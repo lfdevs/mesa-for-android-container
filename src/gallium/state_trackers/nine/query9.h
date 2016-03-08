@@ -63,17 +63,17 @@ NineQuery9_ctor( struct NineQuery9 *,
 void
 NineQuery9_dtor( struct NineQuery9 * );
 
-D3DQUERYTYPE WINAPI
+D3DQUERYTYPE NINE_WINAPI
 NineQuery9_GetType( struct NineQuery9 *This );
 
-DWORD WINAPI
+DWORD NINE_WINAPI
 NineQuery9_GetDataSize( struct NineQuery9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineQuery9_Issue( struct NineQuery9 *This,
                   DWORD dwIssueFlags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineQuery9_GetData( struct NineQuery9 *This,
                     void *pData,
                     DWORD dwSize,

@@ -171,8 +171,8 @@ fd3_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
 	fd3_query_context_init(pctx);
 
-	fd3_ctx->border_color_uploader = u_upload_create(pctx, 4096,
-			2 * PIPE_MAX_SAMPLERS * BORDERCOLOR_SIZE, 0);
+	fd3_ctx->border_color_uploader = u_upload_create(pctx, 4096, 0,
+                                                         PIPE_USAGE_STREAM);
 
 	return pctx;
 }

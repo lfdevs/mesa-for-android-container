@@ -67,19 +67,19 @@ NineAdapter9_ctor( struct NineAdapter9 *This,
 void
 NineAdapter9_dtor( struct NineAdapter9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_GetAdapterIdentifier( struct NineAdapter9 *This,
                                    DWORD Flags,
                                    D3DADAPTER_IDENTIFIER9 *pIdentifier );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDeviceType( struct NineAdapter9 *This,
                               D3DDEVTYPE DevType,
                               D3DFORMAT AdapterFormat,
                               D3DFORMAT BackBufferFormat,
                               BOOL bWindowed );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
                                 D3DDEVTYPE DeviceType,
                                 D3DFORMAT AdapterFormat,
@@ -87,7 +87,7 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
                                 D3DRESOURCETYPE RType,
                                 D3DFORMAT CheckFormat );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
                                          D3DDEVTYPE DeviceType,
                                          D3DFORMAT SurfaceFormat,
@@ -95,25 +95,25 @@ NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
                                          D3DMULTISAMPLE_TYPE MultiSampleType,
                                          DWORD *pQualityLevels );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDepthStencilMatch( struct NineAdapter9 *This,
                                      D3DDEVTYPE DeviceType,
                                      D3DFORMAT AdapterFormat,
                                      D3DFORMAT RenderTargetFormat,
                                      D3DFORMAT DepthStencilFormat );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDeviceFormatConversion( struct NineAdapter9 *This,
                                           D3DDEVTYPE DeviceType,
                                           D3DFORMAT SourceFormat,
                                           D3DFORMAT TargetFormat );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                             D3DDEVTYPE DeviceType,
                             D3DCAPS9 *pCaps );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CreateDevice( struct NineAdapter9 *This,
                            UINT RealAdapter,
                            D3DDEVTYPE DeviceType,
@@ -124,7 +124,7 @@ NineAdapter9_CreateDevice( struct NineAdapter9 *This,
                            ID3DPresentGroup *pPresentationGroup,
                            IDirect3DDevice9 **ppReturnedDeviceInterface );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CreateDeviceEx( struct NineAdapter9 *This,
                              UINT RealAdapter,
                              D3DDEVTYPE DeviceType,

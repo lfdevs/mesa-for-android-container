@@ -12,6 +12,7 @@ env.Prepend(LIBS = [
     st_osmesa,
     ws_null,
     glapi,
+    compiler,
     mesa,
     gallium,
     trace,

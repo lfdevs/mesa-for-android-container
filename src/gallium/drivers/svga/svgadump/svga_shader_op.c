@@ -144,7 +144,7 @@ const struct sh_opcode_info *svga_opcode_info( uint op )
 {
    struct sh_opcode_info *info;
 
-   if (op >= sizeof( opcode_info ) / sizeof( opcode_info[0] )) {
+   if (op >= ARRAY_SIZE(opcode_info)) {
       /* The opcode is either PHASE, COMMENT, END or out of range.
        */
       assert( 0 );

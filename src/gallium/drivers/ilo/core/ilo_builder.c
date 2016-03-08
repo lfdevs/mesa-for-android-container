@@ -333,7 +333,7 @@ ilo_builder_init(struct ilo_builder *builder,
                  const struct ilo_dev *dev,
                  struct intel_winsys *winsys)
 {
-   int i;
+   unsigned i;
 
    assert(ilo_is_zeroed(builder, sizeof(*builder)));
 
@@ -366,7 +366,7 @@ ilo_builder_init(struct ilo_builder *builder,
 void
 ilo_builder_reset(struct ilo_builder *builder)
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < ILO_BUILDER_WRITER_COUNT; i++)
       ilo_builder_writer_reset(builder, i);
@@ -382,7 +382,7 @@ ilo_builder_reset(struct ilo_builder *builder)
 bool
 ilo_builder_begin(struct ilo_builder *builder)
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < ILO_BUILDER_WRITER_COUNT; i++) {
       if (!ilo_builder_writer_alloc_and_map(builder, i)) {
@@ -407,7 +407,7 @@ struct intel_bo *
 ilo_builder_end(struct ilo_builder *builder, unsigned *used)
 {
    struct ilo_builder_writer *bat;
-   int i;
+   unsigned i;
 
    ilo_builder_batch_patch_sba(builder);
 

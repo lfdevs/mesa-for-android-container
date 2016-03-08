@@ -60,6 +60,8 @@ extern const char *tgsi_fs_coord_pixel_center_names[2];
 
 extern const char *tgsi_immediate_type_names[4];
 
+extern const char *tgsi_memory_names[3];
+
 
 const char *
 tgsi_file_name(unsigned file);

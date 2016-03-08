@@ -173,6 +173,30 @@ trace_screen_get_paramf(struct pipe_screen *_screen,
 }
 
 
+static int
+trace_screen_get_compute_param(struct pipe_screen *_screen,
+                               enum pipe_compute_cap param, void *data)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
+   int result;
+
+   trace_dump_call_begin("pipe_screen", "get_compute_param");
+
+   trace_dump_arg(ptr, screen);
+   trace_dump_arg(int, param);
+   trace_dump_arg(ptr, data);
+
+   result = screen->get_compute_param(screen, param, data);
+
+   trace_dump_ret(int, result);
+
+   trace_dump_call_end();
+
+   return result;
+}
+
+
 static boolean
 trace_screen_is_format_supported(struct pipe_screen *_screen,
                                  enum pipe_format format,
@@ -462,7 +486,7 @@ trace_screen_create(struct pipe_screen *screen)
    trace_dump_call_begin("", "pipe_screen_create");
 
    tr_scr = CALLOC_STRUCT(trace_screen);
-   if(!tr_scr)
+   if (!tr_scr)
       goto error2;
 
    tr_scr->base.destroy = trace_screen_destroy;
@@ -472,6 +496,7 @@ trace_screen_create(struct pipe_screen *screen)
    tr_scr->base.get_param = trace_screen_get_param;
    tr_scr->base.get_shader_param = trace_screen_get_shader_param;
    tr_scr->base.get_paramf = trace_screen_get_paramf;
+   tr_scr->base.get_compute_param = trace_screen_get_compute_param;
    tr_scr->base.is_format_supported = trace_screen_is_format_supported;
    assert(screen->context_create);
    tr_scr->base.context_create = trace_screen_context_create;

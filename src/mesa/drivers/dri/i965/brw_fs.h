@@ -30,28 +30,8 @@
 #include "brw_shader.h"
 #include "brw_ir_fs.h"
 #include "brw_fs_builder.h"
-
-extern "C" {
-
-#include <sys/types.h>
-
-#include "main/macros.h"
-#include "main/shaderobj.h"
-#include "main/uniforms.h"
-#include "program/prog_parameter.h"
-#include "program/prog_print.h"
-#include "program/prog_optimize.h"
-#include "util/register_allocate.h"
-#include "program/hash_table.h"
-#include "brw_context.h"
-#include "brw_eu.h"
-#include "brw_wm.h"
-#include "intel_asm_annotation.h"
-}
-#include "glsl/nir/glsl_types.h"
-#include "glsl/ir.h"
-#include "glsl/nir/nir.h"
-#include "program/sampler.h"
+#include "compiler/glsl/ir.h"
+#include "compiler/nir/nir.h"
 
 struct bblock_t;
 namespace {
@@ -101,7 +81,8 @@ public:
               struct gl_program *prog,
               const nir_shader *shader,
               unsigned dispatch_width,
-              int shader_time_index);
+              int shader_time_index,
+              const struct brw_vue_map *input_vue_map = NULL);
    fs_visitor(const struct brw_compiler *compiler, void *log_data,
               void *mem_ctx,
               struct brw_gs_compile *gs_compile,
@@ -116,10 +97,6 @@ public:
    void setup_uniform_clipplane_values(gl_clip_plane *clip_planes);
    void compute_clip_distance(gl_clip_plane *clip_planes);
 
-   uint32_t gather_channel(int orig_chan, uint32_t sampler);
-   void swizzle_result(ir_texture_opcode op, int dest_components,
-                       fs_reg orig_val, uint32_t sampler);
-
    fs_inst *get_instruction_generating_reg(fs_inst *start,
 					   fs_inst *end,
 					   const fs_reg &reg);
@@ -133,12 +110,13 @@ public:
 
    bool run_fs(bool do_rep_send);
    bool run_vs(gl_clip_plane *clip_planes);
+   bool run_tes();
    bool run_gs();
    bool run_cs();
    void optimize();
    void allocate_registers();
-   void setup_payload_gen4();
-   void setup_payload_gen6();
+   void setup_fs_payload_gen4();
+   void setup_fs_payload_gen6();
    void setup_vs_payload();
    void setup_gs_payload();
    void setup_cs_payload();
@@ -148,6 +126,7 @@ public:
    void assign_urb_setup();
    void convert_attr_sources_to_hw_regs(fs_inst *inst);
    void assign_vs_urb_setup();
+   void assign_tes_urb_setup();
    void assign_gs_urb_setup();
    bool assign_regs(bool allow_spilling);
    void assign_regs_trivial();
@@ -196,6 +175,7 @@ public:
    bool lower_load_payload();
    bool lower_logical_sends();
    bool lower_integer_multiplication();
+   bool lower_minmax();
    bool lower_simd_width();
    bool opt_combine_constants();
 
@@ -218,8 +198,6 @@ public:
    void emit_interpolation_setup_gen4();
    void emit_interpolation_setup_gen6();
    void compute_sample_position(fs_reg dst, fs_reg int_sample_pos);
-   fs_reg rescale_texcoord(fs_reg coordinate, int coord_components,
-                           bool is_rect, uint32_t sampler);
    void emit_texture(ir_texture_opcode op,
                      const glsl_type *dest_type,
                      fs_reg coordinate, int components,
@@ -230,7 +208,8 @@ public:
                      fs_reg mcs,
                      int gather_component,
                      bool is_cube_array,
-                     bool is_rect,
+                     uint32_t surface,
+                     fs_reg surface_reg,
                      uint32_t sampler,
                      fs_reg sampler_reg);
    fs_reg emit_mcs_fetch(const fs_reg &coordinate, unsigned components,
@@ -276,8 +255,12 @@ public:
                               nir_intrinsic_instr *instr);
    void nir_emit_intrinsic(const brw::fs_builder &bld,
                            nir_intrinsic_instr *instr);
+   void nir_emit_tes_intrinsic(const brw::fs_builder &bld,
+                               nir_intrinsic_instr *instr);
    void nir_emit_ssbo_atomic(const brw::fs_builder &bld,
                              int op, nir_intrinsic_instr *instr);
+   void nir_emit_shared_atomic(const brw::fs_builder &bld,
+                               int op, nir_intrinsic_instr *instr);
    void nir_emit_texture(const brw::fs_builder &bld,
                          nir_tex_instr *instr);
    void nir_emit_jump(const brw::fs_builder &bld,
@@ -285,6 +268,7 @@ public:
    fs_reg get_nir_src(nir_src src);
    fs_reg get_nir_dest(nir_dest dest);
    fs_reg get_nir_image_deref(const nir_deref_var *deref);
+   fs_reg get_indirect_offset(nir_intrinsic_instr *instr);
    void emit_percomp(const brw::fs_builder &bld, const fs_inst &inst,
                      unsigned wr_mask);
 
@@ -305,7 +289,7 @@ public:
                        unsigned stream_id);
    void emit_gs_thread_end();
    void emit_gs_input_load(const fs_reg &dst, const nir_src &vertex_src,
-                           const fs_reg &indirect_offset, unsigned imm_offset,
+                           unsigned base_offset, const nir_src &offset_src,
                            unsigned num_components);
    void emit_cs_terminate();
    fs_reg *emit_cs_local_invocation_id_setup();
@@ -337,6 +321,8 @@ public:
 
    struct brw_stage_prog_data *prog_data;
    struct gl_program *prog;
+
+   const struct brw_vue_map *input_vue_map;
 
    int *param_size;
 
@@ -465,6 +451,7 @@ private:
    void generate_linterp(fs_inst *inst, struct brw_reg dst,
 			 struct brw_reg *src);
    void generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src,
+                     struct brw_reg surface_index,
                      struct brw_reg sampler_index);
    void generate_get_buffer_size(fs_inst *inst, struct brw_reg dst,
                                  struct brw_reg src,

@@ -53,22 +53,29 @@ DRI_CONF_BEGIN
          DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_1)
     DRI_CONF_SECTION_END
     DRI_CONF_SECTION_NINE
+        DRI_CONF_NINE_OVERRIDEVENDOR(-1)
         DRI_CONF_NINE_THROTTLE(-2)
         DRI_CONF_NINE_THREADSUBMIT("false")
     DRI_CONF_SECTION_END
 DRI_CONF_END;
 
-/* define fallback value here: NVIDIA GeForce GTX 970 */
-#define FALLBACK_NAME "NV124"
-#define FALLBACK_DEVID 0x13C2
-#define FALLBACK_VENID 0x10de
+struct fallback_card_config {
+    const char *name;
+    unsigned vendor_id;
+    unsigned device_id;
+} fallback_cards[] = {
+        {"NV124", 0x10de, 0x13C2}, /* NVIDIA GeForce GTX 970 */
+        {"HAWAII", 0x1002, 0x67b1}, /* AMD Radeon R9 290 */
+        {"Haswell Mobile", 0x8086, 0x13C2}, /* Intel Haswell Mobile */
+        {"SVGA3D", 0x15ad, 0x0405}, /* VMware SVGA 3D */
+};
 
 /* prototypes */
 void
 d3d_match_vendor_id( D3DADAPTER_IDENTIFIER9* drvid,
-		unsigned fallback_ven,
-		unsigned fallback_dev,
-		const char* fallback_name );
+                     unsigned fallback_ven,
+                     unsigned fallback_dev,
+                     const char* fallback_name );
 
 void d3d_fill_driver_version(D3DADAPTER_IDENTIFIER9* drvid);
 
@@ -118,9 +125,9 @@ get_bus_info( int fd,
         *subsysid = 0;
         *revision = 0;
     } else {
-        DBG("Unable to detect card. Faking %s\n", FALLBACK_NAME);
-        *vendorid = FALLBACK_VENID;
-        *deviceid = FALLBACK_DEVID;
+        DBG("Unable to detect card. Faking %s\n", fallback_cards[0].name);
+        *vendorid = fallback_cards[0].vendor_id;
+        *deviceid = fallback_cards[0].device_id;
         *subsysid = 0;
         *revision = 0;
     }
@@ -128,8 +135,10 @@ get_bus_info( int fd,
 
 static inline void
 read_descriptor( struct d3dadapter9_context *ctx,
-                 int fd )
+                 int fd, int override_vendorid )
 {
+    unsigned i;
+    BOOL found;
     D3DADAPTER_IDENTIFIER9 *drvid = &ctx->identifier;
 
     memset(drvid, 0, sizeof(*drvid));
@@ -140,9 +149,30 @@ read_descriptor( struct d3dadapter9_context *ctx,
     strncpy(drvid->Description, ctx->hal->get_name(ctx->hal),
                  sizeof(drvid->Description));
 
+    if (override_vendorid > 0) {
+        found = FALSE;
+        /* fill in device_id and card name for fake vendor */
+        for (i = 0; i < sizeof(fallback_cards)/sizeof(fallback_cards[0]); i++) {
+            if (fallback_cards[i].vendor_id == override_vendorid) {
+                DBG("Faking card '%s' vendor 0x%04x, device 0x%04x\n",
+                        fallback_cards[i].name,
+                        fallback_cards[i].vendor_id,
+                        fallback_cards[i].device_id);
+                drvid->VendorId = fallback_cards[i].vendor_id;
+                drvid->DeviceId = fallback_cards[i].device_id;
+                strncpy(drvid->Description, fallback_cards[i].name,
+                             sizeof(drvid->Description));
+                found = TRUE;
+                break;
+            }
+        }
+        if (!found) {
+            DBG("Unknown fake vendor 0x%04x! Using detected vendor !\n", override_vendorid);
+        }
+    }
     /* choose fall-back vendor if necessary to allow
      * the following functions to return sane results */
-    d3d_match_vendor_id(drvid, FALLBACK_VENID, FALLBACK_DEVID, FALLBACK_NAME);
+    d3d_match_vendor_id(drvid, fallback_cards[0].vendor_id, fallback_cards[0].device_id, fallback_cards[0].name);
     /* fill in driver name and version info */
     d3d_fill_driver_version(drvid);
     /* override Description field with Windows like names */
@@ -177,6 +207,7 @@ drm_create_adapter( int fd,
     driOptionCache defaultInitOptions;
     driOptionCache userInitOptions;
     int throttling_value_user = -2;
+    int override_vendorid = -1;
 
     if (!ctx) { return E_OUTOFMEMORY; }
 
@@ -247,6 +278,10 @@ drm_create_adapter( int fd,
                 "You should not expect any benefit.");
     }
 
+    if (driCheckOption(&userInitOptions, "override_vendorid", DRI_INT)) {
+        override_vendorid = driQueryOptioni(&userInitOptions, "override_vendorid");
+    }
+
     driDestroyOptionCache(&userInitOptions);
     driDestroyOptionInfo(&defaultInitOptions);
 
@@ -260,7 +295,7 @@ drm_create_adapter( int fd,
     }
 
     /* read out PCI info */
-    read_descriptor(&ctx->base, fd);
+    read_descriptor(&ctx->base, fd, override_vendorid);
 
     /* create and return new ID3DAdapter9 */
     hr = NineAdapter9_new(&ctx->base, (struct NineAdapter9 **)ppAdapter);

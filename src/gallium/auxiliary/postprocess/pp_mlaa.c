@@ -238,7 +238,7 @@ pp_jimenezmlaa_init_run(struct pp_queue_t *ppq, unsigned int n,
    tmp_text = CALLOC(sizeof(blend2fs_1) + sizeof(blend2fs_2) +
                      IMM_SPACE, sizeof(char));
 
-   if (tmp_text == NULL) {
+   if (!tmp_text) {
       pp_debug("Failed to allocate shader space\n");
       return FALSE;
    }

@@ -319,10 +319,13 @@ dump_gen8_surface_state(struct brw_context *brw, uint32_t offset, int index)
              GET_FIELD(surf[4], GEN7_SURFACE_MIN_ARRAY_ELEMENT),
              GET_FIELD(surf[4], GEN7_SURFACE_RENDER_TARGET_VIEW_EXTENT) + 1,
              1 << GET_BITS(surf[4], 5, 3));
-   batch_out(brw, name, offset, 5, "x,y offset: %d,%d, min LOD: %d\n",
+   batch_out(brw, name, offset, 5, "x,y offset: %d,%d, min LOD: %d,"
+             " tr_mode (gen9+): %d, mip tail (gen9+): %d\n",
              GET_FIELD(surf[5], BRW_SURFACE_X_OFFSET),
              GET_FIELD(surf[5], BRW_SURFACE_Y_OFFSET),
-             GET_FIELD(surf[5], GEN7_SURFACE_MIN_LOD));
+             GET_FIELD(surf[5], GEN7_SURFACE_MIN_LOD),
+             GET_FIELD(surf[5], GEN9_SURFACE_TRMODE),
+             GET_FIELD(surf[5], GEN9_SURFACE_MIP_TAIL_START_LOD));
    batch_out(brw, name, offset, 6, "AUX pitch: %d qpitch: %d\n",
              GET_FIELD(surf[6], GEN8_SURFACE_AUX_QPITCH) << 2,
              GET_FIELD(surf[6], GEN8_SURFACE_AUX_PITCH) << 2);
@@ -729,6 +732,12 @@ dump_prog_cache(struct brw_context *brw)
 	 case BRW_CACHE_VS_PROG:
 	    name = "VS kernel";
 	    break;
+         case BRW_CACHE_TCS_PROG:
+            name = "TCS kernel";
+            break;
+         case BRW_CACHE_TES_PROG:
+            name = "TES kernel";
+            break;
 	 case BRW_CACHE_FF_GS_PROG:
 	    name = "Fixed-function GS kernel";
 	    break;

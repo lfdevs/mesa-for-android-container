@@ -384,7 +384,7 @@ void r500FragmentProgramDump(struct radeon_compiler *c, void *user)
     case R500_INST_TYPE_OUT: str = "OUT"; break;
     case R500_INST_TYPE_FC: str = "FC"; break;
     case R500_INST_TYPE_TEX: str = "TEX"; break;
-    };
+    }
     fprintf(stderr,"%s %s %s %s %s ", str,
 	    inst & R500_INST_TEX_SEM_WAIT ? "TEX_WAIT" : "",
 	    inst & R500_INST_LAST ? "LAST" : "",

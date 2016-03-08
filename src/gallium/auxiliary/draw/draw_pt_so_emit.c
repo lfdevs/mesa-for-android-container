@@ -275,7 +275,7 @@ void draw_pt_so_emit( struct pt_so_emit *emit,
    emit->generated_primitives = 0;
    emit->input_vertex_stride = input_verts->stride;
    if (emit->use_pre_clip_pos)
-      emit->pre_clip_pos = input_verts->verts->pre_clip_pos;
+      emit->pre_clip_pos = input_verts->verts->clip_pos;
 
    emit->inputs = (const float (*)[4])input_verts->verts->data;
 

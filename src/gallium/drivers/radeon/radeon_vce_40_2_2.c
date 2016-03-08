@@ -77,7 +77,7 @@ static void task_info(struct rvce_encoder *enc, uint32_t op,
 static void feedback(struct rvce_encoder *enc)
 {
 	RVCE_BEGIN(0x05000005); // feedback buffer
-	RVCE_WRITE(enc->fb->res->cs_buf, enc->fb->res->domains, 0x0); // feedbackRingAddressHi/Lo
+	RVCE_WRITE(enc->fb->res->buf, enc->fb->res->domains, 0x0); // feedbackRingAddressHi/Lo
 	RVCE_CS(0x00000001); // feedbackRingSize
 	RVCE_END();
 }
@@ -303,7 +303,7 @@ static void encode(struct rvce_encoder *enc)
 	enc->task_info(enc, 0x00000003, 0, 0, 0);
 
 	RVCE_BEGIN(0x05000001); // context buffer
-	RVCE_READWRITE(enc->cpb.res->cs_buf, enc->cpb.res->domains, 0x0); // encodeContextAddressHi/Lo
+	RVCE_READWRITE(enc->cpb.res->buf, enc->cpb.res->domains, 0x0); // encodeContextAddressHi/Lo
 	RVCE_END();
 
 	RVCE_BEGIN(0x05000004); // video bitstream buffer

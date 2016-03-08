@@ -67,8 +67,8 @@ static void sp_blit(struct pipe_context *pipe,
    util_blitter_save_so_targets(sp->blitter, sp->num_so_targets,
                      (struct pipe_stream_output_target**)sp->so_targets);
    util_blitter_save_rasterizer(sp->blitter, sp->rasterizer);
-   util_blitter_save_viewport(sp->blitter, &sp->viewport);
-   util_blitter_save_scissor(sp->blitter, &sp->scissor);
+   util_blitter_save_viewport(sp->blitter, &sp->viewports[0]);
+   util_blitter_save_scissor(sp->blitter, &sp->scissors[0]);
    util_blitter_save_fragment_shader(sp->blitter, sp->fs);
    util_blitter_save_blend(sp->blitter, sp->blend);
    util_blitter_save_depth_stencil_alpha(sp->blitter, sp->depth_stencil);

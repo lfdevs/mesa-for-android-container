@@ -93,6 +93,8 @@ C_SOURCES := \
 	pipebuffer/pb_bufmgr_ondemand.c \
 	pipebuffer/pb_bufmgr_pool.c \
 	pipebuffer/pb_bufmgr_slab.c \
+	pipebuffer/pb_cache.c \
+	pipebuffer/pb_cache.h \
 	pipebuffer/pb_validate.c \
 	pipebuffer/pb_validate.h \
 	postprocess/filters.h \
@@ -189,11 +191,13 @@ C_SOURCES := \
 	util/u_cpu_detect.c \
 	util/u_cpu_detect.h \
 	util/u_debug.c \
+	util/u_debug.h \
 	util/u_debug_describe.c \
 	util/u_debug_describe.h \
 	util/u_debug_flush.c \
 	util/u_debug_flush.h \
-	util/u_debug.h \
+	util/u_debug_image.c \
+	util/u_debug_image.h \
 	util/u_debug_memory.c \
 	util/u_debug_refcnt.c \
 	util/u_debug_refcnt.h \
@@ -219,8 +223,6 @@ C_SOURCES := \
 	util/u_format.h \
 	util/u_format_etc.c \
 	util/u_format_etc.h \
-	util/u_format_fake.c \
-	util/u_format_fake.h \
 	util/u_format_latc.c \
 	util/u_format_latc.h \
 	util/u_format_other.c \
@@ -252,7 +254,6 @@ C_SOURCES := \
 	util/u_helpers.h \
 	util/u_index_modify.c \
 	util/u_index_modify.h \
-	util/u_init.h \
 	util/u_inlines.h \
 	util/u_keymap.c \
 	util/u_keymap.h \
@@ -272,6 +273,7 @@ C_SOURCES := \
 	util/u_prim_restart.h \
 	util/u_pstipple.c \
 	util/u_pstipple.h \
+	util/u_pwr8.h \
 	util/u_range.h \
 	util/u_rect.h \
 	util/u_resource.c \

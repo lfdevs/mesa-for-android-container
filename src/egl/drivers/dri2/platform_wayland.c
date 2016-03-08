@@ -653,6 +653,37 @@ create_wl_buffer(struct dri2_egl_surface *dri2_surf)
                           &wl_buffer_listener, dri2_surf);
 }
 
+static EGLBoolean
+try_damage_buffer(struct dri2_egl_surface *dri2_surf,
+                  const EGLint *rects,
+                  EGLint n_rects)
+{
+/* The WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION macro and
+ * wl_proxy_get_version() were both introduced in wayland 1.10.
+ * Instead of bumping our wayland dependency we just make this
+ * function conditional on the required 1.10 features, falling
+ * back to old (correct but suboptimal) behaviour for older
+ * wayland.
+ */
+#ifdef WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION
+   int i;
+
+   if (wl_proxy_get_version((struct wl_proxy *) dri2_surf->wl_win->surface)
+       < WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION)
+      return EGL_FALSE;
+
+   for (i = 0; i < n_rects; i++) {
+      const int *rect = &rects[i * 4];
+
+      wl_surface_damage_buffer(dri2_surf->wl_win->surface,
+                               rect[0],
+                               dri2_surf->base.Height - rect[1] - rect[3],
+                               rect[2], rect[3]);
+   }
+   return EGL_TRUE;
+#endif
+   return EGL_FALSE;
+}
 /**
  * Called via eglSwapBuffers(), drv->API.SwapBuffers().
  */
@@ -703,10 +734,12 @@ dri2_wl_swap_buffers_with_damage(_EGLDriver *drv,
    dri2_surf->dx = 0;
    dri2_surf->dy = 0;
 
-   /* We deliberately ignore the damage region and post maximum damage, due to
+   /* If the compositor doesn't support damage_buffer, we deliberately
+    * ignore the damage region and post maximum damage, due to
     * https://bugs.freedesktop.org/78190 */
-   wl_surface_damage(dri2_surf->wl_win->surface,
-                     0, 0, INT32_MAX, INT32_MAX);
+   if (!n_rects || !try_damage_buffer(dri2_surf, rects, n_rects))
+      wl_surface_damage(dri2_surf->wl_win->surface,
+                        0, 0, INT32_MAX, INT32_MAX);
 
    if (dri2_dpy->is_different_gpu) {
       _EGLContext *ctx = _eglGetCurrentContext();

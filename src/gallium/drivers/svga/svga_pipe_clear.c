@@ -178,7 +178,7 @@ try_clear(struct svga_context *svga,
 
                rtv = svga_validate_surface_view(svga,
                                                 svga_surface(fb->cbufs[i]));
-               if (rtv == NULL)
+               if (!rtv)
                   return PIPE_ERROR_OUT_OF_MEMORY;
 
                ret = SVGA3D_vgpu10_ClearRenderTargetView(svga->swc,
@@ -191,7 +191,7 @@ try_clear(struct svga_context *svga,
       if (flags & (SVGA3D_CLEAR_DEPTH | SVGA3D_CLEAR_STENCIL)) {
          struct pipe_surface *dsv =
             svga_validate_surface_view(svga, svga_surface(fb->zsbuf));
-         if (dsv == NULL)
+         if (!dsv)
             return PIPE_ERROR_OUT_OF_MEMORY;
 
          ret = SVGA3D_vgpu10_ClearDepthStencilView(svga->swc, dsv, flags,

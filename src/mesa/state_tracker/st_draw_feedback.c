@@ -33,6 +33,7 @@
 
 #include "st_context.h"
 #include "st_atom.h"
+#include "st_cb_bitmap.h"
 #include "st_cb_bufferobjects.h"
 #include "st_draw.h"
 #include "st_program.h"
@@ -137,7 +138,9 @@ st_feedback_draw_vbo(struct gl_context *ctx,
 
    assert(draw);
 
-   st_validate_state(st);
+   st_flush_bitmap_cache(st);
+
+   st_validate_state(st, ST_PIPELINE_RENDER);
 
    if (!index_bounds_valid)
       vbo_get_minmax_indices(ctx, prims, ib, &min_index, &max_index, nr_prims);

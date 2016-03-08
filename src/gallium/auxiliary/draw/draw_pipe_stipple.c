@@ -235,7 +235,7 @@ stipple_destroy( struct draw_stage *stage )
 struct draw_stage *draw_stipple_stage( struct draw_context *draw )
 {
    struct stipple_stage *stipple = CALLOC_STRUCT(stipple_stage);
-   if (stipple == NULL)
+   if (!stipple)
       goto fail;
 
    stipple->stage.draw = draw;

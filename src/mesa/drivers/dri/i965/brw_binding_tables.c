@@ -196,6 +196,61 @@ const struct brw_tracked_state brw_wm_binding_table = {
    .emit = brw_upload_wm_binding_table,
 };
 
+/** Upload the TCS binding table (if tessellation stages are active). */
+static void
+brw_tcs_upload_binding_table(struct brw_context *brw)
+{
+   /* Skip if the tessellation stages are disabled. */
+   if (brw->tess_eval_program == NULL)
+      return;
+
+   /* BRW_NEW_TCS_PROG_DATA */
+   const struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
+   brw_upload_binding_table(brw,
+                            _3DSTATE_BINDING_TABLE_POINTERS_HS,
+                            prog_data,
+                            &brw->tcs.base);
+}
+
+const struct brw_tracked_state brw_tcs_binding_table = {
+   .dirty = {
+      .mesa = 0,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_DEFAULT_TESS_LEVELS |
+             BRW_NEW_SURFACES |
+             BRW_NEW_TCS_CONSTBUF |
+             BRW_NEW_TCS_PROG_DATA,
+   },
+   .emit = brw_tcs_upload_binding_table,
+};
+
+/** Upload the TES binding table (if TES is active). */
+static void
+brw_tes_upload_binding_table(struct brw_context *brw)
+{
+   /* If there's no TES, skip changing anything. */
+   if (brw->tess_eval_program == NULL)
+      return;
+
+   /* BRW_NEW_TES_PROG_DATA */
+   const struct brw_stage_prog_data *prog_data = brw->tes.base.prog_data;
+   brw_upload_binding_table(brw,
+                            _3DSTATE_BINDING_TABLE_POINTERS_DS,
+                            prog_data,
+                            &brw->tes.base);
+}
+
+const struct brw_tracked_state brw_tes_binding_table = {
+   .dirty = {
+      .mesa = 0,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_SURFACES |
+             BRW_NEW_TES_CONSTBUF |
+             BRW_NEW_TES_PROG_DATA,
+   },
+   .emit = brw_tes_upload_binding_table,
+};
+
 /** Upload the GS binding table (if GS is active). */
 static void
 brw_gs_upload_binding_table(struct brw_context *brw)
@@ -310,7 +365,7 @@ gen7_disable_hw_binding_tables(struct brw_context *brw)
 /**
  * Enable hardware binding tables and set up the binding table pool.
  */
-static void
+void
 gen7_enable_hw_binding_tables(struct brw_context *brw)
 {
    if (!brw->use_resource_streamer)

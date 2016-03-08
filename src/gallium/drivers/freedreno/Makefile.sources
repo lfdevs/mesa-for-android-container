@@ -128,6 +128,7 @@ ir3_SOURCES := \
 	ir3/ir3_group.c \
 	ir3/ir3.h \
 	ir3/ir3_legalize.c \
+	ir3/ir3_nir.c \
 	ir3/ir3_nir.h \
 	ir3/ir3_nir_lower_if_else.c \
 	ir3/ir3_print.c \

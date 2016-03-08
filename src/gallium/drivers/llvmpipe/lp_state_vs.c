@@ -46,7 +46,7 @@ llvmpipe_create_vs_state(struct pipe_context *pipe,
    struct draw_vertex_shader *vs;
 
    vs = draw_create_vertex_shader(llvmpipe->draw, templ);
-   if (vs == NULL) {
+   if (!vs) {
       return NULL;
    }
 

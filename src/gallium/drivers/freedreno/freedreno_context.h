@@ -40,6 +40,8 @@
 #include "freedreno_gmem.h"
 #include "freedreno_util.h"
 
+#define BORDER_COLOR_UPLOAD_SIZE (2 * PIPE_MAX_SAMPLERS * BORDERCOLOR_SIZE)
+
 struct fd_vertex_stateobj;
 
 struct fd_texture_stateobj {
@@ -161,6 +163,9 @@ struct fd_context {
 	 * the same sample snapshot)
 	 */
 	struct fd_hw_sample *sample_cache[MAX_HW_SAMPLE_PROVIDERS];
+
+	/* which sample providers were active in the current batch: */
+	uint32_t active_providers;
 
 	/* tracking for current stage, to know when to start/stop
 	 * any active queries:
@@ -384,6 +389,10 @@ struct fd_context {
 			const uint32_t *dwords, struct pipe_resource *prsc);
 	void (*emit_const_bo)(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 			uint32_t regid, uint32_t num, struct fd_bo **bos, uint32_t *offsets);
+
+	/* indirect-branch emit: */
+	void (*emit_ib)(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
+			struct fd_ringmarker *end);
 };
 
 static inline struct fd_context *

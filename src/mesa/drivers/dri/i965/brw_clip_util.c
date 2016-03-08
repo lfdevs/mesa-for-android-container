@@ -30,7 +30,6 @@
   */
 
 
-#include "main/glheader.h"
 #include "main/macros.h"
 #include "main/enums.h"
 #include "program/program.h"
@@ -119,7 +118,7 @@ static void brw_clip_project_vertex( struct brw_clip_compile *c,
    brw_MOV(p, tmp, deref_4f(vert_addr, hpos_offset));
    brw_clip_project_position(c, tmp);
    brw_MOV(p, deref_4f(vert_addr, ndc_offset), tmp);
-	
+
    release_tmp(c, tmp);
 }
 

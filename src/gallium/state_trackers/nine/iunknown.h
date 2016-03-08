@@ -28,6 +28,7 @@
 #include "util/u_memory.h"
 
 #include "guid.h"
+#include "nine_flags.h"
 #include "nine_debug.h"
 #include "nine_quirk.h"
 
@@ -77,18 +78,18 @@ NineUnknown_dtor( struct NineUnknown *This );
 
 /*** Direct3D public methods ***/
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineUnknown_QueryInterface( struct NineUnknown *This,
                             REFIID riid,
                             void **ppvObject );
 
-ULONG WINAPI
+ULONG NINE_WINAPI
 NineUnknown_AddRef( struct NineUnknown *This );
 
-ULONG WINAPI
+ULONG NINE_WINAPI
 NineUnknown_Release( struct NineUnknown *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineUnknown_GetDevice( struct NineUnknown *This,
                        IDirect3DDevice9 **ppDevice );
 

@@ -30,6 +30,8 @@
 extern "C" {
 #endif
 
+struct brw_context;
+
 void brw_setup_tex_for_precompile(struct brw_context *brw,
                                   struct brw_sampler_prog_key_data *tex,
                                   struct gl_program *prog);
@@ -53,6 +55,11 @@ brw_stage_prog_data_free(const void *prog_data);
 void
 brw_dump_ir(const char *stage, struct gl_shader_program *shader_prog,
             struct gl_shader *shader, struct gl_program *prog);
+
+void brw_upload_tcs_prog(struct brw_context *brw,
+                         uint64_t per_vertex_slots, uint32_t per_patch_slots);
+void brw_upload_tes_prog(struct brw_context *brw,
+                         uint64_t per_vertex_slots, uint32_t per_patch_slots);
 
 #ifdef __cplusplus
 } /* extern "C" */

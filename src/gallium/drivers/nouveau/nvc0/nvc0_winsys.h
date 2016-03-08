@@ -68,6 +68,7 @@ PUSH_REFN(struct nouveau_pushbuf *push, struct nouveau_bo *bo, uint32_t flags)
 #define SUBC_SW(m) 7, (m)
 
 #define NVC0_3D_SERIALIZE NV50_GRAPH_SERIALIZE
+#define NVC0_IB_ENTRY_1_NO_PREFETCH (1 << (31 - 8))
 
 static inline uint32_t
 NVC0_FIFO_PKHDR_SQ(int subc, int mthd, unsigned size)

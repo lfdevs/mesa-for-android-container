@@ -174,17 +174,6 @@ pipe_sampler_view_release(struct pipe_context *ctx,
 }
 
 static inline void
-pipe_image_view_reference(struct pipe_image_view **ptr, struct pipe_image_view *view)
-{
-   struct pipe_image_view *old_view = *ptr;
-
-   if (pipe_reference_described(&(*ptr)->reference, &view->reference,
-                                (debug_reference_descriptor)debug_describe_image_view))
-      old_view->context->image_view_destroy(old_view->context, old_view);
-   *ptr = view;
-}
-
-static inline void
 pipe_so_target_reference(struct pipe_stream_output_target **ptr,
                          struct pipe_stream_output_target *target)
 {
@@ -289,7 +278,7 @@ pipe_buffer_map_range(struct pipe_context *pipe,
    u_box_1d(offset, length, &box);
 
    map = pipe->transfer_map(pipe, buffer, 0, access, &box, transfer);
-   if (map == NULL) {
+   if (!map) {
       return NULL;
    }
 

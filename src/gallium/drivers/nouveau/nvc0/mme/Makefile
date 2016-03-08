@@ -1,5 +1,5 @@
 ENVYAS?=envyas
-TARGETS=com9097.mme.h
+TARGETS=com9097.mme.h com90c0.mme.h
 
 all: $(TARGETS)
 

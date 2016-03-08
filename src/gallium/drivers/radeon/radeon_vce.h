@@ -50,7 +50,7 @@ struct r600_common_screen;
 
 /* driver dependent callback */
 typedef void (*rvce_get_buffer)(struct pipe_resource *resource,
-				struct radeon_winsys_cs_handle **handle,
+				struct pb_buffer **handle,
 				struct radeon_surf **surface);
 
 /* Coded picture buffer slot */
@@ -92,11 +92,11 @@ struct rvce_encoder {
 
 	rvce_get_buffer			get_buffer;
 
-	struct radeon_winsys_cs_handle*	handle;
+	struct pb_buffer*	handle;
 	struct radeon_surf*		luma;
 	struct radeon_surf*		chroma;
 
-	struct radeon_winsys_cs_handle*	bs_handle;
+	struct pb_buffer*	bs_handle;
 	unsigned			bs_size;
 
 	struct rvce_cpb_slot		*cpb_array;
@@ -130,7 +130,7 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 
 bool rvce_is_fw_version_supported(struct r600_common_screen *rscreen);
 
-void rvce_add_buffer(struct rvce_encoder *enc, struct radeon_winsys_cs_handle *buf,
+void rvce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf,
 		     enum radeon_bo_usage usage, enum radeon_bo_domain domain,
 		     signed offset);
 

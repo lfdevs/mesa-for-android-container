@@ -896,6 +896,49 @@ BOOL_32 CIAddrLib::HwlOverrideTileMode(
 
 /**
 ***************************************************************************************************
+*   CiAddrLib::GetPrtSwitchP4Threshold
+*
+*   @brief
+*       Return the threshold of switching to P4_* instead of P16_* for PRT resources
+***************************************************************************************************
+*/
+UINT_32 CIAddrLib::GetPrtSwitchP4Threshold() const
+{
+    UINT_32 threshold;
+
+    switch (m_pipes)
+    {
+        case 8:
+            threshold = 32;
+            break;
+        case 16:
+            if (m_settings.isFiji)
+            {
+                threshold = 16;
+            }
+            else if (m_settings.isHawaii)
+            {
+                threshold = 8;
+            }
+            else
+            {
+                ///@todo add for possible new ASICs.
+                ADDR_ASSERT_ALWAYS();
+                threshold = 16;
+            }
+            break;
+        default:
+            ///@todo add for possible new ASICs.
+            ADDR_ASSERT_ALWAYS();
+            threshold = 32;
+            break;
+    }
+
+    return threshold;
+}
+
+/**
+***************************************************************************************************
 *   CIAddrLib::HwlSetupTileInfo
 *
 *   @brief
@@ -1123,7 +1166,7 @@ VOID CIAddrLib::HwlSetupTileInfo(
             {
                 UINT_32 bytesXSamples = bpp * numSamples / 8;
                 UINT_32 bytesXThickness = bpp * thickness / 8;
-                UINT_32 switchP4Threshold = (m_pipes == 16) ? 8 : 32;
+                UINT_32 switchP4Threshold = GetPrtSwitchP4Threshold();
 
                 if ((bytesXSamples > switchP4Threshold) || (bytesXThickness > switchP4Threshold))
                 {

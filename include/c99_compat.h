@@ -36,17 +36,17 @@
  */
 #if defined(_MSC_VER)
 
-#  if _MSC_VER < 1500
-#    error "Microsoft Visual Studio 2008 or higher required"
+#  if _MSC_VER < 1800
+#    error "Microsoft Visual Studio 2013 or higher required"
 #  endif
 
    /*
-    * Visual Studio 2012 will complain if we define the `inline` keyword, but
+    * Visual Studio will complain if we define the `inline` keyword, but
     * actually it only supports the keyword on C++.
     *
     * To avoid this the _ALLOW_KEYWORD_MACROS must be set.
     */
-#  if (_MSC_VER >= 1700) && !defined(_ALLOW_KEYWORD_MACROS)
+#  if !defined(_ALLOW_KEYWORD_MACROS)
 #    define _ALLOW_KEYWORD_MACROS
 #  endif
 
@@ -81,8 +81,6 @@
      /* Intel compiler supports inline keyword */
 #  elif defined(__WATCOMC__) && (__WATCOMC__ >= 1100)
 #    define inline __inline
-#  elif defined(__SUNPRO_C) && defined(__C99FEATURES__)
-     /* C99 supports inline keyword */
 #  elif (__STDC_VERSION__ >= 199901L)
      /* C99 supports inline keyword */
 #  else
@@ -100,8 +98,6 @@
 #ifndef restrict
 #  if (__STDC_VERSION__ >= 199901L)
      /* C99 */
-#  elif defined(__SUNPRO_C) && defined(__C99FEATURES__)
-     /* C99 */
 #  elif defined(__GNUC__)
 #    define restrict __restrict__
 #  elif defined(_MSC_VER)
@@ -117,8 +113,6 @@
  */
 #ifndef __func__
 #  if (__STDC_VERSION__ >= 199901L)
-     /* C99 */
-#  elif defined(__SUNPRO_C) && defined(__C99FEATURES__)
      /* C99 */
 #  elif defined(__GNUC__)
 #    define __func__ __FUNCTION__

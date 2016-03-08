@@ -1102,9 +1102,14 @@ dri2BindExtensions(struct dri2_screen *psc, struct glx_display * priv,
       __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context");
       __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context_profile");
 
-      if ((mask & (1 << __DRI_API_GLES2)) != 0)
-	 __glXEnableDirectExtension(&psc->base,
-				    "GLX_EXT_create_context_es2_profile");
+      if ((mask & ((1 << __DRI_API_GLES) |
+                   (1 << __DRI_API_GLES2) |
+                   (1 << __DRI_API_GLES3))) != 0) {
+         __glXEnableDirectExtension(&psc->base,
+                                    "GLX_EXT_create_context_es_profile");
+         __glXEnableDirectExtension(&psc->base,
+                                    "GLX_EXT_create_context_es2_profile");
+      }
    }
 
    for (i = 0; extensions[i]; i++) {
@@ -1289,7 +1294,7 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       __glXEnableDirectExtension(&psc->base, "GLX_OML_sync_control");
    }
 
-   /* DRI2 suports SubBuffer through DRI2CopyRegion, so it's always
+   /* DRI2 supports SubBuffer through DRI2CopyRegion, so it's always
     * available.*/
    psp->copySubBuffer = dri2CopySubBuffer;
    __glXEnableDirectExtension(&psc->base, "GLX_MESA_copy_sub_buffer");

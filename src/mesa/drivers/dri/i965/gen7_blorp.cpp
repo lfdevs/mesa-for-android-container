@@ -24,15 +24,12 @@
 #include <assert.h>
 
 #include "intel_batchbuffer.h"
-#include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
 
 #include "brw_context.h"
-#include "brw_defines.h"
 #include "brw_state.h"
 
 #include "brw_blorp.h"
-#include "gen7_blorp.h"
 
 
 /* 3DSTATE_URB_VS
@@ -53,6 +50,8 @@ gen7_blorp_emit_urb_config(struct brw_context *brw)
    unsigned urb_size = (brw->is_haswell && brw->gt == 3) ? 32 : 16;
    gen7_emit_push_constant_state(brw,
                                  urb_size / 2 /* vs_size */,
+                                 0 /* hs_size */,
+                                 0 /* ds_size */,
                                  0 /* gs_size */,
                                  urb_size / 2 /* fs_size */);
 
@@ -63,6 +62,12 @@ gen7_blorp_emit_urb_config(struct brw_context *brw)
                        32 /* num_vs_entries */,
                        2 /* vs_size */,
                        2 /* vs_start */,
+                       0 /* num_hs_entries */,
+                       1 /* hs_size */,
+                       2 /* hs_start */,
+                       0 /* num_ds_entries */,
+                       1 /* ds_size */,
+                       2 /* ds_start */,
                        0 /* num_gs_entries */,
                        1 /* gs_size */,
                        2 /* gs_start */);

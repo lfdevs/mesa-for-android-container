@@ -200,7 +200,7 @@ draw_vs_lookup_variant( struct draw_vertex_shader *vs,
    /* Else have to create a new one: 
     */
    variant = vs->create_variant( vs, key );
-   if (variant == NULL)
+   if (!variant)
       return NULL;
 
    /* Add it to our list, could be smarter: 

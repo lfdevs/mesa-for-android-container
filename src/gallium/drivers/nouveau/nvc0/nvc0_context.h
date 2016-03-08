@@ -56,6 +56,8 @@
 #define NVC0_NEW_SURFACES     (1 << 23)
 #define NVC0_NEW_MIN_SAMPLES  (1 << 24)
 #define NVC0_NEW_TESSFACTOR   (1 << 25)
+#define NVC0_NEW_BUFFERS      (1 << 26)
+#define NVC0_NEW_DRIVERCONST  (1 << 27)
 
 #define NVC0_NEW_CP_PROGRAM   (1 << 0)
 #define NVC0_NEW_CP_SURFACES  (1 << 1)
@@ -63,6 +65,8 @@
 #define NVC0_NEW_CP_SAMPLERS  (1 << 3)
 #define NVC0_NEW_CP_CONSTBUF  (1 << 4)
 #define NVC0_NEW_CP_GLOBALS   (1 << 5)
+#define NVC0_NEW_CP_DRIVERCONST (1 << 6)
+#define NVC0_NEW_CP_BUFFERS   (1 << 7)
 
 /* 3d bufctx (during draw_vbo, blit_3d) */
 #define NVC0_BIND_FB            0
@@ -73,9 +77,10 @@
 #define NVC0_BIND_CB(s, i)   (164 + 16 * (s) + (i))
 #define NVC0_BIND_TFB         244
 #define NVC0_BIND_SUF         245
-#define NVC0_BIND_SCREEN      246
-#define NVC0_BIND_TLS         247
-#define NVC0_BIND_3D_COUNT    248
+#define NVC0_BIND_BUF         246
+#define NVC0_BIND_SCREEN      247
+#define NVC0_BIND_TLS         249
+#define NVC0_BIND_3D_COUNT    250
 
 /* compute bufctx (during launch_grid) */
 #define NVC0_BIND_CP_CB(i)     (  0 + (i))
@@ -85,7 +90,8 @@
 #define NVC0_BIND_CP_DESC        50
 #define NVC0_BIND_CP_SCREEN      51
 #define NVC0_BIND_CP_QUERY       52
-#define NVC0_BIND_CP_COUNT       53
+#define NVC0_BIND_CP_BUF         53
+#define NVC0_BIND_CP_COUNT       54
 
 /* bufctx for other operations */
 #define NVC0_BIND_2D            0
@@ -134,10 +140,12 @@ struct nvc0_context {
    struct nvc0_constbuf constbuf[6][NVC0_MAX_PIPE_CONSTBUFS];
    uint16_t constbuf_dirty[6];
    uint16_t constbuf_valid[6];
+   uint16_t constbuf_coherent[6];
    bool cb_dirty;
 
    struct pipe_vertex_buffer vtxbuf[PIPE_MAX_ATTRIBS];
    unsigned num_vtxbufs;
+   uint32_t vtxbufs_coherent;
    struct pipe_index_buffer idxbuf;
    uint32_t constant_vbos;
    uint32_t vbo_user; /* bitmask of vertex buffers pointing to user memory */
@@ -149,9 +157,11 @@ struct nvc0_context {
    struct pipe_sampler_view *textures[6][PIPE_MAX_SAMPLERS];
    unsigned num_textures[6];
    uint32_t textures_dirty[6];
+   uint32_t textures_coherent[6];
    struct nv50_tsc_entry *samplers[6][PIPE_MAX_SAMPLERS];
    unsigned num_samplers[6];
    uint16_t samplers_dirty[6];
+   bool seamless_cube_map;
 
    uint32_t tex_handles[6][PIPE_MAX_SAMPLERS]; /* for nve4 */
 
@@ -184,9 +194,14 @@ struct nvc0_context {
 
    struct nvc0_blitctx *blit;
 
+   /* NOTE: some of these surfaces may reference buffers */
    struct pipe_surface *surfaces[2][NVC0_MAX_SURFACE_SLOTS];
    uint16_t surfaces_dirty[2];
    uint16_t surfaces_valid[2];
+
+   struct pipe_shader_buffer buffers[6][NVC0_MAX_BUFFERS];
+   uint32_t buffers_dirty[6];
+   uint32_t buffers_valid[6];
 
    struct util_dynarray global_residents;
 };
@@ -248,8 +263,7 @@ extern void nvc0_init_state_functions(struct nvc0_context *);
 /* nvc0_state_validate.c */
 void nvc0_validate_global_residents(struct nvc0_context *,
                                     struct nouveau_bufctx *, int bin);
-extern bool nvc0_state_validate(struct nvc0_context *, uint32_t state_mask,
-                                unsigned space_words);
+bool nvc0_state_validate(struct nvc0_context *, uint32_t state_mask);
 
 /* nvc0_surface.c */
 extern void nvc0_clear(struct pipe_context *, unsigned buffers,
@@ -258,6 +272,8 @@ extern void nvc0_clear(struct pipe_context *, unsigned buffers,
 extern void nvc0_init_surface_functions(struct nvc0_context *);
 
 /* nvc0_tex.c */
+bool nvc0_validate_tic(struct nvc0_context *nvc0, int s);
+bool nvc0_validate_tsc(struct nvc0_context *nvc0, int s);
 bool nve4_validate_tsc(struct nvc0_context *nvc0, int s);
 void nvc0_validate_textures(struct nvc0_context *);
 void nvc0_validate_samplers(struct nvc0_context *);
@@ -322,11 +338,9 @@ nvc0_video_buffer_create(struct pipe_context *pipe,
 void nvc0_push_vbo(struct nvc0_context *, const struct pipe_draw_info *);
 
 /* nve4_compute.c */
-void nve4_launch_grid(struct pipe_context *,
-                      const uint *, const uint *, uint32_t, const void *);
+void nve4_launch_grid(struct pipe_context *, const struct pipe_grid_info *);
 
 /* nvc0_compute.c */
-void nvc0_launch_grid(struct pipe_context *,
-                      const uint *, const uint *, uint32_t, const void *);
+void nvc0_launch_grid(struct pipe_context *, const struct pipe_grid_info *);
 
 #endif

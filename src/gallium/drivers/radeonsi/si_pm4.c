@@ -115,7 +115,7 @@ void si_pm4_free_state(struct si_context *sctx,
 		       struct si_pm4_state *state,
 		       unsigned idx)
 {
-	if (state == NULL)
+	if (!state)
 		return;
 
 	if (idx != ~0 && sctx->emitted.array[idx] == state) {

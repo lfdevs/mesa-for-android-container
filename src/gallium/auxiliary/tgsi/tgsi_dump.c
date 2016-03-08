@@ -348,13 +348,25 @@ iter_declaration(
       }
    }
 
-   if (decl->Declaration.File == TGSI_FILE_RESOURCE) {
+   if (decl->Declaration.File == TGSI_FILE_IMAGE) {
       TXT(", ");
-      ENM(decl->Resource.Resource, tgsi_texture_names);
-      if (decl->Resource.Writable)
+      ENM(decl->Image.Resource, tgsi_texture_names);
+      TXT(", ");
+      TXT(util_format_name(decl->Image.Format));
+      if (decl->Image.Writable)
          TXT(", WR");
-      if (decl->Resource.Raw)
+      if (decl->Image.Raw)
          TXT(", RAW");
+   }
+
+   if (decl->Declaration.File == TGSI_FILE_BUFFER) {
+      if (decl->Declaration.Atomic)
+         TXT(", ATOMIC");
+   }
+
+   if (decl->Declaration.File == TGSI_FILE_MEMORY) {
+      if (decl->Declaration.Shared)
+         TXT(", SHARED");
    }
 
    if (decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
@@ -614,6 +626,16 @@ iter_instruction(
          ENM( inst->TexOffsets[i].SwizzleX, tgsi_swizzle_names);
          ENM( inst->TexOffsets[i].SwizzleY, tgsi_swizzle_names);
          ENM( inst->TexOffsets[i].SwizzleZ, tgsi_swizzle_names);
+      }
+   }
+
+   if (inst->Instruction.Memory) {
+      uint32_t qualifier = inst->Memory.Qualifier;
+      while (qualifier) {
+         int bit = ffs(qualifier) - 1;
+         qualifier &= ~(1U << bit);
+         TXT(", ");
+         ENM(bit, tgsi_memory_names);
       }
    }
 

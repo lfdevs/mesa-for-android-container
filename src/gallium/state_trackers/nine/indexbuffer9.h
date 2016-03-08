@@ -24,7 +24,7 @@
 #define _NINE_INDEXBUFFER9_H_
 
 #include "resource9.h"
-
+#include "buffer9.h"
 #include "pipe/p_state.h"
 
 struct pipe_screen;
@@ -35,13 +35,10 @@ struct NineDevice9;
 
 struct NineIndexBuffer9
 {
-    struct NineResource9 base;
+    struct NineBuffer9 base;
 
     /* g3d stuff */
-    struct pipe_context *pipe;
     struct pipe_index_buffer buffer;
-    struct pipe_transfer *transfer;
-    UINT map_count;
 
     D3DINDEXBUFFER_DESC desc;
 };
@@ -69,19 +66,21 @@ NineIndexBuffer9_dtor( struct NineIndexBuffer9 *This );
 const struct pipe_index_buffer *
 NineIndexBuffer9_GetBuffer( struct NineIndexBuffer9 *This );
 
+struct pipe_resource *
+NineIndexBuffer9_GetResource( struct NineIndexBuffer9 *This );
 /*** Direct3D public ***/
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineIndexBuffer9_Lock( struct NineIndexBuffer9 *This,
                        UINT OffsetToLock,
                        UINT SizeToLock,
                        void **ppbData,
                        DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineIndexBuffer9_Unlock( struct NineIndexBuffer9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineIndexBuffer9_GetDesc( struct NineIndexBuffer9 *This,
                           D3DINDEXBUFFER_DESC *pDesc );
 

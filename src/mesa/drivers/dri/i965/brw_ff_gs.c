@@ -29,7 +29,6 @@
   *   Keith Whitwell <keithw@vmware.com>
   */
 
-#include "main/glheader.h"
 #include "main/macros.h"
 #include "main/enums.h"
 #include "main/transformfeedback.h"

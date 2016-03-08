@@ -121,11 +121,9 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 		if (!resources[i])
 			continue;
 
-		/* recreate the CS handle */
-		resources[i]->resource.cs_buf = ctx->b.ws->buffer_get_cs_handle(
-			resources[i]->resource.buf);
+		/* reset the address */
 		resources[i]->resource.gpu_address = ctx->b.ws->buffer_get_virtual_address(
-			resources[i]->resource.cs_buf);
+			resources[i]->resource.buf);
 	}
 
 	template.height *= array_size;
@@ -155,29 +153,29 @@ static uint32_t eg_num_banks(uint32_t nbanks)
 }
 
 /* set the decoding target buffer offsets */
-static struct radeon_winsys_cs_handle* r600_uvd_set_dtb(struct ruvd_msg *msg, struct vl_video_buffer *buf)
+static struct pb_buffer* r600_uvd_set_dtb(struct ruvd_msg *msg, struct vl_video_buffer *buf)
 {
 	struct r600_screen *rscreen = (struct r600_screen*)buf->base.context->screen;
 	struct r600_texture *luma = (struct r600_texture *)buf->resources[0];
 	struct r600_texture *chroma = (struct r600_texture *)buf->resources[1];
 
 	msg->body.decode.dt_field_mode = buf->base.interlaced;
-	msg->body.decode.dt_surf_tile_config |= RUVD_NUM_BANKS(eg_num_banks(rscreen->b.tiling_info.num_banks));
+	msg->body.decode.dt_surf_tile_config |= RUVD_NUM_BANKS(eg_num_banks(rscreen->b.info.r600_num_banks));
 
 	ruvd_set_dt_surfaces(msg, &luma->surface, &chroma->surface);
 
-	return luma->resource.cs_buf;
+	return luma->resource.buf;
 }
 
 /* get the radeon resources for VCE */
 static void r600_vce_get_buffer(struct pipe_resource *resource,
-				struct radeon_winsys_cs_handle **handle,
+				struct pb_buffer **handle,
 				struct radeon_surf **surface)
 {
 	struct r600_texture *res = (struct r600_texture *)resource;
 
 	if (handle)
-		*handle = res->resource.cs_buf;
+		*handle = res->resource.buf;
 
 	if (surface)
 		*surface = &res->surface;

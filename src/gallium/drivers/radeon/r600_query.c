@@ -100,6 +100,12 @@ static boolean r600_query_sw_begin(struct r600_common_context *rctx,
 	case R600_QUERY_NUM_SHADERS_CREATED:
 		query->begin_result = p_atomic_read(&rctx->screen->num_shaders_created);
 		break;
+	case R600_QUERY_GPIN_ASIC_ID:
+	case R600_QUERY_GPIN_NUM_SIMD:
+	case R600_QUERY_GPIN_NUM_RB:
+	case R600_QUERY_GPIN_NUM_SPI:
+	case R600_QUERY_GPIN_NUM_SE:
+		break;
 	default:
 		unreachable("r600_query_sw_begin: bad query type");
 	}
@@ -146,6 +152,12 @@ static void r600_query_sw_end(struct r600_common_context *rctx,
 	case R600_QUERY_NUM_SHADERS_CREATED:
 		query->end_result = p_atomic_read(&rctx->screen->num_shaders_created);
 		break;
+	case R600_QUERY_GPIN_ASIC_ID:
+	case R600_QUERY_GPIN_NUM_SIMD:
+	case R600_QUERY_GPIN_NUM_RB:
+	case R600_QUERY_GPIN_NUM_SPI:
+	case R600_QUERY_GPIN_NUM_SE:
+		break;
 	default:
 		unreachable("r600_query_sw_end: bad query type");
 	}
@@ -162,7 +174,7 @@ static boolean r600_query_sw_get_result(struct r600_common_context *rctx,
 	case PIPE_QUERY_TIMESTAMP_DISJOINT:
 		/* Convert from cycles per millisecond to cycles per second (Hz). */
 		result->timestamp_disjoint.frequency =
-			(uint64_t)rctx->screen->info.r600_clock_crystal_freq * 1000;
+			(uint64_t)rctx->screen->info.clock_crystal_freq * 1000;
 		result->timestamp_disjoint.disjoint = FALSE;
 		return TRUE;
 	case PIPE_QUERY_GPU_FINISHED: {
@@ -171,6 +183,22 @@ static boolean r600_query_sw_get_result(struct r600_common_context *rctx,
 						 wait ? PIPE_TIMEOUT_INFINITE : 0);
 		return result->b;
 	}
+
+	case R600_QUERY_GPIN_ASIC_ID:
+		result->u32 = 0;
+		return TRUE;
+	case R600_QUERY_GPIN_NUM_SIMD:
+		result->u32 = rctx->screen->info.num_good_compute_units;
+		return TRUE;
+	case R600_QUERY_GPIN_NUM_RB:
+		result->u32 = rctx->screen->info.num_render_backends;
+		return TRUE;
+	case R600_QUERY_GPIN_NUM_SPI:
+		result->u32 = 1; /* all supported chips have one SPI per SE */
+		return TRUE;
+	case R600_QUERY_GPIN_NUM_SE:
+		result->u32 = rctx->screen->info.max_se;
+		return TRUE;
 	}
 
 	result->u64 = query->end_result - query->begin_result;
@@ -202,7 +230,7 @@ static struct pipe_query *r600_query_sw_create(struct pipe_context *ctx,
 	struct r600_query_sw *query;
 
 	query = CALLOC_STRUCT(r600_query_sw);
-	if (query == NULL)
+	if (!query)
 		return NULL;
 
 	query->b.type = query_type;
@@ -232,7 +260,7 @@ void r600_query_hw_destroy(struct r600_common_context *rctx,
 static struct r600_resource *r600_new_query_buffer(struct r600_common_context *ctx,
 						   struct r600_query_hw *query)
 {
-	unsigned buf_size = 4096;
+	unsigned buf_size = MAX2(query->result_size, 4096);
 
 	/* Queries are normally read by the CPU after
 	 * being written by the gpu, hence staging is probably a good
@@ -253,7 +281,7 @@ static void r600_query_hw_prepare_buffer(struct r600_common_context *ctx,
 					 struct r600_resource *buffer)
 {
 	/* Callers ensure that the buffer is currently unused by the GPU. */
-	uint32_t *results = ctx->ws->buffer_map(buffer->cs_buf, NULL,
+	uint32_t *results = ctx->ws->buffer_map(buffer->buf, NULL,
 						PIPE_TRANSFER_WRITE |
 						PIPE_TRANSFER_UNSYNCHRONIZED);
 
@@ -667,7 +695,7 @@ static void r600_query_hw_reset_buffers(struct r600_common_context *rctx,
 
 	if (query->flags & R600_QUERY_HW_FLAG_PREDICATE) {
 		/* Obtain a new buffer if the current one can't be mapped without a stall. */
-		if (r600_rings_is_buffer_referenced(rctx, query->buffer.buf->cs_buf, RADEON_USAGE_READWRITE) ||
+		if (r600_rings_is_buffer_referenced(rctx, query->buffer.buf->buf, RADEON_USAGE_READWRITE) ||
 		    !rctx->ws->buffer_wait(query->buffer.buf->buf, 0, RADEON_USAGE_READWRITE)) {
 			pipe_resource_reference((struct pipe_resource**)&query->buffer.buf, NULL);
 			query->buffer.buf = r600_new_query_buffer(rctx, query);
@@ -908,7 +936,7 @@ boolean r600_query_hw_get_result(struct r600_common_context *rctx,
 	/* Convert the time to expected units. */
 	if (rquery->type == PIPE_QUERY_TIME_ELAPSED ||
 	    rquery->type == PIPE_QUERY_TIMESTAMP) {
-		result->u64 = (1000000 * result->u64) / rctx->screen->info.r600_clock_crystal_freq;
+		result->u64 = (1000000 * result->u64) / rctx->screen->info.clock_crystal_freq;
 	}
 	return TRUE;
 }
@@ -1021,13 +1049,13 @@ void r600_query_init_backend_mask(struct r600_common_context *ctx)
 	struct radeon_winsys_cs *cs = ctx->gfx.cs;
 	struct r600_resource *buffer;
 	uint32_t *results;
-	unsigned num_backends = ctx->screen->info.r600_num_backends;
+	unsigned num_backends = ctx->screen->info.num_render_backends;
 	unsigned i, mask = 0;
 
 	/* if backend_map query is supported by the kernel */
-	if (ctx->screen->info.r600_backend_map_valid) {
-		unsigned num_tile_pipes = ctx->screen->info.r600_num_tile_pipes;
-		unsigned backend_map = ctx->screen->info.r600_backend_map;
+	if (ctx->screen->info.r600_gb_backend_map_valid) {
+		unsigned num_tile_pipes = ctx->screen->info.num_tile_pipes;
+		unsigned backend_map = ctx->screen->info.r600_gb_backend_map;
 		unsigned item_width, item_mask;
 
 		if (ctx->chip_class >= EVERGREEN) {
@@ -1096,14 +1124,20 @@ err:
 	return;
 }
 
-#define X(name_, query_type_, type_, result_type_) \
+#define XFULL(name_, query_type_, type_, result_type_, group_id_) \
 	{ \
 		.name = name_, \
 		.query_type = R600_QUERY_##query_type_, \
 		.type = PIPE_DRIVER_QUERY_TYPE_##type_, \
 		.result_type = PIPE_DRIVER_QUERY_RESULT_TYPE_##result_type_, \
-		.group_id = ~(unsigned)0 \
+		.group_id = group_id_ \
 	}
+
+#define X(name_, query_type_, type_, result_type_) \
+	XFULL(name_, query_type_, type_, result_type_, ~(unsigned)0)
+
+#define XG(group_, name_, query_type_, type_, result_type_) \
+	XFULL(name_, query_type_, type_, result_type_, R600_QUERY_GROUP_##group_)
 
 static struct pipe_driver_query_info r600_driver_query_list[] = {
 	X("num-compilations",		NUM_COMPILATIONS,	UINT64, CUMULATIVE),
@@ -1116,6 +1150,20 @@ static struct pipe_driver_query_info r600_driver_query_list[] = {
 	X("num-bytes-moved",		NUM_BYTES_MOVED,	BYTES, CUMULATIVE),
 	X("VRAM-usage",			VRAM_USAGE,		BYTES, AVERAGE),
 	X("GTT-usage",			GTT_USAGE,		BYTES, AVERAGE),
+
+	/* GPIN queries are for the benefit of old versions of GPUPerfStudio,
+	 * which use it as a fallback path to detect the GPU type.
+	 *
+	 * Note: The names of these queries are significant for GPUPerfStudio
+	 * (and possibly their order as well). */
+	XG(GPIN, "GPIN_000",		GPIN_ASIC_ID,		UINT, AVERAGE),
+	XG(GPIN, "GPIN_001",		GPIN_NUM_SIMD,		UINT, AVERAGE),
+	XG(GPIN, "GPIN_002",		GPIN_NUM_RB,		UINT, AVERAGE),
+	XG(GPIN, "GPIN_003",		GPIN_NUM_SPI,		UINT, AVERAGE),
+	XG(GPIN, "GPIN_004",		GPIN_NUM_SE,		UINT, AVERAGE),
+
+	/* The following queries must be at the end of the list because their
+	 * availability is adjusted dynamically based on the DRM version. */
 	X("GPU-load",			GPU_LOAD,		UINT64, AVERAGE),
 	X("temperature",		GPU_TEMPERATURE,	UINT64, AVERAGE),
 	X("shader-clock",		CURRENT_GPU_SCLK,	HZ, AVERAGE),
@@ -1123,6 +1171,8 @@ static struct pipe_driver_query_info r600_driver_query_list[] = {
 };
 
 #undef X
+#undef XG
+#undef XFULL
 
 static unsigned r600_get_num_queries(struct r600_common_screen *rscreen)
 {
@@ -1141,11 +1191,15 @@ static int r600_get_driver_query_info(struct pipe_screen *screen,
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 	unsigned num_queries = r600_get_num_queries(rscreen);
 
-	if (!info)
-		return num_queries;
+	if (!info) {
+		unsigned num_perfcounters =
+			r600_get_perfcounter_info(rscreen, 0, NULL);
+
+		return num_queries + num_perfcounters;
+	}
 
 	if (index >= num_queries)
-		return 0;
+		return r600_get_perfcounter_info(rscreen, index - num_queries, info);
 
 	*info = r600_driver_query_list[index];
 
@@ -1163,19 +1217,53 @@ static int r600_get_driver_query_info(struct pipe_screen *screen,
 		break;
 	}
 
+	if (info->group_id != ~(unsigned)0 && rscreen->perfcounters)
+		info->group_id += rscreen->perfcounters->num_groups;
+
+	return 1;
+}
+
+/* Note: Unfortunately, GPUPerfStudio hardcodes the order of hardware
+ * performance counter groups, so be careful when changing this and related
+ * functions.
+ */
+static int r600_get_driver_query_group_info(struct pipe_screen *screen,
+					    unsigned index,
+					    struct pipe_driver_query_group_info *info)
+{
+	struct r600_common_screen *rscreen = (struct r600_common_screen *)screen;
+	unsigned num_pc_groups = 0;
+
+	if (rscreen->perfcounters)
+		num_pc_groups = rscreen->perfcounters->num_groups;
+
+	if (!info)
+		return num_pc_groups + R600_NUM_SW_QUERY_GROUPS;
+
+	if (index < num_pc_groups)
+		return r600_get_perfcounter_group_info(rscreen, index, info);
+
+	index -= num_pc_groups;
+	if (index >= R600_NUM_SW_QUERY_GROUPS)
+		return 0;
+
+	info->name = "GPIN";
+	info->max_active_queries = 5;
+	info->num_queries = 5;
 	return 1;
 }
 
 void r600_query_init(struct r600_common_context *rctx)
 {
 	rctx->b.create_query = r600_create_query;
+	rctx->b.create_batch_query = r600_create_batch_query;
 	rctx->b.destroy_query = r600_destroy_query;
 	rctx->b.begin_query = r600_begin_query;
 	rctx->b.end_query = r600_end_query;
 	rctx->b.get_query_result = r600_get_query_result;
 	rctx->render_cond_atom.emit = r600_emit_query_predication;
 
-	if (((struct r600_common_screen*)rctx->b.screen)->info.r600_num_backends > 0)
+	if (((struct r600_common_screen*)rctx->b.screen)->info.num_render_backends > 0)
 	    rctx->b.render_condition = r600_render_condition;
 
 	LIST_INITHEAD(&rctx->active_nontimer_queries);
@@ -1185,4 +1273,5 @@ void r600_query_init(struct r600_common_context *rctx)
 void r600_init_screen_query_functions(struct r600_common_screen *rscreen)
 {
 	rscreen->b.get_driver_query_info = r600_get_driver_query_info;
+	rscreen->b.get_driver_query_group_info = r600_get_driver_query_group_info;
 }

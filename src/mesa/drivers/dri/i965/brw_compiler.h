@@ -191,6 +191,38 @@ struct brw_vs_prog_key {
    struct brw_sampler_prog_key_data tex;
 };
 
+/** The program key for Tessellation Control Shaders. */
+struct brw_tcs_prog_key
+{
+   unsigned program_string_id;
+
+   GLenum tes_primitive_mode;
+
+   unsigned input_vertices;
+
+   /** A bitfield of per-patch outputs written. */
+   uint32_t patch_outputs_written;
+
+   /** A bitfield of per-vertex outputs written. */
+   uint64_t outputs_written;
+
+   struct brw_sampler_prog_key_data tex;
+};
+
+/** The program key for Tessellation Evaluation Shaders. */
+struct brw_tes_prog_key
+{
+   unsigned program_string_id;
+
+   /** A bitfield of per-patch inputs read. */
+   uint32_t patch_inputs_read;
+
+   /** A bitfield of per-vertex inputs read. */
+   uint64_t inputs_read;
+
+   struct brw_sampler_prog_key_data tex;
+};
+
 /** The program key for Geometry Shaders. */
 struct brw_gs_prog_key
 {
@@ -214,6 +246,7 @@ struct brw_wm_prog_key {
    bool compute_sample_id:1;
    unsigned line_aa:2;
    bool high_quality_derivatives:1;
+   bool force_dual_color_blend:1;
 
    uint16_t drawable_height;
    uint64_t input_slots_valid;
@@ -300,6 +333,7 @@ struct brw_stage_prog_data {
 
    unsigned curb_read_length;
    unsigned total_scratch;
+   unsigned total_shared;
 
    /**
     * Register where the thread expects to find input data from the URB
@@ -350,6 +384,9 @@ struct brw_wm_prog_data {
    bool uses_pos_offset;
    bool uses_omask;
    bool uses_kill;
+   bool uses_src_depth;
+   bool uses_src_w;
+   bool uses_sample_mask;
    bool pulls_bary;
    uint32_t prog_offset_16;
 
@@ -441,7 +478,7 @@ struct brw_vue_map {
     * additional processing is applied before storing them in the VUE), the
     * value is -1.
     */
-   signed char varying_to_slot[BRW_VARYING_SLOT_COUNT];
+   signed char varying_to_slot[VARYING_SLOT_TESS_MAX];
 
    /**
     * Map from VUE slot to gl_varying_slot value.  For slots that do not
@@ -450,12 +487,24 @@ struct brw_vue_map {
     *
     * For slots that are not in use, the value is BRW_VARYING_SLOT_PAD.
     */
-   signed char slot_to_varying[BRW_VARYING_SLOT_COUNT];
+   signed char slot_to_varying[VARYING_SLOT_TESS_MAX];
 
    /**
     * Total number of VUE slots in use
     */
    int num_slots;
+
+   /**
+    * Number of per-patch VUE slots. Only valid for tessellation control
+    * shader outputs and tessellation evaluation shader inputs.
+    */
+   int num_per_patch_slots;
+
+   /**
+    * Number of per-vertex VUE slots. Only valid for tessellation control
+    * shader outputs and tessellation evaluation shader inputs.
+    */
+   int num_per_vertex_slots;
 };
 
 void brw_print_vue_map(FILE *fp, const struct brw_vue_map *vue_map);
@@ -482,6 +531,10 @@ void brw_compute_vue_map(const struct brw_device_info *devinfo,
                          struct brw_vue_map *vue_map,
                          GLbitfield64 slots_valid,
                          bool separate_shader);
+
+void brw_compute_tess_vue_map(struct brw_vue_map *const vue_map,
+                              const GLbitfield64 slots_valid,
+                              const GLbitfield is_patch);
 
 enum shader_dispatch_mode {
    DISPATCH_MODE_4X1_SINGLE = 0,
@@ -546,11 +599,34 @@ struct brw_vs_prog_data {
 
    bool uses_vertexid;
    bool uses_instanceid;
+   bool uses_basevertex;
+   bool uses_baseinstance;
+   bool uses_drawid;
+};
+
+struct brw_tcs_prog_data
+{
+   struct brw_vue_prog_data base;
+
+   /** Number vertices in output patch */
+   int instances;
+};
+
+
+struct brw_tes_prog_data
+{
+   struct brw_vue_prog_data base;
+
+   enum brw_tess_partitioning partitioning;
+   enum brw_tess_output_topology output_topology;
+   enum brw_tess_domain domain;
 };
 
 struct brw_gs_prog_data
 {
    struct brw_vue_prog_data base;
+
+   unsigned vertices_in;
 
    /**
     * Size of an output vertex, measured in HWORDS (32 bytes).
@@ -616,6 +692,9 @@ struct brw_gs_prog_data
 
 /** @} */
 
+struct brw_compiler *
+brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo);
+
 /**
  * Compile a vertex shader.
  *
@@ -632,6 +711,38 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
                int shader_time_index,
                unsigned *final_assembly_size,
                char **error_str);
+
+/**
+ * Compile a tessellation control shader.
+ *
+ * Returns the final assembly and the program's size.
+ */
+const unsigned *
+brw_compile_tcs(const struct brw_compiler *compiler,
+                void *log_data,
+                void *mem_ctx,
+                const struct brw_tcs_prog_key *key,
+                struct brw_tcs_prog_data *prog_data,
+                const struct nir_shader *nir,
+                int shader_time_index,
+                unsigned *final_assembly_size,
+                char **error_str);
+
+/**
+ * Compile a tessellation evaluation shader.
+ *
+ * Returns the final assembly and the program's size.
+ */
+const unsigned *
+brw_compile_tes(const struct brw_compiler *compiler, void *log_data,
+                void *mem_ctx,
+                const struct brw_tes_prog_key *key,
+                struct brw_tes_prog_data *prog_data,
+                const struct nir_shader *shader,
+                struct gl_shader_program *shader_prog,
+                int shader_time_index,
+                unsigned *final_assembly_size,
+                char **error_str);
 
 /**
  * Compile a vertex shader.
@@ -681,6 +792,13 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
                int shader_time_index,
                unsigned *final_assembly_size,
                char **error_str);
+
+/**
+ * Fill out local id payload for compute shader according to cs_prog_data.
+ */
+void
+brw_cs_fill_local_id_payload(const struct brw_cs_prog_data *cs_prog_data,
+                             void *buffer, uint32_t threads, uint32_t stride);
 
 #ifdef __cplusplus
 } /* extern "C" */

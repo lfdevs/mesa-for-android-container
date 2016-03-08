@@ -18,7 +18,6 @@ struct lp_setup_variant_key {
    unsigned size:16;
    unsigned num_inputs:8;
    int color_slot:8;
-
    int bcolor_slot:8;
    int spec_slot:8;
    int bspec_slot:8;

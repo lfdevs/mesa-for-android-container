@@ -107,6 +107,12 @@ svga_init_resource_functions(struct svga_context *svga)
    svga->pipe.transfer_flush_region = u_transfer_flush_region_vtbl;
    svga->pipe.transfer_unmap = u_transfer_unmap_vtbl;
    svga->pipe.transfer_inline_write = u_transfer_inline_write_vtbl;
+
+   if (svga_have_vgpu10(svga)) {
+      svga->pipe.generate_mipmap = svga_texture_generate_mipmap;
+   } else {
+      svga->pipe.generate_mipmap = NULL;
+   }
 }
 
 void

@@ -253,14 +253,8 @@ vl_video_buffer_template(struct pipe_resource *templ,
    templ->bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
    templ->usage = usage;
 
-   if (plane > 0) {
-      if (tmpl->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420) {
-         templ->width0 /= 2;
-         templ->height0 /= 2;
-      } else if (tmpl->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_422) {
-         templ->width0 /= 2;
-      }
-   }
+   vl_video_buffer_adjust_size(&templ->width0, &templ->height0, plane,
+                               tmpl->chroma_format, false);
 }
 
 static void

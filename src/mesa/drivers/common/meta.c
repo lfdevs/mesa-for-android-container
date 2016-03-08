@@ -61,6 +61,7 @@
 #include "main/polygon.h"
 #include "main/queryobj.h"
 #include "main/readpix.h"
+#include "main/renderbuffer.h"
 #include "main/scissor.h"
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
@@ -848,8 +849,6 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
 
       save->DrawBufferName = ctx->DrawBuffer->Name;
       save->ReadBufferName = ctx->ReadBuffer->Name;
-      save->RenderbufferName = (ctx->CurrentRenderbuffer ?
-                                ctx->CurrentRenderbuffer->Name : 0);
    }
 }
 
@@ -1241,10 +1240,6 @@ _mesa_meta_end(struct gl_context *ctx)
    if (ctx->ReadBuffer->Name != save->ReadBufferName)
       _mesa_BindFramebuffer(GL_READ_FRAMEBUFFER, save->ReadBufferName);
 
-   if (!ctx->CurrentRenderbuffer ||
-       ctx->CurrentRenderbuffer->Name != save->RenderbufferName)
-      _mesa_BindRenderbuffer(GL_RENDERBUFFER, save->RenderbufferName);
-
    if (state & MESA_META_DRAW_BUFFERS) {
       _mesa_drawbuffers(ctx, ctx->DrawBuffer, ctx->Const.MaxDrawBuffers,
                         save->ColorDrawBuffers, NULL);
@@ -1544,7 +1539,8 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
    const char *vs_source =
       "#extension GL_AMD_vertex_shader_layer : enable\n"
       "#extension GL_ARB_draw_instanced : enable\n"
-      "attribute vec4 position;\n"
+      "#extension GL_ARB_explicit_attrib_location :enable\n"
+      "layout(location = 0) in vec4 position;\n"
       "void main()\n"
       "{\n"
       "#ifdef GL_AMD_vertex_shader_layer\n"
@@ -1553,7 +1549,9 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       "   gl_Position = position;\n"
       "}\n";
    const char *fs_source =
-      "uniform vec4 color;\n"
+      "#extension GL_ARB_explicit_attrib_location :enable\n"
+      "#extension GL_ARB_explicit_uniform_location :enable\n"
+      "layout(location = 0) uniform vec4 color;\n"
       "void main()\n"
       "{\n"
       "   gl_FragColor = color;\n"
@@ -1580,11 +1578,8 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
    _mesa_DeleteShader(fs);
    _mesa_AttachShader(clear->ShaderProg, vs);
    _mesa_DeleteShader(vs);
-   _mesa_BindAttribLocation(clear->ShaderProg, 0, "position");
    _mesa_ObjectLabel(GL_PROGRAM, clear->ShaderProg, -1, "meta clear");
    _mesa_LinkProgram(clear->ShaderProg);
-
-   clear->ColorLocation = _mesa_GetUniformLocation(clear->ShaderProg, "color");
 
    has_integer_textures = _mesa_is_gles3(ctx) ||
       (_mesa_is_desktop_gl(ctx) && ctx->Const.GLSLVersion >= 130);
@@ -1596,7 +1591,8 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
                          "#version 130\n"
                          "#extension GL_AMD_vertex_shader_layer : enable\n"
                          "#extension GL_ARB_draw_instanced : enable\n"
-                         "in vec4 position;\n"
+                         "#extension GL_ARB_explicit_attrib_location :enable\n"
+                         "layout(location = 0) in vec4 position;\n"
                          "void main()\n"
                          "{\n"
                          "#ifdef GL_AMD_vertex_shader_layer\n"
@@ -1607,7 +1603,9 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       const char *fs_int_source =
          ralloc_asprintf(shader_source_mem_ctx,
                          "#version 130\n"
-                         "uniform ivec4 color;\n"
+                         "#extension GL_ARB_explicit_attrib_location :enable\n"
+                         "#extension GL_ARB_explicit_uniform_location :enable\n"
+                         "layout(location = 0) uniform ivec4 color;\n"
                          "out ivec4 out_color;\n"
                          "\n"
                          "void main()\n"
@@ -1626,7 +1624,6 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       _mesa_DeleteShader(fs);
       _mesa_AttachShader(clear->IntegerShaderProg, vs);
       _mesa_DeleteShader(vs);
-      _mesa_BindAttribLocation(clear->IntegerShaderProg, 0, "position");
 
       /* Note that user-defined out attributes get automatically assigned
        * locations starting from 0, so we don't need to explicitly
@@ -1636,9 +1633,6 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       _mesa_ObjectLabel(GL_PROGRAM, clear->IntegerShaderProg, -1,
                         "integer clear");
       _mesa_meta_link_program_with_debug(ctx, clear->IntegerShaderProg);
-
-      clear->IntegerColorLocation =
-	 _mesa_GetUniformLocation(clear->IntegerShaderProg, "color");
    }
 }
 
@@ -1770,12 +1764,10 @@ meta_clear(struct gl_context *ctx, GLbitfield buffers, bool glsl)
    if (fb->_IntegerColor) {
       assert(glsl);
       _mesa_UseProgram(clear->IntegerShaderProg);
-      _mesa_Uniform4iv(clear->IntegerColorLocation, 1,
-			  ctx->Color.ClearColor.i);
+      _mesa_Uniform4iv(0, 1, ctx->Color.ClearColor.i);
    } else if (glsl) {
       _mesa_UseProgram(clear->ShaderProg);
-      _mesa_Uniform4fv(clear->ColorLocation, 1,
-			  ctx->Color.ClearColor.f);
+      _mesa_Uniform4fv(0, 1, ctx->Color.ClearColor.f);
    }
 
    /* GL_COLOR_BUFFER_BIT */
@@ -2971,7 +2963,7 @@ meta_decompress_fbo_cleanup(struct decompress_fbo_state *decompress_fbo)
 {
    if (decompress_fbo->FBO != 0) {
       _mesa_DeleteFramebuffers(1, &decompress_fbo->FBO);
-      _mesa_DeleteRenderbuffers(1, &decompress_fbo->RBO);
+      _mesa_reference_renderbuffer(&decompress_fbo->rb, NULL);
    }
 
    memset(decompress_fbo, 0, sizeof(*decompress_fbo));
@@ -2989,8 +2981,7 @@ meta_decompress_cleanup(struct gl_context *ctx,
       _mesa_reference_buffer_object(ctx, &decompress->buf_obj, NULL);
    }
 
-   if (decompress->Sampler != 0)
-      _mesa_DeleteSamplers(1, &decompress->Sampler);
+   _mesa_reference_sampler_object(ctx, &decompress->samp_obj, NULL);
 
    memset(decompress, 0, sizeof(*decompress));
 }
@@ -3020,7 +3011,7 @@ decompress_texture_image(struct gl_context *ctx,
    GLenum rbFormat;
    GLenum faceTarget;
    struct vertex verts[4];
-   GLuint samplerSave;
+   struct gl_sampler_object *samp_obj_save = NULL;
    GLenum status;
    const bool use_glsl_version = ctx->Extensions.ARB_vertex_shader &&
                                       ctx->Extensions.ARB_fragment_shader;
@@ -3070,19 +3061,23 @@ decompress_texture_image(struct gl_context *ctx,
    _mesa_meta_begin(ctx, MESA_META_ALL & ~(MESA_META_PIXEL_STORE |
                                            MESA_META_DRAW_BUFFERS));
 
-   samplerSave = ctx->Texture.Unit[ctx->Texture.CurrentUnit].Sampler ?
-         ctx->Texture.Unit[ctx->Texture.CurrentUnit].Sampler->Name : 0;
+   _mesa_reference_sampler_object(ctx, &samp_obj_save,
+                                  ctx->Texture.Unit[ctx->Texture.CurrentUnit].Sampler);
 
    /* Create/bind FBO/renderbuffer */
    if (decompress_fbo->FBO == 0) {
+      decompress_fbo->rb = ctx->Driver.NewRenderbuffer(ctx, 0xDEADBEEF);
+      if (decompress_fbo->rb == NULL) {
+         _mesa_meta_end(ctx);
+         return false;
+      }
+
+      decompress_fbo->rb->RefCount = 1;
+
       _mesa_GenFramebuffers(1, &decompress_fbo->FBO);
-      _mesa_GenRenderbuffers(1, &decompress_fbo->RBO);
       _mesa_BindFramebuffer(GL_FRAMEBUFFER_EXT, decompress_fbo->FBO);
-      _mesa_BindRenderbuffer(GL_RENDERBUFFER_EXT, decompress_fbo->RBO);
-      _mesa_FramebufferRenderbuffer(GL_FRAMEBUFFER_EXT,
-                                       GL_COLOR_ATTACHMENT0_EXT,
-                                       GL_RENDERBUFFER_EXT,
-                                       decompress_fbo->RBO);
+      _mesa_framebuffer_renderbuffer(ctx, ctx->DrawBuffer, GL_COLOR_ATTACHMENT0,
+                                     decompress_fbo->rb);
    }
    else {
       _mesa_BindFramebuffer(GL_FRAMEBUFFER_EXT, decompress_fbo->FBO);
@@ -3090,9 +3085,8 @@ decompress_texture_image(struct gl_context *ctx,
 
    /* alloc dest surface */
    if (width > decompress_fbo->Width || height > decompress_fbo->Height) {
-      _mesa_BindRenderbuffer(GL_RENDERBUFFER_EXT, decompress_fbo->RBO);
-      _mesa_RenderbufferStorage(GL_RENDERBUFFER_EXT, rbFormat,
-                                width, height);
+      _mesa_renderbuffer_storage(ctx, decompress_fbo->rb, rbFormat,
+                                 width, height, 0);
       status = _mesa_CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
       if (status != GL_FRAMEBUFFER_COMPLETE) {
          /* If the framebuffer isn't complete then we'll leave
@@ -3116,21 +3110,31 @@ decompress_texture_image(struct gl_context *ctx,
                                        &decompress->buf_obj, 3);
    }
 
-   if (!decompress->Sampler) {
-      _mesa_GenSamplers(1, &decompress->Sampler);
-      _mesa_BindSampler(ctx->Texture.CurrentUnit, decompress->Sampler);
-      /* nearest filtering */
-      _mesa_SamplerParameteri(decompress->Sampler, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      _mesa_SamplerParameteri(decompress->Sampler, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-      /* No sRGB decode or encode.*/
-      if (ctx->Extensions.EXT_texture_sRGB_decode) {
-         _mesa_SamplerParameteri(decompress->Sampler, GL_TEXTURE_SRGB_DECODE_EXT,
-                             GL_SKIP_DECODE_EXT);
+   if (decompress->samp_obj == NULL) {
+      decompress->samp_obj =  ctx->Driver.NewSamplerObject(ctx, 0xDEADBEEF);
+      if (decompress->samp_obj == NULL) {
+         _mesa_meta_end(ctx);
+
+         /* This is a bit lazy.  Flag out of memory, and then don't bother to
+          * clean up.  Once out of memory is flagged, the only realistic next
+          * move is to destroy the context.  That will trigger all the right
+          * clean up.
+          *
+          * Returning true prevents other GetTexImage methods from attempting
+          * anything since they will likely fail too.
+          */
+         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage");
+         return true;
       }
 
-   } else {
-      _mesa_BindSampler(ctx->Texture.CurrentUnit, decompress->Sampler);
+      /* nearest filtering */
+      _mesa_set_sampler_filters(ctx, decompress->samp_obj, GL_NEAREST, GL_NEAREST);
+
+      /* We don't want to encode or decode sRGB values; treat them as linear. */
+      _mesa_set_sampler_srgb_decode(ctx, decompress->samp_obj, GL_SKIP_DECODE_EXT);
    }
+
+   _mesa_bind_sampler(ctx, ctx->Texture.CurrentUnit, decompress->samp_obj);
 
    /* Silence valgrind warnings about reading uninitialized stack. */
    memset(verts, 0, sizeof(verts));
@@ -3225,7 +3229,8 @@ decompress_texture_image(struct gl_context *ctx,
    if (!use_glsl_version)
       _mesa_set_enable(ctx, target, GL_FALSE);
 
-   _mesa_BindSampler(ctx->Texture.CurrentUnit, samplerSave);
+   _mesa_bind_sampler(ctx, ctx->Texture.CurrentUnit, samp_obj_save);
+   _mesa_reference_sampler_object(ctx, &samp_obj_save, NULL);
 
    _mesa_meta_end(ctx);
 

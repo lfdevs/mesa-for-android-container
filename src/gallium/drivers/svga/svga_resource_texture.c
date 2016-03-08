@@ -506,7 +506,7 @@ svga_texture_transfer_map(struct pipe_context *pipe,
       /*
        * Make sure we return NULL if the map fails
        */
-      if (map == NULL) {
+      if (!map) {
          FREE(st);
          return map;
       }
@@ -992,4 +992,62 @@ svga_texture_from_handle(struct pipe_screen *screen,
    ss->hud.num_resources++;
 
    return &tex->b.b;
+}
+
+boolean
+svga_texture_generate_mipmap(struct pipe_context *pipe,
+                             struct pipe_resource *pt,
+                             enum pipe_format format,
+                             unsigned base_level,
+                             unsigned last_level,
+                             unsigned first_layer,
+                             unsigned last_layer)
+{
+   struct pipe_sampler_view templ, *psv;
+   struct svga_pipe_sampler_view *sv;
+   struct svga_context *svga = svga_context(pipe);
+   struct svga_texture *tex = svga_texture(pt);
+   enum pipe_error ret;
+
+   assert(svga_have_vgpu10(svga));
+
+   /* Only support 2D texture for now */
+   if (pt->target != PIPE_TEXTURE_2D)
+      return FALSE;
+
+   /* Fallback to the mipmap generation utility for those formats that
+    * do not support hw generate mipmap
+    */
+   if (!svga_format_support_gen_mips(format))
+      return FALSE;
+
+   /* Make sure the texture surface was created with
+    * SVGA3D_SURFACE_BIND_RENDER_TARGET
+    */
+   if (!tex->handle || !(tex->key.flags & SVGA3D_SURFACE_BIND_RENDER_TARGET))
+      return FALSE;
+
+   templ.format = format;
+   templ.u.tex.first_layer = first_layer;
+   templ.u.tex.last_layer = last_layer;
+   templ.u.tex.first_level = base_level;
+   templ.u.tex.last_level = last_level;
+
+   psv = pipe->create_sampler_view(pipe, pt, &templ);
+   if (psv == NULL)
+      return FALSE;
+
+   sv = svga_pipe_sampler_view(psv);
+   svga_validate_pipe_sampler_view(svga, sv);
+
+   ret = SVGA3D_vgpu10_GenMips(svga->swc, sv->id, tex->handle);
+   if (ret != PIPE_OK) {
+      svga_context_flush(svga, NULL);
+      ret = SVGA3D_vgpu10_GenMips(svga->swc, sv->id, tex->handle);
+   }
+   pipe_sampler_view_reference(&psv, NULL);
+
+   svga->hud.num_generate_mipmap++;
+
+   return TRUE;
 }

@@ -33,6 +33,7 @@ struct nouveau_context;
 
 struct nouveau_screen {
 	__DRIscreen *dri_screen;
+	struct nouveau_drm *drm;
 	struct nouveau_device *device;
 	const struct nouveau_driver *driver;
 };

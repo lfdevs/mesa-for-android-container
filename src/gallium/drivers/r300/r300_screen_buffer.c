@@ -42,7 +42,7 @@ void r300_upload_index_buffer(struct r300_context *r300,
     *index_buffer = NULL;
 
     u_upload_data(r300->uploader,
-                  0, count * index_size,
+                  0, count * index_size, 4,
                   ptr + (*start * index_size),
                   &index_offset,
                   index_buffer);
@@ -95,7 +95,7 @@ r300_buffer_transfer_map( struct pipe_context *context,
         assert(usage & PIPE_TRANSFER_WRITE);
 
         /* Check if mapping this buffer would cause waiting for the GPU. */
-        if (r300->rws->cs_is_buffer_referenced(r300->cs, rbuf->cs_buf, RADEON_USAGE_READWRITE) ||
+        if (r300->rws->cs_is_buffer_referenced(r300->cs, rbuf->buf, RADEON_USAGE_READWRITE) ||
             !r300->rws->buffer_wait(rbuf->buf, 0, RADEON_USAGE_READWRITE)) {
             unsigned i;
             struct pb_buffer *new_buf;
@@ -108,7 +108,6 @@ r300_buffer_transfer_map( struct pipe_context *context,
                 /* Discard the old buffer. */
                 pb_reference(&rbuf->buf, NULL);
                 rbuf->buf = new_buf;
-                rbuf->cs_buf = r300->rws->buffer_get_cs_handle(rbuf->buf);
 
                 /* We changed the buffer, now we need to bind it where the old one was bound. */
                 for (i = 0; i < r300->nr_vertex_buffers; i++) {
@@ -127,9 +126,9 @@ r300_buffer_transfer_map( struct pipe_context *context,
        usage |= PIPE_TRANSFER_UNSYNCHRONIZED;
     }
 
-    map = rws->buffer_map(rbuf->cs_buf, r300->cs, usage);
+    map = rws->buffer_map(rbuf->buf, r300->cs, usage);
 
-    if (map == NULL) {
+    if (!map) {
         util_slab_free(&r300->pool_transfers, transfer);
         return NULL;
     }
@@ -190,9 +189,5 @@ struct pipe_resource *r300_buffer_create(struct pipe_screen *screen,
         FREE(rbuf);
         return NULL;
     }
-
-    rbuf->cs_buf =
-        r300screen->rws->buffer_get_cs_handle(rbuf->buf);
-
     return &rbuf->b.b;
 }

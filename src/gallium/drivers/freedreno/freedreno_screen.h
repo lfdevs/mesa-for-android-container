@@ -56,6 +56,7 @@ struct fd_screen {
 	uint32_t device_id;
 	uint32_t gpu_id;         /* 220, 305, etc */
 	uint32_t chip_id;        /* coreid:8 majorrev:8 minorrev:8 patch:8 */
+	uint32_t max_freq;
 	uint32_t max_rts;        /* max # of render targets */
 
 	void *compiler;          /* currently unused for a2xx */

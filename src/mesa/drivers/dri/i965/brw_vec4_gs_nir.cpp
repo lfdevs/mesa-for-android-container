@@ -21,7 +21,6 @@
  * IN THE SOFTWARE.
  */
 
-#include "brw_nir.h"
 #include "brw_vec4_gs_visitor.h"
 
 namespace brw {
@@ -61,19 +60,23 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    src_reg src;
 
    switch (instr->intrinsic) {
-   case nir_intrinsic_load_per_vertex_input_indirect:
-      assert(!"EmitNoIndirectInput should prevent this.");
    case nir_intrinsic_load_per_vertex_input: {
       /* The EmitNoIndirectInput flag guarantees our vertex index will
        * be constant.  We should handle indirects someday.
        */
       nir_const_value *vertex = nir_src_as_const_value(instr->src[0]);
+      nir_const_value *offset = nir_src_as_const_value(instr->src[1]);
 
       /* Make up a type...we have no way of knowing... */
       const glsl_type *const type = glsl_type::ivec(instr->num_components);
 
       src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u[0] +
-                          instr->const_index[0], type);
+                          instr->const_index[0] + offset->u[0],
+                    type);
+      /* gl_PointSize is passed in the .w component of the VUE header */
+      if (instr->const_index[0] == VARYING_SLOT_PSIZ)
+         src.swizzle = BRW_SWIZZLE_WWWW;
+
       dest = get_nir_dest(instr->dest, src.type);
       dest.writemask = brw_writemask_for_size(instr->num_components);
       emit(MOV(dest, src));
@@ -81,7 +84,6 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    }
 
    case nir_intrinsic_load_input:
-   case nir_intrinsic_load_input_indirect:
       unreachable("nir_lower_io should have produced per_vertex intrinsics");
 
    case nir_intrinsic_emit_vertex_with_counter: {

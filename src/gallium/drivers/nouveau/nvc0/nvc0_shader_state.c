@@ -236,11 +236,8 @@ nvc0_gmtyprog_validate(struct nvc0_context *nvc0)
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_program *gp = nvc0->gmtyprog;
 
-   if (gp)
-      nvc0_program_validate(nvc0, gp);
-
    /* we allow GPs with no code for specifying stream output state only */
-   if (gp && gp->code_size) {
+   if (gp && nvc0_program_validate(nvc0, gp) && gp->code_size) {
       const bool gp_selects_layer = !!(gp->hdr[13] & (1 << 9));
 
       BEGIN_NVC0(push, NVC0_3D(MACRO_GP_SELECT), 1);
@@ -319,7 +316,7 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
          continue;
 
       if (!targ->clean)
-         nvc0_hw_query_fifo_wait(push, nvc0_query(targ->pq));
+         nvc0_hw_query_fifo_wait(nvc0, nvc0_query(targ->pq));
       nouveau_pushbuf_space(push, 0, 0, 1);
       BEGIN_NVC0(push, NVC0_3D(TFB_BUFFER_ENABLE(b)), 5);
       PUSH_DATA (push, 1);

@@ -62,6 +62,7 @@ struct virgl_drm_winsys
    pipe_mutex mutex;
 
    struct util_hash_table *bo_handles;
+   struct util_hash_table *bo_names;
    pipe_mutex bo_handles_mutex;
 };
 

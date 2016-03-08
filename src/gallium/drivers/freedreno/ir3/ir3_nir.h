@@ -29,9 +29,16 @@
 #ifndef IR3_NIR_H_
 #define IR3_NIR_H_
 
-#include "glsl/nir/nir.h"
-#include "glsl/nir/shader_enums.h"
+#include "compiler/nir/nir.h"
+#include "compiler/shader_enums.h"
+
+#include "ir3_shader.h"
 
 bool ir3_nir_lower_if_else(nir_shader *shader);
+
+struct nir_shader * ir3_tgsi_to_nir(const struct tgsi_token *tokens);
+bool ir3_key_lowers_nir(const struct ir3_shader_key *key);
+struct nir_shader * ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
+		const struct ir3_shader_key *key);
 
 #endif /* IR3_NIR_H_ */

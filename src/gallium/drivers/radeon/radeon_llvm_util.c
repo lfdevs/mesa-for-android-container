@@ -55,8 +55,10 @@ unsigned radeon_llvm_get_num_kernels(LLVMContextRef ctx,
 
 static void radeon_llvm_optimize(LLVMModuleRef mod)
 {
+#if HAVE_LLVM < 0x0309
 	const char *data_layout = LLVMGetDataLayout(mod);
 	LLVMTargetDataRef TD = LLVMCreateTargetData(data_layout);
+#endif
 	LLVMPassManagerBuilderRef builder = LLVMPassManagerBuilderCreate();
 	LLVMPassManagerRef pass_manager = LLVMCreatePassManager();
 
@@ -77,14 +79,18 @@ static void radeon_llvm_optimize(LLVMModuleRef mod)
 		}
 	}
 
+#if HAVE_LLVM < 0x0309
 	LLVMAddTargetData(TD, pass_manager);
+#endif
 	LLVMAddAlwaysInlinerPass(pass_manager);
 	LLVMPassManagerBuilderPopulateModulePassManager(builder, pass_manager);
 
 	LLVMRunPassManager(pass_manager, mod);
 	LLVMPassManagerBuilderDispose(builder);
 	LLVMDisposePassManager(pass_manager);
+#if HAVE_LLVM < 0x0309
 	LLVMDisposeTargetData(TD);
+#endif
 }
 
 LLVMModuleRef radeon_llvm_get_kernel_module(LLVMContextRef ctx, unsigned index,

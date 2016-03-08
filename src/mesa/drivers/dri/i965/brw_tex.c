@@ -30,7 +30,6 @@
   */
 
 
-#include "main/glheader.h"
 #include "main/mtypes.h"
 #include "main/teximage.h"
 

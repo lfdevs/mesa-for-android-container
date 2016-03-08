@@ -48,7 +48,6 @@ NineTexture9_ctor( struct NineTexture9 *This,
 {
     struct pipe_screen *screen = pParams->device->screen;
     struct pipe_resource *info = &This->base.base.info;
-    struct pipe_resource *resource;
     enum pipe_format pf;
     unsigned *level_offsets;
     unsigned l;
@@ -61,10 +60,23 @@ NineTexture9_ctor( struct NineTexture9 *This,
         nine_D3DUSAGE_to_str(Usage),
         d3dformat_to_string(Format), nine_D3DPOOL_to_str(Pool), pSharedHandle);
 
-    user_assert(!(Usage & D3DUSAGE_AUTOGENMIPMAP) ||
-                (Pool != D3DPOOL_SYSTEMMEM && Levels <= 1), D3DERR_INVALIDCALL);
+    user_assert(Width && Height, D3DERR_INVALIDCALL);
 
-    /* TODO: implement buffer sharing (should work with cross process too)
+    /* pSharedHandle: can be non-null for ex only.
+     * D3DPOOL_SYSTEMMEM: Levels must be 1
+     * D3DPOOL_DEFAULT: no restriction for Levels
+     * Other Pools are forbidden. */
+    user_assert(!pSharedHandle || pParams->device->ex, D3DERR_INVALIDCALL);
+    user_assert(!pSharedHandle ||
+                (Pool == D3DPOOL_SYSTEMMEM && Levels == 1) ||
+                Pool == D3DPOOL_DEFAULT, D3DERR_INVALIDCALL);
+
+    user_assert(!(Usage & D3DUSAGE_AUTOGENMIPMAP) ||
+                (Pool != D3DPOOL_SYSTEMMEM && Pool != D3DPOOL_SCRATCH && Levels <= 1),
+                D3DERR_INVALIDCALL);
+
+    /* TODO: implement pSharedHandle for D3DPOOL_DEFAULT (cross process
+     * buffer sharing).
      *
      * Gem names may have fit but they're depreciated and won't work on render-nodes.
      * One solution is to use shm buffers. We would use a /dev/shm file, fill the first
@@ -77,9 +89,6 @@ NineTexture9_ctor( struct NineTexture9 *This,
      * invalid handle, that we would fail to import. Please note that we don't advertise
      * the flag indicating the support for that feature, but apps seem to not care.
      */
-    user_assert(!pSharedHandle ||
-                Pool == D3DPOOL_SYSTEMMEM ||
-                Pool == D3DPOOL_DEFAULT, D3DERR_INVALIDCALL);
 
     if (pSharedHandle && Pool == D3DPOOL_DEFAULT) {
         if (!*pSharedHandle) {
@@ -97,7 +106,9 @@ NineTexture9_ctor( struct NineTexture9 *This,
         Levels = 0;
 
     pf = d3d9_to_pipe_format_checked(screen, Format, PIPE_TEXTURE_2D, 0,
-                                     PIPE_BIND_SAMPLER_VIEW, FALSE);
+                                     PIPE_BIND_SAMPLER_VIEW, FALSE,
+                                     Pool == D3DPOOL_SCRATCH);
+
     if (Format != D3DFMT_NULL && pf == PIPE_FORMAT_NONE)
         return D3DERR_INVALIDCALL;
 
@@ -139,12 +150,6 @@ NineTexture9_ctor( struct NineTexture9 *This,
     if (Usage & D3DUSAGE_SOFTWAREPROCESSING)
         DBG("Application asked for Software Vertex Processing, "
             "but this is unimplemented\n");
-
-    if (pSharedHandle)
-        info->bind |= PIPE_BIND_SHARED;
-
-    if (Pool == D3DPOOL_SYSTEMMEM)
-        info->usage = PIPE_USAGE_STAGING;
 
     if (pSharedHandle && *pSharedHandle) { /* Pool == D3DPOOL_SYSTEMMEM */
         user_buffer = (void *)*pSharedHandle;
@@ -188,11 +193,6 @@ NineTexture9_ctor( struct NineTexture9 *This,
     sfdesc.MultiSampleType = D3DMULTISAMPLE_NONE;
     sfdesc.MultiSampleQuality = 0;
 
-    if (Pool == D3DPOOL_SYSTEMMEM)
-        resource = NULL;
-    else
-        resource = This->base.base.resource;
-
     for (l = 0; l <= info->last_level; ++l) {
         sfdesc.Width = u_minify(Width, l);
         sfdesc.Height = u_minify(Height, l);
@@ -202,7 +202,7 @@ NineTexture9_ctor( struct NineTexture9 *This,
             level_offsets[l] : NULL;
 
         hr = NineSurface9_new(This->base.base.base.device, NineUnknown(This),
-                              resource, user_buffer_for_level,
+                              This->base.base.resource, user_buffer_for_level,
                               D3DRTYPE_TEXTURE, l, 0,
                               &sfdesc, &This->surfaces[l]);
         if (FAILED(hr))
@@ -235,12 +235,12 @@ NineTexture9_dtor( struct NineTexture9 *This )
     }
 
     if (This->managed_buffer)
-        FREE(This->managed_buffer);
+        align_free(This->managed_buffer);
 
     NineBaseTexture9_dtor(&This->base);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_GetLevelDesc( struct NineTexture9 *This,
                            UINT Level,
                            D3DSURFACE_DESC *pDesc )
@@ -254,7 +254,7 @@ NineTexture9_GetLevelDesc( struct NineTexture9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_GetSurfaceLevel( struct NineTexture9 *This,
                               UINT Level,
                               IDirect3DSurface9 **ppSurfaceLevel )
@@ -269,7 +269,7 @@ NineTexture9_GetSurfaceLevel( struct NineTexture9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_LockRect( struct NineTexture9 *This,
                        UINT Level,
                        D3DLOCKED_RECT *pLockedRect,
@@ -287,7 +287,7 @@ NineTexture9_LockRect( struct NineTexture9 *This,
                                  pRect, Flags);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_UnlockRect( struct NineTexture9 *This,
                          UINT Level )
 {
@@ -298,7 +298,7 @@ NineTexture9_UnlockRect( struct NineTexture9 *This,
     return NineSurface9_UnlockRect(This->surfaces[Level]);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_AddDirtyRect( struct NineTexture9 *This,
                            const RECT *pDirtyRect )
 {

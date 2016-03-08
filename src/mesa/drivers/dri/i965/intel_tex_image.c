@@ -1,5 +1,4 @@
 
-#include "main/glheader.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
 #include "main/enums.h"
@@ -399,10 +398,11 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
       return false;
 
    /* We can't handle copying from RGBX or BGRX because the tiled_memcpy
-    * function doesn't set the last channel to 1.
+    * function doesn't set the last channel to 1. Note this checks BaseFormat
+    * rather than TexFormat in case the RGBX format is being simulated with an
+    * RGBA format.
     */
-   if (texImage->TexFormat == MESA_FORMAT_B8G8R8X8_UNORM ||
-       texImage->TexFormat == MESA_FORMAT_R8G8B8X8_UNORM)
+   if (texImage->_BaseFormat == GL_RGB)
       return false;
 
    if (!intel_get_memcpy(texImage->TexFormat, format, type, &mem_copy, &cpp,
@@ -423,7 +423,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
    /* Since we are going to write raw data to the miptree, we need to resolve
     * any pending fast color clears before we start.
     */
-   intel_miptree_resolve_color(brw, image->mt);
+   intel_miptree_resolve_color(brw, image->mt, 0);
 
    bo = image->mt->bo;
 

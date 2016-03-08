@@ -25,6 +25,8 @@
  *
  **************************************************************************/
 
+/* Force assertions, even on release builds. */
+#undef NDEBUG
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

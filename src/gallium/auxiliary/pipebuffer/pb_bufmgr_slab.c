@@ -542,7 +542,7 @@ pb_slab_range_manager_create(struct pb_manager *provider,
    pb_size bufSize;
    unsigned i;
 
-   if(!provider)
+   if (!provider)
       return NULL;
    
    mgr = CALLOC_STRUCT(pb_slab_range_manager);

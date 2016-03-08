@@ -51,7 +51,7 @@ struct compute_memory_pool* compute_memory_pool_new(
 {
 	struct compute_memory_pool* pool = (struct compute_memory_pool*)
 				CALLOC(sizeof(struct compute_memory_pool), 1);
-	if (pool == NULL)
+	if (!pool)
 		return NULL;
 
 	COMPUTE_DBG(rscreen, "* compute_memory_pool_new()\n");
@@ -80,8 +80,8 @@ static void compute_memory_pool_init(struct compute_memory_pool * pool,
 		initial_size_in_dw);
 
 	pool->size_in_dw = initial_size_in_dw;
-	pool->bo = (struct r600_resource*)r600_compute_buffer_alloc_vram(pool->screen,
-							pool->size_in_dw * 4);
+	pool->bo = r600_compute_buffer_alloc_vram(pool->screen,
+						  pool->size_in_dw * 4);
 }
 
 /**
@@ -202,8 +202,7 @@ int compute_memory_grow_defrag_pool(struct compute_memory_pool *pool,
 	} else {
 		struct r600_resource *temp = NULL;
 
-		temp = (struct r600_resource *)r600_compute_buffer_alloc_vram(
-							pool->screen, new_size_in_dw * 4);
+		temp = r600_compute_buffer_alloc_vram(pool->screen, new_size_in_dw * 4);
 
 		if (temp != NULL) {
 			struct pipe_resource *src = (struct pipe_resource *)pool->bo;
@@ -234,9 +233,7 @@ int compute_memory_grow_defrag_pool(struct compute_memory_pool *pool,
 			pool->screen->b.b.resource_destroy(
 					(struct pipe_screen *)pool->screen,
 					(struct pipe_resource *)pool->bo);
-			pool->bo = (struct r600_resource*)r600_compute_buffer_alloc_vram(
-					pool->screen,
-					pool->size_in_dw * 4);
+			pool->bo = r600_compute_buffer_alloc_vram(pool->screen, pool->size_in_dw * 4);
 			compute_memory_shadow(pool, pipe, 0);
 
 			if (pool->status & POOL_FRAGMENTED) {
@@ -402,7 +399,7 @@ int compute_memory_promote_item(struct compute_memory_pool *pool,
 	list_addtail(&item->link, pool->item_list);
 	item->start_in_dw = start_in_dw;
 
-	if (src != NULL) {
+	if (src) {
 		u_box_1d(0, item->size_in_dw * 4, &box);
 
 		rctx->b.b.resource_copy_region(pipe,
@@ -449,7 +446,7 @@ void compute_memory_demote_item(struct compute_memory_pool *pool,
 	/* We check if the intermediate buffer exists, and if it
 	 * doesn't, we create it again */
 	if (item->real_buffer == NULL) {
-		item->real_buffer = (struct r600_resource*)r600_compute_buffer_alloc_vram(
+		item->real_buffer = r600_compute_buffer_alloc_vram(
 				pool->screen, item->size_in_dw * 4);
 	}
 
@@ -633,7 +630,7 @@ struct compute_memory_item* compute_memory_alloc(
 
 	new_item = (struct compute_memory_item *)
 				CALLOC(sizeof(struct compute_memory_item), 1);
-	if (new_item == NULL)
+	if (!new_item)
 		return NULL;
 
 	new_item->size_in_dw = size_in_dw;

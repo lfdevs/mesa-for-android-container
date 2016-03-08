@@ -728,7 +728,7 @@ i915_texture_transfer_map(struct pipe_context *pipe,
    unsigned offset;
    char *map;
 
-   if (transfer == NULL)
+   if (!transfer)
       return NULL;
 
    transfer->b.resource = resource;
@@ -774,7 +774,7 @@ i915_texture_transfer_map(struct pipe_context *pipe,
 
    map = iws->buffer_map(iws, tex->buffer,
                          (transfer->b.usage & PIPE_TRANSFER_WRITE) ? TRUE : FALSE);
-   if (map == NULL) {
+   if (!map) {
       pipe_resource_reference(&transfer->staging_texture, NULL);
       FREE(transfer);
       return NULL;

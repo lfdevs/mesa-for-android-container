@@ -27,6 +27,7 @@
 #include "main/texformat.h"
 #include "main/teximage.h"
 #include "program/prog_parameter.h"
+#include "program/prog_instruction.h"
 
 #include "intel_mipmap_tree.h"
 #include "intel_batchbuffer.h"
@@ -196,6 +197,28 @@ gen8_emit_fast_clear_color(struct brw_context *brw,
       surf[7] |= mt->fast_clear_color_value;
 }
 
+static uint32_t
+gen8_get_aux_mode(const struct brw_context *brw,
+                  const struct intel_mipmap_tree *mt,
+                  uint32_t surf_type)
+{
+   if (mt->mcs_mt == NULL)
+      return GEN8_SURFACE_AUX_MODE_NONE;
+
+   /*
+    * From the BDW PRM, Volume 2d, page 260 (RENDER_SURFACE_STATE):
+    * "When MCS is enabled for non-MSRT, HALIGN_16 must be used"
+    *
+    * From the hardware spec for GEN9:
+    * "When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E, HALIGN
+    *  16 must be used."
+    */
+   if (brw->gen >= 9 || mt->num_samples == 1)
+      assert(mt->halign == 16);
+
+   return GEN8_SURFACE_AUX_MODE_MCS;
+}
+
 static void
 gen8_emit_texture_surface_state(struct brw_context *brw,
                                 struct intel_mipmap_tree *mt,
@@ -208,13 +231,13 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
                                 bool rw, bool for_gather)
 {
    const unsigned depth = max_layer - min_layer;
-   struct intel_mipmap_tree *aux_mt = NULL;
-   uint32_t aux_mode = 0;
+   struct intel_mipmap_tree *aux_mt = mt->mcs_mt;
    uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
    int surf_index = surf_offset - &brw->wm.base.surf_offset[0];
    unsigned tiling_mode, pitch;
    const unsigned tr_mode = surface_tiling_resource_mode(mt->tr_mode);
    const uint32_t surf_type = translate_tex_target(target);
+   uint32_t aux_mode = gen8_get_aux_mode(brw, mt, surf_type);
 
    if (mt->format == MESA_FORMAT_S_UINT8) {
       tiling_mode = GEN8_SURFACE_TILING_W;
@@ -224,26 +247,13 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
       pitch = mt->pitch;
    }
 
-   if (mt->mcs_mt) {
-      aux_mt = mt->mcs_mt;
-      aux_mode = GEN8_SURFACE_AUX_MODE_MCS;
-
-      /*
-       * From the BDW PRM, Volume 2d, page 260 (RENDER_SURFACE_STATE):
-       * "When MCS is enabled for non-MSRT, HALIGN_16 must be used"
-       *
-       * From the hardware spec for GEN9:
-       * "When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E, HALIGN
-       *  16 must be used."
-       */
-      if (brw->gen >= 9 || mt->num_samples == 1)
-         assert(mt->halign == 16);
-
-      if (brw->gen >= 9) {
-         assert(mt->num_samples > 1 ||
-                brw_losslessly_compressible_format(brw, surf_type));
-      }
-
+   /* The MCS is not uploaded for single-sampled surfaces because the color
+    * buffer should always have been resolved before it is used as a texture
+    * so there is no need for it.
+    */
+   if (mt->num_samples <= 1) {
+      aux_mt = NULL;
+      aux_mode = GEN8_SURFACE_AUX_MODE_NONE;
    }
 
    uint32_t *surf = allocate_surface_state(brw, surf_offset, surf_index);
@@ -272,7 +282,7 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
         format == BRW_SURFACEFORMAT_BC7_UNORM))
       surf[0] |= GEN8_SURFACE_SAMPLER_L2_BYPASS_DISABLE;
 
-   if (_mesa_is_array_texture(target) || target == GL_TEXTURE_CUBE_MAP)
+   if (_mesa_is_array_texture(mt->target) || mt->target == GL_TEXTURE_CUBE_MAP)
       surf[0] |= GEN8_SURFACE_IS_ARRAY;
 
    surf[1] = SET_FIELD(mocs_wb, GEN8_SURFACE_MOCS) | mt->qpitch >> 2;
@@ -419,8 +429,6 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
    struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_mipmap_tree *mt = irb->mt;
-   struct intel_mipmap_tree *aux_mt = NULL;
-   uint32_t aux_mode = 0;
    unsigned width = mt->logical_width0;
    unsigned height = mt->logical_height0;
    unsigned pitch = mt->pitch;
@@ -451,7 +459,7 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
       /* fallthrough */
    default:
       surf_type = translate_tex_target(gl_target);
-      is_array = _mesa_tex_target_is_array(gl_target);
+      is_array = _mesa_is_array_texture(mt->target);
       break;
    }
 
@@ -473,21 +481,8 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
                        __func__, _mesa_get_format_name(rb_format));
    }
 
-   if (mt->mcs_mt) {
-      aux_mt = mt->mcs_mt;
-      aux_mode = GEN8_SURFACE_AUX_MODE_MCS;
-
-      /*
-       * From the BDW PRM, Volume 2d, page 260 (RENDER_SURFACE_STATE):
-       * "When MCS is enabled for non-MSRT, HALIGN_16 must be used"
-       *
-       * From the hardware spec for GEN9:
-       * "When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E, HALIGN
-       *  16 must be used."
-       */
-      if (brw->gen >= 9 || mt->num_samples == 1)
-         assert(mt->halign == 16);
-   }
+   struct intel_mipmap_tree *aux_mt = mt->mcs_mt;
+   const uint32_t aux_mode = gen8_get_aux_mode(brw, mt, surf_type);
 
    uint32_t *surf = allocate_surface_state(brw, &offset, surf_index);
 

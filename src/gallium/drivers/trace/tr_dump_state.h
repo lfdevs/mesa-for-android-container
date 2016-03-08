@@ -50,6 +50,8 @@ void trace_dump_token(const struct tgsi_token *token);
 
 void trace_dump_shader_state(const struct pipe_shader_state *state);
 
+void trace_dump_compute_state(const struct pipe_compute_state *state);
+
 void trace_dump_depth_stencil_alpha_state(const struct pipe_depth_stencil_alpha_state *state);
 
 void trace_dump_blend_state(const struct pipe_blend_state *state);
@@ -78,11 +80,15 @@ void trace_dump_vertex_element(const struct pipe_vertex_element *state);
 
 void trace_dump_constant_buffer(const struct pipe_constant_buffer *state);
 
+void trace_dump_shader_buffer(const struct pipe_shader_buffer *buffer);
+
 void trace_dump_draw_info(const struct pipe_draw_info *state);
 
 void trace_dump_blit_info(const struct pipe_blit_info *);
 
 void trace_dump_query_result(unsigned query_type,
                              const union pipe_query_result *result);
+
+void trace_dump_grid_info(const struct pipe_grid_info *state);
 
 #endif /* TR_STATE_H */

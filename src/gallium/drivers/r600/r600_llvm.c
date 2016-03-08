@@ -726,7 +726,7 @@ static void tex_fetch_args(
 		 * That operand should be passed as a float value in the args array
 		 * right after the coord vector. After packing it's not used anymore,
 		 * that's why arg_count is not increased */
-		coords[4] = lp_build_emit_fetch(bld_base, inst, 1, 0);
+		coords[4] = lp_build_emit_fetch(bld_base, inst, 1, TGSI_CHAN_X);
 	}
 
 	if ((inst->Texture.Texture == TGSI_TEXTURE_CUBE ||
@@ -784,12 +784,12 @@ LLVMModuleRef r600_tgsi_llvm(
 {
 	struct tgsi_shader_info shader_info;
 	struct lp_build_tgsi_context * bld_base = &ctx->soa.bld_base;
-	radeon_llvm_context_init(ctx);
+	radeon_llvm_context_init(ctx, "r600--");
 	LLVMTypeRef Arguments[32];
 	unsigned ArgumentsCount = 0;
 	for (unsigned i = 0; i < ctx->inputs_count; i++)
 		Arguments[ArgumentsCount++] = LLVMVectorType(bld_base->base.elem_type, 4);
-	radeon_llvm_create_func(ctx, Arguments, ArgumentsCount);
+	radeon_llvm_create_func(ctx, NULL, 0, Arguments, ArgumentsCount);
 	for (unsigned i = 0; i < ctx->inputs_count; i++) {
 		LLVMValueRef P = LLVMGetParam(ctx->main_fn, i);
 		LLVMAddAttribute(P, LLVMInRegAttribute);
@@ -848,6 +848,7 @@ LLVMModuleRef r600_tgsi_llvm(
 
 	lp_build_tgsi_llvm(bld_base, tokens);
 
+	LLVMBuildRetVoid(bld_base->base.gallivm->builder);
 	radeon_llvm_finalize_module(ctx);
 
 	return ctx->gallivm.module;
@@ -887,7 +888,7 @@ void r600_shader_binary_read_config(const struct radeon_shader_binary *binary,
 		case R_02880C_DB_SHADER_CONTROL:
 			*use_kill = G_02880C_KILL_ENABLE(value);
 			break;
-		case CM_R_0288E8_SQ_LDS_ALLOC:
+		case R_0288E8_SQ_LDS_ALLOC:
 			bc->nlds_dw = value;
 			break;
 		}
@@ -910,26 +911,31 @@ unsigned r600_create_shader(struct r600_bytecode *bc,
 	return 0;
 }
 
+void r600_destroy_shader(struct r600_bytecode *bc)
+{
+	FREE(bc->bytecode);
+}
+
 unsigned r600_llvm_compile(
 	LLVMModuleRef mod,
 	enum radeon_family family,
 	struct r600_bytecode *bc,
 	boolean *use_kill,
-	unsigned dump)
+	unsigned dump,
+	struct pipe_debug_callback *debug)
 {
 	unsigned r;
 	struct radeon_shader_binary binary;
 	const char * gpu_family = r600_get_llvm_processor_name(family);
 
-	memset(&binary, 0, sizeof(struct radeon_shader_binary));
-	r = radeon_llvm_compile(mod, &binary, gpu_family, dump, dump, NULL);
+	radeon_shader_binary_init(&binary);
+	if (dump)
+		LLVMDumpModule(mod);
+	r = radeon_llvm_compile(mod, &binary, gpu_family, NULL, debug);
 
 	r = r600_create_shader(bc, &binary, use_kill);
 
-	FREE(binary.code);
-	FREE(binary.config);
-	FREE(binary.rodata);
-	FREE(binary.global_symbol_offsets);
+	radeon_shader_binary_clean(&binary);
 
 	return r;
 }

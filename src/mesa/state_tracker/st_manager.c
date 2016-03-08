@@ -28,6 +28,7 @@
 #include "main/mtypes.h"
 #include "main/extensions.h"
 #include "main/context.h"
+#include "main/debug_output.h"
 #include "main/texobj.h"
 #include "main/teximage.h"
 #include "main/texstate.h"
@@ -39,6 +40,7 @@
 #include "st_texture.h"
 
 #include "st_context.h"
+#include "st_debug.h"
 #include "st_extensions.h"
 #include "st_format.h"
 #include "st_cb_fbo.h"
@@ -623,58 +625,6 @@ st_context_destroy(struct st_context_iface *stctxi)
    st_destroy_context(st);
 }
 
-static void
-st_debug_message(void *data,
-                 unsigned *id,
-                 enum pipe_debug_type ptype,
-                 const char *fmt,
-                 va_list args)
-{
-   struct st_context *st = data;
-   enum mesa_debug_source source;
-   enum mesa_debug_type type;
-   enum mesa_debug_severity severity;
-
-   switch (ptype) {
-   case PIPE_DEBUG_TYPE_OUT_OF_MEMORY:
-      source = MESA_DEBUG_SOURCE_API;
-      type = MESA_DEBUG_TYPE_ERROR;
-      severity = MESA_DEBUG_SEVERITY_MEDIUM;
-      break;
-   case PIPE_DEBUG_TYPE_ERROR:
-      source = MESA_DEBUG_SOURCE_API;
-      type = MESA_DEBUG_TYPE_ERROR;
-      severity = MESA_DEBUG_SEVERITY_MEDIUM;
-      break;
-   case PIPE_DEBUG_TYPE_SHADER_INFO:
-      source = MESA_DEBUG_SOURCE_SHADER_COMPILER;
-      type = MESA_DEBUG_TYPE_OTHER;
-      severity = MESA_DEBUG_SEVERITY_NOTIFICATION;
-      break;
-   case PIPE_DEBUG_TYPE_PERF_INFO:
-      source = MESA_DEBUG_SOURCE_API;
-      type = MESA_DEBUG_TYPE_PERFORMANCE;
-      severity = MESA_DEBUG_SEVERITY_NOTIFICATION;
-      break;
-   case PIPE_DEBUG_TYPE_INFO:
-      source = MESA_DEBUG_SOURCE_API;
-      type = MESA_DEBUG_TYPE_OTHER;
-      severity = MESA_DEBUG_SEVERITY_NOTIFICATION;
-      break;
-   case PIPE_DEBUG_TYPE_FALLBACK:
-      source = MESA_DEBUG_SOURCE_API;
-      type = MESA_DEBUG_TYPE_PERFORMANCE;
-      severity = MESA_DEBUG_SEVERITY_NOTIFICATION;
-      break;
-   case PIPE_DEBUG_TYPE_CONFORMANCE:
-      source = MESA_DEBUG_SOURCE_API;
-      type = MESA_DEBUG_TYPE_OTHER;
-      severity = MESA_DEBUG_SEVERITY_NOTIFICATION;
-      break;
-   }
-   _mesa_gl_vdebug(st->ctx, id, source, type, severity, fmt, args);
-}
-
 static struct st_context_iface *
 st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
                       const struct st_context_attribs *attribs,
@@ -686,6 +636,7 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    struct pipe_context *pipe;
    struct gl_config mode;
    gl_api api;
+   unsigned ctx_flags = 0;
 
    if (!(stapi->profile_mask & (1 << attribs->profile)))
       return NULL;
@@ -709,7 +660,10 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
       break;
    }
 
-   pipe = smapi->screen->context_create(smapi->screen, NULL, 0);
+   if (attribs->flags & ST_CONTEXT_FLAG_ROBUST_ACCESS)
+      ctx_flags |= PIPE_CONTEXT_ROBUST_BUFFER_ACCESS;
+
+   pipe = smapi->screen->context_create(smapi->screen, NULL, ctx_flags);
    if (!pipe) {
       *error = ST_CONTEXT_ERROR_NO_MEMORY;
       return NULL;
@@ -723,17 +677,15 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
       return NULL;
    }
 
-   if (attribs->flags & ST_CONTEXT_FLAG_DEBUG){
+   if (attribs->flags & ST_CONTEXT_FLAG_DEBUG) {
       if (!_mesa_set_debug_state_int(st->ctx, GL_DEBUG_OUTPUT, GL_TRUE)) {
          *error = ST_CONTEXT_ERROR_NO_MEMORY;
          return NULL;
       }
+
       st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_DEBUG_BIT;
 
-      if (pipe->set_debug_callback) {
-         struct pipe_debug_callback cb = { st_debug_message, st };
-         pipe->set_debug_callback(pipe, &cb);
-      }
+      st_enable_debug_output(st, TRUE);
    }
 
    if (attribs->flags & ST_CONTEXT_FLAG_FORWARD_COMPATIBLE)

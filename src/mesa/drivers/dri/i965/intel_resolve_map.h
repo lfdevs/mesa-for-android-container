@@ -24,7 +24,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "glsl/list.h"
+#include "compiler/glsl/list.h"
 
 #ifdef __cplusplus
 extern "C" {

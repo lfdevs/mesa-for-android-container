@@ -157,6 +157,109 @@ static const struct nvc0_hw_metric_query_cfg *sm21_hw_metric_queries[] =
 #undef _SM
 #undef _M
 
+/* === PERFORMANCE MONITORING METRICS for NVE4+ === */
+static const char *nve4_hw_metric_names[] =
+{
+   "metric-achieved_occupancy",
+   "metric-branch_efficiency",
+   "metric-inst_issued",
+   "metric-inst_per_wrap",
+   "metric-inst_replay_overhead",
+   "metric-issued_ipc",
+   "metric-issue_slots",
+   "metric-issue_slot_utilization",
+   "metric-ipc",
+   "metric-shared_replay_overhead",
+};
+
+#define _SM(n) NVE4_HW_SM_QUERY(NVE4_HW_SM_QUERY_ ##n)
+#define _M(n, c) [NVE4_HW_METRIC_QUERY_##n] = c
+
+/* ==== Compute capability 3.0 (GK104/GK106/GK107) ==== */
+static const struct nvc0_hw_metric_query_cfg
+sm30_achieved_occupancy =
+{
+   .queries[0]  = _SM(ACTIVE_WARPS),
+   .queries[1]  = _SM(ACTIVE_CYCLES),
+   .num_queries = 2,
+};
+
+static const struct nvc0_hw_metric_query_cfg
+sm30_branch_efficiency =
+{
+   .queries[0]  = _SM(BRANCH),
+   .queries[1]  = _SM(DIVERGENT_BRANCH),
+   .num_queries = 2,
+};
+
+static const struct nvc0_hw_metric_query_cfg
+sm30_inst_issued =
+{
+   .queries[0]  = _SM(INST_ISSUED1),
+   .queries[1]  = _SM(INST_ISSUED2),
+   .num_queries = 2,
+};
+
+static const struct nvc0_hw_metric_query_cfg
+sm30_inst_per_wrap =
+{
+   .queries[0]  = _SM(INST_EXECUTED),
+   .queries[1]  = _SM(WARPS_LAUNCHED),
+   .num_queries = 2,
+};
+
+static const struct nvc0_hw_metric_query_cfg
+sm30_inst_replay_overhead =
+{
+   .queries[0]  = _SM(INST_ISSUED1),
+   .queries[1]  = _SM(INST_ISSUED2),
+   .queries[2]  = _SM(INST_EXECUTED),
+   .num_queries = 3,
+};
+
+static const struct nvc0_hw_metric_query_cfg
+sm30_issued_ipc =
+{
+   .queries[0]  = _SM(INST_ISSUED1),
+   .queries[1]  = _SM(INST_ISSUED2),
+   .queries[2]  = _SM(ACTIVE_CYCLES),
+   .num_queries = 3,
+};
+
+static const struct nvc0_hw_metric_query_cfg
+sm30_ipc =
+{
+   .queries[0]  = _SM(INST_EXECUTED),
+   .queries[1]  = _SM(ACTIVE_CYCLES),
+   .num_queries = 2,
+};
+
+static const struct nvc0_hw_metric_query_cfg
+sm30_shared_replay_overhead =
+{
+   .queries[0]  = _SM(SHARED_LD_REPLAY),
+   .queries[1]  = _SM(SHARED_ST_REPLAY),
+   .queries[2]  = _SM(INST_EXECUTED),
+   .num_queries = 3,
+};
+
+static const struct nvc0_hw_metric_query_cfg *sm30_hw_metric_queries[] =
+{
+   _M(ACHIEVED_OCCUPANCY,              &sm30_achieved_occupancy),
+   _M(BRANCH_EFFICIENCY,               &sm30_branch_efficiency),
+   _M(INST_ISSUED,                     &sm30_inst_issued),
+   _M(INST_PER_WRAP,                   &sm30_inst_per_wrap),
+   _M(INST_REPLAY_OVERHEAD,            &sm30_inst_replay_overhead),
+   _M(ISSUED_IPC,                      &sm30_issued_ipc),
+   _M(ISSUE_SLOTS,                     &sm30_inst_issued),
+   _M(ISSUE_SLOT_UTILIZATION,          &sm30_issued_ipc),
+   _M(IPC,                             &sm30_ipc),
+   _M(SHARED_REPLAY_OVERHEAD,          &sm30_shared_replay_overhead),
+};
+
+#undef _SM
+#undef _M
+
 static inline const struct nvc0_hw_metric_query_cfg **
 nvc0_hw_metric_get_queries(struct nvc0_screen *screen)
 {
@@ -174,6 +277,9 @@ nvc0_hw_metric_query_get_cfg(struct nvc0_context *nvc0,
    const struct nvc0_hw_metric_query_cfg **queries;
    struct nvc0_screen *screen = nvc0->screen;
    struct nvc0_query *q = &hq->base;
+
+   if (screen->base.class_3d >= NVE4_3D_CLASS)
+      return sm30_hw_metric_queries[q->type - NVE4_HW_METRIC_QUERY(0)];
 
    queries = nvc0_hw_metric_get_queries(screen);
    return queries[q->type - NVC0_HW_METRIC_QUERY(0)];
@@ -310,6 +416,55 @@ sm21_hw_metric_calc_result(struct nvc0_hw_query *hq, uint64_t res64[8])
    return 0;
 }
 
+static uint64_t
+sm30_hw_metric_calc_result(struct nvc0_hw_query *hq, uint64_t res64[8])
+{
+   switch (hq->base.type - NVE4_HW_METRIC_QUERY(0)) {
+   case NVE4_HW_METRIC_QUERY_ACHIEVED_OCCUPANCY:
+      /* (active_warps / active_cycles) / max. number of warps on a MP */
+      if (res64[1])
+         return (res64[0] / (double)res64[1]) / 64;
+      break;
+   case NVE4_HW_METRIC_QUERY_BRANCH_EFFICIENCY:
+      return sm20_hw_metric_calc_result(hq, res64);
+   case NVE4_HW_METRIC_QUERY_INST_ISSUED:
+      /* inst_issued1 + inst_issued2 * 2 */
+      return res64[0] + res64[1] * 2;
+   case NVE4_HW_METRIC_QUERY_INST_PER_WRAP:
+      return sm20_hw_metric_calc_result(hq, res64);
+   case NVE4_HW_METRIC_QUERY_INST_REPLAY_OVERHEAD:
+      /* (metric-inst_issued - inst_executed) / inst_executed */
+      if (res64[2])
+         return (((res64[0] + res64[1] * 2) - res64[2]) / (double)res64[2]);
+      break;
+   case NVE4_HW_METRIC_QUERY_ISSUED_IPC:
+      /* metric-inst_issued / active_cycles */
+      if (res64[2])
+         return (res64[0] + res64[1] * 2) / (double)res64[2];
+      break;
+   case NVE4_HW_METRIC_QUERY_ISSUE_SLOTS:
+      /* inst_issued1 + inst_issued2 */
+      return res64[0] + res64[1];
+   case NVE4_HW_METRIC_QUERY_ISSUE_SLOT_UTILIZATION:
+      /* ((metric-issue_slots / 2) / active_cycles) * 100 */
+      if (res64[2])
+         return (((res64[0] + res64[1]) / 2) / (double)res64[2]) * 100;
+      break;
+   case NVE4_HW_METRIC_QUERY_IPC:
+      return sm20_hw_metric_calc_result(hq, res64);
+   case NVE4_HW_METRIC_QUERY_SHARED_REPLAY_OVERHEAD:
+      /* (shared_load_replay + shared_store_replay) / inst_executed */
+      if (res64[2])
+         return (res64[0] + res64[1]) / (double)res64[2];
+      break;
+   default:
+      debug_printf("invalid metric type: %d\n",
+                   hq->base.type - NVE4_HW_METRIC_QUERY(0));
+      break;
+   }
+   return 0;
+}
+
 static boolean
 nvc0_hw_metric_get_query_result(struct nvc0_context *nvc0,
                                 struct nvc0_hw_query *hq, boolean wait,
@@ -332,10 +487,14 @@ nvc0_hw_metric_get_query_result(struct nvc0_context *nvc0,
       res64[i] = *(uint64_t *)&results[i];
    }
 
-   if (dev->chipset == 0xc0 || dev->chipset == 0xc8)
-      value = sm20_hw_metric_calc_result(hq, res64);
-   else
-      value = sm21_hw_metric_calc_result(hq, res64);
+   if (screen->base.class_3d >= NVE4_3D_CLASS) {
+      value = sm30_hw_metric_calc_result(hq, res64);
+   } else {
+      if (dev->chipset == 0xc0 || dev->chipset == 0xc8)
+         value = sm20_hw_metric_calc_result(hq, res64);
+      else
+         value = sm21_hw_metric_calc_result(hq, res64);
+   }
 
    *(uint64_t *)result = value;
    return ret;
@@ -356,7 +515,8 @@ nvc0_hw_metric_create_query(struct nvc0_context *nvc0, unsigned type)
    struct nvc0_hw_query *hq;
    unsigned i;
 
-   if (type < NVC0_HW_METRIC_QUERY(0) || type > NVC0_HW_METRIC_QUERY_LAST)
+   if ((type < NVE4_HW_METRIC_QUERY(0) || type > NVE4_HW_METRIC_QUERY_LAST) &&
+       (type < NVC0_HW_METRIC_QUERY(0) || type > NVC0_HW_METRIC_QUERY_LAST))
       return NULL;
 
    hmq = CALLOC_STRUCT(nvc0_hw_metric_query);
@@ -405,8 +565,11 @@ nvc0_hw_metric_get_driver_query_info(struct nvc0_screen *screen, unsigned id,
    uint16_t class_3d = screen->base.class_3d;
    int count = 0;
 
-   if (screen->base.device->drm_version >= 0x01000101) {
+   if (screen->base.drm->version >= 0x01000101) {
       if (screen->compute) {
+         if (screen->base.class_3d == NVE4_3D_CLASS) {
+            count += NVE4_HW_METRIC_QUERY_COUNT;
+         } else
          if (class_3d < NVE4_3D_CLASS) {
             const struct nvc0_hw_metric_query_cfg **queries =
                nvc0_hw_metric_get_queries(screen);
@@ -425,6 +588,12 @@ nvc0_hw_metric_get_driver_query_info(struct nvc0_screen *screen, unsigned id,
 
    if (id < count) {
       if (screen->compute) {
+         if (screen->base.class_3d == NVE4_3D_CLASS) {
+            info->name = nve4_hw_metric_names[id];
+            info->query_type = NVE4_HW_METRIC_QUERY(id);
+            info->group_id = NVC0_HW_METRIC_QUERY_GROUP;
+            return 1;
+         } else
          if (class_3d < NVE4_3D_CLASS) {
              const struct nvc0_hw_metric_query_cfg **queries =
                nvc0_hw_metric_get_queries(screen);

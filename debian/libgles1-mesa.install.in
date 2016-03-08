@@ -1,1 +1,1 @@
-dri/usr/lib/${DEB_HOST_MULTIARCH}/libGLESv1_CM.so.1* usr/lib/${DEB_HOST_MULTIARCH}
+usr/lib/${DEB_HOST_MULTIARCH}/libGLESv1_CM.so.1*

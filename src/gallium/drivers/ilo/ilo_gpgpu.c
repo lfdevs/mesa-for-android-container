@@ -79,9 +79,7 @@ launch_grid(struct ilo_context *ilo,
 }
 
 static void
-ilo_launch_grid(struct pipe_context *pipe,
-                const uint *block_layout, const uint *grid_layout,
-                uint32_t pc, const void *input)
+ilo_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 {
    struct ilo_context *ilo = ilo_context(pipe);
    struct ilo_shader_state *cs = ilo->state_vector.cs;
@@ -92,13 +90,13 @@ ilo_launch_grid(struct pipe_context *pipe,
    input_buf.buffer_size =
       ilo_shader_get_kernel_param(cs, ILO_KERNEL_CS_INPUT_SIZE);
    if (input_buf.buffer_size) {
-      u_upload_data(ilo->uploader, 0, input_buf.buffer_size, input,
+      u_upload_data(ilo->uploader, 0, input_buf.buffer_size, 16, info->input,
             &input_buf.buffer_offset, &input_buf.buffer);
    }
 
    ilo_shader_cache_upload(ilo->shader_cache, &ilo->cp->builder);
 
-   launch_grid(ilo, block_layout, grid_layout, &input_buf, pc);
+   launch_grid(ilo, info->block, info->grid, &input_buf, info->pc);
 
    ilo_render_invalidate_hw(ilo->render);
 

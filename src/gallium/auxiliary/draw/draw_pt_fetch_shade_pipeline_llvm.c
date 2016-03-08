@@ -453,6 +453,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
                                draw->vs.vertex_shader->info.writes_viewport_index)) {
          clipped = draw_pt_post_vs_run( fpme->post_vs, vert_info, prim_info );
       }
+      /* "clipped" also includes non-one edgeflag */
       if (clipped) {
          opt |= PT_PIPELINE;
       }

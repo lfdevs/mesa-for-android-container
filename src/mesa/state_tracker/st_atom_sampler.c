@@ -250,7 +250,7 @@ update_shader_samplers(struct st_context *st,
    samplers_used = prog->SamplersUsed;
 
    if (*num_samplers == 0 && samplers_used == 0x0)
-       return;
+      return;
 
    *num_samplers = 0;
 
@@ -320,6 +320,14 @@ update_samplers(struct st_context *st)
                              ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits,
                              st->state.samplers[PIPE_SHADER_TESS_EVAL],
                              &st->state.num_samplers[PIPE_SHADER_TESS_EVAL]);
+   }
+   if (ctx->ComputeProgram._Current) {
+      update_shader_samplers(st,
+                             PIPE_SHADER_COMPUTE,
+                             &ctx->ComputeProgram._Current->Base,
+                             ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits,
+                             st->state.samplers[PIPE_SHADER_COMPUTE],
+                             &st->state.num_samplers[PIPE_SHADER_COMPUTE]);
    }
 }
 

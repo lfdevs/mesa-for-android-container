@@ -26,6 +26,7 @@
 #include "glheader.h"
 #include "context.h"
 #include "blend.h"
+#include "debug_output.h"
 #include "enable.h"
 #include "enums.h"
 #include "errors.h"
@@ -147,11 +148,14 @@ enum value_extra {
    EXTRA_VALID_CLIP_DISTANCE,
    EXTRA_FLUSH_CURRENT,
    EXTRA_GLSL_130,
-   EXTRA_EXT_UBO_GS4,
-   EXTRA_EXT_ATOMICS_GS4,
-   EXTRA_EXT_SHADER_IMAGE_GS4,
+   EXTRA_EXT_UBO_GS,
+   EXTRA_EXT_ATOMICS_GS,
+   EXTRA_EXT_SHADER_IMAGE_GS,
    EXTRA_EXT_ATOMICS_TESS,
    EXTRA_EXT_SHADER_IMAGE_TESS,
+   EXTRA_EXT_SSBO_GS,
+   EXTRA_EXT_FB_NO_ATTACH_GS,
+   EXTRA_EXT_ES_GS,
 };
 
 #define NO_EXTRA NULL
@@ -308,7 +312,7 @@ static const int extra_ARB_transform_feedback2_api_es3[] = {
 };
 
 static const int extra_ARB_uniform_buffer_object_and_geometry_shader[] = {
-   EXTRA_EXT_UBO_GS4,
+   EXTRA_EXT_UBO_GS,
    EXTRA_END
 };
 
@@ -343,12 +347,12 @@ static const int extra_EXT_texture_array_es3[] = {
 };
 
 static const int extra_ARB_shader_atomic_counters_and_geometry_shader[] = {
-   EXTRA_EXT_ATOMICS_GS4,
+   EXTRA_EXT_ATOMICS_GS,
    EXTRA_END
 };
 
 static const int extra_ARB_shader_image_load_store_and_geometry_shader[] = {
-   EXTRA_EXT_SHADER_IMAGE_GS4,
+   EXTRA_EXT_SHADER_IMAGE_GS,
    EXTRA_END
 };
 
@@ -375,6 +379,28 @@ static const int extra_ARB_shader_storage_buffer_object_es31[] = {
    EXTRA_END
 };
 
+static const int extra_ARB_shader_storage_buffer_object_and_geometry_shader[] = {
+   EXTRA_EXT_SSBO_GS,
+   EXTRA_END
+};
+
+static const int extra_ARB_framebuffer_no_attachments_and_geometry_shader[] = {
+   EXTRA_EXT_FB_NO_ATTACH_GS,
+   EXTRA_END
+};
+
+static const int extra_ARB_viewport_array_or_oes_geometry_shader[] = {
+   EXT(ARB_viewport_array),
+   EXTRA_EXT_ES_GS,
+   EXTRA_END
+};
+
+static const int extra_ARB_gpu_shader5_or_oes_geometry_shader[] = {
+   EXT(ARB_gpu_shader5),
+   EXTRA_EXT_ES_GS,
+   EXTRA_END
+};
+
 EXTRA_EXT(ARB_texture_cube_map);
 EXTRA_EXT(EXT_texture_array);
 EXTRA_EXT(NV_fog_distance);
@@ -398,7 +424,6 @@ EXTRA_EXT(EXT_pixel_buffer_object);
 EXTRA_EXT(ARB_vertex_program);
 EXTRA_EXT2(NV_point_sprite, ARB_point_sprite);
 EXTRA_EXT2(ARB_vertex_program, ARB_fragment_program);
-EXTRA_EXT(ARB_geometry_shader4);
 EXTRA_EXT(ARB_color_buffer_float);
 EXTRA_EXT(EXT_framebuffer_sRGB);
 EXTRA_EXT(OES_EGL_image_external);
@@ -415,6 +440,7 @@ EXTRA_EXT(ARB_shader_image_load_store);
 EXTRA_EXT(ARB_viewport_array);
 EXTRA_EXT(ARB_compute_shader);
 EXTRA_EXT(ARB_gpu_shader5);
+EXTRA_EXT(ARB_query_buffer_object);
 EXTRA_EXT2(ARB_transform_feedback3, ARB_gpu_shader5);
 EXTRA_EXT(INTEL_performance_query);
 EXTRA_EXT(ARB_explicit_uniform_location);
@@ -424,6 +450,9 @@ EXTRA_EXT(ARB_framebuffer_no_attachments);
 EXTRA_EXT(ARB_tessellation_shader);
 EXTRA_EXT(ARB_shader_subroutine);
 EXTRA_EXT(ARB_shader_storage_buffer_object);
+EXTRA_EXT(ARB_indirect_parameters);
+EXTRA_EXT(ATI_meminfo);
+EXTRA_EXT(NVX_gpu_memory_info);
 
 static const int
 extra_ARB_color_buffer_float_or_glcore[] = {
@@ -455,9 +484,9 @@ static const int extra_gl32_es3[] = {
     EXTRA_END,
 };
 
-static const int extra_gl32_ARB_geometry_shader4[] = {
+static const int extra_version_32_OES_geometry_shader[] = {
     EXTRA_VERSION_32,
-    EXT(ARB_geometry_shader4),
+    EXTRA_EXT_ES_GS,
     EXTRA_END
 };
 
@@ -613,7 +642,7 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
    case GL_TEXTURE_1D:
    case GL_TEXTURE_2D:
    case GL_TEXTURE_3D:
-   case GL_TEXTURE_CUBE_MAP_ARB:
+   case GL_TEXTURE_CUBE_MAP:
    case GL_TEXTURE_RECTANGLE_NV:
    case GL_TEXTURE_EXTERNAL_OES:
       v->value_bool = _mesa_IsEnabled(d->pname);
@@ -1012,6 +1041,10 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
    case GL_SHADER_STORAGE_BUFFER_BINDING:
       v->value_int = ctx->ShaderStorageBuffer->Name;
       break;
+   /* GL_ARB_query_buffer_object */
+   case GL_QUERY_BUFFER_BINDING:
+      v->value_int = ctx->QueryBuffer->Name;
+      break;
    /* GL_ARB_timer_query */
    case GL_TIMESTAMP:
       if (ctx->Driver.GetTimestamp) {
@@ -1022,6 +1055,8 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       }
       break;
    /* GL_KHR_DEBUG */
+   case GL_DEBUG_OUTPUT:
+   case GL_DEBUG_OUTPUT_SYNCHRONOUS:
    case GL_DEBUG_LOGGED_MESSAGES:
    case GL_DEBUG_NEXT_LOGGED_MESSAGE_LENGTH:
    case GL_DEBUG_GROUP_STACK_DEPTH:
@@ -1039,6 +1074,10 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
    case GL_DRAW_INDIRECT_BUFFER_BINDING:
       v->value_int = ctx->DrawIndirectBuffer->Name;
       break;
+   /* GL_ARB_indirect_parameters */
+   case GL_PARAMETER_BUFFER_BINDING_ARB:
+      v->value_int = ctx->ParameterBuffer->Name;
+      break;
    /* GL_ARB_separate_shader_objects */
    case GL_PROGRAM_PIPELINE_BINDING:
       if (ctx->Pipeline.Current) {
@@ -1050,6 +1089,60 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
    /* GL_ARB_compute_shader */
    case GL_DISPATCH_INDIRECT_BUFFER_BINDING:
       v->value_int = ctx->DispatchIndirectBuffer->Name;
+      break;
+   /* GL_ARB_multisample */
+   case GL_SAMPLES:
+      v->value_int = _mesa_geometric_samples(ctx->DrawBuffer);
+      break;
+   case GL_SAMPLE_BUFFERS:
+      v->value_int = _mesa_geometric_samples(ctx->DrawBuffer) > 0;
+      break;
+   /* GL_ATI_meminfo & GL_NVX_gpu_memory_info */
+   case GL_VBO_FREE_MEMORY_ATI:
+   case GL_TEXTURE_FREE_MEMORY_ATI:
+   case GL_RENDERBUFFER_FREE_MEMORY_ATI:
+   case GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX:
+   case GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX:
+   case GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX:
+   case GL_GPU_MEMORY_INFO_EVICTION_COUNT_NVX:
+   case GL_GPU_MEMORY_INFO_EVICTED_MEMORY_NVX:
+      {
+         struct gl_memory_info info;
+
+         ctx->Driver.QueryMemoryInfo(ctx, &info);
+
+         if (d->pname == GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX)
+            v->value_int = info.total_device_memory;
+         else if (d->pname == GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX)
+            v->value_int = info.total_device_memory +
+                           info.total_staging_memory;
+         else if (d->pname == GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX)
+            v->value_int = info.avail_device_memory;
+         else if (d->pname == GL_GPU_MEMORY_INFO_EVICTION_COUNT_NVX)
+            v->value_int = info.nr_device_memory_evictions;
+         else if (d->pname == GL_GPU_MEMORY_INFO_EVICTED_MEMORY_NVX)
+            v->value_int = info.device_memory_evicted;
+         else {
+            /* ATI free memory enums.
+             *
+             * Since the GPU memory is (usually) page-table based, every two
+             * consecutive elements are equal. From the GL_ATI_meminfo
+             * specification:
+             *
+             *    "param[0] - total memory free in the pool
+             *     param[1] - largest available free block in the pool
+             *     param[2] - total auxiliary memory free
+             *     param[3] - largest auxiliary free block"
+             *
+             * All three (VBO, TEXTURE, RENDERBUFFER) queries return
+             * the same numbers here.
+             */
+            v->value_int_4[0] = info.avail_device_memory;
+            v->value_int_4[1] = info.avail_device_memory;
+            v->value_int_4[2] = info.avail_staging_memory;
+            v->value_int_4[3] = info.avail_staging_memory;
+         }
+      }
       break;
    }
 }
@@ -1156,20 +1249,23 @@ check_extra(struct gl_context *ctx, const char *func, const struct value_desc *d
          if (ctx->Const.GLSLVersion >= 130)
             api_found = GL_TRUE;
 	 break;
-      case EXTRA_EXT_UBO_GS4:
+      case EXTRA_EXT_UBO_GS:
          api_check = GL_TRUE;
-         api_found = (ctx->Extensions.ARB_uniform_buffer_object &&
-                      _mesa_has_geometry_shaders(ctx));
+         if (ctx->Extensions.ARB_uniform_buffer_object &&
+            _mesa_has_geometry_shaders(ctx))
+            api_found = GL_TRUE;
          break;
-      case EXTRA_EXT_ATOMICS_GS4:
+      case EXTRA_EXT_ATOMICS_GS:
          api_check = GL_TRUE;
-         api_found = (ctx->Extensions.ARB_shader_atomic_counters &&
-                      _mesa_has_geometry_shaders(ctx));
+         if (ctx->Extensions.ARB_shader_atomic_counters &&
+            _mesa_has_geometry_shaders(ctx))
+            api_found = GL_TRUE;
          break;
-      case EXTRA_EXT_SHADER_IMAGE_GS4:
+      case EXTRA_EXT_SHADER_IMAGE_GS:
          api_check = GL_TRUE;
-         api_found = (ctx->Extensions.ARB_shader_image_load_store &&
-                      _mesa_has_geometry_shaders(ctx));
+         if (ctx->Extensions.ARB_shader_image_load_store &&
+            _mesa_has_geometry_shaders(ctx))
+            api_found = GL_TRUE;
          break;
       case EXTRA_EXT_ATOMICS_TESS:
          api_check = GL_TRUE;
@@ -1180,6 +1276,24 @@ check_extra(struct gl_context *ctx, const char *func, const struct value_desc *d
          api_check = GL_TRUE;
          api_found = ctx->Extensions.ARB_shader_image_load_store &&
                      _mesa_has_tessellation(ctx);
+         break;
+      case EXTRA_EXT_SSBO_GS:
+         api_check = GL_TRUE;
+         if (ctx->Extensions.ARB_shader_storage_buffer_object &&
+            _mesa_has_geometry_shaders(ctx))
+            api_found = GL_TRUE;
+         break;
+      case EXTRA_EXT_FB_NO_ATTACH_GS:
+         api_check = GL_TRUE;
+         if (ctx->Extensions.ARB_framebuffer_no_attachments &&
+            (_mesa_is_desktop_gl(ctx) ||
+            _mesa_has_OES_geometry_shader(ctx)))
+            api_found = GL_TRUE;
+         break;
+      case EXTRA_EXT_ES_GS:
+         api_check = GL_TRUE;
+         if (_mesa_has_OES_geometry_shader(ctx))
+            api_found = GL_TRUE;
          break;
       case EXTRA_END:
 	 break;

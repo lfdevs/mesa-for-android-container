@@ -37,8 +37,8 @@
 #include "nv50/nv50_context.h"
 #include "nv50/nv50_resource.h"
 
-#include "nv50/nv50_defs.xml.h"
-#include "nv50/nv50_texture.xml.h"
+#include "nv50/g80_defs.xml.h"
+#include "nv50/g80_texture.xml.h"
 
 /* these are used in nv50_blit.h */
 #define NV50_ENG2D_SUPPORTED_FORMATS 0xff0843e080608409ULL
@@ -64,15 +64,15 @@ nv50_2d_format(enum pipe_format format, bool dst, bool dst_src_equal)
 
    switch (util_format_get_blocksize(format)) {
    case 1:
-      return NV50_SURFACE_FORMAT_R8_UNORM;
+      return G80_SURFACE_FORMAT_R8_UNORM;
    case 2:
-      return NV50_SURFACE_FORMAT_R16_UNORM;
+      return G80_SURFACE_FORMAT_R16_UNORM;
    case 4:
-      return NV50_SURFACE_FORMAT_BGRA8_UNORM;
+      return G80_SURFACE_FORMAT_BGRA8_UNORM;
    case 8:
-      return NV50_SURFACE_FORMAT_RGBA16_FLOAT;
+      return G80_SURFACE_FORMAT_RGBA16_FLOAT;
    case 16:
-      return NV50_SURFACE_FORMAT_RGBA32_FLOAT;
+      return G80_SURFACE_FORMAT_RGBA32_FLOAT;
    default:
       return 0;
    }
@@ -286,6 +286,8 @@ nv50_clear_render_target(struct pipe_context *pipe,
    struct nouveau_bo *bo = mt->base.bo;
    unsigned z;
 
+   assert(dst->texture->target != PIPE_BUFFER);
+
    BEGIN_NV04(push, NV50_3D(CLEAR_COLOR(0)), 4);
    PUSH_DATAf(push, color->f[0]);
    PUSH_DATAf(push, color->f[1]);
@@ -371,6 +373,7 @@ nv50_clear_depth_stencil(struct pipe_context *pipe,
    uint32_t mode = 0;
    unsigned z;
 
+   assert(dst->texture->target != PIPE_BUFFER);
    assert(nouveau_bo_memtype(bo)); /* ZETA cannot be linear */
 
    if (clear_flags & PIPE_CLEAR_DEPTH) {
@@ -522,7 +525,7 @@ nv50_clear(struct pipe_context *pipe, unsigned buffers,
    uint32_t mode = 0;
 
    /* don't need NEW_BLEND, COLOR_MASK doesn't affect CLEAR_BUFFERS */
-   if (!nv50_state_validate(nv50, NV50_NEW_FRAMEBUFFER, 9 + (fb->nr_cbufs * 2)))
+   if (!nv50_state_validate(nv50, NV50_NEW_FRAMEBUFFER))
       return;
 
    /* We have to clear ALL of the layers, not up to the min number of layers
@@ -625,7 +628,7 @@ nv50_clear_buffer_push(struct pipe_context *pipe,
    offset &= ~0xff;
 
    BEGIN_NV04(push, NV50_2D(DST_FORMAT), 2);
-   PUSH_DATA (push, NV50_SURFACE_FORMAT_R8_UNORM);
+   PUSH_DATA (push, G80_SURFACE_FORMAT_R8_UNORM);
    PUSH_DATA (push, 1);
    BEGIN_NV04(push, NV50_2D(DST_PITCH), 5);
    PUSH_DATA (push, 262144);
@@ -635,7 +638,7 @@ nv50_clear_buffer_push(struct pipe_context *pipe,
    PUSH_DATA (push, buf->address + offset);
    BEGIN_NV04(push, NV50_2D(SIFC_BITMAP_ENABLE), 2);
    PUSH_DATA (push, 0);
-   PUSH_DATA (push, NV50_SURFACE_FORMAT_R8_UNORM);
+   PUSH_DATA (push, G80_SURFACE_FORMAT_R8_UNORM);
    BEGIN_NV04(push, NV50_2D(SIFC_WIDTH), 10);
    PUSH_DATA (push, size);
    PUSH_DATA (push, 1);
@@ -994,12 +997,14 @@ nv50_blitter_make_sampler(struct nv50_blitter *blit)
 
    blit->sampler[0].id = -1;
 
-   blit->sampler[0].tsc[0] = NV50_TSC_0_SRGB_CONVERSION_ALLOWED |
-      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPS__SHIFT) |
-      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPT__SHIFT) |
-      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPR__SHIFT);
+   blit->sampler[0].tsc[0] = G80_TSC_0_SRGB_CONVERSION |
+      (G80_TSC_WRAP_CLAMP_TO_EDGE << G80_TSC_0_ADDRESS_U__SHIFT) |
+      (G80_TSC_WRAP_CLAMP_TO_EDGE << G80_TSC_0_ADDRESS_V__SHIFT) |
+      (G80_TSC_WRAP_CLAMP_TO_EDGE << G80_TSC_0_ADDRESS_P__SHIFT);
    blit->sampler[0].tsc[1] =
-      NV50_TSC_1_MAGF_NEAREST | NV50_TSC_1_MINF_NEAREST | NV50_TSC_1_MIPF_NONE;
+      G80_TSC_1_MAG_FILTER_NEAREST |
+      G80_TSC_1_MIN_FILTER_NEAREST |
+      G80_TSC_1_MIP_FILTER_NONE;
 
    /* clamp to edge, min/max lod = 0, bilinear filtering */
 
@@ -1007,7 +1012,9 @@ nv50_blitter_make_sampler(struct nv50_blitter *blit)
 
    blit->sampler[1].tsc[0] = blit->sampler[0].tsc[0];
    blit->sampler[1].tsc[1] =
-      NV50_TSC_1_MAGF_LINEAR | NV50_TSC_1_MINF_LINEAR | NV50_TSC_1_MIPF_NONE;
+      G80_TSC_1_MAG_FILTER_LINEAR |
+      G80_TSC_1_MIN_FILTER_LINEAR |
+      G80_TSC_1_MIP_FILTER_NONE;
 }
 
 unsigned
@@ -1337,7 +1344,7 @@ nv50_blit_3d(struct nv50_context *nv50, const struct pipe_blit_info *info)
 
    nv50_blitctx_prepare_state(blit);
 
-   nv50_state_validate(nv50, ~0, 36);
+   nv50_state_validate(nv50, ~0);
 
    x_range = (float)info->src.box.width / (float)info->dst.box.width;
    y_range = (float)info->src.box.height / (float)info->dst.box.height;

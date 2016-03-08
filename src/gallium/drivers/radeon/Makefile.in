@@ -128,19 +128,20 @@ am__DEPENDENCIES_1 =
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1) \
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1)
 am__libradeon_la_SOURCES_DIST = cayman_msaa.c r600_buffer_common.c \
-	r600_cs.h r600d_common.h r600_gpu_load.c r600_pipe_common.c \
-	r600_pipe_common.h r600_query.c r600_query.h r600_streamout.c \
-	r600_texture.c radeon_uvd.c radeon_uvd.h radeon_vce_40_2_2.c \
-	radeon_vce_50.c radeon_vce_52.c radeon_vce.c radeon_vce.h \
-	radeon_video.c radeon_video.h radeon_winsys.h \
-	radeon_elf_util.c radeon_elf_util.h radeon_llvm_emit.c \
-	radeon_llvm_emit.h radeon_llvm.h radeon_llvm_util.c \
-	radeon_llvm_util.h radeon_setup_tgsi_llvm.c
+	r600_cs.h r600d_common.h r600_gpu_load.c r600_perfcounter.c \
+	r600_pipe_common.c r600_pipe_common.h r600_query.c \
+	r600_query.h r600_streamout.c r600_texture.c radeon_uvd.c \
+	radeon_uvd.h radeon_vce_40_2_2.c radeon_vce_50.c \
+	radeon_vce_52.c radeon_vce.c radeon_vce.h radeon_video.c \
+	radeon_video.h radeon_winsys.h radeon_elf_util.c \
+	radeon_elf_util.h radeon_llvm_emit.c radeon_llvm_emit.h \
+	radeon_llvm.h radeon_llvm_util.c radeon_llvm_util.h \
+	radeon_setup_tgsi_llvm.c
 am__objects_1 = cayman_msaa.lo r600_buffer_common.lo r600_gpu_load.lo \
-	r600_pipe_common.lo r600_query.lo r600_streamout.lo \
-	r600_texture.lo radeon_uvd.lo radeon_vce_40_2_2.lo \
-	radeon_vce_50.lo radeon_vce_52.lo radeon_vce.lo \
-	radeon_video.lo
+	r600_perfcounter.lo r600_pipe_common.lo r600_query.lo \
+	r600_streamout.lo r600_texture.lo radeon_uvd.lo \
+	radeon_vce_40_2_2.lo radeon_vce_50.lo radeon_vce_52.lo \
+	radeon_vce.lo radeon_video.lo
 am__objects_2 = radeon_elf_util.lo radeon_llvm_emit.lo \
 	radeon_llvm_util.lo radeon_setup_tgsi_llvm.lo
 @NEED_RADEON_LLVM_TRUE@am__objects_3 = $(am__objects_2)
@@ -341,8 +342,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -388,6 +387,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -511,6 +511,7 @@ C_SOURCES := \
 	r600_cs.h \
 	r600d_common.h \
 	r600_gpu_load.c \
+	r600_perfcounter.c \
 	r600_pipe_common.c \
 	r600_pipe_common.h \
 	r600_query.c \
@@ -677,6 +678,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cayman_msaa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_buffer_common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_gpu_load.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_perfcounter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_pipe_common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_streamout.Plo@am__quote@

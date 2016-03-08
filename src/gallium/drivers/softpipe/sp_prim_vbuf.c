@@ -161,7 +161,7 @@ sp_vbuf_draw_elements(struct vbuf_render *vbr, const ushort *indices, uint nr)
 {
    struct softpipe_vbuf_render *cvbr = softpipe_vbuf_render(vbr);
    struct softpipe_context *softpipe = cvbr->softpipe;
-   const unsigned stride = softpipe->vertex_info_vbuf.size * sizeof(float);
+   const unsigned stride = softpipe->vertex_info.size * sizeof(float);
    const void *vertex_buffer = cvbr->vertex_buffer;
    struct setup_context *setup = cvbr->setup;
    const boolean flatshade_first = softpipe->rasterizer->flatshade_first;
@@ -358,7 +358,7 @@ sp_vbuf_draw_arrays(struct vbuf_render *vbr, uint start, uint nr)
    struct softpipe_vbuf_render *cvbr = softpipe_vbuf_render(vbr);
    struct softpipe_context *softpipe = cvbr->softpipe;
    struct setup_context *setup = cvbr->setup;
-   const unsigned stride = softpipe->vertex_info_vbuf.size * sizeof(float);
+   const unsigned stride = softpipe->vertex_info.size * sizeof(float);
    const void *vertex_buffer =
       (void *) get_vert(cvbr->vertex_buffer, start, stride);
    const boolean flatshade_first = softpipe->rasterizer->flatshade_first;

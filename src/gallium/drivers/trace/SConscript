@@ -2,7 +2,7 @@ Import('*')
 
 env = env.Clone()
 
-env.MSVC2008Compat()
+env.MSVC2013Compat()
 
 trace = env.ConvenienceLibrary(
     target = 'trace',

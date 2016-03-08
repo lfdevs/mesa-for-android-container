@@ -51,6 +51,6 @@ void
 nvc0_hw_query_pushbuf_submit(struct nouveau_pushbuf *, struct nvc0_query *,
                              unsigned);
 void
-nvc0_hw_query_fifo_wait(struct nouveau_pushbuf *, struct nvc0_query *);
+nvc0_hw_query_fifo_wait(struct nvc0_context *, struct nvc0_query *);
 
 #endif

@@ -50,23 +50,31 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   pipe_mutex_lock(drv->mutex);
    context = handle_table_get(drv->htab, context_id);
-   if (!context)
+   if (!context) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+   }
 
    surf = handle_table_get(drv->htab, render_target);
+   pipe_mutex_unlock(drv->mutex);
    if (!surf || !surf->buffer)
       return VA_STATUS_ERROR_INVALID_SURFACE;
 
    context->target = surf->buffer;
+
    if (!context->decoder) {
+
       /* VPP */
-      if ((context->target->buffer_format != PIPE_FORMAT_B8G8R8A8_UNORM  &&
-           context->target->buffer_format != PIPE_FORMAT_R8G8B8A8_UNORM  &&
-           context->target->buffer_format != PIPE_FORMAT_B8G8R8X8_UNORM  &&
-           context->target->buffer_format != PIPE_FORMAT_R8G8B8X8_UNORM) ||
-           context->target->interlaced)
+      if (context->templat.profile == PIPE_VIDEO_PROFILE_UNKNOWN &&
+          context->target->buffer_format != PIPE_FORMAT_B8G8R8A8_UNORM &&
+          context->target->buffer_format != PIPE_FORMAT_R8G8B8A8_UNORM &&
+          context->target->buffer_format != PIPE_FORMAT_B8G8R8X8_UNORM &&
+          context->target->buffer_format != PIPE_FORMAT_R8G8B8X8_UNORM &&
+          context->target->buffer_format != PIPE_FORMAT_NV12)
          return VA_STATUS_ERROR_UNIMPLEMENTED;
+
       return VA_STATUS_SUCCESS;
    }
 
@@ -75,9 +83,9 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
    return VA_STATUS_SUCCESS;
 }
 
-static void
-getReferenceFrame(vlVaDriver *drv, VASurfaceID surface_id,
-                  struct pipe_video_buffer **ref_frame)
+void
+vlVaGetReferenceFrame(vlVaDriver *drv, VASurfaceID surface_id,
+                      struct pipe_video_buffer **ref_frame)
 {
    vlVaSurface *surf = handle_table_get(drv->htab, surface_id);
    if (surf)
@@ -86,429 +94,80 @@ getReferenceFrame(vlVaDriver *drv, VASurfaceID surface_id,
       *ref_frame = NULL;
 }
 
-static void
+static VAStatus
 handlePictureParameterBuffer(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
-   VAPictureParameterBufferMPEG2 *mpeg2;
-   VAPictureParameterBufferH264 *h264;
-   VAPictureParameterBufferVC1 * vc1;
-   VAPictureParameterBufferMPEG4 *mpeg4;
-   VAPictureParameterBufferHEVC *hevc;
-   vlVaSurface *surf_forward;
-   vlVaSurface *surf_backward;
-   unsigned int i;
-   static const uint8_t default_intra_quant_matrix[64] = { 0 };
-   static const uint8_t default_non_intra_quant_matrix[64] = { 0 };
+   VAStatus vaStatus = VA_STATUS_SUCCESS;
 
-   switch (u_reduce_video_profile(context->decoder->profile)) {
+   switch (u_reduce_video_profile(context->templat.profile)) {
    case PIPE_VIDEO_FORMAT_MPEG12:
-      assert(buf->size >= sizeof(VAPictureParameterBufferMPEG2) && buf->num_elements == 1);
-      mpeg2 = buf->data;
-      /*horizontal_size;*/
-      /*vertical_size;*/
-      getReferenceFrame(drv, mpeg2->forward_reference_picture, &context->desc.mpeg12.ref[0]);
-      getReferenceFrame(drv, mpeg2->backward_reference_picture, &context->desc.mpeg12.ref[1]);
-      context->desc.mpeg12.picture_coding_type = mpeg2->picture_coding_type;
-      context->desc.mpeg12.f_code[0][0] = ((mpeg2->f_code >> 12) & 0xf) - 1;
-      context->desc.mpeg12.f_code[0][1] = ((mpeg2->f_code >> 8) & 0xf) - 1;
-      context->desc.mpeg12.f_code[1][0] = ((mpeg2->f_code >> 4) & 0xf) - 1;
-      context->desc.mpeg12.f_code[1][1] = (mpeg2->f_code & 0xf) - 1;
-      context->desc.mpeg12.intra_dc_precision =
-         mpeg2->picture_coding_extension.bits.intra_dc_precision;
-      context->desc.mpeg12.picture_structure =
-         mpeg2->picture_coding_extension.bits.picture_structure;
-      context->desc.mpeg12.top_field_first =
-         mpeg2->picture_coding_extension.bits.top_field_first;
-      context->desc.mpeg12.frame_pred_frame_dct =
-         mpeg2->picture_coding_extension.bits.frame_pred_frame_dct;
-      context->desc.mpeg12.concealment_motion_vectors =
-         mpeg2->picture_coding_extension.bits.concealment_motion_vectors;
-      context->desc.mpeg12.q_scale_type =
-         mpeg2->picture_coding_extension.bits.q_scale_type;
-      context->desc.mpeg12.intra_vlc_format =
-         mpeg2->picture_coding_extension.bits.intra_vlc_format;
-      context->desc.mpeg12.alternate_scan =
-         mpeg2->picture_coding_extension.bits.alternate_scan;
-      /*repeat_first_field*/
-      /*progressive_frame*/
-      /*is_first_field*/
+      vlVaHandlePictureParameterBufferMPEG12(drv, context, buf);
       break;
 
    case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-      assert(buf->size >= sizeof(VAPictureParameterBufferH264) && buf->num_elements == 1);
-      h264 = buf->data;
-      /*CurrPic*/
-      context->desc.h264.field_order_cnt[0] = h264->CurrPic.TopFieldOrderCnt;
-      context->desc.h264.field_order_cnt[1] = h264->CurrPic.BottomFieldOrderCnt;
-      /*ReferenceFrames[16]*/
-      /*picture_width_in_mbs_minus1*/
-      /*picture_height_in_mbs_minus1*/
-      /*bit_depth_luma_minus8*/
-      /*bit_depth_chroma_minus8*/
-      context->desc.h264.num_ref_frames = h264->num_ref_frames;
-      /*chroma_format_idc*/
-      /*residual_colour_transform_flag*/
-      /*gaps_in_frame_num_value_allowed_flag*/
-      context->desc.h264.pps->sps->frame_mbs_only_flag =
-         h264->seq_fields.bits.frame_mbs_only_flag;
-      context->desc.h264.pps->sps->mb_adaptive_frame_field_flag =
-         h264->seq_fields.bits.mb_adaptive_frame_field_flag;
-      context->desc.h264.pps->sps->direct_8x8_inference_flag =
-         h264->seq_fields.bits.direct_8x8_inference_flag;
-      /*MinLumaBiPredSize8x8*/
-      context->desc.h264.pps->sps->log2_max_frame_num_minus4 =
-         h264->seq_fields.bits.log2_max_frame_num_minus4;
-      context->desc.h264.pps->sps->pic_order_cnt_type =
-         h264->seq_fields.bits.pic_order_cnt_type;
-      context->desc.h264.pps->sps->log2_max_pic_order_cnt_lsb_minus4 =
-         h264->seq_fields.bits.log2_max_pic_order_cnt_lsb_minus4;
-      context->desc.h264.pps->sps->delta_pic_order_always_zero_flag =
-         h264->seq_fields.bits.delta_pic_order_always_zero_flag;
-      /*num_slice_groups_minus1*/
-      /*slice_group_map_type*/
-      /*slice_group_change_rate_minus1*/
-      context->desc.h264.pps->pic_init_qp_minus26 =
-         h264->pic_init_qp_minus26;
-      /*pic_init_qs_minus26*/
-      context->desc.h264.pps->chroma_qp_index_offset =
-         h264->chroma_qp_index_offset;
-      context->desc.h264.pps->second_chroma_qp_index_offset =
-         h264->second_chroma_qp_index_offset;
-      context->desc.h264.pps->entropy_coding_mode_flag =
-         h264->pic_fields.bits.entropy_coding_mode_flag;
-      context->desc.h264.pps->weighted_pred_flag =
-         h264->pic_fields.bits.weighted_pred_flag;
-      context->desc.h264.pps->weighted_bipred_idc =
-         h264->pic_fields.bits.weighted_bipred_idc;
-      context->desc.h264.pps->transform_8x8_mode_flag =
-         h264->pic_fields.bits.transform_8x8_mode_flag;
-      context->desc.h264.field_pic_flag =
-         h264->pic_fields.bits.field_pic_flag;
-      context->desc.h264.pps->constrained_intra_pred_flag =
-         h264->pic_fields.bits.constrained_intra_pred_flag;
-      context->desc.h264.pps->bottom_field_pic_order_in_frame_present_flag =
-         h264->pic_fields.bits.pic_order_present_flag;
-      context->desc.h264.pps->deblocking_filter_control_present_flag =
-         h264->pic_fields.bits.deblocking_filter_control_present_flag;
-      context->desc.h264.pps->redundant_pic_cnt_present_flag =
-         h264->pic_fields.bits.redundant_pic_cnt_present_flag;
-      /*reference_pic_flag*/
-      context->desc.h264.frame_num = h264->frame_num;
+      vlVaHandlePictureParameterBufferH264(drv, context, buf);
       break;
 
    case PIPE_VIDEO_FORMAT_VC1:
-      assert(buf->size >= sizeof(VAPictureParameterBufferVC1) && buf->num_elements == 1);
-      vc1 = buf->data;
-      getReferenceFrame(drv, vc1->forward_reference_picture, &context->desc.vc1.ref[0]);
-      getReferenceFrame(drv, vc1->backward_reference_picture, &context->desc.vc1.ref[1]);
-      context->desc.vc1.picture_type = vc1->picture_fields.bits.picture_type;
-      context->desc.vc1.frame_coding_mode = vc1->picture_fields.bits.frame_coding_mode;
-      context->desc.vc1.postprocflag = vc1->post_processing != 0;
-      context->desc.vc1.pulldown = vc1->sequence_fields.bits.pulldown;
-      context->desc.vc1.interlace = vc1->sequence_fields.bits.interlace;
-      context->desc.vc1.tfcntrflag = vc1->sequence_fields.bits.tfcntrflag;
-      context->desc.vc1.finterpflag = vc1->sequence_fields.bits.finterpflag;
-      context->desc.vc1.psf = vc1->sequence_fields.bits.psf;
-      context->desc.vc1.dquant = vc1->pic_quantizer_fields.bits.dquant;
-      context->desc.vc1.panscan_flag = vc1->entrypoint_fields.bits.panscan_flag;
-      context->desc.vc1.refdist_flag =
-         vc1->reference_fields.bits.reference_distance_flag;
-      context->desc.vc1.quantizer = vc1->pic_quantizer_fields.bits.quantizer;
-      context->desc.vc1.extended_mv = vc1->mv_fields.bits.extended_mv_flag;
-      context->desc.vc1.extended_dmv = vc1->mv_fields.bits.extended_dmv_flag;
-      context->desc.vc1.overlap = vc1->sequence_fields.bits.overlap;
-      context->desc.vc1.vstransform =
-         vc1->transform_fields.bits.variable_sized_transform_flag;
-      context->desc.vc1.loopfilter = vc1->entrypoint_fields.bits.loopfilter;
-      context->desc.vc1.fastuvmc = vc1->fast_uvmc_flag;
-      context->desc.vc1.range_mapy_flag = vc1->range_mapping_fields.bits.luma_flag;
-      context->desc.vc1.range_mapy = vc1->range_mapping_fields.bits.luma;
-      context->desc.vc1.range_mapuv_flag = vc1->range_mapping_fields.bits.chroma_flag;
-      context->desc.vc1.range_mapuv = vc1->range_mapping_fields.bits.chroma;
-      context->desc.vc1.multires = vc1->sequence_fields.bits.multires;
-      context->desc.vc1.syncmarker = vc1->sequence_fields.bits.syncmarker;
-      context->desc.vc1.rangered = vc1->sequence_fields.bits.rangered;
-      context->desc.vc1.maxbframes = vc1->sequence_fields.bits.max_b_frames;
-      context->desc.vc1.deblockEnable = vc1->post_processing != 0;
-      context->desc.vc1.pquant = vc1->pic_quantizer_fields.bits.pic_quantizer_scale;
+      vlVaHandlePictureParameterBufferVC1(drv, context, buf);
       break;
 
    case PIPE_VIDEO_FORMAT_MPEG4:
-      assert(buf->size >= sizeof(VAPictureParameterBufferMPEG4) && buf->num_elements == 1);
-      mpeg4 = buf->data;
-
-      context->mpeg4.pps = *mpeg4;
-
-      /* vop_width */
-      /* vop_height */
-      /* forward_reference_picture */
-      /* backward_reference_picture */
-      context->desc.mpeg4.short_video_header =
-            mpeg4->vol_fields.bits.short_video_header;
-      /* chroma_format */
-      context->desc.mpeg4.interlaced = mpeg4->vol_fields.bits.interlaced;
-      /* obmc_disable */
-      /* sprite_enable */
-      /* sprite_warping_accuracy */
-      context->desc.mpeg4.quant_type = mpeg4->vol_fields.bits.quant_type;
-      context->desc.mpeg4.quarter_sample = mpeg4->vol_fields.bits.quarter_sample;
-      /* data_partitioned */
-      /* reversible_vlc */
-      context->desc.mpeg4.resync_marker_disable =
-            mpeg4->vol_fields.bits.resync_marker_disable;
-      /* no_of_sprite_warping_points */
-      /* sprite_trajectory_du */
-      /* sprite_trajectory_dv */
-      /* quant_precision */
-      context->desc.mpeg4.vop_coding_type = mpeg4->vop_fields.bits.vop_coding_type;
-      /* backward_reference_vop_coding_type */
-      /* vop_rounding_type */
-      /* intra_dc_vlc_thr */
-      context->desc.mpeg4.top_field_first =
-            mpeg4->vop_fields.bits.top_field_first;
-      context->desc.mpeg4.alternate_vertical_scan_flag =
-            mpeg4->vop_fields.bits.alternate_vertical_scan_flag;
-      context->desc.mpeg4.vop_fcode_forward = mpeg4->vop_fcode_forward;
-      context->desc.mpeg4.vop_fcode_backward = mpeg4->vop_fcode_backward;
-      context->desc.mpeg4.vop_time_increment_resolution =
-            mpeg4->vop_time_increment_resolution;
-      /* num_gobs_in_vop */
-      /* num_macroblocks_in_gob */
-      context->desc.mpeg4.trb[0] = mpeg4->TRB;
-      context->desc.mpeg4.trb[1] = mpeg4->TRB;
-      context->desc.mpeg4.trd[0] = mpeg4->TRD;
-      context->desc.mpeg4.trd[1] = mpeg4->TRD;
-
-      /* default [non-]intra quant matrix because mpv does not set these
-         matrices */
-      if (!context->desc.mpeg4.intra_matrix)
-         context->desc.mpeg4.intra_matrix = default_intra_quant_matrix;
-      if (!context->desc.mpeg4.non_intra_matrix)
-         context->desc.mpeg4.non_intra_matrix = default_non_intra_quant_matrix;
-
-      surf_forward = handle_table_get(drv->htab, mpeg4->forward_reference_picture);
-      if (surf_forward)
-         context->desc.mpeg4.ref[0] = surf_forward->buffer;
-      surf_backward = handle_table_get(drv->htab, mpeg4->backward_reference_picture);
-      if (surf_backward)
-         context->desc.mpeg4.ref[1] = surf_backward->buffer;
-
-      context->mpeg4.vti_bits = 0;
-      for (i = context->desc.mpeg4.vop_time_increment_resolution; i > 0; i /= 2)
-         ++context->mpeg4.vti_bits;
-
+      vlVaHandlePictureParameterBufferMPEG4(drv, context, buf);
       break;
 
   case PIPE_VIDEO_FORMAT_HEVC:
-      assert(buf->size >= sizeof(VAPictureParameterBufferHEVC) && buf->num_elements == 1);
-      hevc = buf->data;
-      context->desc.h265.pps->sps->chroma_format_idc = hevc->pic_fields.bits.chroma_format_idc;
-      context->desc.h265.pps->sps->separate_colour_plane_flag =
-         hevc->pic_fields.bits.separate_colour_plane_flag;
-      context->desc.h265.pps->sps->pic_width_in_luma_samples = hevc->pic_width_in_luma_samples;
-      context->desc.h265.pps->sps->pic_height_in_luma_samples = hevc->pic_height_in_luma_samples;
-      context->desc.h265.pps->sps->bit_depth_luma_minus8 = hevc->bit_depth_luma_minus8;
-      context->desc.h265.pps->sps->bit_depth_chroma_minus8 = hevc->bit_depth_chroma_minus8;
-      context->desc.h265.pps->sps->log2_max_pic_order_cnt_lsb_minus4 =
-         hevc->log2_max_pic_order_cnt_lsb_minus4;
-      context->desc.h265.pps->sps->sps_max_dec_pic_buffering_minus1 =
-         hevc->sps_max_dec_pic_buffering_minus1;
-      context->desc.h265.pps->sps->log2_min_luma_coding_block_size_minus3 =
-         hevc->log2_min_luma_coding_block_size_minus3;
-      context->desc.h265.pps->sps->log2_diff_max_min_luma_coding_block_size =
-         hevc->log2_diff_max_min_luma_coding_block_size;
-      context->desc.h265.pps->sps->log2_min_transform_block_size_minus2 =
-         hevc->log2_min_transform_block_size_minus2;
-      context->desc.h265.pps->sps->log2_diff_max_min_transform_block_size =
-         hevc->log2_diff_max_min_transform_block_size;
-      context->desc.h265.pps->sps->max_transform_hierarchy_depth_inter =
-         hevc->max_transform_hierarchy_depth_inter;
-      context->desc.h265.pps->sps->max_transform_hierarchy_depth_intra =
-         hevc->max_transform_hierarchy_depth_intra;
-      context->desc.h265.pps->sps->scaling_list_enabled_flag =
-         hevc->pic_fields.bits.scaling_list_enabled_flag;
-      context->desc.h265.pps->sps->amp_enabled_flag = hevc->pic_fields.bits.amp_enabled_flag;
-      context->desc.h265.pps->sps->sample_adaptive_offset_enabled_flag =
-         hevc->slice_parsing_fields.bits.sample_adaptive_offset_enabled_flag;
-      context->desc.h265.pps->sps->pcm_enabled_flag = hevc->pic_fields.bits.pcm_enabled_flag;
-      if (hevc->pic_fields.bits.pcm_enabled_flag == 1) {
-         context->desc.h265.pps->sps->pcm_sample_bit_depth_luma_minus1 =
-            hevc->pcm_sample_bit_depth_luma_minus1;
-         context->desc.h265.pps->sps->pcm_sample_bit_depth_chroma_minus1 =
-            hevc->pcm_sample_bit_depth_chroma_minus1;
-         context->desc.h265.pps->sps->log2_min_pcm_luma_coding_block_size_minus3 =
-            hevc->log2_min_pcm_luma_coding_block_size_minus3;
-         context->desc.h265.pps->sps->log2_diff_max_min_pcm_luma_coding_block_size =
-            hevc->log2_diff_max_min_pcm_luma_coding_block_size;
-         context->desc.h265.pps->sps->pcm_loop_filter_disabled_flag =
-            hevc->pic_fields.bits.pcm_loop_filter_disabled_flag;
-      }
-      context->desc.h265.pps->sps->num_short_term_ref_pic_sets = hevc->num_short_term_ref_pic_sets;
-      context->desc.h265.pps->sps->long_term_ref_pics_present_flag =
-         hevc->slice_parsing_fields.bits.long_term_ref_pics_present_flag;
-      context->desc.h265.pps->sps->num_long_term_ref_pics_sps = hevc->num_long_term_ref_pic_sps;
-      context->desc.h265.pps->sps->sps_temporal_mvp_enabled_flag =
-         hevc->slice_parsing_fields.bits.sps_temporal_mvp_enabled_flag;
-      context->desc.h265.pps->sps->strong_intra_smoothing_enabled_flag =
-         hevc->pic_fields.bits.strong_intra_smoothing_enabled_flag;
-
-      context->desc.h265.pps->dependent_slice_segments_enabled_flag =
-         hevc->slice_parsing_fields.bits.dependent_slice_segments_enabled_flag;
-      context->desc.h265.pps->output_flag_present_flag =
-         hevc->slice_parsing_fields.bits.output_flag_present_flag;
-      context->desc.h265.pps->num_extra_slice_header_bits = hevc->num_extra_slice_header_bits;
-      context->desc.h265.pps->sign_data_hiding_enabled_flag =
-         hevc->pic_fields.bits.sign_data_hiding_enabled_flag;
-      context->desc.h265.pps->cabac_init_present_flag =
-         hevc->slice_parsing_fields.bits.cabac_init_present_flag;
-      context->desc.h265.pps->num_ref_idx_l0_default_active_minus1 =
-         hevc->num_ref_idx_l0_default_active_minus1;
-      context->desc.h265.pps->num_ref_idx_l1_default_active_minus1 =
-         hevc->num_ref_idx_l1_default_active_minus1;
-      context->desc.h265.pps->init_qp_minus26 = hevc->init_qp_minus26;
-      context->desc.h265.pps->constrained_intra_pred_flag =
-         hevc->pic_fields.bits.constrained_intra_pred_flag;
-      context->desc.h265.pps->transform_skip_enabled_flag =
-         hevc->pic_fields.bits.transform_skip_enabled_flag;
-      context->desc.h265.pps->cu_qp_delta_enabled_flag =
-         hevc->pic_fields.bits.cu_qp_delta_enabled_flag;
-      context->desc.h265.pps->diff_cu_qp_delta_depth = hevc->diff_cu_qp_delta_depth;
-      context->desc.h265.pps->pps_cb_qp_offset = hevc->pps_cb_qp_offset;
-      context->desc.h265.pps->pps_cr_qp_offset = hevc->pps_cr_qp_offset;
-      context->desc.h265.pps->pps_slice_chroma_qp_offsets_present_flag =
-         hevc->slice_parsing_fields.bits.pps_slice_chroma_qp_offsets_present_flag;
-      context->desc.h265.pps->weighted_pred_flag = hevc->pic_fields.bits.weighted_pred_flag;
-      context->desc.h265.pps->weighted_bipred_flag = hevc->pic_fields.bits.weighted_bipred_flag;
-      context->desc.h265.pps->transquant_bypass_enabled_flag =
-         hevc->pic_fields.bits.transquant_bypass_enabled_flag;
-      context->desc.h265.pps->tiles_enabled_flag = hevc->pic_fields.bits.tiles_enabled_flag;
-      context->desc.h265.pps->entropy_coding_sync_enabled_flag =
-         hevc->pic_fields.bits.entropy_coding_sync_enabled_flag;
-      if (hevc->pic_fields.bits.tiles_enabled_flag == 1) {
-         context->desc.h265.pps->num_tile_columns_minus1 = hevc->num_tile_columns_minus1;
-         context->desc.h265.pps->num_tile_rows_minus1 = hevc->num_tile_rows_minus1;
-         for (i = 0 ; i < 19 ; i++)
-            context->desc.h265.pps->column_width_minus1[i] = hevc->column_width_minus1[i];
-         for (i = 0 ; i < 21 ; i++)
-            context->desc.h265.pps->row_height_minus1[i] = hevc->row_height_minus1[i];
-         context->desc.h265.pps->loop_filter_across_tiles_enabled_flag =
-            hevc->pic_fields.bits.loop_filter_across_tiles_enabled_flag;
-      }
-      context->desc.h265.pps->pps_loop_filter_across_slices_enabled_flag =
-         hevc->pic_fields.bits.pps_loop_filter_across_slices_enabled_flag;
-      context->desc.h265.pps->deblocking_filter_override_enabled_flag =
-         hevc->slice_parsing_fields.bits.deblocking_filter_override_enabled_flag;
-      context->desc.h265.pps->pps_deblocking_filter_disabled_flag =
-         hevc->slice_parsing_fields.bits.pps_disable_deblocking_filter_flag;
-      context->desc.h265.pps->pps_beta_offset_div2 = hevc->pps_beta_offset_div2;
-      context->desc.h265.pps->pps_tc_offset_div2 = hevc->pps_tc_offset_div2;
-      context->desc.h265.pps->lists_modification_present_flag =
-         hevc->slice_parsing_fields.bits.lists_modification_present_flag;
-      context->desc.h265.pps->log2_parallel_merge_level_minus2 =
-         hevc->log2_parallel_merge_level_minus2;
-      context->desc.h265.pps->slice_segment_header_extension_present_flag =
-         hevc->slice_parsing_fields.bits.slice_segment_header_extension_present_flag;
-
-      context->desc.h265.IDRPicFlag = hevc->slice_parsing_fields.bits.IdrPicFlag;
-      context->desc.h265.RAPPicFlag = hevc->slice_parsing_fields.bits.RapPicFlag;
-
-      context->desc.h265.CurrPicOrderCntVal = hevc->CurrPic.pic_order_cnt;
-
-      for (i = 0 ; i < 8 ; i++) {
-         context->desc.h265.RefPicSetStCurrBefore[i] = 0xFF;
-         context->desc.h265.RefPicSetStCurrAfter[i] = 0xFF;
-         context->desc.h265.RefPicSetLtCurr[i] = 0xFF;
-      }
-      context->desc.h265.NumPocStCurrBefore = 0;
-      context->desc.h265.NumPocStCurrAfter = 0;
-      context->desc.h265.NumPocLtCurr = 0;
-      unsigned int iBefore = 0;
-      unsigned int iAfter = 0;
-      unsigned int iCurr = 0;
-      for (i = 0 ; i < 15 ; i++) {
-         context->desc.h265.PicOrderCntVal[i] = hevc->ReferenceFrames[i].pic_order_cnt;
-
-         unsigned int index = hevc->ReferenceFrames[i].picture_id & 0x7F;
-
-         if (index == 0x7F)
-            continue;
-
-         getReferenceFrame(drv, hevc->ReferenceFrames[i].picture_id, &context->desc.h265.ref[i]);
-
-         if ((hevc->ReferenceFrames[i].flags & VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE) && (iBefore < 8)) {
-            context->desc.h265.RefPicSetStCurrBefore[iBefore++] = i;
-            context->desc.h265.NumPocStCurrBefore++;
-         }
-         if ((hevc->ReferenceFrames[i].flags & VA_PICTURE_HEVC_RPS_ST_CURR_AFTER) && (iAfter < 8)) {
-            context->desc.h265.RefPicSetStCurrAfter[iAfter++] = i;
-            context->desc.h265.NumPocStCurrAfter++;
-         }
-         if ((hevc->ReferenceFrames[i].flags & VA_PICTURE_HEVC_RPS_LT_CURR) && (iCurr < 8)) {
-            context->desc.h265.RefPicSetLtCurr[iCurr++] = i;
-            context->desc.h265.NumPocLtCurr++;
-         }
-      }
+      vlVaHandlePictureParameterBufferHEVC(drv, context, buf);
       break;
 
    default:
       break;
    }
+
+   /* Create the decoder once max_references is known. */
+   if (!context->decoder) {
+      if (!context->target)
+         return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+      if (context->templat.max_references == 0)
+         return VA_STATUS_ERROR_INVALID_BUFFER;
+
+      if (u_reduce_video_profile(context->templat.profile) ==
+          PIPE_VIDEO_FORMAT_MPEG4_AVC)
+         context->templat.level = u_get_h264_level(context->templat.width,
+            context->templat.height, &context->templat.max_references);
+
+      context->decoder = drv->pipe->create_video_codec(drv->pipe,
+         &context->templat);
+
+      if (!context->decoder)
+         return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+      context->decoder->begin_frame(context->decoder, context->target,
+         &context->desc.base);
+   }
+
+   return vaStatus;
 }
 
 static void
 handleIQMatrixBuffer(vlVaContext *context, vlVaBuffer *buf)
 {
-   VAIQMatrixBufferMPEG2 *mpeg2;
-   VAIQMatrixBufferH264 *h264;
-   VAIQMatrixBufferMPEG4 *mpeg4;
-   VAIQMatrixBufferHEVC *h265;
-
-   switch (u_reduce_video_profile(context->decoder->profile)) {
+   switch (u_reduce_video_profile(context->templat.profile)) {
    case PIPE_VIDEO_FORMAT_MPEG12:
-      assert(buf->size >= sizeof(VAIQMatrixBufferMPEG2) && buf->num_elements == 1);
-      mpeg2 = buf->data;
-      if (mpeg2->load_intra_quantiser_matrix)
-         context->desc.mpeg12.intra_matrix = mpeg2->intra_quantiser_matrix;
-      else
-         context->desc.mpeg12.intra_matrix = NULL;
-
-      if (mpeg2->load_non_intra_quantiser_matrix)
-         context->desc.mpeg12.non_intra_matrix = mpeg2->non_intra_quantiser_matrix;
-      else
-         context->desc.mpeg12.non_intra_matrix = NULL;
+      vlVaHandleIQMatrixBufferMPEG12(context, buf);
       break;
 
    case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-      assert(buf->size >= sizeof(VAIQMatrixBufferH264) && buf->num_elements == 1);
-      h264 = buf->data;
-      memcpy(&context->desc.h264.pps->ScalingList4x4, h264->ScalingList4x4, 6 * 16);
-      memcpy(&context->desc.h264.pps->ScalingList8x8, h264->ScalingList8x8, 2 * 64);
-      break;
-
-   case PIPE_VIDEO_FORMAT_HEVC:
-      assert(buf->size >= sizeof(VAIQMatrixBufferH264) && buf->num_elements == 1);
-      h265 = buf->data;
-      memcpy(&context->desc.h265.pps->sps->ScalingList4x4, h265->ScalingList4x4, 6 * 16);
-      memcpy(&context->desc.h265.pps->sps->ScalingList8x8, h265->ScalingList8x8, 6 * 64);
-      memcpy(&context->desc.h265.pps->sps->ScalingList16x16, h265->ScalingList16x16, 6 * 64);
-      memcpy(&context->desc.h265.pps->sps->ScalingList32x32, h265->ScalingList32x32, 2 * 64);
-      memcpy(&context->desc.h265.pps->sps->ScalingListDCCoeff16x16, h265->ScalingListDC16x16, 6);
-      memcpy(&context->desc.h265.pps->sps->ScalingListDCCoeff32x32, h265->ScalingListDC32x32, 2);
+      vlVaHandleIQMatrixBufferH264(context, buf);
       break;
 
    case PIPE_VIDEO_FORMAT_MPEG4:
-      assert(buf->size >= sizeof(VAIQMatrixBufferMPEG4) && buf->num_elements == 1);
-      mpeg4 = buf->data;
+      vlVaHandleIQMatrixBufferMPEG4(context, buf);
+      break;
 
-      if (mpeg4->load_intra_quant_mat)
-         context->desc.mpeg4.intra_matrix = mpeg4->intra_quant_mat;
-      else
-         context->desc.mpeg4.intra_matrix = NULL;
-
-      if (mpeg4->load_non_intra_quant_mat)
-         context->desc.mpeg4.non_intra_matrix = mpeg4->non_intra_quant_mat;
-      else
-         context->desc.mpeg4.non_intra_matrix = NULL;
+   case PIPE_VIDEO_FORMAT_HEVC:
+      vlVaHandleIQMatrixBufferHEVC(context, buf);
       break;
 
    default:
@@ -519,128 +178,30 @@ handleIQMatrixBuffer(vlVaContext *context, vlVaBuffer *buf)
 static void
 handleSliceParameterBuffer(vlVaContext *context, vlVaBuffer *buf)
 {
-   VASliceParameterBufferH264 *h264;
-   VASliceParameterBufferMPEG4 *mpeg4;
-   VASliceParameterBufferHEVC *h265;
+   switch (u_reduce_video_profile(context->templat.profile)) {
+   case PIPE_VIDEO_FORMAT_MPEG12:
+      vlVaHandleSliceParameterBufferMPEG12(context, buf);
+      break;
 
-   switch (u_reduce_video_profile(context->decoder->profile)) {
+   case PIPE_VIDEO_FORMAT_VC1:
+      vlVaHandleSliceParameterBufferVC1(context, buf);
+      break;
+
    case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-      assert(buf->size >= sizeof(VASliceParameterBufferH264) && buf->num_elements == 1);
-      h264 = buf->data;
-      context->desc.h264.num_ref_idx_l0_active_minus1 =
-         h264->num_ref_idx_l0_active_minus1;
-      context->desc.h264.num_ref_idx_l1_active_minus1 =
-         h264->num_ref_idx_l1_active_minus1;
+      vlVaHandleSliceParameterBufferH264(context, buf);
       break;
-   case PIPE_VIDEO_FORMAT_MPEG4:
-      assert(buf->size >= sizeof(VASliceParameterBufferMPEG4) && buf->num_elements == 1);
-      mpeg4 = buf->data;
 
-      context->mpeg4.quant_scale = mpeg4->quant_scale;
+   case PIPE_VIDEO_FORMAT_MPEG4:
+      vlVaHandleSliceParameterBufferMPEG4(context, buf);
       break;
+
    case PIPE_VIDEO_FORMAT_HEVC:
-      assert(buf->size >= sizeof(VASliceParameterBufferHEVC) && buf->num_elements == 1);
-      h265 = buf->data;
-      for (int i = 0 ; i < 2 ; i++) {
-         for (int j = 0 ; j < 15 ; j++)
-            context->desc.h265.RefPicList[i][j] = h265->RefPicList[i][j];
-      }
-      context->desc.h265.UseRefPicList = true;
+      vlVaHandleSliceParameterBufferHEVC(context, buf);
       break;
+
    default:
       break;
    }
-}
-
-struct bit_stream
-{
-   uint8_t *data;
-   unsigned int length; /* bits */
-   unsigned int pos;    /* bits */
-};
-
-static inline void
-write_bit(struct bit_stream *writer, unsigned int bit)
-{
-   assert(writer->length > (writer)->pos);
-   writer->data[writer->pos>>3] |= ((bit & 1)<<(7 - (writer->pos & 7)));
-   writer->pos++;
-}
-
-static inline void
-write_bits(struct bit_stream *writer, unsigned int bits, unsigned int len)
-{
-   int i;
-   assert(len <= sizeof(bits)*8);
-   for (i = len - 1; i >= 0; i--)
-      write_bit(writer, bits>>i);
-}
-
-static void
-vlVaDecoderFixMPEG4Startcode(vlVaContext *context)
-{
-   uint8_t vop[] = { 0x00, 0x00, 0x01, 0xb6, 0x00, 0x00, 0x00, 0x00, 0x00 };
-   struct bit_stream bs_vop = {vop, sizeof(vop)*8, 32};
-   unsigned int vop_time_inc;
-   int mod_time;
-   unsigned int vop_size;
-   unsigned int vop_coding_type = context->desc.mpeg4.vop_coding_type;
-
-   context->mpeg4.start_code_size = 0;
-   memset(context->mpeg4.start_code, 0, sizeof(context->mpeg4.start_code));
-   if (vop_coding_type+1 == PIPE_MPEG12_PICTURE_CODING_TYPE_I) {
-      unsigned int vop_time = context->mpeg4.frame_num/
-            context->desc.mpeg4.vop_time_increment_resolution;
-      unsigned int vop_hour = vop_time / 3600;
-      unsigned int vop_minute = (vop_time / 60) % 60;
-      unsigned int vop_second = vop_time % 60;
-      uint8_t group_of_vop[] = { 0x00, 0x00, 0x01, 0xb3, 0x00, 0x00, 0x00 };
-      struct bit_stream bs_gvop = {group_of_vop, sizeof(group_of_vop)*8, 32};
-
-      write_bits(&bs_gvop, vop_hour, 5);
-      write_bits(&bs_gvop, vop_minute, 6);
-      write_bit(&bs_gvop, 1); /* marker_bit */
-      write_bits(&bs_gvop, vop_second, 6);
-      write_bit(&bs_gvop, 0); /* closed_gov */ /* TODO replace magic */
-      write_bit(&bs_gvop, 0); /* broken_link */
-      write_bit(&bs_gvop, 0); /* padding */
-      write_bits(&bs_gvop, 7, 3); /* padding */
-
-      memcpy(context->mpeg4.start_code, group_of_vop, sizeof(group_of_vop));
-      context->mpeg4.start_code_size += sizeof(group_of_vop);
-   }
-
-   write_bits(&bs_vop, vop_coding_type, 2);
-   mod_time = context->mpeg4.frame_num %
-         context->desc.mpeg4.vop_time_increment_resolution == 0 &&
-         vop_coding_type+1 != PIPE_MPEG12_PICTURE_CODING_TYPE_I;
-   while (mod_time--)
-      write_bit(&bs_vop, 1); /* modulo_time_base */
-   write_bit(&bs_vop, 0); /* modulo_time_base */
-
-   write_bit(&bs_vop, 1); /* marker_bit */
-   vop_time_inc = context->mpeg4.frame_num %
-         context->desc.mpeg4.vop_time_increment_resolution;
-   write_bits(&bs_vop, vop_time_inc, context->mpeg4.vti_bits);
-   write_bit(&bs_vop, 1); /* marker_bit */
-   write_bit(&bs_vop, 1); /* vop_coded */
-   if (vop_coding_type+1 == PIPE_MPEG12_PICTURE_CODING_TYPE_P)
-      write_bit(&bs_vop, context->mpeg4.pps.vop_fields.bits.vop_rounding_type);
-   write_bits(&bs_vop, context->mpeg4.pps.vop_fields.bits.intra_dc_vlc_thr, 3);
-   if (context->mpeg4.pps.vol_fields.bits.interlaced) {
-      write_bit(&bs_vop, context->mpeg4.pps.vop_fields.bits.top_field_first);
-      write_bit(&bs_vop, context->mpeg4.pps.vop_fields.bits.alternate_vertical_scan_flag);
-   }
-
-   write_bits(&bs_vop, context->mpeg4.quant_scale, context->mpeg4.pps.quant_precision);
-   if (vop_coding_type+1 != PIPE_MPEG12_PICTURE_CODING_TYPE_I)
-      write_bits(&bs_vop, context->desc.mpeg4.vop_fcode_forward, 3);
-   if (vop_coding_type+1 == PIPE_MPEG12_PICTURE_CODING_TYPE_B)
-      write_bits(&bs_vop, context->desc.mpeg4.vop_fcode_backward, 3);
-
-   vop_size = bs_vop.pos/8;
-   memcpy(context->mpeg4.start_code + context->mpeg4.start_code_size, vop, vop_size);
-   context->mpeg4.start_code_size += vop_size;
 }
 
 static unsigned int
@@ -672,22 +233,22 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
    static const uint8_t start_code_h265[] = { 0x00, 0x00, 0x01 };
    static const uint8_t start_code_vc1[] = { 0x00, 0x00, 0x01, 0x0d };
 
-   format = u_reduce_video_profile(context->decoder->profile);
+   format = u_reduce_video_profile(context->templat.profile);
    switch (format) {
    case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-         if (bufHasStartcode(buf, 0x000001, 24))
-            break;
+      if (bufHasStartcode(buf, 0x000001, 24))
+         break;
 
-         buffers[num_buffers] = (void *const)&start_code_h264;
-         sizes[num_buffers++] = sizeof(start_code_h264);
+      buffers[num_buffers] = (void *const)&start_code_h264;
+      sizes[num_buffers++] = sizeof(start_code_h264);
       break;
    case PIPE_VIDEO_FORMAT_HEVC:
       if (bufHasStartcode(buf, 0x000001, 24))
          break;
 
-         buffers[num_buffers] = (void *const)&start_code_h265;
-         sizes[num_buffers++] = sizeof(start_code_h265);
-         break;
+      buffers[num_buffers] = (void *const)&start_code_h265;
+      sizes[num_buffers++] = sizeof(start_code_h265);
+      break;
    case PIPE_VIDEO_FORMAT_VC1:
       if (bufHasStartcode(buf, 0x0000010d, 32) ||
           bufHasStartcode(buf, 0x0000010c, 32) ||
@@ -717,65 +278,6 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
       num_buffers, (const void * const*)buffers, sizes);
 }
 
-static VAStatus
-handleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
-{
-   struct u_rect src_rect;
-   struct u_rect dst_rect;
-   struct u_rect *dirty_area;
-   vlVaSurface *src_surface;
-   VAProcPipelineParameterBuffer *pipeline_param;
-   struct pipe_surface **surfaces;
-   struct pipe_screen *screen;
-   struct pipe_surface *psurf;
-
-   if (!drv || !context)
-      return VA_STATUS_ERROR_INVALID_CONTEXT;
-
-   if (!buf || !buf->data)
-      return VA_STATUS_ERROR_INVALID_BUFFER;
-
-   if (!context->target)
-      return VA_STATUS_ERROR_INVALID_SURFACE;
-
-   pipeline_param = (VAProcPipelineParameterBuffer *)buf->data;
-
-   src_surface = handle_table_get(drv->htab, pipeline_param->surface);
-   if (!src_surface || !src_surface->buffer)
-      return VA_STATUS_ERROR_INVALID_SURFACE;
-
-   surfaces = context->target->get_surfaces(context->target);
-
-   if (!surfaces || !surfaces[0])
-      return VA_STATUS_ERROR_INVALID_SURFACE;
-
-   screen = drv->pipe->screen;
-
-   psurf = surfaces[0];
-
-   src_rect.x0 = pipeline_param->surface_region->x;
-   src_rect.y0 = pipeline_param->surface_region->y;
-   src_rect.x1 = pipeline_param->surface_region->x + pipeline_param->surface_region->width;
-   src_rect.y1 = pipeline_param->surface_region->y + pipeline_param->surface_region->height;
-
-   dst_rect.x0 = pipeline_param->output_region->x;
-   dst_rect.y0 = pipeline_param->output_region->y;
-   dst_rect.x1 = pipeline_param->output_region->x + pipeline_param->output_region->width;
-   dst_rect.y1 = pipeline_param->output_region->y + pipeline_param->output_region->height;
-
-   dirty_area = drv->vscreen->get_dirty_area(drv->vscreen);
-
-   vl_compositor_clear_layers(&drv->cstate);
-   vl_compositor_set_buffer_layer(&drv->cstate, &drv->compositor, 0, src_surface->buffer, &src_rect, NULL, VL_COMPOSITOR_WEAVE);
-   vl_compositor_set_layer_dst_area(&drv->cstate, 0, &dst_rect);
-   vl_compositor_render(&drv->cstate, &drv->compositor, psurf, dirty_area, true);
-
-   screen->fence_reference(screen, &src_surface->fence, NULL);
-   drv->pipe->flush(drv->pipe, &src_surface->fence, 0);
-
-   return VA_STATUS_SUCCESS;
-}
-
 VAStatus
 vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buffers, int num_buffers)
 {
@@ -792,18 +294,23 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   pipe_mutex_lock(drv->mutex);
    context = handle_table_get(drv->htab, context_id);
-   if (!context)
+   if (!context) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+   }
 
    for (i = 0; i < num_buffers; ++i) {
       vlVaBuffer *buf = handle_table_get(drv->htab, buffers[i]);
-      if (!buf)
+      if (!buf) {
+         pipe_mutex_unlock(drv->mutex);
          return VA_STATUS_ERROR_INVALID_BUFFER;
+      }
 
       switch (buf->type) {
       case VAPictureParameterBufferType:
-         handlePictureParameterBuffer(drv, context, buf);
+         vaStatus = handlePictureParameterBuffer(drv, context, buf);
          break;
 
       case VAIQMatrixBufferType:
@@ -818,13 +325,14 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
          handleVASliceDataBufferType(context, buf);
          break;
       case VAProcPipelineParameterBufferType:
-         vaStatus = handleVAProcPipelineParameterBufferType(drv, context, buf);
+         vaStatus = vlVaHandleVAProcPipelineParameterBufferType(drv, context, buf);
          break;
 
       default:
          break;
       }
    }
+   pipe_mutex_unlock(drv->mutex);
 
    return vaStatus;
 }
@@ -842,11 +350,16 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   pipe_mutex_lock(drv->mutex);
    context = handle_table_get(drv->htab, context_id);
+   pipe_mutex_unlock(drv->mutex);
    if (!context)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
    if (!context->decoder) {
+      if (context->templat.profile != PIPE_VIDEO_PROFILE_UNKNOWN)
+         return VA_STATUS_ERROR_INVALID_CONTEXT;
+
       /* VPP */
       return VA_STATUS_SUCCESS;
    }

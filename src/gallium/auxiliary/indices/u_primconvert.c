@@ -153,10 +153,11 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
    }
 
    if (!pc->upload) {
-      pc->upload = u_upload_create(pc->pipe, 4096, 4, PIPE_BIND_INDEX_BUFFER);
+      pc->upload = u_upload_create(pc->pipe, 4096, PIPE_BIND_INDEX_BUFFER,
+                                   PIPE_USAGE_STREAM);
    }
 
-   u_upload_alloc(pc->upload, 0, new_ib.index_size * new_info.count,
+   u_upload_alloc(pc->upload, 0, new_ib.index_size * new_info.count, 4,
                   &new_ib.offset, &new_ib.buffer, &dst);
 
    if (info->indexed) {

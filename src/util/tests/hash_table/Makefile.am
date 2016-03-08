@@ -29,6 +29,7 @@ LDADD = \
 	$(DLOPEN_LIBS)
 
 TESTS = \
+	clear \
 	collision \
 	delete_and_lookup \
 	delete_management \

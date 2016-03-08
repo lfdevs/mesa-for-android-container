@@ -30,6 +30,8 @@
 #include "intel_mipmap_tree.h"
 #include "intel_batchbuffer.h"
 #include "brw_state.h"
+#include "program/prog_statevars.h"
+#include "compiler/glsl/ir_uniform.h"
 
 static unsigned
 get_cs_thread_count(const struct brw_cs_prog_data *cs_prog_data)
@@ -139,7 +141,7 @@ brw_upload_cs_state(struct brw_context *brw)
       BEGIN_BATCH(4);
       OUT_BATCH(MEDIA_CURBE_LOAD << 16 | (4 - 2));
       OUT_BATCH(0);
-      OUT_BATCH(reg_aligned_constant_size * threads);
+      OUT_BATCH(ALIGN(reg_aligned_constant_size * threads, 64));
       OUT_BATCH(stage_state->push_const_offset);
       ADVANCE_BATCH();
    }
@@ -164,8 +166,20 @@ brw_upload_cs_state(struct brw_context *brw)
       SET_FIELD(threads, GEN8_MEDIA_GPGPU_THREAD_COUNT) :
       SET_FIELD(threads, MEDIA_GPGPU_THREAD_COUNT);
    assert(threads <= brw->max_cs_threads);
+
+   assert(prog_data->total_shared <= 64 * 1024);
+   uint32_t slm_size = 0;
+   if (prog_data->total_shared > 0) {
+      /* slm_size is in 4k increments, but must be a power of 2. */
+      slm_size = 4 * 1024;
+      while (slm_size < prog_data->total_shared)
+         slm_size <<= 1;
+      slm_size /= 4 * 1024;
+   }
+
    desc[dw++] =
       SET_FIELD(cs_prog_data->uses_barrier, MEDIA_BARRIER_ENABLE) |
+      SET_FIELD(slm_size, MEDIA_SHARED_LOCAL_MEMORY_SIZE) |
       media_threads;
 
    BEGIN_BATCH(4);
@@ -182,6 +196,7 @@ const struct brw_tracked_state brw_cs_state = {
       .brw = BRW_NEW_BATCH |
              BRW_NEW_CS_PROG_DATA |
              BRW_NEW_PUSH_CONSTANT_ALLOCATION |
+             BRW_NEW_SAMPLER_STATE_TABLE |
              BRW_NEW_SURFACES,
    },
    .emit = brw_upload_cs_state
@@ -235,8 +250,8 @@ brw_upload_cs_push_constants(struct brw_context *brw,
 
       param = (gl_constant_value*)
          brw_state_batch(brw, type,
-                         reg_aligned_constant_size * threads,
-                         32, &stage_state->push_const_offset);
+                         ALIGN(reg_aligned_constant_size * threads, 64),
+                         64, &stage_state->push_const_offset);
       assert(param);
 
       STATIC_ASSERT(sizeof(gl_constant_value) == sizeof(float));

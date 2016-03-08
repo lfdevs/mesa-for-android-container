@@ -148,8 +148,8 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES = gl.pc
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libmesa_la_DEPENDENCIES = $(top_builddir)/src/glsl/libglsl.la \
-	$(ARCH_LIBS)
+libmesa_la_DEPENDENCIES =  \
+	$(top_builddir)/src/compiler/glsl/libglsl.la $(ARCH_LIBS)
 am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/api_arrayelt.c main/api_arrayelt.h main/api_exec.c \
 	main/api_exec.h main/api_loopback.c main/api_loopback.h \
@@ -165,11 +165,12 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/context.c main/context.h main/convolve.c main/convolve.h \
 	main/copyimage.c main/copyimage.h main/core.h main/cpuinfo.c \
 	main/cpuinfo.h main/dd.h main/debug.c main/debug.h \
-	main/depth.c main/depth.h main/dlist.c main/dlist.h \
-	main/dlopen.h main/drawpix.c main/drawpix.h main/drawtex.c \
-	main/drawtex.h main/enable.c main/enable.h main/enums.c \
-	main/enums.h main/errors.c main/errors.h main/eval.c \
-	main/eval.h main/execmem.c main/extensions.c main/extensions.h \
+	main/debug_output.c main/debug_output.h main/depth.c \
+	main/depth.h main/dlist.c main/dlist.h main/dlopen.h \
+	main/drawpix.c main/drawpix.h main/drawtex.c main/drawtex.h \
+	main/enable.c main/enable.h main/enums.c main/enums.h \
+	main/errors.c main/errors.h main/eval.c main/eval.h \
+	main/execmem.c main/extensions.c main/extensions.h \
 	main/extensions_table.h main/fbobject.c main/fbobject.h \
 	main/feedback.c main/feedback.h main/ff_fragment_shader.cpp \
 	main/ffvertex_prog.c main/ffvertex_prog.h main/fog.c \
@@ -234,7 +235,7 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	vbo/vbo_attrib_tmp.h vbo/vbo_context.c vbo/vbo_context.h \
 	vbo/vbo_exec_api.c vbo/vbo_exec_array.c vbo/vbo_exec.c \
 	vbo/vbo_exec_draw.c vbo/vbo_exec_eval.c vbo/vbo_exec.h \
-	vbo/vbo.h vbo/vbo_noop.c vbo/vbo_noop.h \
+	vbo/vbo.h vbo/vbo_minmax_index.c vbo/vbo_noop.c vbo/vbo_noop.h \
 	vbo/vbo_primitive_restart.c vbo/vbo_rebase.c \
 	vbo/vbo_save_api.c vbo/vbo_save.c vbo/vbo_save_draw.c \
 	vbo/vbo_save.h vbo/vbo_save_loopback.c vbo/vbo_split.c \
@@ -294,7 +295,6 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	program/program_parse_extra.c program/program_parse.tab.c \
 	program/program_parse.tab.h program/program_parser.h \
 	program/prog_statevars.c program/prog_statevars.h \
-	program/sampler.cpp program/sampler.h \
 	program/string_to_uint_map.cpp program/symbol_table.c \
 	program/symbol_table.h program/prog_to_nir.c \
 	program/prog_to_nir.h x86-64/x86-64.h x86-64/xform4.S \
@@ -316,17 +316,18 @@ am__objects_2 = main/accum.lo main/api_arrayelt.lo main/api_exec.lo \
 	main/blend.lo main/blit.lo main/bufferobj.lo main/buffers.lo \
 	main/clear.lo main/clip.lo main/colortab.lo main/compute.lo \
 	main/condrender.lo main/context.lo main/convolve.lo \
-	main/copyimage.lo main/cpuinfo.lo main/debug.lo main/depth.lo \
-	main/dlist.lo main/drawpix.lo main/drawtex.lo main/enable.lo \
-	main/enums.lo main/errors.lo main/eval.lo main/execmem.lo \
-	main/extensions.lo main/fbobject.lo main/feedback.lo \
-	main/ff_fragment_shader.lo main/ffvertex_prog.lo main/fog.lo \
-	main/format_pack.lo main/format_unpack.lo main/formatquery.lo \
-	main/formats.lo main/format_utils.lo main/framebuffer.lo \
-	main/get.lo main/genmipmap.lo main/getstring.lo \
-	main/glformats.lo main/hash.lo main/hint.lo main/histogram.lo \
-	main/image.lo main/imports.lo main/light.lo main/lines.lo \
-	main/matrix.lo main/mipmap.lo main/mm.lo main/multisample.lo \
+	main/copyimage.lo main/cpuinfo.lo main/debug.lo \
+	main/debug_output.lo main/depth.lo main/dlist.lo \
+	main/drawpix.lo main/drawtex.lo main/enable.lo main/enums.lo \
+	main/errors.lo main/eval.lo main/execmem.lo main/extensions.lo \
+	main/fbobject.lo main/feedback.lo main/ff_fragment_shader.lo \
+	main/ffvertex_prog.lo main/fog.lo main/format_pack.lo \
+	main/format_unpack.lo main/formatquery.lo main/formats.lo \
+	main/format_utils.lo main/framebuffer.lo main/get.lo \
+	main/genmipmap.lo main/getstring.lo main/glformats.lo \
+	main/hash.lo main/hint.lo main/histogram.lo main/image.lo \
+	main/imports.lo main/light.lo main/lines.lo main/matrix.lo \
+	main/mipmap.lo main/mm.lo main/multisample.lo \
 	main/objectlabel.lo main/objectpurge.lo main/pack.lo \
 	main/pbo.lo main/performance_monitor.lo main/pipelineobj.lo \
 	main/pixel.lo main/pixelstore.lo main/pixeltransfer.lo \
@@ -353,7 +354,7 @@ am__objects_3 = math/m_debug_clip.lo math/m_debug_norm.lo \
 am__objects_4 = math/m_xform.lo
 am__objects_5 = vbo/vbo_context.lo vbo/vbo_exec_api.lo \
 	vbo/vbo_exec_array.lo vbo/vbo_exec.lo vbo/vbo_exec_draw.lo \
-	vbo/vbo_exec_eval.lo vbo/vbo_noop.lo \
+	vbo/vbo_exec_eval.lo vbo/vbo_minmax_index.lo vbo/vbo_noop.lo \
 	vbo/vbo_primitive_restart.lo vbo/vbo_rebase.lo \
 	vbo/vbo_save_api.lo vbo/vbo_save.lo vbo/vbo_save_draw.lo \
 	vbo/vbo_save_loopback.lo vbo/vbo_split.lo \
@@ -393,8 +394,8 @@ am__objects_12 = program/arbprogparse.lo program/ir_to_mesa.lo \
 	program/prog_parameter.lo program/prog_parameter_layout.lo \
 	program/prog_print.lo program/program.lo program/programopt.lo \
 	program/program_parse_extra.lo program/program_parse.tab.lo \
-	program/prog_statevars.lo program/sampler.lo \
-	program/string_to_uint_map.lo program/symbol_table.lo
+	program/prog_statevars.lo program/string_to_uint_map.lo \
+	program/symbol_table.lo
 am__objects_13 = program/prog_to_nir.lo
 am__objects_14 = x86-64/xform4.lo
 @HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__objects_15 =  \
@@ -429,8 +430,8 @@ libmesa_sse41_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(libmesa_sse41_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 @SSE41_SUPPORTED_TRUE@am_libmesa_sse41_la_rpath =
-libmesagallium_la_DEPENDENCIES = $(top_builddir)/src/glsl/libglsl.la \
-	$(ARCH_LIBS)
+libmesagallium_la_DEPENDENCIES =  \
+	$(top_builddir)/src/compiler/glsl/libglsl.la $(ARCH_LIBS)
 am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/api_arrayelt.c main/api_arrayelt.h main/api_exec.c \
 	main/api_exec.h main/api_loopback.c main/api_loopback.h \
@@ -446,11 +447,12 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/context.c main/context.h main/convolve.c main/convolve.h \
 	main/copyimage.c main/copyimage.h main/core.h main/cpuinfo.c \
 	main/cpuinfo.h main/dd.h main/debug.c main/debug.h \
-	main/depth.c main/depth.h main/dlist.c main/dlist.h \
-	main/dlopen.h main/drawpix.c main/drawpix.h main/drawtex.c \
-	main/drawtex.h main/enable.c main/enable.h main/enums.c \
-	main/enums.h main/errors.c main/errors.h main/eval.c \
-	main/eval.h main/execmem.c main/extensions.c main/extensions.h \
+	main/debug_output.c main/debug_output.h main/depth.c \
+	main/depth.h main/dlist.c main/dlist.h main/dlopen.h \
+	main/drawpix.c main/drawpix.h main/drawtex.c main/drawtex.h \
+	main/enable.c main/enable.h main/enums.c main/enums.h \
+	main/errors.c main/errors.h main/eval.c main/eval.h \
+	main/execmem.c main/extensions.c main/extensions.h \
 	main/extensions_table.h main/fbobject.c main/fbobject.h \
 	main/feedback.c main/feedback.h main/ff_fragment_shader.cpp \
 	main/ffvertex_prog.c main/ffvertex_prog.h main/fog.c \
@@ -512,22 +514,25 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	math/m_vector.h vbo/vbo_attrib.h vbo/vbo_attrib_tmp.h \
 	vbo/vbo_context.c vbo/vbo_context.h vbo/vbo_exec_api.c \
 	vbo/vbo_exec_array.c vbo/vbo_exec.c vbo/vbo_exec_draw.c \
-	vbo/vbo_exec_eval.c vbo/vbo_exec.h vbo/vbo.h vbo/vbo_noop.c \
-	vbo/vbo_noop.h vbo/vbo_primitive_restart.c vbo/vbo_rebase.c \
+	vbo/vbo_exec_eval.c vbo/vbo_exec.h vbo/vbo.h \
+	vbo/vbo_minmax_index.c vbo/vbo_noop.c vbo/vbo_noop.h \
+	vbo/vbo_primitive_restart.c vbo/vbo_rebase.c \
 	vbo/vbo_save_api.c vbo/vbo_save.c vbo/vbo_save_draw.c \
 	vbo/vbo_save.h vbo/vbo_save_loopback.c vbo/vbo_split.c \
 	vbo/vbo_split_copy.c vbo/vbo_split.h vbo/vbo_split_inplace.c \
-	state_tracker/st_atom_array.c state_tracker/st_atom_blend.c \
-	state_tracker/st_atom.c state_tracker/st_atom_clip.c \
-	state_tracker/st_atom_constbuf.c \
+	state_tracker/st_atom_array.c \
+	state_tracker/st_atom_atomicbuf.c \
+	state_tracker/st_atom_blend.c state_tracker/st_atom.c \
+	state_tracker/st_atom_clip.c state_tracker/st_atom_constbuf.c \
 	state_tracker/st_atom_constbuf.h state_tracker/st_atom_depth.c \
 	state_tracker/st_atom_framebuffer.c state_tracker/st_atom.h \
-	state_tracker/st_atom_msaa.c \
+	state_tracker/st_atom_image.c state_tracker/st_atom_msaa.c \
 	state_tracker/st_atom_pixeltransfer.c \
 	state_tracker/st_atom_rasterizer.c \
 	state_tracker/st_atom_sampler.c \
 	state_tracker/st_atom_scissor.c state_tracker/st_atom_shader.c \
 	state_tracker/st_atom_shader.h state_tracker/st_atom_stipple.c \
+	state_tracker/st_atom_storagebuf.c \
 	state_tracker/st_atom_tess.c state_tracker/st_atom_texture.c \
 	state_tracker/st_atom_viewport.c state_tracker/st_cache.h \
 	state_tracker/st_cb_bitmap.c state_tracker/st_cb_bitmap.h \
@@ -535,6 +540,7 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	state_tracker/st_cb_blit.h state_tracker/st_cb_bufferobjects.c \
 	state_tracker/st_cb_bufferobjects.h \
 	state_tracker/st_cb_clear.c state_tracker/st_cb_clear.h \
+	state_tracker/st_cb_compute.c state_tracker/st_cb_compute.h \
 	state_tracker/st_cb_condrender.c \
 	state_tracker/st_cb_condrender.h \
 	state_tracker/st_cb_copyimage.c \
@@ -563,6 +569,7 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	state_tracker/st_cb_viewport.c state_tracker/st_cb_viewport.h \
 	state_tracker/st_cb_xformfb.c state_tracker/st_cb_xformfb.h \
 	state_tracker/st_context.c state_tracker/st_context.h \
+	state_tracker/st_copytex.c state_tracker/st_copytex.h \
 	state_tracker/st_debug.c state_tracker/st_debug.h \
 	state_tracker/st_draw.c state_tracker/st_draw_feedback.c \
 	state_tracker/st_draw.h state_tracker/st_extensions.c \
@@ -592,7 +599,6 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	program/program_parse_extra.c program/program_parse.tab.c \
 	program/program_parse.tab.h program/program_parser.h \
 	program/prog_statevars.c program/prog_statevars.h \
-	program/sampler.cpp program/sampler.h \
 	program/string_to_uint_map.cpp program/symbol_table.c \
 	program/symbol_table.h program/prog_to_nir.c \
 	program/prog_to_nir.h x86-64/x86-64.h x86-64/xform4.S \
@@ -607,25 +613,28 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	x86/read_rgba_span_x86.S sparc/sparc.h sparc/sparc_clip.S \
 	sparc/sparc_matrix.h sparc/norm.S sparc/xform.S
 am__objects_21 = state_tracker/st_atom_array.lo \
+	state_tracker/st_atom_atomicbuf.lo \
 	state_tracker/st_atom_blend.lo state_tracker/st_atom.lo \
 	state_tracker/st_atom_clip.lo \
 	state_tracker/st_atom_constbuf.lo \
 	state_tracker/st_atom_depth.lo \
 	state_tracker/st_atom_framebuffer.lo \
-	state_tracker/st_atom_msaa.lo \
+	state_tracker/st_atom_image.lo state_tracker/st_atom_msaa.lo \
 	state_tracker/st_atom_pixeltransfer.lo \
 	state_tracker/st_atom_rasterizer.lo \
 	state_tracker/st_atom_sampler.lo \
 	state_tracker/st_atom_scissor.lo \
 	state_tracker/st_atom_shader.lo \
-	state_tracker/st_atom_stipple.lo state_tracker/st_atom_tess.lo \
-	state_tracker/st_atom_texture.lo \
+	state_tracker/st_atom_stipple.lo \
+	state_tracker/st_atom_storagebuf.lo \
+	state_tracker/st_atom_tess.lo state_tracker/st_atom_texture.lo \
 	state_tracker/st_atom_viewport.lo \
 	state_tracker/st_cb_bitmap.lo \
 	state_tracker/st_cb_bitmap_shader.lo \
 	state_tracker/st_cb_blit.lo \
 	state_tracker/st_cb_bufferobjects.lo \
-	state_tracker/st_cb_clear.lo state_tracker/st_cb_condrender.lo \
+	state_tracker/st_cb_clear.lo state_tracker/st_cb_compute.lo \
+	state_tracker/st_cb_condrender.lo \
 	state_tracker/st_cb_copyimage.lo \
 	state_tracker/st_cb_drawpixels.lo \
 	state_tracker/st_cb_drawpixels_shader.lo \
@@ -640,8 +649,8 @@ am__objects_21 = state_tracker/st_atom_array.lo \
 	state_tracker/st_cb_texturebarrier.lo \
 	state_tracker/st_cb_texture.lo state_tracker/st_cb_viewport.lo \
 	state_tracker/st_cb_xformfb.lo state_tracker/st_context.lo \
-	state_tracker/st_debug.lo state_tracker/st_draw.lo \
-	state_tracker/st_draw_feedback.lo \
+	state_tracker/st_copytex.lo state_tracker/st_debug.lo \
+	state_tracker/st_draw.lo state_tracker/st_draw_feedback.lo \
 	state_tracker/st_extensions.lo state_tracker/st_format.lo \
 	state_tracker/st_gen_mipmap.lo \
 	state_tracker/st_glsl_to_tgsi.lo state_tracker/st_manager.lo \
@@ -949,8 +958,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -996,6 +1003,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -1174,6 +1182,8 @@ MAIN_FILES = \
 	main/dd.h \
 	main/debug.c \
 	main/debug.h \
+	main/debug_output.c \
+	main/debug_output.h \
 	main/depth.c \
 	main/depth.h \
 	main/dlist.c \
@@ -1494,6 +1504,7 @@ VBO_FILES = \
 	vbo/vbo_exec_eval.c \
 	vbo/vbo_exec.h \
 	vbo/vbo.h \
+	vbo/vbo_minmax_index.c \
 	vbo/vbo_noop.c \
 	vbo/vbo_noop.h \
 	vbo/vbo_primitive_restart.c \
@@ -1510,6 +1521,7 @@ VBO_FILES = \
 
 STATETRACKER_FILES = \
 	state_tracker/st_atom_array.c \
+	state_tracker/st_atom_atomicbuf.c \
 	state_tracker/st_atom_blend.c \
 	state_tracker/st_atom.c \
 	state_tracker/st_atom_clip.c \
@@ -1518,6 +1530,7 @@ STATETRACKER_FILES = \
 	state_tracker/st_atom_depth.c \
 	state_tracker/st_atom_framebuffer.c \
 	state_tracker/st_atom.h \
+	state_tracker/st_atom_image.c \
 	state_tracker/st_atom_msaa.c \
 	state_tracker/st_atom_pixeltransfer.c \
 	state_tracker/st_atom_rasterizer.c \
@@ -1526,6 +1539,7 @@ STATETRACKER_FILES = \
 	state_tracker/st_atom_shader.c \
 	state_tracker/st_atom_shader.h \
 	state_tracker/st_atom_stipple.c \
+	state_tracker/st_atom_storagebuf.c \
 	state_tracker/st_atom_tess.c \
 	state_tracker/st_atom_texture.c \
 	state_tracker/st_atom_viewport.c \
@@ -1539,6 +1553,8 @@ STATETRACKER_FILES = \
 	state_tracker/st_cb_bufferobjects.h \
 	state_tracker/st_cb_clear.c \
 	state_tracker/st_cb_clear.h \
+	state_tracker/st_cb_compute.c \
+	state_tracker/st_cb_compute.h \
 	state_tracker/st_cb_condrender.c \
 	state_tracker/st_cb_condrender.h \
 	state_tracker/st_cb_copyimage.c \
@@ -1582,6 +1598,8 @@ STATETRACKER_FILES = \
 	state_tracker/st_cb_xformfb.h \
 	state_tracker/st_context.c \
 	state_tracker/st_context.h \
+	state_tracker/st_copytex.c \
+	state_tracker/st_copytex.h \
 	state_tracker/st_debug.c \
 	state_tracker/st_debug.h \
 	state_tracker/st_draw.c \
@@ -1642,8 +1660,6 @@ PROGRAM_FILES = \
 	program/program_parser.h \
 	program/prog_statevars.c \
 	program/prog_statevars.h \
-	program/sampler.cpp \
-	program/sampler.h \
 	program/string_to_uint_map.cpp \
 	program/symbol_table.c \
 	program/symbol_table.h
@@ -1739,11 +1755,7 @@ MESA_GALLIUM_FILES = \
 INCLUDE_DIRS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
-	-I$(top_srcdir)/src/glsl \
-	-I$(top_srcdir)/src/glsl/nir \
-	-I$(top_builddir)/src/glsl \
-	-I$(top_builddir)/src/glsl/nir \
-	-I$(top_srcdir)/src/glsl/glcpp \
+	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/mesa \
 	-I$(top_builddir)/src/mesa \
 	-I$(top_srcdir)/src/mesa/main \
@@ -1804,7 +1816,7 @@ libmesa_la_SOURCES = \
 	$(MESA_ASM_FILES_FOR_ARCH)
 
 libmesa_la_LIBADD = \
-	$(top_builddir)/src/glsl/libglsl.la \
+	$(top_builddir)/src/compiler/glsl/libglsl.la \
 	$(ARCH_LIBS)
 
 libmesagallium_la_SOURCES = \
@@ -1814,7 +1826,7 @@ libmesagallium_la_SOURCES = \
 	$(MESA_ASM_FILES_FOR_ARCH)
 
 libmesagallium_la_LIBADD = \
-	$(top_builddir)/src/glsl/libglsl.la \
+	$(top_builddir)/src/compiler/glsl/libglsl.la \
 	$(ARCH_LIBS)
 
 libmesa_sse41_la_SOURCES = \
@@ -1923,6 +1935,8 @@ main/convolve.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/copyimage.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/cpuinfo.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/debug.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
+main/debug_output.lo: main/$(am__dirstamp) \
+	main/$(DEPDIR)/$(am__dirstamp)
 main/depth.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/dlist.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/drawpix.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
@@ -2082,6 +2096,8 @@ vbo/vbo_exec.lo: vbo/$(am__dirstamp) vbo/$(DEPDIR)/$(am__dirstamp)
 vbo/vbo_exec_draw.lo: vbo/$(am__dirstamp) \
 	vbo/$(DEPDIR)/$(am__dirstamp)
 vbo/vbo_exec_eval.lo: vbo/$(am__dirstamp) \
+	vbo/$(DEPDIR)/$(am__dirstamp)
+vbo/vbo_minmax_index.lo: vbo/$(am__dirstamp) \
 	vbo/$(DEPDIR)/$(am__dirstamp)
 vbo/vbo_noop.lo: vbo/$(am__dirstamp) vbo/$(DEPDIR)/$(am__dirstamp)
 vbo/vbo_primitive_restart.lo: vbo/$(am__dirstamp) \
@@ -2289,8 +2305,6 @@ program/program_parse.tab.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
 program/prog_statevars.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
-program/sampler.lo: program/$(am__dirstamp) \
-	program/$(DEPDIR)/$(am__dirstamp)
 program/string_to_uint_map.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
 program/symbol_table.lo: program/$(am__dirstamp) \
@@ -2339,6 +2353,8 @@ state_tracker/$(DEPDIR)/$(am__dirstamp):
 	@: > state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_atom_array.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_atom_atomicbuf.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_atom_blend.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_atom.lo: state_tracker/$(am__dirstamp) \
@@ -2350,6 +2366,8 @@ state_tracker/st_atom_constbuf.lo: state_tracker/$(am__dirstamp) \
 state_tracker/st_atom_depth.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_atom_framebuffer.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_atom_image.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_atom_msaa.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
@@ -2364,6 +2382,8 @@ state_tracker/st_atom_scissor.lo: state_tracker/$(am__dirstamp) \
 state_tracker/st_atom_shader.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_atom_stipple.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_atom_storagebuf.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_atom_tess.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
@@ -2380,6 +2400,8 @@ state_tracker/st_cb_blit.lo: state_tracker/$(am__dirstamp) \
 state_tracker/st_cb_bufferobjects.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_cb_clear.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_cb_compute.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_cb_condrender.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
@@ -2425,6 +2447,8 @@ state_tracker/st_cb_viewport.lo: state_tracker/$(am__dirstamp) \
 state_tracker/st_cb_xformfb.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_context.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_copytex.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_debug.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
@@ -2530,6 +2554,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/copyimage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/cpuinfo.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/debug.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/debug_output.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/depth.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/dlist.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/drawpix.Plo@am__quote@
@@ -2651,7 +2676,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/program_parse.tab.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/program_parse_extra.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/programopt.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/sampler.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/string_to_uint_map.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/symbol_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@sparc/$(DEPDIR)/norm.Plo@am__quote@
@@ -2660,11 +2684,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@sparc/$(DEPDIR)/xform.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_array.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_atomicbuf.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_blend.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_clip.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_constbuf.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_depth.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_framebuffer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_image.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_msaa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_pixeltransfer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_rasterizer.Plo@am__quote@
@@ -2672,6 +2698,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_scissor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_stipple.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_storagebuf.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_tess.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_viewport.Plo@am__quote@
@@ -2680,6 +2707,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_bufferobjects.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_clear.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_compute.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_condrender.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_copyimage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_drawpixels.Plo@am__quote@
@@ -2702,6 +2730,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_viewport.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_xformfb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_context.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_copytex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_draw_feedback.Plo@am__quote@
@@ -2767,6 +2796,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@vbo/$(DEPDIR)/vbo_exec_array.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vbo/$(DEPDIR)/vbo_exec_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vbo/$(DEPDIR)/vbo_exec_eval.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@vbo/$(DEPDIR)/vbo_minmax_index.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vbo/$(DEPDIR)/vbo_noop.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vbo/$(DEPDIR)/vbo_primitive_restart.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vbo/$(DEPDIR)/vbo_rebase.Plo@am__quote@

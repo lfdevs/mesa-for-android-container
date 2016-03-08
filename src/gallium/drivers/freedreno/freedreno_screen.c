@@ -155,6 +155,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_USER_CONSTANT_BUFFERS:
 	case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
 	case PIPE_CAP_VERTEXID_NOBASE:
+	case PIPE_CAP_STRING_MARKER:
 		return 1;
 
 	case PIPE_CAP_SHADER_STENCIL_EXPORT:
@@ -163,8 +164,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
 	case PIPE_CAP_TEXTURE_BARRIER:
 	case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
-	case PIPE_CAP_START_INSTANCE:
 	case PIPE_CAP_COMPUTE:
+	case PIPE_CAP_QUERY_MEMORY_INFO:
 		return 0;
 
 	case PIPE_CAP_SM3:
@@ -183,19 +184,25 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_CLIP_HALFZ:
 		return is_a3xx(screen) || is_a4xx(screen);
 
+	case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
+		return 0;
 	case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-		return is_a3xx(screen) ? 16 : 0;
+		if (is_a3xx(screen)) return 16;
+		if (is_a4xx(screen)) return 32;
+		return 0;
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
-		/* I think 32k on a4xx.. and we could possibly emulate more
-		 * by pretending 2d/rect textures and splitting high bits
-		 * of index into 2nd dimension..
+		/* We could possibly emulate more by pretending 2d/rect textures and
+		 * splitting high bits of index into 2nd dimension..
 		 */
 		if (is_a3xx(screen)) return 8192;
-		if (is_a4xx(screen)) return 16383;
+		if (is_a4xx(screen)) return 16384;
 		return 0;
 
 	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
 	case PIPE_CAP_CUBE_MAP_ARRAY:
+	case PIPE_CAP_START_INSTANCE:
+	case PIPE_CAP_SAMPLER_VIEW_TARGET:
+	case PIPE_CAP_TEXTURE_QUERY_LOD:
 		return is_a4xx(screen);
 
 	case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
@@ -219,13 +226,13 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
 	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
 	case PIPE_CAP_TEXTURE_GATHER_SM5:
-	case PIPE_CAP_TEXTURE_QUERY_LOD:
 	case PIPE_CAP_SAMPLE_SHADING:
 	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
 	case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
 	case PIPE_CAP_DRAW_INDIRECT:
+	case PIPE_CAP_MULTI_DRAW_INDIRECT:
+	case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
 	case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
-	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
 	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
@@ -237,6 +244,14 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_SHAREABLE_SHADERS:
 	case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
 	case PIPE_CAP_CLEAR_TEXTURE:
+	case PIPE_CAP_DRAW_PARAMETERS:
+	case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+	case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
+	case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+	case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
+	case PIPE_CAP_INVALIDATE_BUFFER:
+	case PIPE_CAP_GENERATE_MIPMAP:
+	case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
 		return 0;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
@@ -283,11 +298,14 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return is_a3xx(screen) ? 1 : 0;
 
 	/* Queries. */
-	case PIPE_CAP_QUERY_TIME_ELAPSED:
 	case PIPE_CAP_QUERY_TIMESTAMP:
+	case PIPE_CAP_QUERY_BUFFER_OBJECT:
 		return 0;
 	case PIPE_CAP_OCCLUSION_QUERY:
 		return is_a3xx(screen) || is_a4xx(screen);
+	case PIPE_CAP_QUERY_TIME_ELAPSED:
+		/* only a4xx, requires new enough kernel so we know max_freq: */
+		return (screen->max_freq > 0) && is_a4xx(screen);
 
 	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MIN_TEXEL_OFFSET:
@@ -390,9 +408,16 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		return 1;
 	case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
+		/* Technically this should be the same as for TEMP/CONST, since
+		 * everything is just normal registers.  This is just temporary
+		 * hack until load_input/store_output handle arrays in a similar
+		 * way as load_var/store_var..
+		 */
+		return 0;
 	case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
-		return 1;
+		/* a2xx compiler doesn't handle indirect: */
+		return is_ir3(screen) ? 1 : 0;
 	case PIPE_SHADER_CAP_SUBROUTINES:
 	case PIPE_SHADER_CAP_DOUBLES:
 	case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
@@ -411,8 +436,13 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		return 16;
 	case PIPE_SHADER_CAP_PREFERRED_IR:
 		return PIPE_SHADER_IR_TGSI;
+	case PIPE_SHADER_CAP_SUPPORTED_IRS:
+		return 0;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
 		return 32;
+	case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+		return 0;
 	}
 	debug_printf("unknown shader param %d\n", param);
 	return 0;
@@ -509,6 +539,16 @@ fd_screen_create(struct fd_device *dev)
 	}
 	screen->device_id = val;
 
+	if (fd_pipe_get_param(screen->pipe, FD_MAX_FREQ, &val)) {
+		DBG("could not get gpu freq");
+		/* this limits what performance related queries are
+		 * supported but is not fatal
+		 */
+		screen->max_freq = 0;
+	} else {
+		screen->max_freq = val;
+	}
+
 	if (fd_pipe_get_param(screen->pipe, FD_GPU_ID, &val)) {
 		DBG("could not get gpu-id");
 		goto fail;
@@ -554,6 +594,7 @@ fd_screen_create(struct fd_device *dev)
 		fd3_screen_init(pscreen);
 		break;
 	case 420:
+	case 430:
 		fd4_screen_init(pscreen);
 		break;
 	default:

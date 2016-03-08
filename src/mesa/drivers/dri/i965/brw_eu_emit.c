@@ -534,7 +534,7 @@ brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
  *       \b before filling out any message-specific data.  Callers can
  *       choose not to fill in irrelevant bits; they will be zero.
  */
-static void
+void
 brw_set_message_descriptor(struct brw_codegen *p,
 			   brw_inst *inst,
 			   enum brw_message_target sfid,
@@ -847,12 +847,11 @@ brw_alu2(struct brw_codegen *p, unsigned opcode,
 static int
 get_3src_subreg_nr(struct brw_reg reg)
 {
-   if (reg.vstride == BRW_VERTICAL_STRIDE_0) {
-      assert(brw_is_single_value_swizzle(reg.swizzle));
-      return reg.subnr / 4 + BRW_GET_SWZ(reg.swizzle, 0);
-   } else {
-      return reg.subnr / 4;
-   }
+   /* Normally, SubRegNum is in bytes (0..31).  However, 3-src instructions
+    * use 32-bit units (components 0..7).  Since they only support F/D/UD
+    * types, this doesn't lose any flexibility, but uses fewer bits.
+    */
+   return reg.subnr / 4;
 }
 
 static brw_inst *
@@ -1997,6 +1996,19 @@ void gen6_math(struct brw_codegen *p,
    brw_set_src1(p, insn, src1);
 }
 
+/**
+ * Return the right surface index to access the thread scratch space using
+ * stateless dataport messages.
+ */
+unsigned
+brw_scratch_surface_idx(const struct brw_codegen *p)
+{
+   /* The scratch space is thread-local so IA coherency is unnecessary. */
+   if (p->devinfo->gen >= 8)
+      return GEN8_BTI_STATELESS_NON_COHERENT;
+   else
+      return BRW_BTI_STATELESS;
+}
 
 /**
  * Write a block of OWORDs (half a GRF each) from the scratch buffer,
@@ -2097,7 +2109,7 @@ void brw_oword_block_write_scratch(struct brw_codegen *p,
 
       brw_set_dp_write_message(p,
 			       insn,
-			       255, /* binding table index (255=stateless) */
+                               brw_scratch_surface_idx(p),
 			       msg_control,
 			       msg_type,
 			       mlen,
@@ -2183,7 +2195,7 @@ brw_oword_block_read_scratch(struct brw_codegen *p,
 
       brw_set_dp_read_message(p,
 			      insn,
-			      255, /* binding table index (255=stateless) */
+                              brw_scratch_surface_idx(p),
 			      msg_control,
 			      BRW_DATAPORT_READ_MESSAGE_OWORD_BLOCK_READ, /* msg_type */
 			      BRW_DATAPORT_READ_TARGET_RENDER_CACHE,
@@ -2604,17 +2616,27 @@ brw_find_next_block_end(struct brw_codegen *p, int start_offset)
    void *store = p->store;
    const struct brw_device_info *devinfo = p->devinfo;
 
+   int depth = 0;
+
    for (offset = next_offset(devinfo, store, start_offset);
         offset < p->next_insn_offset;
         offset = next_offset(devinfo, store, offset)) {
       brw_inst *insn = store + offset;
 
       switch (brw_inst_opcode(devinfo, insn)) {
+      case BRW_OPCODE_IF:
+         depth++;
+         break;
       case BRW_OPCODE_ENDIF:
+         if (depth == 0)
+            return offset;
+         depth--;
+         break;
       case BRW_OPCODE_ELSE:
       case BRW_OPCODE_WHILE:
       case BRW_OPCODE_HALT:
-	 return offset;
+         if (depth == 0)
+            return offset;
       }
    }
 

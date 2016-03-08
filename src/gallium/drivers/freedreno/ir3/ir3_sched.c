@@ -34,11 +34,12 @@
 /*
  * Instruction Scheduling:
  *
- * A priority-queue based scheduling algo.  Add eligible instructions,
- * ie. ones with all their dependencies scheduled, to the priority
- * (depth) sorted queue (list).  Pop highest priority instruction off
- * the queue and schedule it, add newly eligible instructions to the
- * priority queue, rinse, repeat.
+ * A recursive depth based scheduling algo.  Recursively find an eligible
+ * instruction to schedule from the deepest instruction (recursing through
+ * it's unscheduled src instructions).  Normally this would result in a
+ * lot of re-traversal of the same instructions, so we cache results in
+ * instr->data (and clear cached results that would be no longer valid
+ * after scheduling an instruction).
  *
  * There are a few special cases that need to be handled, since sched
  * is currently independent of register allocation.  Usages of address
@@ -52,6 +53,7 @@
 
 struct ir3_sched_ctx {
 	struct ir3_block *block;           /* the current block */
+	struct list_head depth_list;       /* depth sorted unscheduled instrs */
 	struct ir3_instruction *scheduled; /* last scheduled instr XXX remove*/
 	struct ir3_instruction *addr;      /* current a0.x user, if any */
 	struct ir3_instruction *pred;      /* current p0.x user, if any */
@@ -61,6 +63,17 @@ struct ir3_sched_ctx {
 static bool is_sfu_or_mem(struct ir3_instruction *instr)
 {
 	return is_sfu(instr) || is_mem(instr);
+}
+
+#define NULL_INSTR ((void *)~0)
+
+static void
+clear_cache(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
+{
+	list_for_each_entry (struct ir3_instruction, instr2, &ctx->depth_list, node) {
+		if ((instr2->data == instr) || (instr2->data == NULL_INSTR) || !instr)
+			instr2->data = NULL;
+	}
 }
 
 static void
@@ -93,6 +106,34 @@ schedule(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
 
 	list_addtail(&instr->node, &instr->block->instr_list);
 	ctx->scheduled = instr;
+
+	if (writes_addr(instr) || writes_pred(instr) || is_input(instr)) {
+		clear_cache(ctx, NULL);
+	} else {
+		/* invalidate only the necessary entries.. */
+		clear_cache(ctx, instr);
+	}
+}
+
+static struct ir3_instruction *
+deepest(struct ir3_instruction **srcs, unsigned nsrcs)
+{
+	struct ir3_instruction *d = NULL;
+	unsigned i = 0, id = 0;
+
+	while ((i < nsrcs) && !(d = srcs[id = i]))
+		i++;
+
+	if (!d)
+		return NULL;
+
+	for (; i < nsrcs; i++)
+		if (srcs[i] && (srcs[i]->depth > d->depth))
+			d = srcs[id = i];
+
+	srcs[id] = NULL;
+
+	return d;
 }
 
 static unsigned
@@ -146,6 +187,9 @@ delay_calc(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
 
 	foreach_ssa_src_n(src, i, instr) {
 		unsigned d;
+		/* for array writes, no need to delay on previous write: */
+		if (i == 0)
+			continue;
 		if (src->block != instr->block)
 			continue;
 		d = delay_calc_srcn(ctx, src, instr, i);
@@ -171,10 +215,51 @@ static bool is_scheduled(struct ir3_instruction *instr)
 	return !!(instr->flags & IR3_INSTR_MARK);
 }
 
+/* could an instruction be scheduled if specified ssa src was scheduled? */
 static bool
-check_conflict(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
+could_sched(struct ir3_instruction *instr, struct ir3_instruction *src)
+{
+	struct ir3_instruction *other_src;
+	foreach_ssa_src(other_src, instr) {
+		/* if dependency not scheduled, we aren't ready yet: */
+		if ((src != other_src) && !is_scheduled(other_src)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/* Check if instruction is ok to schedule.  Make sure it is not blocked
+ * by use of addr/predicate register, etc.
+ */
+static bool
+check_instr(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
 		struct ir3_instruction *instr)
 {
+	/* For instructions that write address register we need to
+	 * make sure there is at least one instruction that uses the
+	 * addr value which is otherwise ready.
+	 *
+	 * TODO if any instructions use pred register and have other
+	 * src args, we would need to do the same for writes_pred()..
+	 */
+	if (writes_addr(instr)) {
+		struct ir3 *ir = instr->block->shader;
+		bool ready = false;
+		for (unsigned i = 0; (i < ir->indirects_count) && !ready; i++) {
+			struct ir3_instruction *indirect = ir->indirects[i];
+			if (!indirect)
+				continue;
+			if (indirect->address != instr)
+				continue;
+			ready = could_sched(indirect, instr);
+		}
+
+		/* nothing could be scheduled, so keep looking: */
+		if (!ready)
+			return false;
+	}
+
 	/* if this is a write to address/predicate register, and that
 	 * register is currently in use, we need to defer until it is
 	 * free:
@@ -182,51 +267,14 @@ check_conflict(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
 	if (writes_addr(instr) && ctx->addr) {
 		debug_assert(ctx->addr != instr);
 		notes->addr_conflict = true;
-		return true;
+		return false;
 	}
 
 	if (writes_pred(instr) && ctx->pred) {
 		debug_assert(ctx->pred != instr);
 		notes->pred_conflict = true;
-		return true;
+		return false;
 	}
-
-	return false;
-}
-
-/* is this instruction ready to be scheduled?  Return negative for not
- * ready (updating notes if needed), or >= 0 to indicate number of
- * delay slots needed.
- */
-static int
-instr_eligibility(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
-		struct ir3_instruction *instr)
-{
-	struct ir3_instruction *src;
-	unsigned delay = 0;
-
-	/* Phi instructions can have a dependency on something not
-	 * scheduled yet (for ex, loops).  But OTOH we don't really
-	 * care.  By definition phi's should appear at the top of
-	 * the block, and it's sources should be values from the
-	 * previously executing block, so they are always ready to
-	 * be scheduled:
-	 */
-	if (is_meta(instr) && (instr->opc == OPC_META_PHI))
-		return 0;
-
-	foreach_ssa_src(src, instr) {
-		/* if dependency not scheduled, we aren't ready yet: */
-		if (!is_scheduled(src))
-			return -1;
-	}
-
-	/* all our dependents are scheduled, figure out if
-	 * we have enough delay slots to schedule ourself:
-	 */
-	delay = delay_calc(ctx, instr);
-	if (delay)
-		return delay;
 
 	/* if the instruction is a kill, we need to ensure *every*
 	 * bary.f is scheduled.  The hw seems unhappy if the thread
@@ -246,80 +294,109 @@ instr_eligibility(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
 
 		for (unsigned i = 0; i < ir->baryfs_count; i++) {
 			struct ir3_instruction *baryf = ir->baryfs[i];
-			if (baryf->depth == DEPTH_UNUSED)
+			if (baryf->flags & IR3_INSTR_UNUSED)
 				continue;
 			if (!is_scheduled(baryf)) {
 				notes->blocked_kill = true;
-				return -1;
+				return false;
 			}
 		}
 	}
 
-	if (check_conflict(ctx, notes, instr))
-		return -1;
-
-	return 0;
-}
-
-/* could an instruction be scheduled if specified ssa src was scheduled? */
-static bool
-could_sched(struct ir3_instruction *instr, struct ir3_instruction *src)
-{
-	struct ir3_instruction *other_src;
-	foreach_ssa_src(other_src, instr) {
-		/* if dependency not scheduled, we aren't ready yet: */
-		if ((src != other_src) && !is_scheduled(other_src)) {
-			return false;
-		}
-	}
 	return true;
 }
 
-/* move eligible instructions to the priority list: */
-static unsigned
-add_eligible_instrs(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
-		struct list_head *prio_queue, struct list_head *unscheduled_list)
+/* Find the best instruction to schedule from specified instruction or
+ * recursively it's ssa sources.
+ */
+static struct ir3_instruction *
+find_instr_recursive(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
+		struct ir3_instruction *instr)
 {
-	unsigned min_delay = ~0;
+	struct ir3_instruction *srcs[__ssa_src_cnt(instr)];
+	struct ir3_instruction *src;
+	unsigned nsrcs = 0;
 
-	list_for_each_entry_safe (struct ir3_instruction, instr, unscheduled_list, node) {
-		int e = instr_eligibility(ctx, notes, instr);
-		if (e < 0)
-			continue;
+	if (is_scheduled(instr))
+		return NULL;
 
-		/* For instructions that write address register we need to
-		 * make sure there is at least one instruction that uses the
-		 * addr value which is otherwise ready.
-		 *
-		 * TODO if any instructions use pred register and have other
-		 * src args, we would need to do the same for writes_pred()..
-		 */
-		if (unlikely(writes_addr(instr))) {
-			struct ir3 *ir = instr->block->shader;
-			bool ready = false;
-			for (unsigned i = 0; (i < ir->indirects_count) && !ready; i++) {
-				struct ir3_instruction *indirect = ir->indirects[i];
-				if (!indirect)
-					continue;
-				if (indirect->address != instr)
-					continue;
-				ready = could_sched(indirect, instr);
-			}
+	/* use instr->data to cache the results of recursing up the
+	 * instr src's.  Otherwise the recursive algo can scale quite
+	 * badly w/ shader size.  But this takes some care to clear
+	 * the cache appropriately when instructions are scheduled.
+	 */
+	if (instr->data) {
+		if (instr->data == NULL_INSTR)
+			return NULL;
+		return instr->data;
+	}
 
-			/* nothing could be scheduled, so keep looking: */
-			if (!ready)
-				continue;
-		}
-
-		min_delay = MIN2(min_delay, e);
-		if (e == 0) {
-			/* remove from unscheduled list and into priority queue: */
-			list_delinit(&instr->node);
-			ir3_insert_by_depth(instr, prio_queue);
+	/* find unscheduled srcs: */
+	foreach_ssa_src(src, instr) {
+		if (!is_scheduled(src)) {
+			debug_assert(nsrcs < ARRAY_SIZE(srcs));
+			srcs[nsrcs++] = src;
 		}
 	}
 
-	return min_delay;
+	/* if all our src's are already scheduled: */
+	if (nsrcs == 0) {
+		if (check_instr(ctx, notes, instr)) {
+			instr->data = instr;
+			return instr;
+		}
+		return NULL;
+	}
+
+	while ((src = deepest(srcs, nsrcs))) {
+		struct ir3_instruction *candidate;
+
+		candidate = find_instr_recursive(ctx, notes, src);
+		if (!candidate)
+			continue;
+
+		if (check_instr(ctx, notes, candidate)) {
+			instr->data = candidate;
+			return candidate;
+		}
+	}
+
+	instr->data = NULL_INSTR;
+	return NULL;
+}
+
+/* find instruction to schedule: */
+static struct ir3_instruction *
+find_eligible_instr(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes)
+{
+	struct ir3_instruction *best_instr = NULL;
+	unsigned min_delay = ~0;
+
+	/* TODO we'd really rather use the list/array of block outputs.  But we
+	 * don't have such a thing.  Recursing *every* instruction in the list
+	 * will result in a lot of repeated traversal, since instructions will
+	 * get traversed both when they appear as ssa src to a later instruction
+	 * as well as where they appear in the depth_list.
+	 */
+	list_for_each_entry_rev (struct ir3_instruction, instr, &ctx->depth_list, node) {
+		struct ir3_instruction *candidate;
+		unsigned delay;
+
+		candidate = find_instr_recursive(ctx, notes, instr);
+		if (!candidate)
+			continue;
+
+		delay = delay_calc(ctx, candidate);
+		if (delay < min_delay) {
+			best_instr = candidate;
+			min_delay = delay;
+		}
+
+		if (min_delay == 0)
+			break;
+	}
+
+	return best_instr;
 }
 
 /* "spill" the address register by remapping any unscheduled
@@ -413,50 +490,55 @@ split_pred(struct ir3_sched_ctx *ctx)
 static void
 sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 {
-	struct list_head unscheduled_list, prio_queue;
+	struct list_head unscheduled_list;
 
 	ctx->block = block;
 
+	/* addr/pred writes are per-block: */
+	ctx->addr = NULL;
+	ctx->pred = NULL;
+
 	/* move all instructions to the unscheduled list, and
 	 * empty the block's instruction list (to which we will
-	 * be inserting.
+	 * be inserting).
 	 */
 	list_replace(&block->instr_list, &unscheduled_list);
 	list_inithead(&block->instr_list);
-	list_inithead(&prio_queue);
+	list_inithead(&ctx->depth_list);
 
 	/* first a pre-pass to schedule all meta:input/phi instructions
 	 * (which need to appear first so that RA knows the register is
-	 * occupied:
+	 * occupied), and move remaining to depth sorted list:
 	 */
 	list_for_each_entry_safe (struct ir3_instruction, instr, &unscheduled_list, node) {
 		if (is_meta(instr) && ((instr->opc == OPC_META_INPUT) ||
-				(instr->opc == OPC_META_PHI)))
+				(instr->opc == OPC_META_PHI))) {
 			schedule(ctx, instr);
+		} else {
+			ir3_insert_by_depth(instr, &ctx->depth_list);
+		}
 	}
 
-	while (!(list_empty(&unscheduled_list) &&
-			list_empty(&prio_queue))) {
+	while (!list_empty(&ctx->depth_list)) {
 		struct ir3_sched_notes notes = {0};
-		unsigned delay;
+		struct ir3_instruction *instr;
 
-		delay = add_eligible_instrs(ctx, &notes, &prio_queue, &unscheduled_list);
+		instr = find_eligible_instr(ctx, &notes);
 
-		if (!list_empty(&prio_queue)) {
-			struct ir3_instruction *instr = list_last_entry(&prio_queue,
-					struct ir3_instruction, node);
-			/* ugg, this is a bit ugly, but between the time when
-			 * the instruction became eligible and now, a new
-			 * conflict may have arose..
+		if (instr) {
+			unsigned delay = delay_calc(ctx, instr);
+
+			/* and if we run out of instructions that can be scheduled,
+			 * then it is time for nop's:
 			 */
-			if (check_conflict(ctx, &notes, instr)) {
-				list_del(&instr->node);
-				list_addtail(&instr->node, &unscheduled_list);
-				continue;
+			debug_assert(delay <= 6);
+			while (delay > 0) {
+				ir3_NOP(block);
+				delay--;
 			}
 
 			schedule(ctx, instr);
-		} else if (delay == ~0) {
+		} else {
 			struct ir3_instruction *new_instr = NULL;
 
 			/* nothing available to schedule.. if we are blocked on
@@ -475,22 +557,16 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 			}
 
 			if (new_instr) {
-				list_del(&new_instr->node);
-				list_addtail(&new_instr->node, &unscheduled_list);
+				/* clearing current addr/pred can change what is
+				 * available to schedule, so clear cache..
+				 */
+				clear_cache(ctx, NULL);
+
+				ir3_insert_by_depth(new_instr, &ctx->depth_list);
 				/* the original instr that wrote addr/pred may have
 				 * originated from a different block:
 				 */
 				new_instr->block = block;
-			}
-
-		} else {
-			/* and if we run out of instructions that can be scheduled,
-			 * then it is time for nop's:
-			 */
-			debug_assert(delay <= 6);
-			while (delay > 0) {
-				ir3_NOP(block);
-				delay--;
 			}
 		}
 	}

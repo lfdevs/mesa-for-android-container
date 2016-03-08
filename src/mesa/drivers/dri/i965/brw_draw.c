@@ -25,7 +25,6 @@
 
 #include <sys/errno.h>
 
-#include "main/glheader.h"
 #include "main/context.h"
 #include "main/condrender.h"
 #include "main/samplerobj.h"
@@ -145,14 +144,17 @@ gen6_set_prim(struct brw_context *brw, const struct _mesa_prim *prim)
 
    DBG("PRIM: %s\n", _mesa_enum_to_string(prim->mode));
 
-   if (prim->mode == GL_PATCHES)
+   if (prim->mode == GL_PATCHES) {
       hw_prim = _3DPRIM_PATCHLIST(ctx->TessCtrlProgram.patch_vertices);
-   else
+   } else {
       hw_prim = get_hw_prim_for_gl_prim(prim->mode);
+   }
 
    if (hw_prim != brw->primitive) {
       brw->primitive = hw_prim;
       brw->ctx.NewDriverState |= BRW_NEW_PRIMITIVE;
+      if (prim->mode == GL_PATCHES)
+         brw->ctx.NewDriverState |= BRW_NEW_PATCH_PRIMITIVE;
    }
 }
 
@@ -418,17 +420,6 @@ brw_try_draw_prims(struct gl_context *ctx,
    if (ctx->NewState)
       _mesa_update_state(ctx);
 
-   /* Find the highest sampler unit used by each shader program.  A bit-count
-    * won't work since ARB programs use the texture unit number as the sampler
-    * index.
-    */
-   brw->wm.base.sampler_count =
-      _mesa_fls(ctx->FragmentProgram._Current->Base.SamplersUsed);
-   brw->gs.base.sampler_count = ctx->GeometryProgram._Current ?
-      _mesa_fls(ctx->GeometryProgram._Current->Base.SamplersUsed) : 0;
-   brw->vs.base.sampler_count =
-      _mesa_fls(ctx->VertexProgram._Current->Base.SamplersUsed);
-
    /* We have to validate the textures *before* checking for fallbacks;
     * otherwise, the software fallback won't be able to rely on the
     * texture state, the firstLevel and lastLevel fields won't be
@@ -437,6 +428,21 @@ brw_try_draw_prims(struct gl_context *ctx,
     * texture level other than level 0.
     */
    brw_validate_textures(brw);
+
+   /* Find the highest sampler unit used by each shader program.  A bit-count
+    * won't work since ARB programs use the texture unit number as the sampler
+    * index.
+    */
+   brw->wm.base.sampler_count =
+      _mesa_fls(ctx->FragmentProgram._Current->Base.SamplersUsed);
+   brw->gs.base.sampler_count = ctx->GeometryProgram._Current ?
+      _mesa_fls(ctx->GeometryProgram._Current->Base.SamplersUsed) : 0;
+   brw->tes.base.sampler_count = ctx->TessEvalProgram._Current ?
+      _mesa_fls(ctx->TessEvalProgram._Current->Base.SamplersUsed) : 0;
+   brw->tcs.base.sampler_count = ctx->TessCtrlProgram._Current ?
+      _mesa_fls(ctx->TessCtrlProgram._Current->Base.SamplersUsed) : 0;
+   brw->vs.base.sampler_count =
+      _mesa_fls(ctx->VertexProgram._Current->Base.SamplersUsed);
 
    intel_prepare_render(brw);
 
@@ -485,9 +491,29 @@ brw_try_draw_prims(struct gl_context *ctx,
          }
       }
 
-      brw->draw.gl_basevertex =
+      /* Determine if we need to flag BRW_NEW_VERTICES for updating the
+       * gl_BaseVertexARB or gl_BaseInstanceARB values. For indirect draw, we
+       * always flag if the shader uses one of the values. For direct draws,
+       * we only flag if the values change.
+       */
+      const int new_basevertex =
          prims[i].indexed ? prims[i].basevertex : prims[i].start;
+      const int new_baseinstance = prims[i].base_instance;
+      if (i > 0) {
+         const bool uses_draw_parameters =
+            brw->vs.prog_data->uses_basevertex ||
+            brw->vs.prog_data->uses_baseinstance;
 
+         if ((uses_draw_parameters && prims[i].is_indirect) ||
+             (brw->vs.prog_data->uses_basevertex &&
+              brw->draw.params.gl_basevertex != new_basevertex) ||
+             (brw->vs.prog_data->uses_baseinstance &&
+              brw->draw.params.gl_baseinstance != new_baseinstance))
+            brw->ctx.NewDriverState |= BRW_NEW_VERTICES;
+      }
+
+      brw->draw.params.gl_basevertex = new_basevertex;
+      brw->draw.params.gl_baseinstance = new_baseinstance;
       drm_intel_bo_unreference(brw->draw.draw_params_bo);
 
       if (prims[i].is_indirect) {
@@ -504,6 +530,18 @@ brw_try_draw_prims(struct gl_context *ctx,
          brw->draw.draw_params_bo = NULL;
          brw->draw.draw_params_offset = 0;
       }
+
+      /* gl_DrawID always needs its own vertex buffer since it's not part of
+       * the indirect parameter buffer. If the program uses gl_DrawID we need
+       * to flag BRW_NEW_VERTICES. For the first iteration, we don't have
+       * valid brw->vs.prog_data, but we always flag BRW_NEW_VERTICES before
+       * the loop.
+       */
+      brw->draw.gl_drawid = prims[i].draw_id;
+      drm_intel_bo_unreference(brw->draw.draw_id_bo);
+      brw->draw.draw_id_bo = NULL;
+      if (i > 0 && brw->vs.prog_data->uses_drawid)
+         brw->ctx.NewDriverState |= BRW_NEW_VERTICES;
 
       if (brw->gen < 6)
 	 brw_set_prim(brw, &prims[i]);

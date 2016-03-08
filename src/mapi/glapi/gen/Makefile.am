@@ -27,8 +27,11 @@ MESA_GLAPI_OUTPUTS = \
 	$(MESA_GLAPI_DIR)/glapi_mapi_tmp.h \
 	$(MESA_GLAPI_DIR)/glprocs.h \
 	$(MESA_GLAPI_DIR)/glapitemp.h \
-	$(MESA_GLAPI_DIR)/glapitable.h \
-	$(MESA_GLAPI_DIR)/glapi_gentable.c
+	$(MESA_GLAPI_DIR)/glapitable.h
+
+if HAVE_APPLEDRI
+MESA_GLAPI_OUTPUTS += $(MESA_GLAPI_DIR)/glapi_gentable.c
+endif
 
 MESA_GLAPI_ASM_OUTPUTS =
 if HAVE_X86_ASM
@@ -57,6 +60,7 @@ BUILT_SOURCES = \
 	$(MESA_GLX_DIR)/indirect_size.c
 EXTRA_DIST= \
 	$(BUILT_SOURCES) \
+	$(MESA_GLAPI_DIR)/glapi_gentable.c \
 	$(MESA_GLAPI_DIR)/glapi_x86.S \
 	$(MESA_GLAPI_DIR)/glapi_x86-64.S \
 	$(MESA_GLAPI_DIR)/glapi_sparc.S \
@@ -88,8 +92,12 @@ XORG_GLAPI_DIR = $(XORG_BASE)/glx
 XORG_GLAPI_OUTPUTS = \
 	$(XORG_GLAPI_DIR)/glprocs.h \
 	$(XORG_GLAPI_DIR)/glapitable.h \
-	$(XORG_GLAPI_DIR)/dispatch.h \
+	$(XORG_GLAPI_DIR)/dispatch.h
+
+if HAVE_APPLEDRI
+XORG_GLAPI_OUTPUTS += \
 	$(XORG_GLAPI_DIR)/glapi_gentable.c
+endif
 
 XORG_OUTPUTS = \
 	$(XORG_GLAPI_OUTPUTS) \
@@ -133,11 +141,11 @@ API_XML = \
 	ARB_ES3_compatibility.xml \
 	ARB_framebuffer_no_attachments.xml \
 	ARB_framebuffer_object.xml \
-	ARB_geometry_shader4.xml \
 	ARB_get_program_binary.xml \
 	ARB_get_texture_sub_image.xml \
 	ARB_gpu_shader_fp64.xml \
 	ARB_gpu_shader5.xml \
+	ARB_indirect_parameters.xml \
 	ARB_instanced_arrays.xml \
 	ARB_internalformat_query.xml \
 	ARB_invalidate_subdata.xml \
@@ -188,6 +196,7 @@ API_XML = \
 	EXT_texture_array.xml \
 	EXT_texture_integer.xml \
 	EXT_transform_feedback.xml \
+	GREMEDY_string_marker.xml \
 	INTEL_performance_query.xml \
 	KHR_debug.xml \
 	KHR_context_flush_control.xml \
@@ -271,8 +280,8 @@ $(MESA_GLAPI_DIR)/glapi_sparc.S: gl_SPARC_asm.py $(COMMON)
 
 ######################################################################
 
-$(MESA_DIR)/main/enums.c: gl_enums.py $(COMMON)
-	$(PYTHON_GEN) $(srcdir)/gl_enums.py -f $(srcdir)/gl_and_es_API.xml > $@
+$(MESA_DIR)/main/enums.c: gl_enums.py $(srcdir)/../registry/gl.xml
+	$(PYTHON_GEN) $(srcdir)/gl_enums.py -f $(srcdir)/../registry/gl.xml > $@
 
 $(MESA_DIR)/main/api_exec.c: gl_genexec.py apiexec.py $(COMMON)
 	$(PYTHON_GEN) $(srcdir)/gl_genexec.py -f $(srcdir)/gl_and_es_API.xml > $@

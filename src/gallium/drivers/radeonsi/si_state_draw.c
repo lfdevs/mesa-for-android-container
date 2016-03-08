@@ -163,7 +163,7 @@ static void si_emit_derived_tess_state(struct si_context *sctx,
 	perpatch_output_offset = output_patch0_offset + pervertex_output_patch_size;
 
 	lds_size = output_patch0_offset + output_patch_size * *num_patches;
-	ls_rsrc2 = ls->current->rsrc2;
+	ls_rsrc2 = ls->current->config.rsrc2;
 
 	if (sctx->b.chip_class >= CIK) {
 		assert(lds_size <= 65536);
@@ -178,7 +178,7 @@ static void si_emit_derived_tess_state(struct si_context *sctx,
 	if (sctx->b.chip_class == CIK && sctx->b.family != CHIP_HAWAII)
 		radeon_set_sh_reg(cs, R_00B52C_SPI_SHADER_PGM_RSRC2_LS, ls_rsrc2);
 	radeon_set_sh_reg_seq(cs, R_00B528_SPI_SHADER_PGM_RSRC1_LS, 2);
-	radeon_emit(cs, ls->current->rsrc1);
+	radeon_emit(cs, ls->current->config.rsrc1);
 	radeon_emit(cs, ls_rsrc2);
 
 	/* Compute userdata SGPRs. */
@@ -818,7 +818,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 			si_get_draw_start_count(sctx, info, &start, &count);
 			start_offset = start * ib.index_size;
 
-			u_upload_alloc(sctx->b.uploader, start_offset, count * 2,
+			u_upload_alloc(sctx->b.uploader, start_offset, count * 2, 256,
 				       &out_offset, &out_buffer, &ptr);
 			if (!out_buffer) {
 				pipe_resource_reference(&ib.buffer, NULL);
@@ -842,7 +842,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 			start_offset = start * ib.index_size;
 
 			u_upload_data(sctx->b.uploader, start_offset, count * ib.index_size,
-				      (char*)ib.user_buffer + start_offset,
+				      256, (char*)ib.user_buffer + start_offset,
 				      &ib.offset, &ib.buffer);
 			if (!ib.buffer)
 				return;

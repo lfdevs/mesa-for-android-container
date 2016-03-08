@@ -23,19 +23,18 @@
 
 #include "brw_shader.h"
 #include "brw_nir.h"
-#include "glsl/ir.h"
-#include "glsl/ir_uniform.h"
+#include "compiler/glsl/ir_uniform.h"
 
 static void
 brw_nir_setup_glsl_builtin_uniform(nir_variable *var,
                                    const struct gl_program *prog,
                                    struct brw_stage_prog_data *stage_prog_data,
-                                   unsigned comps_per_unit)
+                                   bool is_scalar)
 {
    const nir_state_slot *const slots = var->state_slots;
    assert(var->state_slots != NULL);
 
-   unsigned uniform_index = var->data.driver_location * comps_per_unit;
+   unsigned uniform_index = var->data.driver_location / 4;
    for (unsigned int i = 0; i < var->num_state_slots; i++) {
       /* This state reference has already been setup by ir_to_mesa, but we'll
        * get the same index back here.
@@ -56,7 +55,7 @@ brw_nir_setup_glsl_builtin_uniform(nir_variable *var,
           * and move on to the next one.  In vec4, we need to continue and pad
           * it out to 4 components.
           */
-         if (swiz == last_swiz && comps_per_unit == 1)
+         if (swiz == last_swiz && is_scalar)
             break;
 
          last_swiz = swiz;
@@ -71,7 +70,7 @@ static void
 brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
                            struct gl_shader_program *shader_prog,
                            struct brw_stage_prog_data *stage_prog_data,
-                           unsigned comps_per_unit)
+                           bool is_scalar)
 {
    int namelen = strlen(var->name);
 
@@ -81,7 +80,7 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
     * order we'd walk the type, so walk the list of storage and find anything
     * with our name, or the prefix of a component that starts with our name.
     */
-   unsigned uniform_index = var->data.driver_location * comps_per_unit;
+   unsigned uniform_index = var->data.driver_location / 4;
    for (unsigned u = 0; u < shader_prog->NumUniformStorage; u++) {
       struct gl_uniform_storage *storage = &shader_prog->UniformStorage[u];
 
@@ -112,10 +111,12 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
                stage_prog_data->param[uniform_index++] = components++;
             }
 
-            /* Pad out with zeros if needed (only needed for vec4) */
-            for (; i < comps_per_unit; i++) {
-               static const gl_constant_value zero = { 0.0 };
-               stage_prog_data->param[uniform_index++] = &zero;
+            if (!is_scalar) {
+               /* Pad out with zeros if needed (only needed for vec4) */
+               for (; i < 4; i++) {
+                  static const gl_constant_value zero = { 0.0 };
+                  stage_prog_data->param[uniform_index++] = &zero;
+               }
             }
          }
       }
@@ -129,8 +130,6 @@ brw_nir_setup_glsl_uniforms(nir_shader *shader,
                             struct brw_stage_prog_data *stage_prog_data,
                             bool is_scalar)
 {
-   unsigned comps_per_unit = is_scalar ? 1 : 4;
-
    nir_foreach_variable(var, &shader->uniforms) {
       /* UBO's, atomics and samplers don't take up space in the
          uniform file */
@@ -139,10 +138,10 @@ brw_nir_setup_glsl_uniforms(nir_shader *shader,
 
       if (strncmp(var->name, "gl_", 3) == 0) {
          brw_nir_setup_glsl_builtin_uniform(var, prog, stage_prog_data,
-                                            comps_per_unit);
+                                            is_scalar);
       } else {
          brw_nir_setup_glsl_uniform(shader->stage, var, shader_prog,
-                                    stage_prog_data, comps_per_unit);
+                                    stage_prog_data, is_scalar);
       }
    }
 }

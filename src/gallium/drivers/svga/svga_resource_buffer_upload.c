@@ -221,7 +221,7 @@ svga_buffer_upload_gb_command(struct svga_context *svga,
    struct svga_3d_update_gb_image *whole_update_cmd = NULL;
    uint32 numBoxes = sbuf->map.num_ranges;
    struct pipe_resource *dummy;
-   unsigned int i;
+   unsigned i;
 
    assert(numBoxes);
    assert(sbuf->dma.updates == NULL);
@@ -308,6 +308,7 @@ svga_buffer_upload_gb_command(struct svga_context *svga,
    pipe_resource_reference(&dummy, &sbuf->b.b);
    SVGA_FIFOCommitAll(swc);
 
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    sbuf->dma.flags.discard = FALSE;
 
    return PIPE_OK;
@@ -381,6 +382,7 @@ svga_buffer_upload_command(struct svga_context *svga,
 
    SVGA_FIFOCommitAll(swc);
 
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    sbuf->dma.flags.discard = FALSE;
 
    return PIPE_OK;

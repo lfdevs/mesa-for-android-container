@@ -141,6 +141,35 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
 	}
 }
 
+/**
+ * emit marker string as payload of a no-op packet, which can be
+ * decoded by cffdump.
+ */
+static void
+fd_emit_string_marker(struct pipe_context *pctx, const char *string, int len)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd_ringbuffer *ring = ctx->ring;
+	const uint32_t *buf = (const void *)string;
+
+	/* max packet size is 0x3fff dwords: */
+	len = MIN2(len, 0x3fff * 4);
+
+	OUT_PKT3(ring, CP_NOP, align(len, 4) / 4);
+	while (len >= 4) {
+		OUT_RING(ring, *buf);
+		buf++;
+		len -= 4;
+	}
+
+	/* copy remainder bytes without reading past end of input string: */
+	if (len > 0) {
+		uint32_t w = 0;
+		memcpy(&w, buf, len);
+		OUT_RING(ring, w);
+	}
+}
+
 void
 fd_context_destroy(struct pipe_context *pctx)
 {
@@ -207,6 +236,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	pctx->screen = pscreen;
 	pctx->priv = priv;
 	pctx->flush = fd_context_flush;
+	pctx->emit_string_marker = fd_emit_string_marker;
 
 	for (i = 0; i < ARRAY_SIZE(ctx->rings); i++) {
 		ctx->rings[i] = fd_ringbuffer_new(screen->pipe, 0x100000);

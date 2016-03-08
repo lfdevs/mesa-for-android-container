@@ -221,7 +221,6 @@ ureg_DECL_input(struct ureg_program *,
 
 struct ureg_src
 ureg_DECL_system_value(struct ureg_program *,
-                       unsigned index,
                        unsigned semantic_name,
                        unsigned semantic_index);
 
@@ -327,6 +326,19 @@ ureg_DECL_sampler_view(struct ureg_program *,
                        unsigned return_type_z,
                        unsigned return_type_w );
 
+struct ureg_src
+ureg_DECL_image(struct ureg_program *ureg,
+                unsigned index,
+                unsigned target,
+                unsigned format,
+                boolean wr,
+                boolean raw);
+
+struct ureg_src
+ureg_DECL_buffer(struct ureg_program *ureg, unsigned nr, bool atomic);
+
+struct ureg_src
+ureg_DECL_shared_memory(struct ureg_program *ureg);
 
 static inline struct ureg_src
 ureg_imm4f( struct ureg_program *ureg,
@@ -522,6 +534,14 @@ ureg_label_insn(struct ureg_program *ureg,
                 unsigned nr_src,
                 unsigned *label);
 
+void
+ureg_memory_insn(struct ureg_program *ureg,
+                 unsigned opcode,
+                 const struct ureg_dst *dst,
+                 unsigned nr_dst,
+                 const struct ureg_src *src,
+                 unsigned nr_src,
+                 unsigned qualifier);
 
 /***********************************************************************
  * Internal instruction helpers, don't call these directly:
@@ -558,6 +578,11 @@ ureg_emit_texture(struct ureg_program *ureg,
 void
 ureg_emit_texture_offset(struct ureg_program *ureg,
                          const struct tgsi_texture_offset *offset);
+
+void
+ureg_emit_memory(struct ureg_program *ureg,
+                 unsigned insn_token,
+                 unsigned qualifier);
 
 void 
 ureg_emit_dst( struct ureg_program *ureg,

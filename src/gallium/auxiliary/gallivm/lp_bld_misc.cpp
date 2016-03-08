@@ -61,6 +61,11 @@
 #include <llvm/Target/TargetOptions.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ADT/Triple.h>
+#if HAVE_LLVM >= 0x0307
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#else
+#include <llvm/Target/TargetLibraryInfo.h>
+#endif
 #if HAVE_LLVM < 0x0306
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
 #else
@@ -147,6 +152,31 @@ lp_set_target_options(void)
    gallivm_init_llvm_targets();
 }
 
+extern "C"
+LLVMTargetLibraryInfoRef
+gallivm_create_target_library_info(const char *triple)
+{
+   return reinterpret_cast<LLVMTargetLibraryInfoRef>(
+#if HAVE_LLVM < 0x0307
+   new llvm::TargetLibraryInfo(
+#else
+   new llvm::TargetLibraryInfoImpl(
+#endif
+   llvm::Triple(triple)));
+}
+
+extern "C"
+void
+gallivm_dispose_target_library_info(LLVMTargetLibraryInfoRef library_info)
+{
+   delete reinterpret_cast<
+#if HAVE_LLVM < 0x0307
+   llvm::TargetLibraryInfo
+#else
+   llvm::TargetLibraryInfoImpl
+#endif
+   *>(library_info);
+}
 
 extern "C"
 LLVMValueRef

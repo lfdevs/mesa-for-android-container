@@ -251,7 +251,7 @@ static void cull_destroy( struct draw_stage *stage )
 struct draw_stage *draw_cull_stage( struct draw_context *draw )
 {
    struct cull_stage *cull = CALLOC_STRUCT(cull_stage);
-   if (cull == NULL)
+   if (!cull)
       goto fail;
 
    cull->stage.draw = draw;

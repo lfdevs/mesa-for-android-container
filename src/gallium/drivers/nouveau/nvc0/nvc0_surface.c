@@ -34,8 +34,8 @@
 #include "nvc0/nvc0_context.h"
 #include "nvc0/nvc0_resource.h"
 
-#include "nv50/nv50_defs.xml.h"
-#include "nv50/nv50_texture.xml.h"
+#include "nv50/g80_defs.xml.h"
+#include "nv50/g80_texture.xml.h"
 
 /* these are used in nv50_blit.h */
 #define NV50_ENG2D_SUPPORTED_FORMATS 0xff9ccfe1cce3ccc9ULL
@@ -54,7 +54,7 @@ nvc0_2d_format(enum pipe_format format, bool dst, bool dst_src_equal)
 
    /* A8_UNORM is treated as I8_UNORM as far as the 2D engine is concerned. */
    if (!dst && unlikely(format == PIPE_FORMAT_I8_UNORM) && !dst_src_equal)
-      return NV50_SURFACE_FORMAT_A8_UNORM;
+      return G80_SURFACE_FORMAT_A8_UNORM;
 
    /* Hardware values for color formats range from 0xc0 to 0xff,
     * but the 2D engine doesn't support all of them.
@@ -65,15 +65,15 @@ nvc0_2d_format(enum pipe_format format, bool dst, bool dst_src_equal)
 
    switch (util_format_get_blocksize(format)) {
    case 1:
-      return NV50_SURFACE_FORMAT_R8_UNORM;
+      return G80_SURFACE_FORMAT_R8_UNORM;
    case 2:
-      return NV50_SURFACE_FORMAT_RG8_UNORM;
+      return G80_SURFACE_FORMAT_RG8_UNORM;
    case 4:
-      return NV50_SURFACE_FORMAT_BGRA8_UNORM;
+      return G80_SURFACE_FORMAT_BGRA8_UNORM;
    case 8:
-      return NV50_SURFACE_FORMAT_RGBA16_UNORM;
+      return G80_SURFACE_FORMAT_RGBA16_UNORM;
    case 16:
-      return NV50_SURFACE_FORMAT_RGBA32_FLOAT;
+      return G80_SURFACE_FORMAT_RGBA32_FLOAT;
    default:
       assert(0);
       return 0;
@@ -287,6 +287,8 @@ nvc0_clear_render_target(struct pipe_context *pipe,
    struct nv50_surface *sf = nv50_surface(dst);
    struct nv04_resource *res = nv04_resource(sf->base.texture);
    unsigned z;
+
+   assert(dst->texture->target != PIPE_BUFFER);
 
    if (!PUSH_SPACE(push, 32 + sf->depth))
       return;
@@ -627,6 +629,8 @@ nvc0_clear_depth_stencil(struct pipe_context *pipe,
    int unk = mt->base.base.target == PIPE_TEXTURE_2D;
    unsigned z;
 
+   assert(dst->texture->target != PIPE_BUFFER);
+
    if (!PUSH_SPACE(push, 32 + sf->depth))
       return;
 
@@ -689,7 +693,7 @@ nvc0_clear(struct pipe_context *pipe, unsigned buffers,
    uint32_t mode = 0;
 
    /* don't need NEW_BLEND, COLOR_MASK doesn't affect CLEAR_BUFFERS */
-   if (!nvc0_state_validate(nvc0, NVC0_NEW_FRAMEBUFFER, 9 + (fb->nr_cbufs * 2)))
+   if (!nvc0_state_validate(nvc0, NVC0_NEW_FRAMEBUFFER))
       return;
 
    if (buffers & PIPE_CLEAR_COLOR && fb->nr_cbufs) {
@@ -867,12 +871,14 @@ nvc0_blitter_make_sampler(struct nvc0_blitter *blit)
 
    blit->sampler[0].id = -1;
 
-   blit->sampler[0].tsc[0] = NV50_TSC_0_SRGB_CONVERSION_ALLOWED |
-      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPS__SHIFT) |
-      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPT__SHIFT) |
-      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPR__SHIFT);
+   blit->sampler[0].tsc[0] = G80_TSC_0_SRGB_CONVERSION |
+      (G80_TSC_WRAP_CLAMP_TO_EDGE << G80_TSC_0_ADDRESS_U__SHIFT) |
+      (G80_TSC_WRAP_CLAMP_TO_EDGE << G80_TSC_0_ADDRESS_V__SHIFT) |
+      (G80_TSC_WRAP_CLAMP_TO_EDGE << G80_TSC_0_ADDRESS_P__SHIFT);
    blit->sampler[0].tsc[1] =
-      NV50_TSC_1_MAGF_NEAREST | NV50_TSC_1_MINF_NEAREST | NV50_TSC_1_MIPF_NONE;
+      G80_TSC_1_MAG_FILTER_NEAREST |
+      G80_TSC_1_MIN_FILTER_NEAREST |
+      G80_TSC_1_MIP_FILTER_NONE;
 
    /* clamp to edge, min/max lod = 0, bilinear filtering */
 
@@ -880,7 +886,9 @@ nvc0_blitter_make_sampler(struct nvc0_blitter *blit)
 
    blit->sampler[1].tsc[0] = blit->sampler[0].tsc[0];
    blit->sampler[1].tsc[1] =
-      NV50_TSC_1_MAGF_LINEAR | NV50_TSC_1_MINF_LINEAR | NV50_TSC_1_MIPF_NONE;
+      G80_TSC_1_MAG_FILTER_LINEAR |
+      G80_TSC_1_MIN_FILTER_LINEAR |
+      G80_TSC_1_MIP_FILTER_NONE;
 }
 
 static void
@@ -1187,7 +1195,7 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
 
    nvc0_blitctx_prepare_state(blit);
 
-   nvc0_state_validate(nvc0, ~0, 48);
+   nvc0_state_validate(nvc0, ~0);
 
    x_range = (float)info->src.box.width / (float)info->dst.box.width;
    y_range = (float)info->src.box.height / (float)info->dst.box.height;

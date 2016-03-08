@@ -321,7 +321,7 @@ iter_instruction(
    }
 
    info = tgsi_get_opcode_info( inst->Instruction.Opcode );
-   if (info == NULL) {
+   if (!info) {
       report_error( ctx, "(%u): Invalid instruction opcode", inst->Instruction.Opcode );
       return TRUE;
    }

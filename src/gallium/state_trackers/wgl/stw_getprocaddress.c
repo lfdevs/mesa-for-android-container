@@ -74,6 +74,11 @@ static const struct stw_extension_entry stw_extension_entries[] = {
    /* WGL_ARB_create_context */
    STW_EXTENSION_ENTRY( wglCreateContextAttribsARB ),
 
+   /* WGL_ARB_render_texture */
+   STW_EXTENSION_ENTRY( wglBindTexImageARB ),
+   STW_EXTENSION_ENTRY( wglReleaseTexImageARB ),
+   STW_EXTENSION_ENTRY( wglSetPbufferAttribARB ),
+
    { NULL, NULL }
 };
 

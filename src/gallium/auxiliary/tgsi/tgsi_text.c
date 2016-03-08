@@ -1039,6 +1039,12 @@ parse_instruction(
       inst.Texture.Texture = TGSI_TEXTURE_UNKNOWN;
    }
 
+   if ((i >= TGSI_OPCODE_LOAD && i <= TGSI_OPCODE_ATOMIMAX) ||
+       i == TGSI_OPCODE_RESQ) {
+      inst.Instruction.Memory = 1;
+      inst.Memory.Qualifier = 0;
+   }
+
    /* Parse instruction operands.
     */
    for (i = 0; i < info->num_dst + info->num_src + info->is_tex; i++) {
@@ -1089,6 +1095,27 @@ parse_instruction(
          eat_opt_white( &cur );
    }
    inst.Texture.NumOffsets = i;
+
+   cur = ctx->cur;
+   eat_opt_white(&cur);
+   for (i = 0; inst.Instruction.Memory && *cur == ','; i++) {
+      uint j;
+      cur++;
+      eat_opt_white(&cur);
+      ctx->cur = cur;
+      for (j = 0; j < 3; j++) {
+         if (str_match_nocase_whole(&ctx->cur, tgsi_memory_names[j])) {
+            inst.Memory.Qualifier |= 1U << j;
+            break;
+         }
+      }
+      if (j == 3) {
+         report_error(ctx, "Expected memory qualifier");
+         return FALSE;
+      }
+      cur = ctx->cur;
+      eat_opt_white(&cur);
+   }
 
    cur = ctx->cur;
    eat_opt_white( &cur );
@@ -1251,10 +1278,10 @@ static boolean parse_declaration( struct translate_ctx *ctx )
 
       cur++;
       eat_opt_white( &cur );
-      if (file == TGSI_FILE_RESOURCE) {
+      if (file == TGSI_FILE_IMAGE) {
          for (i = 0; i < TGSI_TEXTURE_COUNT; i++) {
             if (str_match_nocase_whole(&cur, tgsi_texture_names[i])) {
-               decl.Resource.Resource = i;
+               decl.Image.Resource = i;
                break;
             }
          }
@@ -1269,13 +1296,22 @@ static boolean parse_declaration( struct translate_ctx *ctx )
             cur2++;
             eat_opt_white(&cur2);
             if (str_match_nocase_whole(&cur2, "RAW")) {
-               decl.Resource.Raw = 1;
+               decl.Image.Raw = 1;
 
             } else if (str_match_nocase_whole(&cur2, "WR")) {
-               decl.Resource.Writable = 1;
+               decl.Image.Writable = 1;
 
             } else {
-               break;
+               for (i = 0; i < PIPE_FORMAT_COUNT; i++) {
+                  const struct util_format_description *desc =
+                     util_format_description(i);
+                  if (desc && str_match_nocase_whole(&cur2, desc->name)) {
+                     decl.Image.Format = i;
+                     break;
+                  }
+               }
+               if (i == PIPE_FORMAT_COUNT)
+                  break;
             }
             cur = cur2;
             eat_opt_white(&cur2);
@@ -1348,6 +1384,14 @@ static boolean parse_declaration( struct translate_ctx *ctx )
                decl.SamplerView.ReturnTypeX;
          }
          ctx->cur = cur;
+      } else if (file == TGSI_FILE_BUFFER) {
+         if (str_match_nocase_whole(&cur, "ATOMIC")) {
+            decl.Declaration.Atomic = 1;
+            ctx->cur = cur;
+         } else if (str_match_nocase_whole(&cur, "SHARED")) {
+            decl.Declaration.Shared = 1;
+            ctx->cur = cur;
+         }
       } else {
          if (str_match_nocase_whole(&cur, "LOCAL")) {
             decl.Declaration.Local = 1;

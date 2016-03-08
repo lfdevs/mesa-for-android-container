@@ -1186,7 +1186,7 @@ _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
 
 out:
    tgsi_parse_free(&parse);
-   if(fpc)
+   if (fpc)
    {
       FREE(fpc->r_temp);
       FREE(fpc->r_imm);

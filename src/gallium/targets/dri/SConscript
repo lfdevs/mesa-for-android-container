@@ -41,6 +41,7 @@ env.Prepend(LIBS = [
     pipe_loader,
     libloader,
     mesautil,
+    compiler,
     mesa,
     glsl,
     gallium,

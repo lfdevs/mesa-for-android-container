@@ -31,7 +31,7 @@
 #define SI_SH_REG_OFFSET                     0x0000B000
 #define SI_SH_REG_END                        0x0000C000
 #define CIK_UCONFIG_REG_OFFSET               0x00030000
-#define CIK_UCONFIG_REG_END                  0x00031000
+#define CIK_UCONFIG_REG_END                  0x00038000
 
 #define PKT_TYPE_S(x)                   (((x) & 0x3) << 30)
 #define PKT_COUNT_S(x)                  (((x) & 0x3FFF) << 16)
@@ -53,8 +53,16 @@
 #define		STRMOUT_SELECT_BUFFER(x)	(((x) & 0x3) << 8)
 #define PKT3_WAIT_REG_MEM                      0x3C
 #define		WAIT_REG_MEM_EQUAL		3
+#define         WAIT_REG_MEM_MEM_SPACE(x)       (((x) & 0x3) << 4)
 #define PKT3_EVENT_WRITE                       0x46
 #define PKT3_EVENT_WRITE_EOP                   0x47
+#define         EOP_DATA_SEL(x)                         ((x) << 29)
+		/* 0 - discard
+		 * 1 - send low 32bit data
+		 * 2 - send 64bit data
+		 * 3 - send 64bit GPU counter value
+		 * 4 - send 64bit sys counter value
+		 */
 #define PKT3_SET_CONFIG_REG		       0x68
 #define PKT3_SET_CONTEXT_REG		       0x69
 #define PKT3_STRMOUT_BASE_UPDATE	       0x72 /* r700 only */
@@ -73,8 +81,11 @@
 #define EVENT_TYPE_CACHE_FLUSH_AND_INV_TS_EVENT 0x14
 #define EVENT_TYPE_ZPASS_DONE                  0x15
 #define EVENT_TYPE_CACHE_FLUSH_AND_INV_EVENT   0x16
+#define EVENT_TYPE_PERFCOUNTER_START            0x17
+#define EVENT_TYPE_PERFCOUNTER_STOP             0x18
 #define EVENT_TYPE_PIPELINESTAT_START		25
 #define EVENT_TYPE_PIPELINESTAT_STOP		26
+#define EVENT_TYPE_PERFCOUNTER_SAMPLE           0x1B
 #define EVENT_TYPE_SAMPLE_PIPELINESTAT		30
 #define EVENT_TYPE_SO_VGTSTREAMOUT_FLUSH	0x1f
 #define EVENT_TYPE_SAMPLE_STREAMOUTSTATS	0x20

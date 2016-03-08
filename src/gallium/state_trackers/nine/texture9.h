@@ -48,28 +48,28 @@ NineTexture9_new( struct NineDevice9 *pDevice,
                   struct NineTexture9 **ppOut,
                   HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_GetLevelDesc( struct NineTexture9 *This,
                            UINT Level,
                            D3DSURFACE_DESC *pDesc );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_GetSurfaceLevel( struct NineTexture9 *This,
                               UINT Level,
                               IDirect3DSurface9 **ppSurfaceLevel );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_LockRect( struct NineTexture9 *This,
                        UINT Level,
                        D3DLOCKED_RECT *pLockedRect,
                        const RECT *pRect,
                        DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_UnlockRect( struct NineTexture9 *This,
                          UINT Level );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineTexture9_AddDirtyRect( struct NineTexture9 *This,
                            const RECT *pDirtyRect );
 

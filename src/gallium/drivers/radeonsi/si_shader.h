@@ -75,11 +75,13 @@
 struct radeon_shader_binary;
 struct radeon_shader_reloc;
 
+#define SI_MAX_VS_OUTPUTS	40
+
 #define SI_SGPR_RW_BUFFERS	0  /* rings (& stream-out, VS only) */
-#define SI_SGPR_CONST		2
-#define SI_SGPR_SAMPLER		4
-#define SI_SGPR_RESOURCE	6
-#define SI_SGPR_VERTEX_BUFFER	8  /* VS only */
+#define SI_SGPR_CONST_BUFFERS	2
+#define SI_SGPR_SAMPLERS	4  /* images & sampler states interleaved */
+/* TODO: gap */
+#define SI_SGPR_VERTEX_BUFFERS	8  /* VS only */
 #define SI_SGPR_BASE_VERTEX	10 /* VS only */
 #define SI_SGPR_START_INSTANCE	11 /* VS only */
 #define SI_SGPR_VS_STATE_BITS	12 /* VS(VS) only */
@@ -88,7 +90,6 @@ struct radeon_shader_reloc;
 #define SI_SGPR_TCS_OUT_LAYOUT	9  /* TCS & TES only */
 #define SI_SGPR_TCS_IN_LAYOUT	10 /* TCS only */
 #define SI_SGPR_ALPHA_REF	8  /* PS only */
-#define SI_SGPR_PS_STATE_BITS	9  /* PS only */
 
 #define SI_VS_NUM_USER_SGPR	13 /* API VS */
 #define SI_ES_NUM_USER_SGPR	12 /* API VS */
@@ -97,16 +98,16 @@ struct radeon_shader_reloc;
 #define SI_TES_NUM_USER_SGPR	10
 #define SI_GS_NUM_USER_SGPR	8
 #define SI_GSCOPY_NUM_USER_SGPR	4
-#define SI_PS_NUM_USER_SGPR	10
+#define SI_PS_NUM_USER_SGPR	9
 
 /* LLVM function parameter indices */
 #define SI_PARAM_RW_BUFFERS	0
-#define SI_PARAM_CONST		1
-#define SI_PARAM_SAMPLER	2
-#define SI_PARAM_RESOURCE	3
+#define SI_PARAM_CONST_BUFFERS	1
+#define SI_PARAM_SAMPLERS	2
+#define SI_PARAM_UNUSED		3 /* TODO: use */
 
 /* VS only parameters */
-#define SI_PARAM_VERTEX_BUFFER	4
+#define SI_PARAM_VERTEX_BUFFERS	4
 #define SI_PARAM_BASE_VERTEX	5
 #define SI_PARAM_START_INSTANCE	6
 /* [0] = clamp vertex color */
@@ -152,29 +153,25 @@ struct radeon_shader_reloc;
 
 /* PS only parameters */
 #define SI_PARAM_ALPHA_REF		4
-/* Bits:
- * 0: force_persample_interp
- */
-#define SI_PARAM_PS_STATE_BITS		5
-#define SI_PARAM_PRIM_MASK		6
-#define SI_PARAM_PERSP_SAMPLE		7
-#define SI_PARAM_PERSP_CENTER		8
-#define SI_PARAM_PERSP_CENTROID		9
-#define SI_PARAM_PERSP_PULL_MODEL	10
-#define SI_PARAM_LINEAR_SAMPLE		11
-#define SI_PARAM_LINEAR_CENTER		12
-#define SI_PARAM_LINEAR_CENTROID	13
-#define SI_PARAM_LINE_STIPPLE_TEX	14
-#define SI_PARAM_POS_X_FLOAT		15
-#define SI_PARAM_POS_Y_FLOAT		16
-#define SI_PARAM_POS_Z_FLOAT		17
-#define SI_PARAM_POS_W_FLOAT		18
-#define SI_PARAM_FRONT_FACE		19
-#define SI_PARAM_ANCILLARY		20
-#define SI_PARAM_SAMPLE_COVERAGE	21
-#define SI_PARAM_POS_FIXED_PT		22
+#define SI_PARAM_PRIM_MASK		5
+#define SI_PARAM_PERSP_SAMPLE		6
+#define SI_PARAM_PERSP_CENTER		7
+#define SI_PARAM_PERSP_CENTROID		8
+#define SI_PARAM_PERSP_PULL_MODEL	9
+#define SI_PARAM_LINEAR_SAMPLE		10
+#define SI_PARAM_LINEAR_CENTER		11
+#define SI_PARAM_LINEAR_CENTROID	12
+#define SI_PARAM_LINE_STIPPLE_TEX	13
+#define SI_PARAM_POS_X_FLOAT		14
+#define SI_PARAM_POS_Y_FLOAT		15
+#define SI_PARAM_POS_Z_FLOAT		16
+#define SI_PARAM_POS_W_FLOAT		17
+#define SI_PARAM_FRONT_FACE		18
+#define SI_PARAM_ANCILLARY		19
+#define SI_PARAM_SAMPLE_COVERAGE	20
+#define SI_PARAM_POS_FIXED_PT		21
 
-#define SI_NUM_PARAMS (SI_PARAM_POS_FIXED_PT + 1)
+#define SI_NUM_PARAMS (SI_PARAM_POS_FIXED_PT + 9) /* +8 for COLOR[0..1] */
 
 struct si_shader;
 
@@ -186,6 +183,11 @@ struct si_shader_selector {
 	struct si_shader	*first_variant; /* immutable after the first variant */
 	struct si_shader	*last_variant; /* mutable */
 
+	/* The compiled TGSI shader expecting a prolog and/or epilog (not
+	 * uploaded to a buffer).
+	 */
+	struct si_shader	*main_shader_part;
+
 	struct tgsi_token       *tokens;
 	struct pipe_stream_output_info  so;
 	struct tgsi_shader_info		info;
@@ -193,14 +195,7 @@ struct si_shader_selector {
 	/* PIPE_SHADER_[VERTEX|FRAGMENT|...] */
 	unsigned	type;
 
-	/* Whether the shader has to use a conditional assignment to
-	 * choose between weights when emulating
-	 * pipe_rasterizer_state::force_persample_interp.
-	 * If false, "si_emit_spi_ps_input" will take care of it instead.
-	 */
-	bool		forces_persample_interp_for_persp;
-	bool		forces_persample_interp_for_linear;
-
+	/* GS parameters. */
 	unsigned	esgs_itemsize;
 	unsigned	gs_input_verts_per_prim;
 	unsigned	gs_output_prim;
@@ -210,10 +205,17 @@ struct si_shader_selector {
 	unsigned	gsvs_vertex_size;
 	unsigned	max_gsvs_emit_size;
 
+	/* PS parameters. */
+	unsigned	color_attr_index[2];
+	unsigned	db_shader_control;
+	/* Set 0xf or 0x0 (4 bits) per each written output.
+	 * ANDed with spi_shader_col_format.
+	 */
+	unsigned	colors_written_4bit;
+
 	/* masks of "get_unique_index" bits */
 	uint64_t	outputs_written;
 	uint32_t	patch_outputs_written;
-	uint32_t	ps_colors_written;
 };
 
 /* Valid shader configurations:
@@ -227,71 +229,154 @@ struct si_shader_selector {
  * With both:        LS | HS  | ES  | GS | VS | PS
  */
 
+/* Common VS bits between the shader key and the prolog key. */
+struct si_vs_prolog_bits {
+	unsigned	instance_divisors[SI_NUM_VERTEX_BUFFERS];
+};
+
+/* Common VS bits between the shader key and the epilog key. */
+struct si_vs_epilog_bits {
+	unsigned	export_prim_id:1; /* when PS needs it and GS is disabled */
+	/* TODO:
+	 * - skip clipdist, culldist (including clipvertex code) exports based
+	 *   on which clip_plane_enable bits are set
+	 * - skip layer, viewport, clipdist, and culldist parameter exports
+	 *   if PS doesn't read them
+	 */
+};
+
+/* Common TCS bits between the shader key and the epilog key. */
+struct si_tcs_epilog_bits {
+	unsigned	prim_mode:3;
+};
+
+/* Common PS bits between the shader key and the prolog key. */
+struct si_ps_prolog_bits {
+	unsigned	color_two_side:1;
+	/* TODO: add a flatshade bit that skips interpolation for colors */
+	unsigned	poly_stipple:1;
+	unsigned	force_persample_interp:1;
+	/* TODO:
+	 * - add force_center_interp if MSAA is disabled and centroid or
+	 *   sample are present
+	 * - add force_center_interp_bc_optimize to force center interpolation
+	 *   based on the bc_optimize SGPR bit if MSAA is enabled, centroid is
+	 *   present and sample isn't present.
+	 */
+};
+
+/* Common PS bits between the shader key and the epilog key. */
+struct si_ps_epilog_bits {
+	unsigned	spi_shader_col_format;
+	unsigned	color_is_int8:8;
+	unsigned	last_cbuf:3;
+	unsigned	alpha_func:3;
+	unsigned	alpha_to_one:1;
+	unsigned	poly_line_smoothing:1;
+	unsigned	clamp_color:1;
+};
+
+union si_shader_part_key {
+	struct {
+		struct si_vs_prolog_bits states;
+		unsigned	num_input_sgprs:5;
+		unsigned	last_input:4;
+	} vs_prolog;
+	struct {
+		struct si_vs_epilog_bits states;
+		unsigned	prim_id_param_offset:5;
+	} vs_epilog;
+	struct {
+		struct si_tcs_epilog_bits states;
+	} tcs_epilog;
+	struct {
+		struct si_ps_prolog_bits states;
+		unsigned	num_input_sgprs:5;
+		unsigned	num_input_vgprs:5;
+		/* Color interpolation and two-side color selection. */
+		unsigned	colors_read:8; /* color input components read */
+		unsigned	num_interp_inputs:5; /* BCOLOR is at this location */
+		unsigned	face_vgpr_index:5;
+		char		color_attr_index[2];
+		char		color_interp_vgpr_index[2]; /* -1 == constant */
+	} ps_prolog;
+	struct {
+		struct si_ps_epilog_bits states;
+		unsigned	colors_written:8;
+		unsigned	writes_z:1;
+		unsigned	writes_stencil:1;
+		unsigned	writes_samplemask:1;
+	} ps_epilog;
+};
+
 union si_shader_key {
 	struct {
-		unsigned	export_16bpc:8;
-		unsigned	last_cbuf:3;
-		unsigned	color_two_side:1;
-		unsigned	alpha_func:3;
-		unsigned	alpha_to_one:1;
-		unsigned	poly_stipple:1;
-		unsigned	poly_line_smoothing:1;
-		unsigned	clamp_color:1;
+		struct si_ps_prolog_bits prolog;
+		struct si_ps_epilog_bits epilog;
 	} ps;
 	struct {
-		unsigned	instance_divisors[SI_NUM_VERTEX_BUFFERS];
-		/* Mask of "get_unique_index" bits - which outputs are read
-		 * by the next stage (needed by ES).
-		 * This describes how outputs are laid out in memory. */
+		struct si_vs_prolog_bits prolog;
+		struct si_vs_epilog_bits epilog;
 		unsigned	as_es:1; /* export shader */
 		unsigned	as_ls:1; /* local shader */
-		unsigned	export_prim_id:1; /* when PS needs it and GS is disabled */
 	} vs;
 	struct {
-		unsigned	prim_mode:3;
+		struct si_tcs_epilog_bits epilog;
 	} tcs; /* tessellation control shader */
 	struct {
-		/* Mask of "get_unique_index" bits - which outputs are read
-		 * by the next stage (needed by ES).
-		 * This describes how outputs are laid out in memory. */
+		struct si_vs_epilog_bits epilog; /* same as VS */
 		unsigned	as_es:1; /* export shader */
-		unsigned	export_prim_id:1; /* when PS needs it and GS is disabled */
 	} tes; /* tessellation evaluation shader */
+};
+
+struct si_shader_config {
+	unsigned			num_sgprs;
+	unsigned			num_vgprs;
+	unsigned			lds_size;
+	unsigned			spi_ps_input_ena;
+	unsigned			spi_ps_input_addr;
+	unsigned			float_mode;
+	unsigned			scratch_bytes_per_wave;
+	unsigned			rsrc1;
+	unsigned			rsrc2;
+};
+
+/* GCN-specific shader info. */
+struct si_shader_info {
+	ubyte			vs_output_param_offset[SI_MAX_VS_OUTPUTS];
+	ubyte			num_input_sgprs;
+	ubyte			num_input_vgprs;
+	char			face_vgpr_index;
+	bool			uses_instanceid;
+	ubyte			nr_pos_exports;
+	ubyte			nr_param_exports;
 };
 
 struct si_shader {
 	struct si_shader_selector	*selector;
 	struct si_shader		*next_variant;
 
+	struct si_shader_part		*prolog;
+	struct si_shader_part		*epilog;
+
 	struct si_shader		*gs_copy_shader;
 	struct si_pm4_state		*pm4;
 	struct r600_resource		*bo;
 	struct r600_resource		*scratch_bo;
-	struct radeon_shader_binary	binary;
-	unsigned			num_sgprs;
-	unsigned			num_vgprs;
-	unsigned			lds_size;
-	unsigned			spi_ps_input_ena;
-	unsigned			float_mode;
-	unsigned			scratch_bytes_per_wave;
-	unsigned			spi_shader_col_format;
-	unsigned			spi_shader_z_format;
-	unsigned			db_shader_control;
-	unsigned			cb_shader_mask;
 	union si_shader_key		key;
+	bool				is_binary_shared;
 
-	unsigned		nparam;
-	unsigned		vs_output_param_offset[PIPE_MAX_SHADER_OUTPUTS];
-	unsigned		ps_input_param_offset[PIPE_MAX_SHADER_INPUTS];
-	unsigned		ps_input_interpolate[PIPE_MAX_SHADER_INPUTS];
-	bool			uses_instanceid;
-	unsigned		nr_pos_exports;
-	unsigned		nr_param_exports;
-	bool			is_gs_copy_shader;
-	bool			dx10_clamp_mode; /* convert NaNs to 0 */
+	/* The following data is all that's needed for binary shaders. */
+	struct radeon_shader_binary	binary;
+	struct si_shader_config		config;
+	struct si_shader_info		info;
+};
 
-	unsigned		rsrc1;
-	unsigned		rsrc2;
+struct si_shader_part {
+	struct si_shader_part *next;
+	union si_shader_part_key key;
+	struct radeon_shader_binary binary;
+	struct si_shader_config config;
 };
 
 static inline struct tgsi_shader_info *si_get_vs_info(struct si_context *sctx)
@@ -319,28 +404,41 @@ static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 static inline bool si_vs_exports_prim_id(struct si_shader *shader)
 {
 	if (shader->selector->type == PIPE_SHADER_VERTEX)
-		return shader->key.vs.export_prim_id;
+		return shader->key.vs.epilog.export_prim_id;
 	else if (shader->selector->type == PIPE_SHADER_TESS_EVAL)
-		return shader->key.tes.export_prim_id;
+		return shader->key.tes.epilog.export_prim_id;
 	else
 		return false;
 }
 
-/* radeonsi_shader.c */
+/* si_shader.c */
+int si_compile_tgsi_shader(struct si_screen *sscreen,
+			   LLVMTargetMachineRef tm,
+			   struct si_shader *shader,
+			   bool is_monolithic,
+			   struct pipe_debug_callback *debug);
 int si_shader_create(struct si_screen *sscreen, LLVMTargetMachineRef tm,
-		     struct si_shader *shader);
+		     struct si_shader *shader,
+		     struct pipe_debug_callback *debug);
 void si_dump_shader_key(unsigned shader, union si_shader_key *key, FILE *f);
-int si_compile_llvm(struct si_screen *sscreen, struct si_shader *shader,
-		    LLVMTargetMachineRef tm, LLVMModuleRef mod);
+int si_compile_llvm(struct si_screen *sscreen,
+		    struct radeon_shader_binary *binary,
+		    struct si_shader_config *conf,
+		    LLVMTargetMachineRef tm,
+		    LLVMModuleRef mod,
+		    struct pipe_debug_callback *debug,
+		    unsigned processor,
+		    const char *name);
 void si_shader_destroy(struct si_shader *shader);
 unsigned si_shader_io_get_unique_index(unsigned semantic_name, unsigned index);
 int si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader);
-int si_shader_binary_read(struct si_screen *sscreen, struct si_shader *shader);
+void si_shader_dump(struct si_screen *sscreen, struct si_shader *shader,
+		    struct pipe_debug_callback *debug, unsigned processor);
 void si_shader_apply_scratch_relocs(struct si_context *sctx,
 			struct si_shader *shader,
 			uint64_t scratch_va);
-void si_shader_binary_read_config(const struct si_screen *sscreen,
-				struct si_shader *shader,
-				unsigned symbol_offset);
+void si_shader_binary_read_config(struct radeon_shader_binary *binary,
+				  struct si_shader_config *conf,
+				  unsigned symbol_offset);
 
 #endif

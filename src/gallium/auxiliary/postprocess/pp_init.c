@@ -58,7 +58,7 @@ pp_init(struct pipe_context *pipe, const unsigned int *enabled,
 
    ppq = CALLOC(1, sizeof(struct pp_queue_t));
 
-   if (ppq == NULL) {
+   if (!ppq) {
       pp_debug("Unable to allocate memory for ppq.\n");
       goto error;
    }

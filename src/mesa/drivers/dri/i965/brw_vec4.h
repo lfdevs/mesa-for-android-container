@@ -24,28 +24,15 @@
 #ifndef BRW_VEC4_H
 #define BRW_VEC4_H
 
-#include <stdint.h>
 #include "brw_shader.h"
-#include "main/compiler.h"
-#include "program/hash_table.h"
 #include "brw_program.h"
 
 #ifdef __cplusplus
 #include "brw_ir_vec4.h"
-
-extern "C" {
 #endif
 
-#include "brw_context.h"
-#include "brw_eu.h"
-#include "intel_asm_annotation.h"
-
-#ifdef __cplusplus
-}; /* extern "C" */
-#endif
-
-#include "glsl/ir.h"
-#include "glsl/nir/nir.h"
+#include "compiler/glsl/ir.h"
+#include "compiler/nir/nir.h"
 
 
 #ifdef __cplusplus
@@ -273,15 +260,12 @@ public:
                      src_reg offset_value,
                      src_reg mcs,
                      bool is_cube_array,
+                     uint32_t surface, src_reg surface_reg,
                      uint32_t sampler, src_reg sampler_reg);
 
-   uint32_t gather_channel(unsigned gather_component, uint32_t sampler);
    src_reg emit_mcs_fetch(const glsl_type *coordinate_type, src_reg coordinate,
-                          src_reg sampler);
+                          src_reg surface);
    void emit_gen6_gather_wa(uint8_t wa, dst_reg dst);
-   void swizzle_result(ir_texture_opcode op, dst_reg dest,
-                       src_reg orig_val, uint32_t sampler,
-                       const glsl_type *dest_type);
 
    void emit_ndc_computation();
    void emit_psiz_and_flags(dst_reg reg);
@@ -323,6 +307,8 @@ public:
 
    void resolve_ud_negate(src_reg *reg);
 
+   bool lower_minmax();
+
    src_reg get_timestamp();
 
    void dump_instruction(backend_instruction *inst);
@@ -330,8 +316,9 @@ public:
 
    bool is_high_sampler(src_reg sampler);
 
+   bool optimize_predicate(nir_alu_instr *instr, enum brw_predicate *predicate);
+
    virtual void emit_nir_code();
-   virtual void nir_setup_inputs();
    virtual void nir_setup_uniforms();
    virtual void nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr);
    virtual void nir_setup_system_values();
@@ -358,13 +345,13 @@ public:
                        unsigned num_components = 4);
    src_reg get_nir_src(nir_src src,
                        unsigned num_components = 4);
+   src_reg get_indirect_offset(nir_intrinsic_instr *instr);
 
    virtual dst_reg *make_reg_for_system_value(int location,
                                               const glsl_type *type) = 0;
 
    dst_reg *nir_locals;
    dst_reg *nir_ssa_values;
-   src_reg *nir_inputs;
    dst_reg *nir_system_values;
 
 protected:

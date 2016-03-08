@@ -462,6 +462,8 @@ struct shader_translator
     boolean lower_preds;
     boolean want_texcoord;
     boolean shift_wpos;
+    boolean wpos_is_sysval;
+    boolean face_is_sysval_integer;
     unsigned texcoord_sn;
 
     struct sm1_instruction insn; /* current instruction */
@@ -828,6 +830,18 @@ nine_ureg_dst_register(unsigned file, int index)
     return ureg_dst(ureg_src_register(file, index));
 }
 
+static inline struct ureg_src
+nine_get_position_input(struct shader_translator *tx)
+{
+    struct ureg_program *ureg = tx->ureg;
+
+    if (tx->wpos_is_sysval)
+        return ureg_DECL_system_value(ureg, TGSI_SEMANTIC_POSITION, 0);
+    else
+        return ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_POSITION,
+                                  0, TGSI_INTERPOLATE_LINEAR);
+}
+
 static struct ureg_src
 tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
 {
@@ -850,7 +864,12 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
             /* the address register (vs only) must be
              * assigned before use */
             assert(!ureg_dst_is_undef(tx->regs.a0));
-            ureg_ARR(ureg, tx->regs.address, ureg_src(tx->regs.a0));
+            /* Round to lowest for vs1.1 (contrary to the doc), else
+             * round to nearest */
+            if (tx->version.major < 2 && tx->version.minor < 2)
+                ureg_ARL(ureg, tx->regs.address, ureg_src(tx->regs.a0));
+            else
+                ureg_ARR(ureg, tx->regs.address, ureg_src(tx->regs.a0));
             src = ureg_src(tx->regs.address);
         } else {
             if (tx->version.major < 2 && tx->version.minor < 4) {
@@ -868,9 +887,12 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         } else {
             if (tx->version.major < 3) {
                 assert(!param->rel);
-                src = ureg_DECL_fs_input(tx->ureg, TGSI_SEMANTIC_COLOR,
-                                         param->idx,
-                                         TGSI_INTERPOLATE_PERSPECTIVE);
+                src = ureg_DECL_fs_input_cyl_centroid(
+                    ureg, TGSI_SEMANTIC_COLOR, param->idx,
+                    TGSI_INTERPOLATE_COLOR, 0,
+                    tx->info->force_color_in_centroid ?
+                      TGSI_INTERPOLATE_LOC_CENTROID : 0,
+                    0, 1);
             } else {
                 assert(!param->rel); /* TODO */
                 assert(param->idx < Elements(tx->regs.v));
@@ -946,9 +968,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         switch (param->idx) {
         case D3DSMO_POSITION:
            if (ureg_src_is_undef(tx->regs.vPos))
-               tx->regs.vPos = ureg_DECL_fs_input(ureg,
-                                                  TGSI_SEMANTIC_POSITION, 0,
-                                                  TGSI_INTERPOLATE_LINEAR);
+              tx->regs.vPos = nine_get_position_input(tx);
            if (tx->shift_wpos) {
                /* TODO: do this only once */
                struct ureg_dst wpos = tx_scratch(tx);
@@ -961,9 +981,20 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
            break;
         case D3DSMO_FACE:
            if (ureg_src_is_undef(tx->regs.vFace)) {
-               tx->regs.vFace = ureg_DECL_fs_input(ureg,
-                                                   TGSI_SEMANTIC_FACE, 0,
-                                                   TGSI_INTERPOLATE_CONSTANT);
+               if (tx->face_is_sysval_integer) {
+                   tmp = tx_scratch(tx);
+                   tx->regs.vFace =
+                       ureg_DECL_system_value(ureg, TGSI_SEMANTIC_FACE, 0);
+
+                   /* convert bool to float */
+                   ureg_UCMP(ureg, tmp, ureg_scalar(tx->regs.vFace, TGSI_SWIZZLE_X),
+                             ureg_imm1f(ureg, 1), ureg_imm1f(ureg, -1));
+                   tx->regs.vFace = ureg_src(tmp);
+               } else {
+                   tx->regs.vFace = ureg_DECL_fs_input(ureg,
+                                                       TGSI_SEMANTIC_FACE, 0,
+                                                       TGSI_INTERPOLATE_CONSTANT);
+               }
                tx->regs.vFace = ureg_scalar(tx->regs.vFace, TGSI_SWIZZLE_X);
            }
            src = tx->regs.vFace;
@@ -1144,12 +1175,9 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
         assert(!param->rel);
         tx->info->rt_mask |= 1 << param->idx;
         if (ureg_dst_is_undef(tx->regs.oCol[param->idx])) {
-            /* ps < 3: oCol[0] will have fog blending afterward
-             * vs < 3: oD1.w (D3DPMISCCAPS_FOGANDSPECULARALPHA) set to 0 even if set */
+            /* ps < 3: oCol[0] will have fog blending afterward */
             if (!IS_VS && tx->version.major < 3 && param->idx == 0) {
                 tx->regs.oCol[0] = ureg_DECL_temporary(tx->ureg);
-            } else if (IS_VS && tx->version.major < 3 && param->idx == 1) {
-                tx->regs.oCol[1] = ureg_DECL_temporary(tx->ureg);
             } else {
                 tx->regs.oCol[param->idx] =
                     ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, param->idx);
@@ -1522,25 +1550,6 @@ DECL_SPECIAL(CALLNZ)
     tx_endcond(tx);
     ureg_ENDIF(ureg);
     return D3D_OK;
-}
-
-DECL_SPECIAL(MOV_vs1x)
-{
-    if (tx->insn.dst[0].file == D3DSPR_ADDR) {
-        /* Implementation note: We don't write directly
-         * to the addr register, but to an intermediate
-         * float register.
-         * Contrary to the doc, when writing to ADDR here,
-         * the rounding is not to nearest, but to lowest
-         * (wine test).
-         * Since we use ARR next, substract 0.5. */
-        ureg_SUB(tx->ureg,
-                 tx_dst_param(tx, &tx->insn.dst[0]),
-                 tx_src_param(tx, &tx->insn.src[0]),
-                 ureg_imm1f(tx->ureg, 0.5f));
-        return D3D_OK;
-    }
-    return NineTranslateInstruction_Generic(tx);
 }
 
 DECL_SPECIAL(LOOP)
@@ -1959,6 +1968,7 @@ nine_tgsi_to_interp_mode(struct tgsi_declaration_semantic *sem)
         return TGSI_INTERPOLATE_LINEAR;
     case TGSI_SEMANTIC_BCOLOR:
     case TGSI_SEMANTIC_COLOR:
+        return TGSI_INTERPOLATE_COLOR;
     case TGSI_SEMANTIC_FOG:
     case TGSI_SEMANTIC_GENERIC:
     case TGSI_SEMANTIC_TEXCOORD:
@@ -2039,13 +2049,24 @@ DECL_SPECIAL(DCL)
         }
     } else {
         if (is_input && tx->version.major >= 3) {
+            unsigned interp_location = 0;
             /* SM3 only, SM2 input semantic determined by file */
             assert(sem.reg.idx < Elements(tx->regs.v));
+
+            if (tgsi.Name == TGSI_SEMANTIC_POSITION) {
+                tx->regs.v[sem.reg.idx] = nine_get_position_input(tx);
+                return D3D_OK;
+            }
+
+            if (sem.reg.mod & NINED3DSPDM_CENTROID ||
+                (tgsi.Name == TGSI_SEMANTIC_COLOR && tx->info->force_color_in_centroid))
+                interp_location = TGSI_INTERPOLATE_LOC_CENTROID;
+
             tx->regs.v[sem.reg.idx] = ureg_DECL_fs_input_cyl_centroid(
                 ureg, tgsi.Name, tgsi.Index,
                 nine_tgsi_to_interp_mode(&tgsi),
                 0, /* cylwrap */
-                sem.reg.mod & NINED3DSPDM_CENTROID, 0, 1);
+                interp_location, 0, 1);
         } else
         if (!is_input && 0) { /* declare in COLOROUT/DEPTHOUT case */
             /* FragColor or FragDepth */
@@ -2717,8 +2738,7 @@ DECL_SPECIAL(COMMENT)
 struct sm1_op_info inst_table[] =
 {
     _OPI(NOP, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 0, 0, NULL), /* 0 */
-    _OPI(MOV, MOV, V(0,0), V(1,1), V(0,0), V(0,0), 1, 1, SPECIAL(MOV_vs1x)),
-    _OPI(MOV, MOV, V(2,0), V(3,0), V(0,0), V(3,0), 1, 1, NULL),
+    _OPI(MOV, MOV, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, NULL),
     _OPI(ADD, ADD, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 2 */
     _OPI(SUB, SUB, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 3 */
     _OPI(MAD, MAD, V(0,0), V(3,0), V(0,0), V(3,0), 1, 3, NULL), /* 4 */
@@ -3259,10 +3279,10 @@ shader_add_ps_fog_stage(struct shader_translator *tx, struct ureg_src src_col)
         return;
     }
 
-    if (tx->info->fog_mode != D3DFOG_NONE)
-        depth = ureg_scalar(ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_POSITION, 0,
-                                              TGSI_INTERPOLATE_LINEAR),
-                                              TGSI_SWIZZLE_Z);
+    if (tx->info->fog_mode != D3DFOG_NONE) {
+        depth = nine_get_position_input(tx);
+        depth = ureg_scalar(depth, TGSI_SWIZZLE_Z);
+    }
 
     nine_info_mark_const_f_used(tx->info, 33);
     fog_color = NINE_CONSTANT_SRC(32);
@@ -3344,6 +3364,8 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     tx->shift_wpos = !GET_CAP(TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
     tx->texcoord_sn = tx->want_texcoord ?
         TGSI_SEMANTIC_TEXCOORD : TGSI_SEMANTIC_GENERIC;
+    tx->wpos_is_sysval = GET_CAP(TGSI_FS_POSITION_IS_SYSVAL);
+    tx->face_is_sysval_integer = GET_CAP(TGSI_FS_FACE_IS_INTEGER_SYSVAL);
 
     if (IS_VS) {
         tx->num_constf_allowed = NINE_MAX_CONST_F;
@@ -3398,13 +3420,6 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     if (IS_VS && tx->version.major < 3 && ureg_dst_is_undef(tx->regs.oFog) && info->fog_enable) {
         tx->regs.oFog = ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_FOG, 0);
         ureg_MOV(tx->ureg, ureg_writemask(tx->regs.oFog, TGSI_WRITEMASK_X), ureg_imm1f(tx->ureg, 0.0f));
-    }
-
-    /* vs < 3: oD1.w (D3DPMISCCAPS_FOGANDSPECULARALPHA) set to 0 even if set */
-    if (IS_VS && tx->version.major < 3 && !ureg_dst_is_undef(tx->regs.oCol[1])) {
-        struct ureg_dst dst = ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, 1);
-        ureg_MOV(tx->ureg, ureg_writemask(dst, TGSI_WRITEMASK_XYZ), ureg_src(tx->regs.oCol[1]));
-        ureg_MOV(tx->ureg, ureg_writemask(dst, TGSI_WRITEMASK_W), ureg_imm1f(tx->ureg, 0.0f));
     }
 
     if (info->position_t)

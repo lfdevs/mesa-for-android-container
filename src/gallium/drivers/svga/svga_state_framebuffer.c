@@ -196,7 +196,7 @@ emit_fb_vgpu10(struct svga_context *svga)
    /* Setup depth stencil view */
    if (curr->zsbuf) {
       dsv = svga_validate_surface_view(svga, svga_surface(curr->zsbuf));
-      if (dsv == NULL) {
+      if (!dsv) {
          return PIPE_ERROR_OUT_OF_MEMORY;
       }
    }

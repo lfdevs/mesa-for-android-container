@@ -41,6 +41,12 @@
 #define GET_BITS(data, high, low) ((data & INTEL_MASK((high), (low))) >> (low))
 #define GET_FIELD(word, field) (((word)  & field ## _MASK) >> field ## _SHIFT)
 
+/**
+ * For use with masked MMIO registers where the upper 16 bits control which
+ * of the lower bits are committed to the register.
+ */
+#define REG_MASK(value) ((value) << 16)
+
 #ifndef BRW_DEFINES_H
 #define BRW_DEFINES_H
 
@@ -962,19 +968,8 @@ enum opcode {
     *
     * LOGICAL opcodes are eventually translated to the matching non-LOGICAL
     * opcode but instead of taking a single payload blob they expect their
-    * arguments separately as individual sources:
-    *
-    * Source 0: [optional] Texture coordinates.
-    * Source 1: [optional] Shadow comparitor.
-    * Source 2: [optional] dPdx if the operation takes explicit derivatives,
-    *                      otherwise LOD value.
-    * Source 3: [optional] dPdy if the operation takes explicit derivatives.
-    * Source 4: [optional] Sample index.
-    * Source 5: [optional] MCS data.
-    * Source 6: [required] Texture sampler.
-    * Source 7: [optional] Texel offset.
-    * Source 8: [required] Number of coordinate components (as UD immediate).
-    * Source 9: [required] Number derivative components (as UD immediate).
+    * arguments separately as individual sources. The position/ordering of the
+    * arguments are defined by the enum tex_logical_srcs.
     */
    SHADER_OPCODE_TEX,
    SHADER_OPCODE_TEX_LOGICAL,
@@ -1078,6 +1073,18 @@ enum opcode {
     * specified as second source.  Useful for variable indexing of surfaces.
     */
    SHADER_OPCODE_BROADCAST,
+
+   /**
+    * Pick the byte from its first source register given by the index
+    * specified as second source.
+    */
+   SHADER_OPCODE_EXTRACT_BYTE,
+
+   /**
+    * Pick the word from its first source register given by the index
+    * specified as second source.
+    */
+   SHADER_OPCODE_EXTRACT_WORD,
 
    VEC4_OPCODE_MOV_BYTES,
    VEC4_OPCODE_PACK_BYTES,
@@ -1299,6 +1306,21 @@ enum opcode {
     *           UD immediate).
     */
    SHADER_OPCODE_MOV_INDIRECT,
+
+   VEC4_OPCODE_URB_READ,
+   TCS_OPCODE_GET_INSTANCE_ID,
+   TCS_OPCODE_URB_WRITE,
+   TCS_OPCODE_SET_INPUT_URB_OFFSETS,
+   TCS_OPCODE_SET_OUTPUT_URB_OFFSETS,
+   TCS_OPCODE_GET_PRIMITIVE_ID,
+   TCS_OPCODE_CREATE_BARRIER_HEADER,
+   TCS_OPCODE_SRC0_010_IS_ZERO,
+   TCS_OPCODE_RELEASE_INPUT,
+   TCS_OPCODE_THREAD_END,
+
+   TES_OPCODE_GET_PRIMITIVE_ID,
+   TES_OPCODE_CREATE_INPUT_READ_HEADER,
+   TES_OPCODE_ADD_INDIRECT_URB_OFFSET,
 };
 
 enum brw_urb_write_flags {
@@ -1369,6 +1391,33 @@ enum fb_write_logical_srcs {
    FB_WRITE_LOGICAL_SRC_SRC_STENCIL, /* gl_FragStencilRefARB */
    FB_WRITE_LOGICAL_SRC_OMASK,       /* Sample Mask (gl_SampleMask) */
    FB_WRITE_LOGICAL_SRC_COMPONENTS,  /* REQUIRED */
+};
+
+enum tex_logical_srcs {
+   /** Texture coordinates */
+   TEX_LOGICAL_SRC_COORDINATE,
+   /** Shadow comparitor */
+   TEX_LOGICAL_SRC_SHADOW_C,
+   /** dPdx if the operation takes explicit derivatives, otherwise LOD value */
+   TEX_LOGICAL_SRC_LOD,
+   /** dPdy if the operation takes explicit derivatives */
+   TEX_LOGICAL_SRC_LOD2,
+   /** Sample index */
+   TEX_LOGICAL_SRC_SAMPLE_INDEX,
+   /** MCS data */
+   TEX_LOGICAL_SRC_MCS,
+   /** REQUIRED: Texture surface index */
+   TEX_LOGICAL_SRC_SURFACE,
+   /** Texture sampler index */
+   TEX_LOGICAL_SRC_SAMPLER,
+   /** Texel offset for gathers */
+   TEX_LOGICAL_SRC_OFFSET_VALUE,
+   /** REQUIRED: Number of coordinate components (as UD immediate) */
+   TEX_LOGICAL_SRC_COORD_COMPONENTS,
+   /** REQUIRED: Number of derivative components (as UD immediate) */
+   TEX_LOGICAL_SRC_GRAD_COMPONENTS,
+
+   TEX_LOGICAL_NUM_SRCS,
 };
 
 #ifdef __cplusplus
@@ -1719,6 +1768,19 @@ enum brw_message_target {
 #define HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP                     11
 #define HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP_SIMD4X2             12
 #define HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE                   13
+
+/* Dataport special binding table indices: */
+#define BRW_BTI_STATELESS                255
+#define GEN7_BTI_SLM                     254
+/* Note that on Gen8+ BTI 255 was redefined to be IA-coherent according to the
+ * hardware spec, however because the DRM sets bit 4 of HDC_CHICKEN0 on BDW,
+ * CHV and at least some pre-production steppings of SKL due to
+ * WaForceEnableNonCoherent, HDC memory access may have been overridden by the
+ * kernel to be non-coherent (matching the behavior of the same BTI on
+ * pre-Gen8 hardware) and BTI 255 may actually be an alias for BTI 253.
+ */
+#define GEN8_BTI_STATELESS_IA_COHERENT   255
+#define GEN8_BTI_STATELESS_NON_COHERENT  253
 
 /* dataport atomic operations. */
 #define BRW_AOP_AND                   1
@@ -2552,6 +2614,25 @@ enum brw_wm_barycentric_interp_mode {
 #define _3DSTATE_CONSTANT_HS                  0x7819 /* GEN7+ */
 #define _3DSTATE_CONSTANT_DS                  0x781A /* GEN7+ */
 
+/* Resource streamer gather constants */
+#define _3DSTATE_GATHER_POOL_ALLOC            0x791A /* GEN7.5+ */
+#define HSW_GATHER_POOL_ALLOC_MUST_BE_ONE     (3 << 4) /* GEN7.5 only */
+
+#define _3DSTATE_GATHER_CONSTANT_VS           0x7834 /* GEN7.5+ */
+#define _3DSTATE_GATHER_CONSTANT_GS           0x7835
+#define _3DSTATE_GATHER_CONSTANT_HS           0x7836
+#define _3DSTATE_GATHER_CONSTANT_DS           0x7837
+#define _3DSTATE_GATHER_CONSTANT_PS           0x7838
+#define HSW_GATHER_CONSTANT_ENABLE            (1 << 11)
+#define HSW_GATHER_CONSTANT_BUFFER_VALID_SHIFT         16
+#define HSW_GATHER_CONSTANT_BUFFER_VALID_MASK          INTEL_MASK(31, 16)
+#define HSW_GATHER_CONSTANT_BINDING_TABLE_BLOCK_SHIFT  12
+#define HSW_GATHER_CONSTANT_BINDING_TABLE_BLOCK_MASK   INTEL_MASK(15, 12)
+#define HSW_GATHER_CONSTANT_CONST_BUFFER_OFFSET_SHIFT  8
+#define HSW_GATHER_CONSTANT_CONST_BUFFER_OFFSET_MASK   INTEL_MASK(15, 8)
+#define HSW_GATHER_CONSTANT_CHANNEL_MASK_SHIFT         4
+#define HSW_GATHER_CONSTANT_CHANNEL_MASK_MASK          INTEL_MASK(7, 4)
+
 #define _3DSTATE_STREAMOUT                    0x781e /* GEN7+ */
 /* DW1 */
 # define SO_FUNCTION_ENABLE				(1 << 31)
@@ -2646,6 +2727,7 @@ enum brw_wm_barycentric_interp_mode {
 # define GEN7_PS_RENDER_TARGET_FAST_CLEAR_ENABLE	(1 << 8)
 # define GEN7_PS_DUAL_SOURCE_BLEND_ENABLE		(1 << 7)
 # define GEN7_PS_RENDER_TARGET_RESOLVE_ENABLE		(1 << 6)
+# define GEN9_PS_RENDER_TARGET_RESOLVE_FULL             (3 << 6)
 # define HSW_PS_UAV_ACCESS_ENABLE			(1 << 5)
 # define GEN7_PS_POSOFFSET_NONE				(0 << 3)
 # define GEN7_PS_POSOFFSET_CENTROID			(2 << 3)
@@ -2846,6 +2928,8 @@ enum brw_wm_barycentric_interp_mode {
 /* GEN7 DW5, GEN8+ DW6 */
 # define MEDIA_BARRIER_ENABLE_SHIFT             21
 # define MEDIA_BARRIER_ENABLE_MASK              INTEL_MASK(21, 21)
+# define MEDIA_SHARED_LOCAL_MEMORY_SIZE_SHIFT   16
+# define MEDIA_SHARED_LOCAL_MEMORY_SIZE_MASK    INTEL_MASK(20, 16)
 # define MEDIA_GPGPU_THREAD_COUNT_SHIFT         0
 # define MEDIA_GPGPU_THREAD_COUNT_MASK          INTEL_MASK(7, 0)
 # define GEN8_MEDIA_GPGPU_THREAD_COUNT_SHIFT    0
@@ -2854,6 +2938,7 @@ enum brw_wm_barycentric_interp_mode {
 #define GPGPU_WALKER                            0x7105
 /* GEN7 DW0 */
 # define GEN7_GPGPU_INDIRECT_PARAMETER_ENABLE   (1 << 10)
+# define GEN7_GPGPU_PREDICATE_ENABLE            (1 << 8)
 /* GEN8+ DW2 */
 # define GPGPU_WALKER_INDIRECT_LENGTH_SHIFT     0
 # define GPGPU_WALKER_INDIRECT_LENGTH_MASK      INTEL_MASK(15, 0)

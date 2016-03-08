@@ -184,7 +184,7 @@ add_blend_test(struct gallivm_state *gallivm,
 
    LLVMBuildStore(builder, res, res_ptr);
 
-   LLVMBuildRetVoid(builder);;
+   LLVMBuildRetVoid(builder);
 
    gallivm_verify_function(gallivm, func);
 
@@ -625,9 +625,9 @@ const struct lp_type blend_types[] = {
 };
 
 
-const unsigned num_funcs = sizeof(blend_funcs)/sizeof(blend_funcs[0]);
-const unsigned num_factors = sizeof(blend_factors)/sizeof(blend_factors[0]);
-const unsigned num_types = sizeof(blend_types)/sizeof(blend_types[0]);
+const unsigned num_funcs = ARRAY_SIZE(blend_funcs);
+const unsigned num_factors = ARRAY_SIZE(blend_factors);
+const unsigned num_types = ARRAY_SIZE(blend_types);
 
 
 boolean

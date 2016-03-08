@@ -72,27 +72,27 @@ NineBaseTexture9_ctor( struct NineBaseTexture9 *This,
 void
 NineBaseTexture9_dtor( struct NineBaseTexture9 *This );
 
-DWORD WINAPI
+DWORD NINE_WINAPI
 NineBaseTexture9_SetLOD( struct NineBaseTexture9 *This,
                          DWORD LODNew );
 
-DWORD WINAPI
+DWORD NINE_WINAPI
 NineBaseTexture9_GetLOD( struct NineBaseTexture9 *This );
 
-DWORD WINAPI
+DWORD NINE_WINAPI
 NineBaseTexture9_GetLevelCount( struct NineBaseTexture9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineBaseTexture9_SetAutoGenFilterType( struct NineBaseTexture9 *This,
                                        D3DTEXTUREFILTERTYPE FilterType );
 
-D3DTEXTUREFILTERTYPE WINAPI
+D3DTEXTUREFILTERTYPE NINE_WINAPI
 NineBaseTexture9_GetAutoGenFilterType( struct NineBaseTexture9 *This );
 
-void WINAPI
+void NINE_WINAPI
 NineBaseTexture9_GenerateMipSubLevels( struct NineBaseTexture9 *This );
 
-void WINAPI
+void NINE_WINAPI
 NineBaseTexture9_PreLoad( struct NineBaseTexture9 *This );
 
 void

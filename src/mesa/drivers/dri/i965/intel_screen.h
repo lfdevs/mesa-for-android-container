@@ -46,8 +46,6 @@ struct intel_screen
 
    bool no_hw;
 
-   bool hw_must_use_separate_stencil;
-
    bool hw_has_swizzling;
 
    int hw_has_timestamp;

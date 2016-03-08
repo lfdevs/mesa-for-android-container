@@ -320,7 +320,8 @@ struct blitter_context *util_blitter_create(struct pipe_context *pipe)
    for (i = 0; i < 4; i++)
       ctx->vertices[i][0][3] = 1; /*v.w*/
 
-   ctx->upload = u_upload_create(pipe, 65536, 4, PIPE_BIND_VERTEX_BUFFER);
+   ctx->upload = u_upload_create(pipe, 65536, PIPE_BIND_VERTEX_BUFFER,
+                                 PIPE_USAGE_STREAM);
 
    return &ctx->base;
 }
@@ -1191,7 +1192,7 @@ static void blitter_draw(struct blitter_context_priv *ctx,
 
    vb.stride = 8 * sizeof(float);
 
-   u_upload_data(ctx->upload, 0, sizeof(ctx->vertices), ctx->vertices,
+   u_upload_data(ctx->upload, 0, sizeof(ctx->vertices), 4, ctx->vertices,
                  &vb.buffer_offset, &vb.buffer);
    if (!vb.buffer)
       return;
@@ -1825,6 +1826,7 @@ void util_blitter_clear_render_target(struct blitter_context *blitter,
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;
    struct pipe_context *pipe = ctx->base.pipe;
    struct pipe_framebuffer_state fb_state;
+   unsigned num_layers;
 
    assert(dstsurf->texture);
    if (!dstsurf->texture)
@@ -1852,10 +1854,19 @@ void util_blitter_clear_render_target(struct blitter_context *blitter,
    pipe->set_framebuffer_state(pipe, &fb_state);
    pipe->set_sample_mask(pipe, ~0);
 
-   blitter_set_common_draw_rect_state(ctx, FALSE, FALSE);
    blitter_set_dst_dimensions(ctx, dstsurf->width, dstsurf->height);
-   blitter->draw_rectangle(blitter, dstx, dsty, dstx+width, dsty+height, 0,
-                           UTIL_BLITTER_ATTRIB_COLOR, color);
+
+   num_layers = dstsurf->u.tex.last_layer - dstsurf->u.tex.first_layer + 1;
+   if (num_layers > 1 && ctx->has_layered) {
+      blitter_set_common_draw_rect_state(ctx, FALSE, TRUE);
+      blitter_set_clear_color(ctx, color);
+      blitter_draw(ctx, dstx, dsty, dstx+width, dsty+height, 0, num_layers);
+   }
+   else {
+      blitter_set_common_draw_rect_state(ctx, FALSE, FALSE);
+      blitter->draw_rectangle(blitter, dstx, dsty, dstx+width, dsty+height, 0,
+                              UTIL_BLITTER_ATTRIB_COLOR, color);
+   }
 
    blitter_restore_vertex_states(ctx);
    blitter_restore_fragment_states(ctx);
@@ -1877,6 +1888,7 @@ void util_blitter_clear_depth_stencil(struct blitter_context *blitter,
    struct pipe_context *pipe = ctx->base.pipe;
    struct pipe_framebuffer_state fb_state;
    struct pipe_stencil_ref sr = { { 0 } };
+   unsigned num_layers;
 
    assert(dstsurf->texture);
    if (!dstsurf->texture)
@@ -1920,11 +1932,19 @@ void util_blitter_clear_depth_stencil(struct blitter_context *blitter,
    pipe->set_framebuffer_state(pipe, &fb_state);
    pipe->set_sample_mask(pipe, ~0);
 
-   blitter_set_common_draw_rect_state(ctx, FALSE, FALSE);
    blitter_set_dst_dimensions(ctx, dstsurf->width, dstsurf->height);
-   blitter->draw_rectangle(blitter, dstx, dsty, dstx+width, dsty+height,
-                           (float) depth,
-                           UTIL_BLITTER_ATTRIB_NONE, NULL);
+
+   num_layers = dstsurf->u.tex.last_layer - dstsurf->u.tex.first_layer + 1;
+   if (num_layers > 1 && ctx->has_layered) {
+      blitter_set_common_draw_rect_state(ctx, FALSE, TRUE);
+      blitter_draw(ctx, dstx, dsty, dstx+width, dsty+height, (float) depth, num_layers);
+   }
+   else {
+      blitter_set_common_draw_rect_state(ctx, FALSE, FALSE);
+      blitter->draw_rectangle(blitter, dstx, dsty, dstx+width, dsty+height,
+                              (float) depth,
+                              UTIL_BLITTER_ATTRIB_NONE, NULL);
+   }
 
    blitter_restore_vertex_states(ctx);
    blitter_restore_fragment_states(ctx);
@@ -2092,7 +2112,7 @@ void util_blitter_clear_buffer(struct blitter_context *blitter,
       return;
    }
 
-   u_upload_data(ctx->upload, 0, num_channels*4, clear_value,
+   u_upload_data(ctx->upload, 0, num_channels*4, 4, clear_value,
                  &vb.buffer_offset, &vb.buffer);
    if (!vb.buffer)
       goto out;

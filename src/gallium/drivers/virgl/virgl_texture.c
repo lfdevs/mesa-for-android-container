@@ -146,7 +146,7 @@ static void *virgl_texture_transfer_map(struct pipe_context *ctx,
       ctx->flush(ctx, NULL, 0);
 
    trans = util_slab_alloc(&vctx->texture_transfer_pool);
-   if (trans == NULL)
+   if (!trans)
       return NULL;
 
    trans->base.resource = resource;

@@ -51,21 +51,21 @@ NineSwapChain9Ex_dtor( struct NineSwapChain9Ex *This )
     NineSwapChain9_dtor(&This->base);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9Ex_GetLastPresentCount( struct NineSwapChain9Ex *This,
                                       UINT *pLastPresentCount )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9Ex_GetPresentStats( struct NineSwapChain9Ex *This,
                                   D3DPRESENTSTATS *pPresentationStatistics )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9Ex_GetDisplayModeEx( struct NineSwapChain9Ex *This,
                                    D3DDISPLAYMODEEX *pMode,
                                    D3DDISPLAYROTATION *pRotation )

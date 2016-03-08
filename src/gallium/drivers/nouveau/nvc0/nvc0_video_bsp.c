@@ -32,45 +32,39 @@ static void dump_comm_bsp(struct comm *comm)
 #endif
 
 unsigned
-nvc0_decoder_bsp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
-                 struct nouveau_vp3_video_buffer *target,
-                 unsigned comm_seq, unsigned num_buffers,
-                 const void *const *data, const unsigned *num_bytes,
-                 unsigned *vp_caps, unsigned *is_ref,
-                 struct nouveau_vp3_video_buffer *refs[16])
+nvc0_decoder_bsp_begin(struct nouveau_vp3_decoder *dec, unsigned comm_seq)
 {
-   struct nouveau_pushbuf *push = dec->pushbuf[0];
-   enum pipe_video_format codec = u_reduce_video_profile(dec->base.profile);
-   uint32_t bsp_addr, comm_addr, inter_addr;
-   uint32_t slice_size, bucket_size, ring_size, bsp_size;
-   uint32_t caps, i;
-   int ret;
+   struct nouveau_bo *bsp_bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH];
+   unsigned ret = 0;
+
+   ret = nouveau_bo_map(bsp_bo, NOUVEAU_BO_WR, dec->client);
+   if (ret) {
+      debug_printf("map failed: %i %s\n", ret, strerror(-ret));
+      return -1;
+   }
+
+   nouveau_vp3_bsp_begin(dec);
+
+   return 2;
+}
+
+unsigned
+nvc0_decoder_bsp_next(struct nouveau_vp3_decoder *dec,
+                      unsigned comm_seq, unsigned num_buffers,
+                      const void *const *data, const unsigned *num_bytes)
+{
    struct nouveau_bo *bsp_bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH];
    struct nouveau_bo *inter_bo = dec->inter_bo[comm_seq & 1];
-   unsigned fence_extra = 0;
-   struct nouveau_pushbuf_refn bo_refs[] = {
-      { bsp_bo, NOUVEAU_BO_RD | NOUVEAU_BO_VRAM },
-      { inter_bo, NOUVEAU_BO_WR | NOUVEAU_BO_VRAM },
-#if NOUVEAU_VP3_DEBUG_FENCE
-      { dec->fence_bo, NOUVEAU_BO_WR | NOUVEAU_BO_GART },
-#endif
-      { dec->bitplane_bo, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
-   };
-   int num_refs = sizeof(bo_refs)/sizeof(*bo_refs);
+   uint32_t bsp_size = 0;
+   uint32_t i = 0;
+   unsigned ret = 0;
 
-   if (!dec->bitplane_bo)
-      num_refs--;
-
-#if NOUVEAU_VP3_DEBUG_FENCE
-   fence_extra = 4;
-#endif
-
-   bsp_size = NOUVEAU_VP3_BSP_RESERVED_SIZE;
+   bsp_size = dec->bsp_ptr - (char *)bsp_bo->map;
    for (i = 0; i < num_buffers; i++)
       bsp_size += num_bytes[i];
    bsp_size += 256; /* the 4 end markers */
 
-   if (!bsp_bo || bsp_size > bsp_bo->size) {
+   if (bsp_size > bsp_bo->size) {
       union nouveau_bo_config cfg;
       struct nouveau_bo *tmp_bo = NULL;
 
@@ -87,8 +81,23 @@ nvc0_decoder_bsp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
                       bsp_bo ? (unsigned)bsp_bo->size : 0, bsp_size, ret);
          return -1;
       }
+
+      ret = nouveau_bo_map(tmp_bo, NOUVEAU_BO_WR, dec->client);
+      if (ret) {
+         debug_printf("map failed: %i %s\n", ret, strerror(-ret));
+         return -1;
+      }
+
+      /* Preserve previous buffer. */
+      /* TODO: offload this copy to the GPU, as otherwise we're reading and
+       * writing to VRAM. */
+      memcpy(tmp_bo->map, bsp_bo->map, bsp_bo->size);
+
+      /* update position to current chunk */
+      dec->bsp_ptr = tmp_bo->map + (dec->bsp_ptr - (char *)bsp_bo->map);
+
       nouveau_bo_ref(NULL, &bsp_bo);
-      bo_refs[0].bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH] = bsp_bo = tmp_bo;
+      dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH] = bsp_bo = tmp_bo;
    }
 
    if (!inter_bo || bsp_bo->size * 4 > inter_bo->size) {
@@ -104,18 +113,55 @@ nvc0_decoder_bsp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
                       inter_bo ? (unsigned)inter_bo->size : 0, (unsigned)bsp_bo->size * 4, ret);
          return -1;
       }
+
+      ret = nouveau_bo_map(tmp_bo, NOUVEAU_BO_WR, dec->client);
+      if (ret) {
+         debug_printf("map failed: %i %s\n", ret, strerror(-ret));
+         return -1;
+      }
+
       nouveau_bo_ref(NULL, &inter_bo);
-      bo_refs[1].bo = dec->inter_bo[comm_seq & 1] = inter_bo = tmp_bo;
+      dec->inter_bo[comm_seq & 1] = inter_bo = tmp_bo;
    }
 
-   ret = nouveau_bo_map(bsp_bo, NOUVEAU_BO_WR, dec->client);
-   if (ret) {
-      debug_printf("map failed: %i %s\n", ret, strerror(-ret));
-      return -1;
-   }
+   nouveau_vp3_bsp_next(dec, num_buffers, data, num_bytes);
 
-   caps = nouveau_vp3_bsp(dec, desc, target, comm_seq,
-                          num_buffers, data, num_bytes);
+   return 2;
+}
+
+
+unsigned
+nvc0_decoder_bsp_end(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
+                     struct nouveau_vp3_video_buffer *target, unsigned comm_seq,
+                     unsigned *vp_caps, unsigned *is_ref,
+                     struct nouveau_vp3_video_buffer *refs[16])
+{
+   struct nouveau_pushbuf *push = dec->pushbuf[0];
+   enum pipe_video_format codec = u_reduce_video_profile(dec->base.profile);
+   uint32_t bsp_addr, comm_addr, inter_addr;
+   uint32_t slice_size, bucket_size, ring_size;
+   uint32_t caps;
+   struct nouveau_bo *bsp_bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH];
+   struct nouveau_bo *inter_bo = dec->inter_bo[comm_seq & 1];
+   unsigned fence_extra = 0;
+   struct nouveau_pushbuf_refn bo_refs[] = {
+      { bsp_bo, NOUVEAU_BO_RD | NOUVEAU_BO_VRAM },
+      { inter_bo, NOUVEAU_BO_WR | NOUVEAU_BO_VRAM },
+#if NOUVEAU_VP3_DEBUG_FENCE
+      { dec->fence_bo, NOUVEAU_BO_WR | NOUVEAU_BO_GART },
+#endif
+      { dec->bitplane_bo, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
+   };
+   int num_refs = ARRAY_SIZE(bo_refs);
+
+   if (!dec->bitplane_bo)
+      num_refs--;
+
+#if NOUVEAU_VP3_DEBUG_FENCE
+   fence_extra = 4;
+#endif
+
+   caps = nouveau_vp3_bsp_end(dec, desc);
 
    nouveau_vp3_vp_caps(dec, desc, target, comm_seq, vp_caps, is_ref, refs);
 

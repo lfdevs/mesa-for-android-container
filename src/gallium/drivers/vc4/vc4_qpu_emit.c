@@ -64,6 +64,12 @@ set_last_cond_add(struct vc4_compile *c, uint32_t cond)
         *last_inst(c) = qpu_set_cond_add(*last_inst(c), cond);
 }
 
+static void
+set_last_cond_mul(struct vc4_compile *c, uint32_t cond)
+{
+        *last_inst(c) = qpu_set_cond_mul(*last_inst(c), cond);
+}
+
 /**
  * Some special registers can be read from either file, which lets us resolve
  * raddr conflicts without extra MOVs.
@@ -306,42 +312,9 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         break;
                 }
 
+                bool handled_qinst_cond = false;
+
                 switch (qinst->op) {
-                case QOP_SEL_X_0_ZS:
-                case QOP_SEL_X_0_ZC:
-                case QOP_SEL_X_0_NS:
-                case QOP_SEL_X_0_NC:
-                case QOP_SEL_X_0_CS:
-                case QOP_SEL_X_0_CC:
-                        queue(c, qpu_a_MOV(dst, src[0]) | unpack);
-                        set_last_cond_add(c, qinst->op - QOP_SEL_X_0_ZS +
-                                          QPU_COND_ZS);
-
-                        queue(c, qpu_a_XOR(dst, qpu_r0(), qpu_r0()));
-                        set_last_cond_add(c, ((qinst->op - QOP_SEL_X_0_ZS) ^
-                                              1) + QPU_COND_ZS);
-                        break;
-
-                case QOP_SEL_X_Y_ZS:
-                case QOP_SEL_X_Y_ZC:
-                case QOP_SEL_X_Y_NS:
-                case QOP_SEL_X_Y_NC:
-                case QOP_SEL_X_Y_CS:
-                case QOP_SEL_X_Y_CC:
-                        queue(c, qpu_a_MOV(dst, src[0]));
-                        if (qinst->src[0].pack)
-                                *(last_inst(c)) |= unpack;
-                        set_last_cond_add(c, qinst->op - QOP_SEL_X_Y_ZS +
-                                          QPU_COND_ZS);
-
-                        queue(c, qpu_a_MOV(dst, src[1]));
-                        if (qinst->src[1].pack)
-                                *(last_inst(c)) |= unpack;
-                        set_last_cond_add(c, ((qinst->op - QOP_SEL_X_Y_ZS) ^
-                                              1) + QPU_COND_ZS);
-
-                        break;
-
                 case QOP_RCP:
                 case QOP_RSQ:
                 case QOP_EXP2:
@@ -497,15 +470,21 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                                 queue(c, qpu_m_alu2(translate[qinst->op].op,
                                                     dst,
                                                     src[0], src[1]) | unpack);
+                                set_last_cond_mul(c, qinst->cond);
                         } else {
                                 queue(c, qpu_a_alu2(translate[qinst->op].op,
                                                     dst,
                                                     src[0], src[1]) | unpack);
+                                set_last_cond_add(c, qinst->cond);
                         }
+                        handled_qinst_cond = true;
                         set_last_dst_pack(c, qinst);
 
                         break;
                 }
+
+                assert(qinst->cond == QPU_COND_ALWAYS ||
+                       handled_qinst_cond);
 
                 if (qinst->sf) {
                         assert(!qir_is_multi_instruction(qinst));
@@ -513,7 +492,8 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                 }
         }
 
-        qpu_schedule_instructions(c);
+        uint32_t cycles = qpu_schedule_instructions(c);
+        uint32_t inst_count_at_schedule_time = c->qpu_inst_count;
 
         /* thread end can't have VPM write or read */
         if (QPU_GET_FIELD(c->qpu_insts[c->qpu_inst_count - 1],
@@ -554,6 +534,15 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         qpu_set_sig(c->qpu_insts[c->qpu_inst_count - 1],
                                     QPU_SIG_SCOREBOARD_UNLOCK);
                 break;
+        }
+
+        cycles += c->qpu_inst_count - inst_count_at_schedule_time;
+
+        if (vc4_debug & VC4_DEBUG_SHADERDB) {
+                fprintf(stderr, "SHADER-DB: %s prog %d/%d: %d estimated cycles\n",
+                        qir_get_stage_name(c->stage),
+                        c->program_id, c->variant_id,
+                        cycles);
         }
 
         if (vc4_debug & VC4_DEBUG_QPU)

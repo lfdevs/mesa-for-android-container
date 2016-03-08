@@ -329,8 +329,20 @@ st_GetPerfMonitorResult(struct gl_context *ctx,
 
 
 bool
-st_init_perfmon(struct st_context *st)
+st_have_perfmon(struct st_context *st)
 {
+   struct pipe_screen *screen = st->pipe->screen;
+
+   if (!screen->get_driver_query_info || !screen->get_driver_query_group_info)
+      return false;
+
+   return screen->get_driver_query_group_info(screen, 0, NULL) != 0;
+}
+
+static void
+st_InitPerfMonitorGroups(struct gl_context *ctx)
+{
+   struct st_context *st = st_context(ctx);
    struct gl_perf_monitor_state *perfmon = &st->ctx->PerfMonitor;
    struct pipe_screen *screen = st->pipe->screen;
    struct gl_perf_monitor_group *groups = NULL;
@@ -338,20 +350,14 @@ st_init_perfmon(struct st_context *st)
    int num_counters, num_groups;
    int gid, cid;
 
-   if (!screen->get_driver_query_info || !screen->get_driver_query_group_info)
-      return false;
-
    /* Get the number of available queries. */
    num_counters = screen->get_driver_query_info(screen, 0, NULL);
-   if (!num_counters)
-      return false;
 
    /* Get the number of available groups. */
    num_groups = screen->get_driver_query_group_info(screen, 0, NULL);
-   if (num_groups)
-      groups = CALLOC(num_groups, sizeof(*groups));
+   groups = CALLOC(num_groups, sizeof(*groups));
    if (!groups)
-      return false;
+      return;
 
    stgroups = CALLOC(num_groups, sizeof(*stgroups));
    if (!stgroups)
@@ -432,7 +438,7 @@ st_init_perfmon(struct st_context *st)
    perfmon->Groups = groups;
    st->perfmon = stgroups;
 
-   return true;
+   return;
 
 fail:
    for (gid = 0; gid < num_groups; gid++) {
@@ -442,7 +448,6 @@ fail:
    FREE(stgroups);
 fail_only_groups:
    FREE(groups);
-   return false;
 }
 
 void
@@ -461,6 +466,7 @@ st_destroy_perfmon(struct st_context *st)
 
 void st_init_perfmon_functions(struct dd_function_table *functions)
 {
+   functions->InitPerfMonitorGroups = st_InitPerfMonitorGroups;
    functions->NewPerfMonitor = st_NewPerfMonitor;
    functions->DeletePerfMonitor = st_DeletePerfMonitor;
    functions->BeginPerfMonitor = st_BeginPerfMonitor;

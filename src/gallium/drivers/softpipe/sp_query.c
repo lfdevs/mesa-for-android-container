@@ -223,7 +223,7 @@ softpipe_get_query_result(struct pipe_context *pipe,
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
       memcpy(vresult, &sq->stats,
-             sizeof(struct pipe_query_data_pipeline_statistics));;
+             sizeof(struct pipe_query_data_pipeline_statistics));
       break;
    case PIPE_QUERY_GPU_FINISHED:
       vresult->b = TRUE;

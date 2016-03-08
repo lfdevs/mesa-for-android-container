@@ -24,7 +24,7 @@
 
 #define DBG_CHANNEL DBG_OVERLAYEXTENSION
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 Nine9ExOverlayExtension_CheckDeviceOverlayType( struct Nine9ExOverlayExtension *This,
                                                 UINT Adapter,
                                                 D3DDEVTYPE DevType,

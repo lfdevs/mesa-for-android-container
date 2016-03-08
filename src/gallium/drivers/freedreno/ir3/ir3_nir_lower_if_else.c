@@ -28,8 +28,8 @@
  */
 
 #include "ir3_nir.h"
-#include "glsl/nir/nir_builder.h"
-#include "glsl/nir/nir_control_flow.h"
+#include "compiler/nir/nir_builder.h"
+#include "compiler/nir/nir_control_flow.h"
 
 /* Based on nir_opt_peephole_select, and hacked up to more aggressively
  * flatten anything that can be flattened
@@ -328,9 +328,9 @@ ir3_nir_lower_if_else(nir_shader *shader)
 {
 	bool progress = false;
 
-	nir_foreach_overload(shader, overload) {
-		if (overload->impl)
-			progress |= lower_if_else_impl(overload->impl);
+	nir_foreach_function(shader, function) {
+		if (function->impl)
+			progress |= lower_if_else_impl(function->impl);
 	}
 
 	return progress;

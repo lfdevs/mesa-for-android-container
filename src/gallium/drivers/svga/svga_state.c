@@ -129,7 +129,11 @@ update_state(struct svga_context *svga,
              const struct svga_tracked_state *atoms[],
              unsigned *state)
 {
+#ifdef DEBUG
    boolean debug = TRUE;
+#else
+   boolean debug = FALSE;
+#endif
    enum pipe_error ret = PIPE_OK;
    unsigned i;
 

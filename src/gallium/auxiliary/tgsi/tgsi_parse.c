@@ -121,8 +121,8 @@ tgsi_parse_token(
          next_token( ctx, &decl->Semantic );
       }
 
-      if (decl->Declaration.File == TGSI_FILE_RESOURCE) {
-         next_token(ctx, &decl->Resource);
+      if (decl->Declaration.File == TGSI_FILE_IMAGE) {
+         next_token(ctx, &decl->Image);
       }
 
       if (decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
@@ -193,6 +193,10 @@ tgsi_parse_token(
          for (i = 0; i < inst->Texture.NumOffsets; i++) {
             next_token( ctx, &inst->TexOffsets[i] );
          }
+      }
+
+      if (inst->Instruction.Memory) {
+         next_token(ctx, &inst->Memory);
       }
 
       assert( inst->Instruction.NumDstRegs <= TGSI_FULL_MAX_DST_REGISTERS );

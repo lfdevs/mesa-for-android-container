@@ -157,6 +157,8 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_USER_VERTEX_BUFFERS:
    case PIPE_CAP_COMPUTE:
    case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
@@ -174,6 +176,18 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SHAREABLE_SHADERS:
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
    case PIPE_CAP_CLEAR_TEXTURE:
+   case PIPE_CAP_DRAW_PARAMETERS:
+   case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+   case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
+   case PIPE_CAP_INVALIDATE_BUFFER:
+   case PIPE_CAP_GENERATE_MIPMAP:
+   case PIPE_CAP_STRING_MARKER:
+   case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
+   case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
+   case PIPE_CAP_QUERY_BUFFER_OBJECT:
+   case PIPE_CAP_QUERY_MEMORY_INFO:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -265,6 +279,8 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+      case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+      case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
          return 0;
       case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
          return 32;
@@ -308,6 +324,8 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+      case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+      case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
          return 0;
       case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
          return 32;
@@ -413,22 +431,19 @@ nv30_screen_destroy(struct pipe_screen *pscreen)
 #define FAIL_SCREEN_INIT(str, err)                    \
    do {                                               \
       NOUVEAU_ERR(str, err);                          \
-      nv30_screen_destroy(pscreen);                   \
-      return NULL;                                    \
+      screen->base.base.context_create = NULL;        \
+      return &screen->base;                           \
    } while(0)
 
-struct pipe_screen *
+struct nouveau_screen *
 nv30_screen_create(struct nouveau_device *dev)
 {
-   struct nv30_screen *screen = CALLOC_STRUCT(nv30_screen);
+   struct nv30_screen *screen;
    struct pipe_screen *pscreen;
    struct nouveau_pushbuf *push;
    struct nv04_fifo *fifo;
    unsigned oclass = 0;
    int ret, i;
-
-   if (!screen)
-      return NULL;
 
    switch (dev->chipset & 0xf0) {
    case 0x30:
@@ -458,9 +473,15 @@ nv30_screen_create(struct nouveau_device *dev)
 
    if (!oclass) {
       NOUVEAU_ERR("unknown 3d class for 0x%02x\n", dev->chipset);
-      FREE(screen);
       return NULL;
    }
+
+   screen = CALLOC_STRUCT(nv30_screen);
+   if (!screen)
+      return NULL;
+
+   pscreen = &screen->base.base;
+   pscreen->destroy = nv30_screen_destroy;
 
    /*
     * Some modern apps try to use msaa without keeping in mind the
@@ -479,8 +500,6 @@ nv30_screen_create(struct nouveau_device *dev)
    if (screen->max_sample_count > 4)
       screen->max_sample_count = 4;
 
-   pscreen = &screen->base.base;
-   pscreen->destroy = nv30_screen_destroy;
    pscreen->get_param = nv30_screen_get_param;
    pscreen->get_paramf = nv30_screen_get_paramf;
    pscreen->get_shader_param = nv30_screen_get_shader_param;
@@ -693,5 +712,5 @@ nv30_screen_create(struct nouveau_device *dev)
    nouveau_pushbuf_kick(push, push->channel);
 
    nouveau_fence_new(&screen->base, &screen->base.fence.current, false);
-   return pscreen;
+   return &screen->base;
 }

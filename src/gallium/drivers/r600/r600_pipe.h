@@ -38,7 +38,7 @@
 
 #include "tgsi/tgsi_scan.h"
 
-#define R600_NUM_ATOMS 43
+#define R600_NUM_ATOMS 52
 
 #define R600_MAX_VIEWPORTS 16
 
@@ -59,11 +59,11 @@
 
 /* the number of CS dwords for flushing and drawing */
 #define R600_MAX_FLUSH_CS_DWORDS	16
-#define R600_MAX_DRAW_CS_DWORDS		52
+#define R600_MAX_DRAW_CS_DWORDS		58
 #define R600_TRACE_CS_DWORDS		7
 
 #define R600_MAX_USER_CONST_BUFFERS 13
-#define R600_MAX_DRIVER_CONST_BUFFERS 2
+#define R600_MAX_DRIVER_CONST_BUFFERS 3
 #define R600_MAX_CONST_BUFFERS (R600_MAX_USER_CONST_BUFFERS + R600_MAX_DRIVER_CONST_BUFFERS)
 
 /* start driver buffers after user buffers */
@@ -71,7 +71,12 @@
 #define R600_UCP_SIZE (4*4*8)
 #define R600_BUFFER_INFO_OFFSET (R600_UCP_SIZE)
 
-#define R600_GS_RING_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 1)
+#define R600_LDS_INFO_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 1)
+/*
+ * Note GS doesn't use a constant buffer binding, just a resource index,
+ * so it's fine to have it exist at index 16.
+ */
+#define R600_GS_RING_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 2)
 /* Currently R600_MAX_CONST_BUFFERS just fits on the hw, which has a limit
  * of 16 const buffers.
  * UCP/SAMPLE_POSITIONS are never accessed by same shader stage so they can use the same id.
@@ -80,6 +85,17 @@
  * we'd have to squash all use cases into one driver buffer.
  */
 #define R600_MAX_CONST_BUFFER_SIZE (4096 * sizeof(float[4]))
+
+/* HW stages */
+#define R600_HW_STAGE_PS 0
+#define R600_HW_STAGE_VS 1
+#define R600_HW_STAGE_GS 2
+#define R600_HW_STAGE_ES 3
+#define EG_HW_STAGE_LS 4
+#define EG_HW_STAGE_HS 5
+
+#define R600_NUM_HW_STAGES 4
+#define EG_NUM_HW_STAGES 6
 
 #ifdef PIPE_ARCH_BIG_ENDIAN
 #define R600_BIG_ENDIAN 1
@@ -136,6 +152,7 @@ struct r600_clip_misc_state {
 	unsigned clip_plane_enable; /* from rasterizer    */
 	unsigned clip_dist_write;   /* from vertex shader */
 	boolean clip_disable;       /* from vertex shader */
+	boolean vs_out_viewport;    /* from vertex shader */
 };
 
 struct r600_alphatest_state {
@@ -190,6 +207,8 @@ struct r600_config_state {
 	struct r600_atom atom;
 	unsigned sq_gpr_resource_mgmt_1;
 	unsigned sq_gpr_resource_mgmt_2;
+	unsigned sq_gpr_resource_mgmt_3;
+	bool dyn_gpr_enabled;
 };
 
 struct r600_stencil_ref
@@ -319,6 +338,9 @@ struct r600_pipe_shader_selector {
 	unsigned	gs_max_out_vertices;
 	unsigned	gs_num_invocations;
 
+	/* TCS/VS */
+	uint64_t        lds_patch_outputs_written_mask;
+	uint64_t        lds_outputs_written_mask;
 	unsigned	nr_ps_max_color_exports;
 };
 
@@ -421,7 +443,8 @@ struct r600_context {
 	/* Hardware info. */
 	boolean				has_vertex_cache;
 	boolean				keep_tiling_flags;
-	unsigned			default_ps_gprs, default_vs_gprs;
+	unsigned			default_gprs[EG_NUM_HW_STAGES];
+	unsigned                        current_gprs[EG_NUM_HW_STAGES];
 	unsigned			r6xx_num_clause_temp_gprs;
 
 	/* Miscellaneous state objects. */
@@ -470,10 +493,7 @@ struct r600_context {
 	struct r600_viewport_state	viewport;
 	/* Shaders and shader resources. */
 	struct r600_cso_state		vertex_fetch_shader;
-	struct r600_shader_state	vertex_shader;
-	struct r600_shader_state	pixel_shader;
-	struct r600_shader_state	geometry_shader;
-	struct r600_shader_state	export_shader;
+	struct r600_shader_state        hw_shader_stages[EG_NUM_HW_STAGES];
 	struct r600_cs_shader_state	cs_shader_state;
 	struct r600_shader_stages_state shader_stages;
 	struct r600_gs_rings_state	gs_rings;
@@ -492,6 +512,12 @@ struct r600_context {
 	struct r600_pipe_shader_selector *ps_shader;
 	struct r600_pipe_shader_selector *vs_shader;
 	struct r600_pipe_shader_selector *gs_shader;
+
+	struct r600_pipe_shader_selector *tcs_shader;
+	struct r600_pipe_shader_selector *tes_shader;
+
+	struct r600_pipe_shader_selector *fixed_func_tcs_shader;
+
 	struct r600_rasterizer_state	*rasterizer;
 	bool				alpha_to_one;
 	bool				force_blend_disable;
@@ -509,6 +535,12 @@ struct r600_context {
 	void				*sb_context;
 	struct r600_isa		*isa;
 	float sample_positions[4 * 16];
+	float tess_state[8];
+	bool tess_state_dirty;
+	struct r600_pipe_shader_selector *last_ls;
+	struct r600_pipe_shader_selector *last_tcs;
+	unsigned last_num_tcs_input_cp;
+	unsigned lds_alloc;
 };
 
 static inline void r600_emit_command_buffer(struct radeon_winsys_cs *cs,
@@ -580,7 +612,8 @@ evergreen_create_sampler_view_custom(struct pipe_context *ctx,
 				     const struct pipe_sampler_view *state,
 				     unsigned width0, unsigned height0,
 				     unsigned force_level);
-void evergreen_init_common_regs(struct r600_command_buffer *cb,
+void evergreen_init_common_regs(struct r600_context *ctx,
+				struct r600_command_buffer *cb,
 				enum chip_class ctx_chip_class,
 				enum radeon_family ctx_family,
 				int ctx_drm_minor);
@@ -595,6 +628,8 @@ void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader
 void evergreen_update_es_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
 void evergreen_update_gs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
 void evergreen_update_vs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
+void evergreen_update_ls_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
+void evergreen_update_hs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
 void *evergreen_create_db_flush_dsa(struct r600_context *rctx);
 void *evergreen_create_resolve_blend(struct r600_context *rctx);
 void *evergreen_create_decompress_blend(struct r600_context *rctx);
@@ -609,7 +644,7 @@ void evergreen_init_color_surface(struct r600_context *rctx,
 void evergreen_init_color_surface_rat(struct r600_context *rctx,
 					struct r600_surface *surf);
 void evergreen_update_db_shader_control(struct r600_context * rctx);
-
+bool evergreen_adjust_gprs(struct r600_context *rctx);
 /* r600_blit.c */
 void r600_init_blit_functions(struct r600_context *rctx);
 void r600_decompress_depth_textures(struct r600_context *rctx,
@@ -684,6 +719,18 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 			       uint64_t dst_offset,
 			       uint64_t src_offset,
 			       uint64_t size);
+void evergreen_setup_tess_constants(struct r600_context *rctx,
+				    const struct pipe_draw_info *info,
+				    unsigned *num_patches);
+uint32_t evergreen_get_ls_hs_config(struct r600_context *rctx,
+				    const struct pipe_draw_info *info,
+				    unsigned num_patches);
+void evergreen_set_ls_hs_config(struct r600_context *rctx,
+				struct radeon_winsys_cs *cs,
+				uint32_t ls_hs_config);
+void evergreen_set_lds_alloc(struct r600_context *rctx,
+			     struct radeon_winsys_cs *cs,
+			     uint32_t lds_alloc);
 
 /* r600_state_common.c */
 void r600_init_common_state_functions(struct r600_context *rctx);
@@ -899,7 +946,6 @@ static inline uint32_t S_FIXED(float value, uint32_t frac_bits)
 {
 	return value * (1 << frac_bits);
 }
-#define ALIGN_DIVUP(x, y) (((x) + (y) - 1) / (y))
 
 /* 12.4 fixed-point */
 static inline unsigned r600_pack_float_12p4(float x)

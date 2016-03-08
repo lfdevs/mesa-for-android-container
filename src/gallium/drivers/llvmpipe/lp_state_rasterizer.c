@@ -64,7 +64,7 @@ llvmpipe_create_rasterizer_state(struct pipe_context *pipe,
     * handle, and what we'll look after ourselves.
     */
    struct lp_rast_state *state = MALLOC_STRUCT(lp_rast_state);
-   if (state == NULL)
+   if (!state)
       return NULL;
 
    memcpy(&state->draw_state, rast, sizeof *rast);

@@ -58,7 +58,7 @@ initialize_vertex_header(struct vertex_header *header)
 {
    header->clipmask = 0;
    header->edgeflag = 1;
-   header->have_clipdist = 0;
+   header->pad = 0;
    header->vertex_id = UNDEFINED_VERTEX_ID;
 }
 

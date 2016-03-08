@@ -40,6 +40,7 @@ vlVaCreateBuffer(VADriverContextP ctx, VAContextID context, VABufferType type,
                  unsigned int size, unsigned int num_elements, void *data,
                  VABufferID *buf_id)
 {
+   vlVaDriver *drv;
    vlVaBuffer *buf;
 
    if (!ctx)
@@ -62,7 +63,10 @@ vlVaCreateBuffer(VADriverContextP ctx, VAContextID context, VABufferType type,
    if (data)
       memcpy(buf->data, data, size * num_elements);
 
-   *buf_id = handle_table_add(VL_VA_DRIVER(ctx)->htab, buf);
+   drv = VL_VA_DRIVER(ctx);
+   pipe_mutex_lock(drv->mutex);
+   *buf_id = handle_table_add(drv->htab, buf);
+   pipe_mutex_unlock(drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }
@@ -71,12 +75,16 @@ VAStatus
 vlVaBufferSetNumElements(VADriverContextP ctx, VABufferID buf_id,
                          unsigned int num_elements)
 {
+   vlVaDriver *drv;
    vlVaBuffer *buf;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
+   drv = VL_VA_DRIVER(ctx);
+   pipe_mutex_lock(drv->mutex);
+   buf = handle_table_get(drv->htab, buf_id);
+   pipe_mutex_unlock(drv->mutex);
    if (!buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;
 
@@ -109,22 +117,24 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
    if (!pbuff)
       return VA_STATUS_ERROR_INVALID_PARAMETER;
 
+   pipe_mutex_lock(drv->mutex);
    buf = handle_table_get(drv->htab, buf_id);
-   if (!buf)
+   if (!buf || buf->export_refcount > 0) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_BUFFER;
-
-   if (buf->export_refcount > 0)
-      return VA_STATUS_ERROR_INVALID_BUFFER;
+   }
 
    if (buf->derived_surface.resource) {
       *pbuff = pipe_buffer_map(drv->pipe, buf->derived_surface.resource,
                                PIPE_TRANSFER_WRITE,
                                &buf->derived_surface.transfer);
+      pipe_mutex_unlock(drv->mutex);
 
       if (!buf->derived_surface.transfer || !*pbuff)
          return VA_STATUS_ERROR_INVALID_BUFFER;
 
    } else {
+      pipe_mutex_unlock(drv->mutex);
       *pbuff = buf->data;
    }
 
@@ -144,20 +154,23 @@ vlVaUnmapBuffer(VADriverContextP ctx, VABufferID buf_id)
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   pipe_mutex_lock(drv->mutex);
    buf = handle_table_get(drv->htab, buf_id);
-   if (!buf)
+   if (!buf || buf->export_refcount > 0) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_BUFFER;
-
-   if (buf->export_refcount > 0)
-      return VA_STATUS_ERROR_INVALID_BUFFER;
+   }
 
    if (buf->derived_surface.resource) {
-      if (!buf->derived_surface.transfer)
+      if (!buf->derived_surface.transfer) {
+         pipe_mutex_unlock(drv->mutex);
          return VA_STATUS_ERROR_INVALID_BUFFER;
+      }
 
       pipe_buffer_unmap(drv->pipe, buf->derived_surface.transfer);
       buf->derived_surface.transfer = NULL;
    }
+   pipe_mutex_unlock(drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }
@@ -165,18 +178,25 @@ vlVaUnmapBuffer(VADriverContextP ctx, VABufferID buf_id)
 VAStatus
 vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
 {
+   vlVaDriver *drv;
    vlVaBuffer *buf;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
-   if (!buf)
+   drv = VL_VA_DRIVER(ctx);
+   pipe_mutex_lock(drv->mutex);
+   buf = handle_table_get(drv->htab, buf_id);
+   if (!buf) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_BUFFER;
+   }
 
    if (buf->derived_surface.resource) {
-      if (buf->export_refcount > 0)
+      if (buf->export_refcount > 0) {
+         pipe_mutex_unlock(drv->mutex);
          return VA_STATUS_ERROR_INVALID_BUFFER;
+      }
 
       pipe_resource_reference(&buf->derived_surface.resource, NULL);
    }
@@ -184,6 +204,7 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
    FREE(buf->data);
    FREE(buf);
    handle_table_remove(VL_VA_DRIVER(ctx)->htab, buf_id);
+   pipe_mutex_unlock(drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }
@@ -192,12 +213,16 @@ VAStatus
 vlVaBufferInfo(VADriverContextP ctx, VABufferID buf_id, VABufferType *type,
                unsigned int *size, unsigned int *num_elements)
 {
+   vlVaDriver *drv;
    vlVaBuffer *buf;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
+   drv = VL_VA_DRIVER(ctx);
+   pipe_mutex_lock(drv->mutex);
+   buf = handle_table_get(drv->htab, buf_id);
+   pipe_mutex_unlock(drv->mutex);
    if (!buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;
 
@@ -212,6 +237,7 @@ VAStatus
 vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
                         VABufferInfo *out_buf_info)
 {
+   vlVaDriver *drv;
    uint32_t i;
    uint32_t mem_type;
    vlVaBuffer *buf ;
@@ -226,7 +252,11 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   drv = VL_VA_DRIVER(ctx);
+   screen = VL_VA_PSCREEN(ctx);
+   pipe_mutex_lock(drv->mutex);
    buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
+   pipe_mutex_unlock(drv->mutex);
 
    if (!buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;
@@ -255,13 +285,6 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
    if (!buf->derived_surface.resource)
       return VA_STATUS_ERROR_INVALID_BUFFER;
 
-   screen = VL_VA_PSCREEN(ctx);
-
-   if (buf->derived_surface.fence) {
-      screen->fence_finish(screen, buf->derived_surface.fence, PIPE_TIMEOUT_INFINITE);
-      screen->fence_reference(screen, &buf->derived_surface.fence, NULL);
-   }
-
    if (buf->export_refcount > 0) {
       if (buf->export_state.mem_type != mem_type)
          return VA_STATUS_ERROR_INVALID_PARAMETER;
@@ -271,6 +294,10 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
       switch (mem_type) {
       case VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME: {
          struct winsys_handle whandle;
+
+         pipe_mutex_lock(drv->mutex);
+         drv->pipe->flush(drv->pipe, NULL, 0);
+         pipe_mutex_unlock(drv->mutex);
 
          memset(&whandle, 0, sizeof(whandle));
          whandle.type = DRM_API_HANDLE_TYPE_FD;
@@ -300,12 +327,16 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
 VAStatus
 vlVaReleaseBufferHandle(VADriverContextP ctx, VABufferID buf_id)
 {
+   vlVaDriver *drv;
    vlVaBuffer *buf;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
+   drv = VL_VA_DRIVER(ctx);
+   pipe_mutex_lock(drv->mutex);
+   buf = handle_table_get(drv->htab, buf_id);
+   pipe_mutex_unlock(drv->mutex);
 
    if (!buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;

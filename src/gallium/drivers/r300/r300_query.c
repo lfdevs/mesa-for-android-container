@@ -64,8 +64,6 @@ static struct pipe_query *r300_create_query(struct pipe_context *pipe,
         FREE(q);
         return NULL;
     }
-    q->cs_buf = r300->rws->buffer_get_cs_handle(q->buf);
-
     return (struct pipe_query*)q;
 }
 
@@ -155,7 +153,7 @@ static boolean r300_get_query_result(struct pipe_context* pipe,
         return vresult->b;
     }
 
-    map = r300->rws->buffer_map(q->cs_buf, r300->cs,
+    map = r300->rws->buffer_map(q->buf, r300->cs,
                                 PIPE_TRANSFER_READ |
                                 (!wait ? PIPE_TRANSFER_DONTBLOCK : 0));
     if (!map)

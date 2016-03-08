@@ -1,2 +1,2 @@
-dri/usr/lib/${DEB_HOST_MULTIARCH}/libGL.so  usr/lib/${DEB_HOST_MULTIARCH}
-dri/usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/gl.pc usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig
+usr/lib/${DEB_HOST_MULTIARCH}/libGL.so
+usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/gl.pc

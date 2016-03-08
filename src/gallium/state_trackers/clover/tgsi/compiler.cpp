@@ -97,6 +97,11 @@ namespace {
 module
 clover::compile_program_tgsi(const std::string &source, std::string &r_log) {
    const size_t body_pos = source.find("COMP\n");
+   if (body_pos == std::string::npos) {
+      r_log = "invalid source";
+      throw compile_error();
+   }
+
    const char *body = &source[body_pos];
    module m;
 

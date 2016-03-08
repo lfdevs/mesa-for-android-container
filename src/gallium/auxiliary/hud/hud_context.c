@@ -431,7 +431,7 @@ hud_alloc_vertices(struct hud_context *hud, struct vertex_queue *v,
    v->max_num_vertices = num_vertices;
    v->vbuf.stride = stride;
    u_upload_alloc(hud->uploader, 0, v->vbuf.stride * v->max_num_vertices,
-                  &v->vbuf.buffer_offset, &v->vbuf.buffer,
+                  16, &v->vbuf.buffer_offset, &v->vbuf.buffer,
                   (void**)&v->vertices);
 }
 
@@ -460,25 +460,25 @@ hud_draw(struct hud_context *hud, struct pipe_resource *tex)
    hud->constants.two_div_fb_width = 2.0f / hud->fb_width;
    hud->constants.two_div_fb_height = 2.0f / hud->fb_height;
 
-   cso_save_framebuffer(cso);
-   cso_save_sample_mask(cso);
-   cso_save_min_samples(cso);
-   cso_save_blend(cso);
-   cso_save_depth_stencil_alpha(cso);
-   cso_save_fragment_shader(cso);
-   cso_save_fragment_sampler_views(cso);
-   cso_save_fragment_samplers(cso);
-   cso_save_rasterizer(cso);
-   cso_save_viewport(cso);
-   cso_save_stream_outputs(cso);
-   cso_save_geometry_shader(cso);
-   cso_save_tessctrl_shader(cso);
-   cso_save_tesseval_shader(cso);
-   cso_save_vertex_shader(cso);
-   cso_save_vertex_elements(cso);
-   cso_save_aux_vertex_buffer_slot(cso);
+   cso_save_state(cso, (CSO_BIT_FRAMEBUFFER |
+                        CSO_BIT_SAMPLE_MASK |
+                        CSO_BIT_MIN_SAMPLES |
+                        CSO_BIT_BLEND |
+                        CSO_BIT_DEPTH_STENCIL_ALPHA |
+                        CSO_BIT_FRAGMENT_SHADER |
+                        CSO_BIT_FRAGMENT_SAMPLER_VIEWS |
+                        CSO_BIT_FRAGMENT_SAMPLERS |
+                        CSO_BIT_RASTERIZER |
+                        CSO_BIT_VIEWPORT |
+                        CSO_BIT_STREAM_OUTPUTS |
+                        CSO_BIT_GEOMETRY_SHADER |
+                        CSO_BIT_TESSCTRL_SHADER |
+                        CSO_BIT_TESSEVAL_SHADER |
+                        CSO_BIT_VERTEX_SHADER |
+                        CSO_BIT_VERTEX_ELEMENTS |
+                        CSO_BIT_AUX_VERTEX_BUFFER_SLOT |
+                        CSO_BIT_RENDER_CONDITION));
    cso_save_constant_buffer_slot0(cso, PIPE_SHADER_VERTEX);
-   cso_save_render_condition(cso);
 
    /* set states */
    memset(&surf_templ, 0, sizeof(surf_templ));
@@ -591,26 +591,8 @@ hud_draw(struct hud_context *hud, struct pipe_resource *tex)
          hud_pane_draw_colored_objects(hud, pane);
    }
 
-   /* restore states */
-   cso_restore_framebuffer(cso);
-   cso_restore_sample_mask(cso);
-   cso_restore_min_samples(cso);
-   cso_restore_blend(cso);
-   cso_restore_depth_stencil_alpha(cso);
-   cso_restore_fragment_shader(cso);
-   cso_restore_fragment_sampler_views(cso);
-   cso_restore_fragment_samplers(cso);
-   cso_restore_rasterizer(cso);
-   cso_restore_viewport(cso);
-   cso_restore_stream_outputs(cso);
-   cso_restore_tessctrl_shader(cso);
-   cso_restore_tesseval_shader(cso);
-   cso_restore_geometry_shader(cso);
-   cso_restore_vertex_shader(cso);
-   cso_restore_vertex_elements(cso);
-   cso_restore_aux_vertex_buffer_slot(cso);
+   cso_restore_state(cso);
    cso_restore_constant_buffer_slot0(cso, PIPE_SHADER_VERTEX);
-   cso_restore_render_condition(cso);
 
    pipe_surface_reference(&surf, NULL);
 }
@@ -1127,12 +1109,20 @@ print_help(struct pipe_screen *screen)
    }
 
    if (screen->get_driver_query_info){
+      boolean skipping = false;
       struct pipe_driver_query_info info;
       num_queries = screen->get_driver_query_info(screen, 0, NULL);
 
       for (i = 0; i < num_queries; i++){
          screen->get_driver_query_info(screen, i, &info);
-         printf("    %s\n", info.name);
+         if (info.flags & PIPE_DRIVER_QUERY_FLAG_DONT_LIST) {
+            if (!skipping)
+               puts("    ...");
+            skipping = true;
+         } else {
+            printf("    %s\n", info.name);
+            skipping = false;
+         }
       }
    }
 
@@ -1168,8 +1158,8 @@ hud_create(struct pipe_context *pipe, struct cso_context *cso)
 
    hud->pipe = pipe;
    hud->cso = cso;
-   hud->uploader = u_upload_create(pipe, 256 * 1024, 16,
-                                   PIPE_BIND_VERTEX_BUFFER);
+   hud->uploader = u_upload_create(pipe, 256 * 1024,
+                                   PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STREAM);
 
    /* font */
    if (!util_font_create(pipe, UTIL_FONT_FIXED_8X13, &hud->font)) {

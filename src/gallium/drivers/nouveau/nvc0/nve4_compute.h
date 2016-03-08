@@ -2,7 +2,6 @@
 #ifndef NVE4_COMPUTE_H
 #define NVE4_COMPUTE_H
 
-#include "nv50/nv50_defs.xml.h"
 #include "nvc0/nve4_compute.xml.h"
 
 /* Input space is implemented as c0[], to which we bind the screen->parm bo.

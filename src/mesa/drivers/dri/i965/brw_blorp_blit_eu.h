@@ -24,7 +24,6 @@
 #ifndef BRW_BLORP_BLIT_EU_H
 #define BRW_BLORP_BLIT_EU_H
 
-#include "brw_context.h"
 #include "brw_fs.h"
 
 class brw_blorp_eu_emitter

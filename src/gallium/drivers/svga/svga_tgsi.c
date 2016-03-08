@@ -71,7 +71,7 @@ svga_shader_expand(struct svga_shader_emitter *emit)
    else
       new_buf = NULL;
 
-   if (new_buf == NULL) {
+   if (!new_buf) {
       emit->ptr = err_buf;
       emit->buf = err_buf;
       emit->size = sizeof(err_buf);
@@ -229,7 +229,7 @@ svga_tgsi_vgpu9_translate(struct svga_context *svga,
    }
 
    variant = svga_new_shader_variant(svga);
-   if (variant == NULL)
+   if (!variant)
       goto fail;
 
    variant->shader = shader;

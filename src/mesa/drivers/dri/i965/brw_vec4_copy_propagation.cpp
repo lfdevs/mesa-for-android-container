@@ -31,9 +31,7 @@
 
 #include "brw_vec4.h"
 #include "brw_cfg.h"
-extern "C" {
-#include "main/macros.h"
-}
+#include "brw_eu.h"
 
 namespace brw {
 
@@ -134,14 +132,14 @@ try_constant_propagate(const struct brw_device_info *devinfo,
 
    if (inst->src[arg].abs) {
       if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
-          !brw_abs_immediate(value.type, &value)) {
+          !brw_abs_immediate(value.type, &value.as_brw_reg())) {
          return false;
       }
    }
 
    if (inst->src[arg].negate) {
       if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
-          !brw_negate_immediate(value.type, &value)) {
+          !brw_negate_immediate(value.type, &value.as_brw_reg())) {
          return false;
       }
    }
@@ -256,8 +254,8 @@ try_constant_propagate(const struct brw_device_info *devinfo,
 
 static bool
 try_copy_propagate(const struct brw_device_info *devinfo,
-                   vec4_instruction *inst,
-                   int arg, struct copy_entry *entry)
+                   vec4_instruction *inst, int arg,
+                   struct copy_entry *entry, int attributes_per_reg)
 {
    /* Build up the value we are propagating as if it were the source of a
     * single MOV
@@ -322,7 +320,8 @@ try_copy_propagate(const struct brw_device_info *devinfo,
    unsigned composed_swizzle = brw_compose_swizzle(inst->src[arg].swizzle,
                                                    value.swizzle);
    if (inst->is_3src() &&
-       value.file == UNIFORM &&
+       (value.file == UNIFORM ||
+        (value.file == ATTR && attributes_per_reg != 1)) &&
        !brw_is_single_value_swizzle(composed_swizzle))
       return false;
 
@@ -397,6 +396,11 @@ try_copy_propagate(const struct brw_device_info *devinfo,
 bool
 vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 {
+   /* If we are in dual instanced or single mode, then attributes are going
+    * to be interleaved, so one register contains two attribute slots.
+    */
+   const int attributes_per_reg =
+      prog_data->dispatch_mode == DISPATCH_MODE_4X2_DUAL_OBJECT ? 1 : 2;
    bool progress = false;
    struct copy_entry entries[alloc.total_size];
 
@@ -467,7 +471,7 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
          if (do_constant_prop && try_constant_propagate(devinfo, inst, i, &entry))
             progress = true;
 
-	 if (try_copy_propagate(devinfo, inst, i, &entry))
+         if (try_copy_propagate(devinfo, inst, i, &entry, attributes_per_reg))
 	    progress = true;
       }
 

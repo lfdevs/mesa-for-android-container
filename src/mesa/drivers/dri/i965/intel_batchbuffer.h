@@ -30,8 +30,12 @@ extern "C" {
  *     - 5 dwords for initial mi_flush
  *     - 2 dwords for CC state setup
  *     - 5 dwords for the required pipe control at the end
+ *   - Restoring L3 configuration: (24 dwords = 96 bytes)
+ *     - 2*6 dwords for two PIPE_CONTROL flushes.
+ *     - 7 dwords for L3 configuration set-up.
+ *     - 5 dwords for L3 atomic set-up (on HSW).
  */
-#define BATCH_RESERVED 152
+#define BATCH_RESERVED 248
 
 struct intel_batchbuffer;
 

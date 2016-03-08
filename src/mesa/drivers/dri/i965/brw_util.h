@@ -33,8 +33,6 @@
 #ifndef BRW_UTIL_H
 #define BRW_UTIL_H
 
-#include "main/mtypes.h"
-#include "main/imports.h"
 #include "brw_context.h"
 
 extern GLuint brw_translate_blend_factor( GLenum factor );

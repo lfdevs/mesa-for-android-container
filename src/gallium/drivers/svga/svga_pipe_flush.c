@@ -24,6 +24,7 @@
  **********************************************************/
 
 #include "pipe/p_defines.h"
+#include "util/u_debug_image.h"
 #include "util/u_string.h"
 #include "svga_screen.h"
 #include "svga_surface.h"

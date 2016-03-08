@@ -463,6 +463,39 @@
 #define R_0286EC_SPI_COMPUTE_NUM_THREAD_X            0x0286EC
 #define R_0286F0_SPI_COMPUTE_NUM_THREAD_Y            0x0286F0
 #define R_0286F4_SPI_COMPUTE_NUM_THREAD_Z            0x0286F4
+#define R_028B6C_VGT_TF_PARAM                        0x028B6C
+#define   S_028B6C_TYPE(x)                                            (((x) & 0x03) << 0)
+#define   G_028B6C_TYPE(x)                                            (((x) >> 0) & 0x03)
+#define   C_028B6C_TYPE                                               0xFFFFFFFC
+#define     V_028B6C_TESS_ISOLINE                                   0x00
+#define     V_028B6C_TESS_TRIANGLE                                  0x01
+#define     V_028B6C_TESS_QUAD                                      0x02
+#define   S_028B6C_PARTITIONING(x)                                    (((x) & 0x07) << 2)
+#define   G_028B6C_PARTITIONING(x)                                    (((x) >> 2) & 0x07)
+#define   C_028B6C_PARTITIONING                                       0xFFFFFFE3
+#define     V_028B6C_PART_INTEGER                                   0x00
+#define     V_028B6C_PART_POW2                                      0x01
+#define     V_028B6C_PART_FRAC_ODD                                  0x02
+#define     V_028B6C_PART_FRAC_EVEN                                 0x03
+#define   S_028B6C_TOPOLOGY(x)                                        (((x) & 0x07) << 5)
+#define   G_028B6C_TOPOLOGY(x)                                        (((x) >> 5) & 0x07)
+#define   C_028B6C_TOPOLOGY                                           0xFFFFFF1F
+#define     V_028B6C_OUTPUT_POINT                                   0x00
+#define     V_028B6C_OUTPUT_LINE                                    0x01
+#define     V_028B6C_OUTPUT_TRIANGLE_CW                             0x02
+#define     V_028B6C_OUTPUT_TRIANGLE_CCW                            0x03
+#define   S_028B6C_RESERVED_REDUC_AXIS(x)                             (((x) & 0x1) << 8)
+#define   G_028B6C_RESERVED_REDUC_AXIS(x)                             (((x) >> 8) & 0x1)
+#define   C_028B6C_RESERVED_REDUC_AXIS                                0xFFFFFEFF
+#define   S_028B6C_BUFFER_ACCESS_MODE(x)                              (((x) & 0x1) << 9)
+#define   G_028B6C_BUFFER_ACCESS_MODE(x)                              (((x) >> 9) & 0x1)
+#define   C_028B6C_BUFFER_ACCESS_MODE                                 0xFFFFFDFF
+#define     V_028B6C_PATCH_MAJOR                                    0x00
+#define     V_028B6C_TF_MAJOR                                       0x01
+#define   S_028B6C_NUM_DS_WAVES_PER_SIMD(x)                           (((x) & 0xf) << 10)
+#define   G_028B6C_NUM_DS_WAVES_PER_SIMD(x)                           (((x) >> 10) & 0xF)
+#define   C_028B6C_NUM_DS_WAVES_PER_SIMD                              0xFFFFC3FF
+
 #define R_028B74_VGT_DISPATCH_INITIATOR              0x028B74
 
 #define R_028800_DB_DEPTH_CONTROL                    0x028800
@@ -1260,6 +1293,16 @@
 #define R_00A430_TD_GS_SAMPLER0_BORDER_GREEN         0x00A430
 #define R_00A434_TD_GS_SAMPLER0_BORDER_BLUE          0x00A434
 #define R_00A438_TD_GS_SAMPLER0_BORDER_ALPHA         0x00A438
+#define R_00A43C_TD_HS_SAMPLER0_BORDER_COLOR_INDEX   0x00A43C
+#define R_00A440_TD_HS_SAMPLER0_BORDER_COLOR_RED     0x00A440
+#define R_00A444_TD_HS_SAMPLER0_BORDER_COLOR_GREEN   0x00A444
+#define R_00A448_TD_HS_SAMPLER0_BORDER_COLOR_BLUE    0x00A448
+#define R_00A44C_TD_HS_SAMPLER0_BORDER_COLOR_ALPHA   0x00A44C
+#define R_00A450_TD_LS_SAMPLER0_BORDER_COLOR_INDEX   0x00A450
+#define R_00A454_TD_LS_SAMPLER0_BORDER_COLOR_RED     0x00A454
+#define R_00A458_TD_LS_SAMPLER0_BORDER_COLOR_GREEN   0x00A458
+#define R_00A45C_TD_LS_SAMPLER0_BORDER_COLOR_BLUE    0x00A45C
+#define R_00A460_TD_LS_SAMPLER0_BORDER_COLOR_ALPHA   0x00A460
 #define R_00A464_TD_CS_SAMPLER0_BORDER_INDEX         0x00A464
 #define R_00A468_TD_CS_SAMPLER0_BORDER_RED           0x00A468
 #define R_00A46C_TD_CS_SAMPLER0_BORDER_GREEN         0x00A46C
@@ -1383,7 +1426,7 @@
 #define     V_008958_DI_PT_TRISTRIP                    0x00000006
 #define     V_008958_DI_PT_UNUSED_0                    0x00000007
 #define     V_008958_DI_PT_UNUSED_1                    0x00000008
-#define     V_008958_DI_PT_UNUSED_2                    0x00000009
+#define     V_008958_DI_PT_PATCH                       0x00000009
 #define     V_008958_DI_PT_LINELIST_ADJ                0x0000000A
 #define     V_008958_DI_PT_LINESTRIP_ADJ               0x0000000B
 #define     V_008958_DI_PT_TRILIST_ADJ                 0x0000000C
@@ -1585,27 +1628,24 @@
 #define   G_028848_ALLOW_DOUBLE_DENORM_OUT(x)          (((x) >> 7) & 0x1)
 #define   C_028848_ALLOW_DOUBLE_DENORM_OUT             0xFFFFFF7F
 
-#define R_0288D4_SQ_PGM_RESOURCES_LS                 0x0288d4
-#define   S_0288D4_NUM_GPRS(x)                         (((x) & 0xFF) << 0)
-#define   G_0288D4_NUM_GPRS(x)                         (((x) >> 0) & 0xFF)
-#define   C_0288D4_NUM_GPRS                            0xFFFFFF00
-#define   S_0288D4_STACK_SIZE(x)                       (((x) & 0xFF) << 8)
-#define   G_0288D4_STACK_SIZE(x)                       (((x) >> 8) & 0xFF)
-#define   C_0288D4_STACK_SIZE                          0xFFFF00FF
-#define   S_0288D4_DX10_CLAMP(x)                       (((x) & 0x1) << 21)
-#define   G_0288D4_DX10_CLAMP(x)                       (((x) >> 21) & 0x1)
-#define   C_0288D4_DX10_CLAMP                          0xFFDFFFFF
-#define   S_0288D4_PRIME_CACHE_ON_DRAW(x)              (((x) & 0x1) << 23)
-#define   G_0288D4_PRIME_CACHE_ON_DRAW(x)              (((x) >> 23) & 0x1)
-#define   S_0288D4_UNCACHED_FIRST_INST(x)              (((x) & 0x1) << 28)
-#define   G_0288D4_UNCACHED_FIRST_INST(x)              (((x) >> 28) & 0x1)
-#define   C_0288D4_UNCACHED_FIRST_INST                 0xEFFFFFFF
-#define   S_0288D4_CLAMP_CONSTS(x)                     (((x) & 0x1) << 31)
-#define   G_0288D4_CLAMP_CONSTS(x)                     (((x) >> 31) & 0x1)
-#define   C_0288D4_CLAMP_CONSTS                        0x7FFFFFFF
+#define R_0288BC_SQ_PGM_RESOURCES_HS                 0x0288BC
+#define   S_0288BC_NUM_GPRS(x)                         (((x) & 0xFF) << 0)
+#define   G_0288BC_NUM_GPRS(x)                         (((x) >> 0) & 0xFF)
+#define   C_0288BC_NUM_GPRS                            0xFFFFFF00
+#define   S_0288BC_STACK_SIZE(x)                       (((x) & 0xFF) << 8)
+#define   G_0288BC_STACK_SIZE(x)                       (((x) >> 8) & 0xFF)
+#define   C_0288BC_STACK_SIZE                          0xFFFF00FF
+#define   S_0288BC_DX10_CLAMP(x)                       (((x) & 0x1) << 21)
+#define   G_0288BC_DX10_CLAMP(x)                       (((x) >> 21) & 0x1)
+#define   C_0288BC_DX10_CLAMP                          0xFFDFFFFF
+#define   S_0288BC_PRIME_CACHE_ON_DRAW(x)              (((x) & 0x1) << 23)
+#define   G_0288BC_PRIME_CACHE_ON_DRAW(x)              (((x) >> 23) & 0x1)
+#define   C_028844_PRIME_CACHE_ON_DRAW                 0xFF7FFFFF
+#define   S_0288BC_UNCACHED_FIRST_INST(x)              (((x) & 0x1) << 28)
+#define   G_0288BC_UNCACHED_FIRST_INST(x)              (((x) >> 28) & 0x1)
+#define   C_0288BC_UNCACHED_FIRST_INST                 0xEFFFFFFF
 
-#define R_0288D8_SQ_PGM_RESOURCES_LS_2               0x0288d8
-
+#define R_0288C0_SQ_PGM_RESOURCES_2_HS               0x0288c0
 
 #define R_0288D4_SQ_PGM_RESOURCES_LS                 0x0288d4
 #define   S_0288D4_NUM_GPRS(x)                         (((x) & 0xFF) << 0)
@@ -1622,12 +1662,8 @@
 #define   S_0288D4_UNCACHED_FIRST_INST(x)              (((x) & 0x1) << 28)
 #define   G_0288D4_UNCACHED_FIRST_INST(x)              (((x) >> 28) & 0x1)
 #define   C_0288D4_UNCACHED_FIRST_INST                 0xEFFFFFFF
-#define   S_0288D4_CLAMP_CONSTS(x)                     (((x) & 0x1) << 31)
-#define   G_0288D4_CLAMP_CONSTS(x)                     (((x) >> 31) & 0x1)
-#define   C_0288D4_CLAMP_CONSTS                        0x7FFFFFFF
 
-#define R_0288D8_SQ_PGM_RESOURCES_LS_2               0x0288d8
-
+#define R_0288D8_SQ_PGM_RESOURCES_2_LS               0x0288d8
 
 #define R_028644_SPI_PS_INPUT_CNTL_0                 0x028644
 #define   S_028644_SEMANTIC(x)                         (((x) & 0xFF) << 0)
@@ -1957,6 +1993,7 @@
 #define   C_028818_VTX_W0_FMT                          0xFFFFFBFF
 
 #define R_028820_PA_CL_NANINF_CNTL                   0x00028820
+#define R_028830_SQ_LSTMP_RING_ITEMSIZE              0x00028830
 #define R_028838_SQ_DYN_GPR_RESOURCE_LIMIT_1         0x00028838
 #define   S_028838_PS_GPRS(x)                          (((x) & 0x1F) << 0)
 #define   S_028838_VS_GPRS(x)                          (((x) & 0x1F) << 5)
@@ -1976,8 +2013,10 @@
 #define R_028874_SQ_PGM_START_GS                     0x00028874
 #define R_02888C_SQ_PGM_START_ES                     0x0002888C
 #define R_0288A4_SQ_PGM_START_FS                     0x000288A4
-#define R_0288D0_SQ_PGM_START_LS                     0x000288d0
+#define R_0288B8_SQ_PGM_START_HS                     0x000288B8
+#define R_0288D0_SQ_PGM_START_LS                     0x000288D0
 #define R_0288A8_SQ_PGM_RESOURCES_FS                 0x000288A8
+#define R_0288E8_SQ_LDS_ALLOC                        0x000288E8
 #define R_0288EC_SQ_LDS_ALLOC_PS                     0x000288EC
 #define R_028900_SQ_ESGS_RING_ITEMSIZE               0x00028900
 #define R_028904_SQ_GSVS_RING_ITEMSIZE               0x00028904
@@ -1997,6 +2036,7 @@
 #define R_028980_ALU_CONST_CACHE_VS_0                0x00028980
 #define R_028984_ALU_CONST_CACHE_VS_1                0x00028984
 #define R_0289C0_ALU_CONST_CACHE_GS_0                0x000289C0
+#define R_028F00_ALU_CONST_CACHE_HS_0                0x00028F00
 #define R_028F40_ALU_CONST_CACHE_LS_0                0x00028F40
 #define R_028A04_PA_SU_POINT_MINMAX                  0x00028A04
 #define   S_028A04_MIN_SIZE(x)                         (((x) & 0xFFFF) << 0)
@@ -2090,6 +2130,44 @@
 #define     V_028B54_VS_STAGE_REAL                   0x00
 #define     V_028B54_VS_STAGE_DS                     0x01
 #define     V_028B54_VS_STAGE_COPY_SHADER            0x02
+#define R_028B58_VGT_LS_HS_CONFIG		     0x00028B58
+#define   S_028B58_NUM_PATCHES(x)                                     (((x) & 0xFF) << 0)
+#define   G_028B58_NUM_PATCHES(x)                                     (((x) >> 0) & 0xFF)
+#define   C_028B58_NUM_PATCHES                                        0xFFFFFF00
+#define   S_028B58_HS_NUM_INPUT_CP(x)                                 (((x) & 0x3F) << 8)
+#define   G_028B58_HS_NUM_INPUT_CP(x)                                 (((x) >> 8) & 0x3F)
+#define   C_028B58_HS_NUM_INPUT_CP                                    0xFFFFC0FF
+#define   S_028B58_HS_NUM_OUTPUT_CP(x)                                (((x) & 0x3F) << 14)
+#define   G_028B58_HS_NUM_OUTPUT_CP(x)                                (((x) >> 14) & 0x3F)
+#define   C_028B58_HS_NUM_OUTPUT_CP                                   0xFFF03FFF
+#define R_028B5C_VGT_LS_SIZE                         0x00028B5C
+#define   S_028B5C_SIZE(x)                                            (((x) & 0xFF) << 0)
+#define   G_028B5C_SIZE(x)                                            (((x) >> 0) & 0xFF)
+#define   C_028B5C_SIZE                                               0xFFFFFF00
+#define   S_028B5C_PATCH_CP_SIZE(x)                                   (((x) & 0x1FFF) << 8)
+#define   G_028B5C_PATCH_CP_SIZE(x)                                   (((x) >> 8) & 0x1FFF)
+#define   C_028B5C_PATCH_CP_SIZE                                      0xFFE000FF
+#define R_028B60_VGT_HS_SIZE                         0x00028B60
+#define   S_028B60_SIZE(x)                                            (((x) & 0xFF) << 0)
+#define   G_028B60_SIZE(x)                                            (((x) >> 0) & 0xFF)
+#define   C_028B60_SIZE                                               0xFFFFFF00
+#define   S_028B60_PATCH_CP_SIZE(x)                                   (((x) & 0x1FFF) << 8)
+#define   G_028B60_PATCH_CP_SIZE(x)                                   (((x) >> 8) & 0x1FFF)
+#define   C_028B60_PATCH_CP_SIZE                                      0xFFE000FF
+#define R_028B64_VGT_LS_HS_ALLOC                     0x00028B64
+#define   S_028B64_HS_TOTAL_OUTPUT(x)                                 (((x) & 0x1FFF) << 0)
+#define   G_028B64_HS_TOTAL_OUTPUT(x)                                 (((x) >> 0) & 0x1FFF)
+#define   C_028B64_HS_TOTAL_OUTPUT                                    0xFFFFE000
+#define   S_028B64_LS_HS_TOTAL_OUTPUT(x)                              (((x) & 0x1FFF) << 13)
+#define   G_028B64_LS_HS_TOTAL_OUTPUT(x)                              (((x) >> 13) & 0x1FFF)
+#define   C_028B64_LS_HS_TOTAL_OUTPUT                                 0xFC001FFF
+#define R_028B68_VGT_HS_PATCH_CONST                  0x00028B68
+#define   S_028B68_SIZE(x)                                            (((x) & 0x1FFF) << 0)
+#define   G_028B68_SIZE(x)                                            (((x) >> 0) & 0x1FFF)
+#define   C_028B68_SIZE                                               0xFFFFE000
+#define   S_028B68_STRIDE(x)                                          (((x) & 0x1FFF) << 13)
+#define   G_028B68_STRIDE(x)                                          (((x) >> 13) & 0x1FFF)
+#define   C_028B68_STRIDE                                             0xFC001FFF
 #define R_028B70_DB_ALPHA_TO_MASK                    0x00028B70
 #define   S_028B70_ALPHA_TO_MASK_ENABLE(x)		(((x) & 0x1) << 0)
 #define   S_028B70_ALPHA_TO_MASK_OFFSET0(x)		(((x) & 0x3) << 8)
@@ -2423,7 +2501,6 @@
 #define CM_R_0286FC_SPI_LDS_MGMT                     0x286fc
 #define   S_0286FC_NUM_PS_LDS(x)                     ((x) & 0xff)
 #define   S_0286FC_NUM_LS_LDS(x)                     ((x) & 0xff) << 8
-#define CM_R_0288E8_SQ_LDS_ALLOC                     0x000288E8
 
 #define CM_R_028804_DB_EQAA                          0x00028804
 #define   S_028804_MAX_ANCHOR_SAMPLES(x)		(((x) & 0x7) << 0)

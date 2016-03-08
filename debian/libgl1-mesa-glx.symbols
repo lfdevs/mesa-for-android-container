@@ -309,9 +309,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glFramebufferTexture3D@Base 0
  glFramebufferTexture3DEXT@Base 0
  glFramebufferTexture@Base 0
- glFramebufferTextureARB@Base 0
  glFramebufferTextureLayer@Base 0
- glFramebufferTextureLayerARB@Base 0
  glFramebufferTextureLayerEXT@Base 0
  glFrontFace@Base 0
  glFrustum@Base 0
@@ -753,7 +751,6 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glProgramLocalParameter4fARB@Base 0
  glProgramLocalParameter4fvARB@Base 0
  glProgramParameteri@Base 0
- glProgramParameteriARB@Base 0
  glProgramStringARB@Base 0
  glProvokingVertex@Base 0
  glProvokingVertexEXT@Base 0

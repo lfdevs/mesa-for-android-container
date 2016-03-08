@@ -1486,7 +1486,7 @@ translate_sse2_create(const struct translate_key *key)
       goto fail;
 
    p = os_malloc_aligned(sizeof(struct translate_sse), 16);
-   if (p == NULL)
+   if (!p)
       goto fail;
 
    memset(p, 0, sizeof(*p));

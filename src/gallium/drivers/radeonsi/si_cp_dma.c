@@ -176,7 +176,7 @@ static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 
 	/* Fallback for unaligned clears. */
 	if (offset % 4 != 0 || size % 4 != 0) {
-		uint8_t *map = sctx->b.ws->buffer_map(r600_resource(dst)->cs_buf,
+		uint8_t *map = sctx->b.ws->buffer_map(r600_resource(dst)->buf,
 						      sctx->b.gfx.cs,
 						      PIPE_TRANSFER_WRITE);
 		map += offset;
@@ -273,22 +273,26 @@ void si_copy_buffer(struct si_context *sctx,
 	dst_offset += r600_resource(dst)->gpu_address;
 	src_offset += r600_resource(src)->gpu_address;
 
-	/* If the size is not aligned, we must add a dummy copy at the end
-	 * just to align the internal counter. Otherwise, the DMA engine
-	 * would slow down by an order of magnitude for following copies.
-	 */
-	if (size % CP_DMA_ALIGNMENT)
-		realign_size = CP_DMA_ALIGNMENT - (size % CP_DMA_ALIGNMENT);
+	/* The workarounds aren't needed on Fiji and beyond. */
+	if (sctx->b.family <= CHIP_CARRIZO ||
+	    sctx->b.family == CHIP_STONEY) {
+		/* If the size is not aligned, we must add a dummy copy at the end
+		 * just to align the internal counter. Otherwise, the DMA engine
+		 * would slow down by an order of magnitude for following copies.
+		 */
+		if (size % CP_DMA_ALIGNMENT)
+			realign_size = CP_DMA_ALIGNMENT - (size % CP_DMA_ALIGNMENT);
 
-	/* If the copy begins unaligned, we must start copying from the next
-	 * aligned block and the skipped part should be copied after everything
-	 * else has been copied. Only the src alignment matters, not dst.
-	 */
-	if (src_offset % CP_DMA_ALIGNMENT) {
-		skipped_size = CP_DMA_ALIGNMENT - (src_offset % CP_DMA_ALIGNMENT);
-		/* The main part will be skipped if the size is too small. */
-		skipped_size = MIN2(skipped_size, size);
-		size -= skipped_size;
+		/* If the copy begins unaligned, we must start copying from the next
+		 * aligned block and the skipped part should be copied after everything
+		 * else has been copied. Only the src alignment matters, not dst.
+		 */
+		if (src_offset % CP_DMA_ALIGNMENT) {
+			skipped_size = CP_DMA_ALIGNMENT - (src_offset % CP_DMA_ALIGNMENT);
+			/* The main part will be skipped if the size is too small. */
+			skipped_size = MIN2(skipped_size, size);
+			size -= skipped_size;
+		}
 	}
 
 	/* Flush the caches. */

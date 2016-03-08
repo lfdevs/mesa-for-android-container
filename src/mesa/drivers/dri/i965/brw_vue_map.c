@@ -40,7 +40,6 @@
  */
 
 
-#include "main/compiler.h"
 #include "brw_context.h"
 
 static inline void
@@ -177,11 +176,80 @@ brw_compute_vue_map(const struct brw_device_info *devinfo,
    }
 
    vue_map->num_slots = separate ? slot + 1 : slot;
+   vue_map->num_per_vertex_slots = 0;
+   vue_map->num_per_patch_slots = 0;
+}
+
+/**
+ * Compute the VUE map for tessellation control shader outputs and
+ * tessellation evaluation shader inputs.
+ */
+void
+brw_compute_tess_vue_map(struct brw_vue_map *vue_map,
+                         GLbitfield64 vertex_slots,
+                         GLbitfield patch_slots)
+{
+   /* I don't think anything actually uses this... */
+   vue_map->slots_valid = vertex_slots;
+
+   vertex_slots &= ~(VARYING_BIT_TESS_LEVEL_OUTER |
+                     VARYING_BIT_TESS_LEVEL_INNER);
+
+   /* Make sure that the values we store in vue_map->varying_to_slot and
+    * vue_map->slot_to_varying won't overflow the signed chars that are used
+    * to store them.  Note that since vue_map->slot_to_varying sometimes holds
+    * values equal to VARYING_SLOT_TESS_MAX , we need to ensure that
+    * VARYING_SLOT_TESS_MAX is <= 127, not 128.
+    */
+   STATIC_ASSERT(VARYING_SLOT_TESS_MAX <= 127);
+
+   for (int i = 0; i < VARYING_SLOT_TESS_MAX ; ++i) {
+      vue_map->varying_to_slot[i] = -1;
+      vue_map->slot_to_varying[i] = BRW_VARYING_SLOT_PAD;
+   }
+
+   int slot = 0;
+
+   /* The first 8 DWords are reserved for the "Patch Header".
+    *
+    * VARYING_SLOT_TESS_LEVEL_OUTER / INNER live here, but the exact layout
+    * depends on the domain type.  They might not be in slots 0 and 1 as
+    * described here, but pretending they're separate allows us to uniquely
+    * identify them by distinct slot locations.
+    */
+   assign_vue_slot(vue_map, VARYING_SLOT_TESS_LEVEL_INNER, slot++);
+   assign_vue_slot(vue_map, VARYING_SLOT_TESS_LEVEL_OUTER, slot++);
+
+   /* first assign per-patch varyings */
+   while (patch_slots != 0) {
+      const int varying = ffsll(patch_slots) - 1;
+      if (vue_map->varying_to_slot[varying + VARYING_SLOT_PATCH0] == -1) {
+         assign_vue_slot(vue_map, varying + VARYING_SLOT_PATCH0, slot++);
+      }
+      patch_slots &= ~BITFIELD64_BIT(varying);
+   }
+
+   /* apparently, including the patch header... */
+   vue_map->num_per_patch_slots = slot;
+
+   /* then assign per-vertex varyings for each vertex in our patch */
+   while (vertex_slots != 0) {
+      const int varying = ffsll(vertex_slots) - 1;
+      if (vue_map->varying_to_slot[varying] == -1) {
+         assign_vue_slot(vue_map, varying, slot++);
+      }
+      vertex_slots &= ~BITFIELD64_BIT(varying);
+   }
+
+   vue_map->num_per_vertex_slots = slot - vue_map->num_per_patch_slots;
+   vue_map->num_slots = slot;
 }
 
 static const char *
 varying_name(brw_varying_slot slot)
 {
+   assume(slot < BRW_VARYING_SLOT_COUNT);
+
    if (slot < VARYING_SLOT_MAX)
       return gl_varying_slot_name(slot);
 
@@ -197,11 +265,28 @@ varying_name(brw_varying_slot slot)
 void
 brw_print_vue_map(FILE *fp, const struct brw_vue_map *vue_map)
 {
-   fprintf(fp, "VUE map (%d slots, %s)\n",
-           vue_map->num_slots, vue_map->separate ? "SSO" : "non-SSO");
-   for (int i = 0; i < vue_map->num_slots; i++) {
-      fprintf(fp, "  [%d] %s\n", i,
-              varying_name(vue_map->slot_to_varying[i]));
+   if (vue_map->num_per_vertex_slots > 0 || vue_map->num_per_patch_slots > 0) {
+      fprintf(fp, "PUE map (%d slots, %d/patch, %d/vertex, %s)\n",
+              vue_map->num_slots,
+              vue_map->num_per_patch_slots,
+              vue_map->num_per_vertex_slots,
+              vue_map->separate ? "SSO" : "non-SSO");
+      for (int i = 0; i < vue_map->num_slots; i++) {
+         if (vue_map->slot_to_varying[i] >= VARYING_SLOT_PATCH0) {
+            fprintf(fp, "  [%d] VARYING_SLOT_PATCH%d\n", i,
+                    vue_map->slot_to_varying[i] - VARYING_SLOT_PATCH0);
+         } else {
+            fprintf(fp, "  [%d] %s\n", i,
+                    varying_name(vue_map->slot_to_varying[i]));
+         }
+      }
+   } else {
+      fprintf(fp, "VUE map (%d slots, %s)\n",
+              vue_map->num_slots, vue_map->separate ? "SSO" : "non-SSO");
+      for (int i = 0; i < vue_map->num_slots; i++) {
+         fprintf(fp, "  [%d] %s\n", i,
+                 varying_name(vue_map->slot_to_varying[i]));
+      }
    }
    fprintf(fp, "\n");
 }

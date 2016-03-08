@@ -30,6 +30,7 @@
 #include "brw_vec4_gs_visitor.h"
 #include "gen6_gs_visitor.h"
 #include "brw_fs.h"
+#include "brw_nir.h"
 
 namespace brw {
 
@@ -177,29 +178,6 @@ vec4_gs_visitor::emit_prolog()
       if (c->control_data_header_size_bits <= 32) {
          this->current_annotation = "initialize control data bits";
          inst = emit(MOV(dst_reg(this->control_data_bits), brw_imm_ud(0u)));
-         inst->force_writemask_all = true;
-      }
-   }
-
-   /* If the geometry shader uses the gl_PointSize input, we need to fix it up
-    * to account for the fact that the vertex shader stored it in the w
-    * component of VARYING_SLOT_PSIZ.
-    */
-   if (nir->info.inputs_read & VARYING_BIT_PSIZ) {
-      this->current_annotation = "swizzle gl_PointSize input";
-      for (int vertex = 0; vertex < (int)nir->info.gs.vertices_in; vertex++) {
-         dst_reg dst(ATTR,
-                     BRW_VARYING_SLOT_COUNT * vertex + VARYING_SLOT_PSIZ);
-         dst.type = BRW_REGISTER_TYPE_F;
-         src_reg src(dst);
-         dst.writemask = WRITEMASK_X;
-         src.swizzle = BRW_SWIZZLE_WWWW;
-         inst = emit(MOV(dst, src));
-
-         /* In dual instanced dispatch mode, dst has a width of 4, so we need
-          * to make sure the MOV happens regardless of which channels are
-          * enabled.
-          */
          inst->force_writemask_all = true;
       }
    }
@@ -606,7 +584,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
                void *mem_ctx,
                const struct brw_gs_prog_key *key,
                struct brw_gs_prog_data *prog_data,
-               const nir_shader *shader,
+               const nir_shader *src_shader,
                struct gl_shader_program *shader_prog,
                int shader_time_index,
                unsigned *final_assembly_size,
@@ -615,6 +593,12 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
    struct brw_gs_compile c;
    memset(&c, 0, sizeof(c));
    c.key = *key;
+
+   nir_shader *shader = nir_shader_clone(mem_ctx, src_shader);
+   shader = brw_nir_apply_sampler_key(shader, compiler->devinfo, &key->tex,
+                                      compiler->scalar_stage[MESA_SHADER_GEOMETRY]);
+   shader = brw_postprocess_nir(shader, compiler->devinfo,
+                                compiler->scalar_stage[MESA_SHADER_GEOMETRY]);
 
    prog_data->include_primitive_id =
       (shader->info.inputs_read & VARYING_BIT_PRIMITIVE_ID) != 0;
@@ -788,6 +772,8 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
 
    prog_data->output_topology =
       get_hw_prim_for_gl_prim(shader->info.gs.output_primitive);
+
+   prog_data->vertices_in = shader->info.gs.vertices_in;
 
    /* The GLSL linker will have already matched up GS inputs and the outputs
     * of prior stages.  The driver does extend VS outputs in some cases, but

@@ -220,7 +220,7 @@ static void print_instr_cat1(instr_t *instr)
 		else if (cat1->off > 0)
 			printf("%c<a0.x + %d>", type, cat1->off);
 		else
-			printf("c<a0.x>");
+			printf("%c<a0.x>", type);
 	} else {
 		print_reg_src((reg_t)(cat1->src), type_size(cat1->src_type) == 32,
 				cat1->src_r, cat1->src_c, cat1->src_im, false, false, false);
@@ -650,7 +650,7 @@ static void print_instr_cat6(instr_t *instr)
 /* size of largest OPC field of all the instruction categories: */
 #define NOPC_BITS 6
 
-struct opc_info {
+static const struct opc_info {
 	uint16_t cat;
 	uint16_t opc;
 	const char *name;

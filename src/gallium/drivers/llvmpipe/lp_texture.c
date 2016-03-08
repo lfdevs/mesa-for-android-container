@@ -695,7 +695,7 @@ llvmpipe_user_buffer_create(struct pipe_screen *screen,
    struct llvmpipe_resource *buffer;
 
    buffer = CALLOC_STRUCT(llvmpipe_resource);
-   if(!buffer)
+   if (!buffer)
       return NULL;
 
    pipe_reference_init(&buffer->base.reference, 1);

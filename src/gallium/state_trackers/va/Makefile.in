@@ -142,7 +142,9 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libvatracker_la_LIBADD =
 am__objects_1 = buffer.lo config.lo context.lo display.lo image.lo \
-	picture.lo subpicture.lo surface.lo
+	picture.lo picture_mpeg12.lo picture_mpeg4.lo picture_h264.lo \
+	picture_hevc.lo picture_vc1.lo postproc.lo subpicture.lo \
+	surface.lo
 am_libvatracker_la_OBJECTS = $(am__objects_1)
 libvatracker_la_OBJECTS = $(am_libvatracker_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -337,8 +339,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -384,6 +384,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -508,6 +509,12 @@ C_SOURCES := \
 	display.c \
 	image.c \
 	picture.c \
+	picture_mpeg12.c \
+	picture_mpeg4.c \
+	picture_h264.c \
+	picture_hevc.c \
+	picture_vc1.c \
+	postproc.c \
 	subpicture.c \
 	surface.c \
 	va_private.h
@@ -648,6 +655,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/display.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/image.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/picture.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/picture_h264.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/picture_hevc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/picture_mpeg12.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/picture_mpeg4.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/picture_vc1.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/postproc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/subpicture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/surface.Plo@am__quote@
 

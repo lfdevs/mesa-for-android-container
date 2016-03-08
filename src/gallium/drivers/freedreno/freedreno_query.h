@@ -65,4 +65,16 @@ fd_query(struct pipe_query *pq)
 void fd_query_screen_init(struct pipe_screen *pscreen);
 void fd_query_context_init(struct pipe_context *pctx);
 
+static inline bool
+skip_begin_query(int type)
+{
+	switch (type) {
+	case PIPE_QUERY_TIMESTAMP:
+	case PIPE_QUERY_GPU_FINISHED:
+		return true;
+	default:
+		return false;
+	}
+}
+
 #endif /* FREEDRENO_QUERY_H_ */

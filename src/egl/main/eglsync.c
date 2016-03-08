@@ -144,9 +144,6 @@ EGLBoolean
 _eglGetSyncAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
                   EGLint attribute, EGLAttrib *value)
 {
-   if (!value)
-      return _eglError(EGL_BAD_PARAMETER, "eglGetSyncAttribKHR");
-
    switch (attribute) {
    case EGL_SYNC_TYPE_KHR:
       *value = sync->Type;

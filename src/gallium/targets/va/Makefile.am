@@ -42,6 +42,8 @@ TARGET_DRIVERS =
 TARGET_CPPFLAGS =
 TARGET_LIB_DEPS =
 
+include $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc
+
 include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 

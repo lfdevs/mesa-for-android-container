@@ -47,6 +47,8 @@ static int pidx(unsigned query_type)
 		return 0;
 	case PIPE_QUERY_OCCLUSION_PREDICATE:
 		return 1;
+	case PIPE_QUERY_TIME_ELAPSED:
+		return 2;
 	default:
 		return -1;
 	}
@@ -89,7 +91,9 @@ static void
 resume_query(struct fd_context *ctx, struct fd_hw_query *hq,
 		struct fd_ringbuffer *ring)
 {
+	int idx = pidx(hq->provider->query_type);
 	assert(!hq->period);
+	ctx->active_providers |= (1 << idx);
 	hq->period = util_slab_alloc(&ctx->sample_period_pool);
 	list_inithead(&hq->period->list);
 	hq->period->start = get_sample(ctx, ring, hq->base.type);
@@ -101,7 +105,9 @@ static void
 pause_query(struct fd_context *ctx, struct fd_hw_query *hq,
 		struct fd_ringbuffer *ring)
 {
+	int idx = pidx(hq->provider->query_type);
 	assert(hq->period && !hq->period->end);
+	assert(ctx->active_providers & (1 << idx));
 	hq->period->end = get_sample(ctx, ring, hq->base.type);
 	list_addtail(&hq->period->list, &hq->current_periods);
 	hq->period = NULL;
@@ -156,6 +162,12 @@ static void
 fd_hw_end_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_hw_query *hq = fd_hw_query(q);
+	/* there are a couple special cases, which don't have
+	 * a matching ->begin_query():
+	 */
+	if (skip_begin_query(q->type) && !q->active) {
+		fd_hw_begin_query(ctx, q);
+	}
 	if (!q->active)
 		return;
 	if (is_active(hq, ctx->stage))
@@ -291,6 +303,8 @@ fd_hw_sample_init(struct fd_context *ctx, uint32_t size)
 	struct fd_hw_sample *samp = util_slab_alloc(&ctx->sample_pool);
 	pipe_reference_init(&samp->reference, 1);
 	samp->size = size;
+	debug_assert(util_is_power_of_two(size));
+	ctx->next_sample_offset = align(ctx->next_sample_offset, size);
 	samp->offset = ctx->next_sample_offset;
 	/* NOTE: util_slab_alloc() does not zero out the buffer: */
 	samp->bo = NULL;
@@ -318,7 +332,7 @@ prepare_sample(struct fd_hw_sample *samp, struct fd_bo *bo,
 		assert(samp->tile_stride == tile_stride);
 		return;
 	}
-	samp->bo = bo;
+	samp->bo = fd_bo_ref(bo);
 	samp->num_tiles = num_tiles;
 	samp->tile_stride = tile_stride;
 }
@@ -429,6 +443,23 @@ fd_hw_query_set_stage(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	}
 	clear_sample_cache(ctx);
 	ctx->stage = stage;
+}
+
+/* call the provider->enable() for all the hw queries that were active
+ * in the current batch.  This sets up perfctr selector regs statically
+ * for the duration of the batch.
+ */
+void
+fd_hw_query_enable(struct fd_context *ctx, struct fd_ringbuffer *ring)
+{
+	for (int idx = 0; idx < MAX_HW_SAMPLE_PROVIDERS; idx++) {
+		if (ctx->active_providers & (1 << idx)) {
+			assert(ctx->sample_providers[idx]);
+			if (ctx->sample_providers[idx]->enable)
+				ctx->sample_providers[idx]->enable(ctx, ring);
+		}
+	}
+	ctx->active_providers = 0;  /* clear it for next frame */
 }
 
 void

@@ -36,17 +36,11 @@
 #include "amdgpu_winsys.h"
 #include "pipebuffer/pb_bufmgr.h"
 
-struct amdgpu_bo_desc {
-   struct pb_desc base;
-
-   enum radeon_bo_domain initial_domain;
-   unsigned flags;
-};
-
 struct amdgpu_winsys_bo {
    struct pb_buffer base;
+   struct pb_cache_entry cache_entry;
 
-   struct amdgpu_winsys *rws;
+   struct amdgpu_winsys *ws;
    void *user_ptr; /* from buffer_from_ptr */
 
    amdgpu_bo_handle bo;
@@ -54,6 +48,7 @@ struct amdgpu_winsys_bo {
    amdgpu_va_handle va_handle;
    uint64_t va;
    enum radeon_bo_domain initial_domain;
+   bool use_reusable_pool;
 
    /* how many command streams is this bo referenced in? */
    int num_cs_references;
@@ -65,10 +60,13 @@ struct amdgpu_winsys_bo {
 
    /* Fences for buffer synchronization. */
    struct pipe_fence_handle *fence[RING_LAST];
+
+   struct list_head global_list_item;
 };
 
-struct pb_manager *amdgpu_bomgr_create(struct amdgpu_winsys *rws);
-void amdgpu_bomgr_init_functions(struct amdgpu_winsys *ws);
+bool amdgpu_bo_can_reclaim(struct pb_buffer *_buf);
+void amdgpu_bo_destroy(struct pb_buffer *_buf);
+void amdgpu_bo_init_functions(struct amdgpu_winsys *ws);
 
 static inline
 void amdgpu_winsys_bo_reference(struct amdgpu_winsys_bo **dst,

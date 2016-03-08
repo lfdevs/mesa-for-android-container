@@ -1059,8 +1059,6 @@ r300_texture_create_object(struct r300_screen *rscreen,
                 util_format_is_depth_or_stencil(base->format) ? "depth" : "color");
     }
 
-    tex->cs_buf = rws->buffer_get_cs_handle(tex->buf);
-
     rws->buffer_set_tiling(tex->buf, NULL,
             tex->tex.microtile, tex->tex.macrotile[0],
             0, 0, 0, 0, 0, 0, 0,
@@ -1169,7 +1167,7 @@ struct pipe_surface* r300_create_surface_custom(struct pipe_context * ctx,
         surface->base.u.tex.last_layer = surf_tmpl->u.tex.last_layer;
 
         surface->buf = tex->buf;
-        surface->cs_buf = tex->cs_buf;
+        surface->buf = tex->buf;
 
         /* Prefer VRAM if there are multiple domains to choose from. */
         surface->domain = tex->domain;

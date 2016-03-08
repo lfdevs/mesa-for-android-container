@@ -72,7 +72,8 @@ nv50_screen_is_format_supported(struct pipe_screen *pscreen,
                  PIPE_BIND_TRANSFER_WRITE |
                  PIPE_BIND_SHARED);
 
-   return (nv50_format_table[format].usage & bindings) == bindings;
+   return (( nv50_format_table[format].usage |
+            nv50_vertex_format[format].usage) & bindings) == bindings;
 }
 
 static int
@@ -120,7 +121,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 256;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-      return 1; /* 256 for binding as RT, but that's not possible in GL */
+      return 16; /* 256 for binding as RT, but that's not possible in GL */
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return NOUVEAU_MIN_BUFFER_MAP_ALIGN;
    case PIPE_CAP_MAX_VIEWPORTS:
@@ -182,6 +183,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SHAREABLE_SHADERS:
    case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_COMPUTE:
+   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return 1; /* class_3d >= NVA0_3D_CLASS; */
@@ -212,11 +214,24 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
    case PIPE_CAP_VERTEXID_NOBASE:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE: /* potentially supported on some hw */
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
    case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+   case PIPE_CAP_DRAW_PARAMETERS:
+   case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
+   case PIPE_CAP_INVALIDATE_BUFFER:
+   case PIPE_CAP_GENERATE_MIPMAP:
+   case PIPE_CAP_STRING_MARKER:
+   case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
+   case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
+   case PIPE_CAP_QUERY_BUFFER_OBJECT:
+   case PIPE_CAP_QUERY_MEMORY_INFO:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -249,8 +264,8 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
    case PIPE_SHADER_VERTEX:
    case PIPE_SHADER_GEOMETRY:
    case PIPE_SHADER_FRAGMENT:
-   case PIPE_SHADER_COMPUTE:
       break;
+   case PIPE_SHADER_COMPUTE:
    default:
       return 0;
    }
@@ -300,6 +315,9 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+   case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+   case PIPE_SHADER_CAP_SUPPORTED_IRS:
+   case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
       return 0;
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;
@@ -523,11 +541,11 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
    }
 
    BEGIN_NV04(push, NV50_3D(ZETA_COMP_ENABLE), 1);
-   PUSH_DATA(push, screen->base.device->drm_version >= 0x01000101);
+   PUSH_DATA(push, screen->base.drm->version >= 0x01000101);
 
    BEGIN_NV04(push, NV50_3D(RT_COMP_ENABLE(0)), 8);
    for (i = 0; i < 8; ++i)
-      PUSH_DATA(push, screen->base.device->drm_version >= 0x01000101);
+      PUSH_DATA(push, screen->base.drm->version >= 0x01000101);
 
    BEGIN_NV04(push, NV50_3D(RT_CONTROL), 1);
    PUSH_DATA (push, 1);
@@ -547,7 +565,7 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
 
    if (screen->tesla->oclass >= NVA0_3D_CLASS) {
       BEGIN_NV04(push, SUBC_3D(NVA0_3D_TEX_MISC), 1);
-      PUSH_DATA (push, NVA0_3D_TEX_MISC_SEAMLESS_CUBE_MAP);
+      PUSH_DATA (push, 0);
    }
 
    BEGIN_NV04(push, NV50_3D(SCREEN_Y_CONTROL), 1);
@@ -752,7 +770,7 @@ int nv50_tls_realloc(struct nv50_screen *screen, unsigned tls_space)
    return 1;
 }
 
-struct pipe_screen *
+struct nouveau_screen *
 nv50_screen_create(struct nouveau_device *dev)
 {
    struct nv50_screen *screen;
@@ -767,6 +785,7 @@ nv50_screen_create(struct nouveau_device *dev)
    if (!screen)
       return NULL;
    pscreen = &screen->base.base;
+   pscreen->destroy = nv50_screen_destroy;
 
    ret = nouveau_screen_init(&screen->base, dev);
    if (ret) {
@@ -787,7 +806,6 @@ nv50_screen_create(struct nouveau_device *dev)
 
    chan = screen->base.channel;
 
-   pscreen->destroy = nv50_screen_destroy;
    pscreen->context_create = nv50_create;
    pscreen->is_format_supported = nv50_screen_is_format_supported;
    pscreen->get_param = nv50_screen_get_param;
@@ -966,11 +984,11 @@ nv50_screen_create(struct nouveau_device *dev)
 
    nouveau_fence_new(&screen->base, &screen->base.fence.current, false);
 
-   return pscreen;
+   return &screen->base;
 
 fail:
-   nv50_screen_destroy(pscreen);
-   return NULL;
+   screen->base.base.context_create = NULL;
+   return &screen->base;
 }
 
 int

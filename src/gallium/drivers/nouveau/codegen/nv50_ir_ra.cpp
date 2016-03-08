@@ -23,6 +23,7 @@
 #include "codegen/nv50_ir.h"
 #include "codegen/nv50_ir_target.h"
 
+#include <algorithm>
 #include <stack>
 #include <limits>
 #if __cplusplus >= 201103L
@@ -102,6 +103,8 @@ public:
 
    void print() const;
 
+   const bool restrictedGPR16Range;
+
 private:
    BitSet bits[LAST_REGISTER_FILE + 1];
 
@@ -109,8 +112,6 @@ private:
 
    int last[LAST_REGISTER_FILE + 1];
    int fill[LAST_REGISTER_FILE + 1];
-
-   const bool restrictedGPR16Range;
 };
 
 void
@@ -839,6 +840,32 @@ GCRA::printNodeInfo() const
    }
 }
 
+static bool
+isShortRegOp(Instruction *insn)
+{
+   // Immediates are always in src1. Every other situation can be resolved by
+   // using a long encoding.
+   return insn->srcExists(1) && insn->src(1).getFile() == FILE_IMMEDIATE;
+}
+
+// Check if this LValue is ever used in an instruction that can't be encoded
+// with long registers (i.e. > r63)
+static bool
+isShortRegVal(LValue *lval)
+{
+   if (lval->defs.size() == 0)
+      return false;
+   for (Value::DefCIterator def = lval->defs.begin();
+        def != lval->defs.end(); ++def)
+      if (isShortRegOp((*def)->getInsn()))
+         return true;
+   for (Value::UseCIterator use = lval->uses.begin();
+        use != lval->uses.end(); ++use)
+      if (isShortRegOp((*use)->getInsn()))
+         return true;
+   return false;
+}
+
 void
 GCRA::RIG_Node::init(const RegisterSet& regs, LValue *lval)
 {
@@ -854,7 +881,12 @@ GCRA::RIG_Node::init(const RegisterSet& regs, LValue *lval)
 
    weight = std::numeric_limits<float>::infinity();
    degree = 0;
-   degreeLimit = regs.getFileSize(f, lval->reg.size);
+   int size = regs.getFileSize(f, lval->reg.size);
+   // On nv50, we lose a bit of gpr encoding when there's an embedded
+   // immediate.
+   if (regs.restrictedGPR16Range && f == FILE_GPR && isShortRegVal(lval))
+      size /= 2;
+   degreeLimit = size;
    degreeLimit -= relDegree[1][colors] - 1;
 
    livei.insert(lval->livei);
@@ -936,6 +968,7 @@ GCRA::coalesce(ArrayList& insns)
    case 0xf0:
    case 0x100:
    case 0x110:
+   case 0x120:
       ret = doCoalesce(insns, JOIN_MASK_UNION);
       break;
    default:
@@ -1433,6 +1466,19 @@ GCRA::allocateRegisters(ArrayList& insns)
       if (lval) {
          nodes[i].init(regs, lval);
          RIG.insert(&nodes[i]);
+
+         if (lval->inFile(FILE_GPR) && lval->defs.size() > 0 &&
+             prog->getTarget()->getChipset() < 0xc0) {
+            Instruction *insn = lval->getInsn();
+            if (insn->op == OP_MAD || insn->op == OP_SAD)
+               // Short encoding only possible if they're all GPRs, no need to
+               // affect them otherwise.
+               if (insn->flagsDef < 0 &&
+                   insn->src(0).getFile() == FILE_GPR &&
+                   insn->src(1).getFile() == FILE_GPR &&
+                   insn->src(2).getFile() == FILE_GPR)
+                  nodes[i].addRegPreference(getNode(insn->getSrc(2)->asLValue()));
+         }
       }
    }
 
@@ -1602,6 +1648,8 @@ SpillCodeInserter::spill(Instruction *defi, Value *slot, LValue *lval)
       st = new_Instruction(func, OP_CVT, ty);
       st->setDef(0, slot);
       st->setSrc(0, lval);
+      if (lval->reg.file == FILE_FLAGS)
+         st->flagsSrc = 0;
    }
    defi->bb->insertAfter(defi, st);
 }
@@ -1643,11 +1691,20 @@ SpillCodeInserter::unspill(Instruction *usei, LValue *lval, Value *slot)
    }
    ld->setDef(0, lval);
    ld->setSrc(0, slot);
+   if (lval->reg.file == FILE_FLAGS)
+      ld->flagsDef = 0;
 
    usei->bb->insertBefore(usei, ld);
    return lval;
 }
 
+static bool
+value_cmp(ValueRef *a, ValueRef *b) {
+   Instruction *ai = a->getInsn(), *bi = b->getInsn();
+   if (ai->bb != bi->bb)
+      return ai->bb->getId() < bi->bb->getId();
+   return ai->serial < bi->serial;
+}
 
 // For each value that is to be spilled, go through all its definitions.
 // A value can have multiple definitions if it has been coalesced before.
@@ -1681,18 +1738,25 @@ SpillCodeInserter::run(const std::list<ValuePair>& lst)
          LValue *dval = (*d)->get()->asLValue();
          Instruction *defi = (*d)->getInsn();
 
+         // Sort all the uses by BB/instruction so that we don't unspill
+         // multiple times in a row, and also remove a source of
+         // non-determinism.
+         std::vector<ValueRef *> refs(dval->uses.begin(), dval->uses.end());
+         std::sort(refs.begin(), refs.end(), value_cmp);
+
          // Unspill at each use *before* inserting spill instructions,
          // we don't want to have the spill instructions in the use list here.
-         while (!dval->uses.empty()) {
-            ValueRef *u = *dval->uses.begin();
+         for (std::vector<ValueRef*>::const_iterator it = refs.begin();
+              it != refs.end(); ++it) {
+            ValueRef *u = *it;
             Instruction *usei = u->getInsn();
             assert(usei);
             if (usei->isPseudo()) {
                tmp = (slot->reg.file == FILE_MEMORY_LOCAL) ? NULL : slot;
                last = NULL;
-            } else
-            if (!last || usei != last->next) { // TODO: sort uses
-               tmp = unspill(usei, dval, slot);
+            } else {
+               if (!last || (usei != last->next && usei != last))
+                  tmp = unspill(usei, dval, slot);
                last = usei;
             }
             u->set(tmp);
@@ -2087,7 +2151,8 @@ RegAlloc::InsertConstraintsPass::texConstraintNVC0(TexInstruction *tex)
 {
    int n, s;
 
-   textureMask(tex);
+   if (isTextureOp(tex->op))
+      textureMask(tex);
 
    if (tex->op == OP_TXQ) {
       s = tex->srcCount(0xff);
@@ -2167,6 +2232,7 @@ RegAlloc::InsertConstraintsPass::visit(BasicBlock *bb)
             texConstraintNVE0(tex);
             break;
          case 0x110:
+         case 0x120:
             texConstraintGM107(tex);
             break;
          default:

@@ -50,6 +50,9 @@ struct schedule_node {
         uint32_t child_array_size;
         uint32_t parent_count;
 
+        /* Longest cycles + instruction_latency() of any parent of this node. */
+        uint32_t unblocked_time;
+
         /**
          * Minimum number of cycles from scheduling this instruction until the
          * end of the program, based on the slowest dependency chain through
@@ -90,6 +93,8 @@ struct schedule_state {
         struct schedule_node *last_tlb;
         struct schedule_node *last_vpm;
         enum direction dir;
+        /* Estimated cycle when the current instruction would start. */
+        uint32_t time;
 };
 
 static void
@@ -600,10 +605,8 @@ update_scoreboard_for_chosen(struct choose_scoreboard *scoreboard,
 static void
 dump_state(struct list_head *schedule_list)
 {
-        uint32_t i = 0;
-
         list_for_each_entry(struct schedule_node, n, schedule_list, link) {
-                fprintf(stderr, "%3d: ", i++);
+                fprintf(stderr, "         t=%4d: ", n->unblocked_time);
                 vc4_qpu_disasm(&n->inst->inst, 1);
                 fprintf(stderr, "\n");
 
@@ -612,13 +615,53 @@ dump_state(struct list_head *schedule_list)
                         if (!child)
                                 continue;
 
-                        fprintf(stderr, "   - ");
+                        fprintf(stderr, "                 - ");
                         vc4_qpu_disasm(&child->inst->inst, 1);
                         fprintf(stderr, " (%d parents, %c)\n",
                                 child->parent_count,
                                 n->children[i].write_after_read ? 'w' : 'r');
                 }
         }
+}
+
+static uint32_t waddr_latency(uint32_t waddr, uint64_t after)
+{
+        if (waddr < 32)
+                return 2;
+
+        /* Apply some huge latency between texture fetch requests and getting
+         * their results back.
+         */
+        if (waddr == QPU_W_TMU0_S) {
+                if (QPU_GET_FIELD(after, QPU_SIG) == QPU_SIG_LOAD_TMU0)
+                        return 100;
+        }
+        if (waddr == QPU_W_TMU1_S) {
+                if (QPU_GET_FIELD(after, QPU_SIG) == QPU_SIG_LOAD_TMU1)
+                        return 100;
+        }
+
+        switch(waddr) {
+        case QPU_W_SFU_RECIP:
+        case QPU_W_SFU_RECIPSQRT:
+        case QPU_W_SFU_EXP:
+        case QPU_W_SFU_LOG:
+                return 3;
+        default:
+                return 1;
+        }
+}
+
+static uint32_t
+instruction_latency(struct schedule_node *before, struct schedule_node *after)
+{
+        uint64_t before_inst = before->inst->inst;
+        uint64_t after_inst = after->inst->inst;
+
+        return MAX2(waddr_latency(QPU_GET_FIELD(before_inst, QPU_WADDR_ADD),
+                                  after_inst),
+                    waddr_latency(QPU_GET_FIELD(before_inst, QPU_WADDR_MUL),
+                                  after_inst));
 }
 
 /** Recursive computation of the delay member of a node. */
@@ -632,13 +675,15 @@ compute_delay(struct schedule_node *n)
                         if (!n->children[i].node->delay)
                                 compute_delay(n->children[i].node);
                         n->delay = MAX2(n->delay,
-                                        n->children[i].node->delay + n->latency);
+                                        n->children[i].node->delay +
+                                        instruction_latency(n, n->children[i].node));
                 }
         }
 }
 
 static void
 mark_instruction_scheduled(struct list_head *schedule_list,
+                           uint32_t time,
                            struct schedule_node *node,
                            bool war_only)
 {
@@ -655,6 +700,19 @@ mark_instruction_scheduled(struct list_head *schedule_list,
                 if (war_only && !node->children[i].write_after_read)
                         continue;
 
+                /* If the requirement is only that the node not appear before
+                 * the last read of its destination, then it can be scheduled
+                 * immediately after (or paired with!) the thing reading the
+                 * destination.
+                 */
+                uint32_t latency = 0;
+                if (!war_only) {
+                        latency = instruction_latency(node,
+                                                      node->children[i].node);
+                }
+
+                child->unblocked_time = MAX2(child->unblocked_time,
+                                             time + latency);
                 child->parent_count--;
                 if (child->parent_count == 0)
                         list_add(&child->link, schedule_list);
@@ -663,10 +721,11 @@ mark_instruction_scheduled(struct list_head *schedule_list,
         }
 }
 
-static void
+static uint32_t
 schedule_instructions(struct vc4_compile *c, struct list_head *schedule_list)
 {
         struct choose_scoreboard scoreboard;
+        uint32_t time = 0;
 
         /* We reorder the uniforms as we schedule instructions, so save the
          * old data off and replace it.
@@ -709,9 +768,10 @@ schedule_instructions(struct vc4_compile *c, struct list_head *schedule_list)
                 uint64_t inst = chosen ? chosen->inst->inst : qpu_NOP();
 
                 if (debug) {
-                        fprintf(stderr, "current list:\n");
+                        fprintf(stderr, "t=%4d: current list:\n",
+                                time);
                         dump_state(schedule_list);
-                        fprintf(stderr, "chose: ");
+                        fprintf(stderr, "t=%4d: chose: ", time);
                         vc4_qpu_disasm(&inst, 1);
                         fprintf(stderr, "\n");
                 }
@@ -720,8 +780,10 @@ schedule_instructions(struct vc4_compile *c, struct list_head *schedule_list)
                  * find an instruction to pair with it.
                  */
                 if (chosen) {
+                        time = MAX2(chosen->unblocked_time, time);
                         list_del(&chosen->link);
-                        mark_instruction_scheduled(schedule_list, chosen, true);
+                        mark_instruction_scheduled(schedule_list, time,
+                                                   chosen, true);
                         if (chosen->uniform != -1) {
                                 c->uniform_data[next_uniform] =
                                         uniform_data[chosen->uniform];
@@ -734,6 +796,7 @@ schedule_instructions(struct vc4_compile *c, struct list_head *schedule_list)
                                                                schedule_list,
                                                                chosen);
                         if (merge) {
+                                time = MAX2(merge->unblocked_time, time);
                                 list_del(&merge->link);
                                 inst = qpu_merge_inst(inst, merge->inst->inst);
                                 assert(inst != 0);
@@ -746,10 +809,11 @@ schedule_instructions(struct vc4_compile *c, struct list_head *schedule_list)
                                 }
 
                                 if (debug) {
-                                        fprintf(stderr, "merging: ");
+                                        fprintf(stderr, "t=%4d: merging: ",
+                                                time);
                                         vc4_qpu_disasm(&merge->inst->inst, 1);
                                         fprintf(stderr, "\n");
-                                        fprintf(stderr, "resulting in: ");
+                                        fprintf(stderr, "            resulting in: ");
                                         vc4_qpu_disasm(&inst, 1);
                                         fprintf(stderr, "\n");
                                 }
@@ -769,43 +833,19 @@ schedule_instructions(struct vc4_compile *c, struct list_head *schedule_list)
                  * be scheduled.  Update the children's unblocked time for this
                  * DAG edge as we do so.
                  */
-                mark_instruction_scheduled(schedule_list, chosen, false);
-                mark_instruction_scheduled(schedule_list, merge, false);
+                mark_instruction_scheduled(schedule_list, time, chosen, false);
+                mark_instruction_scheduled(schedule_list, time, merge, false);
 
                 scoreboard.tick++;
+                time++;
         }
 
         assert(next_uniform == c->num_uniforms);
+
+        return time;
 }
 
-static uint32_t waddr_latency(uint32_t waddr)
-{
-        if (waddr < 32)
-                return 2;
-
-        /* Some huge number, really. */
-        if (waddr >= QPU_W_TMU0_S && waddr <= QPU_W_TMU1_B)
-                return 10;
-
-        switch(waddr) {
-        case QPU_W_SFU_RECIP:
-        case QPU_W_SFU_RECIPSQRT:
-        case QPU_W_SFU_EXP:
-        case QPU_W_SFU_LOG:
-                return 3;
-        default:
-                return 1;
-        }
-}
-
-static uint32_t
-instruction_latency(uint64_t inst)
-{
-        return MAX2(waddr_latency(QPU_GET_FIELD(inst, QPU_WADDR_ADD)),
-                    waddr_latency(QPU_GET_FIELD(inst, QPU_WADDR_MUL)));
-}
-
-void
+uint32_t
 qpu_schedule_instructions(struct vc4_compile *c)
 {
         void *mem_ctx = ralloc_context(NULL);
@@ -831,7 +871,6 @@ qpu_schedule_instructions(struct vc4_compile *c)
                 struct schedule_node *n = rzalloc(mem_ctx, struct schedule_node);
 
                 n->inst = inst;
-                n->latency = instruction_latency(inst->inst);
 
                 if (reads_uniform(inst->inst)) {
                         n->uniform = next_uniform++;
@@ -850,7 +889,7 @@ qpu_schedule_instructions(struct vc4_compile *c)
                 compute_delay(n);
         }
 
-        schedule_instructions(c, &schedule_list);
+        uint32_t cycles = schedule_instructions(c, &schedule_list);
 
         if (debug) {
                 fprintf(stderr, "Post-schedule instructions\n");
@@ -859,4 +898,6 @@ qpu_schedule_instructions(struct vc4_compile *c)
         }
 
         ralloc_free(mem_ctx);
+
+        return cycles;
 }

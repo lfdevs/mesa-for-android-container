@@ -55,6 +55,7 @@ kernel::launch(command_queue &q,
    const auto reduced_grid_size =
       map(divides(), grid_size, block_size);
    void *st = exec.bind(&q, grid_offset);
+   struct pipe_grid_info info;
 
    // The handles are created during exec_context::bind(), so we need make
    // sure to call exec_context::bind() before retrieving them.
@@ -74,11 +75,13 @@ kernel::launch(command_queue &q,
    q.pipe->set_global_binding(q.pipe, 0, exec.g_buffers.size(),
                               exec.g_buffers.data(), g_handles.data());
 
-   q.pipe->launch_grid(q.pipe,
-                       pad_vector(q, block_size, 1).data(),
-                       pad_vector(q, reduced_grid_size, 1).data(),
-                       find(name_equals(_name), m.syms).offset,
-                       exec.input.data());
+   // Fill information for the launch_grid() call.
+   copy(pad_vector(q, block_size, 1), info.block);
+   copy(pad_vector(q, reduced_grid_size, 1), info.grid);
+   info.pc = find(name_equals(_name), m.syms).offset;
+   info.input = exec.input.data();
+
+   q.pipe->launch_grid(q.pipe, &info);
 
    q.pipe->set_global_binding(q.pipe, 0, exec.g_buffers.size(), NULL, NULL);
    q.pipe->set_compute_resources(q.pipe, 0, exec.resources.size(), NULL);

@@ -41,16 +41,22 @@ static bool is_eligible_mov(struct ir3_instruction *instr, bool allow_flags)
 		struct ir3_register *dst = instr->regs[0];
 		struct ir3_register *src = instr->regs[1];
 		struct ir3_instruction *src_instr = ssa(src);
+
+		/* only if mov src is SSA (not const/immed): */
+		if (!src_instr)
+			return false;
+
+		/* no indirect: */
 		if (dst->flags & IR3_REG_RELATIV)
 			return false;
 		if (src->flags & IR3_REG_RELATIV)
 			return false;
+
 		if (!allow_flags)
 			if (src->flags & (IR3_REG_FABS | IR3_REG_FNEG |
 					IR3_REG_SABS | IR3_REG_SNEG | IR3_REG_BNOT))
 				return false;
-		if (!src_instr)
-			return false;
+
 		/* TODO: remove this hack: */
 		if (is_meta(src_instr) && (src_instr->opc == OPC_META_FO))
 			return false;
@@ -82,10 +88,17 @@ static bool valid_flags(struct ir3_instruction *instr, unsigned n,
 	unsigned valid_flags;
 	flags = cp_flags(flags);
 
+	/* If destination is indirect, then source cannot be.. at least
+	 * I don't think so..
+	 */
+	if ((instr->regs[0]->flags & IR3_REG_RELATIV) &&
+			(flags & IR3_REG_RELATIV))
+		return false;
+
 	/* clear flags that are 'ok' */
 	switch (instr->category) {
 	case 1:
-		valid_flags = IR3_REG_IMMED | IR3_REG_RELATIV;
+		valid_flags = IR3_REG_IMMED | IR3_REG_CONST | IR3_REG_RELATIV;
 		if (flags & ~valid_flags)
 			return false;
 		break;
@@ -183,9 +196,14 @@ static void combine_flags(unsigned *dstflags, unsigned srcflags)
 		*dstflags ^= IR3_REG_SNEG;
 	if (srcflags & IR3_REG_BNOT)
 		*dstflags ^= IR3_REG_BNOT;
-}
 
-static struct ir3_instruction * instr_cp(struct ir3_instruction *instr, unsigned *flags);
+	*dstflags &= ~IR3_REG_SSA;
+	*dstflags |= srcflags & IR3_REG_SSA;
+	*dstflags |= srcflags & IR3_REG_CONST;
+	*dstflags |= srcflags & IR3_REG_IMMED;
+	*dstflags |= srcflags & IR3_REG_RELATIV;
+	*dstflags |= srcflags & IR3_REG_ARRAY;
+}
 
 /* the "plain" MAD's (ie. the ones that don't shift first src prior to
  * multiply) can swap their first two srcs if src[0] is !CONST and
@@ -206,52 +224,35 @@ static bool is_valid_mad(struct ir3_instruction *instr)
 static void
 reg_cp(struct ir3_instruction *instr, struct ir3_register *reg, unsigned n)
 {
-	unsigned src_flags = 0, new_flags;
-	struct ir3_instruction *src_instr;
+	struct ir3_instruction *src = ssa(reg);
 
-	if (is_meta(instr)) {
-		/* meta instructions cannot fold up register
-		 * flags.. they are usually src for texture
-		 * fetch, etc, where we cannot specify abs/neg
-		 */
-		reg->instr = instr_cp(reg->instr, NULL);
-		return;
-	}
+	if (is_eligible_mov(src, true)) {
+		/* simple case, no immed/const/relativ, only mov's w/ ssa src: */
+		struct ir3_register *src_reg = src->regs[1];
+		unsigned new_flags = reg->flags;
 
-	src_instr = instr_cp(reg->instr, &src_flags);
+		combine_flags(&new_flags, src_reg->flags);
 
-	new_flags = reg->flags;
-	combine_flags(&new_flags, src_flags);
-
-	reg->flags = new_flags;
-	reg->instr = src_instr;
-
-	if (!valid_flags(instr, n, reg->flags)) {
-		/* insert an absneg.f */
-		if (reg->flags & (IR3_REG_SNEG | IR3_REG_SABS | IR3_REG_BNOT)) {
-			debug_assert(!(reg->flags & (IR3_REG_FNEG | IR3_REG_FABS)));
-			reg->instr = ir3_ABSNEG_S(instr->block,
-					reg->instr, cp_flags(src_flags));
-		} else {
-			debug_assert(!(reg->flags & (IR3_REG_SNEG | IR3_REG_SABS | IR3_REG_BNOT)));
-			reg->instr = ir3_ABSNEG_F(instr->block,
-					reg->instr, cp_flags(src_flags));
+		if (valid_flags(instr, n, new_flags)) {
+			if (new_flags & IR3_REG_ARRAY) {
+				debug_assert(!(reg->flags & IR3_REG_ARRAY));
+				reg->array = src_reg->array;
+			}
+			reg->flags = new_flags;
+			reg->instr = ssa(src_reg);
 		}
-		reg->flags &= ~cp_flags(src_flags);
-		debug_assert(valid_flags(instr, n, reg->flags));
-		/* send it through instr_cp() again since
-		 * the absneg src might be a mov from const
-		 * that could be cleaned up:
-		 */
-		reg->instr = instr_cp(reg->instr, NULL);
-		return;
-	}
 
-	if (is_same_type_mov(reg->instr)) {
-		struct ir3_register *src_reg = reg->instr->regs[1];
-		unsigned new_flags = src_reg->flags;
+		src = ssa(reg);      /* could be null for IR3_REG_ARRAY case */
+		if (!src)
+			return;
+	} else if (is_same_type_mov(src) &&
+			/* cannot collapse const/immed/etc into meta instrs: */
+			!is_meta(instr)) {
+		/* immed/const/etc cases, which require some special handling: */
+		struct ir3_register *src_reg = src->regs[1];
+		unsigned new_flags = reg->flags;
 
-		combine_flags(&new_flags, reg->flags);
+		combine_flags(&new_flags, src_reg->flags);
 
 		if (!valid_flags(instr, n, new_flags)) {
 			/* special case for "normal" mad instructions, we can
@@ -287,6 +288,16 @@ reg_cp(struct ir3_instruction *instr, struct ir3_register *reg, unsigned n)
 					conflicts(instr->address, reg->instr->address))
 				return;
 
+			/* This seems to be a hw bug, or something where the timings
+			 * just somehow don't work out.  This restriction may only
+			 * apply if the first src is also CONST.
+			 */
+			if ((instr->category == 3) && (n == 2) &&
+					(src_reg->flags & IR3_REG_RELATIV) &&
+					(src_reg->array.offset == 0))
+				return;
+
+			src_reg = ir3_reg_clone(instr->block->shader, src_reg);
 			src_reg->flags = new_flags;
 			instr->regs[n+1] = src_reg;
 
@@ -298,6 +309,7 @@ reg_cp(struct ir3_instruction *instr, struct ir3_register *reg, unsigned n)
 
 		if ((src_reg->flags & IR3_REG_RELATIV) &&
 				!conflicts(instr->address, reg->instr->address)) {
+			src_reg = ir3_reg_clone(instr->block->shader, src_reg);
 			src_reg->flags = new_flags;
 			instr->regs[n+1] = src_reg;
 			ir3_instr_set_address(instr, reg->instr->address);
@@ -330,8 +342,10 @@ reg_cp(struct ir3_instruction *instr, struct ir3_register *reg, unsigned n)
 			if (new_flags & IR3_REG_BNOT)
 				iim_val = ~iim_val;
 
-			if (!(iim_val & ~0x3ff)) {
+			/* other than category 1 (mov) we can only encode up to 10 bits: */
+			if ((instr->category == 1) || !(iim_val & ~0x3ff)) {
 				new_flags &= ~(IR3_REG_SABS | IR3_REG_SNEG | IR3_REG_BNOT);
+				src_reg = ir3_reg_clone(instr->block->shader, src_reg);
 				src_reg->flags = new_flags;
 				src_reg->iim_val = iim_val;
 				instr->regs[n+1] = src_reg;
@@ -342,56 +356,68 @@ reg_cp(struct ir3_instruction *instr, struct ir3_register *reg, unsigned n)
 	}
 }
 
-/**
- * Given an SSA src (instruction), return the one with extraneous
- * mov's removed, ie, for (to copy NIR syntax):
- *
- *   vec1 ssa1 = fadd <something>, <somethingelse>
- *   vec1 ssa2 = fabs ssa1
- *   vec1 ssa3 = fneg ssa1
- *
- * then calling instr_cp(ssa3, &flags) would return ssa1 with
- * (IR3_REG_ABS | IR3_REG_NEGATE) in flags.  If flags is NULL,
- * then disallow eliminating copies which would require flag
- * propagation (for example, we cannot propagate abs/neg into
- * an output).
+/* Handle special case of eliminating output mov, and similar cases where
+ * there isn't a normal "consuming" instruction.  In this case we cannot
+ * collapse flags (ie. output mov from const, or w/ abs/neg flags, cannot
+ * be eliminated)
  */
 static struct ir3_instruction *
-instr_cp(struct ir3_instruction *instr, unsigned *flags)
+eliminate_output_mov(struct ir3_instruction *instr)
+{
+	if (is_eligible_mov(instr, false)) {
+		struct ir3_register *reg = instr->regs[1];
+		if (!(reg->flags & IR3_REG_ARRAY)) {
+			struct ir3_instruction *src_instr = ssa(reg);
+			debug_assert(src_instr);
+			return src_instr;
+		}
+	}
+	return instr;
+}
+
+/**
+ * Find instruction src's which are mov's that can be collapsed, replacing
+ * the mov dst with the mov src
+ */
+static void
+instr_cp(struct ir3_instruction *instr)
 {
 	struct ir3_register *reg;
 
-	if (is_eligible_mov(instr, !!flags)) {
-		struct ir3_register *reg = instr->regs[1];
-		struct ir3_instruction *src_instr = ssa(reg);
-		if (flags)
-			combine_flags(flags, reg->flags);
-		return instr_cp(src_instr, flags);
-	}
+	if (instr->regs_count == 0)
+		return;
 
-	/* Check termination condition before walking children (rather
-	 * than before checking eligible-mov).  A mov instruction may
-	 * appear as ssa-src for multiple other instructions, and we
-	 * want to consider it for removal for each, rather than just
-	 * the first one.  (But regardless of how many places it shows
-	 * up as a src, we only need to recursively walk the children
-	 * once.)
-	 */
 	if (ir3_instr_check_mark(instr))
-		return instr;
+		return;
 
 	/* walk down the graph from each src: */
 	foreach_src_n(reg, n, instr) {
-		if (!(reg->flags & IR3_REG_SSA))
+		struct ir3_instruction *src = ssa(reg);
+
+		if (!src)
+			continue;
+
+		instr_cp(src);
+
+		/* TODO non-indirect access we could figure out which register
+		 * we actually want and allow cp..
+		 */
+		if (reg->flags & IR3_REG_ARRAY)
 			continue;
 
 		reg_cp(instr, reg, n);
 	}
 
-	if (instr->address)
-		ir3_instr_set_address(instr, instr_cp(instr->address, NULL));
+	if (instr->regs[0]->flags & IR3_REG_ARRAY) {
+		struct ir3_instruction *src = ssa(instr->regs[0]);
+		if (src)
+			instr_cp(src);
+	}
 
-	return instr;
+	if (instr->address) {
+		instr_cp(instr->address);
+		ir3_instr_set_address(instr, eliminate_output_mov(instr->address));
+	}
 }
 
 void
@@ -401,19 +427,20 @@ ir3_cp(struct ir3 *ir)
 
 	for (unsigned i = 0; i < ir->noutputs; i++) {
 		if (ir->outputs[i]) {
-			struct ir3_instruction *out =
-					instr_cp(ir->outputs[i], NULL);
-
-			ir->outputs[i] = out;
+			instr_cp(ir->outputs[i]);
+			ir->outputs[i] = eliminate_output_mov(ir->outputs[i]);
 		}
 	}
 
 	for (unsigned i = 0; i < ir->keeps_count; i++) {
-		ir->keeps[i] = instr_cp(ir->keeps[i], NULL);
+		instr_cp(ir->keeps[i]);
+		ir->keeps[i] = eliminate_output_mov(ir->keeps[i]);
 	}
 
 	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
-		if (block->condition)
-			block->condition = instr_cp(block->condition, NULL);
+		if (block->condition) {
+			instr_cp(block->condition);
+			block->condition = eliminate_output_mov(block->condition);
+		}
 	}
 }

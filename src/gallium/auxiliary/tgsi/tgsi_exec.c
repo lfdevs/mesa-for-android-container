@@ -58,6 +58,7 @@
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
 #include "tgsi_exec.h"
+#include "util/u_half.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
 
@@ -2299,7 +2300,8 @@ exec_txf(struct tgsi_exec_machine *mach,
 
    IFETCH(&r[3], 0, TGSI_CHAN_W);
 
-   if (inst->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I) {
+   if (inst->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I ||
+       inst->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I_MS) {
       target = mach->SamplerViews[unit].Resource;
    }
    else {
@@ -2341,7 +2343,8 @@ exec_txf(struct tgsi_exec_machine *mach,
       r[3].f[j] = rgba[3][j];
    }
 
-   if (inst->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I) {
+   if (inst->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I ||
+       inst->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I_MS) {
       unsigned char swizzles[4];
       swizzles[0] = inst->Src[1].Register.SwizzleX;
       swizzles[1] = inst->Src[1].Register.SwizzleY;
@@ -3053,6 +3056,45 @@ exec_dp2(struct tgsi_exec_machine *mach,
    for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
       if (inst->Dst[0].Register.WriteMask & (1 << chan)) {
          store_dest(mach, &arg[2], &inst->Dst[0], inst, chan, TGSI_EXEC_DATA_FLOAT);
+      }
+   }
+}
+
+static void
+exec_pk2h(struct tgsi_exec_machine *mach,
+          const struct tgsi_full_instruction *inst)
+{
+   unsigned chan;
+   union tgsi_exec_channel arg[2], dst;
+
+   fetch_source(mach, &arg[0], &inst->Src[0], TGSI_CHAN_X, TGSI_EXEC_DATA_FLOAT);
+   fetch_source(mach, &arg[1], &inst->Src[0], TGSI_CHAN_Y, TGSI_EXEC_DATA_FLOAT);
+   for (chan = 0; chan < TGSI_QUAD_SIZE; chan++) {
+      dst.u[chan] = util_float_to_half(arg[0].f[chan]) |
+         (util_float_to_half(arg[1].f[chan]) << 16);
+   }
+   for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
+      if (inst->Dst[0].Register.WriteMask & (1 << chan)) {
+         store_dest(mach, &dst, &inst->Dst[0], inst, chan, TGSI_EXEC_DATA_UINT);
+      }
+   }
+}
+
+static void
+exec_up2h(struct tgsi_exec_machine *mach,
+          const struct tgsi_full_instruction *inst)
+{
+   unsigned chan;
+   union tgsi_exec_channel arg, dst[2];
+
+   fetch_source(mach, &arg, &inst->Src[0], TGSI_CHAN_X, TGSI_EXEC_DATA_UINT);
+   for (chan = 0; chan < TGSI_QUAD_SIZE; chan++) {
+      dst[0].f[chan] = util_half_to_float(arg.u[chan] & 0xffff);
+      dst[1].f[chan] = util_half_to_float(arg.u[chan] >> 16);
+   }
+   for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
+      if (inst->Dst[0].Register.WriteMask & (1 << chan)) {
+         store_dest(mach, &dst[chan & 1], &inst->Dst[0], inst, chan, TGSI_EXEC_DATA_FLOAT);
       }
    }
 }
@@ -4339,7 +4381,7 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_PK2H:
-      assert (0);
+      exec_pk2h(mach, inst);
       break;
 
    case TGSI_OPCODE_PK2US:
@@ -4425,7 +4467,7 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_UP2H:
-      assert (0);
+      exec_up2h(mach, inst);
       break;
 
    case TGSI_OPCODE_UP2US:
@@ -4927,7 +4969,7 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_SAMPLE_I_MS:
-      assert(0);
+      exec_txf(mach, inst);
       break;
 
    case TGSI_OPCODE_SAMPLE:

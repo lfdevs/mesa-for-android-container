@@ -30,7 +30,6 @@
   */
 
 
-#include "main/glheader.h"
 #include "main/macros.h"
 #include "main/enums.h"
 
@@ -219,7 +218,7 @@ static void do_flatshade_triangle( struct brw_sf_compile *c )
    copy_flatshaded_attributes(c, c->vert[0], c->vert[2]);
    copy_flatshaded_attributes(c, c->vert[1], c->vert[2]);
 }
-	
+
 
 static void do_flatshade_line( struct brw_sf_compile *c )
 {
@@ -245,7 +244,6 @@ static void do_flatshade_line( struct brw_sf_compile *c )
    copy_flatshaded_attributes(c, c->vert[0], c->vert[1]);
 }
 
-	
 
 /***********************************************************************
  * Triangle setup.
@@ -467,7 +465,7 @@ void brw_emit_tri_setup(struct brw_sf_compile *c, bool allocate)
 	 brw_MUL(p, brw_null_reg(), c->a1_sub_a0, c->dy2);
 	 brw_MAC(p, c->tmp, c->a2_sub_a0, negate(c->dy0));
 	 brw_MUL(p, c->m1Cx, c->tmp, c->inv_det);
-		
+
 	 /* calculate dA/dy
 	  */
 	 brw_MUL(p, brw_null_reg(), c->a2_sub_a0, c->dx0);
@@ -483,7 +481,7 @@ void brw_emit_tri_setup(struct brw_sf_compile *c, bool allocate)
 
 	 /* Copy m0..m3 to URB.  m0 is implicitly copied from r0 in
 	  * the send instruction:
-	  */	
+	  */
 	 brw_urb_WRITE(p,
 		       brw_null_reg(),
 		       0,
@@ -544,7 +542,7 @@ void brw_emit_line_setup(struct brw_sf_compile *c, bool allocate)
 
  	 brw_MUL(p, c->tmp, c->a1_sub_a0, c->dx0);
 	 brw_MUL(p, c->m1Cx, c->tmp, c->inv_det);
-		
+
 	 brw_MUL(p, c->tmp, c->a1_sub_a0, c->dy0);
 	 brw_MUL(p, c->m2Cy, c->tmp, c->inv_det);
       }
@@ -689,7 +687,7 @@ void brw_emit_point_setup(struct brw_sf_compile *c, bool allocate)
       bool last = calculate_masks(c, i, &pc, &pc_persp, &pc_linear);
 
       if (pc_persp)
-      {				
+      {
 	 /* This seems odd as the values are all constant, but the
 	  * fragment shader will be expecting it:
 	  */

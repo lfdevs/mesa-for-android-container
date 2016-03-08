@@ -638,4 +638,8 @@ SVGA3D_vgpu10_UpdateSubResource(struct svga_winsys_context *swc,
                                 const SVGA3dBox *box,
                                 unsigned subResource);
 
+enum pipe_error
+SVGA3D_vgpu10_GenMips(struct svga_winsys_context *swc,
+                      const SVGA3dShaderResourceViewId shaderResourceViewId,
+                      struct svga_winsys_surface *view);
 #endif /* __SVGA3D_H__ */

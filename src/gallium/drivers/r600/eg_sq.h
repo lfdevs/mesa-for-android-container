@@ -514,6 +514,66 @@
 #define   G_SQ_TEX_WORD2_SRC_SEL_W(x)                                (((x) >> 29) & 0x7)
 #define   C_SQ_TEX_WORD2_SRC_SEL_W                                   0x1FFFFFFF
 
+#define P_SQ_MEM_GDS_WORD0
+#define   S_SQ_MEM_GDS_WORD0_MEM_INST(x)                             (((x) & 0x1f) << 0)
+#define   S_SQ_MEM_GDS_WORD0_MEM_OP(x)                               (((x) & 0x7) << 8)
+#define   S_SQ_MEM_GDS_WORD0_SRC_GPR(x)                              (((x) & 0x7f) << 11)
+#define   S_SQ_MEM_GDS_WORD0_SRC_REL(x)                              (((x) & 0x3) << 18)
+#define   S_SQ_MEM_GDS_WORD0_SRC_SEL_X(x)                            (((x) & 0x7) << 20)
+#define   S_SQ_MEM_GDS_WORD0_SRC_SEL_Y(x)                            (((x) & 0x7) << 23)
+#define   S_SQ_MEM_GDS_WORD0_SRC_SEL_Z(x)                            (((x) & 0x7) << 26)
+
+#define P_SQ_MEM_GDS_WORD1
+#define   S_SQ_MEM_GDS_WORD1_DST_GPR(x)                              (((x) & 0x7f) << 0)
+#define   S_SQ_MEM_GDS_WORD1_DST_REL(x)                              (((x) & 0x3) << 7)
+#define   S_SQ_MEM_GDS_WORD1_GDS_OP(x)                               (((x) & 0x3f) << 9)
+#define   S_SQ_MEM_GDS_WORD1_SRC_GPR(x)                              (((x) & 0x7f) << 16)
+
+#define P_SQ_MEM_GDS_WORD2
+#define   S_SQ_MEM_GDS_WORD2_DST_SEL_X(x)                            (((x) & 0x7) << 0)
+#define   S_SQ_MEM_GDS_WORD2_DST_SEL_Y(x)                            (((x) & 0x7) << 3)
+#define   S_SQ_MEM_GDS_WORD2_DST_SEL_Z(x)                            (((x) & 0x7) << 6)
+#define   S_SQ_MEM_GDS_WORD2_DST_SEL_W(x)                            (((x) & 0x7) << 9)
+
+/* LDS IDX redefines the neg bits on op3 */
+#define S_SQ_ALU_WORD0_LDS_IDX_OP_IDX_OFFSET_4(x)                    (((x) & 0x1) << 12)
+#define S_SQ_ALU_WORD0_LDS_IDX_OP_IDX_OFFSET_5(x)                    (((x) & 0x1) << 25)
+
+/* src2 neg */
+#define S_SQ_ALU_WORD1_LDS_IDX_OP_IDX_OFFSET_1(x)                    (((x) & 0x1) << 12)
+
+/* this was dst gpr */
+#define S_SQ_ALU_WORD1_LDS_IDX_OP_LDS_OP(x)                    (((x) & 0x3f) << 21)
+#define S_SQ_ALU_WORD1_LDS_IDX_OP_IDX_OFFSET_0(x)                    (((x) & 0x1) << 27)
+
+/* this was dst rel */
+#define S_SQ_ALU_WORD1_LDS_IDX_OP_IDX_OFFSET_2(x)                    (((x) & 0x1) << 28)
+/* this was clamp */
+#define S_SQ_ALU_WORD1_LDS_IDX_OP_IDX_OFFSET_3(x)                    (((x) & 0x1) << 31)
+
+#define V_SQ_LDS_INST_ADD                               0x00
+#define V_SQ_LDS_INST_SUB                               0x01
+#define V_SQ_LDS_INST_RSUB                              0x02
+
+#define V_SQ_LDS_INST_INC                               0x03
+#define V_SQ_LDS_INST_DEC                               0x04
+#define V_SQ_LDS_INST_MIN_INT                           0x05
+#define V_SQ_LDS_INST_MAX_INT                           0x06
+#define V_SQ_LDS_INST_MIN_UINT                          0x07
+#define V_SQ_LDS_INST_MAX_UINT                          0x08
+#define V_SQ_LDS_INST_AND                               0x09
+#define V_SQ_LDS_INST_OR                                0x0a
+#define V_SQ_LDS_INST_XOR                               0x0b
+#define V_SQ_LDS_INST_MSKOR                             0x0c
+#define V_SQ_LDS_INST_WRITE                             0x0d
+#define V_SQ_LDS_INST_WRITE_REL                         0x0e
+#define V_SQ_LDS_INST_WRITE2                            0x0f
+
+#define V_SQ_LDS_INST_READ_RET                          0x32
+#define V_SQ_LDS_INST_READ_REL_RET                      0x33
+#define V_SQ_LDS_INST_READ2_RET                         0x34
+#define V_SQ_LDS_INST_READWRITE_RET                     0x35
+
 #define V_SQ_CF_COND_ACTIVE                             0x00
 #define V_SQ_CF_COND_FALSE                              0x01
 #define V_SQ_CF_COND_BOOL                               0x02

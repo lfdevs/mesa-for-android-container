@@ -86,7 +86,7 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
    assert(box->depth == 1);
 
    transfer = CALLOC_STRUCT(pipe_transfer);
-   if (transfer == NULL) {
+   if (!transfer) {
       return NULL;
    }
 

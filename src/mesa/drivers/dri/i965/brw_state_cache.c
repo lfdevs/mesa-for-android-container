@@ -51,6 +51,7 @@
 #include "brw_wm.h"
 #include "brw_gs.h"
 #include "brw_cs.h"
+#include "brw_program.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 
@@ -386,8 +387,27 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
    /* We need to make sure that the programs get regenerated, since
     * any offsets leftover in brw_context will no longer be valid.
     */
-   brw->NewGLState |= ~0;
-   brw->ctx.NewDriverState |= ~0ull;
+   brw->NewGLState = ~0;
+   brw->ctx.NewDriverState = ~0ull;
+   brw->state.pipelines[BRW_RENDER_PIPELINE].mesa = ~0;
+   brw->state.pipelines[BRW_RENDER_PIPELINE].brw = ~0ull;
+   brw->state.pipelines[BRW_COMPUTE_PIPELINE].mesa = ~0;
+   brw->state.pipelines[BRW_COMPUTE_PIPELINE].brw = ~0ull;
+
+   /* Also, NULL out any stale program pointers. */
+   brw->vs.prog_data = NULL;
+   brw->vs.base.prog_data = NULL;
+   brw->tcs.prog_data = NULL;
+   brw->tcs.base.prog_data = NULL;
+   brw->tes.prog_data = NULL;
+   brw->tes.base.prog_data = NULL;
+   brw->gs.prog_data = NULL;
+   brw->gs.base.prog_data = NULL;
+   brw->wm.prog_data = NULL;
+   brw->wm.base.prog_data = NULL;
+   brw->cs.prog_data = NULL;
+   brw->cs.base.prog_data = NULL;
+
    intel_batchbuffer_flush(brw);
 }
 

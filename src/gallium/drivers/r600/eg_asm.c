@@ -193,3 +193,101 @@ int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_c
 
 	return 0;
 }
+
+int eg_bytecode_gds_build(struct r600_bytecode *bc, struct r600_bytecode_gds *gds, unsigned id)
+{
+	unsigned opcode = r600_isa_fetch_opcode(bc->isa->hw_class, gds->op) >> 8;
+	bc->bytecode[id++] = S_SQ_MEM_GDS_WORD0_MEM_INST(2) |
+		S_SQ_MEM_GDS_WORD0_MEM_OP(opcode) |
+		S_SQ_MEM_GDS_WORD0_SRC_GPR(gds->src_gpr) |
+		S_SQ_MEM_GDS_WORD0_SRC_REL(gds->src_rel) |
+		S_SQ_MEM_GDS_WORD0_SRC_SEL_X(gds->src_sel_x) |
+		S_SQ_MEM_GDS_WORD0_SRC_SEL_Y(gds->src_sel_y) |
+		S_SQ_MEM_GDS_WORD0_SRC_SEL_Z(gds->src_sel_z);
+
+	bc->bytecode[id++] = S_SQ_MEM_GDS_WORD1_DST_GPR(gds->dst_gpr) |
+		S_SQ_MEM_GDS_WORD1_DST_REL(gds->dst_rel) |
+		S_SQ_MEM_GDS_WORD1_GDS_OP(gds->gds_op) |
+		S_SQ_MEM_GDS_WORD1_SRC_GPR(gds->src_gpr2);
+
+	bc->bytecode[id++] = S_SQ_MEM_GDS_WORD2_DST_SEL_X(gds->dst_sel_x) |
+		S_SQ_MEM_GDS_WORD2_DST_SEL_Y(gds->dst_sel_y) |
+		S_SQ_MEM_GDS_WORD2_DST_SEL_Z(gds->dst_sel_z) |
+		S_SQ_MEM_GDS_WORD2_DST_SEL_W(gds->dst_sel_w);
+	return 0;
+}
+
+int eg_bytecode_alu_build(struct r600_bytecode *bc, struct r600_bytecode_alu *alu, unsigned id)
+{
+	if (alu->is_lds_idx_op) {
+		assert(!alu->src[0].abs && !alu->src[1].abs && !alu->src[2].abs);
+		assert(!alu->src[0].neg && !alu->src[1].neg && !alu->src[2].neg);
+		bc->bytecode[id++] = S_SQ_ALU_WORD0_SRC0_SEL(alu->src[0].sel) |
+			S_SQ_ALU_WORD0_SRC0_REL(alu->src[0].rel) |
+			S_SQ_ALU_WORD0_SRC0_CHAN(alu->src[0].chan) |
+			S_SQ_ALU_WORD0_LDS_IDX_OP_IDX_OFFSET_4(alu->lds_idx >> 4) |
+			S_SQ_ALU_WORD0_SRC1_SEL(alu->src[1].sel) |
+			S_SQ_ALU_WORD0_SRC1_REL(alu->src[1].rel) |
+			S_SQ_ALU_WORD0_SRC1_CHAN(alu->src[1].chan) |
+			S_SQ_ALU_WORD0_LDS_IDX_OP_IDX_OFFSET_5(alu->lds_idx >> 5) |
+			S_SQ_ALU_WORD0_INDEX_MODE(alu->index_mode) |
+			S_SQ_ALU_WORD0_PRED_SEL(alu->pred_sel) |
+			S_SQ_ALU_WORD0_LAST(alu->last);
+	} else {
+		bc->bytecode[id++] = S_SQ_ALU_WORD0_SRC0_SEL(alu->src[0].sel) |
+			S_SQ_ALU_WORD0_SRC0_REL(alu->src[0].rel) |
+			S_SQ_ALU_WORD0_SRC0_CHAN(alu->src[0].chan) |
+			S_SQ_ALU_WORD0_SRC0_NEG(alu->src[0].neg) |
+			S_SQ_ALU_WORD0_SRC1_SEL(alu->src[1].sel) |
+			S_SQ_ALU_WORD0_SRC1_REL(alu->src[1].rel) |
+			S_SQ_ALU_WORD0_SRC1_CHAN(alu->src[1].chan) |
+			S_SQ_ALU_WORD0_SRC1_NEG(alu->src[1].neg) |
+			S_SQ_ALU_WORD0_PRED_SEL(alu->pred_sel) |
+			S_SQ_ALU_WORD0_LAST(alu->last);
+	}
+
+	/* don't replace gpr by pv or ps for destination register */
+	if (alu->is_lds_idx_op) {
+		unsigned lds_op = r600_isa_alu_opcode(bc->isa->hw_class, alu->op);
+		bc->bytecode[id++] =
+			S_SQ_ALU_WORD1_OP3_SRC2_SEL(alu->src[2].sel) |
+			S_SQ_ALU_WORD1_OP3_SRC2_REL(alu->src[2].rel) |
+			S_SQ_ALU_WORD1_OP3_SRC2_CHAN(alu->src[2].chan) |
+			S_SQ_ALU_WORD1_LDS_IDX_OP_IDX_OFFSET_1(alu->lds_idx >> 1) |
+
+			S_SQ_ALU_WORD1_OP3_ALU_INST(lds_op & 0xff) |
+			S_SQ_ALU_WORD1_BANK_SWIZZLE(alu->bank_swizzle) |
+			S_SQ_ALU_WORD1_LDS_IDX_OP_LDS_OP((lds_op >> 8) & 0xff) |
+			S_SQ_ALU_WORD1_LDS_IDX_OP_IDX_OFFSET_0(alu->lds_idx) |
+			S_SQ_ALU_WORD1_LDS_IDX_OP_IDX_OFFSET_2(alu->lds_idx >> 2) |
+			S_SQ_ALU_WORD1_DST_CHAN(alu->dst.chan) |
+			S_SQ_ALU_WORD1_LDS_IDX_OP_IDX_OFFSET_3(alu->lds_idx >> 3);
+
+	} else if (alu->is_op3) {
+		assert(!alu->src[0].abs && !alu->src[1].abs && !alu->src[2].abs);
+		bc->bytecode[id++] = S_SQ_ALU_WORD1_DST_GPR(alu->dst.sel) |
+					S_SQ_ALU_WORD1_DST_CHAN(alu->dst.chan) |
+			                S_SQ_ALU_WORD1_DST_REL(alu->dst.rel) |
+			                S_SQ_ALU_WORD1_CLAMP(alu->dst.clamp) |
+					S_SQ_ALU_WORD1_OP3_SRC2_SEL(alu->src[2].sel) |
+					S_SQ_ALU_WORD1_OP3_SRC2_REL(alu->src[2].rel) |
+					S_SQ_ALU_WORD1_OP3_SRC2_CHAN(alu->src[2].chan) |
+					S_SQ_ALU_WORD1_OP3_SRC2_NEG(alu->src[2].neg) |
+					S_SQ_ALU_WORD1_OP3_ALU_INST(r600_isa_alu_opcode(bc->isa->hw_class, alu->op)) |
+					S_SQ_ALU_WORD1_BANK_SWIZZLE(alu->bank_swizzle);
+	} else {
+		bc->bytecode[id++] = S_SQ_ALU_WORD1_DST_GPR(alu->dst.sel) |
+					S_SQ_ALU_WORD1_DST_CHAN(alu->dst.chan) |
+			                S_SQ_ALU_WORD1_DST_REL(alu->dst.rel) |
+			                S_SQ_ALU_WORD1_CLAMP(alu->dst.clamp) |
+					S_SQ_ALU_WORD1_OP2_SRC0_ABS(alu->src[0].abs) |
+					S_SQ_ALU_WORD1_OP2_SRC1_ABS(alu->src[1].abs) |
+					S_SQ_ALU_WORD1_OP2_WRITE_MASK(alu->dst.write) |
+					S_SQ_ALU_WORD1_OP2_OMOD(alu->omod) |
+					S_SQ_ALU_WORD1_OP2_ALU_INST(r600_isa_alu_opcode(bc->isa->hw_class, alu->op)) |
+					S_SQ_ALU_WORD1_BANK_SWIZZLE(alu->bank_swizzle) |
+			                S_SQ_ALU_WORD1_OP2_UPDATE_EXECUTE_MASK(alu->execute_mask) |
+			                S_SQ_ALU_WORD1_OP2_UPDATE_PRED(alu->update_pred);
+	}
+	return 0;
+}

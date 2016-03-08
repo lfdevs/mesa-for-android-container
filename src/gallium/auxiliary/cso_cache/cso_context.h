@@ -47,22 +47,15 @@ void cso_destroy_context( struct cso_context *cso );
 
 enum pipe_error cso_set_blend( struct cso_context *cso,
                                const struct pipe_blend_state *blend );
-void cso_save_blend(struct cso_context *cso);
-void cso_restore_blend(struct cso_context *cso);
-
 
 
 enum pipe_error cso_set_depth_stencil_alpha( struct cso_context *cso,
                                              const struct pipe_depth_stencil_alpha_state *dsa );
-void cso_save_depth_stencil_alpha(struct cso_context *cso);
-void cso_restore_depth_stencil_alpha(struct cso_context *cso);
 
 
 
 enum pipe_error cso_set_rasterizer( struct cso_context *cso,
                                     const struct pipe_rasterizer_state *rasterizer );
-void cso_save_rasterizer(struct cso_context *cso);
-void cso_restore_rasterizer(struct cso_context *cso);
 
 
 enum pipe_error
@@ -71,11 +64,6 @@ cso_set_samplers(struct cso_context *cso,
                  unsigned count,
                  const struct pipe_sampler_state **states);
 
-void
-cso_save_fragment_samplers(struct cso_context *cso);
-
-void
-cso_restore_fragment_samplers(struct cso_context *cso);
 
 /* Alternate interface to support state trackers that like to modify
  * samplers one at a time:
@@ -91,9 +79,6 @@ cso_single_sampler_done(struct cso_context *cso, unsigned shader_stage);
 enum pipe_error cso_set_vertex_elements(struct cso_context *ctx,
                                         unsigned count,
                                         const struct pipe_vertex_element *states);
-void cso_save_vertex_elements(struct cso_context *ctx);
-void cso_restore_vertex_elements(struct cso_context *ctx);
-
 
 void cso_set_vertex_buffers(struct cso_context *ctx,
                             unsigned start_slot, unsigned count,
@@ -101,8 +86,6 @@ void cso_set_vertex_buffers(struct cso_context *ctx,
 
 /* One vertex buffer slot is provided with the save/restore functionality.
  * cso_context chooses the slot, it can be non-zero. */
-void cso_save_aux_vertex_buffer_slot(struct cso_context *ctx);
-void cso_restore_aux_vertex_buffer_slot(struct cso_context *ctx);
 unsigned cso_get_aux_vertex_buffer_slot(struct cso_context *ctx);
 
 
@@ -110,8 +93,6 @@ void cso_set_stream_outputs(struct cso_context *ctx,
                             unsigned num_targets,
                             struct pipe_stream_output_target **targets,
                             const unsigned *offsets);
-void cso_save_stream_outputs(struct cso_context *ctx);
-void cso_restore_stream_outputs(struct cso_context *ctx);
 
 
 /*
@@ -123,67 +104,81 @@ void cso_restore_stream_outputs(struct cso_context *ctx);
 
 void cso_set_fragment_shader_handle(struct cso_context *ctx, void *handle);
 void cso_delete_fragment_shader(struct cso_context *ctx, void *handle );
-void cso_save_fragment_shader(struct cso_context *cso);
-void cso_restore_fragment_shader(struct cso_context *cso);
 
 
 void cso_set_vertex_shader_handle(struct cso_context *ctx, void *handle);
 void cso_delete_vertex_shader(struct cso_context *ctx, void *handle );
-void cso_save_vertex_shader(struct cso_context *cso);
-void cso_restore_vertex_shader(struct cso_context *cso);
 
 
 void cso_set_geometry_shader_handle(struct cso_context *ctx, void *handle);
 void cso_delete_geometry_shader(struct cso_context *ctx, void *handle);
-void cso_save_geometry_shader(struct cso_context *cso);
-void cso_restore_geometry_shader(struct cso_context *cso);
 
 
 void cso_set_tessctrl_shader_handle(struct cso_context *ctx, void *handle);
 void cso_delete_tessctrl_shader(struct cso_context *ctx, void *handle);
-void cso_save_tessctrl_shader(struct cso_context *cso);
-void cso_restore_tessctrl_shader(struct cso_context *cso);
 
 
 void cso_set_tesseval_shader_handle(struct cso_context *ctx, void *handle);
 void cso_delete_tesseval_shader(struct cso_context *ctx, void *handle);
-void cso_save_tesseval_shader(struct cso_context *cso);
-void cso_restore_tesseval_shader(struct cso_context *cso);
+
+
+void cso_set_compute_shader_handle(struct cso_context *ctx, void *handle);
+void cso_delete_compute_shader(struct cso_context *ctx, void *handle);
 
 
 void cso_set_framebuffer(struct cso_context *cso,
                          const struct pipe_framebuffer_state *fb);
-void cso_save_framebuffer(struct cso_context *cso);
-void cso_restore_framebuffer(struct cso_context *cso);
 
 
 void cso_set_viewport(struct cso_context *cso,
                       const struct pipe_viewport_state *vp);
-void cso_save_viewport(struct cso_context *cso);
-void cso_restore_viewport(struct cso_context *cso);
+void cso_set_viewport_dims(struct cso_context *ctx,
+                           float width, float height, boolean invert);
 
 
 void cso_set_blend_color(struct cso_context *cso,
                          const struct pipe_blend_color *bc);
 
 void cso_set_sample_mask(struct cso_context *cso, unsigned stencil_mask);
-void cso_save_sample_mask(struct cso_context *ctx);
-void cso_restore_sample_mask(struct cso_context *ctx);
 
 void cso_set_min_samples(struct cso_context *cso, unsigned min_samples);
-void cso_save_min_samples(struct cso_context *ctx);
-void cso_restore_min_samples(struct cso_context *ctx);
 
 void cso_set_stencil_ref(struct cso_context *cso,
                          const struct pipe_stencil_ref *sr);
-void cso_save_stencil_ref(struct cso_context *cso);
-void cso_restore_stencil_ref(struct cso_context *cso);
 
 void cso_set_render_condition(struct cso_context *cso,
                               struct pipe_query *query,
                               boolean condition, uint mode);
-void cso_save_render_condition(struct cso_context *cso);
-void cso_restore_render_condition(struct cso_context *cso);
+
+
+#define CSO_BIT_AUX_VERTEX_BUFFER_SLOT    0x1
+#define CSO_BIT_BLEND                     0x2
+#define CSO_BIT_DEPTH_STENCIL_ALPHA       0x4
+#define CSO_BIT_FRAGMENT_SAMPLERS         0x8
+#define CSO_BIT_FRAGMENT_SAMPLER_VIEWS   0x10
+#define CSO_BIT_FRAGMENT_SHADER          0x20
+#define CSO_BIT_FRAMEBUFFER              0x40
+#define CSO_BIT_GEOMETRY_SHADER          0x80
+#define CSO_BIT_MIN_SAMPLES             0x100
+#define CSO_BIT_RASTERIZER              0x200
+#define CSO_BIT_RENDER_CONDITION        0x400
+#define CSO_BIT_SAMPLE_MASK             0x800
+#define CSO_BIT_STENCIL_REF            0x1000
+#define CSO_BIT_STREAM_OUTPUTS         0x2000
+#define CSO_BIT_TESSCTRL_SHADER        0x4000
+#define CSO_BIT_TESSEVAL_SHADER        0x8000
+#define CSO_BIT_VERTEX_ELEMENTS       0x10000
+#define CSO_BIT_VERTEX_SHADER         0x20000
+#define CSO_BIT_VIEWPORT              0x40000
+
+#define CSO_BITS_ALL_SHADERS (CSO_BIT_VERTEX_SHADER | \
+                              CSO_BIT_FRAGMENT_SHADER | \
+                              CSO_BIT_GEOMETRY_SHADER | \
+                              CSO_BIT_TESSCTRL_SHADER | \
+                              CSO_BIT_TESSEVAL_SHADER)
+
+void cso_save_state(struct cso_context *cso, unsigned state_mask);
+void cso_restore_state(struct cso_context *cso);
 
 
 /* sampler view state */
@@ -193,12 +188,6 @@ cso_set_sampler_views(struct cso_context *cso,
                       unsigned shader_stage,
                       unsigned count,
                       struct pipe_sampler_view **views);
-
-void
-cso_save_fragment_sampler_views(struct cso_context *ctx);
-
-void
-cso_restore_fragment_sampler_views(struct cso_context *ctx);
 
 
 /* constant buffers */
@@ -230,7 +219,6 @@ cso_draw_arrays_instanced(struct cso_context *cso, uint mode,
                           uint start, uint count,
                           uint start_instance, uint instance_count);
 
-/* helper drawing function */
 void
 cso_draw_arrays(struct cso_context *cso, uint mode, uint start, uint count);
 

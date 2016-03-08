@@ -20,7 +20,9 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include "device9.h"
 #include "device9ex.h"
+#include "nine_pipe.h"
 #include "swapchain9ex.h"
 
 #include "nine_helpers.h"
@@ -37,7 +39,8 @@ NineDevice9Ex_ctor( struct NineDevice9Ex *This,
                     D3DDISPLAYMODEEX *pFullscreenDisplayMode,
                     IDirect3D9Ex *pD3D9Ex,
                     ID3DPresentGroup *pPresentationGroup,
-                    struct d3dadapter9_context *pCTX )
+                    struct d3dadapter9_context *pCTX,
+                    int minorVersionNum )
 {
     DBG("This=%p pParams=%p pScreen=%p pCreationParameters=%p pCaps=%p "
         "pPresentationParameters=%p pFullscreenDisplayMode=%p "
@@ -50,7 +53,7 @@ NineDevice9Ex_ctor( struct NineDevice9Ex *This,
                             pScreen, pCreationParameters, pCaps,
                             pPresentationParameters,
                             (IDirect3D9 *)pD3D9Ex, pPresentationGroup, pCTX,
-                            TRUE, pFullscreenDisplayMode);
+                            TRUE, pFullscreenDisplayMode, minorVersionNum);
 }
 
 static void
@@ -59,7 +62,7 @@ NineDevice9Ex_dtor( struct NineDevice9Ex *This )
     NineDevice9_dtor(&This->base);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_SetConvolutionMonoKernel( struct NineDevice9Ex *This,
                                         UINT width,
                                         UINT height,
@@ -69,7 +72,7 @@ NineDevice9Ex_SetConvolutionMonoKernel( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_ComposeRects( struct NineDevice9Ex *This,
                             IDirect3DSurface9 *pSrc,
                             IDirect3DSurface9 *pDst,
@@ -83,7 +86,7 @@ NineDevice9Ex_ComposeRects( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_PresentEx( struct NineDevice9Ex *This,
                          const RECT *pSourceRect,
                          const RECT *pDestRect,
@@ -108,28 +111,28 @@ NineDevice9Ex_PresentEx( struct NineDevice9Ex *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_GetGPUThreadPriority( struct NineDevice9Ex *This,
                                     INT *pPriority )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_SetGPUThreadPriority( struct NineDevice9Ex *This,
                                     INT Priority )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_WaitForVBlank( struct NineDevice9Ex *This,
                              UINT iSwapChain )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_CheckResourceResidency( struct NineDevice9Ex *This,
                                       IDirect3DResource9 **pResourceArray,
                                       UINT32 NumResources )
@@ -137,32 +140,40 @@ NineDevice9Ex_CheckResourceResidency( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_SetMaximumFrameLatency( struct NineDevice9Ex *This,
                                       UINT MaxLatency )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_GetMaximumFrameLatency( struct NineDevice9Ex *This,
                                       UINT *pMaxLatency )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_CheckDeviceState( struct NineDevice9Ex *This,
                                 HWND hDestinationWindow )
 {
     DBG("This=%p hDestinationWindow=%p\n",
         This, hDestinationWindow);
 
+    user_assert(!This->base.swapchains[0]->params.Windowed, D3D_OK);
+
+    if (This->base.params.hFocusWindow == hDestinationWindow) {
+        if (NineSwapChain9_GetOccluded(This->base.swapchains[0]))
+            return S_PRESENT_OCCLUDED;
+    } else if(!NineSwapChain9_GetOccluded(This->base.swapchains[0])) {
+        return S_PRESENT_OCCLUDED;
+    }
     /* TODO: handle the other return values */
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_CreateRenderTargetEx( struct NineDevice9Ex *This,
                                     UINT Width,
                                     UINT Height,
@@ -177,7 +188,7 @@ NineDevice9Ex_CreateRenderTargetEx( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_CreateOffscreenPlainSurfaceEx( struct NineDevice9Ex *This,
                                              UINT Width,
                                              UINT Height,
@@ -190,7 +201,7 @@ NineDevice9Ex_CreateOffscreenPlainSurfaceEx( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_CreateDepthStencilSurfaceEx( struct NineDevice9Ex *This,
                                            UINT Width,
                                            UINT Height,
@@ -205,7 +216,7 @@ NineDevice9Ex_CreateDepthStencilSurfaceEx( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_ResetEx( struct NineDevice9Ex *This,
                        D3DPRESENT_PARAMETERS *pPresentationParameters,
                        D3DDISPLAYMODEEX *pFullscreenDisplayMode )
@@ -221,17 +232,42 @@ NineDevice9Ex_ResetEx( struct NineDevice9Ex *This,
         if (pFullscreenDisplayMode) mode = &(pFullscreenDisplayMode[i]);
         hr = NineSwapChain9_Resize(This->base.swapchains[i], params, mode);
         if (FAILED(hr))
-            return (hr == D3DERR_OUTOFVIDEOMEMORY) ? hr : D3DERR_DEVICELOST;
+            break;
     }
 
     NineDevice9_SetRenderTarget(
         (struct NineDevice9 *)This, 0, (IDirect3DSurface9 *)This->base.swapchains[0]->buffers[0]);
 
+    return hr;
+}
+
+HRESULT NINE_WINAPI
+NineDevice9Ex_Reset( struct NineDevice9Ex *This,
+                     D3DPRESENT_PARAMETERS *pPresentationParameters )
+{
+    HRESULT hr = D3D_OK;
+    unsigned i;
+
+    DBG("This=%p pPresentationParameters=%p\n", This, pPresentationParameters);
+
+    for (i = 0; i < This->base.nswapchains; ++i) {
+        D3DPRESENT_PARAMETERS *params = &pPresentationParameters[i];
+        hr = NineSwapChain9_Resize(This->base.swapchains[i], params, NULL);
+        if (FAILED(hr))
+            break;
+    }
+
+    nine_pipe_context_clear((struct NineDevice9 *)This);
+    nine_state_clear(&This->base.state, TRUE);
+
+    NineDevice9_SetDefaultState((struct NineDevice9 *)This, TRUE);
+    NineDevice9_SetRenderTarget(
+        (struct NineDevice9 *)This, 0, (IDirect3DSurface9 *)This->base.swapchains[0]->buffers[0]);
 
     return hr;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Ex_GetDisplayModeEx( struct NineDevice9Ex *This,
                                 UINT iSwapChain,
                                 D3DDISPLAYMODEEX *pMode,
@@ -248,11 +284,18 @@ NineDevice9Ex_GetDisplayModeEx( struct NineDevice9Ex *This,
     return NineSwapChain9Ex_GetDisplayModeEx(swapchain, pMode, pRotation);
 }
 
+HRESULT NINE_WINAPI
+NineDevice9Ex_TestCooperativeLevel( struct NineDevice9Ex *This )
+{
+    return D3D_OK;
+}
+
+
 IDirect3DDevice9ExVtbl NineDevice9Ex_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
-    (void *)NineDevice9_TestCooperativeLevel,
+    (void *)NineDevice9Ex_TestCooperativeLevel,
     (void *)NineDevice9_GetAvailableTextureMem,
     (void *)NineDevice9_EvictManagedResources,
     (void *)NineDevice9_GetDirect3D,
@@ -265,7 +308,7 @@ IDirect3DDevice9ExVtbl NineDevice9Ex_vtable = {
     (void *)NineDevice9_CreateAdditionalSwapChain,
     (void *)NineDevice9_GetSwapChain,
     (void *)NineDevice9_GetNumberOfSwapChains,
-    (void *)NineDevice9_Reset,
+    (void *)NineDevice9Ex_Reset,
     (void *)NineDevice9_Present,
     (void *)NineDevice9_GetBackBuffer,
     (void *)NineDevice9_GetRasterStatus,
@@ -401,13 +444,14 @@ NineDevice9Ex_new( struct pipe_screen *pScreen,
                    IDirect3D9Ex *pD3D9Ex,
                    ID3DPresentGroup *pPresentationGroup,
                    struct d3dadapter9_context *pCTX,
-                   struct NineDevice9Ex **ppOut )
+                   struct NineDevice9Ex **ppOut,
+                   int minorVersionNum )
 {
     BOOL lock;
     lock = !!(pCreationParameters->BehaviorFlags & D3DCREATE_MULTITHREADED);
 
     NINE_NEW(Device9Ex, ppOut, lock,
              pScreen, pCreationParameters, pCaps, pPresentationParameters,
-             pFullscreenDisplayMode, pD3D9Ex, pPresentationGroup, pCTX);
+             pFullscreenDisplayMode, pD3D9Ex, pPresentationGroup, pCTX, minorVersionNum );
 }
 

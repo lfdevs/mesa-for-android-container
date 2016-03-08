@@ -734,7 +734,7 @@ draw_create_geometry_shader(struct draw_context *draw,
    if (use_llvm) {
       llvm_gs = CALLOC_STRUCT(llvm_geometry_shader);
 
-      if (llvm_gs == NULL)
+      if (!llvm_gs)
          return NULL;
 
       gs = &llvm_gs->base;

@@ -358,11 +358,119 @@ nvc0_hw_get_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
    return true;
 }
 
+static void
+nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
+                                  struct nvc0_query *q,
+                                  boolean wait,
+                                  enum pipe_query_value_type result_type,
+                                  int index,
+                                  struct pipe_resource *resource,
+                                  unsigned offset)
+{
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nvc0_hw_query *hq = nvc0_hw_query(q);
+   struct nv04_resource *buf = nv04_resource(resource);
+   unsigned stride;
+
+   assert(!hq->funcs || !hq->funcs->get_query_result);
+
+   if (index == -1) {
+      /* TODO: Use a macro to write the availability of the query */
+      if (hq->state != NVC0_HW_QUERY_STATE_READY)
+         nvc0_hw_query_update(nvc0->screen->base.client, q);
+      uint32_t ready[2] = {hq->state == NVC0_HW_QUERY_STATE_READY};
+      nvc0->base.push_cb(&nvc0->base, buf, offset,
+                         result_type >= PIPE_QUERY_TYPE_I64 ? 2 : 1,
+                         ready);
+      return;
+   }
+
+   /* If the fence guarding this query has not been emitted, that makes a lot
+    * of the following logic more complicated.
+    */
+   if (hq->is64bit && hq->fence->state < NOUVEAU_FENCE_STATE_EMITTED)
+      nouveau_fence_emit(hq->fence);
+
+   /* We either need to compute a 32- or 64-bit difference between 2 values,
+    * and then store the result as either a 32- or 64-bit value. As such let's
+    * treat all inputs as 64-bit (and just push an extra 0 for the 32-bit
+    * ones), and have one macro that clamps result to i32, u32, or just
+    * outputs the difference (no need to worry about 64-bit clamping).
+    */
+   if (hq->state != NVC0_HW_QUERY_STATE_READY)
+      nvc0_hw_query_update(nvc0->screen->base.client, q);
+
+   if (wait && hq->state != NVC0_HW_QUERY_STATE_READY)
+      nvc0_hw_query_fifo_wait(nvc0, q);
+
+   nouveau_pushbuf_space(push, 16, 2, 0);
+   PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
+   PUSH_REFN (push, buf->bo, buf->domain | NOUVEAU_BO_WR);
+   BEGIN_NVC0(push, NVC0_3D(QUERY_ADDRESS_HIGH), 2);
+   PUSH_DATAh(push, buf->address + offset);
+   PUSH_DATA (push, buf->address + offset);
+   BEGIN_1IC0(push, NVC0_3D(MACRO_QUERY_BUFFER_WRITE), 7);
+   if (q->type == PIPE_QUERY_OCCLUSION_PREDICATE) /* XXX what if 64-bit? */
+      PUSH_DATA(push, 0x00000001);
+   else if (result_type == PIPE_QUERY_TYPE_I32)
+      PUSH_DATA(push, 0x7fffffff);
+   else if (result_type == PIPE_QUERY_TYPE_U32)
+      PUSH_DATA(push, 0xffffffff);
+   else
+      PUSH_DATA(push, 0x00000000);
+
+   switch (q->type) {
+   case PIPE_QUERY_SO_STATISTICS:
+      stride = 2;
+      break;
+   case PIPE_QUERY_PIPELINE_STATISTICS:
+      stride = 12;
+      break;
+   default:
+      assert(index == 0);
+      stride = 1;
+      break;
+   }
+
+   if (hq->is64bit) {
+      nouveau_pushbuf_data(push, hq->bo, hq->offset + 16 * index,
+                           8 | NVC0_IB_ENTRY_1_NO_PREFETCH);
+      nouveau_pushbuf_data(push, hq->bo, hq->offset + 16 * (index + stride),
+                           8 | NVC0_IB_ENTRY_1_NO_PREFETCH);
+   } else {
+      nouveau_pushbuf_data(push, hq->bo, hq->offset + 4,
+                           4 | NVC0_IB_ENTRY_1_NO_PREFETCH);
+      PUSH_DATA(push, 0);
+      nouveau_pushbuf_data(push, hq->bo, hq->offset + 16 + 4,
+                           4 | NVC0_IB_ENTRY_1_NO_PREFETCH);
+      PUSH_DATA(push, 0);
+   }
+
+   if (wait || hq->state == NVC0_HW_QUERY_STATE_READY) {
+      PUSH_DATA(push, 0);
+      PUSH_DATA(push, 0);
+   } else if (hq->is64bit) {
+      PUSH_DATA(push, hq->fence->sequence);
+      nouveau_pushbuf_data(push, nvc0->screen->fence.bo, 0,
+                           4 | NVC0_IB_ENTRY_1_NO_PREFETCH);
+   } else {
+      PUSH_DATA(push, hq->sequence);
+      nouveau_pushbuf_data(push, hq->bo, hq->offset,
+                           4 | NVC0_IB_ENTRY_1_NO_PREFETCH);
+   }
+
+   if (buf->mm) {
+      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
+      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
+   }
+}
+
 static const struct nvc0_query_funcs hw_query_funcs = {
    .destroy_query = nvc0_hw_destroy_query,
    .begin_query = nvc0_hw_begin_query,
    .end_query = nvc0_hw_end_query,
    .get_query_result = nvc0_hw_get_query_result,
+   .get_query_result_resource = nvc0_hw_get_query_result_resource,
 };
 
 struct nvc0_query *
@@ -470,16 +578,15 @@ nvc0_hw_query_pushbuf_submit(struct nouveau_pushbuf *push,
 {
    struct nvc0_hw_query *hq = nvc0_hw_query(q);
 
-#define NVC0_IB_ENTRY_1_NO_PREFETCH (1 << (31 - 8))
-
    PUSH_REFN(push, hq->bo, NOUVEAU_BO_RD | NOUVEAU_BO_GART);
    nouveau_pushbuf_data(push, hq->bo, hq->offset + result_offset, 4 |
                         NVC0_IB_ENTRY_1_NO_PREFETCH);
 }
 
 void
-nvc0_hw_query_fifo_wait(struct nouveau_pushbuf *push, struct nvc0_query *q)
+nvc0_hw_query_fifo_wait(struct nvc0_context *nvc0, struct nvc0_query *q)
 {
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_hw_query *hq = nvc0_hw_query(q);
    unsigned offset = hq->offset;
 
@@ -488,9 +595,15 @@ nvc0_hw_query_fifo_wait(struct nouveau_pushbuf *push, struct nvc0_query *q)
    PUSH_SPACE(push, 5);
    PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
    BEGIN_NVC0(push, SUBC_3D(NV84_SUBCHAN_SEMAPHORE_ADDRESS_HIGH), 4);
-   PUSH_DATAh(push, hq->bo->offset + offset);
-   PUSH_DATA (push, hq->bo->offset + offset);
-   PUSH_DATA (push, hq->sequence);
+   if (hq->is64bit) {
+      PUSH_DATAh(push, nvc0->screen->fence.bo->offset);
+      PUSH_DATA (push, nvc0->screen->fence.bo->offset);
+      PUSH_DATA (push, hq->fence->sequence);
+   } else {
+      PUSH_DATAh(push, hq->bo->offset + offset);
+      PUSH_DATA (push, hq->bo->offset + offset);
+      PUSH_DATA (push, hq->sequence);
+   }
    PUSH_DATA (push, (1 << 12) |
               NV84_SUBCHAN_SEMAPHORE_TRIGGER_ACQUIRE_EQUAL);
 }

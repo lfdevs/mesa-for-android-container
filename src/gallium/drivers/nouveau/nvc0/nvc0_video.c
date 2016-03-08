@@ -26,6 +26,24 @@
 #include "util/u_format.h"
 
 static void
+nvc0_decoder_begin_frame(struct pipe_video_codec *decoder,
+                         struct pipe_video_buffer *target,
+                         struct pipe_picture_desc *picture)
+{
+   struct nouveau_vp3_decoder *dec = (struct nouveau_vp3_decoder *)decoder;
+   uint32_t comm_seq = ++dec->fence_seq;
+   unsigned ret = 0;
+
+   assert(dec);
+   assert(target);
+   assert(target->buffer_format == PIPE_FORMAT_NV12);
+
+   ret = nvc0_decoder_bsp_begin(dec, comm_seq);
+
+   assert(ret == 2);
+}
+
+static void
 nvc0_decoder_decode_bitstream(struct pipe_video_codec *decoder,
                               struct pipe_video_buffer *video_target,
                               struct pipe_picture_desc *picture,
@@ -34,8 +52,24 @@ nvc0_decoder_decode_bitstream(struct pipe_video_codec *decoder,
                               const unsigned *num_bytes)
 {
    struct nouveau_vp3_decoder *dec = (struct nouveau_vp3_decoder *)decoder;
+   uint32_t comm_seq = dec->fence_seq;
+   unsigned ret = 0;
+
+   assert(decoder);
+
+   ret = nvc0_decoder_bsp_next(dec, comm_seq, num_buffers, data, num_bytes);
+
+   assert(ret == 2);
+}
+
+static void
+nvc0_decoder_end_frame(struct pipe_video_codec *decoder,
+                       struct pipe_video_buffer *video_target,
+                       struct pipe_picture_desc *picture)
+{
+   struct nouveau_vp3_decoder *dec = (struct nouveau_vp3_decoder *)decoder;
    struct nouveau_vp3_video_buffer *target = (struct nouveau_vp3_video_buffer *)video_target;
-   uint32_t comm_seq = ++dec->fence_seq;
+   uint32_t comm_seq = dec->fence_seq;
    union pipe_desc desc;
 
    unsigned vp_caps, is_ref, ret;
@@ -43,11 +77,7 @@ nvc0_decoder_decode_bitstream(struct pipe_video_codec *decoder,
 
    desc.base = picture;
 
-   assert(target->base.buffer_format == PIPE_FORMAT_NV12);
-
-   ret = nvc0_decoder_bsp(dec, desc, target, comm_seq,
-                          num_buffers, data, num_bytes,
-                          &vp_caps, &is_ref, refs);
+   ret = nvc0_decoder_bsp_end(dec, desc, target, comm_seq, &vp_caps, &is_ref, refs);
 
    /* did we decode bitstream correctly? */
    assert(ret == 2);
@@ -164,7 +194,9 @@ nvc0_create_decoder(struct pipe_context *context,
    PUSH_DATA (push[2], dec->ppp->handle);
 
    dec->base.context = context;
+   dec->base.begin_frame = nvc0_decoder_begin_frame;
    dec->base.decode_bitstream = nvc0_decoder_decode_bitstream;
+   dec->base.end_frame = nvc0_decoder_end_frame;
 
    for (i = 0; i < NOUVEAU_VP3_VIDEO_QDEPTH && !ret; ++i)
       ret = nouveau_bo_new(screen->device, NOUVEAU_BO_VRAM,

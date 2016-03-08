@@ -315,7 +315,8 @@ private:
         UINT_32* pBaseAlign, UINT_32* pPitchAlign, UINT_32* pHeightAlign) const;
 
     BOOL_32 ComputeSurfaceAlignmentsMicroTiled(
-        AddrTileMode tileMode, UINT_32 bpp, ADDR_SURFACE_FLAGS flags, UINT_32 numSamples,
+        AddrTileMode tileMode, UINT_32 bpp, ADDR_SURFACE_FLAGS flags,
+        UINT_32 mipLevel, UINT_32 numSamples,
         UINT_32* pBaseAlign, UINT_32* pPitchAlign, UINT_32* pHeightAlign) const;
 
     BOOL_32 ComputeSurfaceAlignmentsMacroTiled(

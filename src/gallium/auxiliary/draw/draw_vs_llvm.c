@@ -86,7 +86,7 @@ draw_create_vs_llvm(struct draw_context *draw,
 {
    struct llvm_vertex_shader *vs = CALLOC_STRUCT( llvm_vertex_shader );
 
-   if (vs == NULL)
+   if (!vs)
       return NULL;
 
    /* we make a private copy of the tokens */

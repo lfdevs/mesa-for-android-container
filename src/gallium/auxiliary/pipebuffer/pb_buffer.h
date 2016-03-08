@@ -163,7 +163,7 @@ pb_map(struct pb_buffer *buf,
        unsigned flags, void *flush_ctx)
 {
    assert(buf);
-   if(!buf)
+   if (!buf)
       return NULL;
    assert(pipe_is_referenced(&buf->reference));
    return buf->vtbl->map(buf, flags, flush_ctx);
@@ -174,7 +174,7 @@ static inline void
 pb_unmap(struct pb_buffer *buf)
 {
    assert(buf);
-   if(!buf)
+   if (!buf)
       return;
    assert(pipe_is_referenced(&buf->reference));
    buf->vtbl->unmap(buf);
@@ -187,7 +187,7 @@ pb_get_base_buffer( struct pb_buffer *buf,
 		    pb_size *offset )
 {
    assert(buf);
-   if(!buf) {
+   if (!buf) {
       base_buf = NULL;
       offset = 0;
       return;
@@ -204,7 +204,7 @@ static inline enum pipe_error
 pb_validate(struct pb_buffer *buf, struct pb_validate *vl, unsigned flags)
 {
    assert(buf);
-   if(!buf)
+   if (!buf)
       return PIPE_ERROR;
    assert(buf->vtbl->validate);
    return buf->vtbl->validate(buf, vl, flags);
@@ -215,7 +215,7 @@ static inline void
 pb_fence(struct pb_buffer *buf, struct pipe_fence_handle *fence)
 {
    assert(buf);
-   if(!buf)
+   if (!buf)
       return;
    assert(buf->vtbl->fence);
    buf->vtbl->fence(buf, fence);
@@ -226,7 +226,7 @@ static inline void
 pb_destroy(struct pb_buffer *buf)
 {
    assert(buf);
-   if(!buf)
+   if (!buf)
       return;
    assert(!pipe_is_referenced(&buf->reference));
    buf->vtbl->destroy(buf);

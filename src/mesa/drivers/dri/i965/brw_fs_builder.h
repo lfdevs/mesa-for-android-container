@@ -369,20 +369,14 @@ namespace brw {
        *
        * Generally useful to get the minimum or maximum of two values.
        */
-      void
+      instruction *
       emit_minmax(const dst_reg &dst, const src_reg &src0,
                   const src_reg &src1, brw_conditional_mod mod) const
       {
          assert(mod == BRW_CONDITIONAL_GE || mod == BRW_CONDITIONAL_L);
 
-         if (shader->devinfo->gen >= 6) {
-            set_condmod(mod, SEL(dst, fix_unsigned_negate(src0),
-                                 fix_unsigned_negate(src1)));
-         } else {
-            CMP(null_reg_d(), src0, src1, mod);
-            set_predicate(BRW_PREDICATE_NORMAL,
-                          SEL(dst, src0, src1));
-         }
+         return set_condmod(mod, SEL(dst, fix_unsigned_negate(src0),
+                                     fix_unsigned_negate(src1)));
       }
 
       /**

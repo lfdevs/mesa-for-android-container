@@ -70,7 +70,7 @@ struct linear_scan {
 static void
 linear_scan_free_regs(struct linear_scan *ls, int reg, int count)
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < count; i++)
       ls->free_regs[ls->num_free_regs++] = reg + count - 1 - i;
@@ -221,7 +221,7 @@ linear_scan_spill(struct linear_scan *ls,
 static void
 linear_scan_spill_range(struct linear_scan *ls, int first, int count)
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < count; i++) {
       struct linear_scan_live_interval *interval = &ls->intervals[first + i];

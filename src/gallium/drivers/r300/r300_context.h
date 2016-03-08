@@ -295,7 +295,6 @@ struct r300_query {
 
     /* The buffer where query results are stored. */
     struct pb_buffer *buf;
-    struct radeon_winsys_cs_handle *cs_buf;
 };
 
 struct r300_surface {
@@ -303,7 +302,6 @@ struct r300_surface {
 
     /* Winsys buffer backing the texture. */
     struct pb_buffer *buf;
-    struct radeon_winsys_cs_handle *cs_buf;
 
     enum radeon_bo_domain domain;
 
@@ -395,7 +393,6 @@ struct r300_resource
 
     /* Winsys buffer backing this resource. */
     struct pb_buffer *buf;
-    struct radeon_winsys_cs_handle *cs_buf;
     enum radeon_bo_domain domain;
 
     /* Constant buffers and SWTCL vertex and index buffers are in user
@@ -460,7 +457,6 @@ struct r300_context {
     struct draw_context* draw;
     /* Vertex buffer for SW TCL. */
     struct pb_buffer *vbo;
-    struct radeon_winsys_cs_handle *vbo_cs;
     /* Offset and size into the SW TCL VBO. */
     size_t draw_vbo_offset;
 

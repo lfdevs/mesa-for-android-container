@@ -208,6 +208,13 @@ brw_finish_batch(struct brw_context *brw)
    brw_emit_query_end(brw);
 
    if (brw->batch.ring == RENDER_RING) {
+      /* Work around L3 state leaks into contexts set MI_RESTORE_INHIBIT which
+       * assume that the L3 cache is configured according to the hardware
+       * defaults.
+       */
+      if (brw->gen >= 7)
+         gen7_restore_default_l3_config(brw);
+
       /* We may also need to snapshot and disable OA counters. */
       brw_perf_monitor_finish_batch(brw);
 

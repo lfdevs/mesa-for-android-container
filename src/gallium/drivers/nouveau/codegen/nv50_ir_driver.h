@@ -124,6 +124,7 @@ struct nv50_ir_prog_info
    union {
       struct {
          uint32_t inputMask[4]; /* mask of attributes read (1 bit per scalar) */
+         bool usesDrawParameters;
       } vp;
       struct {
          uint8_t inputPatchSize;
@@ -160,8 +161,9 @@ struct nv50_ir_prog_info
       uint8_t clipDistances;     /* number of clip distance outputs */
       uint8_t cullDistances;     /* number of cull distance outputs */
       int8_t genUserClip;        /* request user clip planes for ClipVertex */
+      uint8_t auxCBSlot;         /* constant buffer index of UCP/draw data */
       uint16_t ucpBase;          /* base address for UCPs */
-      uint8_t ucpCBSlot;         /* constant buffer index of UCP data */
+      uint16_t drawInfoBase;     /* base address for draw parameters */
       uint8_t pointSize;         /* output index for PointSize */
       uint8_t instanceId;        /* system value index of InstanceID */
       uint8_t vertexId;          /* system value index of VertexID */

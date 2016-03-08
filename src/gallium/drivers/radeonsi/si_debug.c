@@ -28,8 +28,11 @@
 #include "si_shader.h"
 #include "sid.h"
 #include "sid_tables.h"
+#include "radeon/radeon_elf_util.h"
 #include "ddebug/dd_util.h"
+#include "util/u_memory.h"
 
+DEBUG_GET_ONCE_OPTION(replace_shaders, "RADEON_REPLACE_SHADERS", NULL)
 
 static void si_dump_shader(struct si_shader_ctx_state *state, const char *name,
 			   FILE *f)
@@ -40,6 +43,98 @@ static void si_dump_shader(struct si_shader_ctx_state *state, const char *name,
 	fprintf(f, "%s shader disassembly:\n", name);
 	si_dump_shader_key(state->cso->type, &state->current->key, f);
 	fprintf(f, "%s\n\n", state->current->binary.disasm_string);
+}
+
+/**
+ * Shader compiles can be overridden with arbitrary ELF objects by setting
+ * the environment variable RADEON_REPLACE_SHADERS=num1:filename1[;num2:filename2]
+ */
+bool si_replace_shader(unsigned num, struct radeon_shader_binary *binary)
+{
+	const char *p = debug_get_option_replace_shaders();
+	const char *semicolon;
+	char *copy = NULL;
+	FILE *f;
+	long filesize, nread;
+	char *buf = NULL;
+	bool replaced = false;
+
+	if (!p)
+		return false;
+
+	while (*p) {
+		unsigned long i;
+		char *endp;
+		i = strtoul(p, &endp, 0);
+
+		p = endp;
+		if (*p != ':') {
+			fprintf(stderr, "RADEON_REPLACE_SHADERS formatted badly.\n");
+			exit(1);
+		}
+		++p;
+
+		if (i == num)
+			break;
+
+		p = strchr(p, ';');
+		if (!p)
+			return false;
+		++p;
+	}
+	if (!*p)
+		return false;
+
+	semicolon = strchr(p, ';');
+	if (semicolon) {
+		p = copy = strndup(p, semicolon - p);
+		if (!copy) {
+			fprintf(stderr, "out of memory\n");
+			return false;
+		}
+	}
+
+	fprintf(stderr, "radeonsi: replace shader %u by %s\n", num, p);
+
+	f = fopen(p, "r");
+	if (!f) {
+		perror("radeonsi: failed to open file");
+		goto out_free;
+	}
+
+	if (fseek(f, 0, SEEK_END) != 0)
+		goto file_error;
+
+	filesize = ftell(f);
+	if (filesize < 0)
+		goto file_error;
+
+	if (fseek(f, 0, SEEK_SET) != 0)
+		goto file_error;
+
+	buf = MALLOC(filesize);
+	if (!buf) {
+		fprintf(stderr, "out of memory\n");
+		goto out_close;
+	}
+
+	nread = fread(buf, 1, filesize, f);
+	if (nread != filesize)
+		goto file_error;
+
+	radeon_elf_read(buf, filesize, binary);
+	replaced = true;
+
+out_close:
+	fclose(f);
+out_free:
+	FREE(buf);
+	free(copy);
+	return replaced;
+
+file_error:
+	perror("radeonsi: reading shader");
+	goto out_close;
 }
 
 /* Parsed IBs are difficult to read without colors. Use "less -R file" to
@@ -61,13 +156,16 @@ static void print_spaces(FILE *f, unsigned num)
 static void print_value(FILE *file, uint32_t value, int bits)
 {
 	/* Guess if it's int or float */
-	if (value <= (1 << 15))
-		fprintf(file, "%u\n", value);
-	else {
+	if (value <= (1 << 15)) {
+		if (value <= 9)
+			fprintf(file, "%u\n", value);
+		else
+			fprintf(file, "%u (0x%0*x)\n", value, bits / 4, value);
+	} else {
 		float f = uif(value);
 
 		if (fabs(f) < 100000 && f*10 == floor(f*10))
-			fprintf(file, "%.1ff\n", f);
+			fprintf(file, "%.1ff (0x%0*x)\n", f, bits / 4, value);
 		else
 			/* Don't print more leading zeros than there are bits. */
 			fprintf(file, "0x%0*x\n", bits / 4, value);
@@ -312,9 +410,10 @@ static uint32_t *si_parse_packet3(FILE *f, uint32_t *ib, int *num_dw,
  * \param trace_id	the last trace ID that is known to have been reached
  *			and executed by the CP, typically read from a buffer
  */
-static void si_parse_ib(FILE *f, uint32_t *ib, int num_dw, int trace_id)
+static void si_parse_ib(FILE *f, uint32_t *ib, int num_dw, int trace_id,
+			const char *name)
 {
-	fprintf(f, "------------------ IB begin ------------------\n");
+	fprintf(f, "------------------ %s begin ------------------\n", name);
 
 	while (num_dw > 0) {
 		unsigned type = PKT_TYPE_G(ib[0]);
@@ -337,11 +436,12 @@ static void si_parse_ib(FILE *f, uint32_t *ib, int num_dw, int trace_id)
 		}
 	}
 
-	fprintf(f, "------------------- IB end -------------------\n");
+	fprintf(f, "------------------- %s end -------------------\n", name);
 	if (num_dw < 0) {
 		printf("Packet ends after the end of IB.\n");
 		exit(0);
 	}
+	fprintf(f, "\n");
 }
 
 static void si_dump_mmapped_reg(struct si_context *sctx, FILE *f,
@@ -405,7 +505,7 @@ static void si_dump_last_ib(struct si_context *sctx, FILE *f)
 		 * waited for the context, so this buffer should be idle.
 		 * If the GPU is hung, there is no point in waiting for it.
 		 */
-		uint32_t *map = sctx->b.ws->buffer_map(sctx->last_trace_buf->cs_buf,
+		uint32_t *map = sctx->b.ws->buffer_map(sctx->last_trace_buf->buf,
 						       NULL,
 						       PIPE_TRANSFER_UNSYNCHRONIZED |
 						       PIPE_TRANSFER_READ);
@@ -413,8 +513,17 @@ static void si_dump_last_ib(struct si_context *sctx, FILE *f)
 			last_trace_id = *map;
 	}
 
+	if (sctx->init_config)
+		si_parse_ib(f, sctx->init_config->pm4, sctx->init_config->ndw,
+			    -1, "IB2: Init config");
+
+	if (sctx->init_config_gs_rings)
+		si_parse_ib(f, sctx->init_config_gs_rings->pm4,
+			    sctx->init_config_gs_rings->ndw,
+			    -1, "IB2: Init GS rings");
+
 	si_parse_ib(f, sctx->last_ib, sctx->last_ib_dw_size,
-		    last_trace_id);
+		    last_trace_id, "IB");
 	free(sctx->last_ib); /* dump only once */
 	sctx->last_ib = NULL;
 	r600_resource_reference(&sctx->last_trace_buf, NULL);
@@ -528,6 +637,30 @@ static void si_dump_last_bo_list(struct si_context *sctx, FILE *f)
 	sctx->last_bo_list = NULL;
 }
 
+static void si_dump_framebuffer(struct si_context *sctx, FILE *f)
+{
+	struct pipe_framebuffer_state *state = &sctx->framebuffer.state;
+	struct r600_texture *rtex;
+	int i;
+
+	for (i = 0; i < state->nr_cbufs; i++) {
+		if (!state->cbufs[i])
+			continue;
+
+		rtex = (struct r600_texture*)state->cbufs[i]->texture;
+		fprintf(f, COLOR_YELLOW "Color buffer %i:" COLOR_RESET "\n", i);
+		r600_print_texture_info(rtex, f);
+		fprintf(f, "\n");
+	}
+
+	if (state->zsbuf) {
+		rtex = (struct r600_texture*)state->zsbuf->texture;
+		fprintf(f, COLOR_YELLOW "Depth-stencil buffer:" COLOR_RESET "\n");
+		r600_print_texture_info(rtex, f);
+		fprintf(f, "\n");
+	}
+}
+
 static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 				unsigned flags)
 {
@@ -536,6 +669,7 @@ static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 	if (flags & PIPE_DEBUG_DEVICE_IS_HUNG)
 		si_dump_debug_registers(sctx, f);
 
+	si_dump_framebuffer(sctx, f);
 	si_dump_shader(&sctx->vs_shader, "Vertex", f);
 	si_dump_shader(&sctx->tcs_shader, "Tessellation control", f);
 	si_dump_shader(&sctx->tes_shader, "Tessellation evaluation", f);
@@ -637,7 +771,7 @@ void si_check_vm_faults(struct si_context *sctx)
 	if (!si_vm_fault_occured(sctx, &addr))
 		return;
 
-	f = dd_get_debug_file();
+	f = dd_get_debug_file(false);
 	if (!f)
 		return;
 

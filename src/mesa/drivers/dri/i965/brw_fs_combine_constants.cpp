@@ -35,10 +35,11 @@
  */
 
 #include "brw_fs.h"
-#include "brw_fs_live_variables.h"
 #include "brw_cfg.h"
 
 using namespace brw;
+
+static const bool debug = false;
 
 /* Returns whether an instruction could co-issue if its immediate source were
  * replaced with a GRF source.
@@ -266,9 +267,8 @@ fs_visitor::opt_combine_constants()
    if (cfg->num_blocks != 1)
       qsort(table.imm, table.len, sizeof(struct imm), compare);
 
-
    /* Insert MOVs to load the constant values into GRFs. */
-   fs_reg reg(VGRF, alloc.allocate(dispatch_width / 8));
+   fs_reg reg(VGRF, alloc.allocate(1));
    reg.stride = 0;
    for (int i = 0; i < table.len; i++) {
       struct imm *imm = &table.imm[i];
@@ -284,8 +284,8 @@ fs_visitor::opt_combine_constants()
       imm->subreg_offset = reg.subreg_offset;
 
       reg.subreg_offset += sizeof(float);
-      if ((unsigned)reg.subreg_offset == dispatch_width * sizeof(float)) {
-         reg.nr = alloc.allocate(dispatch_width / 8);
+      if ((unsigned)reg.subreg_offset == 8 * sizeof(float)) {
+         reg.nr = alloc.allocate(1);
          reg.subreg_offset = 0;
       }
    }
@@ -300,7 +300,26 @@ fs_visitor::opt_combine_constants()
          reg->subreg_offset = table.imm[i].subreg_offset;
          reg->stride = 0;
          reg->negate = signbit(reg->f) != signbit(table.imm[i].val);
-         assert(fabsf(reg->f) == table.imm[i].val);
+         assert((isnan(reg->f) && isnan(table.imm[i].val)) ||
+                fabsf(reg->f) == table.imm[i].val);
+      }
+   }
+
+   if (debug) {
+      for (int i = 0; i < table.len; i++) {
+         struct imm *imm = &table.imm[i];
+
+         printf("%.3fF - block %3d, reg %3d sub %2d, Uses: (%2d, %2d), "
+                "IP: %4d to %4d, length %4d\n",
+                imm->val,
+                imm->block->num,
+                imm->nr,
+                imm->subreg_offset,
+                imm->must_promote,
+                imm->uses_by_coissue,
+                imm->first_use_ip,
+                imm->last_use_ip,
+                imm->last_use_ip - imm->first_use_ip);
       }
    }
 

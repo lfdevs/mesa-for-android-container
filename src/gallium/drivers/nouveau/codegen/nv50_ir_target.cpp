@@ -46,7 +46,7 @@ const uint8_t Target::operationSrcNr[] =
    1, 1, 1,                // TEX, TXB, TXL,
    1, 1, 1, 1, 1, 1, 2,    // TXF, TXQ, TXD, TXG, TXLQ, TEXCSAA, TEXPREP
    1, 1, 2, 2, 2, 2, 2,    // SULDB, SULDP, SUSTB, SUSTP, SUREDB, SUREDP, SULEA
-   3, 3, 3, 3,             // SUBFM, SUCLAMP, SUEAU, MADSP
+   3, 3, 3, 1, 3,          // SUBFM, SUCLAMP, SUEAU, SUQ, MADSP
    0,                      // TEXBAR
    1, 1,                   // DFDX, DFDY
    1, 2, 1, 2, 0, 0,       // RDSV, WRSV, PIXLD, QUADOP, QUADON, QUADPOP
@@ -109,8 +109,8 @@ const OpClass Target::operationClass[] =
    // SULDB, SULDP, SUSTB, SUSTP; SUREDB, SUREDP, SULEA
    OPCLASS_SURFACE, OPCLASS_SURFACE, OPCLASS_ATOMIC, OPCLASS_SURFACE,
    OPCLASS_SURFACE, OPCLASS_SURFACE, OPCLASS_SURFACE,
-   // SUBFM, SUCLAMP, SUEAU, MADSP
-   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_ARITH,
+   // SUBFM, SUCLAMP, SUEAU, SUQ, MADSP
+   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_ARITH,
    // TEXBAR
    OPCLASS_OTHER,
    // DFDX, DFDY, RDSV, WRSV; PIXLD, QUADOP, QUADON, QUADPOP
@@ -143,6 +143,7 @@ Target *Target::create(unsigned int chipset)
    STATIC_ASSERT(Elements(operationClass) == OP_LAST + 1);
    switch (chipset & ~0xf) {
    case 0x110:
+   case 0x120:
       return getTargetGM107(chipset);
    case 0xc0:
    case 0xd0:

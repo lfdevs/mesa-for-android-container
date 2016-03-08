@@ -58,10 +58,12 @@ int bc_parser::decode() {
 		switch (bc->type) {
 		case TGSI_PROCESSOR_FRAGMENT: t = TARGET_PS; break;
 		case TGSI_PROCESSOR_VERTEX:
-			t = pshader->vs_as_es ? TARGET_ES : TARGET_VS;
+			t = pshader->vs_as_ls ? TARGET_LS : (pshader->vs_as_es ? TARGET_ES : TARGET_VS);
 			break;
 		case TGSI_PROCESSOR_GEOMETRY: t = TARGET_GS; break;
 		case TGSI_PROCESSOR_COMPUTE: t = TARGET_COMPUTE; break;
+		case TGSI_PROCESSOR_TESS_CTRL: t = TARGET_HS; break;
+		case TGSI_PROCESSOR_TESS_EVAL: t = pshader->tes_as_es ? TARGET_ES : TARGET_VS; break;
 		default: assert(!"unknown shader target"); return -1; break;
 		}
 	} else {
@@ -146,7 +148,7 @@ int bc_parser::parse_decls() {
 		}
 	}
 
-	if (sh->target == TARGET_VS || sh->target == TARGET_ES)
+	if (sh->target == TARGET_VS || sh->target == TARGET_ES || sh->target == TARGET_HS)
 		sh->add_input(0, 1, 0x0F);
 	else if (sh->target == TARGET_GS) {
 		sh->add_input(0, 1, 0x0F);

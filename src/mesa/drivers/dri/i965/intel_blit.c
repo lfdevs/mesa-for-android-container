@@ -317,8 +317,8 @@ intel_miptree_blit(struct brw_context *brw,
     */
    intel_miptree_slice_resolve_depth(brw, src_mt, src_level, src_slice);
    intel_miptree_slice_resolve_depth(brw, dst_mt, dst_level, dst_slice);
-   intel_miptree_resolve_color(brw, src_mt);
-   intel_miptree_resolve_color(brw, dst_mt);
+   intel_miptree_resolve_color(brw, src_mt, 0);
+   intel_miptree_resolve_color(brw, dst_mt, 0);
 
    if (src_flip)
       src_y = minify(src_mt->physical_height0, src_level - src_mt->first_level) - src_y - height;
@@ -406,11 +406,6 @@ can_fast_copy_blit(struct brw_context *brw,
    if (brw->gen < 9)
       return false;
 
-   if (src_buffer->handle == dst_buffer->handle &&
-       _mesa_regions_overlap(src_x, src_y, src_x + w, src_y + h,
-                             dst_x, dst_y, dst_x + w, dst_y + h))
-      return false;
-
    /* Enable fast copy blit only if the surfaces are Yf/Ys tiled.
     * FIXME: Based on performance data, remove this condition later to
     * enable for all types of surfaces.
@@ -427,8 +422,10 @@ can_fast_copy_blit(struct brw_context *brw,
    if ((dst_offset | src_offset) & 63)
       return false;
 
-   /* Color depth greater than 128 bits not supported. */
-   if (cpp > 16)
+   /* Color depths which are not power of 2 or greater than 128 bits are
+    * not supported.
+    */
+   if (!_mesa_is_pow_two(cpp) || cpp > 16)
       return false;
 
    /* For Fast Copy Blits the pitch cannot be a negative number. So, bit 15
@@ -567,9 +564,10 @@ intelEmitCopyBlit(struct brw_context *brw,
                                            dst_offset, dst_pitch,
                                            dst_tiling, dst_tr_mode,
                                            w, h, cpp);
-   assert(use_fast_copy_blit ||
-          (src_tr_mode == INTEL_MIPTREE_TRMODE_NONE &&
-           dst_tr_mode == INTEL_MIPTREE_TRMODE_NONE));
+   if (!use_fast_copy_blit &&
+       (src_tr_mode != INTEL_MIPTREE_TRMODE_NONE ||
+        dst_tr_mode != INTEL_MIPTREE_TRMODE_NONE))
+      return false;
 
    if (use_fast_copy_blit) {
       /* When two sequential fast copy blits have different source surfaces,

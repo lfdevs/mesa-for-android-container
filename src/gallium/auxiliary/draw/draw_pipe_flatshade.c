@@ -309,7 +309,7 @@ static void flatshade_destroy( struct draw_stage *stage )
 struct draw_stage *draw_flatshade_stage( struct draw_context *draw )
 {
    struct flat_stage *flatshade = CALLOC_STRUCT(flat_stage);
-   if (flatshade == NULL)
+   if (!flatshade)
       goto fail;
 
    flatshade->stage.draw = draw;

@@ -359,6 +359,36 @@ enum pipe_format {
    PIPE_FORMAT_ETC2_RG11_UNORM         = 277,
    PIPE_FORMAT_ETC2_RG11_SNORM         = 278,
 
+   PIPE_FORMAT_ASTC_4x4                = 279,
+   PIPE_FORMAT_ASTC_5x4                = 280,
+   PIPE_FORMAT_ASTC_5x5                = 281,
+   PIPE_FORMAT_ASTC_6x5                = 282,
+   PIPE_FORMAT_ASTC_6x6                = 283,
+   PIPE_FORMAT_ASTC_8x5                = 284,
+   PIPE_FORMAT_ASTC_8x6                = 285,
+   PIPE_FORMAT_ASTC_8x8                = 286,
+   PIPE_FORMAT_ASTC_10x5               = 287,
+   PIPE_FORMAT_ASTC_10x6               = 288,
+   PIPE_FORMAT_ASTC_10x8               = 289,
+   PIPE_FORMAT_ASTC_10x10              = 290,
+   PIPE_FORMAT_ASTC_12x10              = 291,
+   PIPE_FORMAT_ASTC_12x12              = 292,
+
+   PIPE_FORMAT_ASTC_4x4_SRGB           = 293,
+   PIPE_FORMAT_ASTC_5x4_SRGB           = 294,
+   PIPE_FORMAT_ASTC_5x5_SRGB           = 295,
+   PIPE_FORMAT_ASTC_6x5_SRGB           = 296,
+   PIPE_FORMAT_ASTC_6x6_SRGB           = 297,
+   PIPE_FORMAT_ASTC_8x5_SRGB           = 298,
+   PIPE_FORMAT_ASTC_8x6_SRGB           = 299,
+   PIPE_FORMAT_ASTC_8x8_SRGB           = 300,
+   PIPE_FORMAT_ASTC_10x5_SRGB          = 301,
+   PIPE_FORMAT_ASTC_10x6_SRGB          = 302,
+   PIPE_FORMAT_ASTC_10x8_SRGB          = 303,
+   PIPE_FORMAT_ASTC_10x10_SRGB         = 304,
+   PIPE_FORMAT_ASTC_12x10_SRGB         = 305,
+   PIPE_FORMAT_ASTC_12x12_SRGB         = 306,
+
    PIPE_FORMAT_COUNT
 };
 

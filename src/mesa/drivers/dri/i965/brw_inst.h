@@ -39,15 +39,6 @@
 extern "C" {
 #endif
 
-/** Maximum SEND message length */
-#define BRW_MAX_MSG_LENGTH 15
-
-/** First MRF register used by pull loads */
-#define FIRST_SPILL_MRF(gen) ((gen) == 6 ? 21 : 13)
-
-/** First MRF register used by spills */
-#define FIRST_PULL_LOAD_MRF(gen) ((gen) == 6 ? 16 : 13)
-
 /* brw_context.h has a forward declaration of brw_inst, so name the struct. */
 typedef struct brw_inst {
    uint64_t data[2];

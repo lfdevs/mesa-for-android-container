@@ -243,6 +243,15 @@ svga_create_blend_state(struct pipe_context *pipe,
          blend->rt[i].srcblend_alpha = blend->rt[i].srcblend;
          blend->rt[i].dstblend_alpha = blend->rt[i].dstblend;
          blend->rt[i].blendeq_alpha = blend->rt[i].blendeq;
+
+         if (templ->logicop_func == PIPE_LOGICOP_XOR) {
+            pipe_debug_message(&svga->debug.callback, CONFORMANCE,
+                               "XOR logicop mode has limited support");
+         }
+         else if (templ->logicop_func != PIPE_LOGICOP_COPY) {
+            pipe_debug_message(&svga->debug.callback, CONFORMANCE,
+                               "general logicops are not supported");
+         }
       }
       else {
          /* Note: the vgpu10 device does not yet support independent

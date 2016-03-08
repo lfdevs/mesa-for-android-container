@@ -61,23 +61,24 @@
 #define NINE_STATE_SAMPLER     (1 << 11)
 #define NINE_STATE_VDECL       (1 << 12)
 #define NINE_STATE_IDXBUF      (1 << 13)
-#define NINE_STATE_PRIM        (1 << 14)
-#define NINE_STATE_MATERIAL    (1 << 15)
-#define NINE_STATE_BLEND_COLOR (1 << 16)
-#define NINE_STATE_STENCIL_REF (1 << 17)
-#define NINE_STATE_SAMPLE_MASK (1 << 18)
-#define NINE_STATE_FF          (0x1f << 19)
-#define NINE_STATE_FF_VS       (0x17 << 19)
-#define NINE_STATE_FF_PS       (0x18 << 19)
-#define NINE_STATE_FF_LIGHTING (1 << 19)
-#define NINE_STATE_FF_MATERIAL (1 << 20)
-#define NINE_STATE_FF_VSTRANSF (1 << 21)
-#define NINE_STATE_FF_PSSTAGES (1 << 22)
-#define NINE_STATE_FF_OTHER    (1 << 23)
-#define NINE_STATE_FOG_SHADER  (1 << 24)
-#define NINE_STATE_PS1X_SHADER (1 << 25)
-#define NINE_STATE_ALL          0x3ffffff
-#define NINE_STATE_UNHANDLED   (1 << 26)
+#define NINE_STATE_STREAMFREQ  (1 << 14)
+#define NINE_STATE_PRIM        (1 << 15)
+#define NINE_STATE_MATERIAL    (1 << 16)
+#define NINE_STATE_BLEND_COLOR (1 << 17)
+#define NINE_STATE_STENCIL_REF (1 << 18)
+#define NINE_STATE_SAMPLE_MASK (1 << 19)
+#define NINE_STATE_FF          (0x1f << 20)
+#define NINE_STATE_FF_VS       (0x17 << 20)
+#define NINE_STATE_FF_PS       (0x18 << 20)
+#define NINE_STATE_FF_LIGHTING (1 << 20)
+#define NINE_STATE_FF_MATERIAL (1 << 21)
+#define NINE_STATE_FF_VSTRANSF (1 << 22)
+#define NINE_STATE_FF_PSSTAGES (1 << 23)
+#define NINE_STATE_FF_OTHER    (1 << 24)
+#define NINE_STATE_FOG_SHADER  (1 << 25)
+#define NINE_STATE_PS1X_SHADER (1 << 26)
+#define NINE_STATE_ALL          0x7ffffff
+#define NINE_STATE_UNHANDLED   (1 << 27)
 
 #define NINE_STATE_COMMIT_DSA  (1 << 0)
 #define NINE_STATE_COMMIT_RASTERIZER (1 << 1)
@@ -152,6 +153,7 @@ struct nine_state
     int    vs_const_i[NINE_MAX_CONST_I][4];
     BOOL   vs_const_b[NINE_MAX_CONST_B];
     float *vs_lconstf_temp;
+    BOOL programmable_vs;
 
     struct NinePixelShader9 *ps;
     float *ps_const_f;
@@ -179,6 +181,7 @@ struct nine_state
     uint8_t rt_mask;
 
     DWORD rs[NINED3DRS_COUNT];
+    DWORD rs_advertised[NINED3DRS_COUNT]; /* the ones apps get with GetRenderState */
 
     struct NineBaseTexture9 *texture[NINE_MAX_SAMPLERS]; /* PS, DMAP, VS */
 
@@ -236,7 +239,7 @@ extern const uint32_t nine_render_states_vertex[(NINED3DRS_COUNT + 31) / 32];
 
 struct NineDevice9;
 
-void nine_update_state_framebuffer(struct NineDevice9 *);
+void nine_update_state_framebuffer_clear(struct NineDevice9 *);
 boolean nine_update_state(struct NineDevice9 *);
 
 void nine_state_restore_non_cso(struct NineDevice9 *device);

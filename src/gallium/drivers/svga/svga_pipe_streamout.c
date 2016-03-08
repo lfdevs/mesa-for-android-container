@@ -75,7 +75,7 @@ svga_create_stream_output(struct svga_context *svga,
    /* Allocate the streamout data structure */
    streamout = CALLOC_STRUCT(svga_stream_output);
 
-   if (streamout == NULL)
+   if (!streamout)
       return NULL;
 
    streamout->info = *info;

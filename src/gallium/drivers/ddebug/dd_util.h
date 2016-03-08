@@ -40,7 +40,7 @@
 #define DD_DIR "ddebug_dumps"
 
 static inline FILE *
-dd_get_debug_file()
+dd_get_debug_file(bool verbose)
 {
    static unsigned index;
    char proc_name[128], dir[256], name[512];
@@ -64,6 +64,9 @@ dd_get_debug_file()
       fprintf(stderr, "dd: can't open file %s\n", name);
       return NULL;
    }
+
+   if (verbose)
+      fprintf(stderr, "dd: dumping to file %s\n", name);
 
    return f;
 }

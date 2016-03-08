@@ -324,7 +324,8 @@ d3d9_to_pipe_format_checked(struct pipe_screen *screen,
                             enum pipe_texture_target target,
                             unsigned sample_count,
                             unsigned bindings,
-                            boolean srgb)
+                            boolean srgb,
+                            boolean bypass_check)
 {
     enum pipe_format result;
 
@@ -335,7 +336,10 @@ d3d9_to_pipe_format_checked(struct pipe_screen *screen,
     if (srgb)
         result = util_format_srgb(result);
 
-    if (format_check_internal(result))
+    /* bypass_check: Used for D3DPOOL_SCRATCH, which
+     * isn't limited to the formats supported by the
+     * device. */
+    if (bypass_check || format_check_internal(result))
         return result;
 
     /* fallback to another format for formats

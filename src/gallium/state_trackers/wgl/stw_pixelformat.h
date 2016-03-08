@@ -43,6 +43,10 @@ struct stw_pixelformat_info
    PIXELFORMATDESCRIPTOR pfd;
    
    struct st_visual stvis;
+
+   /** WGL_ARB_render_texture */
+   boolean bindToTextureRGB;
+   boolean bindToTextureRGBA;
 };
 
 void

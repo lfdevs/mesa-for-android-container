@@ -910,7 +910,9 @@ lp_rast_create( unsigned num_threads )
    create_rast_threads(rast);
 
    /* for synchronizing rasterization threads */
-   pipe_barrier_init( &rast->barrier, rast->num_threads );
+   if (rast->num_threads > 0) {
+      pipe_barrier_init( &rast->barrier, rast->num_threads );
+   }
 
    memset(lp_dummy_tile, 0, sizeof lp_dummy_tile);
 
@@ -967,7 +969,9 @@ void lp_rast_destroy( struct lp_rasterizer *rast )
    }
 
    /* for synchronizing rasterization threads */
-   pipe_barrier_destroy( &rast->barrier );
+   if (rast->num_threads > 0) {
+      pipe_barrier_destroy( &rast->barrier );
+   }
 
    lp_scene_queue_destroy(rast->full_scenes);
 

@@ -114,6 +114,11 @@ struct nouveau_vp3_decoder {
    unsigned fence_seq, fw_sizes, last_frame_num, tmp_stride, ref_stride;
 
    unsigned bsp_idx, vp_idx, ppp_idx;
+
+   /* End of the bsp bo where new data should be appended between one begin/end
+    * frame.
+    */
+   char *bsp_ptr;
 };
 
 struct comm {
@@ -208,11 +213,15 @@ nouveau_vp3_load_firmware(struct nouveau_vp3_decoder *dec,
                           enum pipe_video_profile profile,
                           unsigned chipset);
 
+void
+nouveau_vp3_bsp_begin(struct nouveau_vp3_decoder *dec);
+
+void
+nouveau_vp3_bsp_next(struct nouveau_vp3_decoder *dec, unsigned num_buffers,
+                     const void *const *data, const unsigned *num_bytes);
+
 uint32_t
-nouveau_vp3_bsp(struct nouveau_vp3_decoder *dec,  union pipe_desc desc,
-                struct nouveau_vp3_video_buffer *target,
-                unsigned comm_seq, unsigned num_buffers,
-                const void *const *data, const unsigned *num_bytes);
+nouveau_vp3_bsp_end(struct nouveau_vp3_decoder *dec, union pipe_desc desc);
 
 void
 nouveau_vp3_vp_caps(struct nouveau_vp3_decoder *dec, union pipe_desc desc,

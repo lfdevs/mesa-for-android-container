@@ -268,9 +268,11 @@ void _debug_assert_fail(const char *expr,
  */
 #define pipe_debug_message(cb, type, fmt, ...) do { \
    static unsigned id = 0; \
-   _pipe_debug_message(cb, &id, \
-                       PIPE_DEBUG_TYPE_ ## type, \
-                       fmt, __VA_ARGS__); \
+   if ((cb) && (cb)->debug_message) { \
+      _pipe_debug_message(cb, &id, \
+                          PIPE_DEBUG_TYPE_ ## type, \
+                          fmt, ##__VA_ARGS__); \
+   } \
 } while (0)
 
 struct pipe_debug_callback;
@@ -402,6 +404,19 @@ debug_get_flags_option(const char *name,
                        const struct debug_named_value *flags,
                        uint64_t dfault);
 
+#define DEBUG_GET_ONCE_OPTION(suffix, name, dfault) \
+static const char * \
+debug_get_option_ ## suffix (void) \
+{ \
+   static boolean first = TRUE; \
+   static const char * value; \
+   if (first) { \
+      first = FALSE; \
+      value = debug_get_option(name, dfault); \
+   } \
+   return value; \
+}
+
 #define DEBUG_GET_ONCE_BOOL_OPTION(sufix, name, dfault) \
 static boolean \
 debug_get_option_ ## sufix (void) \
@@ -447,41 +462,6 @@ debug_memory_begin(void);
 
 void 
 debug_memory_end(unsigned long beginning);
-
-
-#ifdef DEBUG
-struct pipe_context;
-struct pipe_surface;
-struct pipe_transfer;
-struct pipe_resource;
-
-void debug_dump_image(const char *prefix,
-                      enum pipe_format format, unsigned cpp,
-                      unsigned width, unsigned height,
-                      unsigned stride,
-                      const void *data);
-void debug_dump_surface(struct pipe_context *pipe,
-			const char *prefix,
-                        struct pipe_surface *surface);   
-void debug_dump_texture(struct pipe_context *pipe,
-			const char *prefix,
-                        struct pipe_resource *texture);
-void debug_dump_surface_bmp(struct pipe_context *pipe,
-                            const char *filename,
-                            struct pipe_surface *surface);
-void debug_dump_transfer_bmp(struct pipe_context *pipe,
-                             const char *filename,
-                             struct pipe_transfer *transfer, void *ptr);
-void debug_dump_float_rgba_bmp(const char *filename,
-                               unsigned width, unsigned height,
-                               float *rgba, unsigned stride);
-#else
-#define debug_dump_image(prefix, format, cpp, width, height, stride, data) ((void)0)
-#define debug_dump_surface(pipe, prefix, surface) ((void)0)
-#define debug_dump_surface_bmp(pipe, filename, surface) ((void)0)
-#define debug_dump_transfer_bmp(filename, transfer, ptr) ((void)0)
-#define debug_dump_float_rgba_bmp(filename, width, height, rgba, stride) ((void)0)
-#endif
 
 
 void

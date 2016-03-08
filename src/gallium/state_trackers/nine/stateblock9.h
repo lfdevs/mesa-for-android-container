@@ -62,10 +62,10 @@ NineStateBlock9_ctor( struct NineStateBlock9 *,
 void
 NineStateBlock9_dtor( struct NineStateBlock9 * );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineStateBlock9_Capture( struct NineStateBlock9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineStateBlock9_Apply( struct NineStateBlock9 *This );
 
 #endif /* _NINE_STATEBLOCK9_H_ */

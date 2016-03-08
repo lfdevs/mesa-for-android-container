@@ -58,6 +58,11 @@ lp_build_interleave2(struct gallivm_state *gallivm,
                      LLVMValueRef b,
                      unsigned lo_hi);
 
+LLVMValueRef
+lp_build_uninterleave1(struct gallivm_state *gallivm,
+                       unsigned num_elems,
+                       LLVMValueRef a,
+                       unsigned lo_hi);
 
 void
 lp_build_unpack2(struct gallivm_state *gallivm,

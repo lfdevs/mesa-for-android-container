@@ -12,6 +12,7 @@ C_SOURCES := \
 	si_pipe.h \
 	si_pm4.c \
 	si_pm4.h \
+	si_perfcounter.c \
 	si_public.h \
 	si_shader.c \
 	si_shader.h \

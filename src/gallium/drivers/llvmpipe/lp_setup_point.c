@@ -328,7 +328,7 @@ try_setup_point( struct lp_setup_context *setup,
    struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
    /* x/y positions in fixed point */
    const struct lp_setup_variant_key *key = &setup->setup.variant->key;
-   const int sizeAttr = setup->psize;
+   const int sizeAttr = setup->psize_slot;
    const float size
       = (setup->point_size_per_vertex && sizeAttr > 0) ? v0[sizeAttr][0]
       : setup->point_size;
@@ -492,24 +492,24 @@ try_setup_point( struct lp_setup_context *setup,
    {
       struct lp_rast_plane *plane = GET_PLANES(point);
 
-      plane[0].dcdx = -1;
+      plane[0].dcdx = -1 << 8;
       plane[0].dcdy = 0;
-      plane[0].c = 1-bbox.x0;
-      plane[0].eo = 1;
+      plane[0].c = (1-bbox.x0) << 8;
+      plane[0].eo = 1 << 8;
 
-      plane[1].dcdx = 1;
+      plane[1].dcdx = 1 << 8;
       plane[1].dcdy = 0;
-      plane[1].c = bbox.x1+1;
+      plane[1].c = (bbox.x1+1) << 8;
       plane[1].eo = 0;
 
       plane[2].dcdx = 0;
-      plane[2].dcdy = 1;
-      plane[2].c = 1-bbox.y0;
-      plane[2].eo = 1;
+      plane[2].dcdy = 1 << 8;
+      plane[2].c = (1-bbox.y0) << 8;
+      plane[2].eo = 1 << 8;
 
       plane[3].dcdx = 0;
-      plane[3].dcdy = -1;
-      plane[3].c = bbox.y1+1;
+      plane[3].dcdy = -1 << 8;
+      plane[3].c = (bbox.y1+1) << 8;
       plane[3].eo = 0;
    }
 

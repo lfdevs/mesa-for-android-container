@@ -626,7 +626,7 @@ fenced_buffer_copy_storage_to_gpu_locked(struct fenced_buffer *fenced_buf)
    assert(fenced_buf->buffer);
 
    map = pb_map(fenced_buf->buffer, PB_USAGE_CPU_WRITE, NULL);
-   if(!map)
+   if (!map)
       return PIPE_ERROR;
 
    memcpy(map, fenced_buf->data, fenced_buf->size);
@@ -646,7 +646,7 @@ fenced_buffer_copy_storage_to_cpu_locked(struct fenced_buffer *fenced_buf)
    assert(fenced_buf->buffer);
 
    map = pb_map(fenced_buf->buffer, PB_USAGE_CPU_READ, NULL);
-   if(!map)
+   if (!map)
       return PIPE_ERROR;
 
    memcpy(fenced_buf->data, map, fenced_buf->size);
@@ -720,7 +720,7 @@ fenced_buffer_map(struct pb_buffer *buf,
       map = fenced_buf->data;
    }
 
-   if(map) {
+   if (map) {
       ++fenced_buf->mapcount;
       fenced_buf->flags |= flags & PB_USAGE_CPU_READ_WRITE;
    }
@@ -764,7 +764,7 @@ fenced_buffer_validate(struct pb_buffer *buf,
 
    pipe_mutex_lock(fenced_mgr->mutex);
 
-   if(!vl) {
+   if (!vl) {
       /* invalidate */
       fenced_buf->vl = NULL;
       fenced_buf->validation_flags = 0;
@@ -927,7 +927,7 @@ fenced_bufmgr_create_buffer(struct pb_manager *mgr,
    }
 
    fenced_buf = CALLOC_STRUCT(fenced_buffer);
-   if(!fenced_buf)
+   if (!fenced_buf)
       goto no_buffer;
 
    pipe_reference_init(&fenced_buf->base.reference, 1);
@@ -1042,7 +1042,7 @@ fenced_bufmgr_create(struct pb_manager *provider,
 {
    struct fenced_manager *fenced_mgr;
 
-   if(!provider)
+   if (!provider)
       return NULL;
 
    fenced_mgr = CALLOC_STRUCT(fenced_manager);

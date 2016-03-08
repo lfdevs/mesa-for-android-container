@@ -86,11 +86,10 @@ struct draw_vertex_buffer {
 struct vertex_header {
    unsigned clipmask:DRAW_TOTAL_CLIP_PLANES;
    unsigned edgeflag:1;
-   unsigned have_clipdist:1;
+   unsigned pad:1;
    unsigned vertex_id:16;
 
-   float clip[4];
-   float pre_clip_pos[4];
+   float clip_pos[4];
 
    /* This will probably become float (*data)[4] soon:
     */

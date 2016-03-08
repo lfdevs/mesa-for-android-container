@@ -60,6 +60,8 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 	util_blitter_save_vertex_elements(rctx->blitter, rctx->vertex_fetch_shader.cso);
 	util_blitter_save_vertex_shader(rctx->blitter, rctx->vs_shader);
 	util_blitter_save_geometry_shader(rctx->blitter, rctx->gs_shader);
+	util_blitter_save_tessctrl_shader(rctx->blitter, rctx->tcs_shader);
+	util_blitter_save_tesseval_shader(rctx->blitter, rctx->tes_shader);
 	util_blitter_save_so_targets(rctx->blitter, rctx->b.streamout.num_targets,
 				     (struct pipe_stream_output_target**)rctx->b.streamout.targets);
 	util_blitter_save_rasterizer(rctx->blitter, rctx->rasterizer_state.cso);
@@ -531,7 +533,7 @@ static void r600_copy_buffer(struct pipe_context *ctx, struct pipe_resource *dst
 /**
  * Global buffers are not really resources, they are are actually offsets
  * into a single global resource (r600_screen::global_pool).  The means
- * they don't have their own cs_buf handle, so they cannot be passed
+ * they don't have their own buf handle, so they cannot be passed
  * to r600_copy_buffer() and must be handled separately.
  */
 static void r600_copy_global_buffer(struct pipe_context *ctx,
@@ -553,7 +555,7 @@ static void r600_copy_global_buffer(struct pipe_context *ctx,
 			src = (struct pipe_resource *)pool->bo;
 		} else {
 			if (item->real_buffer == NULL) {
-				item->real_buffer = (struct r600_resource*)
+				item->real_buffer =
 					r600_compute_buffer_alloc_vram(pool->screen,
 								       item->size_in_dw * 4);
 			}
@@ -570,7 +572,7 @@ static void r600_copy_global_buffer(struct pipe_context *ctx,
 			dst = (struct pipe_resource *)pool->bo;
 		} else {
 			if (item->real_buffer == NULL) {
-				item->real_buffer = (struct r600_resource*)
+				item->real_buffer =
 					r600_compute_buffer_alloc_vram(pool->screen,
 								       item->size_in_dw * 4);
 			}
@@ -654,7 +656,8 @@ void r600_resource_copy_region(struct pipe_context *ctx,
 	util_blitter_default_dst_texture(&dst_templ, dst, dst_level, dstz);
 	util_blitter_default_src_texture(&src_templ, src, src_level);
 
-	if (util_format_is_compressed(src->format)) {
+	if (util_format_is_compressed(src->format) ||
+	    util_format_is_compressed(dst->format)) {
 		unsigned blocksize = util_format_get_blocksize(src->format);
 
 		if (blocksize == 8)

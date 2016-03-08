@@ -23,7 +23,6 @@
 
 #include "intel_resolve_map.h"
 
-#include <assert.h>
 #include <stdlib.h>
 
 /**

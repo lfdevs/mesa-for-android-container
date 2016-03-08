@@ -7,6 +7,7 @@
 struct nv50_tsc_entry {
    int id;
    uint32_t tsc[8];
+   bool seamless_cube_map;
 };
 
 static inline struct nv50_tsc_entry *

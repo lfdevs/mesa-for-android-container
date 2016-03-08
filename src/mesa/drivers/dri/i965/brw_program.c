@@ -31,20 +31,18 @@
 
 #include <pthread.h>
 #include "main/imports.h"
-#include "main/enums.h"
-#include "main/shaderobj.h"
 #include "program/prog_parameter.h"
 #include "program/prog_print.h"
 #include "program/program.h"
 #include "program/programopt.h"
 #include "tnl/tnl.h"
 #include "util/ralloc.h"
-#include "glsl/ir.h"
+#include "compiler/glsl/ir.h"
 
+#include "brw_program.h"
 #include "brw_context.h"
 #include "brw_shader.h"
 #include "brw_nir.h"
-#include "brw_wm.h"
 #include "intel_batchbuffer.h"
 
 static unsigned
@@ -88,6 +86,28 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
 
    case GL_GEOMETRY_PROGRAM_NV: {
       struct brw_geometry_program *prog = CALLOC_STRUCT(brw_geometry_program);
+      if (prog) {
+         prog->id = get_new_program_id(brw->intelScreen);
+
+         return _mesa_init_gl_program(&prog->program.Base, target, id);
+      } else {
+         return NULL;
+      }
+   }
+
+   case GL_TESS_CONTROL_PROGRAM_NV: {
+      struct brw_tess_ctrl_program *prog = CALLOC_STRUCT(brw_tess_ctrl_program);
+      if (prog) {
+         prog->id = get_new_program_id(brw->intelScreen);
+
+         return _mesa_init_gl_program(&prog->program.Base, target, id);
+      } else {
+         return NULL;
+      }
+   }
+
+   case GL_TESS_EVALUATION_PROGRAM_NV: {
+      struct brw_tess_eval_program *prog = CALLOC_STRUCT(brw_tess_eval_program);
       if (prog) {
          prog->id = get_new_program_id(brw->intelScreen);
 
@@ -189,7 +209,7 @@ static void
 brw_memory_barrier(struct gl_context *ctx, GLbitfield barriers)
 {
    struct brw_context *brw = brw_context(ctx);
-   unsigned bits = (PIPE_CONTROL_DATA_CACHE_INVALIDATE |
+   unsigned bits = (PIPE_CONTROL_DATA_CACHE_FLUSH |
                     PIPE_CONTROL_NO_WRITE |
                     PIPE_CONTROL_CS_STALL);
    assert(brw->gen >= 7 && brw->gen <= 9);

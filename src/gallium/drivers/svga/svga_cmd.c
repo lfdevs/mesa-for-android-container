@@ -337,7 +337,7 @@ SVGA3D_DefineSurface2D(struct svga_winsys_context *swc,    // IN
    mipSizes[0].height = height;
    mipSizes[0].depth = 1;
 
-   swc->commit(swc);;
+   swc->commit(swc);
 
    return PIPE_OK;
 }
@@ -372,7 +372,7 @@ SVGA3D_DestroySurface(struct svga_winsys_context *swc,
    
    swc->surface_relocation(swc, &cmd->sid, NULL, sid,
                            SVGA_RELOC_WRITE | SVGA_RELOC_INTERNAL);
-   swc->commit(swc);;
+   swc->commit(swc);
 
    return PIPE_OK;
 }
@@ -473,6 +473,7 @@ SVGA3D_SurfaceDMA(struct svga_winsys_context *swc,
    pSuffix->flags = flags;
 
    swc->commit(swc);
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
 
    return PIPE_OK;
 }
@@ -543,6 +544,7 @@ SVGA3D_BufferDMA(struct svga_winsys_context *swc,
    pSuffix->flags = flags;
 
    swc->commit(swc);
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
 
    return PIPE_OK;
 }
@@ -1016,7 +1018,7 @@ SVGA3D_BeginDrawPrimitives(struct svga_winsys_context *swc,
    *decls = declArray;
    *ranges = rangeArray;
 
-   swc->hints |= SVGA_HINT_FLAG_DRAW_EMITTED;
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
 
    return PIPE_OK;
 }
@@ -1386,7 +1388,7 @@ SVGA3D_BeginGBQuery(struct svga_winsys_context *swc,
                             SVGA_3D_CMD_BEGIN_GB_QUERY,
                             sizeof *cmd,
                             1);
-   if(!cmd)
+   if (!cmd)
       return PIPE_ERROR_OUT_OF_MEMORY;
 
    cmd->cid = swc->cid;
@@ -1466,7 +1468,7 @@ SVGA3D_EndGBQuery(struct svga_winsys_context *swc,
                             SVGA_3D_CMD_END_GB_QUERY,
                             sizeof *cmd,
                             2);
-   if(!cmd)
+   if (!cmd)
       return PIPE_ERROR_OUT_OF_MEMORY;
 
    cmd->cid = swc->cid;
@@ -1553,7 +1555,7 @@ SVGA3D_WaitForGBQuery(struct svga_winsys_context *swc,
                             SVGA_3D_CMD_WAIT_FOR_GB_QUERY,
                             sizeof *cmd,
                             2);
-   if(!cmd)
+   if (!cmd)
       return PIPE_ERROR_OUT_OF_MEMORY;
 
    cmd->cid = swc->cid;
@@ -1720,6 +1722,7 @@ SVGA3D_UpdateGBImage(struct svga_winsys_context *swc,
    cmd->box = *box;
 
    swc->commit(swc);
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
 
    return PIPE_OK;
 }
@@ -1746,6 +1749,7 @@ SVGA3D_UpdateGBSurface(struct svga_winsys_context *swc,
                            SVGA_RELOC_WRITE | SVGA_RELOC_INTERNAL);
 
    swc->commit(swc);
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
 
    return PIPE_OK;
 }
@@ -1775,6 +1779,7 @@ SVGA3D_ReadbackGBImage(struct svga_winsys_context *swc,
    cmd->image.mipmap = mipLevel;
 
    swc->commit(swc);
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
 
    return PIPE_OK;
 }
@@ -1801,6 +1806,7 @@ SVGA3D_ReadbackGBSurface(struct svga_winsys_context *swc,
                            SVGA_RELOC_READ | SVGA_RELOC_INTERNAL);
 
    swc->commit(swc);
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
 
    return PIPE_OK;
 }
@@ -1829,6 +1835,7 @@ SVGA3D_ReadbackGBImagePartial(struct svga_winsys_context *swc,
    cmd->invertBox = invertBox;
 
    swc->commit(swc);
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
 
    return PIPE_OK;
 }

@@ -85,7 +85,7 @@ struct winsys_handle;
 #define SVGA_QUERY_FLAG_SET        (1 << 0)
 #define SVGA_QUERY_FLAG_REF        (1 << 1)
 
-#define SVGA_HINT_FLAG_DRAW_EMITTED (1 << 0)
+#define SVGA_HINT_FLAG_CAN_PRE_FLUSH (1 << 0)  /* Can preemptively flush */
 
 /** Opaque surface handle */
 struct svga_winsys_surface;

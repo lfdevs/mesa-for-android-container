@@ -217,12 +217,15 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 	struct stage s[MAX_STAGES];
 	uint32_t pos_regid, posz_regid, psize_regid, color_regid[8];
 	uint32_t face_regid, coord_regid, zwcoord_regid;
+	enum a3xx_threadsize fssz;
 	int constmode;
 	int i, j, k;
 
 	debug_assert(nr <= ARRAY_SIZE(color_regid));
 
 	setup_stages(emit, s);
+
+	fssz = (s[FS].i->max_reg >= 24) ? TWO_QUADS : FOUR_QUADS;
 
 	/* blob seems to always use constmode currently: */
 	constmode = 1;
@@ -258,7 +261,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 	OUT_RING(ring, 0x00000003);
 
 	OUT_PKT0(ring, REG_A4XX_HLSQ_CONTROL_0_REG, 5);
-	OUT_RING(ring, A4XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(FOUR_QUADS) |
+	OUT_RING(ring, A4XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(fssz) |
 			A4XX_HLSQ_CONTROL_0_REG_CONSTMODE(constmode) |
 			A4XX_HLSQ_CONTROL_0_REG_FSSUPERTHREADENABLE |
 			/* NOTE:  I guess SHADERRESTART and CONSTFULLUPDATE maybe
@@ -326,7 +329,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			A4XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(s[VS].v->total_in));
 	OUT_RING(ring, A4XX_SP_VS_PARAM_REG_POSREGID(pos_regid) |
 			A4XX_SP_VS_PARAM_REG_PSIZEREGID(psize_regid) |
-			A4XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(align(s[FS].v->total_in, 4) / 4));
+			A4XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(s[FS].v->varying_in));
 
 	for (i = 0, j = -1; (i < 16) && (j < (int)s[FS].v->inputs_count); i++) {
 		uint32_t reg = 0;
@@ -385,7 +388,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			A4XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(s[FS].i->max_half_reg + 1) |
 			A4XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(s[FS].i->max_reg + 1) |
 			A4XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
-			A4XX_SP_FS_CTRL_REG0_THREADSIZE(FOUR_QUADS) |
+			A4XX_SP_FS_CTRL_REG0_THREADSIZE(fssz) |
 			A4XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
 			COND(s[FS].v->has_samp, A4XX_SP_FS_CTRL_REG0_PIXLODENABLE));
 	OUT_RING(ring, A4XX_SP_FS_CTRL_REG1_CONSTLENGTH(s[FS].constlen) |
@@ -420,9 +423,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			COND(s[FS].v->frag_face, A4XX_RB_RENDER_CONTROL2_FACENESS) |
 			COND(s[FS].v->frag_coord, A4XX_RB_RENDER_CONTROL2_XCOORD |
 					A4XX_RB_RENDER_CONTROL2_YCOORD |
-// TODO enabling gl_FragCoord.z is causing lockups on 0ad (but seems
-// to work everywhere else).
-//					A4XX_RB_RENDER_CONTROL2_ZCOORD |
+					A4XX_RB_RENDER_CONTROL2_ZCOORD |
 					A4XX_RB_RENDER_CONTROL2_WCOORD));
 
 	OUT_PKT0(ring, REG_A4XX_RB_FS_OUTPUT_REG, 1);
@@ -479,24 +480,27 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 		 */
 		/* figure out VARYING_INTERP / VARYING_PS_REPL register values: */
 		for (j = -1; (j = ir3_next_varying(s[FS].v, j)) < (int)s[FS].v->inputs_count; ) {
+			/* NOTE: varyings are packed, so if compmask is 0xb
+			 * then first, third, and fourth component occupy
+			 * three consecutive varying slots:
+			 */
+			unsigned compmask = s[FS].v->inputs[j].compmask;
 
 			/* TODO might be cleaner to just +8 in SP_VS_VPC_DST_REG
 			 * instead.. rather than -8 everywhere else..
 			 */
 			uint32_t inloc = s[FS].v->inputs[j].inloc - 8;
 
-			/* currently assuming varyings aligned to 4 (not
-			 * packed):
-			 */
-			debug_assert((inloc % 4) == 0);
-
 			if ((s[FS].v->inputs[j].interpolate == INTERP_QUALIFIER_FLAT) ||
 					(s[FS].v->inputs[j].rasterflat && emit->rasterflat)) {
 				uint32_t loc = inloc;
 
-				for (i = 0; i < 4; i++, loc++) {
-					vinterp[loc / 16] |= 1 << ((loc % 16) * 2);
-					//flatshade[loc / 32] |= 1 << (loc % 32);
+				for (i = 0; i < 4; i++) {
+					if (compmask & (1 << i)) {
+						vinterp[loc / 16] |= 1 << ((loc % 16) * 2);
+						//flatshade[loc / 32] |= 1 << (loc % 32);
+						loc++;
+					}
 				}
 			}
 
@@ -509,10 +513,31 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 				 * interpolation bits for .zw such that they become .01
 				 */
 				if (emit->sprite_coord_enable & texmask) {
-					vpsrepl[inloc / 16] |= (emit->sprite_coord_mode ? 0x0d : 0x09)
-						<< ((inloc % 16) * 2);
-					vinterp[(inloc + 2) / 16] |= 2 << (((inloc + 2) % 16) * 2);
-					vinterp[(inloc + 3) / 16] |= 3 << (((inloc + 3) % 16) * 2);
+					/* mask is two 2-bit fields, where:
+					 *   '01' -> S
+					 *   '10' -> T
+					 *   '11' -> 1 - T  (flip mode)
+					 */
+					unsigned mask = emit->sprite_coord_mode ? 0b1101 : 0b1001;
+					uint32_t loc = inloc;
+					if (compmask & 0x1) {
+						vpsrepl[loc / 16] |= ((mask >> 0) & 0x3) << ((loc % 16) * 2);
+						loc++;
+					}
+					if (compmask & 0x2) {
+						vpsrepl[loc / 16] |= ((mask >> 2) & 0x3) << ((loc % 16) * 2);
+						loc++;
+					}
+					if (compmask & 0x4) {
+						/* .z <- 0.0f */
+						vinterp[loc / 16] |= 0b10 << ((loc % 16) * 2);
+						loc++;
+					}
+					if (compmask & 0x8) {
+						/* .w <- 1.0f */
+						vinterp[loc / 16] |= 0b11 << ((loc % 16) * 2);
+						loc++;
+					}
 				}
 			}
 		}

@@ -30,8 +30,6 @@
 #include "main/formats.h"
 #include "brw_context.h"
 
-struct intel_renderbuffer;
-
 void intelInitTextureFuncs(struct dd_function_table *functions);
 
 void intelInitTextureImageFuncs(struct dd_function_table *functions);

@@ -59,42 +59,8 @@ fs_live_variables::setup_one_read(struct block_data *bd, fs_inst *inst,
    int var = var_from_reg(reg);
    assert(var < num_vars);
 
-   /* In most cases, a register can be written over safely by the
-    * same instruction that is its last use.  For a single
-    * instruction, the sources are dereferenced before writing of the
-    * destination starts (naturally).  This gets more complicated for
-    * simd16, because the instruction:
-    *
-    * add(16)      g4<1>F      g4<8,8,1>F   g6<8,8,1>F
-    *
-    * is actually decoded in hardware as:
-    *
-    * add(8)       g4<1>F      g4<8,8,1>F   g6<8,8,1>F
-    * add(8)       g5<1>F      g5<8,8,1>F   g7<8,8,1>F
-    *
-    * Which is safe.  However, if we have uniform accesses
-    * happening, we get into trouble:
-    *
-    * add(8)       g4<1>F      g4<0,1,0>F   g6<8,8,1>F
-    * add(8)       g5<1>F      g4<0,1,0>F   g7<8,8,1>F
-    *
-    * Now our destination for the first instruction overwrote the
-    * second instruction's src0, and we get garbage for those 8
-    * pixels.  There's a similar issue for the pre-gen6
-    * pixel_x/pixel_y, which are registers of 16-bit values and thus
-    * would get stomped by the first decode as well.
-    */
-   int end_ip = ip;
-   if (inst->exec_size == 16 && (reg.stride == 0 ||
-                                 reg.type == BRW_REGISTER_TYPE_UW ||
-                                 reg.type == BRW_REGISTER_TYPE_W ||
-                                 reg.type == BRW_REGISTER_TYPE_UB ||
-                                 reg.type == BRW_REGISTER_TYPE_B)) {
-      end_ip++;
-   }
-
    start[var] = MIN2(start[var], ip);
-   end[var] = MAX2(end[var], end_ip);
+   end[var] = MAX2(end[var], ip);
 
    /* The use[] bitset marks when the block makes use of a variable (VGRF
     * channel) without having completely defined that variable within the

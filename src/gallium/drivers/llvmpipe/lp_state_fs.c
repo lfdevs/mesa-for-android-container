@@ -2563,7 +2563,7 @@ generate_variant(struct llvmpipe_context *lp,
    char module_name[64];
 
    variant = CALLOC_STRUCT(lp_fragment_shader_variant);
-   if(!variant)
+   if (!variant)
       return NULL;
 
    util_snprintf(module_name, sizeof(module_name), "fs%u_variant%u",
@@ -2695,34 +2695,35 @@ llvmpipe_create_fs_state(struct pipe_context *pipe,
 
       switch (shader->info.base.input_interpolate[i]) {
       case TGSI_INTERPOLATE_CONSTANT:
-	 shader->inputs[i].interp = LP_INTERP_CONSTANT;
-	 break;
+         shader->inputs[i].interp = LP_INTERP_CONSTANT;
+         break;
       case TGSI_INTERPOLATE_LINEAR:
-	 shader->inputs[i].interp = LP_INTERP_LINEAR;
-	 break;
+         shader->inputs[i].interp = LP_INTERP_LINEAR;
+         break;
       case TGSI_INTERPOLATE_PERSPECTIVE:
-	 shader->inputs[i].interp = LP_INTERP_PERSPECTIVE;
-	 break;
+         shader->inputs[i].interp = LP_INTERP_PERSPECTIVE;
+         break;
       case TGSI_INTERPOLATE_COLOR:
-	 shader->inputs[i].interp = LP_INTERP_COLOR;
-	 break;
+         shader->inputs[i].interp = LP_INTERP_COLOR;
+         break;
       default:
-	 assert(0);
-	 break;
+         assert(0);
+         break;
       }
 
       switch (shader->info.base.input_semantic_name[i]) {
       case TGSI_SEMANTIC_FACE:
-	 shader->inputs[i].interp = LP_INTERP_FACING;
-	 break;
+         shader->inputs[i].interp = LP_INTERP_FACING;
+         break;
       case TGSI_SEMANTIC_POSITION:
-	 /* Position was already emitted above
-	  */
-	 shader->inputs[i].interp = LP_INTERP_POSITION;
-	 shader->inputs[i].src_index = 0;
-	 continue;
+         /* Position was already emitted above
+          */
+         shader->inputs[i].interp = LP_INTERP_POSITION;
+         shader->inputs[i].src_index = 0;
+         continue;
       }
 
+      /* XXX this is a completely pointless index map... */
       shader->inputs[i].src_index = i+1;
    }
 

@@ -60,15 +60,15 @@ translate_indices(struct svga_hwtnl *hwtnl, struct pipe_resource *src,
 
    dst = pipe_buffer_create(pipe->screen,
                             PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_DEFAULT, size);
-   if (dst == NULL)
+   if (!dst)
       goto fail;
 
    src_map = pipe_buffer_map(pipe, src, PIPE_TRANSFER_READ, &src_transfer);
-   if (src_map == NULL)
+   if (!src_map)
       goto fail;
 
    dst_map = pipe_buffer_map(pipe, dst, PIPE_TRANSFER_WRITE, &dst_transfer);
-   if (dst_map == NULL)
+   if (!dst_map)
       goto fail;
 
    translate((const char *) src_map + offset, 0, 0, nr, 0, dst_map);

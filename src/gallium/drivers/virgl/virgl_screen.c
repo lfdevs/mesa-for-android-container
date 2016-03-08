@@ -169,6 +169,8 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return vscreen->caps.caps.v1.max_tbo_size > 0;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
       return 0;
+   case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
+      return 0;
    case PIPE_CAP_CUBE_MAP_ARRAY:
       return vscreen->caps.caps.v1.bset.cube_map_array;
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
@@ -201,6 +203,8 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_MAX_VERTEX_STREAMS:
    case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
@@ -219,6 +223,15 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
    case PIPE_CAP_SHAREABLE_SHADERS:
    case PIPE_CAP_CLEAR_TEXTURE:
+   case PIPE_CAP_DRAW_PARAMETERS:
+   case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+   case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
+   case PIPE_CAP_INVALIDATE_BUFFER:
+   case PIPE_CAP_GENERATE_MIPMAP:
+   case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
+   case PIPE_CAP_QUERY_BUFFER_OBJECT:
       return 0;
    case PIPE_CAP_VENDOR_ID:
       return 0x1af4;
@@ -548,6 +561,7 @@ virgl_create_screen(struct virgl_winsys *vws)
 
    vws->get_caps(vws, &screen->caps);
 
+   screen->refcnt = 1;
 
    util_format_s3tc_init();
    return &screen->base;

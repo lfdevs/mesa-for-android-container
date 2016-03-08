@@ -33,4 +33,8 @@ boolean
 GUID_equal( const GUID *a,
             const GUID *b );
 
+char*
+GUID_sprintf( char *guid_str,
+              REFGUID id );
+
 #endif /* _NINE_GUID_H_ */

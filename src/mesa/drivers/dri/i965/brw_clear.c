@@ -24,7 +24,6 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "main/glheader.h"
 #include "main/mtypes.h"
 #include "main/condrender.h"
 #include "swrast/swrast.h"

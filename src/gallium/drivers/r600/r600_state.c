@@ -390,7 +390,7 @@ static void *r600_create_dsa_state(struct pipe_context *ctx,
 	unsigned db_depth_control, alpha_test_control, alpha_ref;
 	struct r600_dsa_state *dsa = CALLOC_STRUCT(r600_dsa_state);
 
-	if (dsa == NULL) {
+	if (!dsa) {
 		return NULL;
 	}
 
@@ -446,7 +446,7 @@ static void *r600_create_rs_state(struct pipe_context *ctx,
 	float psize_min, psize_max;
 	struct r600_rasterizer_state *rs = CALLOC_STRUCT(r600_rasterizer_state);
 
-	if (rs == NULL) {
+	if (!rs) {
 		return NULL;
 	}
 
@@ -559,7 +559,7 @@ static void *r600_create_sampler_state(struct pipe_context *ctx,
 	struct r600_pipe_sampler_state *ss = CALLOC_STRUCT(r600_pipe_sampler_state);
 	unsigned aniso_flag_offset = state->max_anisotropy > 1 ? 4 : 0;
 
-	if (ss == NULL) {
+	if (!ss) {
 		return NULL;
 	}
 
@@ -642,7 +642,7 @@ r600_create_sampler_view_custom(struct pipe_context *ctx,
 	unsigned char swizzle[4], array_mode = 0;
 	unsigned width, height, depth, offset_level, last_level;
 
-	if (view == NULL)
+	if (!view)
 		return NULL;
 
 	/* initialize base object */
@@ -930,11 +930,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 	swap = r600_translate_colorswap(surf->base.format);
 	assert(swap != ~0);
 
-	if (rtex->resource.b.b.usage == PIPE_USAGE_STAGING) {
-		endian = ENDIAN_NONE;
-	} else {
-		endian = r600_colorformat_endian_swap(format);
-	}
+	endian = r600_colorformat_endian_swap(format);
 
 	/* set blend bypass according to docs if SINT/UINT or
 	   8/24 COLOR variants */
@@ -1768,7 +1764,7 @@ static void r600_emit_constant_buffers(struct r600_context *rctx,
 
 		if (!gs_ring_buffer) {
 			radeon_set_context_reg(cs, reg_alu_constbuf_size + buffer_index * 4,
-					       ALIGN_DIVUP(cb->buffer_size, 256));
+					       DIV_ROUND_UP(cb->buffer_size, 256));
 			radeon_set_context_reg(cs, reg_alu_const_cache + buffer_index * 4, offset >> 8);
 		}
 
@@ -2044,57 +2040,62 @@ static void r600_emit_gs_rings(struct r600_context *rctx, struct r600_atom *a)
 /* Adjust GPR allocation on R6xx/R7xx */
 bool r600_adjust_gprs(struct r600_context *rctx)
 {
-	unsigned num_ps_gprs = rctx->ps_shader->current->shader.bc.ngpr;
-	unsigned num_vs_gprs, num_es_gprs, num_gs_gprs;
-	unsigned new_num_ps_gprs = num_ps_gprs;
-	unsigned new_num_vs_gprs, new_num_es_gprs, new_num_gs_gprs;
-	unsigned cur_num_ps_gprs = G_008C04_NUM_PS_GPRS(rctx->config_state.sq_gpr_resource_mgmt_1);
-	unsigned cur_num_vs_gprs = G_008C04_NUM_VS_GPRS(rctx->config_state.sq_gpr_resource_mgmt_1);
-	unsigned cur_num_gs_gprs = G_008C08_NUM_GS_GPRS(rctx->config_state.sq_gpr_resource_mgmt_2);
-	unsigned cur_num_es_gprs = G_008C08_NUM_ES_GPRS(rctx->config_state.sq_gpr_resource_mgmt_2);
-	unsigned def_num_ps_gprs = rctx->default_ps_gprs;
-	unsigned def_num_vs_gprs = rctx->default_vs_gprs;
-	unsigned def_num_gs_gprs = 0;
-	unsigned def_num_es_gprs = 0;
+	unsigned num_gprs[R600_NUM_HW_STAGES];
+	unsigned new_gprs[R600_NUM_HW_STAGES];
+	unsigned cur_gprs[R600_NUM_HW_STAGES];
+	unsigned def_gprs[R600_NUM_HW_STAGES];
 	unsigned def_num_clause_temp_gprs = rctx->r6xx_num_clause_temp_gprs;
-	/* hardware will reserve twice num_clause_temp_gprs */
-	unsigned max_gprs = def_num_gs_gprs + def_num_es_gprs + def_num_ps_gprs + def_num_vs_gprs + def_num_clause_temp_gprs * 2;
+	unsigned max_gprs;
 	unsigned tmp, tmp2;
+	unsigned i;
+	bool need_recalc = false, use_default = true;
 
-	if (rctx->gs_shader) {
-		num_es_gprs = rctx->vs_shader->current->shader.bc.ngpr;
-		num_gs_gprs = rctx->gs_shader->current->shader.bc.ngpr;
-		num_vs_gprs = rctx->gs_shader->current->gs_copy_shader->shader.bc.ngpr;
-	} else {
-		num_es_gprs = 0;
-		num_gs_gprs = 0;
-		num_vs_gprs = rctx->vs_shader->current->shader.bc.ngpr;
+	/* hardware will reserve twice num_clause_temp_gprs */
+	max_gprs = def_num_clause_temp_gprs * 2;
+	for (i = 0; i < R600_NUM_HW_STAGES; i++) {
+		def_gprs[i] = rctx->default_gprs[i];
+		max_gprs += def_gprs[i];
 	}
-	new_num_vs_gprs = num_vs_gprs;
-	new_num_es_gprs = num_es_gprs;
-	new_num_gs_gprs = num_gs_gprs;
+
+	cur_gprs[R600_HW_STAGE_PS] = G_008C04_NUM_PS_GPRS(rctx->config_state.sq_gpr_resource_mgmt_1);
+	cur_gprs[R600_HW_STAGE_VS] = G_008C04_NUM_VS_GPRS(rctx->config_state.sq_gpr_resource_mgmt_1);
+	cur_gprs[R600_HW_STAGE_GS] = G_008C08_NUM_GS_GPRS(rctx->config_state.sq_gpr_resource_mgmt_2);
+	cur_gprs[R600_HW_STAGE_ES] = G_008C08_NUM_ES_GPRS(rctx->config_state.sq_gpr_resource_mgmt_2);
+
+	num_gprs[R600_HW_STAGE_PS] = rctx->ps_shader->current->shader.bc.ngpr;
+	if (rctx->gs_shader) {
+		num_gprs[R600_HW_STAGE_ES] = rctx->vs_shader->current->shader.bc.ngpr;
+		num_gprs[R600_HW_STAGE_GS] = rctx->gs_shader->current->shader.bc.ngpr;
+		num_gprs[R600_HW_STAGE_VS] = rctx->gs_shader->current->gs_copy_shader->shader.bc.ngpr;
+	} else {
+		num_gprs[R600_HW_STAGE_ES] = 0;
+		num_gprs[R600_HW_STAGE_GS] = 0;
+		num_gprs[R600_HW_STAGE_VS] = rctx->vs_shader->current->shader.bc.ngpr;
+	}
+
+	for (i = 0; i < R600_NUM_HW_STAGES; i++) {
+		new_gprs[i] = num_gprs[i];
+		if (new_gprs[i] > cur_gprs[i])
+			need_recalc = true;
+		if (new_gprs[i] > def_gprs[i])
+			use_default = false;
+	}
 
 	/* the sum of all SQ_GPR_RESOURCE_MGMT*.NUM_*_GPRS must <= to max_gprs */
-	if (new_num_ps_gprs > cur_num_ps_gprs || new_num_vs_gprs > cur_num_vs_gprs ||
-	    new_num_es_gprs > cur_num_es_gprs || new_num_gs_gprs > cur_num_gs_gprs) {
-		/* try to use switch back to default */
-		if (new_num_ps_gprs > def_num_ps_gprs || new_num_vs_gprs > def_num_vs_gprs ||
-		    new_num_gs_gprs > def_num_gs_gprs || new_num_es_gprs > def_num_es_gprs) {
-			/* always privilege vs stage so that at worst we have the
-			 * pixel stage producing wrong output (not the vertex
-			 * stage) */
-			new_num_ps_gprs = max_gprs - ((new_num_vs_gprs + new_num_es_gprs + new_num_gs_gprs) + def_num_clause_temp_gprs * 2);
-			new_num_vs_gprs = num_vs_gprs;
-			new_num_gs_gprs = num_gs_gprs;
-			new_num_es_gprs = num_es_gprs;
-		} else {
-			new_num_ps_gprs = def_num_ps_gprs;
-			new_num_vs_gprs = def_num_vs_gprs;
-			new_num_es_gprs = def_num_es_gprs;
-			new_num_gs_gprs = def_num_gs_gprs;
-		}
-	} else {
+	if (!need_recalc)
 		return true;
+
+	/* try to use switch back to default */
+	if (!use_default) {
+		/* always privilege vs stage so that at worst we have the
+		 * pixel stage producing wrong output (not the vertex
+		 * stage) */
+		new_gprs[R600_HW_STAGE_PS] = max_gprs - def_num_clause_temp_gprs * 2;
+		for (i = R600_HW_STAGE_VS; i < R600_NUM_HW_STAGES; i++)
+			new_gprs[R600_HW_STAGE_PS] -= new_gprs[i];
+	} else {
+		for (i = 0; i < R600_NUM_HW_STAGES; i++)
+			new_gprs[i] = def_gprs[i];
 	}
 
 	/* SQ_PGM_RESOURCES_*.NUM_GPRS must always be program to a value <=
@@ -2103,21 +2104,22 @@ bool r600_adjust_gprs(struct r600_context *rctx)
 	 * it will lockup. So in this case just discard the draw command
 	 * and don't change the current gprs repartitions.
 	 */
-	if (num_ps_gprs > new_num_ps_gprs || num_vs_gprs > new_num_vs_gprs ||
-	    num_gs_gprs > new_num_gs_gprs || num_es_gprs > new_num_es_gprs) {
-		R600_ERR("shaders require too many register (%d + %d + %d + %d) "
-			 "for a combined maximum of %d\n",
-			 num_ps_gprs, num_vs_gprs, num_es_gprs, num_gs_gprs, max_gprs);
-		return false;
+	for (i = 0; i < R600_NUM_HW_STAGES; i++) {
+		if (num_gprs[i] > new_gprs[i]) {
+			R600_ERR("shaders require too many register (%d + %d + %d + %d) "
+				 "for a combined maximum of %d\n",
+				 num_gprs[R600_HW_STAGE_PS], num_gprs[R600_HW_STAGE_VS], num_gprs[R600_HW_STAGE_ES], num_gprs[R600_HW_STAGE_GS], max_gprs);
+			return false;
+		}
 	}
 
 	/* in some case we endup recomputing the current value */
-	tmp = S_008C04_NUM_PS_GPRS(new_num_ps_gprs) |
-		S_008C04_NUM_VS_GPRS(new_num_vs_gprs) |
+	tmp = S_008C04_NUM_PS_GPRS(new_gprs[R600_HW_STAGE_PS]) |
+		S_008C04_NUM_VS_GPRS(new_gprs[R600_HW_STAGE_VS]) |
 		S_008C04_NUM_CLAUSE_TEMP_GPRS(def_num_clause_temp_gprs);
 
-	tmp2 = S_008C08_NUM_ES_GPRS(new_num_es_gprs) |
-		S_008C08_NUM_GS_GPRS(new_num_gs_gprs);
+	tmp2 = S_008C08_NUM_ES_GPRS(new_gprs[R600_HW_STAGE_ES]) |
+		S_008C08_NUM_GS_GPRS(new_gprs[R600_HW_STAGE_GS]);
 	if (rctx->config_state.sq_gpr_resource_mgmt_1 != tmp || rctx->config_state.sq_gpr_resource_mgmt_2 != tmp2) {
 		rctx->config_state.sq_gpr_resource_mgmt_1 = tmp;
 		rctx->config_state.sq_gpr_resource_mgmt_2 = tmp2;
@@ -2286,8 +2288,11 @@ void r600_init_atom_start_cs(struct r600_context *rctx)
 		break;
 	}
 
-	rctx->default_ps_gprs = num_ps_gprs;
-	rctx->default_vs_gprs = num_vs_gprs;
+	rctx->default_gprs[R600_HW_STAGE_PS] = num_ps_gprs;
+	rctx->default_gprs[R600_HW_STAGE_VS] = num_vs_gprs;
+	rctx->default_gprs[R600_HW_STAGE_GS] = 0;
+	rctx->default_gprs[R600_HW_STAGE_ES] = 0;
+
 	rctx->r6xx_num_clause_temp_gprs = num_temp_gprs;
 
 	/* SQ_CONFIG */
@@ -3075,7 +3080,7 @@ fallback:
 void r600_init_state_functions(struct r600_context *rctx)
 {
 	unsigned id = 1;
-
+	unsigned i;
 	/* !!!
 	 *  To avoid GPU lockup registers must be emited in a specific order
 	 * (no kidding ...). The order below is important and have been
@@ -3130,10 +3135,8 @@ void r600_init_state_functions(struct r600_context *rctx)
 	r600_add_atom(rctx, &rctx->b.render_cond_atom, id++);
 	r600_add_atom(rctx, &rctx->b.streamout.begin_atom, id++);
 	r600_add_atom(rctx, &rctx->b.streamout.enable_atom, id++);
-	r600_init_atom(rctx, &rctx->vertex_shader.atom, id++, r600_emit_shader, 23);
-	r600_init_atom(rctx, &rctx->pixel_shader.atom, id++, r600_emit_shader, 0);
-	r600_init_atom(rctx, &rctx->geometry_shader.atom, id++, r600_emit_shader, 0);
-	r600_init_atom(rctx, &rctx->export_shader.atom, id++, r600_emit_shader, 0);
+	for (i = 0; i < R600_NUM_HW_STAGES; i++)
+		r600_init_atom(rctx, &rctx->hw_shader_stages[i].atom, id++, r600_emit_shader, 0);
 	r600_init_atom(rctx, &rctx->shader_stages.atom, id++, r600_emit_shader_stages, 0);
 	r600_init_atom(rctx, &rctx->gs_rings.atom, id++, r600_emit_gs_rings, 0);
 

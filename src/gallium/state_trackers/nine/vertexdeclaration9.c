@@ -174,24 +174,24 @@ NineVertexDeclaration9_ctor( struct NineVertexDeclaration9 *This,
                              const D3DVERTEXELEMENT9 *pElements )
 {
     const D3DCAPS9 *caps;
-    unsigned i;
-
+    unsigned i, nelems;
     DBG("This=%p pParams=%p pElements=%p\n", This, pParams, pElements);
+
+    /* wine */
+    for (nelems = 0;
+         pElements[nelems].Stream != 0xFF;
+         ++nelems) {
+        user_assert(pElements[nelems].Type != D3DDECLTYPE_UNUSED, E_FAIL);
+        user_assert(!(pElements[nelems].Offset & 3), E_FAIL);
+    }
+
+    caps = NineDevice9_GetCaps(pParams->device);
+    user_assert(nelems <= caps->MaxStreams, D3DERR_INVALIDCALL);
 
     HRESULT hr = NineUnknown_ctor(&This->base, pParams);
     if (FAILED(hr)) { return hr; }
 
-    /* wine */
-    for (This->nelems = 0;
-         pElements[This->nelems].Stream != 0xFF;
-         ++This->nelems) {
-        user_assert(pElements[This->nelems].Type != D3DDECLTYPE_UNUSED, E_FAIL);
-        user_assert(!(pElements[This->nelems].Offset & 3), E_FAIL);
-    }
-
-    caps = NineDevice9_GetCaps(This->base.device);
-    user_assert(This->nelems <= caps->MaxStreams, D3DERR_INVALIDCALL);
-
+    This->nelems = nelems;
     This->decls = CALLOC(This->nelems+1, sizeof(D3DVERTEXELEMENT9));
     This->elems = CALLOC(This->nelems, sizeof(struct pipe_vertex_element));
     This->usage_map = CALLOC(This->nelems, sizeof(uint16_t));
@@ -202,6 +202,9 @@ NineVertexDeclaration9_ctor( struct NineVertexDeclaration9 *This,
         uint16_t usage = nine_d3d9_to_nine_declusage(This->decls[i].Usage,
                                                      This->decls[i].UsageIndex);
         This->usage_map[i] = usage;
+
+        if (This->decls[i].Usage == D3DDECLUSAGE_POSITIONT)
+            This->position_t = TRUE;
 
         This->elems[i].src_offset = This->decls[i].Offset;
         This->elems[i].instance_divisor = 0;
@@ -230,7 +233,7 @@ NineVertexDeclaration9_dtor( struct NineVertexDeclaration9 *This )
     NineUnknown_dtor(&This->base);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVertexDeclaration9_GetDeclaration( struct NineVertexDeclaration9 *This,
                                        D3DVERTEXELEMENT9 *pElement,
                                        UINT *pNumElements )

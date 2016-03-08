@@ -35,7 +35,7 @@ Nine9ExOverlayExtension( void *data )
     return (struct Nine9ExOverlayExtension *)data;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 Nine9ExOverlayExtension_CheckDeviceOverlayType( struct Nine9ExOverlayExtension *This,
                                                 UINT Adapter,
                                                 D3DDEVTYPE DevType,

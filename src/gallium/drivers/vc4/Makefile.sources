@@ -32,6 +32,7 @@ C_SOURCES := \
 	vc4_program.c \
 	vc4_qir.c \
 	vc4_qir_lower_uniforms.c \
+	vc4_qir_schedule.c \
 	vc4_qir.h \
 	vc4_qpu.c \
 	vc4_qpu_defines.h \

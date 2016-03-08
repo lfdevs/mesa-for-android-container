@@ -476,21 +476,29 @@ lp_setup_try_clear_zs(struct lp_setup_context *setup,
    uint64_t zsvalue = 0;
    uint32_t zmask32;
    uint8_t smask8;
+   enum pipe_format format = setup->fb.zsbuf->format;
 
    LP_DBG(DEBUG_SETUP, "%s state %d\n", __FUNCTION__, setup->state);
 
    zmask32 = (flags & PIPE_CLEAR_DEPTH) ? ~0 : 0;
    smask8 = (flags & PIPE_CLEAR_STENCIL) ? ~0 : 0;
 
-   zsvalue = util_pack64_z_stencil(setup->fb.zsbuf->format,
-                                   depth,
-                                   stencil);
+   zsvalue = util_pack64_z_stencil(format, depth, stencil);
 
-   zsmask = util_pack64_mask_z_stencil(setup->fb.zsbuf->format,
-                                       zmask32,
-                                       smask8);
+   zsmask = util_pack64_mask_z_stencil(format, zmask32, smask8);
 
    zsvalue &= zsmask;
+
+   if (format == PIPE_FORMAT_Z24X8_UNORM ||
+       format == PIPE_FORMAT_X8Z24_UNORM) {
+      /*
+       * Make full mask if there's "X" bits so we can do full
+       * clear (without rmw).
+       */
+      uint32_t zsmask_full = 0;
+      zsmask_full = util_pack_mask_z_stencil(format, ~0, ~0);
+      zsmask |= ~zsmask_full;
+   }
 
    if (setup->state == SETUP_ACTIVE) {
       struct lp_scene *scene = setup->scene;
@@ -791,13 +799,15 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                                     unsigned num,
                                     struct pipe_sampler_view **views)
 {
-   unsigned i;
+   unsigned i, max_tex_num;
 
    LP_DBG(DEBUG_SETUP, "%s\n", __FUNCTION__);
 
    assert(num <= PIPE_MAX_SHADER_SAMPLER_VIEWS);
 
-   for (i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++) {
+   max_tex_num = MAX2(num, setup->fs.current_tex_num);
+
+   for (i = 0; i < max_tex_num; i++) {
       struct pipe_sampler_view *view = i < num ? views[i] : NULL;
 
       if (view) {
@@ -917,7 +927,11 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
             assert(jit_tex->base);
          }
       }
+      else {
+         pipe_resource_reference(&setup->fs.current_tex[i], NULL);
+      }
    }
+   setup->fs.current_tex_num = num;
 
    setup->dirty |= LP_SETUP_NEW_FS;
 }
@@ -1207,7 +1221,7 @@ lp_setup_update_state( struct lp_setup_context *setup,
       /* Will probably need to move this somewhere else, just need  
        * to know about vertex shader point size attribute.
        */
-      setup->psize = lp->psize_slot;
+      setup->psize_slot = lp->psize_slot;
       setup->viewport_index_slot = lp->viewport_index_slot;
       setup->layer_slot = lp->layer_slot;
       setup->face_slot = lp->face_slot;

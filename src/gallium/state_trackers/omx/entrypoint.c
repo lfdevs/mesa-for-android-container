@@ -137,7 +137,7 @@ OMX_ERRORTYPE omx_workaround_Destructor(OMX_COMPONENTTYPE *comp)
    priv->state = OMX_StateInvalid;
    tsem_up(priv->messageSem);
 
-   /* wait for thread to exit */;
+   /* wait for thread to exit */
    pthread_join(priv->messageHandlerThread, NULL);
 
    return omx_base_component_Destructor(comp);

@@ -181,6 +181,7 @@ nine_convert_blend_state(struct pipe_blend_state *blend_state, const DWORD *rs)
         }
         nine_convert_blend_state_fixup(&blend, rs); /* for BOTH[INV]SRCALPHA */
     }
+
     blend.rt[0].colormask = rs[D3DRS_COLORWRITEENABLE];
 
     if (rs[D3DRS_COLORWRITEENABLE1] != rs[D3DRS_COLORWRITEENABLE] ||
@@ -222,8 +223,8 @@ nine_convert_sampler_state(struct cso_context *ctx, int idx, const DWORD *ss)
     samp.wrap_s = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSU]);
     samp.wrap_t = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSV]);
     samp.wrap_r = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSW]);
-    samp.min_img_filter = ss[D3DSAMP_MINFILTER] == D3DTEXF_POINT ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR;
-    samp.mag_img_filter = ss[D3DSAMP_MAGFILTER] == D3DTEXF_POINT ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR;
+    samp.min_img_filter = (ss[D3DSAMP_MINFILTER] == D3DTEXF_POINT && !ss[NINED3DSAMP_SHADOW]) ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR;
+    samp.mag_img_filter = (ss[D3DSAMP_MAGFILTER] == D3DTEXF_POINT && !ss[NINED3DSAMP_SHADOW]) ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR;
     if (ss[D3DSAMP_MINFILTER] == D3DTEXF_ANISOTROPIC ||
         ss[D3DSAMP_MAGFILTER] == D3DTEXF_ANISOTROPIC)
         samp.max_anisotropy = ss[D3DSAMP_MAXANISOTROPY];
@@ -265,7 +266,7 @@ nine_pipe_context_clear(struct NineDevice9 *This)
 const enum pipe_format nine_d3d9_to_pipe_format_map[120] =
 {
    [D3DFMT_UNKNOWN]       = PIPE_FORMAT_NONE,
-   [D3DFMT_R8G8B8]        = PIPE_FORMAT_NONE,
+   [D3DFMT_R8G8B8]        = PIPE_FORMAT_R8G8B8_UNORM,
    [D3DFMT_A8R8G8B8]      = PIPE_FORMAT_B8G8R8A8_UNORM,
    [D3DFMT_X8R8G8B8]      = PIPE_FORMAT_B8G8R8X8_UNORM,
    [D3DFMT_R5G6B5]        = PIPE_FORMAT_B5G6R5_UNORM,
@@ -323,8 +324,8 @@ const enum pipe_format nine_d3d9_to_pipe_format_map[120] =
 const D3DFORMAT nine_pipe_to_d3d9_format_map[PIPE_FORMAT_COUNT] =
 {
    [PIPE_FORMAT_NONE]               = D3DFMT_UNKNOWN,
-
-/* [PIPE_FORMAT_B8G8R8_UNORM]       = D3DFMT_R8G8B8, */
+   /* TODO: rename PIPE_FORMAT_R8G8B8_UNORM to PIPE_FORMAT_B8G8R8_UNORM */
+   [PIPE_FORMAT_R8G8B8_UNORM]       = D3DFMT_R8G8B8,
    [PIPE_FORMAT_B8G8R8A8_UNORM]     = D3DFMT_A8R8G8B8,
    [PIPE_FORMAT_B8G8R8X8_UNORM]     = D3DFMT_X8R8G8B8,
    [PIPE_FORMAT_B5G6R5_UNORM]       = D3DFMT_R5G6B5,

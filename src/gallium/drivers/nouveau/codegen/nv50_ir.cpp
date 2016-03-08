@@ -393,6 +393,9 @@ ImmediateValue::isInteger(const int i) const
    case TYPE_S32:
    case TYPE_U32:
       return reg.data.s32 == i; // as if ...
+   case TYPE_S64:
+   case TYPE_U64:
+      return reg.data.s64 == i; // as if ...
    case TYPE_F32:
       return reg.data.f32 == static_cast<float>(i);
    case TYPE_F64:

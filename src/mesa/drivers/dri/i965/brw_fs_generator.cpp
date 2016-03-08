@@ -27,12 +27,10 @@
  * native instructions.
  */
 
-#include "glsl/glsl_parser_extras.h"
-#include "main/macros.h"
-#include "brw_context.h"
 #include "brw_eu.h"
 #include "brw_fs.h"
 #include "brw_cfg.h"
+#include "brw_program.h"
 
 static enum brw_reg_file
 brw_file_from_reg(fs_reg *reg)
@@ -93,7 +91,7 @@ brw_reg_from_fs_reg(fs_inst *inst, fs_reg *reg, unsigned gen)
    case ARF:
    case FIXED_GRF:
    case IMM:
-      brw_reg = *static_cast<struct brw_reg *>(reg);
+      brw_reg = reg->as_brw_reg();
       break;
    case BAD_FILE:
       /* Probably unused. */
@@ -680,6 +678,7 @@ fs_generator::generate_get_buffer_size(fs_inst *inst,
 
 void
 fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src,
+                           struct brw_reg surface_index,
                            struct brw_reg sampler_index)
 {
    int msg_type = -1;
@@ -699,6 +698,17 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
       return_format = BRW_SAMPLER_RETURN_FORMAT_FLOAT32;
       break;
    }
+
+   /* Stomp the resinfo output type to UINT32.  On gens 4-5, the output type
+    * is set as part of the message descriptor.  On gen4, the PRM seems to
+    * allow UINT32 and FLOAT32 (i965 PRM, Vol. 4 Section 4.8.1.1), but on
+    * later gens UINT32 is required.  Once you hit Sandy Bridge, the bit is
+    * gone from the message descriptor entirely and you just get UINT32 all
+    * the time regasrdless.  Since we can really only do non-UINT32 on gen4,
+    * just stomp it to UINT32 all the time.
+    */
+   if (inst->opcode == SHADER_OPCODE_TXS)
+      return_format = BRW_SAMPLER_RETURN_FORMAT_UINT32;
 
    switch (inst->exec_size) {
    case 8:
@@ -924,14 +934,16 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
          ? prog_data->binding_table.gather_texture_start
          : prog_data->binding_table.texture_start;
 
-   if (sampler_index.file == BRW_IMMEDIATE_VALUE) {
+   if (surface_index.file == BRW_IMMEDIATE_VALUE &&
+       sampler_index.file == BRW_IMMEDIATE_VALUE) {
+      uint32_t surface = surface_index.ud;
       uint32_t sampler = sampler_index.ud;
 
       brw_SAMPLE(p,
                  retype(dst, BRW_REGISTER_TYPE_UW),
                  inst->base_mrf,
                  src,
-                 sampler + base_binding_table_index,
+                 surface + base_binding_table_index,
                  sampler % 16,
                  msg_type,
                  rlen,
@@ -940,19 +952,24 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
                  simd_mode,
                  return_format);
 
-      brw_mark_surface_used(prog_data, sampler + base_binding_table_index);
+      brw_mark_surface_used(prog_data, surface + base_binding_table_index);
    } else {
       /* Non-const sampler index */
 
       struct brw_reg addr = vec1(retype(brw_address_reg(0), BRW_REGISTER_TYPE_UD));
+      struct brw_reg surface_reg = vec1(retype(surface_index, BRW_REGISTER_TYPE_UD));
       struct brw_reg sampler_reg = vec1(retype(sampler_index, BRW_REGISTER_TYPE_UD));
 
       brw_push_insn_state(p);
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_set_default_access_mode(p, BRW_ALIGN_1);
 
-      /* addr = ((sampler * 0x101) + base_binding_table_index) & 0xfff */
-      brw_MUL(p, addr, sampler_reg, brw_imm_uw(0x101));
+      if (memcmp(&surface_reg, &sampler_reg, sizeof(surface_reg)) == 0) {
+         brw_MUL(p, addr, sampler_reg, brw_imm_uw(0x101));
+      } else {
+         brw_SHL(p, addr, sampler_reg, brw_imm_ud(8));
+         brw_OR(p, addr, addr, surface_reg);
+      }
       if (base_binding_table_index)
          brw_ADD(p, addr, addr, brw_imm_ud(base_binding_table_index));
       brw_AND(p, addr, addr, brw_imm_ud(0xfff));
@@ -2061,7 +2078,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
       case SHADER_OPCODE_TG4:
       case SHADER_OPCODE_TG4_OFFSET:
       case SHADER_OPCODE_SAMPLEINFO:
-	 generate_tex(inst, dst, src[0], src[1]);
+	 generate_tex(inst, dst, src[0], src[1], src[2]);
 	 break;
       case FS_OPCODE_DDX_COARSE:
       case FS_OPCODE_DDX_FINE:
@@ -2192,6 +2209,28 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          brw_broadcast(p, dst, src[0], src[1]);
          break;
 
+      case SHADER_OPCODE_EXTRACT_BYTE: {
+         assert(src[0].type == BRW_REGISTER_TYPE_D ||
+                src[0].type == BRW_REGISTER_TYPE_UD);
+
+         enum brw_reg_type type =
+            src[0].type == BRW_REGISTER_TYPE_D ? BRW_REGISTER_TYPE_B
+                                               : BRW_REGISTER_TYPE_UB;
+         brw_MOV(p, dst, spread(suboffset(retype(src[0], type), src[1].ud), 4));
+         break;
+      }
+
+      case SHADER_OPCODE_EXTRACT_WORD: {
+         assert(src[0].type == BRW_REGISTER_TYPE_D ||
+                src[0].type == BRW_REGISTER_TYPE_UD);
+
+         enum brw_reg_type type =
+            src[0].type == BRW_REGISTER_TYPE_D ? BRW_REGISTER_TYPE_W
+                                               : BRW_REGISTER_TYPE_UW;
+         brw_MOV(p, dst, spread(suboffset(retype(src[0], type), src[1].ud), 2));
+         break;
+      }
+
       case FS_OPCODE_SET_SAMPLE_ID:
          generate_set_sample_id(inst, dst, src[0], src[1]);
          break;
@@ -2304,7 +2343,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
    compiler->shader_debug_log(log_data,
                               "%s SIMD%d shader: %d inst, %d loops, %u cycles, "
                               "%d:%d spills:fills, Promoted %u constants, "
-                              "compacted %d to %d bytes.\n",
+                              "compacted %d to %d bytes.",
                               _mesa_shader_stage_to_abbrev(stage),
                               dispatch_width, before_size / 16,
                               loop_count, cfg->cycle_count, spill_count,

@@ -69,7 +69,7 @@ _mesa_x86_64_transform_points4_general:
 	movq V4F_START(%rdx), %rdx	/* ptr to first src vertex */
 	movq V4F_START(%rdi), %rdi	/* ptr to first dest vertex */
 
-	prefetch 16(%rdx)
+	prefetcht1 16(%rdx)
 
 	movaps 0(%rsi), %xmm4		/* m3  | m2  | m1  | m0  */
 	movaps 16(%rsi), %xmm5		/* m7  | m6  | m5  | m4  */
@@ -80,7 +80,7 @@ _mesa_x86_64_transform_points4_general:
 p4_general_loop:
 
 	movups (%rdx), %xmm8		/* ox | oy | oz | ow */
-	prefetchw 16(%rdi)
+	prefetcht1 16(%rdi)
 
 	pshufd $0x00, %xmm8, %xmm0	/* ox | ox | ox | ox */
 	addq %rax, %rdx
@@ -93,7 +93,7 @@ p4_general_loop:
 	addps %xmm1, %xmm0		/* ox*m3+oy*m7 | ... */
 	mulps %xmm7, %xmm3		/* ow*m15 | ow*m14 | ow*m13 | ow*m12 */
 	addps %xmm2, %xmm0		/* ox*m3+oy*m7+oz*m11 | ... */
-	prefetch 16(%rdx)
+	prefetcht1 16(%rdx)
 	addps %xmm3, %xmm0		/* ox*m3+oy*m7+oz*m11+ow*m15 | ... */
 
 	movaps %xmm0, (%rdi)		/* ->D(3) | ->D(2) | ->D(1) | ->D(0) */
@@ -150,7 +150,7 @@ _mesa_x86_64_transform_points4_3d:
 	movq V4F_START(%rdx), %rdx	/* ptr to first src vertex */
 	movq V4F_START(%rdi), %rdi	/* ptr to first dest vertex */
 
-	prefetch 16(%rdx)
+	prefetcht1 16(%rdx)
 
 	movaps 0(%rsi), %xmm4		/* m3  | m2  | m1  | m0  */
 	movaps 16(%rsi), %xmm5		/* m7  | m6  | m5  | m4  */
@@ -166,7 +166,7 @@ _mesa_x86_64_transform_points4_3d:
 p4_3d_loop:
 
 	movups (%rdx), %xmm8		/* ox | oy | oz | ow */
-	prefetchw 16(%rdi)
+	prefetcht1 16(%rdi)
 
 	pshufd $0x00, %xmm8, %xmm0	/* ox | ox | ox | ox */
 	addq %rax, %rdx
@@ -179,7 +179,7 @@ p4_3d_loop:
 	addps %xmm1, %xmm0		/* ox*m3+oy*m7 | ... */
 	mulps %xmm7, %xmm3		/* ow*m15 | ow*m14 | ow*m13 | ow*m12 */
 	addps %xmm2, %xmm0		/* ox*m3+oy*m7+oz*m11 | ... */
-	prefetch 16(%rdx)
+	prefetcht1 16(%rdx)
 	addps %xmm3, %xmm0		/* ox*m3+oy*m7+oz*m11+ow*m15 | ... */
 
 	movaps %xmm0, (%rdi)		/* ->D(3) | ->D(2) | ->D(1) | ->D(0) */
@@ -210,8 +210,8 @@ _mesa_x86_64_transform_points4_identity:
 
 	movq V4F_START(%rdx), %rsi	/* ptr to first src vertex */
 	movq V4F_START(%rdi), %rdi	/* ptr to first dest vertex */
-	prefetch 64(%rsi)
-	prefetchw 64(%rdi)
+	prefetcht1 64(%rsi)
+	prefetcht1 64(%rdi)
 
 	add %ecx, %ecx
 
@@ -242,7 +242,7 @@ _mesa_3dnow_transform_points4_3d_no_rot:
 	movq V4F_START(%rdx), %rdx	/* ptr to first src vertex */
 	movq V4F_START(%rdi), %rdi	/* ptr to first dest vertex */
 
-	prefetch (%rdx)
+	prefetcht1 (%rdx)
 	
 	movd (%rsi), %mm0		/*                 | m00             */
 	.byte 0x66, 0x66, 0x90	        /* manual align += 3 */
@@ -255,7 +255,7 @@ _mesa_3dnow_transform_points4_3d_no_rot:
 
 p4_3d_no_rot_loop:
 
-	prefetchw 32(%rdi)
+	prefetcht1 32(%rdi)
 	
 	movq  (%rdx), %mm4		/* x1              | x0              */
 	movq  8(%rdx), %mm5		/* x3              | x2              */
@@ -279,7 +279,7 @@ p4_3d_no_rot_loop:
 	addq $16, %rdi
 	
 	decl %ecx
-	prefetch 32(%rdx)
+	prefetcht1 32(%rdx)
 	jnz p4_3d_no_rot_loop
 
 p4_3d_no_rot_done:
@@ -311,7 +311,7 @@ _mesa_3dnow_transform_points4_perspective:
 	punpckldq 20(%rsi), %mm0	/* m11             | m00             */
 	
 	movq 32(%rsi), %mm2		/* m21             | m20             */
-	prefetch (%rdx)
+	prefetcht1 (%rdx)
 	
 	movd 40(%rsi), %mm1		/*                 | m22             */
 
@@ -321,7 +321,7 @@ _mesa_3dnow_transform_points4_perspective:
 
 p4_perspective_loop:
 
-	prefetchw 32(%rdi)		/* prefetch 2 vertices ahead         */
+	prefetcht1 32(%rdi)		/* prefetch 2 vertices ahead         */
 
 	movq (%rdx), %mm4		/* x1              | x0              */
 	movq 8(%rdx), %mm5		/* x3              | x2              */
@@ -347,7 +347,7 @@ p4_perspective_loop:
 	addq $16, %rdi
 
 	decl %ecx
-	prefetch 32(%rdx)		/* hopefully stride is zero          */
+	prefetcht1 32(%rdx)		/* hopefully stride is zero          */
 	jnz p4_perspective_loop
 
 p4_perspective_done:
@@ -374,14 +374,14 @@ _mesa_3dnow_transform_points4_2d_no_rot:
 	movq V4F_START(%rdi), %rdi	/* ptr to first dest vertex */
 
 	movd (%rsi), %mm0		/*                 | m00             */
-	prefetch (%rdx)
+	prefetcht1 (%rdx)
 	punpckldq 20(%rsi), %mm0	/* m11             | m00             */
 	
 	movq 48(%rsi), %mm1		/* m31             | m30             */
 
 p4_2d_no_rot_loop:
 
-	prefetchw 32(%rdi)		/* prefetch 2 vertices ahead         */
+	prefetcht1 32(%rdi)		/* prefetch 2 vertices ahead         */
 
 	movq (%rdx), %mm4		/* x1              | x0              */
 	movq 8(%rdx), %mm5		/* x3              | x2              */
@@ -394,7 +394,7 @@ p4_2d_no_rot_loop:
 	addq %rax, %rdx	
 	pfmul %mm1, %mm6		/* x3*m31          | x3*m30          */
 
-	prefetch 32(%rdx)		/* hopefully stride is zero          */
+	prefetcht1 32(%rdx)		/* hopefully stride is zero          */
 	pfadd %mm4, %mm6		/* x1*m11+x3*m31   | x0*m00+x3*m30   */
 
 	movq %mm6, (%rdi)		/* write r0, r1                      */
@@ -433,7 +433,7 @@ _mesa_3dnow_transform_points4_2d:
 	movd (%rsi), %mm0		/*                 | m00             */
 	movd 4(%rsi), %mm1		/*                 | m01             */
 
-	prefetch (%rdx)
+	prefetcht1 (%rdx)
 
 	punpckldq 16(%rsi), %mm0	/* m10             | m00             */
 	.byte 0x66, 0x66, 0x90		/* manual align += 4 */
@@ -443,7 +443,7 @@ _mesa_3dnow_transform_points4_2d:
 
 p4_2d_loop:
 
-	prefetchw 32(%rdi)		/* prefetch 2 vertices ahead         */
+	prefetcht1 32(%rdi)		/* prefetch 2 vertices ahead         */
 
 	movq (%rdx), %mm3		/* x1              | x0              */
 	movq 8(%rdx), %mm5		/* x3              | x2              */
@@ -460,7 +460,7 @@ p4_2d_loop:
 	pfacc %mm4, %mm3		/* x0*m01+x1*m11   | x0*m00+x1*m10   */
 
 	pfmul %mm2, %mm6		/* x3*m31          | x3*m30          */
-	prefetch 32(%rdx)		/* hopefully stride is zero          */
+	prefetcht1 32(%rdx)		/* hopefully stride is zero          */
 
 	pfadd %mm6, %mm3		/* r1              | r0              */
 

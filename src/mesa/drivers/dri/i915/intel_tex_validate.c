@@ -1,6 +1,7 @@
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/samplerobj.h"
+#include "main/teximage.h"
 #include "main/texobj.h"
 
 #include "intel_context.h"

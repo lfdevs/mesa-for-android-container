@@ -214,7 +214,6 @@ static bool amdgpu_get_new_ib(struct amdgpu_cs *cs)
    if (!cs->big_ib_buffer ||
        cs->used_ib_space + ib_size > cs->big_ib_buffer->size) {
       struct radeon_winsys *ws = &cs->ctx->ws->base;
-      struct radeon_winsys_cs_handle *winsys_bo;
 
       pb_reference(&cs->big_ib_buffer, NULL);
       cs->big_ib_winsys_buffer = NULL;
@@ -228,15 +227,14 @@ static bool amdgpu_get_new_ib(struct amdgpu_cs *cs)
       if (!cs->big_ib_buffer)
          return false;
 
-      winsys_bo = ws->buffer_get_cs_handle(cs->big_ib_buffer);
-
-      cs->ib_mapped = ws->buffer_map(winsys_bo, NULL, PIPE_TRANSFER_WRITE);
+      cs->ib_mapped = ws->buffer_map(cs->big_ib_buffer, NULL,
+                                     PIPE_TRANSFER_WRITE);
       if (!cs->ib_mapped) {
          pb_reference(&cs->big_ib_buffer, NULL);
          return false;
       }
 
-      cs->big_ib_winsys_buffer = (struct amdgpu_winsys_bo*)winsys_bo;
+      cs->big_ib_winsys_buffer = (struct amdgpu_winsys_bo*)cs->big_ib_buffer;
    }
 
    cs->ib.ib_mc_address = cs->big_ib_winsys_buffer->va + cs->used_ib_space;
@@ -338,7 +336,7 @@ amdgpu_cs_create(struct radeon_winsys_ctx *rwctx,
                  void (*flush)(void *ctx, unsigned flags,
                                struct pipe_fence_handle **fence),
                  void *flush_ctx,
-                 struct radeon_winsys_cs_handle *trace_buf)
+                 struct pb_buffer *trace_buf)
 {
    struct amdgpu_ctx *ctx = (struct amdgpu_ctx*)rwctx;
    struct amdgpu_cs *cs;
@@ -457,7 +455,7 @@ static unsigned amdgpu_add_buffer(struct amdgpu_cs *cs,
 }
 
 static unsigned amdgpu_cs_add_buffer(struct radeon_winsys_cs *rcs,
-                                    struct radeon_winsys_cs_handle *buf,
+                                    struct pb_buffer *buf,
                                     enum radeon_bo_usage usage,
                                     enum radeon_bo_domain domains,
                                     enum radeon_bo_priority priority)
@@ -480,7 +478,7 @@ static unsigned amdgpu_cs_add_buffer(struct radeon_winsys_cs *rcs,
 }
 
 static int amdgpu_cs_lookup_buffer(struct radeon_winsys_cs *rcs,
-                               struct radeon_winsys_cs_handle *buf)
+                               struct pb_buffer *buf)
 {
    struct amdgpu_cs *cs = amdgpu_cs(rcs);
 
@@ -607,6 +605,7 @@ static void amdgpu_cs_sync_flush(struct radeon_winsys_cs *rcs)
 }
 
 DEBUG_GET_ONCE_BOOL_OPTION(noop, "RADEON_NOOP", FALSE)
+DEBUG_GET_ONCE_BOOL_OPTION(all_bos, "RADEON_ALL_BOS", FALSE)
 
 static void amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
                             unsigned flags,
@@ -646,9 +645,35 @@ static void amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
    if (cs->base.cdw && cs->base.cdw <= cs->base.max_dw && !debug_get_option_noop()) {
       int r;
 
-      r = amdgpu_bo_list_create(ws->dev, cs->num_buffers,
-                                cs->handles, cs->flags,
-                                &cs->request.resources);
+      /* Use a buffer list containing all allocated buffers if requested. */
+      if (debug_get_option_all_bos()) {
+         struct amdgpu_winsys_bo *bo;
+         amdgpu_bo_handle *handles;
+         unsigned num = 0;
+
+         pipe_mutex_lock(ws->global_bo_list_lock);
+
+         handles = malloc(sizeof(handles[0]) * ws->num_buffers);
+         if (!handles) {
+            pipe_mutex_unlock(ws->global_bo_list_lock);
+            goto cleanup;
+         }
+
+         LIST_FOR_EACH_ENTRY(bo, &ws->global_bo_list, global_list_item) {
+            assert(num < ws->num_buffers);
+            handles[num++] = bo->bo;
+         }
+
+         r = amdgpu_bo_list_create(ws->dev, ws->num_buffers,
+                                   handles, NULL,
+                                   &cs->request.resources);
+         free(handles);
+         pipe_mutex_unlock(ws->global_bo_list_lock);
+      } else {
+         r = amdgpu_bo_list_create(ws->dev, cs->num_buffers,
+                                   cs->handles, cs->flags,
+                                   &cs->request.resources);
+      }
 
       if (r) {
          fprintf(stderr, "amdgpu: resource list creation failed (%d)\n", r);
@@ -684,7 +709,7 @@ static void amdgpu_cs_destroy(struct radeon_winsys_cs *rcs)
 }
 
 static boolean amdgpu_bo_is_referenced(struct radeon_winsys_cs *rcs,
-                                       struct radeon_winsys_cs_handle *_buf,
+                                       struct pb_buffer *_buf,
                                        enum radeon_bo_usage usage)
 {
    struct amdgpu_cs *cs = amdgpu_cs(rcs);

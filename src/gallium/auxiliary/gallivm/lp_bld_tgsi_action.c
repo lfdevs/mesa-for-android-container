@@ -45,8 +45,10 @@
 #include "lp_bld_arit.h"
 #include "lp_bld_bitarit.h"
 #include "lp_bld_const.h"
+#include "lp_bld_conv.h"
 #include "lp_bld_gather.h"
 #include "lp_bld_logic.h"
+#include "lp_bld_pack.h"
 
 #include "tgsi/tgsi_exec.h"
 
@@ -528,6 +530,77 @@ log_emit(
 static struct lp_build_tgsi_action log_action = {
    scalar_unary_fetch_args,	 /* fetch_args */
    log_emit	 /* emit */
+};
+
+/* TGSI_OPCODE_PK2H */
+
+static void
+pk2h_fetch_args(
+   struct lp_build_tgsi_context * bld_base,
+   struct lp_build_emit_data * emit_data)
+{
+   /* src0.x */
+   emit_data->args[0] = lp_build_emit_fetch(bld_base, emit_data->inst,
+                                            0, TGSI_CHAN_X);
+   /* src0.y */
+   emit_data->args[1] = lp_build_emit_fetch(bld_base, emit_data->inst,
+                                            0, TGSI_CHAN_Y);
+}
+
+static void
+pk2h_emit(
+   const struct lp_build_tgsi_action *action,
+   struct lp_build_tgsi_context *bld_base,
+   struct lp_build_emit_data *emit_data)
+{
+   struct gallivm_state *gallivm = bld_base->base.gallivm;
+   struct lp_type f16i_t;
+   LLVMValueRef lo, hi, res;
+
+   f16i_t = lp_type_uint_vec(16, bld_base->base.type.length * 32);
+   lo = lp_build_float_to_half(gallivm, emit_data->args[0]);
+   hi = lp_build_float_to_half(gallivm, emit_data->args[1]);
+   /* maybe some interleave doubling vector width would be useful... */
+   lo = lp_build_pad_vector(gallivm, lo, bld_base->base.type.length * 2);
+   hi = lp_build_pad_vector(gallivm, hi, bld_base->base.type.length * 2);
+   res = lp_build_interleave2(gallivm, f16i_t, lo, hi, 0);
+
+   emit_data->output[emit_data->chan] = res;
+}
+
+static struct lp_build_tgsi_action pk2h_action = {
+   pk2h_fetch_args, /* fetch_args */
+   pk2h_emit        /* emit */
+};
+
+/* TGSI_OPCODE_UP2H */
+
+static void
+up2h_emit(
+   const struct lp_build_tgsi_action *action,
+   struct lp_build_tgsi_context *bld_base,
+   struct lp_build_emit_data *emit_data)
+{
+   struct gallivm_state *gallivm = bld_base->base.gallivm;
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMContextRef context = gallivm->context;
+   LLVMValueRef lo, hi, res[2], arg;
+   unsigned nr = bld_base->base.type.length;
+   LLVMTypeRef i16t = LLVMVectorType(LLVMInt16TypeInContext(context), nr * 2);
+
+   arg = LLVMBuildBitCast(builder, emit_data->args[0], i16t, "");
+   lo = lp_build_uninterleave1(gallivm, nr * 2, arg, 0);
+   hi = lp_build_uninterleave1(gallivm, nr * 2, arg, 1);
+   res[0] = lp_build_half_to_float(gallivm, lo);
+   res[1] = lp_build_half_to_float(gallivm, hi);
+
+   emit_data->output[0] = emit_data->output[2] = res[0];
+   emit_data->output[1] = emit_data->output[3] = res[1];
+}
+
+static struct lp_build_tgsi_action up2h_action = {
+   scalar_unary_fetch_args, /* fetch_args */
+   up2h_emit                /* emit */
 };
 
 /* TGSI_OPCODE_LRP */
@@ -1032,10 +1105,12 @@ lp_set_default_actions(struct lp_build_tgsi_context * bld_base)
    bld_base->op_actions[TGSI_OPCODE_EXP] = exp_action;
    bld_base->op_actions[TGSI_OPCODE_LIT] = lit_action;
    bld_base->op_actions[TGSI_OPCODE_LOG] = log_action;
+   bld_base->op_actions[TGSI_OPCODE_PK2H] = pk2h_action;
    bld_base->op_actions[TGSI_OPCODE_RSQ] = rsq_action;
    bld_base->op_actions[TGSI_OPCODE_SQRT] = sqrt_action;
    bld_base->op_actions[TGSI_OPCODE_POW] = pow_action;
    bld_base->op_actions[TGSI_OPCODE_SCS] = scs_action;
+   bld_base->op_actions[TGSI_OPCODE_UP2H] = up2h_action;
    bld_base->op_actions[TGSI_OPCODE_XPD] = xpd_action;
 
    bld_base->op_actions[TGSI_OPCODE_BREAKC].fetch_args = scalar_unary_fetch_args;
@@ -1536,8 +1611,22 @@ mod_emit_cpu(
    struct lp_build_tgsi_context * bld_base,
    struct lp_build_emit_data * emit_data)
 {
-   emit_data->output[emit_data->chan] = lp_build_mod(&bld_base->int_bld,
-                                   emit_data->args[0], emit_data->args[1]);
+   LLVMBuilderRef builder = bld_base->base.gallivm->builder;
+   LLVMValueRef div_mask = lp_build_cmp(&bld_base->uint_bld,
+                                        PIPE_FUNC_EQUAL, emit_data->args[1],
+                                        bld_base->uint_bld.zero);
+   /* We want to make sure that we never divide/mod by zero to not
+    * generate sigfpe. We don't want to crash just because the
+    * shader is doing something weird. */
+   LLVMValueRef divisor = LLVMBuildOr(builder,
+                                      div_mask,
+                                      emit_data->args[1], "");
+   LLVMValueRef result = lp_build_mod(&bld_base->int_bld,
+                                      emit_data->args[0], divisor);
+   /* umod by zero doesn't have a guaranteed return value chose -1 for now. */
+   emit_data->output[emit_data->chan] = LLVMBuildOr(builder,
+                                                    div_mask,
+                                                    result, "");
 }
 
 /* TGSI_OPCODE_NOT */

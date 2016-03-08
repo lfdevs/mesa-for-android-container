@@ -39,7 +39,6 @@ extern "C" {
 #endif
 
 struct intel_mipmap_tree;
-struct intel_texture_image;
 
 /**
  * Intel renderbuffer, derived from gl_renderbuffer.

@@ -186,7 +186,7 @@ struct save_state
    GLboolean RasterDiscard;
    GLboolean TransformFeedbackNeedsResume;
 
-   GLuint DrawBufferName, ReadBufferName, RenderbufferName;
+   GLuint DrawBufferName, ReadBufferName;
 
    /** MESA_META_DRAW_BUFFERS */
    GLenum ColorDrawBuffers[MAX_DRAW_BUFFERS];
@@ -309,7 +309,9 @@ struct blit_state
 struct fb_tex_blit_state
 {
    GLint baseLevelSave, maxLevelSave;
-   GLuint sampler, samplerSave, stencilSamplingSave;
+   struct gl_sampler_object *samp_obj;
+   struct gl_sampler_object *samp_obj_save;
+   GLuint stencilSamplingSave;
    GLuint tempTex;
 };
 
@@ -322,12 +324,7 @@ struct clear_state
    GLuint VAO;
    struct gl_buffer_object *buf_obj;
    GLuint ShaderProg;
-   GLint ColorLocation;
-   GLint LayerLocation;
-
    GLuint IntegerShaderProg;
-   GLint IntegerColorLocation;
-   GLint IntegerLayerLocation;
 };
 
 
@@ -372,7 +369,7 @@ struct gen_mipmap_state
    GLuint VAO;
    struct gl_buffer_object *buf_obj;
    GLuint FBO;
-   GLuint Sampler;
+   struct gl_sampler_object *samp_obj;
 
    struct blit_shader_table shaders;
 };
@@ -383,7 +380,8 @@ struct gen_mipmap_state
  */
 struct decompress_fbo_state
 {
-   GLuint FBO, RBO;
+   struct gl_renderbuffer *rb;
+   GLuint FBO;
    GLint Width, Height;
 };
 
@@ -395,7 +393,7 @@ struct decompress_state
    GLuint VAO;
    struct decompress_fbo_state byteFBO, floatFBO;
    struct gl_buffer_object *buf_obj;
-   GLuint Sampler;
+   struct gl_sampler_object *samp_obj;
 
    struct blit_shader_table shaders;
 };
@@ -456,7 +454,7 @@ _mesa_meta_in_progress(struct gl_context *ctx)
 }
 
 extern void
-_mesa_meta_fb_tex_blit_begin(const struct gl_context *ctx,
+_mesa_meta_fb_tex_blit_begin(struct gl_context *ctx,
                              struct fb_tex_blit_state *blit);
 
 extern void
@@ -470,7 +468,7 @@ _mesa_meta_bind_rb_as_tex_image(struct gl_context *ctx,
                                 struct gl_texture_object **texObj,
                                 GLenum *target);
 
-GLuint
+struct gl_sampler_object *
 _mesa_meta_setup_sampler(struct gl_context *ctx,
                          struct gl_texture_object *texObj,
                          GLenum target, GLenum filter, GLuint srcLevel);

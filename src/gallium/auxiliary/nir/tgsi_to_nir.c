@@ -23,13 +23,13 @@
  */
 
 #include "util/ralloc.h"
-#include "glsl/nir/nir.h"
-#include "glsl/nir/nir_control_flow.h"
-#include "glsl/nir/nir_builder.h"
-#include "glsl/list.h"
-#include "glsl/nir/shader_enums.h"
+#include "compiler/nir/nir.h"
+#include "compiler/nir/nir_control_flow.h"
+#include "compiler/nir/nir_builder.h"
+#include "compiler/glsl/list.h"
+#include "compiler/shader_enums.h"
 
-#include "nir/tgsi_to_nir.h"
+#include "tgsi_to_nir.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_info.h"
@@ -295,7 +295,7 @@ ttn_emit_declaration(struct ttn_compile *c)
          type = nir_type_int;
          break;
       case TGSI_RETURN_TYPE_UINT:
-         type = nir_type_unsigned;
+         type = nir_type_uint;
          break;
       case TGSI_RETURN_TYPE_FLOAT:
       default:
@@ -464,7 +464,7 @@ ttn_emit_immediate(struct ttn_compile *c)
    nir_builder_instr_insert(b, &load_const->instr);
 }
 
-static nir_src
+static nir_ssa_def *
 ttn_src_for_indirect(struct ttn_compile *c, struct tgsi_ind_register *indirect);
 
 /* generate either a constant or indirect deref chain for accessing an
@@ -483,7 +483,7 @@ ttn_array_deref(struct ttn_compile *c, nir_intrinsic_instr *instr,
 
    if (indirect) {
       arr->deref_array_type = nir_deref_array_type_indirect;
-      arr->indirect = ttn_src_for_indirect(c, indirect);
+      arr->indirect = nir_src_for_ssa(ttn_src_for_indirect(c, indirect));
    } else {
       arr->deref_array_type = nir_deref_array_type_direct;
    }
@@ -582,19 +582,14 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
 
       switch (file) {
       case TGSI_FILE_INPUT:
-         op = indirect ? nir_intrinsic_load_input_indirect :
-                         nir_intrinsic_load_input;
+         op = nir_intrinsic_load_input;
          assert(!dim);
          break;
       case TGSI_FILE_CONSTANT:
          if (dim) {
-            op = indirect ? nir_intrinsic_load_ubo_indirect :
-                            nir_intrinsic_load_ubo;
-            /* convert index from vec4 to byte: */
-            index *= 16;
+            op = nir_intrinsic_load_ubo;
          } else {
-            op = indirect ? nir_intrinsic_load_uniform_indirect :
-                            nir_intrinsic_load_uniform;
+            op = nir_intrinsic_load_uniform;
          }
          break;
       default:
@@ -605,7 +600,6 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
       load = nir_intrinsic_instr_create(b->shader, op);
 
       load->num_components = 4;
-      load->const_index[0] = index;
       if (dim) {
          if (dimind) {
             load->src[srcn] =
@@ -618,17 +612,26 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
          }
          srcn++;
       }
-      if (indirect) {
-         load->src[srcn] = ttn_src_for_indirect(c, indirect);
-         if (dim) {
-            assert(load->src[srcn].is_ssa);
-            /* we also need to covert vec4 to byte here too: */
-            load->src[srcn] =
-               nir_src_for_ssa(nir_ishl(b, load->src[srcn].ssa,
-                                        nir_imm_int(b, 4)));
+
+      nir_ssa_def *offset;
+      if (op == nir_intrinsic_load_ubo) {
+         /* UBO loads don't have a base offset. */
+         offset = nir_imm_int(b, index);
+         if (indirect) {
+            offset = nir_iadd(b, offset, ttn_src_for_indirect(c, indirect));
          }
-         srcn++;
+         /* UBO offsets are in bytes, but TGSI gives them to us in vec4's */
+         offset = nir_ishl(b, offset, nir_imm_int(b, 4));
+      } else {
+         nir_intrinsic_set_base(load, index);
+         if (indirect) {
+            offset = ttn_src_for_indirect(c, indirect);
+         } else {
+            offset = nir_imm_int(b, 0);
+         }
       }
+      load->src[srcn++] = nir_src_for_ssa(offset);
+
       nir_ssa_dest_init(&load->instr, &load->dest, 4, NULL);
       nir_builder_instr_insert(b, &load->instr);
 
@@ -644,7 +647,7 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
    return src;
 }
 
-static nir_src
+static nir_ssa_def *
 ttn_src_for_indirect(struct ttn_compile *c, struct tgsi_ind_register *indirect)
 {
    nir_builder *b = &c->build;
@@ -656,7 +659,7 @@ ttn_src_for_indirect(struct ttn_compile *c, struct tgsi_ind_register *indirect)
                                         indirect->File,
                                         indirect->Index,
                                         NULL, NULL, NULL);
-   return nir_src_for_ssa(nir_imov_alu(b, src, 1));
+   return nir_imov_alu(b, src, 1);
 }
 
 static nir_alu_dest
@@ -670,10 +673,6 @@ ttn_get_dest(struct ttn_compile *c, struct tgsi_full_dst_register *tgsi_fdst)
 
    if (tgsi_dst->File == TGSI_FILE_TEMPORARY) {
       if (c->temp_regs[index].var) {
-          nir_builder *b = &c->build;
-          nir_intrinsic_instr *load;
-          struct tgsi_ind_register *indirect =
-                tgsi_dst->Indirect ? &tgsi_fdst->Indirect : NULL;
           nir_register *reg;
 
          /* this works, because TGSI will give us a base offset
@@ -687,26 +686,6 @@ ttn_get_dest(struct ttn_compile *c, struct tgsi_full_dst_register *tgsi_fdst)
          reg->num_components = 4;
          dest.dest.reg.reg = reg;
          dest.dest.reg.base_offset = 0;
-
-         /* since the alu op might not write to all components
-          * of the temporary, we must first do a load_var to
-          * get the previous array elements into the register.
-          * This is one area that NIR could use a bit of
-          * improvement (or opt pass to clean up the mess
-          * once things are scalarized)
-          */
-
-         load = nir_intrinsic_instr_create(c->build.shader,
-                                           nir_intrinsic_load_var);
-         load->num_components = 4;
-         load->variables[0] =
-               ttn_array_deref(c, load, c->temp_regs[index].var,
-                               c->temp_regs[index].offset,
-                               indirect);
-
-         load->dest = nir_dest_for_reg(reg);
-
-         nir_builder_instr_insert(b, &load->instr);
       } else {
          assert(!tgsi_dst->Indirect);
          dest.dest.reg.reg = c->temp_regs[index].reg;
@@ -725,7 +704,7 @@ ttn_get_dest(struct ttn_compile *c, struct tgsi_full_dst_register *tgsi_fdst)
 
    if (tgsi_dst->Indirect && (tgsi_dst->File != TGSI_FILE_TEMPORARY)) {
       nir_src *indirect = ralloc(c->build.shader, nir_src);
-      *indirect = ttn_src_for_indirect(c, &tgsi_fdst->Indirect);
+      *indirect = nir_src_for_ssa(ttn_src_for_indirect(c, &tgsi_fdst->Indirect));
       dest.dest.reg.indirect = indirect;
    }
 
@@ -1062,7 +1041,9 @@ ttn_kill(nir_builder *b, nir_op op, nir_alu_dest dest, nir_ssa_def **src)
 static void
 ttn_kill_if(nir_builder *b, nir_op op, nir_alu_dest dest, nir_ssa_def **src)
 {
-   nir_ssa_def *cmp = nir_bany4(b, nir_flt(b, src[0], nir_imm_float(b, 0.0)));
+   nir_ssa_def *cmp = nir_bany_inequal4(b, nir_flt(b, src[0],
+                                                   nir_imm_float(b, 0.0)),
+                                        nir_imm_int(b, 0));
    nir_intrinsic_instr *discard =
       nir_intrinsic_instr_create(b->shader, nir_intrinsic_discard_if);
    discard->src[0] = nir_src_for_ssa(cmp);
@@ -1280,6 +1261,10 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
       num_srcs = 3;
       samp = 3;
       break;
+   case TGSI_OPCODE_LODQ:
+      op = nir_texop_lod;
+      num_srcs = 1;
+      break;
 
    default:
       fprintf(stderr, "unknown TGSI tex op %d\n", tgsi_inst->Instruction.Opcode);
@@ -1324,15 +1309,18 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
       instr->coord_components++;
 
    assert(tgsi_inst->Src[samp].Register.File == TGSI_FILE_SAMPLER);
+   instr->texture_index = tgsi_inst->Src[samp].Register.Index;
    instr->sampler_index = tgsi_inst->Src[samp].Register.Index;
 
    /* TODO if we supported any opc's which take an explicit SVIEW
     * src, we would use that here instead.  But for the "legacy"
     * texture opc's the SVIEW index is same as SAMP index:
     */
-   sview = instr->sampler_index;
+   sview = instr->texture_index;
 
-   if (sview < c->num_samp_types) {
+   if (op == nir_texop_lod) {
+      instr->dest_type = nir_type_float;
+   } else if (sview < c->num_samp_types) {
       instr->dest_type = c->samp_types[sview];
    } else {
       instr->dest_type = nir_type_float;
@@ -1469,8 +1457,8 @@ ttn_txq(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
    setup_texture_info(qlv, tgsi_inst->Texture.Texture);
 
    assert(tgsi_inst->Src[1].Register.File == TGSI_FILE_SAMPLER);
-   txs->sampler_index = tgsi_inst->Src[1].Register.Index;
-   qlv->sampler_index = tgsi_inst->Src[1].Register.Index;
+   txs->texture_index = tgsi_inst->Src[1].Register.Index;
+   qlv->texture_index = tgsi_inst->Src[1].Register.Index;
 
    /* only single src, the lod: */
    txs->src[0].src = nir_src_for_ssa(ttn_channel(b, src[0], X));
@@ -1648,7 +1636,7 @@ static const nir_op op_trans[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_UMUL_HI] = nir_op_umul_high,
 
    [TGSI_OPCODE_TG4] = 0,
-   [TGSI_OPCODE_LODQ] = 0, /* XXX */
+   [TGSI_OPCODE_LODQ] = 0,
 
    [TGSI_OPCODE_IBFE] = nir_op_ibitfield_extract,
    [TGSI_OPCODE_UBFE] = nir_op_ubitfield_extract,
@@ -1657,7 +1645,7 @@ static const nir_op op_trans[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_POPC] = nir_op_bit_count,
    [TGSI_OPCODE_LSB] = nir_op_find_lsb,
    [TGSI_OPCODE_IMSB] = nir_op_ifind_msb,
-   [TGSI_OPCODE_UMSB] = nir_op_ifind_msb, /* XXX: signed vs unsigned */
+   [TGSI_OPCODE_UMSB] = nir_op_ufind_msb,
 
    [TGSI_OPCODE_INTERP_CENTROID] = 0, /* XXX */
    [TGSI_OPCODE_INTERP_SAMPLE] = 0, /* XXX */
@@ -1816,6 +1804,7 @@ ttn_emit_instruction(struct ttn_compile *c)
    case TGSI_OPCODE_TXQ_LZ:
    case TGSI_OPCODE_TXF:
    case TGSI_OPCODE_TG4:
+   case TGSI_OPCODE_LODQ:
       ttn_tex(c, dest, src);
       break;
 
@@ -1874,7 +1863,7 @@ ttn_emit_instruction(struct ttn_compile *c)
       ttn_move_dest(b, dest, nir_fsat(b, ttn_src_for_dest(b, &dest)));
    }
 
-   /* if the dst has a matching var, append store_global to move
+   /* if the dst has a matching var, append store_var to move
     * output from reg to var
     */
    nir_variable *var = ttn_get_var(c, tgsi_dst);
@@ -1887,6 +1876,7 @@ ttn_emit_instruction(struct ttn_compile *c)
                                            &tgsi_dst->Indirect : NULL;
 
       store->num_components = 4;
+      nir_intrinsic_set_write_mask(store, dest.write_mask);
       store->variables[0] = ttn_array_deref(c, store, var, offset, indirect);
       store->src[0] = nir_src_for_reg(dest.dest.reg.reg);
 
@@ -1916,9 +1906,11 @@ ttn_add_output_stores(struct ttn_compile *c)
             nir_intrinsic_instr_create(b->shader, nir_intrinsic_store_output);
          unsigned loc = var->data.driver_location + i;
          store->num_components = 4;
-         store->const_index[0] = loc;
          store->src[0].reg.reg = c->output_regs[loc].reg;
          store->src[0].reg.base_offset = c->output_regs[loc].offset;
+         nir_intrinsic_set_base(store, loc);
+         nir_intrinsic_set_write_mask(store, 0xf);
+         store->src[1] = nir_src_for_ssa(nir_imm_int(b, 0));
          nir_builder_instr_insert(b, &store->instr);
       }
    }
@@ -1936,7 +1928,7 @@ tgsi_processor_to_shader_stage(unsigned processor)
    case TGSI_PROCESSOR_COMPUTE:   return MESA_SHADER_COMPUTE;
    default:
       unreachable("invalid TGSI processor");
-   };
+   }
 }
 
 struct nir_shader *
@@ -1954,15 +1946,10 @@ tgsi_to_nir(const void *tgsi_tokens,
    tgsi_scan_shader(tgsi_tokens, &scan);
    c->scan = &scan;
 
-   s = nir_shader_create(NULL, tgsi_processor_to_shader_stage(scan.processor),
-                         options);
-
-   nir_function *func = nir_function_create(s, "main");
-   nir_function_overload *overload = nir_function_overload_create(func);
-   nir_function_impl *impl = nir_function_impl_create(overload);
-
-   nir_builder_init(&c->build, impl);
-   c->build.cursor = nir_after_cf_list(&impl->body);
+   nir_builder_init_simple_shader(&c->build, NULL,
+                                  tgsi_processor_to_shader_stage(scan.processor),
+                                  options);
+   s = c->build.shader;
 
    s->num_inputs = scan.file_max[TGSI_FILE_INPUT] + 1;
    s->num_uniforms = scan.const_file_max[0] + 1;

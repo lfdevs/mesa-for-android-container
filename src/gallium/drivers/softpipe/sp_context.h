@@ -37,6 +37,7 @@
 #include "draw/draw_vertex.h"
 
 #include "sp_quad_pipe.h"
+#include "sp_setup.h"
 
 
 /** Do polygon stipple in the draw module? */
@@ -79,10 +80,10 @@ struct softpipe_context {
    struct pipe_resource *constants[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
-   struct pipe_scissor_state scissor;
+   struct pipe_scissor_state scissors[PIPE_MAX_VIEWPORTS];
    struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
-   struct pipe_viewport_state viewport;
+   struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
    struct pipe_index_buffer index_buffer;
    struct pipe_resource *mapped_vs_tex[PIPE_MAX_SHADER_SAMPLER_VIEWS];
@@ -117,14 +118,17 @@ struct softpipe_context {
    unsigned const_buffer_size[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
 
    /** Vertex format */
+   struct sp_setup_info setup_info;
    struct vertex_info vertex_info;
-   struct vertex_info vertex_info_vbuf;
 
    /** Which vertex shader output slot contains point size */
-   int psize_slot;
+   int8_t psize_slot;
+
+   /** Which vertex shader output slot contains viewport index */
+   int8_t viewport_index_slot;
 
    /** Which vertex shader output slot contains layer */
-   int layer_slot;
+   int8_t layer_slot;
 
    /** The reduced version of the primitive supplied by the state tracker */
    unsigned reduced_api_prim;
@@ -140,7 +144,7 @@ struct softpipe_context {
    unsigned reduced_prim;
 
    /** Derived from scissor and surface bounds: */
-   struct pipe_scissor_state cliprect;
+   struct pipe_scissor_state cliprect[PIPE_MAX_VIEWPORTS];
 
    unsigned line_stipple_counter;
 

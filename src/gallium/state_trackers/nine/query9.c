@@ -143,19 +143,19 @@ NineQuery9_dtor( struct NineQuery9 *This )
     NineUnknown_dtor(&This->base);
 }
 
-D3DQUERYTYPE WINAPI
+D3DQUERYTYPE NINE_WINAPI
 NineQuery9_GetType( struct NineQuery9 *This )
 {
     return This->type;
 }
 
-DWORD WINAPI
+DWORD NINE_WINAPI
 NineQuery9_GetDataSize( struct NineQuery9 *This )
 {
     return This->result_size;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineQuery9_Issue( struct NineQuery9 *This,
                   DWORD dwIssueFlags )
 {
@@ -197,7 +197,7 @@ union nine_query_result
     UINT64 u64;
 };
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineQuery9_GetData( struct NineQuery9 *This,
                     void *pData,
                     DWORD dwSize,

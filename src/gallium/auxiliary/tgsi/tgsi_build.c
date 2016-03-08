@@ -110,6 +110,8 @@ tgsi_default_declaration( void )
    declaration.Invariant = 0;
    declaration.Local = 0;
    declaration.Array = 0;
+   declaration.Atomic = 0;
+   declaration.Shared = 0;
    declaration.Padding = 0;
 
    return declaration;
@@ -259,36 +261,39 @@ tgsi_build_declaration_semantic(
    return ds;
 }
 
-static struct tgsi_declaration_resource
-tgsi_default_declaration_resource(void)
+static struct tgsi_declaration_image
+tgsi_default_declaration_image(void)
 {
-   struct tgsi_declaration_resource dr;
+   struct tgsi_declaration_image di;
 
-   dr.Resource = TGSI_TEXTURE_BUFFER;
-   dr.Raw = 0;
-   dr.Writable = 0;
-   dr.Padding = 0;
+   di.Resource = TGSI_TEXTURE_BUFFER;
+   di.Raw = 0;
+   di.Writable = 0;
+   di.Format = 0;
+   di.Padding = 0;
 
-   return dr;
+   return di;
 }
 
-static struct tgsi_declaration_resource
-tgsi_build_declaration_resource(unsigned texture,
-                                unsigned raw,
-                                unsigned writable,
-                                struct tgsi_declaration *declaration,
-                                struct tgsi_header *header)
+static struct tgsi_declaration_image
+tgsi_build_declaration_image(unsigned texture,
+                             unsigned format,
+                             unsigned raw,
+                             unsigned writable,
+                             struct tgsi_declaration *declaration,
+                             struct tgsi_header *header)
 {
-   struct tgsi_declaration_resource dr;
+   struct tgsi_declaration_image di;
 
-   dr = tgsi_default_declaration_resource();
-   dr.Resource = texture;
-   dr.Raw = raw;
-   dr.Writable = writable;
+   di = tgsi_default_declaration_image();
+   di.Resource = texture;
+   di.Format = format;
+   di.Raw = raw;
+   di.Writable = writable;
 
    declaration_grow(declaration, header);
 
-   return dr;
+   return di;
 }
 
 static struct tgsi_declaration_sampler_view
@@ -364,7 +369,7 @@ tgsi_default_full_declaration( void )
    full_declaration.Range = tgsi_default_declaration_range();
    full_declaration.Semantic = tgsi_default_declaration_semantic();
    full_declaration.Interp = tgsi_default_declaration_interp();
-   full_declaration.Resource = tgsi_default_declaration_resource();
+   full_declaration.Image = tgsi_default_declaration_image();
    full_declaration.SamplerView = tgsi_default_declaration_sampler_view();
    full_declaration.Array = tgsi_default_declaration_array();
 
@@ -454,20 +459,21 @@ tgsi_build_full_declaration(
          header );
    }
 
-   if (full_decl->Declaration.File == TGSI_FILE_RESOURCE) {
-      struct tgsi_declaration_resource *dr;
+   if (full_decl->Declaration.File == TGSI_FILE_IMAGE) {
+      struct tgsi_declaration_image *di;
 
       if (maxsize <= size) {
          return  0;
       }
-      dr = (struct tgsi_declaration_resource *)&tokens[size];
+      di = (struct tgsi_declaration_image *)&tokens[size];
       size++;
 
-      *dr = tgsi_build_declaration_resource(full_decl->Resource.Resource,
-                                            full_decl->Resource.Raw,
-                                            full_decl->Resource.Writable,
-                                            declaration,
-                                            header);
+      *di = tgsi_build_declaration_image(full_decl->Image.Resource,
+                                         full_decl->Image.Format,
+                                         full_decl->Image.Raw,
+                                         full_decl->Image.Writable,
+                                         declaration,
+                                         header);
    }
 
    if (full_decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
@@ -616,7 +622,8 @@ tgsi_default_instruction( void )
    instruction.NumSrcRegs = 1;
    instruction.Label = 0;
    instruction.Texture = 0;
-   instruction.Padding  = 0;
+   instruction.Memory = 0;
+   instruction.Padding = 0;
 
    return instruction;
 }
@@ -762,6 +769,34 @@ tgsi_build_instruction_texture(
    return instruction_texture;
 }
 
+static struct tgsi_instruction_memory
+tgsi_default_instruction_memory( void )
+{
+   struct tgsi_instruction_memory instruction_memory;
+
+   instruction_memory.Qualifier = 0;
+   instruction_memory.Padding = 0;
+
+   return instruction_memory;
+}
+
+static struct tgsi_instruction_memory
+tgsi_build_instruction_memory(
+   unsigned qualifier,
+   struct tgsi_token *prev_token,
+   struct tgsi_instruction *instruction,
+   struct tgsi_header *header )
+{
+   struct tgsi_instruction_memory instruction_memory;
+
+   instruction_memory.Qualifier = qualifier;
+   instruction_memory.Padding = 0;
+   instruction->Memory = 1;
+
+   instruction_grow( instruction, header );
+
+   return instruction_memory;
+}
 
 static struct tgsi_texture_offset
 tgsi_default_texture_offset( void )
@@ -1008,6 +1043,7 @@ tgsi_default_full_instruction( void )
    full_instruction.Predicate = tgsi_default_instruction_predicate();
    full_instruction.Label = tgsi_default_instruction_label();
    full_instruction.Texture = tgsi_default_instruction_texture();
+   full_instruction.Memory = tgsi_default_instruction_memory();
    for( i = 0;  i < TGSI_FULL_MAX_TEX_OFFSETS; i++ ) {
       full_instruction.TexOffsets[i] = tgsi_default_texture_offset();
    }
@@ -1119,6 +1155,24 @@ tgsi_build_full_instruction(
          prev_token = (struct tgsi_token *) texture_offset;
       }
    }
+
+   if (full_inst->Instruction.Memory) {
+      struct tgsi_instruction_memory *instruction_memory;
+
+      if( maxsize <= size )
+         return 0;
+      instruction_memory =
+         (struct  tgsi_instruction_memory *) &tokens[size];
+      size++;
+
+      *instruction_memory = tgsi_build_instruction_memory(
+         full_inst->Memory.Qualifier,
+         prev_token,
+         instruction,
+         header );
+      prev_token = (struct tgsi_token  *) instruction_memory;
+   }
+
    for( i = 0;  i <   full_inst->Instruction.NumDstRegs; i++ ) {
       const struct tgsi_full_dst_register *reg = &full_inst->Dst[i];
       struct tgsi_dst_register *dst_register;

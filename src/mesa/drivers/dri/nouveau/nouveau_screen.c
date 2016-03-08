@@ -40,6 +40,9 @@
 #include "main/renderbuffer.h"
 #include "swrast/s_renderbuffer.h"
 
+#include <nvif/class.h>
+#include <nvif/cl0080.h>
+
 static const __DRIextension *nouveau_screen_extensions[];
 
 static void
@@ -99,9 +102,19 @@ nouveau_init_screen2(__DRIscreen *dri_screen)
 	dri_screen->driverPrivate = screen;
 
 	/* Open the DRM device. */
-	ret = nouveau_device_wrap(dri_screen->fd, 0, &screen->device);
+	ret = nouveau_drm_new(dri_screen->fd, &screen->drm);
 	if (ret) {
 		nouveau_error("Error opening the DRM device.\n");
+		goto fail;
+	}
+
+	ret = nouveau_device_new(&screen->drm->client, NV_DEVICE,
+				 &(struct nv_device_v0) {
+					.device = ~0ULL,
+				 }, sizeof(struct nv_device_v0),
+				 &screen->device);
+	if (ret) {
+		nouveau_error("Error creating device object.\n");
 		goto fail;
 	}
 
@@ -213,6 +226,7 @@ nouveau_destroy_screen(__DRIscreen *dri_screen)
 		return;
 
 	nouveau_device_del(&screen->device);
+	nouveau_drm_del(&screen->drm);
 
 	free(screen);
 	dri_screen->driverPrivate = NULL;

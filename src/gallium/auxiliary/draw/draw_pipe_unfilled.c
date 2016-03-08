@@ -86,27 +86,33 @@ inject_front_face_info(struct draw_stage *stage,
 }
 
    
-static void point( struct draw_stage *stage,
-		   struct vertex_header *v0 )
+static void point(struct draw_stage *stage,
+                  struct prim_header *header,
+                  struct vertex_header *v0)
 {
    struct prim_header tmp;
+   tmp.det = header->det;
+   tmp.flags = 0;
    tmp.v[0] = v0;
-   stage->next->point( stage->next, &tmp );
+   stage->next->point(stage->next, &tmp);
 }
 
-static void line( struct draw_stage *stage,
-		  struct vertex_header *v0,
-		  struct vertex_header *v1 )
+static void line(struct draw_stage *stage,
+                 struct prim_header *header,
+                 struct vertex_header *v0,
+                 struct vertex_header *v1)
 {
    struct prim_header tmp;
+   tmp.det = header->det;
+   tmp.flags = 0;
    tmp.v[0] = v0;
    tmp.v[1] = v1;
-   stage->next->line( stage->next, &tmp );
+   stage->next->line(stage->next, &tmp);
 }
 
 
-static void points( struct draw_stage *stage,
-		    struct prim_header *header )
+static void points(struct draw_stage *stage,
+                   struct prim_header *header)
 {
    struct vertex_header *v0 = header->v[0];
    struct vertex_header *v1 = header->v[1];
@@ -114,27 +120,41 @@ static void points( struct draw_stage *stage,
 
    inject_front_face_info(stage, header);
 
-   if ((header->flags & DRAW_PIPE_EDGE_FLAG_0) && v0->edgeflag) point( stage, v0 );
-   if ((header->flags & DRAW_PIPE_EDGE_FLAG_1) && v1->edgeflag) point( stage, v1 );
-   if ((header->flags & DRAW_PIPE_EDGE_FLAG_2) && v2->edgeflag) point( stage, v2 );
+   if ((header->flags & DRAW_PIPE_EDGE_FLAG_0) && v0->edgeflag)
+      point(stage, header, v0);
+   if ((header->flags & DRAW_PIPE_EDGE_FLAG_1) && v1->edgeflag)
+      point(stage, header, v1);
+   if ((header->flags & DRAW_PIPE_EDGE_FLAG_2) && v2->edgeflag)
+      point(stage, header, v2);
 }
 
 
-static void lines( struct draw_stage *stage,
-		   struct prim_header *header )
+static void lines(struct draw_stage *stage,
+                  struct prim_header *header)
 {
    struct vertex_header *v0 = header->v[0];
    struct vertex_header *v1 = header->v[1];
    struct vertex_header *v2 = header->v[2];
 
    if (header->flags & DRAW_PIPE_RESET_STIPPLE)
-      stage->next->reset_stipple_counter( stage->next );
+      /*
+       * XXX could revisit this. The only stage which cares is the line
+       * stipple stage. Could just emit correct reset flags here and not
+       * bother about all the calling through reset_stipple_counter
+       * stages. Though technically it is necessary if line stipple is
+       * handled by the driver, but this is not actually hooked up when
+       * using vbuf (vbuf stage reset_stipple_counter does nothing).
+       */
+      stage->next->reset_stipple_counter(stage->next);
 
    inject_front_face_info(stage, header);
 
-   if ((header->flags & DRAW_PIPE_EDGE_FLAG_2) && v2->edgeflag) line( stage, v2, v0 );
-   if ((header->flags & DRAW_PIPE_EDGE_FLAG_0) && v0->edgeflag) line( stage, v0, v1 );
-   if ((header->flags & DRAW_PIPE_EDGE_FLAG_1) && v1->edgeflag) line( stage, v1, v2 );
+   if ((header->flags & DRAW_PIPE_EDGE_FLAG_2) && v2->edgeflag)
+      line(stage, header, v2, v0);
+   if ((header->flags & DRAW_PIPE_EDGE_FLAG_0) && v0->edgeflag)
+      line(stage, header, v0, v1);
+   if ((header->flags & DRAW_PIPE_EDGE_FLAG_1) && v1->edgeflag)
+      line(stage, header, v1, v2);
 }
 
 
@@ -255,7 +275,7 @@ draw_unfilled_prepare_outputs( struct draw_context *draw,
 struct draw_stage *draw_unfilled_stage( struct draw_context *draw )
 {
    struct unfilled_stage *unfilled = CALLOC_STRUCT(unfilled_stage);
-   if (unfilled == NULL)
+   if (!unfilled)
       goto fail;
 
    unfilled->stage.draw = draw;

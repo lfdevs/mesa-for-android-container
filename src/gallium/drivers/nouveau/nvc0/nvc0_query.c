@@ -74,6 +74,24 @@ nvc0_get_query_result(struct pipe_context *pipe, struct pipe_query *pq,
 }
 
 static void
+nvc0_get_query_result_resource(struct pipe_context *pipe,
+                               struct pipe_query *pq,
+                               boolean wait,
+                               enum pipe_query_value_type result_type,
+                               int index,
+                               struct pipe_resource *resource,
+                               unsigned offset)
+{
+   struct nvc0_query *q = nvc0_query(pq);
+   if (!q->funcs->get_query_result_resource) {
+      assert(!"Unexpected lack of get_query_result_resource");
+      return;
+   }
+   q->funcs->get_query_result_resource(nvc0_context(pipe), q, wait, result_type,
+                                       index, resource, offset);
+}
+
+static void
 nvc0_render_condition(struct pipe_context *pipe,
                       struct pipe_query *pq,
                       boolean condition, uint mode)
@@ -129,7 +147,7 @@ nvc0_render_condition(struct pipe_context *pipe,
    }
 
    if (wait)
-      nvc0_hw_query_fifo_wait(push, q);
+      nvc0_hw_query_fifo_wait(nvc0, q);
 
    PUSH_SPACE(push, 7);
    PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
@@ -184,10 +202,10 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
    count++;
 #endif
 
-   if (screen->base.device->drm_version >= 0x01000101) {
+   if (screen->base.drm->version >= 0x01000101) {
       if (screen->compute) {
          if (screen->base.class_3d == NVE4_3D_CLASS) {
-            count++;
+            count += 2;
          } else
          if (screen->base.class_3d < NVE4_3D_CLASS) {
             count += 2;
@@ -222,6 +240,12 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
    } else
    if (id == NVC0_HW_METRIC_QUERY_GROUP) {
       if (screen->compute) {
+          if (screen->base.class_3d == NVE4_3D_CLASS) {
+            info->name = "Performance metrics";
+            info->max_active_queries = 1;
+            info->num_queries = NVE4_HW_METRIC_QUERY_COUNT;
+            return 1;
+         } else
          if (screen->base.class_3d < NVE4_3D_CLASS) {
             info->name = "Performance metrics";
             info->max_active_queries = 1;
@@ -256,6 +280,7 @@ nvc0_init_query_functions(struct nvc0_context *nvc0)
    pipe->begin_query = nvc0_begin_query;
    pipe->end_query = nvc0_end_query;
    pipe->get_query_result = nvc0_get_query_result;
+   pipe->get_query_result_resource = nvc0_get_query_result_resource;
    pipe->render_condition = nvc0_render_condition;
    nvc0->cond_condmode = NVC0_3D_COND_MODE_ALWAYS;
 }

@@ -24,7 +24,6 @@
  */
 
 #include "main/blend.h"
-#include "main/glheader.h"
 #include "main/enums.h"
 #include "main/image.h"
 #include "main/colormac.h"
@@ -258,7 +257,7 @@ do_blit_bitmap( struct gl_context *ctx,
    /* The blitter has no idea about fast color clears, so we need to resolve
     * the miptree before we do anything.
     */
-   intel_miptree_resolve_color(brw, irb->mt);
+   intel_miptree_resolve_color(brw, irb->mt, 0);
 
    /* Chop it all into chunks that can be digested by hardware: */
    for (py = 0; py < height; py += DY) {

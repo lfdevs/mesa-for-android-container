@@ -5,6 +5,7 @@
 struct pheader
 {
     boolean unknown;
+    GUID guid;
     DWORD size;
     char data[1];
 };

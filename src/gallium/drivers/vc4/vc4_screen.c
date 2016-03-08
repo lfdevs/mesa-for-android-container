@@ -57,6 +57,10 @@ static const struct debug_named_value debug_options[] = {
           "Flush after each draw call" },
         { "always_sync", VC4_DEBUG_ALWAYS_SYNC,
           "Wait for finish after each flush" },
+#if USE_VC4_SIMULATOR
+        { "dump", VC4_DEBUG_DUMP,
+          "Write a GPU command stream trace file" },
+#endif
         { NULL }
 };
 
@@ -96,6 +100,7 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TWO_SIDED_STENCIL:
         case PIPE_CAP_USER_INDEX_BUFFERS:
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
+        case PIPE_CAP_TEXTURE_SWIZZLE:
                 return 1;
 
                 /* lying for GL 2.0 */
@@ -122,9 +127,9 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 /* Unsupported features. */
         case PIPE_CAP_ANISOTROPIC_FILTER:
         case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
+        case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
         case PIPE_CAP_CUBE_MAP_ARRAY:
         case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
-        case PIPE_CAP_TEXTURE_SWIZZLE:
         case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
         case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
         case PIPE_CAP_SEAMLESS_CUBE_MAP:
@@ -167,6 +172,8 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_MAX_TEXEL_OFFSET:
         case PIPE_CAP_MAX_VERTEX_STREAMS:
         case PIPE_CAP_DRAW_INDIRECT:
+        case PIPE_CAP_MULTI_DRAW_INDIRECT:
+        case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
         case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
         case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
         case PIPE_CAP_SAMPLER_VIEW_TARGET:
@@ -176,15 +183,26 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
         case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
         case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
-	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
-	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
-	case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
-	case PIPE_CAP_DEPTH_BOUNDS_TEST:
-	case PIPE_CAP_TGSI_TXQS:
-	case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
-	case PIPE_CAP_SHAREABLE_SHADERS:
-	case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
-	case PIPE_CAP_CLEAR_TEXTURE:
+        case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+        case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+        case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+        case PIPE_CAP_DEPTH_BOUNDS_TEST:
+        case PIPE_CAP_TGSI_TXQS:
+        case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
+        case PIPE_CAP_SHAREABLE_SHADERS:
+        case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
+        case PIPE_CAP_CLEAR_TEXTURE:
+        case PIPE_CAP_DRAW_PARAMETERS:
+        case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+        case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
+        case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+        case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
+        case PIPE_CAP_INVALIDATE_BUFFER:
+        case PIPE_CAP_GENERATE_MIPMAP:
+        case PIPE_CAP_STRING_MARKER:
+        case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
+        case PIPE_CAP_QUERY_BUFFER_OBJECT:
+	case PIPE_CAP_QUERY_MEMORY_INFO:
                 return 0;
 
                 /* Stream output. */
@@ -339,8 +357,13 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 return VC4_MAX_TEXTURE_SAMPLERS;
         case PIPE_SHADER_CAP_PREFERRED_IR:
                 return PIPE_SHADER_IR_TGSI;
+        case PIPE_SHADER_CAP_SUPPORTED_IRS:
+                return 0;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
 		return 32;
+        case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+        case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+                return 0;
         default:
                 fprintf(stderr, "unknown shader param %d\n", param);
                 return 0;

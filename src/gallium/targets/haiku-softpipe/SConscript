@@ -6,6 +6,7 @@ env.Prepend(LIBS = [
     trace,
     rbug,
     mesautil,
+    compiler,
     mesa,
     glsl,
     gallium

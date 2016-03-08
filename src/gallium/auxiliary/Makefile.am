@@ -1,24 +1,36 @@
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
-noinst_LTLIBRARIES = libgallium.la
+noinst_LTLIBRARIES = libgallium_nir.la
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/src/loader \
-	-I$(top_builddir)/src/glsl/nir \
 	-I$(top_srcdir)/src/gallium/auxiliary/util \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
-	$(MSVC2008_COMPAT_CXXFLAGS)
+	$(MSVC2013_COMPAT_CFLAGS)
 
 AM_CXXFLAGS = \
 	$(VISIBILITY_CXXFLAGS) \
-	$(MSVC2008_COMPAT_CXXFLAGS)
+	$(MSVC2013_COMPAT_CXXFLAGS)
+
+libgallium_nir_la_SOURCES = \
+	$(NIR_SOURCES)
+
+libgallium_nir_la_CFLAGS = \
+	-I$(top_builddir)/src/compiler/nir \
+	$(GALLIUM_CFLAGS) \
+	$(VISIBILITY_CFLAGS) \
+	$(MSVC2013_COMPAT_CFLAGS)
+
+noinst_LTLIBRARIES += libgallium.la
 
 libgallium_la_SOURCES = \
 	$(C_SOURCES) \
-	$(NIR_SOURCES) \
 	$(GENERATED_SOURCES)
+
+libgallium_la_LIBADD = \
+	libgallium_nir.la
 
 if HAVE_MESA_LLVM
 

@@ -50,6 +50,7 @@ struct nv50_graph_state {
    uint8_t num_samplers[3];
    uint8_t prim_size;
    uint16_t scissor;
+   bool seamless_cube_map;
 };
 
 struct nv50_screen {
@@ -156,12 +157,27 @@ nv50_resource_validate(struct nv04_resource *res, uint32_t flags)
 
 struct nv50_format {
    uint32_t rt;
-   uint32_t tic;
+   struct {
+      unsigned format:6;
+      unsigned type_r:3;
+      unsigned type_g:3;
+      unsigned type_b:3;
+      unsigned type_a:3;
+      unsigned src_x:3;
+      unsigned src_y:3;
+      unsigned src_z:3;
+      unsigned src_w:3;
+   } tic;
+   uint32_t usage;
+};
+
+struct nv50_vertex_format {
    uint32_t vtx;
    uint32_t usage;
 };
 
 extern const struct nv50_format nv50_format_table[];
+extern const struct nv50_vertex_format nv50_vertex_format[];
 
 static inline void
 nv50_screen_tic_unlock(struct nv50_screen *screen, struct nv50_tic_entry *tic)

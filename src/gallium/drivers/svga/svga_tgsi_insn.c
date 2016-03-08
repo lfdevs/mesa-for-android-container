@@ -166,7 +166,7 @@ scalar(struct src_register src, unsigned comp)
 static boolean
 svga_arl_needs_adjustment( const struct svga_shader_emitter *emit )
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < emit->num_arl_consts; ++i) {
       if (emit->arl_consts[i].arl_num == emit->current_arl)
@@ -179,7 +179,7 @@ svga_arl_needs_adjustment( const struct svga_shader_emitter *emit )
 static int
 svga_arl_adjustment( const struct svga_shader_emitter *emit )
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < emit->num_arl_consts; ++i) {
       if (emit->arl_consts[i].arl_num == emit->current_arl)
@@ -1175,7 +1175,7 @@ emit_div(struct svga_shader_emitter *emit,
    const struct src_register src1 =
       translate_src_register(emit, &insn->Src[1] );
    SVGA3dShaderDestToken temp = get_temp( emit );
-   int i;
+   unsigned i;
 
    /* For each enabled element, perform a RCP instruction.  Note that
     * RCP is scalar in SVGA3D:
@@ -1822,7 +1822,7 @@ emit_tex_swizzle(struct svga_shader_emitter *emit,
    const unsigned swizzleIn[4] = {swizzle_x, swizzle_y, swizzle_z, swizzle_w};
    unsigned srcSwizzle[4];
    unsigned srcWritemask = 0x0, zeroWritemask = 0x0, oneWritemask = 0x0;
-   int i;
+   unsigned i;
 
    /* build writemasks and srcSwizzle terms */
    for (i = 0; i < 4; i++) {
@@ -3371,7 +3371,7 @@ emit_light_twoside(struct svga_shader_emitter *emit)
    struct src_register back[2];
    SVGA3dShaderDestToken color[2];
    int count = emit->internal_color_count;
-   int i;
+   unsigned i;
    SVGA3dShaderInstToken if_token;
 
    if (count == 0)
@@ -3698,7 +3698,7 @@ static boolean
 pre_parse_add_indirect( struct svga_shader_emitter *emit,
                         int num, int current_arl)
 {
-   int i;
+   unsigned i;
    assert(num < 0);
 
    for (i = 0; i < emit->num_arl_consts; ++i) {
@@ -3844,7 +3844,8 @@ svga_shader_emit_instructions(struct svga_shader_emitter *emit,
    if (emit->unit == PIPE_SHADER_FRAGMENT && emit->key.fs.pstipple) {
       unsigned unit;
 
-      new_tokens = util_pstipple_create_fragment_shader(tokens, &unit, 0);
+      new_tokens = util_pstipple_create_fragment_shader(tokens, &unit, 0,
+                                                        TGSI_FILE_INPUT);
 
       if (new_tokens) {
          /* Setup texture state for stipple */

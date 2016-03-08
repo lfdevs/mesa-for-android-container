@@ -756,8 +756,8 @@ firmware_present(struct pipe_screen *pscreen, enum pipe_video_format codec)
    int present, ret;
 
    if (!FIRMWARE_PRESENT(checked, VP_KERN)) {
-      nouveau_object_new(screen->channel, 0, 0x7476, NULL, 0, &obj);
-      if (obj)
+      ret = nouveau_object_new(screen->channel, 0, 0x7476, NULL, 0, &obj);
+      if (!ret)
          screen->firmware_info.profiles_present |= FIRMWARE_VP_KERN;
       nouveau_object_del(&obj);
       screen->firmware_info.profiles_checked |= FIRMWARE_VP_KERN;
@@ -765,8 +765,8 @@ firmware_present(struct pipe_screen *pscreen, enum pipe_video_format codec)
 
    if (codec == PIPE_VIDEO_FORMAT_MPEG4_AVC) {
       if (!FIRMWARE_PRESENT(checked, BSP_KERN)) {
-         nouveau_object_new(screen->channel, 0, 0x74b0, NULL, 0, &obj);
-         if (obj)
+         ret = nouveau_object_new(screen->channel, 0, 0x74b0, NULL, 0, &obj);
+         if (!ret)
             screen->firmware_info.profiles_present |= FIRMWARE_BSP_KERN;
          nouveau_object_del(&obj);
          screen->firmware_info.profiles_checked |= FIRMWARE_BSP_KERN;

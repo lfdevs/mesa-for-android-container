@@ -348,7 +348,7 @@ allocate_query_block_entry(struct svga_context *svga,
    if (block_index == -1)
       return NULL;
    alloc_entry = CALLOC_STRUCT(svga_qmem_alloc_entry);
-   if (alloc_entry == NULL)
+   if (!alloc_entry)
       return NULL;
 
    alloc_entry->block_index = block_index;
@@ -381,13 +381,13 @@ allocate_query(struct svga_context *svga,
 
    alloc_entry = svga->gb_query_map[type];
 
-   if (alloc_entry == NULL) {
+   if (!alloc_entry) {
       /**
        * No query memory block has been allocated for this query type,
        * allocate one now
        */
       alloc_entry = allocate_query_block_entry(svga, len);
-      if (alloc_entry == NULL)
+      if (!alloc_entry)
          return -1;
       svga->gb_query_map[type] = alloc_entry;
    }
@@ -398,7 +398,7 @@ allocate_query(struct svga_context *svga,
    if (slot_index == -1) {
       /* This query memory block is full, allocate another one */
       alloc_entry = allocate_query_block_entry(svga, len);
-      if (alloc_entry == NULL)
+      if (!alloc_entry)
          return -1;
       alloc_entry->next = svga->gb_query_map[type];
       svga->gb_query_map[type] = alloc_entry;
@@ -732,6 +732,7 @@ svga_create_query(struct pipe_context *pipe,
    case SVGA_QUERY_NUM_SURFACE_VIEWS:
    case SVGA_QUERY_NUM_RESOURCES_MAPPED:
    case SVGA_QUERY_NUM_BYTES_UPLOADED:
+   case SVGA_QUERY_NUM_GENERATE_MIPMAP:
       break;
    default:
       assert(!"unexpected query type in svga_create_query()");
@@ -753,8 +754,9 @@ svga_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
    struct svga_query *sq;
 
-   if (q == NULL) {
-      return destroy_gb_query_obj(svga);
+   if (!q) {
+      destroy_gb_query_obj(svga);
+      return;
    }
 
    sq = svga_query(q);
@@ -799,6 +801,7 @@ svga_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_SURFACE_VIEWS:
    case SVGA_QUERY_NUM_RESOURCES_MAPPED:
    case SVGA_QUERY_NUM_BYTES_UPLOADED:
+   case SVGA_QUERY_NUM_GENERATE_MIPMAP:
       /* nothing */
       break;
    default:
@@ -886,6 +889,7 @@ svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_RESOURCES:
    case SVGA_QUERY_NUM_STATE_OBJECTS:
    case SVGA_QUERY_NUM_SURFACE_VIEWS:
+   case SVGA_QUERY_NUM_GENERATE_MIPMAP:
       /* nothing */
       break;
    default:
@@ -979,6 +983,7 @@ svga_end_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_RESOURCES:
    case SVGA_QUERY_NUM_STATE_OBJECTS:
    case SVGA_QUERY_NUM_SURFACE_VIEWS:
+   case SVGA_QUERY_NUM_GENERATE_MIPMAP:
       /* nothing */
       break;
    default:
@@ -1088,6 +1093,9 @@ svga_get_query_result(struct pipe_context *pipe,
       break;
    case SVGA_QUERY_NUM_SURFACE_VIEWS:
       vresult->u64 = svga->hud.num_surface_views;
+      break;
+   case SVGA_QUERY_NUM_GENERATE_MIPMAP:
+      vresult->u64 = svga->hud.num_generate_mipmap;
       break;
    default:
       assert(!"unexpected query type in svga_get_query_result");

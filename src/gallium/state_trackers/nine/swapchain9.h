@@ -109,7 +109,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
                        D3DPRESENT_PARAMETERS *pParams,
                        D3DDISPLAYMODEEX *mode );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9_Present( struct NineSwapChain9 *This,
                         const RECT *pSourceRect,
                         const RECT *pDestRect,
@@ -117,26 +117,29 @@ NineSwapChain9_Present( struct NineSwapChain9 *This,
                         const RGNDATA *pDirtyRegion,
                         DWORD dwFlags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9_GetFrontBufferData( struct NineSwapChain9 *This,
                                    IDirect3DSurface9 *pDestSurface );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9_GetBackBuffer( struct NineSwapChain9 *This,
                               UINT iBackBuffer,
                               D3DBACKBUFFER_TYPE Type,
                               IDirect3DSurface9 **ppBackBuffer );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9_GetRasterStatus( struct NineSwapChain9 *This,
                                 D3DRASTER_STATUS *pRasterStatus );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9_GetDisplayMode( struct NineSwapChain9 *This,
                                D3DDISPLAYMODE *pMode );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9_GetPresentParameters( struct NineSwapChain9 *This,
                                      D3DPRESENT_PARAMETERS *pPresentationParameters );
+
+BOOL
+NineSwapChain9_GetOccluded( struct NineSwapChain9 *This );
 
 #endif /* _NINE_SWAPCHAIN9_H_ */

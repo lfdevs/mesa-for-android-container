@@ -251,7 +251,7 @@ vmw_swc_flush(struct svga_winsys_context *swc,
    vswc->must_flush = FALSE;
    debug_flush_flush(vswc->fctx);
 #endif
-   swc->hints &= ~SVGA_HINT_FLAG_DRAW_EMITTED;
+   swc->hints &= ~SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    vswc->preemptive_flush = FALSE;
    vswc->seen_surfaces = 0;
    vswc->seen_regions = 0;
@@ -373,7 +373,7 @@ vmw_swc_region_relocation(struct svga_winsys_context *swc,
 
    if (vmw_swc_add_validate_buffer(vswc, reloc->buffer, flags)) {
       vswc->seen_regions += reloc->buffer->size;
-      if ((swc->hints & SVGA_HINT_FLAG_DRAW_EMITTED) &&
+      if ((swc->hints & SVGA_HINT_FLAG_CAN_PRE_FLUSH) &&
           vswc->seen_regions >= VMW_GMR_POOL_SIZE/5)
          vswc->preemptive_flush = TRUE;
    }
@@ -416,7 +416,7 @@ vmw_swc_mob_relocation(struct svga_winsys_context *swc,
    if (vmw_swc_add_validate_buffer(vswc, pb_buffer, flags)) {
       vswc->seen_mobs += pb_buffer->size;
 
-      if ((swc->hints & SVGA_HINT_FLAG_DRAW_EMITTED) &&
+      if ((swc->hints & SVGA_HINT_FLAG_CAN_PRE_FLUSH) &&
           vswc->seen_mobs >=
             vswc->vws->ioctl.max_mob_memory / VMW_MAX_MOB_MEM_FACTOR)
          vswc->preemptive_flush = TRUE;
@@ -479,7 +479,7 @@ vmw_swc_surface_only_relocation(struct svga_winsys_context *swc,
       ++vswc->surface.staged;
 
       vswc->seen_surfaces += vsurf->size;
-      if ((swc->hints & SVGA_HINT_FLAG_DRAW_EMITTED) &&
+      if ((swc->hints & SVGA_HINT_FLAG_CAN_PRE_FLUSH) &&
           vswc->seen_surfaces >=
             vswc->vws->ioctl.max_surface_memory / VMW_MAX_SURF_MEM_FACTOR)
          vswc->preemptive_flush = TRUE;

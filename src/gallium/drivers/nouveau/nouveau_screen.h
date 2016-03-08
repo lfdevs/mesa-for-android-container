@@ -17,6 +17,7 @@ struct nouveau_bo;
 
 struct nouveau_screen {
    struct pipe_screen base;
+   struct nouveau_drm *drm;
    struct nouveau_device *device;
    struct nouveau_object *channel;
    struct nouveau_client *client;

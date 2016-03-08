@@ -28,28 +28,17 @@
  * from the LIR.
  */
 
-#include <sys/types.h>
-
-#include "util/hash_table.h"
 #include "main/macros.h"
-#include "main/shaderobj.h"
-#include "main/fbobject.h"
-#include "program/prog_parameter.h"
-#include "program/prog_print.h"
-#include "util/register_allocate.h"
-#include "program/hash_table.h"
 #include "brw_context.h"
 #include "brw_eu.h"
-#include "brw_wm.h"
 #include "brw_fs.h"
 #include "brw_cs.h"
+#include "brw_nir.h"
 #include "brw_vec4_gs_visitor.h"
 #include "brw_cfg.h"
+#include "brw_program.h"
 #include "brw_dead_control_flow.h"
-#include "main/uniforms.h"
-#include "brw_fs_live_variables.h"
-#include "glsl/nir/glsl_types.h"
-#include "program/sampler.h"
+#include "compiler/glsl_types.h"
 
 using namespace brw;
 
@@ -299,6 +288,71 @@ fs_inst::is_send_from_grf() const
    }
 }
 
+/**
+ * Returns true if this instruction's sources and destinations cannot
+ * safely be the same register.
+ *
+ * In most cases, a register can be written over safely by the same
+ * instruction that is its last use.  For a single instruction, the
+ * sources are dereferenced before writing of the destination starts
+ * (naturally).
+ *
+ * However, there are a few cases where this can be problematic:
+ *
+ * - Virtual opcodes that translate to multiple instructions in the
+ *   code generator: if src == dst and one instruction writes the
+ *   destination before a later instruction reads the source, then
+ *   src will have been clobbered.
+ *
+ * - SIMD16 compressed instructions with certain regioning (see below).
+ *
+ * The register allocator uses this information to set up conflicts between
+ * GRF sources and the destination.
+ */
+bool
+fs_inst::has_source_and_destination_hazard() const
+{
+   switch (opcode) {
+   case FS_OPCODE_PACK_HALF_2x16_SPLIT:
+      /* Multiple partial writes to the destination */
+      return true;
+   default:
+      /* The SIMD16 compressed instruction
+       *
+       * add(16)      g4<1>F      g4<8,8,1>F   g6<8,8,1>F
+       *
+       * is actually decoded in hardware as:
+       *
+       * add(8)       g4<1>F      g4<8,8,1>F   g6<8,8,1>F
+       * add(8)       g5<1>F      g5<8,8,1>F   g7<8,8,1>F
+       *
+       * Which is safe.  However, if we have uniform accesses
+       * happening, we get into trouble:
+       *
+       * add(8)       g4<1>F      g4<0,1,0>F   g6<8,8,1>F
+       * add(8)       g5<1>F      g4<0,1,0>F   g7<8,8,1>F
+       *
+       * Now our destination for the first instruction overwrote the
+       * second instruction's src0, and we get garbage for those 8
+       * pixels.  There's a similar issue for the pre-gen6
+       * pixel_x/pixel_y, which are registers of 16-bit values and thus
+       * would get stomped by the first decode as well.
+       */
+      if (exec_size == 16) {
+         for (int i = 0; i < sources; i++) {
+            if (src[i].file == VGRF && (src[i].stride == 0 ||
+                                        src[i].type == BRW_REGISTER_TYPE_UW ||
+                                        src[i].type == BRW_REGISTER_TYPE_W ||
+                                        src[i].type == BRW_REGISTER_TYPE_UB ||
+                                        src[i].type == BRW_REGISTER_TYPE_B)) {
+               return true;
+            }
+         }
+      }
+      return false;
+   }
+}
+
 bool
 fs_inst::is_copy_payload(const brw::simple_allocator &grf_alloc) const
 {
@@ -374,7 +428,7 @@ fs_reg::fs_reg()
    this->file = BAD_FILE;
 }
 
-fs_reg::fs_reg(struct brw_reg reg) :
+fs_reg::fs_reg(struct ::brw_reg reg) :
    backend_reg(reg)
 {
    this->reg_offset = 0;
@@ -392,8 +446,7 @@ fs_reg::fs_reg(struct brw_reg reg) :
 bool
 fs_reg::equals(const fs_reg &r) const
 {
-   return (memcmp((brw_reg *)this, (brw_reg *)&r, sizeof(brw_reg)) == 0 &&
-           reg_offset == r.reg_offset &&
+   return (this->backend_reg::equals(r) &&
            subreg_offset == r.subreg_offset &&
            !reladdr && !r.reladdr &&
            stride == r.stride);
@@ -457,6 +510,7 @@ type_size_scalar(const struct glsl_type *type)
    case GLSL_TYPE_ERROR:
    case GLSL_TYPE_INTERFACE:
    case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_FUNCTION:
       unreachable("not reached");
    }
 
@@ -686,18 +740,20 @@ fs_inst::components_read(unsigned i) const
    case SHADER_OPCODE_LOD_LOGICAL:
    case SHADER_OPCODE_TG4_LOGICAL:
    case SHADER_OPCODE_TG4_OFFSET_LOGICAL:
-      assert(src[8].file == IMM && src[9].file == IMM);
+      assert(src[TEX_LOGICAL_SRC_COORD_COMPONENTS].file == IMM &&
+             src[TEX_LOGICAL_SRC_GRAD_COMPONENTS].file == IMM);
       /* Texture coordinates. */
-      if (i == 0)
-         return src[8].ud;
+      if (i == TEX_LOGICAL_SRC_COORDINATE)
+         return src[TEX_LOGICAL_SRC_COORD_COMPONENTS].ud;
       /* Texture derivatives. */
-      else if ((i == 2 || i == 3) && opcode == SHADER_OPCODE_TXD_LOGICAL)
-         return src[9].ud;
+      else if ((i == TEX_LOGICAL_SRC_LOD || i == TEX_LOGICAL_SRC_LOD2) &&
+               opcode == SHADER_OPCODE_TXD_LOGICAL)
+         return src[TEX_LOGICAL_SRC_GRAD_COMPONENTS].ud;
       /* Texture offset. */
-      else if (i == 7)
+      else if (i == TEX_LOGICAL_SRC_OFFSET_VALUE)
          return 2;
       /* MCS */
-      else if (i == 5 && opcode == SHADER_OPCODE_TXF_CMS_W_LOGICAL)
+      else if (i == TEX_LOGICAL_SRC_MCS && opcode == SHADER_OPCODE_TXF_CMS_W_LOGICAL)
          return 2;
       else
          return 1;
@@ -1617,9 +1673,6 @@ fs_visitor::assign_vs_urb_setup()
    brw_vs_prog_data *vs_prog_data = (brw_vs_prog_data *) prog_data;
 
    assert(stage == MESA_SHADER_VERTEX);
-   int count = _mesa_bitcount_64(vs_prog_data->inputs_read);
-   if (vs_prog_data->uses_vertexid || vs_prog_data->uses_instanceid)
-      count++;
 
    /* Each attribute is 4 regs. */
    this->first_non_payload_grf += 4 * vs_prog_data->nr_attributes;
@@ -1627,6 +1680,21 @@ fs_visitor::assign_vs_urb_setup()
    assert(vs_prog_data->base.urb_read_length <= 15);
 
    /* Rewrite all ATTR file references to the hw grf that they land in. */
+   foreach_block_and_inst(block, fs_inst, inst, cfg) {
+      convert_attr_sources_to_hw_regs(inst);
+   }
+}
+
+void
+fs_visitor::assign_tes_urb_setup()
+{
+   assert(stage == MESA_SHADER_TESS_EVAL);
+
+   brw_vue_prog_data *vue_prog_data = (brw_vue_prog_data *) prog_data;
+
+   first_non_payload_grf += 8 * vue_prog_data->urb_read_length;
+
+   /* Rewrite all ATTR file references to HW_REGs. */
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       convert_attr_sources_to_hw_regs(inst);
    }
@@ -1999,11 +2067,9 @@ fs_visitor::demote_pull_constants()
 
          /* Generate a pull load into dst. */
          if (inst->src[i].reladdr) {
-            fs_reg indirect = ibld.vgrf(BRW_REGISTER_TYPE_D);
-            ibld.MUL(indirect, *inst->src[i].reladdr, brw_imm_d(4));
             VARYING_PULL_CONSTANT_LOAD(ibld, dst,
                                        brw_imm_ud(index),
-                                       indirect,
+                                       *inst->src[i].reladdr,
                                        pull_index * 4);
             inst->src[i].reladdr = NULL;
             inst->src[i].stride = 1;
@@ -2040,7 +2106,8 @@ fs_visitor::opt_algebraic()
             if (inst->dst.type != inst->src[0].type)
                assert(!"unimplemented: saturate mixed types");
 
-            if (brw_saturate_immediate(inst->dst.type, &inst->src[0])) {
+            if (brw_saturate_immediate(inst->dst.type,
+                                       &inst->src[0].as_brw_reg())) {
                inst->saturate = false;
                progress = true;
             }
@@ -3369,8 +3436,7 @@ fs_visitor::lower_integer_multiplication()
              */
             assert(mul->src[1].type == BRW_REGISTER_TYPE_D ||
                    mul->src[1].type == BRW_REGISTER_TYPE_UD);
-            mul->src[1].type = (type_is_signed(mul->src[1].type) ?
-                                BRW_REGISTER_TYPE_W : BRW_REGISTER_TYPE_UW);
+            mul->src[1].type = BRW_REGISTER_TYPE_UW;
             mul->src[1].stride *= 2;
 
          } else if (devinfo->gen == 7 && !devinfo->is_haswell &&
@@ -3402,6 +3468,36 @@ fs_visitor::lower_integer_multiplication()
 
       inst->remove(block);
       progress = true;
+   }
+
+   if (progress)
+      invalidate_live_intervals();
+
+   return progress;
+}
+
+bool
+fs_visitor::lower_minmax()
+{
+   assert(devinfo->gen < 6);
+
+   bool progress = false;
+
+   foreach_block_and_inst_safe(block, fs_inst, inst, cfg) {
+      const fs_builder ibld(this, block, inst);
+
+      if (inst->opcode == BRW_OPCODE_SEL &&
+          inst->predicate == BRW_PREDICATE_NONE) {
+         /* FIXME: Using CMP doesn't preserve the NaN propagation semantics of
+          *        the original SEL.L/GE instruction
+          */
+         ibld.CMP(ibld.null_reg_d(), inst->src[0], inst->src[1],
+                  inst->conditional_mod);
+         inst->predicate = BRW_PREDICATE_NORMAL;
+         inst->conditional_mod = BRW_CONDITIONAL_NONE;
+
+         progress = true;
+      }
    }
 
    if (progress)
@@ -3588,6 +3684,7 @@ lower_sampler_logical_send_gen4(const fs_builder &bld, fs_inst *inst, opcode op,
                                 const fs_reg &coordinate,
                                 const fs_reg &shadow_c,
                                 const fs_reg &lod, const fs_reg &lod2,
+                                const fs_reg &surface,
                                 const fs_reg &sampler,
                                 unsigned coord_components,
                                 unsigned grad_components)
@@ -3680,8 +3777,9 @@ lower_sampler_logical_send_gen4(const fs_builder &bld, fs_inst *inst, opcode op,
 
    inst->opcode = op;
    inst->src[0] = reg_undef;
-   inst->src[1] = sampler;
-   inst->resize_sources(2);
+   inst->src[1] = surface;
+   inst->src[2] = sampler;
+   inst->resize_sources(3);
    inst->base_mrf = msg_begin.nr;
    inst->mlen = msg_end.nr - msg_begin.nr;
    inst->header_size = 1;
@@ -3693,6 +3791,7 @@ lower_sampler_logical_send_gen5(const fs_builder &bld, fs_inst *inst, opcode op,
                                 const fs_reg &shadow_c,
                                 fs_reg lod, fs_reg lod2,
                                 const fs_reg &sample_index,
+                                const fs_reg &surface,
                                 const fs_reg &sampler,
                                 const fs_reg &offset_value,
                                 unsigned coord_components,
@@ -3775,8 +3874,9 @@ lower_sampler_logical_send_gen5(const fs_builder &bld, fs_inst *inst, opcode op,
 
    inst->opcode = op;
    inst->src[0] = reg_undef;
-   inst->src[1] = sampler;
-   inst->resize_sources(2);
+   inst->src[1] = surface;
+   inst->src[2] = sampler;
+   inst->resize_sources(3);
    inst->base_mrf = message.nr;
    inst->mlen = msg_end.nr - message.nr;
    inst->header_size = header_size;
@@ -3800,7 +3900,9 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
                                 const fs_reg &shadow_c,
                                 fs_reg lod, fs_reg lod2,
                                 const fs_reg &sample_index,
-                                const fs_reg &mcs, const fs_reg &sampler,
+                                const fs_reg &mcs,
+                                const fs_reg &surface,
+                                const fs_reg &sampler,
                                 fs_reg offset_value,
                                 unsigned coord_components,
                                 unsigned grad_components)
@@ -4003,8 +4105,9 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
    /* Generate the SEND. */
    inst->opcode = op;
    inst->src[0] = src_payload;
-   inst->src[1] = sampler;
-   inst->resize_sources(2);
+   inst->src[1] = surface;
+   inst->src[2] = sampler;
+   inst->resize_sources(3);
    inst->base_mrf = -1;
    inst->mlen = mlen;
    inst->header_size = header_size;
@@ -4017,31 +4120,34 @@ static void
 lower_sampler_logical_send(const fs_builder &bld, fs_inst *inst, opcode op)
 {
    const brw_device_info *devinfo = bld.shader->devinfo;
-   const fs_reg &coordinate = inst->src[0];
-   const fs_reg &shadow_c = inst->src[1];
-   const fs_reg &lod = inst->src[2];
-   const fs_reg &lod2 = inst->src[3];
-   const fs_reg &sample_index = inst->src[4];
-   const fs_reg &mcs = inst->src[5];
-   const fs_reg &sampler = inst->src[6];
-   const fs_reg &offset_value = inst->src[7];
-   assert(inst->src[8].file == IMM && inst->src[9].file == IMM);
-   const unsigned coord_components = inst->src[8].ud;
-   const unsigned grad_components = inst->src[9].ud;
+   const fs_reg &coordinate = inst->src[TEX_LOGICAL_SRC_COORDINATE];
+   const fs_reg &shadow_c = inst->src[TEX_LOGICAL_SRC_SHADOW_C];
+   const fs_reg &lod = inst->src[TEX_LOGICAL_SRC_LOD];
+   const fs_reg &lod2 = inst->src[TEX_LOGICAL_SRC_LOD2];
+   const fs_reg &sample_index = inst->src[TEX_LOGICAL_SRC_SAMPLE_INDEX];
+   const fs_reg &mcs = inst->src[TEX_LOGICAL_SRC_MCS];
+   const fs_reg &surface = inst->src[TEX_LOGICAL_SRC_SURFACE];
+   const fs_reg &sampler = inst->src[TEX_LOGICAL_SRC_SAMPLER];
+   const fs_reg &offset_value = inst->src[TEX_LOGICAL_SRC_OFFSET_VALUE];
+   assert(inst->src[TEX_LOGICAL_SRC_COORD_COMPONENTS].file == IMM);
+   const unsigned coord_components = inst->src[TEX_LOGICAL_SRC_COORD_COMPONENTS].ud;
+   assert(inst->src[TEX_LOGICAL_SRC_GRAD_COMPONENTS].file == IMM);
+   const unsigned grad_components = inst->src[TEX_LOGICAL_SRC_GRAD_COMPONENTS].ud;
 
    if (devinfo->gen >= 7) {
       lower_sampler_logical_send_gen7(bld, inst, op, coordinate,
                                       shadow_c, lod, lod2, sample_index,
-                                      mcs, sampler, offset_value,
+                                      mcs, surface, sampler, offset_value,
                                       coord_components, grad_components);
    } else if (devinfo->gen >= 5) {
       lower_sampler_logical_send_gen5(bld, inst, op, coordinate,
                                       shadow_c, lod, lod2, sample_index,
-                                      sampler, offset_value,
+                                      surface, sampler, offset_value,
                                       coord_components, grad_components);
    } else {
       lower_sampler_logical_send_gen4(bld, inst, op, coordinate,
-                                      shadow_c, lod, lod2, sampler,
+                                      shadow_c, lod, lod2,
+                                      surface, sampler,
                                       coord_components, grad_components);
    }
 }
@@ -4321,7 +4427,7 @@ get_lowered_simd_width(const struct brw_device_info *devinfo,
 
    case SHADER_OPCODE_TG4_OFFSET_LOGICAL: {
       /* gather4_po_c is unsupported in SIMD16 mode. */
-      const fs_reg &shadow_c = inst->src[1];
+      const fs_reg &shadow_c = inst->src[TEX_LOGICAL_SRC_SHADOW_C];
       return (shadow_c.file != BAD_FILE ? 8 : inst->exec_size);
    }
    case SHADER_OPCODE_TXL_LOGICAL:
@@ -4330,7 +4436,7 @@ get_lowered_simd_width(const struct brw_device_info *devinfo,
        * Gen4-6 can't support TXL and TXB with shadow comparison in SIMD16
        * mode because the message exceeds the maximum length of 11.
        */
-      const fs_reg &shadow_c = inst->src[1];
+      const fs_reg &shadow_c = inst->src[TEX_LOGICAL_SRC_SHADOW_C];
       if (devinfo->gen == 4 && shadow_c.file == BAD_FILE)
          return 16;
       else if (devinfo->gen < 7 && shadow_c.file != BAD_FILE)
@@ -4353,7 +4459,8 @@ get_lowered_simd_width(const struct brw_device_info *devinfo,
        * circumstances it can end up with a message that is too long in SIMD16
        * mode.
        */
-      const unsigned coord_components = inst->src[8].ud;
+      const unsigned coord_components =
+         inst->src[TEX_LOGICAL_SRC_COORD_COMPONENTS].ud;
       /* First three arguments are the sample index and the two arguments for
        * the MCS data.
        */
@@ -4622,6 +4729,8 @@ fs_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
    case IMM:
       unreachable("not reached");
    }
+   if (inst->dst.stride != 1)
+      fprintf(file, "<%u>", inst->dst.stride);
    fprintf(file, ":%s, ", brw_reg_type_letters(inst->dst.type));
 
    for (int i = 0; i < inst->sources; i++) {
@@ -4661,7 +4770,7 @@ fs_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
       case IMM:
          switch (inst->src[i].type) {
          case BRW_REGISTER_TYPE_F:
-            fprintf(file, "%ff", inst->src[i].f);
+            fprintf(file, "%-gf", inst->src[i].f);
             break;
          case BRW_REGISTER_TYPE_W:
          case BRW_REGISTER_TYPE_D:
@@ -4709,6 +4818,16 @@ fs_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
          fprintf(file, "|");
 
       if (inst->src[i].file != IMM) {
+         unsigned stride;
+         if (inst->src[i].file == ARF || inst->src[i].file == FIXED_GRF) {
+            unsigned hstride = inst->src[i].hstride;
+            stride = (hstride == 0 ? 0 : (1 << (hstride - 1)));
+         } else {
+            stride = inst->src[i].stride;
+         }
+         if (stride != 1)
+            fprintf(file, "<%u>", stride);
+
          fprintf(file, ":%s", brw_reg_type_letters(inst->src[i].type));
       }
 
@@ -4760,10 +4879,12 @@ fs_visitor::get_instruction_generating_reg(fs_inst *start,
 }
 
 void
-fs_visitor::setup_payload_gen6()
+fs_visitor::setup_fs_payload_gen6()
 {
-   bool uses_depth =
-      (nir->info.inputs_read & (1 << VARYING_SLOT_POS)) != 0;
+   assert(stage == MESA_SHADER_FRAGMENT);
+   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
+   brw_wm_prog_key *key = (brw_wm_prog_key*) this->key;
+
    unsigned barycentric_interp_modes =
       (stage == MESA_SHADER_FRAGMENT) ?
       ((brw_wm_prog_data*) this->prog_data)->barycentric_interp_modes : 0;
@@ -4792,7 +4913,9 @@ fs_visitor::setup_payload_gen6()
    }
 
    /* R27: interpolated depth if uses source depth */
-   if (uses_depth) {
+   prog_data->uses_src_depth =
+      (nir->info.inputs_read & (1 << VARYING_SLOT_POS)) != 0;
+   if (prog_data->uses_src_depth) {
       payload.source_depth_reg = payload.num_regs;
       payload.num_regs++;
       if (dispatch_width == 16) {
@@ -4800,8 +4923,11 @@ fs_visitor::setup_payload_gen6()
          payload.num_regs++;
       }
    }
+
    /* R29: interpolated W set if GEN6_WM_USES_SOURCE_W. */
-   if (uses_depth) {
+   prog_data->uses_src_w =
+      (nir->info.inputs_read & (1 << VARYING_SLOT_POS)) != 0;
+   if (prog_data->uses_src_w) {
       payload.source_w_reg = payload.num_regs;
       payload.num_regs++;
       if (dispatch_width == 16) {
@@ -4810,19 +4936,17 @@ fs_visitor::setup_payload_gen6()
       }
    }
 
-   if (stage == MESA_SHADER_FRAGMENT) {
-      brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
-      brw_wm_prog_key *key = (brw_wm_prog_key*) this->key;
-      prog_data->uses_pos_offset = key->compute_pos_offset;
-      /* R31: MSAA position offsets. */
-      if (prog_data->uses_pos_offset) {
-         payload.sample_pos_reg = payload.num_regs;
-         payload.num_regs++;
-      }
+   prog_data->uses_pos_offset = key->compute_pos_offset;
+   /* R31: MSAA position offsets. */
+   if (prog_data->uses_pos_offset) {
+      payload.sample_pos_reg = payload.num_regs;
+      payload.num_regs++;
    }
 
    /* R32: MSAA input coverage mask */
-   if (nir->info.system_values_read & SYSTEM_BIT_SAMPLE_MASK_IN) {
+   prog_data->uses_sample_mask =
+      (nir->info.system_values_read & SYSTEM_BIT_SAMPLE_MASK_IN) != 0;
+   if (prog_data->uses_sample_mask) {
       assert(devinfo->gen >= 7);
       payload.sample_mask_in_reg = payload.num_regs;
       payload.num_regs++;
@@ -4991,7 +5115,7 @@ fs_visitor::optimize()
 
    if (unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER)) {
       char filename[64];
-      snprintf(filename, 64, "%s%d-%s-00-start",
+      snprintf(filename, 64, "%s%d-%s-00-00-start",
                stage_abbrev, dispatch_width, nir->info.name);
 
       backend_shader::dump_instructions(filename);
@@ -5043,6 +5167,13 @@ fs_visitor::optimize()
 
    OPT(opt_combine_constants);
    OPT(lower_integer_multiplication);
+
+   if (devinfo->gen <= 5 && OPT(lower_minmax)) {
+      OPT(opt_cmod_propagation);
+      OPT(opt_cse);
+      OPT(opt_copy_propagate);
+      OPT(dead_code_eliminate);
+   }
 
    lower_uniform_pull_constant_loads();
 
@@ -5168,6 +5299,40 @@ fs_visitor::run_vs(gl_clip_plane *clip_planes)
 }
 
 bool
+fs_visitor::run_tes()
+{
+   assert(stage == MESA_SHADER_TESS_EVAL);
+
+   /* R0: thread header, R1-3: gl_TessCoord.xyz, R4: URB handles */
+   payload.num_regs = 5;
+
+   if (shader_time_index >= 0)
+      emit_shader_time_begin();
+
+   emit_nir_code();
+
+   if (failed)
+      return false;
+
+   emit_urb_writes();
+
+   if (shader_time_index >= 0)
+      emit_shader_time_end();
+
+   calculate_cfg();
+
+   optimize();
+
+   assign_curb_setup();
+   assign_tes_urb_setup();
+
+   fixup_3src_null_dest();
+   allocate_registers();
+
+   return !failed;
+}
+
+bool
 fs_visitor::run_gs()
 {
    assert(stage == MESA_SHADER_GEOMETRY);
@@ -5225,9 +5390,9 @@ fs_visitor::run_fs(bool do_rep_send)
    assert(stage == MESA_SHADER_FRAGMENT);
 
    if (devinfo->gen >= 6)
-      setup_payload_gen6();
+      setup_fs_payload_gen6();
    else
-      setup_payload_gen4();
+      setup_fs_payload_gen4();
 
    if (0) {
       emit_dummy_fs();
@@ -5419,13 +5584,18 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
                void *mem_ctx,
                const struct brw_wm_prog_key *key,
                struct brw_wm_prog_data *prog_data,
-               const nir_shader *shader,
+               const nir_shader *src_shader,
                struct gl_program *prog,
                int shader_time_index8, int shader_time_index16,
                bool use_rep_send,
                unsigned *final_assembly_size,
                char **error_str)
 {
+   nir_shader *shader = nir_shader_clone(mem_ctx, src_shader);
+   shader = brw_nir_apply_sampler_key(shader, compiler->devinfo, &key->tex,
+                                      true);
+   shader = brw_postprocess_nir(shader, compiler->devinfo, true);
+
    /* key->alpha_test_func means simulating alpha testing via discards,
     * so the shader definitely kills pixels.
     */
@@ -5501,42 +5671,6 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
    return g.get_assembly(final_assembly_size);
 }
 
-void
-brw_cs_fill_local_id_payload(const struct brw_cs_prog_data *prog_data,
-                             void *buffer, uint32_t threads, uint32_t stride)
-{
-   if (prog_data->local_invocation_id_regs == 0)
-      return;
-
-   /* 'stride' should be an integer number of registers, that is, a multiple
-    * of 32 bytes.
-    */
-   assert(stride % 32 == 0);
-
-   unsigned x = 0, y = 0, z = 0;
-   for (unsigned t = 0; t < threads; t++) {
-      uint32_t *param = (uint32_t *) buffer + stride * t / 4;
-
-      for (unsigned i = 0; i < prog_data->simd_size; i++) {
-         param[0 * prog_data->simd_size + i] = x;
-         param[1 * prog_data->simd_size + i] = y;
-         param[2 * prog_data->simd_size + i] = z;
-
-         x++;
-         if (x == prog_data->local_size[0]) {
-            x = 0;
-            y++;
-            if (y == prog_data->local_size[1]) {
-               y = 0;
-               z++;
-               if (z == prog_data->local_size[2])
-                  z = 0;
-            }
-         }
-      }
-   }
-}
-
 fs_reg *
 fs_visitor::emit_cs_local_invocation_id_setup()
 {
@@ -5579,11 +5713,16 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
                void *mem_ctx,
                const struct brw_cs_prog_key *key,
                struct brw_cs_prog_data *prog_data,
-               const nir_shader *shader,
+               const nir_shader *src_shader,
                int shader_time_index,
                unsigned *final_assembly_size,
                char **error_str)
 {
+   nir_shader *shader = nir_shader_clone(mem_ctx, src_shader);
+   shader = brw_nir_apply_sampler_key(shader, compiler->devinfo, &key->tex,
+                                      true);
+   shader = brw_postprocess_nir(shader, compiler->devinfo, true);
+
    prog_data->local_size[0] = shader->info.cs.local_size[0];
    prog_data->local_size[1] = shader->info.cs.local_size[1];
    prog_data->local_size[2] = shader->info.cs.local_size[2];
@@ -5653,4 +5792,40 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
    g.generate_code(cfg, prog_data->simd_size);
 
    return g.get_assembly(final_assembly_size);
+}
+
+void
+brw_cs_fill_local_id_payload(const struct brw_cs_prog_data *prog_data,
+                             void *buffer, uint32_t threads, uint32_t stride)
+{
+   if (prog_data->local_invocation_id_regs == 0)
+      return;
+
+   /* 'stride' should be an integer number of registers, that is, a multiple
+    * of 32 bytes.
+    */
+   assert(stride % 32 == 0);
+
+   unsigned x = 0, y = 0, z = 0;
+   for (unsigned t = 0; t < threads; t++) {
+      uint32_t *param = (uint32_t *) buffer + stride * t / 4;
+
+      for (unsigned i = 0; i < prog_data->simd_size; i++) {
+         param[0 * prog_data->simd_size + i] = x;
+         param[1 * prog_data->simd_size + i] = y;
+         param[2 * prog_data->simd_size + i] = z;
+
+         x++;
+         if (x == prog_data->local_size[0]) {
+            x = 0;
+            y++;
+            if (y == prog_data->local_size[1]) {
+               y = 0;
+               z++;
+               if (z == prog_data->local_size[2])
+                  z = 0;
+            }
+         }
+      }
+   }
 }

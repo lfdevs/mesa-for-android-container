@@ -21,10 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#include "main/macros.h"
 #include "util/register_allocate.h"
 #include "brw_vec4.h"
-#include "brw_vs.h"
 #include "brw_cfg.h"
 
 using namespace brw;
@@ -220,6 +218,19 @@ vec4_visitor::reg_allocate()
 	 if (virtual_grf_interferes(i, j)) {
 	    ra_add_node_interference(g, i, j);
 	 }
+      }
+   }
+
+   /* Certain instructions can't safely use the same register for their
+    * sources and destination.  Add interference.
+    */
+   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
+      if (inst->dst.file == VGRF && inst->has_source_and_destination_hazard()) {
+         for (unsigned i = 0; i < 3; i++) {
+            if (inst->src[i].file == VGRF) {
+               ra_add_node_interference(g, inst->dst.nr, inst->src[i].nr);
+            }
+         }
       }
    }
 

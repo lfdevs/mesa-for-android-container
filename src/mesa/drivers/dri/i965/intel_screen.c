@@ -26,7 +26,6 @@
 #include <errno.h>
 #include <time.h>
 #include <unistd.h>
-#include "main/glheader.h"
 #include "main/context.h"
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
@@ -37,7 +36,7 @@
 #include "swrast/s_renderbuffer.h"
 #include "util/ralloc.h"
 #include "brw_shader.h"
-#include "glsl/nir/nir.h"
+#include "compiler/nir/nir.h"
 
 #include "utils.h"
 #include "xmlpool.h"
@@ -80,6 +79,7 @@ DRI_CONF_BEGIN
       DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN("false")
       DRI_CONF_DISABLE_GLSL_LINE_CONTINUATIONS("false")
       DRI_CONF_DISABLE_BLEND_FUNC_EXTENDED("false")
+      DRI_CONF_DUAL_COLOR_BLEND_BY_LOCATION("false")
       DRI_CONF_ALLOW_GLSL_EXTENSION_DIRECTIVE_MIDSHADER("false")
 
       DRI_CONF_OPT_BEGIN_B(shader_precompile, "true")
@@ -395,7 +395,7 @@ intel_create_image_from_name(__DRIscreen *screen,
        return NULL;
     }
 
-    return image;	
+    return image;
 }
 
 static __DRIimage *
@@ -530,7 +530,6 @@ intel_create_image(__DRIscreen *screen,
    if (image == NULL)
       return NULL;
 
-   
    cpp = _mesa_get_format_bytes(image->format);
    image->bo = drm_intel_bo_alloc_tiled(intelScreen->bufmgr, "image",
                                         width, height, cpp, &tiling,
@@ -1341,6 +1340,11 @@ set_max_gl_versions(struct intel_screen *screen)
    switch (screen->devinfo->gen) {
    case 9:
    case 8:
+      psp->max_gl_core_version = 33;
+      psp->max_gl_compat_version = 30;
+      psp->max_gl_es1_version = 11;
+      psp->max_gl_es2_version = 31;
+      break;
    case 7:
    case 6:
       psp->max_gl_core_version = 33;
@@ -1446,8 +1450,6 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
    if (INTEL_DEBUG & DEBUG_AUB)
       drm_intel_bufmgr_gem_set_aub_dump(intelScreen->bufmgr, true);
 
-   intelScreen->hw_must_use_separate_stencil = intelScreen->devinfo->gen >= 7;
-
    intelScreen->hw_has_swizzling = intel_detect_swizzling(intelScreen);
    intelScreen->hw_has_timestamp = intel_detect_timestamp(intelScreen);
 
@@ -1494,6 +1496,7 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
 
    intelScreen->compiler = brw_compiler_create(intelScreen,
                                                intelScreen->devinfo);
+   intelScreen->program_id = 1;
 
    if (intelScreen->devinfo->has_resource_streamer) {
       int val = -1;

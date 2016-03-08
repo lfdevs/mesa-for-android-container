@@ -147,6 +147,12 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
    if (nv_dbg)
       nouveau_mesa_debug = atoi(nv_dbg);
 
+   /* These must be set before any failure is possible, as the cleanup
+    * paths assume they're responsible for deleting them.
+    */
+   screen->drm = nouveau_drm(&dev->object);
+   screen->device = dev;
+
    /*
     * this is initialized to 1 in nouveau_drm_screen_create after screen
     * is fully constructed and added to the global screen list.
@@ -175,7 +181,6 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
                             data, size, &screen->channel);
    if (ret)
       return ret;
-   screen->device = dev;
 
    ret = nouveau_client_new(screen->device, &screen->client);
    if (ret)
@@ -229,6 +234,8 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 void
 nouveau_screen_fini(struct nouveau_screen *screen)
 {
+   int fd = screen->drm->fd;
+
    nouveau_mm_destroy(screen->mm_GART);
    nouveau_mm_destroy(screen->mm_VRAM);
 
@@ -238,6 +245,8 @@ nouveau_screen_fini(struct nouveau_screen *screen)
    nouveau_object_del(&screen->channel);
 
    nouveau_device_del(&screen->device);
+   nouveau_drm_del(&screen->drm);
+   close(fd);
 }
 
 static void

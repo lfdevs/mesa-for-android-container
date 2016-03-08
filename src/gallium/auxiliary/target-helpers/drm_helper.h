@@ -226,14 +226,9 @@ pipe_freedreno_create_screen(int fd)
 struct pipe_screen *
 pipe_virgl_create_screen(int fd)
 {
-   struct virgl_winsys *vws;
    struct pipe_screen *screen;
 
-   vws = virgl_drm_winsys_create(fd);
-   if (!vws)
-      return NULL;
-
-   screen = virgl_create_screen(vws);
+   screen = virgl_drm_screen_create(fd);
    return screen ? debug_screen_wrap(screen) : NULL;
 }
 

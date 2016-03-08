@@ -2,5 +2,5 @@
 
 # Common list:
 NOT_INSTALLED := \
-	dri/usr/include/GL/wglext.h \
-	dri/usr/lib/*/libglapi.so
+	usr/include/GL/wglext.h \
+	usr/lib/*/libglapi.so

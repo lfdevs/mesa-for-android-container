@@ -47,7 +47,7 @@ static const struct {
 #define INFOX(prefix) { NULL, NULL, NULL, NULL, }
 
    [PIPE_QUERY_OCCLUSION_COUNTER]      = INFO(draw),
-   [PIPE_QUERY_OCCLUSION_PREDICATE]    = INFOX(draw),
+   [PIPE_QUERY_OCCLUSION_PREDICATE]    = INFO(draw),
    [PIPE_QUERY_TIMESTAMP]              = INFO(draw),
    [PIPE_QUERY_TIMESTAMP_DISJOINT]     = INFOX(draw),
    [PIPE_QUERY_TIME_ELAPSED]           = INFO(draw),
@@ -75,6 +75,7 @@ ilo_create_query(struct pipe_context *pipe, unsigned query_type, unsigned index)
 
    switch (query_type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_TIMESTAMP:
    case PIPE_QUERY_TIME_ELAPSED:
    case PIPE_QUERY_PRIMITIVES_GENERATED:
@@ -161,6 +162,12 @@ query_serialize(const struct ilo_query *q, void *buf)
       {
          uint64_t *dst = buf;
          dst[0] = q->result.u64;
+      }
+      break;
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
+      {
+         uint64_t *dst = buf;
+         dst[0] = !!q->result.u64;
       }
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:

@@ -32,6 +32,8 @@
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
 
+struct st_context;
+
 extern void
 st_print_current(void);
 
@@ -48,6 +50,7 @@ st_print_current(void);
 #define DEBUG_BUFFER    0x200
 #define DEBUG_WIREFRAME 0x400
 #define DEBUG_PRECOMPILE   0x800
+#define DEBUG_GREMEDY   0x1000
 
 #ifdef DEBUG
 extern int ST_DEBUG;
@@ -58,6 +61,8 @@ extern int ST_DEBUG;
 #endif
 
 void st_debug_init( void );
+
+void st_enable_debug_output(struct st_context *st, boolean enable);
 
 static inline void
 ST_DBG( unsigned flag, const char *fmt, ... )

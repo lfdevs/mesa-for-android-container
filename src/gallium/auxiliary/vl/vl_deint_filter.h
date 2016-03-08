@@ -38,7 +38,7 @@ struct vl_deint_filter
    struct pipe_vertex_buffer quad;
 
    void *rs_state;
-   void *blend;
+   void *blend[3];
    void *sampler[4];
    void *ves;
    void *vs;

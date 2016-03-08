@@ -298,10 +298,10 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     }
 
     /* Check for dma */
-    ws->info.r600_has_dma = FALSE;
+    ws->info.has_sdma = FALSE;
     /* DMA is disabled on R700. There is IB corruption and hangs. */
     if (ws->info.chip_class >= EVERGREEN && ws->info.drm_minor >= 27) {
-        ws->info.r600_has_dma = TRUE;
+        ws->info.has_sdma = TRUE;
     }
 
     /* Check for UVD and VCE */
@@ -351,11 +351,11 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
 
     /* Get max clock frequency info and convert it to MHz */
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SCLK, NULL,
-                         &ws->info.max_sclk);
-    ws->info.max_sclk /= 1000;
+                         &ws->info.max_shader_clock);
+    ws->info.max_shader_clock /= 1000;
 
     radeon_get_drm_value(ws->fd, RADEON_INFO_SI_BACKEND_ENABLED_MASK, NULL,
-                         &ws->info.si_backend_enabled_mask);
+                         &ws->info.enabled_rb_mask);
 
     ws->num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
@@ -372,56 +372,85 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
             return FALSE;
     }
     else if (ws->gen >= DRV_R600) {
+        uint32_t tiling_config = 0;
+
         if (ws->info.drm_minor >= 9 &&
             !radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_BACKENDS,
                                   "num backends",
-                                  &ws->info.r600_num_backends))
+                                  &ws->info.num_render_backends))
             return FALSE;
 
         /* get the GPU counter frequency, failure is not fatal */
         radeon_get_drm_value(ws->fd, RADEON_INFO_CLOCK_CRYSTAL_FREQ, NULL,
-                             &ws->info.r600_clock_crystal_freq);
+                             &ws->info.clock_crystal_freq);
 
         radeon_get_drm_value(ws->fd, RADEON_INFO_TILING_CONFIG, NULL,
-                             &ws->info.r600_tiling_config);
+                             &tiling_config);
+
+        ws->info.r600_num_banks =
+            ws->info.chip_class >= EVERGREEN ?
+                4 << ((tiling_config & 0xf0) >> 4) :
+                4 << ((tiling_config & 0x30) >> 4);
+
+        ws->info.pipe_interleave_bytes =
+            ws->info.chip_class >= EVERGREEN ?
+                256 << ((tiling_config & 0xf00) >> 8) :
+                256 << ((tiling_config & 0xc0) >> 6);
+
+        if (!ws->info.pipe_interleave_bytes)
+            ws->info.pipe_interleave_bytes =
+                ws->info.chip_class >= EVERGREEN ? 512 : 256;
 
         if (ws->info.drm_minor >= 11) {
             radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_TILE_PIPES, NULL,
-                                 &ws->info.r600_num_tile_pipes);
+                                 &ws->info.num_tile_pipes);
+
+            /* "num_tiles_pipes" must be equal to the number of pipes (Px) in the
+             * pipe config field of the GB_TILE_MODE array. Only one card (Tahiti)
+             * reports a different value (12). Fix it by setting what's in the
+             * GB_TILE_MODE array (8).
+             */
+            if (ws->gen == DRV_SI && ws->info.num_tile_pipes == 12)
+                ws->info.num_tile_pipes = 8;
 
             if (radeon_get_drm_value(ws->fd, RADEON_INFO_BACKEND_MAP, NULL,
-                                      &ws->info.r600_backend_map))
-                ws->info.r600_backend_map_valid = TRUE;
+                                      &ws->info.r600_gb_backend_map))
+                ws->info.r600_gb_backend_map_valid = TRUE;
+        } else {
+            ws->info.num_tile_pipes =
+                ws->info.chip_class >= EVERGREEN ?
+                    1 << (tiling_config & 0xf) :
+                    1 << ((tiling_config & 0xe) >> 1);
         }
 
-        ws->info.r600_virtual_address = FALSE;
+        ws->info.has_virtual_memory = FALSE;
         if (ws->info.drm_minor >= 13) {
             uint32_t ib_vm_max_size;
 
-            ws->info.r600_virtual_address = TRUE;
+            ws->info.has_virtual_memory = TRUE;
             if (!radeon_get_drm_value(ws->fd, RADEON_INFO_VA_START, NULL,
                                       &ws->va_start))
-                ws->info.r600_virtual_address = FALSE;
+                ws->info.has_virtual_memory = FALSE;
             if (!radeon_get_drm_value(ws->fd, RADEON_INFO_IB_VM_MAX_SIZE, NULL,
                                       &ib_vm_max_size))
-                ws->info.r600_virtual_address = FALSE;
+                ws->info.has_virtual_memory = FALSE;
             radeon_get_drm_value(ws->fd, RADEON_INFO_VA_UNMAP_WORKING, NULL,
                                  &ws->va_unmap_working);
         }
 	if (ws->gen == DRV_R600 && !debug_get_bool_option("RADEON_VA", FALSE))
-		ws->info.r600_virtual_address = FALSE;
+		ws->info.has_virtual_memory = FALSE;
     }
 
     /* Get max pipes, this is only needed for compute shaders.  All evergreen+
      * chips have at least 2 pipes, so we use 2 as a default. */
-    ws->info.r600_max_pipes = 2;
+    ws->info.r600_max_quad_pipes = 2;
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_PIPES, NULL,
-                         &ws->info.r600_max_pipes);
+                         &ws->info.r600_max_quad_pipes);
 
     /* All GPUs have at least one compute unit */
-    ws->info.max_compute_units = 1;
+    ws->info.num_good_compute_units = 1;
     radeon_get_drm_value(ws->fd, RADEON_INFO_ACTIVE_CU_COUNT, NULL,
-                         &ws->info.max_compute_units);
+                         &ws->info.num_good_compute_units);
 
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SE, NULL,
                          &ws->info.max_se);
@@ -494,11 +523,17 @@ static void radeon_winsys_destroy(struct radeon_winsys *rws)
     pipe_mutex_destroy(ws->cmask_owner_mutex);
     pipe_mutex_destroy(ws->cs_stack_lock);
 
-    ws->cman->destroy(ws->cman);
-    ws->kman->destroy(ws->kman);
+    pb_cache_deinit(&ws->bo_cache);
+
     if (ws->gen >= DRV_R600) {
         radeon_surface_manager_free(ws->surf_man);
     }
+
+    util_hash_table_destroy(ws->bo_names);
+    util_hash_table_destroy(ws->bo_handles);
+    util_hash_table_destroy(ws->bo_vas);
+    pipe_mutex_destroy(ws->bo_handles_mutex);
+    pipe_mutex_destroy(ws->bo_va_mutex);
 
     if (ws->fd >= 0)
         close(ws->fd);
@@ -698,6 +733,18 @@ static bool radeon_winsys_unref(struct radeon_winsys *ws)
     return destroy;
 }
 
+#define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
+
+static unsigned handle_hash(void *key)
+{
+    return PTR_TO_UINT(key);
+}
+
+static int handle_compare(void *key1, void *key2)
+{
+    return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
+}
+
 PUBLIC struct radeon_winsys *
 radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
 {
@@ -724,17 +771,12 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
     ws->fd = dup(fd);
 
     if (!do_winsys_init(ws))
-        goto fail;
+        goto fail1;
 
-    /* Create managers. */
-    ws->kman = radeon_bomgr_create(ws);
-    if (!ws->kman)
-        goto fail;
-
-    ws->cman = pb_cache_manager_create(ws->kman, 500000, 2.0f, 0,
-                                       MIN2(ws->info.vram_size, ws->info.gart_size));
-    if (!ws->cman)
-        goto fail;
+    pb_cache_init(&ws->bo_cache, 500000, 2.0f, 0,
+                  MIN2(ws->info.vram_size, ws->info.gart_size),
+                  radeon_bo_destroy,
+                  radeon_bo_can_reclaim);
 
     if (ws->gen >= DRV_R600) {
         ws->surf_man = radeon_surface_manager_new(ws->fd);
@@ -753,13 +795,24 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
     ws->base.query_value = radeon_query_value;
     ws->base.read_registers = radeon_read_registers;
 
-    radeon_bomgr_init_functions(ws);
+    radeon_drm_bo_init_functions(ws);
     radeon_drm_cs_init_functions(ws);
     radeon_surface_init_functions(ws);
 
     pipe_mutex_init(ws->hyperz_owner_mutex);
     pipe_mutex_init(ws->cmask_owner_mutex);
     pipe_mutex_init(ws->cs_stack_lock);
+
+    ws->bo_names = util_hash_table_create(handle_hash, handle_compare);
+    ws->bo_handles = util_hash_table_create(handle_hash, handle_compare);
+    ws->bo_vas = util_hash_table_create(handle_hash, handle_compare);
+    pipe_mutex_init(ws->bo_handles_mutex);
+    pipe_mutex_init(ws->bo_va_mutex);
+    ws->va_offset = ws->va_start;
+    list_inithead(&ws->va_holes);
+
+    /* TTM aligns the BO size to the CPU page size */
+    ws->size_align = sysconf(_SC_PAGESIZE);
 
     ws->ncs = 0;
     pipe_semaphore_init(&ws->cs_queued, 0);
@@ -788,11 +841,9 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
     return &ws->base;
 
 fail:
+    pb_cache_deinit(&ws->bo_cache);
+fail1:
     pipe_mutex_unlock(fd_tab_mutex);
-    if (ws->cman)
-        ws->cman->destroy(ws->cman);
-    if (ws->kman)
-        ws->kman->destroy(ws->kman);
     if (ws->surf_man)
         radeon_surface_manager_free(ws->surf_man);
     if (ws->fd >= 0)

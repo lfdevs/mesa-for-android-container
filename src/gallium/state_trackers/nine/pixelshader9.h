@@ -28,6 +28,7 @@
 #include "nine_state.h"
 #include "basetexture9.h"
 #include "nine_ff.h"
+#include "surface9.h"
 
 struct nine_lconstf;
 
@@ -92,6 +93,10 @@ NinePixelShader9_UpdateKey( struct NinePixelShader9 *ps,
         key |= ((uint64_t)state->rs[D3DRS_FOGTABLEMODE]) << 33;
     }
 
+    /* centroid interpolation automatically used for color ps inputs */
+    if (state->rt[0]->desc.MultiSampleType > 1)
+        key |= ((uint64_t)1) << 34;
+
     if (unlikely(ps->byte_code.version < 0x14)) {
         projected = nine_ff_get_projected_key(state);
         key |= ((uint64_t) projected) << 48;
@@ -121,7 +126,7 @@ NinePixelShader9_ctor( struct NinePixelShader9 *,
 void
 NinePixelShader9_dtor( struct NinePixelShader9 * );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NinePixelShader9_GetFunction( struct NinePixelShader9 *This,
                               void *pData,
                               UINT *pSizeOfData );

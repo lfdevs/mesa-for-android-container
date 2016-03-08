@@ -741,7 +741,9 @@ int virgl_encode_blit(struct virgl_context *ctx,
    virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_BLIT, 0, VIRGL_CMD_BLIT_SIZE));
    tmp = VIRGL_CMD_BLIT_S0_MASK(blit->mask) |
       VIRGL_CMD_BLIT_S0_FILTER(blit->filter) |
-      VIRGL_CMD_BLIT_S0_SCISSOR_ENABLE(blit->scissor_enable);
+      VIRGL_CMD_BLIT_S0_SCISSOR_ENABLE(blit->scissor_enable) |
+      VIRGL_CMD_BLIT_S0_RENDER_CONDITION_ENABLE(blit->render_condition_enable) |
+      VIRGL_CMD_BLIT_S0_ALPHA_BLEND(blit->alpha_blend);
    virgl_encoder_write_dword(ctx->cbuf, tmp);
    virgl_encoder_write_dword(ctx->cbuf, (blit->scissor.minx | blit->scissor.miny << 16));
    virgl_encoder_write_dword(ctx->cbuf, (blit->scissor.maxx | blit->scissor.maxy << 16));

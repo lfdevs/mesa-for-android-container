@@ -9,7 +9,7 @@ if not env['llvm']:
 
 env = env.Clone()
 
-env.MSVC2008Compat()
+env.MSVC2013Compat()
 
 llvmpipe = env.ConvenienceLibrary(
 	target = 'llvmpipe',

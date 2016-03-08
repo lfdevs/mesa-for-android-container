@@ -68,7 +68,9 @@ struct NineDevice9
     struct nine_state *update; /* state to update (&state / &record->state) */
     struct nine_state state;   /* device state */
 
+    struct list_head update_buffers;
     struct list_head update_textures;
+    struct list_head managed_buffers;
     struct list_head managed_textures;
 
     boolean is_recording;
@@ -128,6 +130,7 @@ struct NineDevice9
     struct u_upload_mgr *vertex_uploader;
     struct u_upload_mgr *index_uploader;
     struct u_upload_mgr *constbuf_uploader;
+    unsigned constbuf_alignment;
 
     struct nine_range_pool range_pool;
 
@@ -136,6 +139,10 @@ struct NineDevice9
     /* dummy vbo (containing 0 0 0 0) to bind if vertex shader input
      * is not bound to anything by the vertex declaration */
     struct pipe_resource *dummy_vbo;
+    BOOL device_needs_reset;
+    int minor_version_num;
+    long long available_texture_mem;
+    long long available_texture_limit;
 };
 static inline struct NineDevice9 *
 NineDevice9( void *data )
@@ -153,7 +160,8 @@ NineDevice9_new( struct pipe_screen *pScreen,
                  struct d3dadapter9_context *pCTX,
                  boolean ex,
                  D3DDISPLAYMODEEX *pFullscreenDisplayMode,
-                 struct NineDevice9 **ppOut );
+                 struct NineDevice9 **ppOut,
+                 int minorVersionNum );
 
 HRESULT
 NineDevice9_ctor( struct NineDevice9 *This,
@@ -166,12 +174,15 @@ NineDevice9_ctor( struct NineDevice9 *This,
                   ID3DPresentGroup *pPresentationGroup,
                   struct d3dadapter9_context *pCTX,
                   boolean ex,
-                  D3DDISPLAYMODEEX *pFullscreenDisplayMode );
+                  D3DDISPLAYMODEEX *pFullscreenDisplayMode,
+                  int minorVersionNum );
 
 void
 NineDevice9_dtor( struct NineDevice9 *This );
 
 /*** Nine private ***/
+void
+NineDevice9_SetDefaultState( struct NineDevice9 *This, boolean is_reset );
 
 struct pipe_screen *
 NineDevice9_GetScreen( struct NineDevice9 *This );
@@ -187,100 +198,100 @@ NineDevice9_GetCaps( struct NineDevice9 *This );
 
 /*** Direct3D public ***/
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_TestCooperativeLevel( struct NineDevice9 *This );
 
-UINT WINAPI
+UINT NINE_WINAPI
 NineDevice9_GetAvailableTextureMem( struct NineDevice9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_EvictManagedResources( struct NineDevice9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetDirect3D( struct NineDevice9 *This,
                          IDirect3D9 **ppD3D9 );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetDeviceCaps( struct NineDevice9 *This,
                            D3DCAPS9 *pCaps );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetDisplayMode( struct NineDevice9 *This,
                             UINT iSwapChain,
                             D3DDISPLAYMODE *pMode );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetCreationParameters( struct NineDevice9 *This,
                                    D3DDEVICE_CREATION_PARAMETERS *pParameters );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetCursorProperties( struct NineDevice9 *This,
                                  UINT XHotSpot,
                                  UINT YHotSpot,
                                  IDirect3DSurface9 *pCursorBitmap );
 
-void WINAPI
+void NINE_WINAPI
 NineDevice9_SetCursorPosition( struct NineDevice9 *This,
                                int X,
                                int Y,
                                DWORD Flags );
 
-BOOL WINAPI
+BOOL NINE_WINAPI
 NineDevice9_ShowCursor( struct NineDevice9 *This,
                         BOOL bShow );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateAdditionalSwapChain( struct NineDevice9 *This,
                                        D3DPRESENT_PARAMETERS *pPresentationParameters,
                                        IDirect3DSwapChain9 **pSwapChain );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetSwapChain( struct NineDevice9 *This,
                           UINT iSwapChain,
                           IDirect3DSwapChain9 **pSwapChain );
 
-UINT WINAPI
+UINT NINE_WINAPI
 NineDevice9_GetNumberOfSwapChains( struct NineDevice9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_Reset( struct NineDevice9 *This,
                    D3DPRESENT_PARAMETERS *pPresentationParameters );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_Present( struct NineDevice9 *This,
                      const RECT *pSourceRect,
                      const RECT *pDestRect,
                      HWND hDestWindowOverride,
                      const RGNDATA *pDirtyRegion );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetBackBuffer( struct NineDevice9 *This,
                            UINT iSwapChain,
                            UINT iBackBuffer,
                            D3DBACKBUFFER_TYPE Type,
                            IDirect3DSurface9 **ppBackBuffer );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetRasterStatus( struct NineDevice9 *This,
                              UINT iSwapChain,
                              D3DRASTER_STATUS *pRasterStatus );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetDialogBoxMode( struct NineDevice9 *This,
                               BOOL bEnableDialogs );
 
-void WINAPI
+void NINE_WINAPI
 NineDevice9_SetGammaRamp( struct NineDevice9 *This,
                           UINT iSwapChain,
                           DWORD Flags,
                           const D3DGAMMARAMP *pRamp );
 
-void WINAPI
+void NINE_WINAPI
 NineDevice9_GetGammaRamp( struct NineDevice9 *This,
                           UINT iSwapChain,
                           D3DGAMMARAMP *pRamp );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateTexture( struct NineDevice9 *This,
                            UINT Width,
                            UINT Height,
@@ -291,7 +302,7 @@ NineDevice9_CreateTexture( struct NineDevice9 *This,
                            IDirect3DTexture9 **ppTexture,
                            HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateVolumeTexture( struct NineDevice9 *This,
                                  UINT Width,
                                  UINT Height,
@@ -303,7 +314,7 @@ NineDevice9_CreateVolumeTexture( struct NineDevice9 *This,
                                  IDirect3DVolumeTexture9 **ppVolumeTexture,
                                  HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateCubeTexture( struct NineDevice9 *This,
                                UINT EdgeLength,
                                UINT Levels,
@@ -313,7 +324,7 @@ NineDevice9_CreateCubeTexture( struct NineDevice9 *This,
                                IDirect3DCubeTexture9 **ppCubeTexture,
                                HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateVertexBuffer( struct NineDevice9 *This,
                                 UINT Length,
                                 DWORD Usage,
@@ -322,7 +333,7 @@ NineDevice9_CreateVertexBuffer( struct NineDevice9 *This,
                                 IDirect3DVertexBuffer9 **ppVertexBuffer,
                                 HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateIndexBuffer( struct NineDevice9 *This,
                                UINT Length,
                                DWORD Usage,
@@ -331,7 +342,7 @@ NineDevice9_CreateIndexBuffer( struct NineDevice9 *This,
                                IDirect3DIndexBuffer9 **ppIndexBuffer,
                                HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateRenderTarget( struct NineDevice9 *This,
                                 UINT Width,
                                 UINT Height,
@@ -342,7 +353,7 @@ NineDevice9_CreateRenderTarget( struct NineDevice9 *This,
                                 IDirect3DSurface9 **ppSurface,
                                 HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateDepthStencilSurface( struct NineDevice9 *This,
                                        UINT Width,
                                        UINT Height,
@@ -353,29 +364,29 @@ NineDevice9_CreateDepthStencilSurface( struct NineDevice9 *This,
                                        IDirect3DSurface9 **ppSurface,
                                        HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_UpdateSurface( struct NineDevice9 *This,
                            IDirect3DSurface9 *pSourceSurface,
                            const RECT *pSourceRect,
                            IDirect3DSurface9 *pDestinationSurface,
                            const POINT *pDestPoint );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_UpdateTexture( struct NineDevice9 *This,
                            IDirect3DBaseTexture9 *pSourceTexture,
                            IDirect3DBaseTexture9 *pDestinationTexture );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetRenderTargetData( struct NineDevice9 *This,
                                  IDirect3DSurface9 *pRenderTarget,
                                  IDirect3DSurface9 *pDestSurface );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetFrontBufferData( struct NineDevice9 *This,
                                 UINT iSwapChain,
                                 IDirect3DSurface9 *pDestSurface );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_StretchRect( struct NineDevice9 *This,
                          IDirect3DSurface9 *pSourceSurface,
                          const RECT *pSourceRect,
@@ -383,13 +394,13 @@ NineDevice9_StretchRect( struct NineDevice9 *This,
                          const RECT *pDestRect,
                          D3DTEXTUREFILTERTYPE Filter );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_ColorFill( struct NineDevice9 *This,
                        IDirect3DSurface9 *pSurface,
                        const RECT *pRect,
                        D3DCOLOR color );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateOffscreenPlainSurface( struct NineDevice9 *This,
                                          UINT Width,
                                          UINT Height,
@@ -398,31 +409,31 @@ NineDevice9_CreateOffscreenPlainSurface( struct NineDevice9 *This,
                                          IDirect3DSurface9 **ppSurface,
                                          HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetRenderTarget( struct NineDevice9 *This,
                              DWORD RenderTargetIndex,
                              IDirect3DSurface9 *pRenderTarget );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetRenderTarget( struct NineDevice9 *This,
                              DWORD RenderTargetIndex,
                              IDirect3DSurface9 **ppRenderTarget );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetDepthStencilSurface( struct NineDevice9 *This,
                                     IDirect3DSurface9 *pNewZStencil );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetDepthStencilSurface( struct NineDevice9 *This,
                                     IDirect3DSurface9 **ppZStencilSurface );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_BeginScene( struct NineDevice9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_EndScene( struct NineDevice9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_Clear( struct NineDevice9 *This,
                    DWORD Count,
                    const D3DRECT *pRects,
@@ -431,182 +442,182 @@ NineDevice9_Clear( struct NineDevice9 *This,
                    float Z,
                    DWORD Stencil );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetTransform( struct NineDevice9 *This,
                           D3DTRANSFORMSTATETYPE State,
                           const D3DMATRIX *pMatrix );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetTransform( struct NineDevice9 *This,
                           D3DTRANSFORMSTATETYPE State,
                           D3DMATRIX *pMatrix );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_MultiplyTransform( struct NineDevice9 *This,
                                D3DTRANSFORMSTATETYPE State,
                                const D3DMATRIX *pMatrix );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetViewport( struct NineDevice9 *This,
                          const D3DVIEWPORT9 *pViewport );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetViewport( struct NineDevice9 *This,
                          D3DVIEWPORT9 *pViewport );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetMaterial( struct NineDevice9 *This,
                          const D3DMATERIAL9 *pMaterial );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetMaterial( struct NineDevice9 *This,
                          D3DMATERIAL9 *pMaterial );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetLight( struct NineDevice9 *This,
                       DWORD Index,
                       const D3DLIGHT9 *pLight );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetLight( struct NineDevice9 *This,
                       DWORD Index,
                       D3DLIGHT9 *pLight );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_LightEnable( struct NineDevice9 *This,
                          DWORD Index,
                          BOOL Enable );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetLightEnable( struct NineDevice9 *This,
                             DWORD Index,
                             BOOL *pEnable );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetClipPlane( struct NineDevice9 *This,
                           DWORD Index,
                           const float *pPlane );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetClipPlane( struct NineDevice9 *This,
                           DWORD Index,
                           float *pPlane );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetRenderState( struct NineDevice9 *This,
                             D3DRENDERSTATETYPE State,
                             DWORD Value );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetRenderState( struct NineDevice9 *This,
                             D3DRENDERSTATETYPE State,
                             DWORD *pValue );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateStateBlock( struct NineDevice9 *This,
                               D3DSTATEBLOCKTYPE Type,
                               IDirect3DStateBlock9 **ppSB );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_BeginStateBlock( struct NineDevice9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_EndStateBlock( struct NineDevice9 *This,
                            IDirect3DStateBlock9 **ppSB );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetClipStatus( struct NineDevice9 *This,
                            const D3DCLIPSTATUS9 *pClipStatus );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetClipStatus( struct NineDevice9 *This,
                            D3DCLIPSTATUS9 *pClipStatus );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetTexture( struct NineDevice9 *This,
                         DWORD Stage,
                         IDirect3DBaseTexture9 **ppTexture );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetTexture( struct NineDevice9 *This,
                         DWORD Stage,
                         IDirect3DBaseTexture9 *pTexture );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetTextureStageState( struct NineDevice9 *This,
                                   DWORD Stage,
                                   D3DTEXTURESTAGESTATETYPE Type,
                                   DWORD *pValue );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetTextureStageState( struct NineDevice9 *This,
                                   DWORD Stage,
                                   D3DTEXTURESTAGESTATETYPE Type,
                                   DWORD Value );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetSamplerState( struct NineDevice9 *This,
                              DWORD Sampler,
                              D3DSAMPLERSTATETYPE Type,
                              DWORD *pValue );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetSamplerState( struct NineDevice9 *This,
                              DWORD Sampler,
                              D3DSAMPLERSTATETYPE Type,
                              DWORD Value );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_ValidateDevice( struct NineDevice9 *This,
                             DWORD *pNumPasses );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetPaletteEntries( struct NineDevice9 *This,
                                UINT PaletteNumber,
                                const PALETTEENTRY *pEntries );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetPaletteEntries( struct NineDevice9 *This,
                                UINT PaletteNumber,
                                PALETTEENTRY *pEntries );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetCurrentTexturePalette( struct NineDevice9 *This,
                                       UINT PaletteNumber );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetCurrentTexturePalette( struct NineDevice9 *This,
                                       UINT *PaletteNumber );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetScissorRect( struct NineDevice9 *This,
                             const RECT *pRect );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetScissorRect( struct NineDevice9 *This,
                             RECT *pRect );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetSoftwareVertexProcessing( struct NineDevice9 *This,
                                          BOOL bSoftware );
 
-BOOL WINAPI
+BOOL NINE_WINAPI
 NineDevice9_GetSoftwareVertexProcessing( struct NineDevice9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetNPatchMode( struct NineDevice9 *This,
                            float nSegments );
 
-float WINAPI
+float NINE_WINAPI
 NineDevice9_GetNPatchMode( struct NineDevice9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_DrawPrimitive( struct NineDevice9 *This,
                            D3DPRIMITIVETYPE PrimitiveType,
                            UINT StartVertex,
                            UINT PrimitiveCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_DrawIndexedPrimitive( struct NineDevice9 *This,
                                   D3DPRIMITIVETYPE PrimitiveType,
                                   INT BaseVertexIndex,
@@ -615,14 +626,14 @@ NineDevice9_DrawIndexedPrimitive( struct NineDevice9 *This,
                                   UINT startIndex,
                                   UINT primCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
                              D3DPRIMITIVETYPE PrimitiveType,
                              UINT PrimitiveCount,
                              const void *pVertexStreamZeroData,
                              UINT VertexStreamZeroStride );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
                                     D3DPRIMITIVETYPE PrimitiveType,
                                     UINT MinVertexIndex,
@@ -633,7 +644,7 @@ NineDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
                                     const void *pVertexStreamZeroData,
                                     UINT VertexStreamZeroStride );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_ProcessVertices( struct NineDevice9 *This,
                              UINT SrcStartIndex,
                              UINT DestIndex,
@@ -642,175 +653,175 @@ NineDevice9_ProcessVertices( struct NineDevice9 *This,
                              IDirect3DVertexDeclaration9 *pVertexDecl,
                              DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateVertexDeclaration( struct NineDevice9 *This,
                                      const D3DVERTEXELEMENT9 *pVertexElements,
                                      IDirect3DVertexDeclaration9 **ppDecl );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetVertexDeclaration( struct NineDevice9 *This,
                                   IDirect3DVertexDeclaration9 *pDecl );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetVertexDeclaration( struct NineDevice9 *This,
                                   IDirect3DVertexDeclaration9 **ppDecl );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetFVF( struct NineDevice9 *This,
                     DWORD FVF );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetFVF( struct NineDevice9 *This,
                     DWORD *pFVF );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateVertexShader( struct NineDevice9 *This,
                                 const DWORD *pFunction,
                                 IDirect3DVertexShader9 **ppShader );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetVertexShader( struct NineDevice9 *This,
                              IDirect3DVertexShader9 *pShader );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetVertexShader( struct NineDevice9 *This,
                              IDirect3DVertexShader9 **ppShader );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       const float *pConstantData,
                                       UINT Vector4fCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetVertexShaderConstantF( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       float *pConstantData,
                                       UINT Vector4fCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       const int *pConstantData,
                                       UINT Vector4iCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetVertexShaderConstantI( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       int *pConstantData,
                                       UINT Vector4iCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       const BOOL *pConstantData,
                                       UINT BoolCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetVertexShaderConstantB( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       BOOL *pConstantData,
                                       UINT BoolCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetStreamSource( struct NineDevice9 *This,
                              UINT StreamNumber,
                              IDirect3DVertexBuffer9 *pStreamData,
                              UINT OffsetInBytes,
                              UINT Stride );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetStreamSource( struct NineDevice9 *This,
                              UINT StreamNumber,
                              IDirect3DVertexBuffer9 **ppStreamData,
                              UINT *pOffsetInBytes,
                              UINT *pStride );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetStreamSourceFreq( struct NineDevice9 *This,
                                  UINT StreamNumber,
                                  UINT Setting );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetStreamSourceFreq( struct NineDevice9 *This,
                                  UINT StreamNumber,
                                  UINT *pSetting );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetIndices( struct NineDevice9 *This,
                         IDirect3DIndexBuffer9 *pIndexData );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetIndices( struct NineDevice9 *This,
                         IDirect3DIndexBuffer9 **ppIndexData /*,
                         UINT *pBaseVertexIndex */ );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreatePixelShader( struct NineDevice9 *This,
                                const DWORD *pFunction,
                                IDirect3DPixelShader9 **ppShader );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetPixelShader( struct NineDevice9 *This,
                             IDirect3DPixelShader9 *pShader );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetPixelShader( struct NineDevice9 *This,
                             IDirect3DPixelShader9 **ppShader );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      const float *pConstantData,
                                      UINT Vector4fCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetPixelShaderConstantF( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      float *pConstantData,
                                      UINT Vector4fCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      const int *pConstantData,
                                      UINT Vector4iCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetPixelShaderConstantI( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      int *pConstantData,
                                      UINT Vector4iCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_SetPixelShaderConstantB( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      const BOOL *pConstantData,
                                      UINT BoolCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_GetPixelShaderConstantB( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      BOOL *pConstantData,
                                      UINT BoolCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_DrawRectPatch( struct NineDevice9 *This,
                            UINT Handle,
                            const float *pNumSegs,
                            const D3DRECTPATCH_INFO *pRectPatchInfo );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_DrawTriPatch( struct NineDevice9 *This,
                           UINT Handle,
                           const float *pNumSegs,
                           const D3DTRIPATCH_INFO *pTriPatchInfo );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_DeletePatch( struct NineDevice9 *This,
                          UINT Handle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9_CreateQuery( struct NineDevice9 *This,
                          D3DQUERYTYPE Type,
                          IDirect3DQuery9 **ppQuery );

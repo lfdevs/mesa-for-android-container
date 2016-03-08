@@ -415,30 +415,6 @@ dd_context_sampler_view_destroy(struct pipe_context *_pipe,
    pipe->sampler_view_destroy(pipe, view);
 }
 
-static struct pipe_image_view *
-dd_context_create_image_view(struct pipe_context *_pipe,
-                             struct pipe_resource *resource,
-                             const struct pipe_image_view *templ)
-{
-   struct pipe_context *pipe = dd_context(_pipe)->pipe;
-   struct pipe_image_view *view =
-      pipe->create_image_view(pipe, resource, templ);
-
-   if (!view)
-      return NULL;
-   view->context = _pipe;
-   return view;
-}
-
-static void
-dd_context_image_view_destroy(struct pipe_context *_pipe,
-                              struct pipe_image_view *view)
-{
-   struct pipe_context *pipe = dd_context(_pipe)->pipe;
-
-   pipe->image_view_destroy(pipe, view);
-}
-
 static struct pipe_stream_output_target *
 dd_context_create_stream_output_target(struct pipe_context *_pipe,
                                        struct pipe_resource *res,
@@ -486,7 +462,7 @@ dd_context_set_sampler_views(struct pipe_context *_pipe, unsigned shader,
 static void
 dd_context_set_shader_images(struct pipe_context *_pipe, unsigned shader,
                              unsigned start, unsigned num,
-                             struct pipe_image_view **views)
+                             struct pipe_image_view *views)
 {
    struct dd_context *dctx = dd_context(_pipe);
    struct pipe_context *pipe = dctx->pipe;
@@ -744,8 +720,6 @@ dd_context_create(struct dd_screen *dscreen, struct pipe_context *pipe)
    CTX_INIT(sampler_view_destroy);
    CTX_INIT(create_surface);
    CTX_INIT(surface_destroy);
-   CTX_INIT(create_image_view);
-   CTX_INIT(image_view_destroy);
    CTX_INIT(transfer_map);
    CTX_INIT(transfer_flush_region);
    CTX_INIT(transfer_unmap);

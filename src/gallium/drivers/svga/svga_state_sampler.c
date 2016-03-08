@@ -90,7 +90,7 @@ svga_check_sampler_view_resource_collision(struct svga_context *svga,
  * Create a DX ShaderResourceSamplerView for the given pipe_sampler_view,
  * if needed.
  */
-static enum pipe_error
+enum pipe_error
 svga_validate_pipe_sampler_view(struct svga_context *svga,
                                 struct svga_pipe_sampler_view *sv)
 {
@@ -301,13 +301,21 @@ update_samplers(struct svga_context *svga, unsigned dirty )
       }
 
       if (count > 0) {
-         ret = SVGA3D_vgpu10_SetSamplers(svga->swc,
-                                         count,
-                                         0,                        /* start */
-                                         svga_shader_type(shader), /* type */
-                                         ids);
-         if (ret != PIPE_OK)
-            return ret;
+         if (count != svga->state.hw_draw.num_samplers[shader] ||
+             memcmp(ids, svga->state.hw_draw.samplers[shader],
+                    count * sizeof(ids[0])) != 0) {
+            /* HW state is really changing */
+            ret = SVGA3D_vgpu10_SetSamplers(svga->swc,
+                                            count,
+                                            0,                       /* start */
+                                            svga_shader_type(shader), /* type */
+                                            ids);
+            if (ret != PIPE_OK)
+               return ret;
+            memcpy(svga->state.hw_draw.samplers[shader], ids,
+                   count * sizeof(ids[0]));
+            svga->state.hw_draw.num_samplers[shader] = count;
+         }
       }
    }
 

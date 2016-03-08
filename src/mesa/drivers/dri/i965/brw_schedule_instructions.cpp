@@ -30,8 +30,6 @@
 #include "brw_vec4.h"
 #include "brw_cfg.h"
 #include "brw_shader.h"
-#include "glsl/nir/glsl_types.h"
-#include "glsl/ir_optimization.h"
 
 using namespace brw;
 
@@ -941,8 +939,9 @@ fs_instruction_scheduler::calculate_deps()
    foreach_in_list(schedule_node, n, &instructions) {
       fs_inst *inst = (fs_inst *)n->inst;
 
-      if (inst->opcode == FS_OPCODE_PLACEHOLDER_HALT ||
-         inst->has_side_effects())
+      if ((inst->opcode == FS_OPCODE_PLACEHOLDER_HALT ||
+           inst->has_side_effects()) &&
+          inst->opcode != FS_OPCODE_FB_WRITE)
          add_barrier_deps(n);
 
       /* read-after-write deps. */
@@ -1197,7 +1196,7 @@ vec4_instruction_scheduler::calculate_deps()
    foreach_in_list(schedule_node, n, &instructions) {
       vec4_instruction *inst = (vec4_instruction *)n->inst;
 
-      if (inst->has_side_effects())
+      if (inst->has_side_effects() && inst->opcode != FS_OPCODE_FB_WRITE)
          add_barrier_deps(n);
 
       /* read-after-write deps. */

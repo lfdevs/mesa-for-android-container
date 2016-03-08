@@ -140,7 +140,7 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
    /* Since we are going to write raw data to the miptree, we need to resolve
     * any pending fast color clears before we start.
     */
-   intel_miptree_resolve_color(brw, image->mt);
+   intel_miptree_resolve_color(brw, image->mt, 0);
 
    bo = image->mt->bo;
 

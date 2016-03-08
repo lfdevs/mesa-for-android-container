@@ -62,6 +62,7 @@ update_need_pipeline(struct svga_context *svga, unsigned dirty)
 {
    boolean need_pipeline = FALSE;
    struct svga_vertex_shader *vs = svga->curr.vs;
+   const char *reason = "";
 
    /* SVGA_NEW_RAST, SVGA_NEW_REDUCED_PRIMITIVE
     */
@@ -76,6 +77,20 @@ update_need_pipeline(struct svga_context *svga, unsigned dirty)
                  svga->curr.rast->need_pipeline_lines_str,
                  svga->curr.rast->need_pipeline_points_str);
       need_pipeline = TRUE;
+
+      switch (svga->curr.reduced_prim) {
+      case PIPE_PRIM_POINTS:
+         reason = svga->curr.rast->need_pipeline_points_str;
+         break;
+      case PIPE_PRIM_LINES:
+         reason = svga->curr.rast->need_pipeline_lines_str;
+         break;
+      case PIPE_PRIM_TRIANGLES:
+         reason = svga->curr.rast->need_pipeline_tris_str;
+         break;
+      default:
+         assert(!"Unexpected reduced prim type");
+      }
    }
 
    /* EDGEFLAGS
@@ -83,6 +98,7 @@ update_need_pipeline(struct svga_context *svga, unsigned dirty)
     if (vs && vs->base.info.writes_edgeflag) {
       SVGA_DBG(DEBUG_SWTNL, "%s: edgeflags\n", __FUNCTION__);
       need_pipeline = TRUE;
+      reason = "edge flags";
    }
 
    /* SVGA_NEW_FS, SVGA_NEW_RAST, SVGA_NEW_REDUCED_PRIMITIVE
@@ -104,6 +120,7 @@ update_need_pipeline(struct svga_context *svga, unsigned dirty)
           * point stage.
           */
          need_pipeline = TRUE;
+         reason = "point sprite coordinate generation";
       }
    }
 
@@ -115,6 +132,12 @@ update_need_pipeline(struct svga_context *svga, unsigned dirty)
    /* DEBUG */
    if (0 && svga->state.sw.need_pipeline)
       debug_printf("sw.need_pipeline = %d\n", svga->state.sw.need_pipeline);
+
+   if (svga->state.sw.need_pipeline) {
+      assert(reason);
+      pipe_debug_message(&svga->debug.callback, FALLBACK,
+                         "Using semi-fallback for %s", reason);
+   }
 
    return PIPE_OK;
 }

@@ -229,7 +229,8 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 			A3XX_HLSQ_CONTROL_0_REG_SPCONSTFULLUPDATE);
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_1_REG_VSTHREADSIZE(TWO_QUADS) |
 			A3XX_HLSQ_CONTROL_1_REG_VSSUPERTHREADENABLE |
-			COND(fp->frag_coord, A3XX_HLSQ_CONTROL_1_REG_ZWCOORD));
+			COND(fp->frag_coord, A3XX_HLSQ_CONTROL_1_REG_FRAGCOORDXYREGID(regid(0,0)) |
+					A3XX_HLSQ_CONTROL_1_REG_FRAGCOORDZWREGID(regid(0,2))));
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_2_REG_PRIMALLOCTHRESHOLD(31));
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_3_REG_REGID(fp->pos_regid));
 	OUT_RING(ring, A3XX_HLSQ_VS_CONTROL_REG_CONSTLENGTH(vp->constlen) |
@@ -254,17 +255,15 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 			COND(vpbuffer == CACHE, A3XX_SP_VS_CTRL_REG0_CACHEINVALID) |
 			A3XX_SP_VS_CTRL_REG0_HALFREGFOOTPRINT(vsi->max_half_reg + 1) |
 			A3XX_SP_VS_CTRL_REG0_FULLREGFOOTPRINT(vsi->max_reg + 1) |
-			A3XX_SP_VS_CTRL_REG0_INOUTREGOVERLAP(0) |
 			A3XX_SP_VS_CTRL_REG0_THREADSIZE(TWO_QUADS) |
 			A3XX_SP_VS_CTRL_REG0_SUPERTHREADMODE |
-			COND(vp->has_samp, A3XX_SP_VS_CTRL_REG0_PIXLODENABLE) |
 			A3XX_SP_VS_CTRL_REG0_LENGTH(vpbuffersz));
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG1_CONSTLENGTH(vp->constlen) |
 			A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(vp->total_in) |
 			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(MAX2(vp->constlen + 1, 0)));
 	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(pos_regid) |
 			A3XX_SP_VS_PARAM_REG_PSIZEREGID(psize_regid) |
-			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(align(fp->total_in, 4) / 4));
+			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(fp->varying_in));
 
 	for (i = 0, j = -1; (i < 8) && (j < (int)fp->inputs_count); i++) {
 		uint32_t reg = 0;
@@ -336,7 +335,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 				COND(fpbuffer == CACHE, A3XX_SP_FS_CTRL_REG0_CACHEINVALID) |
 				A3XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(fsi->max_half_reg + 1) |
 				A3XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(fsi->max_reg + 1) |
-				A3XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
+				A3XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP |
 				A3XX_SP_FS_CTRL_REG0_THREADSIZE(FOUR_QUADS) |
 				A3XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
 				COND(fp->has_samp > 0, A3XX_SP_FS_CTRL_REG0_PIXLODENABLE) |
@@ -387,23 +386,27 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 
 		/* figure out VARYING_INTERP / FLAT_SHAD register values: */
 		for (j = -1; (j = ir3_next_varying(fp, j)) < (int)fp->inputs_count; ) {
+			/* NOTE: varyings are packed, so if compmask is 0xb
+			 * then first, third, and fourth component occupy
+			 * three consecutive varying slots:
+			 */
+			unsigned compmask = fp->inputs[j].compmask;
 
 			/* TODO might be cleaner to just +8 in SP_VS_VPC_DST_REG
 			 * instead.. rather than -8 everywhere else..
 			 */
 			uint32_t inloc = fp->inputs[j].inloc - 8;
 
-			/* currently assuming varyings aligned to 4 (not
-			 * packed):
-			 */
-			debug_assert((inloc % 4) == 0);
-
 			if ((fp->inputs[j].interpolate == INTERP_QUALIFIER_FLAT) ||
 					(fp->inputs[j].rasterflat && emit->rasterflat)) {
 				uint32_t loc = inloc;
-				for (i = 0; i < 4; i++, loc++) {
-					vinterp[loc / 16] |= FLAT << ((loc % 16) * 2);
-					flatshade[loc / 32] |= 1 << (loc % 32);
+
+				for (i = 0; i < 4; i++) {
+					if (compmask & (1 << i)) {
+						vinterp[loc / 16] |= FLAT << ((loc % 16) * 2);
+						flatshade[loc / 32] |= 1 << (loc % 32);
+						loc++;
+					}
 				}
 			}
 
@@ -416,10 +419,31 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 				 * interpolation bits for .zw such that they become .01
 				 */
 				if (emit->sprite_coord_enable & texmask) {
-					vpsrepl[inloc / 16] |= (emit->sprite_coord_mode ? 0x0d : 0x09)
-							<< ((inloc % 16) * 2);
-					vinterp[(inloc + 2) / 16] |= 2 << (((inloc + 2) % 16) * 2);
-					vinterp[(inloc + 3) / 16] |= 3 << (((inloc + 3) % 16) * 2);
+					/* mask is two 2-bit fields, where:
+					 *   '01' -> S
+					 *   '10' -> T
+					 *   '11' -> 1 - T  (flip mode)
+					 */
+					unsigned mask = emit->sprite_coord_mode ? 0b1101 : 0b1001;
+					uint32_t loc = inloc;
+					if (compmask & 0x1) {
+						vpsrepl[loc / 16] |= ((mask >> 0) & 0x3) << ((loc % 16) * 2);
+						loc++;
+					}
+					if (compmask & 0x2) {
+						vpsrepl[loc / 16] |= ((mask >> 2) & 0x3) << ((loc % 16) * 2);
+						loc++;
+					}
+					if (compmask & 0x4) {
+						/* .z <- 0.0f */
+						vinterp[loc / 16] |= 0b10 << ((loc % 16) * 2);
+						loc++;
+					}
+					if (compmask & 0x8) {
+						/* .w <- 1.0f */
+						vinterp[loc / 16] |= 0b11 << ((loc % 16) * 2);
+						loc++;
+					}
 				}
 			}
 		}

@@ -43,13 +43,13 @@ rbug_resource_create(struct rbug_screen *rb_screen,
 {
    struct rbug_resource *rb_resource;
 
-   if(!resource)
+   if (!resource)
       goto error;
 
    assert(resource->screen == rb_screen->screen);
 
    rb_resource = CALLOC_STRUCT(rbug_resource);
-   if(!rb_resource)
+   if (!rb_resource)
       goto error;
 
    memcpy(&rb_resource->base, resource, sizeof(struct pipe_resource));
@@ -88,13 +88,13 @@ rbug_surface_create(struct rbug_context *rb_context,
 {
    struct rbug_surface *rb_surface;
 
-   if(!surface)
+   if (!surface)
       goto error;
 
    assert(surface->texture == rb_resource->resource);
 
    rb_surface = CALLOC_STRUCT(rbug_surface);
-   if(!rb_surface)
+   if (!rb_surface)
       goto error;
 
    memcpy(&rb_surface->base, surface, sizeof(struct pipe_surface));
@@ -165,13 +165,13 @@ rbug_transfer_create(struct rbug_context *rb_context,
 {
    struct rbug_transfer *rb_transfer;
 
-   if(!transfer)
+   if (!transfer)
       goto error;
 
    assert(transfer->resource == rb_resource->resource);
 
    rb_transfer = CALLOC_STRUCT(rbug_transfer);
-   if(!rb_transfer)
+   if (!rb_transfer)
       goto error;
 
    memcpy(&rb_transfer->base, transfer, sizeof(struct pipe_transfer));

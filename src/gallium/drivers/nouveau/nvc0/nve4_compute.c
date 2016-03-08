@@ -39,7 +39,7 @@ nve4_screen_compute_setup(struct nvc0_screen *screen,
 {
    struct nouveau_device *dev = screen->base.device;
    struct nouveau_object *chan = screen->base.channel;
-   unsigned i;
+   int i;
    int ret;
    uint32_t obj_class;
 
@@ -50,6 +50,9 @@ nve4_screen_compute_setup(struct nvc0_screen *screen,
       break;
    case 0xe0:
       obj_class = NVE4_COMPUTE_CLASS; /* GK104 */
+      break;
+   case 0x110:
+      obj_class = GM107_COMPUTE_CLASS;
       break;
    default:
       NOUVEAU_ERR("unsupported chipset: NV%02x\n", dev->chipset);
@@ -115,19 +118,20 @@ nve4_screen_compute_setup(struct nvc0_screen *screen,
    PUSH_DATA (push, NVC0_TSC_MAX_ENTRIES - 1);
 
    if (obj_class >= NVF0_COMPUTE_CLASS) {
-      BEGIN_NVC0(push, SUBC_COMPUTE(0x0248), 1);
-      PUSH_DATA (push, 0x100);
-      BEGIN_NIC0(push, SUBC_COMPUTE(0x0248), 63);
-      for (i = 63; i >= 1; --i)
+      /* The blob calls GK110_COMPUTE.FIRMWARE[0x6], along with the args (0x1)
+       * passed with GK110_COMPUTE.GRAPH.SCRATCH[0x2]. This is currently
+       * disabled because our firmware doesn't support these commands and the
+       * GPU hangs if they are used. */
+      BEGIN_NIC0(push, SUBC_COMPUTE(0x0248), 64);
+      for (i = 63; i >= 0; i--)
          PUSH_DATA(push, 0x38000 | i);
       IMMED_NVC0(push, SUBC_COMPUTE(NV50_GRAPH_SERIALIZE), 0);
-      IMMED_NVC0(push, SUBC_COMPUTE(0x518), 0);
    }
 
    BEGIN_NVC0(push, NVE4_COMPUTE(TEX_CB_INDEX), 1);
    PUSH_DATA (push, 0); /* does not interefere with 3D */
 
-   if (obj_class >= NVF0_COMPUTE_CLASS)
+   if (obj_class == NVF0_COMPUTE_CLASS)
       IMMED_NVC0(push, SUBC_COMPUTE(0x02c4), 1);
 
    /* MS sample coordinate offsets: these do not work with _ALT modes ! */
@@ -429,10 +433,7 @@ nve4_compute_alloc_launch_desc(struct nouveau_context *nv,
 }
 
 void
-nve4_launch_grid(struct pipe_context *pipe,
-                 const uint *block_layout, const uint *grid_layout,
-                 uint32_t label,
-                 const void *input)
+nve4_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
@@ -453,13 +454,14 @@ nve4_launch_grid(struct pipe_context *pipe,
    if (ret)
       goto out;
 
-   nve4_compute_setup_launch_desc(nvc0, desc, label, block_layout, grid_layout);
+   nve4_compute_setup_launch_desc(nvc0, desc, info->pc,
+                                  info->block, info->grid);
 #ifdef DEBUG
    if (debug_get_num_option("NV50_PROG_DEBUG", 0))
       nve4_compute_dump_launch_desc(desc);
 #endif
 
-   nve4_compute_upload_input(nvc0, input, block_layout, grid_layout);
+   nve4_compute_upload_input(nvc0, info->input, info->block, info->grid);
 
    /* upload descriptor and flush */
 #if 0

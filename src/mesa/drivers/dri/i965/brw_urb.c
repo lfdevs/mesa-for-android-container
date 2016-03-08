@@ -139,11 +139,11 @@ static void recalculate_urb_fence( struct brw_context *brw )
       brw->urb.sfsize = sfsize;
       brw->urb.vsize = vsize;
 
-      brw->urb.nr_vs_entries = limits[VS].preferred_nr_entries;	
-      brw->urb.nr_gs_entries = limits[GS].preferred_nr_entries;	
+      brw->urb.nr_vs_entries = limits[VS].preferred_nr_entries;
+      brw->urb.nr_gs_entries = limits[GS].preferred_nr_entries;
       brw->urb.nr_clip_entries = limits[CLP].preferred_nr_entries;
-      brw->urb.nr_sf_entries = limits[SF].preferred_nr_entries;	
-      brw->urb.nr_cs_entries = limits[CS].preferred_nr_entries;	
+      brw->urb.nr_sf_entries = limits[SF].preferred_nr_entries;
+      brw->urb.nr_cs_entries = limits[CS].preferred_nr_entries;
 
       brw->urb.constrained = 0;
 
@@ -168,18 +168,18 @@ static void recalculate_urb_fence( struct brw_context *brw )
       }
 
       if (!check_urb_layout(brw)) {
-	 brw->urb.nr_vs_entries = limits[VS].min_nr_entries;	
-	 brw->urb.nr_gs_entries = limits[GS].min_nr_entries;	
+	 brw->urb.nr_vs_entries = limits[VS].min_nr_entries;
+	 brw->urb.nr_gs_entries = limits[GS].min_nr_entries;
 	 brw->urb.nr_clip_entries = limits[CLP].min_nr_entries;
-	 brw->urb.nr_sf_entries = limits[SF].min_nr_entries;	
-	 brw->urb.nr_cs_entries = limits[CS].min_nr_entries;	
+	 brw->urb.nr_sf_entries = limits[SF].min_nr_entries;
+	 brw->urb.nr_cs_entries = limits[CS].min_nr_entries;
 
 	 /* Mark us as operating with constrained nr_entries, so that next
 	  * time we recalculate we'll resize the fences in the hope of
 	  * escaping constrained mode and getting back to normal performance.
 	  */
 	 brw->urb.constrained = 1;
-	
+
 	 if (!check_urb_layout(brw)) {
 	    /* This is impossible, given the maximal sizes of urb
 	     * entries and the values for minimum nr of entries
@@ -188,7 +188,7 @@ static void recalculate_urb_fence( struct brw_context *brw )
 	    fprintf(stderr, "couldn't calculate URB layout!\n");
 	    exit(1);
 	 }
-	
+
 	 if (unlikely(INTEL_DEBUG & (DEBUG_URB|DEBUG_PERF)))
 	    fprintf(stderr, "URB CONSTRAINED\n");
       }

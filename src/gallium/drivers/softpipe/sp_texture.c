@@ -435,7 +435,7 @@ softpipe_transfer_map(struct pipe_context *pipe,
       map = spr->data;
    }
 
-   if (map == NULL) {
+   if (!map) {
       pipe_resource_reference(&pt->resource, NULL);
       FREE(spt);
       return NULL;

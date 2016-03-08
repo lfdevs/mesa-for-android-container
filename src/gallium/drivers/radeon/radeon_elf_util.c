@@ -98,7 +98,8 @@ static void parse_relocs(Elf *elf, Elf_Data *relocs, Elf_Data *symbols,
 		symbol_name = elf_strptr(elf, symbol_sh_link, symbol.st_name);
 
 		reloc->offset = rel.r_offset;
-		reloc->name = strdup(symbol_name);
+		strncpy(reloc->name, symbol_name, sizeof(reloc->name)-1);
+		reloc->name[sizeof(reloc->name)-1] = 0;
 	}
 }
 
@@ -193,27 +194,4 @@ const unsigned char *radeon_shader_binary_config_start(
 		}
 	}
 	return binary->config;
-}
-
-void radeon_shader_binary_free_relocs(struct radeon_shader_reloc *relocs,
-					unsigned reloc_count)
-{
-	unsigned i;
-	for (i = 0; i < reloc_count; i++) {
-		FREE(relocs[i].name);
-	}
-	FREE(relocs);
-}
-
-void radeon_shader_binary_free_members(struct radeon_shader_binary *binary,
-					unsigned free_relocs)
-{
-	FREE(binary->code);
-	FREE(binary->config);
-	FREE(binary->rodata);
-
-	if (free_relocs) {
-		radeon_shader_binary_free_relocs(binary->relocs,
-						binary->reloc_count);
-	}
 }

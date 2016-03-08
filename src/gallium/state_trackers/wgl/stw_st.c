@@ -46,11 +46,6 @@ struct stw_st_framebuffer {
    unsigned texture_mask;
 };
 
-static inline struct stw_st_framebuffer *
-stw_st_framebuffer(struct st_framebuffer_iface *stfb)
-{
-   return (struct stw_st_framebuffer *) stfb;
-}
 
 
 /**

@@ -23,8 +23,8 @@
 
 #include "brw_vec4.h"
 #include "brw_cfg.h"
-#include "glsl/ir_uniform.h"
-#include "program/sampler.h"
+#include "brw_eu.h"
+#include "brw_program.h"
 
 namespace brw {
 
@@ -622,6 +622,7 @@ type_size_vec4(const struct glsl_type *type)
    case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_ERROR:
    case GLSL_TYPE_INTERFACE:
+   case GLSL_TYPE_FUNCTION:
       unreachable("not reached");
    }
 
@@ -678,18 +679,8 @@ vec4_instruction *
 vec4_visitor::emit_minmax(enum brw_conditional_mod conditionalmod, dst_reg dst,
                           src_reg src0, src_reg src1)
 {
-   vec4_instruction *inst;
-
-   if (devinfo->gen >= 6) {
-      inst = emit(BRW_OPCODE_SEL, dst, src0, src1);
-      inst->conditional_mod = conditionalmod;
-   } else {
-      emit(CMP(dst, src0, src1, conditionalmod));
-
-      inst = emit(BRW_OPCODE_SEL, dst, src0, src1);
-      inst->predicate = BRW_PREDICATE_NORMAL;
-   }
-
+   vec4_instruction *inst = emit(BRW_OPCODE_SEL, dst, src0, src1);
+   inst->conditional_mod = conditionalmod;
    return inst;
 }
 
@@ -815,13 +806,14 @@ vec4_visitor::emit_uniformize(const src_reg &src)
 
 src_reg
 vec4_visitor::emit_mcs_fetch(const glsl_type *coordinate_type,
-                             src_reg coordinate, src_reg sampler)
+                             src_reg coordinate, src_reg surface)
 {
    vec4_instruction *inst =
       new(mem_ctx) vec4_instruction(SHADER_OPCODE_TXF_MCS,
                                     dst_reg(this, glsl_type::uvec4_type));
    inst->base_mrf = 2;
-   inst->src[1] = sampler;
+   inst->src[1] = surface;
+   inst->src[2] = surface;
 
    int param_base;
 
@@ -877,6 +869,8 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
                            src_reg offset_value,
                            src_reg mcs,
                            bool is_cube_array,
+                           uint32_t surface,
+                           src_reg surface_reg,
                            uint32_t sampler,
                            src_reg sampler_reg)
 {
@@ -920,8 +914,7 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
       unreachable("Unrecognized tex op");
    }
 
-   vec4_instruction *inst = new(mem_ctx) vec4_instruction(
-      opcode, dst_reg(this, dest_type));
+   vec4_instruction *inst = new(mem_ctx) vec4_instruction(opcode, dest);
 
    inst->offset = constant_offset;
 
@@ -943,7 +936,8 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
    inst->dst.writemask = WRITEMASK_XYZW;
    inst->shadow_compare = shadow_comparitor.file != BAD_FILE;
 
-   inst->src[1] = sampler_reg;
+   inst->src[1] = surface_reg;
+   inst->src[2] = sampler_reg;
 
    /* MRF for the first parameter */
    int param_base = inst->base_mrf + inst->header_size;
@@ -1069,11 +1063,16 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
    }
 
    if (devinfo->gen == 6 && op == ir_tg4) {
-      emit_gen6_gather_wa(key_tex->gen6_gather_wa[sampler], inst->dst);
+      emit_gen6_gather_wa(key_tex->gen6_gather_wa[surface], inst->dst);
    }
 
-   swizzle_result(op, dest,
-                  src_reg(inst->dst), sampler, dest_type);
+   if (op == ir_query_levels) {
+      /* # levels is in .w */
+      src_reg swizzled(dest);
+      swizzled.swizzle = BRW_SWIZZLE4(SWIZZLE_W, SWIZZLE_W,
+                                      SWIZZLE_W, SWIZZLE_W);
+      emit(MOV(dest, swizzled));
+   }
 }
 
 /**
@@ -1100,87 +1099,6 @@ vec4_visitor::emit_gen6_gather_wa(uint8_t wa, dst_reg dst)
        */
       emit(SHL(dst, src_reg(dst), brw_imm_d(32 - width)));
       emit(ASR(dst, src_reg(dst), brw_imm_d(32 - width)));
-   }
-}
-
-/**
- * Set up the gather channel based on the swizzle, for gather4.
- */
-uint32_t
-vec4_visitor::gather_channel(unsigned gather_component, uint32_t sampler)
-{
-   int swiz = GET_SWZ(key_tex->swizzles[sampler], gather_component);
-   switch (swiz) {
-      case SWIZZLE_X: return 0;
-      case SWIZZLE_Y:
-         /* gather4 sampler is broken for green channel on RG32F --
-          * we must ask for blue instead.
-          */
-         if (key_tex->gather_channel_quirk_mask & (1 << sampler))
-            return 2;
-         return 1;
-      case SWIZZLE_Z: return 2;
-      case SWIZZLE_W: return 3;
-      default:
-         unreachable("Not reached"); /* zero, one swizzles handled already */
-   }
-}
-
-void
-vec4_visitor::swizzle_result(ir_texture_opcode op, dst_reg dest,
-                             src_reg orig_val, uint32_t sampler,
-                             const glsl_type *dest_type)
-{
-   int s = key_tex->swizzles[sampler];
-
-   dst_reg swizzled_result = dest;
-
-   if (op == ir_query_levels) {
-      /* # levels is in .w */
-      orig_val.swizzle = BRW_SWIZZLE4(SWIZZLE_W, SWIZZLE_W, SWIZZLE_W, SWIZZLE_W);
-      emit(MOV(swizzled_result, orig_val));
-      return;
-   }
-
-   if (op == ir_txs || dest_type == glsl_type::float_type
-			|| s == SWIZZLE_NOOP || op == ir_tg4) {
-      emit(MOV(swizzled_result, orig_val));
-      return;
-   }
-
-
-   int zero_mask = 0, one_mask = 0, copy_mask = 0;
-   int swizzle[4] = {0};
-
-   for (int i = 0; i < 4; i++) {
-      switch (GET_SWZ(s, i)) {
-      case SWIZZLE_ZERO:
-	 zero_mask |= (1 << i);
-	 break;
-      case SWIZZLE_ONE:
-	 one_mask |= (1 << i);
-	 break;
-      default:
-	 copy_mask |= (1 << i);
-	 swizzle[i] = GET_SWZ(s, i);
-	 break;
-      }
-   }
-
-   if (copy_mask) {
-      orig_val.swizzle = BRW_SWIZZLE4(swizzle[0], swizzle[1], swizzle[2], swizzle[3]);
-      swizzled_result.writemask = copy_mask;
-      emit(MOV(swizzled_result, orig_val));
-   }
-
-   if (zero_mask) {
-      swizzled_result.writemask = zero_mask;
-      emit(MOV(swizzled_result, brw_imm_f(0.0f)));
-   }
-
-   if (one_mask) {
-      swizzled_result.writemask = one_mask;
-      emit(MOV(swizzled_result, brw_imm_f(1.0f)));
    }
 }
 
@@ -1549,8 +1467,7 @@ vec4_visitor::get_pull_constant_offset(bblock_t * block, vec4_instruction *inst,
       src_reg index = src_reg(this, glsl_type::int_type);
 
       emit_before(block, inst, ADD(dst_reg(index), *reladdr,
-                                   brw_imm_d(reg_offset)));
-      emit_before(block, inst, MUL(dst_reg(index), index, brw_imm_d(16)));
+                                   brw_imm_d(reg_offset * 16)));
 
       return index;
    } else if (devinfo->gen >= 8) {

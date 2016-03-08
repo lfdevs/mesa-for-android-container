@@ -83,10 +83,10 @@ nouveau_vp3_video_buffer_create(struct pipe_context *pipe,
    struct pipe_sampler_view sv_templ;
    struct pipe_surface surf_templ;
 
-   assert(templat->interlaced);
    if (getenv("XVMC_VL") || templat->buffer_format != PIPE_FORMAT_NV12)
       return vl_video_buffer_create(pipe, templat);
 
+   assert(templat->interlaced);
    assert(templat->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420);
 
    buffer = CALLOC_STRUCT(nouveau_vp3_video_buffer);

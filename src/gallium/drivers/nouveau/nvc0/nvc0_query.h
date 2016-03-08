@@ -14,6 +14,13 @@ struct nvc0_query_funcs {
    void (*end_query)(struct nvc0_context *, struct nvc0_query *);
    boolean (*get_query_result)(struct nvc0_context *, struct nvc0_query *,
                                boolean, union pipe_query_result *);
+   void (*get_query_result_resource)(struct nvc0_context *nvc0,
+                                     struct nvc0_query *q,
+                                     boolean wait,
+                                     enum pipe_query_value_type result_type,
+                                     int index,
+                                     struct pipe_resource *resource,
+                                     unsigned offset);
 };
 
 struct nvc0_query {

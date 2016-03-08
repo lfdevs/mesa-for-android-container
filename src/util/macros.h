@@ -24,6 +24,8 @@
 #ifndef UTIL_MACROS_H
 #define UTIL_MACROS_H
 
+#include <assert.h>
+
 /* Compute the size of an array */
 #ifndef ARRAY_SIZE
 #  define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
@@ -184,7 +186,7 @@ do {                       \
  * inline a static function that we later use in an alias. - ajax
  */
 #ifndef PUBLIC
-#  if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
+#  if defined(__GNUC__)
 #    define PUBLIC __attribute__((visibility("default")))
 #    define USED __attribute__((used))
 #  elif defined(_MSC_VER)

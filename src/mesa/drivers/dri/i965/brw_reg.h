@@ -84,6 +84,7 @@ struct brw_device_info;
 #define BRW_SWIZZLE_YZXW      BRW_SWIZZLE4(1,2,0,3)
 #define BRW_SWIZZLE_ZXYW      BRW_SWIZZLE4(2,0,1,3)
 #define BRW_SWIZZLE_ZWZW      BRW_SWIZZLE4(2,3,2,3)
+#define BRW_SWIZZLE_WZYX      BRW_SWIZZLE4(3,2,1,0)
 
 static inline bool
 brw_is_single_value_swizzle(unsigned swiz)
@@ -283,33 +284,6 @@ type_sz(unsigned type)
       return 1;
    default:
       return 0;
-   }
-}
-
-static inline bool
-type_is_signed(unsigned type)
-{
-   switch(type) {
-   case BRW_REGISTER_TYPE_D:
-   case BRW_REGISTER_TYPE_W:
-   case BRW_REGISTER_TYPE_F:
-   case BRW_REGISTER_TYPE_B:
-   case BRW_REGISTER_TYPE_V:
-   case BRW_REGISTER_TYPE_VF:
-   case BRW_REGISTER_TYPE_DF:
-   case BRW_REGISTER_TYPE_HF:
-   case BRW_REGISTER_TYPE_Q:
-      return true;
-
-   case BRW_REGISTER_TYPE_UD:
-   case BRW_REGISTER_TYPE_UW:
-   case BRW_REGISTER_TYPE_UB:
-   case BRW_REGISTER_TYPE_UV:
-   case BRW_REGISTER_TYPE_UQ:
-      return false;
-
-   default:
-      unreachable("not reached");
    }
 }
 

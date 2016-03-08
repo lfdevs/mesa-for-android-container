@@ -34,6 +34,7 @@
 #include "util/u_video.h"
 
 #include "vl/vl_winsys.h"
+#include "vl/vl_video_buffer.h"
 
 #include "va_private.h"
 
@@ -61,15 +62,9 @@ vlVaVideoSurfaceSize(vlVaSurface *p_surf, int component,
    *width = p_surf->templat.width;
    *height = p_surf->templat.height;
 
-   if (component > 0) {
-      if (p_surf->templat.chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420) {
-         *width /= 2;
-         *height /= 2;
-      } else if (p_surf->templat.chroma_format == PIPE_VIDEO_CHROMA_FORMAT_422)
-         *width /= 2;
-   }
-   if (p_surf->templat.interlaced)
-      *height /= 2;
+   vl_video_buffer_adjust_size(width, height, component,
+                               p_surf->templat.chroma_format,
+                               p_surf->templat.interlaced);
 }
 
 VAStatus
@@ -119,7 +114,9 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
    img = CALLOC(1, sizeof(VAImage));
    if (!img)
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
+   pipe_mutex_lock(drv->mutex);
    img->image_id = handle_table_add(drv->htab, img);
+   pipe_mutex_unlock(drv->mutex);
 
    img->format = *format;
    img->width = width;
@@ -261,16 +258,17 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
    }
 
+   pipe_mutex_lock(drv->mutex);
    img->image_id = handle_table_add(drv->htab, img);
 
    img_buf->type = VAImageBufferType;
-   img_buf->size = image->data_size;
+   img_buf->size = img->data_size;
    img_buf->num_elements = 1;
-   img_buf->derived_surface.fence = surf->fence;
 
    pipe_resource_reference(&img_buf->derived_surface.resource, surfaces[0]->texture);
 
    img->buf = handle_table_add(VL_VA_DRIVER(ctx)->htab, img_buf);
+   pipe_mutex_unlock(drv->mutex);
 
    *image = *img;
 
@@ -280,16 +278,22 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
 VAStatus
 vlVaDestroyImage(VADriverContextP ctx, VAImageID image)
 {
+   vlVaDriver *drv;
    VAImage  *vaimage;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   vaimage = handle_table_get(VL_VA_DRIVER(ctx)->htab, image);
-   if (!vaimage)
+   drv = VL_VA_DRIVER(ctx);
+   pipe_mutex_lock(drv->mutex);
+   vaimage = handle_table_get(drv->htab, image);
+   if (!vaimage) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_IMAGE;
+   }
 
    handle_table_remove(VL_VA_DRIVER(ctx)->htab, image);
+   pipe_mutex_unlock(drv->mutex);
    FREE(vaimage);
    return vlVaDestroyBuffer(ctx, vaimage->buf);
 }
@@ -322,21 +326,30 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
 
    drv = VL_VA_DRIVER(ctx);
 
+   pipe_mutex_lock(drv->mutex);
    surf = handle_table_get(drv->htab, surface);
-   if (!surf || !surf->buffer)
+   if (!surf || !surf->buffer) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_SURFACE;
+   }
 
    vaimage = handle_table_get(drv->htab, image);
-   if (!vaimage)
+   if (!vaimage) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_IMAGE;
+   }
 
    img_buf = handle_table_get(drv->htab, vaimage->buf);
-   if (!img_buf)
+   if (!img_buf) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_BUFFER;
+   }
 
    format = VaFourccToPipeFormat(vaimage->format.fourcc);
-   if (format == PIPE_FORMAT_NONE)
+   if (format == PIPE_FORMAT_NONE) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_OPERATION_FAILED;
+   }
 
    if (format != surf->buffer->buffer_format) {
       /* support NV12 to YV12 and IYUV conversion now only */
@@ -345,13 +358,17 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
           (format == PIPE_FORMAT_IYUV &&
           surf->buffer->buffer_format == PIPE_FORMAT_NV12))
          convert = true;
-      else
+      else {
+         pipe_mutex_unlock(drv->mutex);
          return VA_STATUS_ERROR_OPERATION_FAILED;
+      }
    }
 
    views = surf->buffer->get_sampler_view_planes(surf->buffer);
-   if (!views)
+   if (!views) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_OPERATION_FAILED;
+   }
 
    for (i = 0; i < vaimage->num_planes; i++) {
       data[i] = img_buf->data + vaimage->offsets[i];
@@ -378,8 +395,10 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
          uint8_t *map;
          map = drv->pipe->transfer_map(drv->pipe, views[i]->texture, 0,
                   PIPE_TRANSFER_READ, &box, &transfer);
-         if (!map)
+         if (!map) {
+            pipe_mutex_unlock(drv->mutex);
             return VA_STATUS_ERROR_OPERATION_FAILED;
+         }
 
          if (i == 1 && convert) {
             u_copy_nv12_to_yv12(data, pitches, i, j,
@@ -394,6 +413,7 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
          pipe_transfer_unmap(drv->pipe, transfer);
       }
    }
+   pipe_mutex_unlock(drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }
@@ -416,28 +436,38 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
    drv = VL_VA_DRIVER(ctx);
+   pipe_mutex_lock(drv->mutex);
 
    surf = handle_table_get(drv->htab, surface);
-   if (!surf || !surf->buffer)
+   if (!surf || !surf->buffer) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_SURFACE;
+   }
 
    vaimage = handle_table_get(drv->htab, image);
-   if (!vaimage)
+   if (!vaimage) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_IMAGE;
+   }
 
    img_buf = handle_table_get(drv->htab, vaimage->buf);
-   if (!img_buf)
+   if (!img_buf) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_INVALID_BUFFER;
+   }
 
    if (img_buf->derived_surface.resource) {
       /* Attempting to transfer derived image to surface */
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_UNIMPLEMENTED;
    }
 
    format = VaFourccToPipeFormat(vaimage->format.fourcc);
 
-   if (format == PIPE_FORMAT_NONE)
+   if (format == PIPE_FORMAT_NONE) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_OPERATION_FAILED;
+   }
 
    if (format != surf->buffer->buffer_format) {
       struct pipe_video_buffer *tmp_buf;
@@ -448,6 +478,7 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
 
       if (!tmp_buf) {
          surf->templat.buffer_format = old_surf_format;
+         pipe_mutex_unlock(drv->mutex);
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
       }
 
@@ -456,8 +487,10 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
    }
 
    views = surf->buffer->get_sampler_view_planes(surf->buffer);
-   if (!views)
+   if (!views) {
+      pipe_mutex_unlock(drv->mutex);
       return VA_STATUS_ERROR_OPERATION_FAILED;
+   }
 
    for (i = 0; i < vaimage->num_planes; i++) {
       data[i] = img_buf->data + vaimage->offsets[i];
@@ -486,6 +519,7 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
             pitches[i] * views[i]->texture->array_size, 0);
       }
    }
+   pipe_mutex_unlock(drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }

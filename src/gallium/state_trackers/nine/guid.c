@@ -20,6 +20,7 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include <stdio.h>
 #include "guid.h"
 
 const GUID IID_IUnknown = { 0x00000000, 0x0000, 0x0000, { 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
@@ -63,4 +64,21 @@ GUID_equal( const GUID *a,
         if (a->Data4[i] != b->Data4[i]) { return FALSE; }
     }
     return TRUE;
+}
+
+char* GUID_sprintf(char *guid_str, REFGUID id) {
+    sprintf( guid_str,
+             "{%08X,%04X,%04X,%02X%02X%02X%02X%02X%02X%02X%02X}",
+             id->Data1,
+             id->Data2,
+             id->Data3,
+             id->Data4[0],
+             id->Data4[1],
+             id->Data4[2],
+             id->Data4[3],
+             id->Data4[4],
+             id->Data4[5],
+             id->Data4[6],
+             id->Data4[7]);
+    return guid_str;
 }

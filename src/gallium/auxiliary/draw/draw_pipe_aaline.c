@@ -429,7 +429,7 @@ aaline_create_texture(struct aaline_stage *aaline)
                                 PIPE_TRANSFER_WRITE,
                                 &box, &transfer);
 
-      if (data == NULL)
+      if (!data)
          return FALSE;
 
       for (i = 0; i < size; i++) {
@@ -646,6 +646,7 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
    struct pipe_context *pipe = draw->pipe;
    const struct pipe_rasterizer_state *rast = draw->rasterizer;
    uint num_samplers;
+   uint num_sampler_views;
    void *r;
 
    assert(draw->rasterizer->line_smooth);
@@ -667,9 +668,9 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
    draw_aaline_prepare_outputs(draw, draw->pipeline.aaline);
 
    /* how many samplers? */
-   /* we'll use sampler/texture[pstip->sampler_unit] for the stipple */
-   num_samplers = MAX2(aaline->num_sampler_views, aaline->num_samplers);
-   num_samplers = MAX2(num_samplers, aaline->fs->sampler_unit + 1);
+   /* we'll use sampler/texture[aaline->sampler_unit] for the alpha texture */
+   num_samplers = MAX2(aaline->num_samplers, aaline->fs->sampler_unit + 1);
+   num_sampler_views = MAX2(num_samplers, aaline->num_sampler_views);
 
    aaline->state.sampler[aaline->fs->sampler_unit] = aaline->sampler_cso;
    pipe_sampler_view_reference(&aaline->state.sampler_views[aaline->fs->sampler_unit],
@@ -681,7 +682,7 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
                                       num_samplers, aaline->state.sampler);
 
    aaline->driver_set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0,
-                                    num_samplers, aaline->state.sampler_views);
+                                    num_sampler_views, aaline->state.sampler_views);
 
    /* Disable triangle culling, stippling, unfilled mode etc. */
    r = draw_get_rasterizer_no_cull(draw, rast->scissor, rast->flatshade);
@@ -774,7 +775,7 @@ static struct aaline_stage *
 draw_aaline_stage(struct draw_context *draw)
 {
    struct aaline_stage *aaline = CALLOC_STRUCT(aaline_stage);
-   if (aaline == NULL)
+   if (!aaline)
       return NULL;
 
    aaline->stage.draw = draw;
@@ -793,8 +794,7 @@ draw_aaline_stage(struct draw_context *draw)
    return aaline;
 
  fail:
-   if (aaline)
-      aaline->stage.destroy(&aaline->stage);
+   aaline->stage.destroy(&aaline->stage);
 
    return NULL;
 }
@@ -824,12 +824,12 @@ aaline_create_fs_state(struct pipe_context *pipe,
    struct aaline_stage *aaline = aaline_stage_from_pipe(pipe);
    struct aaline_fragment_shader *aafs = NULL;
 
-   if (aaline == NULL)
+   if (!aaline)
       return NULL;
 
    aafs = CALLOC_STRUCT(aaline_fragment_shader);
 
-   if (aafs == NULL)
+   if (!aafs)
       return NULL;
 
    aafs->state.tokens = tgsi_dup_tokens(fs->tokens);
@@ -847,7 +847,7 @@ aaline_bind_fs_state(struct pipe_context *pipe, void *fs)
    struct aaline_stage *aaline = aaline_stage_from_pipe(pipe);
    struct aaline_fragment_shader *aafs = (struct aaline_fragment_shader *) fs;
 
-   if (aaline == NULL) {
+   if (!aaline) {
       return;
    }
 
@@ -864,11 +864,11 @@ aaline_delete_fs_state(struct pipe_context *pipe, void *fs)
    struct aaline_stage *aaline = aaline_stage_from_pipe(pipe);
    struct aaline_fragment_shader *aafs = (struct aaline_fragment_shader *) fs;
 
-   if (aafs == NULL) {
+   if (!aafs) {
       return;
    }
 
-   if (aaline != NULL) {
+   if (aaline) {
       /* pass-through */
       aaline->driver_delete_fs_state(pipe, aafs->driver_fs);
 
@@ -889,7 +889,7 @@ aaline_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
 
    assert(start == 0);
 
-   if (aaline == NULL) {
+   if (!aaline) {
       return;
    }
 
@@ -912,7 +912,7 @@ aaline_set_sampler_views(struct pipe_context *pipe, unsigned shader,
    struct aaline_stage *aaline = aaline_stage_from_pipe(pipe);
    uint i;
 
-   if (aaline == NULL) {
+   if (!aaline) {
       return;
    }
 
@@ -938,7 +938,7 @@ draw_aaline_prepare_outputs(struct draw_context *draw,
    const struct pipe_rasterizer_state *rast = draw->rasterizer;
 
    /* update vertex attrib info */
-   aaline->pos_slot = draw_current_shader_position_output(draw);;
+   aaline->pos_slot = draw_current_shader_position_output(draw);
 
    if (!rast->line_smooth)
       return;

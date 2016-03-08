@@ -123,7 +123,7 @@ NineVertexShader9_dtor( struct NineVertexShader9 *This )
     NineUnknown_dtor(&This->base);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVertexShader9_GetFunction( struct NineVertexShader9 *This,
                                void *pData,
                                UINT *pSizeOfData )

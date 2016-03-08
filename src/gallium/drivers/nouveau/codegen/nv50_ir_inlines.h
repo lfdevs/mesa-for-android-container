@@ -281,14 +281,14 @@ Value *TexInstruction::getIndirectS() const
 
 CmpInstruction *Instruction::asCmp()
 {
-   if (op >= OP_SET_AND && op <= OP_SLCT && op != OP_SELP)
+   if (op >= OP_SET_AND && op <= OP_SLCT)
       return static_cast<CmpInstruction *>(this);
    return NULL;
 }
 
 const CmpInstruction *Instruction::asCmp() const
 {
-   if (op >= OP_SET_AND && op <= OP_SLCT && op != OP_SELP)
+   if (op >= OP_SET_AND && op <= OP_SLCT)
       return static_cast<const CmpInstruction *>(this);
    return NULL;
 }

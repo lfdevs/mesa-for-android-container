@@ -247,7 +247,7 @@ struct cso_cache *cso_cache_create(void)
 {
    struct cso_cache *sc = MALLOC_STRUCT(cso_cache);
    int i;
-   if (sc == NULL)
+   if (!sc)
       return NULL;
 
    sc->max_size           = 4096;

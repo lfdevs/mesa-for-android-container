@@ -36,19 +36,10 @@
 #include "pipebuffer/pb_bufmgr.h"
 #include "os/os_thread.h"
 
-struct radeon_bomgr;
-
-struct radeon_bo_desc {
-    struct pb_desc base;
-
-    unsigned initial_domains;
-    unsigned flags;
-};
-
 struct radeon_bo {
     struct pb_buffer base;
+    struct pb_cache_entry cache_entry;
 
-    struct radeon_bomgr *mgr;
     struct radeon_drm_winsys *rws;
     void *user_ptr; /* from buffer_from_ptr */
 
@@ -60,6 +51,7 @@ struct radeon_bo {
     uint32_t flink_name;
     uint64_t va;
     enum radeon_bo_domain initial_domain;
+    bool use_reusable_pool;
 
     /* how many command streams is this bo referenced in? */
     int num_cs_references;
@@ -69,8 +61,9 @@ struct radeon_bo {
     int num_active_ioctls;
 };
 
-struct pb_manager *radeon_bomgr_create(struct radeon_drm_winsys *rws);
-void radeon_bomgr_init_functions(struct radeon_drm_winsys *ws);
+void radeon_bo_destroy(struct pb_buffer *_buf);
+bool radeon_bo_can_reclaim(struct pb_buffer *_buf);
+void radeon_drm_bo_init_functions(struct radeon_drm_winsys *ws);
 
 static inline
 void radeon_bo_reference(struct radeon_bo **dst, struct radeon_bo *src)

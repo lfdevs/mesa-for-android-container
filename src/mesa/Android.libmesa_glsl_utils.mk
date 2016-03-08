@@ -36,8 +36,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libmesa_glsl_utils
 
 LOCAL_C_INCLUDES := \
-	$(MESA_TOP)/src/glsl \
-	$(MESA_TOP)/src/glsl/nir \
+	$(MESA_TOP)/src/compiler/nir \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/gallium/include \
 	$(MESA_TOP)/src/gallium/auxiliary
@@ -62,8 +61,7 @@ LOCAL_IS_HOST_MODULE := true
 LOCAL_CFLAGS := -D_POSIX_C_SOURCE=199309L
 
 LOCAL_C_INCLUDES := \
-	$(MESA_TOP)/src/glsl \
-	$(MESA_TOP)/src/glsl/nir \
+	$(MESA_TOP)/src/compiler/nir \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/gallium/include \
 	$(MESA_TOP)/src/gallium/auxiliary

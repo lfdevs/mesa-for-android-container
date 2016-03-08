@@ -88,8 +88,9 @@ struct dd_call
 static FILE *
 dd_get_file_stream(struct dd_context *dctx)
 {
+   struct dd_screen *dscreen = dd_screen(dctx->base.screen);
    struct pipe_screen *screen = dctx->pipe->screen;
-   FILE *f = dd_get_debug_file();
+   FILE *f = dd_get_debug_file(dscreen->verbose);
    if (!f)
       return NULL;
 
@@ -588,8 +589,11 @@ dd_context_flush(struct pipe_context *_pipe,
 static void
 dd_before_draw(struct dd_context *dctx)
 {
-   if (dd_screen(dctx->base.screen)->mode == DD_DETECT_HANGS &&
-       !dd_screen(dctx->base.screen)->no_flush)
+   struct dd_screen *dscreen = dd_screen(dctx->base.screen);
+
+   if (dscreen->mode == DD_DETECT_HANGS &&
+       !dscreen->no_flush &&
+       dctx->num_draw_calls >= dscreen->skip_count)
       dd_flush_and_handle_hang(dctx, NULL, 0,
                                "GPU hang most likely caused by internal "
                                "driver commands");
@@ -598,22 +602,34 @@ dd_before_draw(struct dd_context *dctx)
 static void
 dd_after_draw(struct dd_context *dctx, struct dd_call *call)
 {
-   switch (dd_screen(dctx->base.screen)->mode) {
-   case DD_DETECT_HANGS:
-      if (!dd_screen(dctx->base.screen)->no_flush &&
-          dd_flush_and_check_hang(dctx, NULL, 0)) {
-         dd_dump_call(dctx, call, PIPE_DEBUG_DEVICE_IS_HUNG);
+   struct dd_screen *dscreen = dd_screen(dctx->base.screen);
+   struct pipe_context *pipe = dctx->pipe;
 
-         /* Terminate the process to prevent future hangs. */
-         dd_kill_process();
+   if (dctx->num_draw_calls >= dscreen->skip_count) {
+      switch (dscreen->mode) {
+      case DD_DETECT_HANGS:
+         if (!dscreen->no_flush &&
+            dd_flush_and_check_hang(dctx, NULL, 0)) {
+            dd_dump_call(dctx, call, PIPE_DEBUG_DEVICE_IS_HUNG);
+
+            /* Terminate the process to prevent future hangs. */
+            dd_kill_process();
+         }
+         break;
+      case DD_DUMP_ALL_CALLS:
+         if (!dscreen->no_flush)
+            pipe->flush(pipe, NULL, 0);
+         dd_dump_call(dctx, call, 0);
+         break;
+      default:
+         assert(0);
       }
-      break;
-   case DD_DUMP_ALL_CALLS:
-      dd_dump_call(dctx, call, 0);
-      break;
-   default:
-      assert(0);
    }
+
+   ++dctx->num_draw_calls;
+   if (dscreen->skip_count && dctx->num_draw_calls % 10000 == 0)
+      fprintf(stderr, "Gallium debugger reached %u draw calls.\n",
+              dctx->num_draw_calls);
 }
 
 static void

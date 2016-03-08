@@ -129,7 +129,7 @@ amdgpu_bo_is_referenced_by_cs(struct amdgpu_cs *cs,
                               struct amdgpu_winsys_bo *bo)
 {
    int num_refs = bo->num_cs_references;
-   return num_refs == bo->rws->num_cs ||
+   return num_refs == bo->ws->num_cs ||
          (num_refs && amdgpu_lookup_buffer(cs, bo) != -1);
 }
 

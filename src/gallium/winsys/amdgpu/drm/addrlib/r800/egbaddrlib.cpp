@@ -352,6 +352,7 @@ BOOL_32 EgBasedAddrLib::ComputeSurfaceInfoMicroTiled(
     ComputeSurfaceAlignmentsMicroTiled(expTileMode,
                                        pIn->bpp,
                                        pIn->flags,
+                                       pIn->mipLevel,
                                        numSamples,
                                        &pOut->baseAlign,
                                        &pOut->pitchAlign,
@@ -647,6 +648,7 @@ BOOL_32 EgBasedAddrLib::ComputeSurfaceAlignmentsMicroTiled(
     AddrTileMode        tileMode,          ///< [in] tile mode
     UINT_32             bpp,               ///< [in] bits per pixel
     ADDR_SURFACE_FLAGS  flags,             ///< [in] surface flags
+    UINT_32             mipLevel,          ///< [in] mip level
     UINT_32             numSamples,        ///< [in] number of samples
     UINT_32*            pBaseAlign,        ///< [out] base address alignment in bytes
     UINT_32*            pPitchAlign,       ///< [out] pitch alignment in pixels
@@ -669,10 +671,10 @@ BOOL_32 EgBasedAddrLib::ComputeSurfaceAlignmentsMicroTiled(
     // ECR#393489
     // Workaround 2 for 1D tiling -  There is HW bug for Carrizo
     // where it requires the following alignments for 1D tiling.
-    if (flags.czDispCompatible)
+    if (flags.czDispCompatible && (mipLevel == 0))
     {
         *pBaseAlign  = PowTwoAlign(*pBaseAlign, 4096);                         //Base address MOD 4096 = 0
-        *pPitchAlign = PowTwoAlign(*pPitchAlign, 512 >> (BITS_TO_BYTES(bpp))); //(8 lines * pitch * bytes per pixel) MOD 4096 = 0
+        *pPitchAlign = PowTwoAlign(*pPitchAlign, 512 / (BITS_TO_BYTES(bpp))); //(8 lines * pitch * bytes per pixel) MOD 4096 = 0
     }
     // end Carrizo workaround for 1D tilling
 

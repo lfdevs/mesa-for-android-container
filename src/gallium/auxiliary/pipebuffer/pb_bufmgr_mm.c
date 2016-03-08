@@ -252,7 +252,7 @@ mm_bufmgr_create_from_buffer(struct pb_buffer *buffer,
 {
    struct mm_pb_manager *mm;
 
-   if(!buffer)
+   if (!buffer)
       return NULL;
    
    mm = CALLOC_STRUCT(mm_pb_manager);
@@ -283,8 +283,8 @@ mm_bufmgr_create_from_buffer(struct pb_buffer *buffer,
    return SUPER(mm);
    
 failure:
-if(mm->heap)
-   u_mmDestroy(mm->heap);
+   if(mm->heap)
+      u_mmDestroy(mm->heap);
    if(mm->map)
       pb_unmap(mm->buffer);
    FREE(mm);
@@ -300,7 +300,7 @@ mm_bufmgr_create(struct pb_manager *provider,
    struct pb_manager *mgr;
    struct pb_desc desc;
 
-   if(!provider)
+   if (!provider)
       return NULL;
    
    memset(&desc, 0, sizeof(desc));

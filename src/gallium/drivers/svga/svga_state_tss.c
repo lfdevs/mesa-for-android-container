@@ -316,7 +316,7 @@ svga_queue_tss( struct ts_queue *q,
                 unsigned tss,
                 unsigned value )
 {
-   assert(q->ts_count < sizeof(q->ts)/sizeof(q->ts[0]));
+   assert(q->ts_count < ARRAY_SIZE(q->ts));
    q->ts[q->ts_count].stage = unit;
    q->ts[q->ts_count].name = tss;
    q->ts[q->ts_count].value = value;

@@ -202,6 +202,7 @@ ilo_render_get_query_len(const struct ilo_render *render,
 
    switch (query_type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_TIMESTAMP:
    case PIPE_QUERY_TIME_ELAPSED:
       /* no reg */
@@ -268,6 +269,7 @@ ilo_render_emit_query(struct ilo_render *render,
 
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
       pipe_control_dw1 = GEN6_PIPE_CONTROL_DEPTH_STALL |
                          GEN6_PIPE_CONTROL_WRITE_PS_DEPTH_COUNT;
       break;

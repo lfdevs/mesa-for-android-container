@@ -192,7 +192,7 @@ tgsi_transform_sampler_view_decl(struct tgsi_transform_context *ctx,
 
    decl = tgsi_default_full_declaration();
    decl.Declaration.File = TGSI_FILE_SAMPLER_VIEW;
-   decl.Declaration.UsageMask = 0xf;
+   decl.Declaration.UsageMask = TGSI_WRITEMASK_XYZW;
    decl.Range.First =
    decl.Range.Last = index;
    decl.SamplerView.Resource = target;

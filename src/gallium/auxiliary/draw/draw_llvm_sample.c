@@ -283,7 +283,7 @@ draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_stat
    struct draw_llvm_sampler_soa *sampler;
 
    sampler = CALLOC_STRUCT(draw_llvm_sampler_soa);
-   if(!sampler)
+   if (!sampler)
       return NULL;
 
    sampler->base.destroy = draw_llvm_sampler_soa_destroy;

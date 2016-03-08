@@ -120,6 +120,7 @@ nv30_query_create(struct pipe_context *pipe, unsigned type, unsigned index)
       q->report = 1;
       break;
    case PIPE_QUERY_OCCLUSION_COUNTER:
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
       q->enable = NV30_3D_QUERY_ENABLE;
       q->report = 1;
       break;
@@ -203,7 +204,6 @@ nv30_query_result(struct pipe_context *pipe, struct pipe_query *pq,
    struct nv30_query *q = nv30_query(pq);
    volatile uint32_t *ntfy0 = nv30_ntfy(screen, q->qo[0]);
    volatile uint32_t *ntfy1 = nv30_ntfy(screen, q->qo[1]);
-   uint64_t *res64 = &result->u64;
 
    if (ntfy1) {
       while (ntfy1[3] & 0xff000000) {
@@ -227,7 +227,10 @@ nv30_query_result(struct pipe_context *pipe, struct pipe_query *pq,
       nv30_query_object_del(screen, &q->qo[1]);
    }
 
-   *res64 = q->result;
+   if (q->type == PIPE_QUERY_OCCLUSION_PREDICATE)
+      result->b = !!q->result;
+   else
+      result->u64 = q->result;
    return true;
 }
 

@@ -45,12 +45,6 @@ struct si_compute {
 
 	struct r600_resource *input_buffer;
 	struct pipe_resource *global_buffers[MAX_GLOBAL_BUFFERS];
-
-#if HAVE_LLVM < 0x0306
-	unsigned num_kernels;
-	struct si_shader *kernels;
-	LLVMContextRef llvm_ctx;
-#endif
 };
 
 static void init_scratch_buffer(struct si_context *sctx, struct si_compute *program)
@@ -61,22 +55,22 @@ static void init_scratch_buffer(struct si_context *sctx, struct si_compute *prog
 
 	/* Compute the scratch buffer size using the maximum number of waves.
 	 * This way we don't need to recompute it for each kernel launch. */
-	unsigned scratch_waves = 32 * sctx->screen->b.info.max_compute_units;
+	unsigned scratch_waves = 32 * sctx->screen->b.info.num_good_compute_units;
 	for (i = 0; i < program->shader.binary.global_symbol_count; i++) {
 		unsigned offset =
 				program->shader.binary.global_symbol_offsets[i];
 		unsigned scratch_bytes_needed;
 
-		si_shader_binary_read_config(sctx->screen,
-						&program->shader, offset);
-		scratch_bytes_needed = program->shader.scratch_bytes_per_wave;
+		si_shader_binary_read_config(&program->shader.binary,
+					     &program->shader.config, offset);
+		scratch_bytes_needed = program->shader.config.scratch_bytes_per_wave;
 		scratch_bytes = MAX2(scratch_bytes, scratch_bytes_needed);
 	}
 
 	if (scratch_bytes == 0)
 		return;
 
-	program->shader.scratch_bo = (struct r600_resource*)
+	program->shader.scratch_bo =
 				si_resource_create_custom(sctx->b.b.screen,
 				PIPE_USAGE_DEFAULT,
 				scratch_bytes * scratch_waves);
@@ -87,7 +81,7 @@ static void init_scratch_buffer(struct si_context *sctx, struct si_compute *prog
 	 * to the maximum bytes needed, so it can compute the stride
 	 * correctly.
 	 */
-	program->shader.scratch_bytes_per_wave = scratch_bytes;
+	program->shader.config.scratch_bytes_per_wave = scratch_bytes;
 
 	/* Patch the shader with the scratch buffer address. */
 	si_shader_apply_scratch_relocs(sctx,
@@ -111,24 +105,6 @@ static void *si_create_compute_state(
 	program->private_size = cso->req_private_mem;
 	program->input_size = cso->req_input_mem;
 
-#if HAVE_LLVM < 0x0306
-	{
-		unsigned i;
-		program->llvm_ctx = LLVMContextCreate();
-	        program->num_kernels = radeon_llvm_get_num_kernels(program->llvm_ctx,
-					code, header->num_bytes);
-	        program->kernels = CALLOC(sizeof(struct si_shader),
-                                                        program->num_kernels);
-	        for (i = 0; i < program->num_kernels; i++) {
-		        LLVMModuleRef mod = radeon_llvm_get_kernel_module(program->llvm_ctx, i,
-                                                        code, header->num_bytes);
-			si_compile_llvm(sctx->screen, &program->kernels[i], sctx->tm,
-					mod);
-			LLVMDisposeModule(mod);
-		}
-	}
-#else
-
 	radeon_elf_read(code, header->num_bytes, &program->shader.binary);
 
 	/* init_scratch_buffer patches the shader code with the scratch address,
@@ -136,9 +112,12 @@ static void *si_create_compute_state(
 	 * the shader code to the GPU.
 	 */
 	init_scratch_buffer(sctx, program);
-	si_shader_binary_read(sctx->screen, &program->shader);
+	si_shader_binary_read_config(&program->shader.binary,
+				     &program->shader.config, 0);
+	si_shader_dump(sctx->screen, &program->shader, &sctx->b.debug,
+		       TGSI_PROCESSOR_COMPUTE);
+	si_shader_binary_upload(sctx->screen, &program->shader);
 
-#endif
 	program->input_buffer =	si_resource_create_custom(sctx->b.b.screen,
 		PIPE_USAGE_IMMUTABLE, program->input_size);
 
@@ -217,9 +196,7 @@ static unsigned compute_num_waves_for_scratch(
 }
 
 static void si_launch_grid(
-		struct pipe_context *ctx,
-		const uint *block_layout, const uint *grid_layout,
-		uint32_t pc, const void *input)
+		struct pipe_context *ctx, const struct pipe_grid_info *info)
 {
 	struct si_context *sctx = (struct si_context*)ctx;
 	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
@@ -238,11 +215,6 @@ static void si_launch_grid(
 	unsigned lds_blocks;
 	unsigned num_waves_for_scratch;
 
-#if HAVE_LLVM < 0x0306
-	shader = &program->kernels[pc];
-#endif
-
-
 	radeon_emit(cs, PKT3(PKT3_CONTEXT_CONTROL, 1, 0) | PKT3_SHADER_TYPE_S(1));
 	radeon_emit(cs, 0x80000000);
 	radeon_emit(cs, 0x80000000);
@@ -257,35 +229,34 @@ static void si_launch_grid(
 
 	pm4->compute_pkt = true;
 
-#if HAVE_LLVM >= 0x0306
 	/* Read the config information */
-	si_shader_binary_read_config(sctx->screen, shader, pc);
-#endif
+	si_shader_binary_read_config(&shader->binary, &shader->config, info->pc);
 
 	/* Upload the kernel arguments */
 
 	/* The extra num_work_size_bytes are for work group / work item size information */
 	kernel_args_size = program->input_size + num_work_size_bytes + 8 /* For scratch va */;
 
-	kernel_args = sctx->b.ws->buffer_map(input_buffer->cs_buf,
+	kernel_args = sctx->b.ws->buffer_map(input_buffer->buf,
 			sctx->b.gfx.cs, PIPE_TRANSFER_WRITE);
 	for (i = 0; i < 3; i++) {
-		kernel_args[i] = grid_layout[i];
-		kernel_args[i + 3] = grid_layout[i] * block_layout[i];
-		kernel_args[i + 6] = block_layout[i];
+		kernel_args[i] = info->grid[i];
+		kernel_args[i + 3] = info->grid[i] * info->block[i];
+		kernel_args[i + 6] = info->block[i];
 	}
 
 	num_waves_for_scratch =	compute_num_waves_for_scratch(
-		&sctx->screen->b.info, block_layout, grid_layout);
+		&sctx->screen->b.info, info->block, info->grid);
 
-	memcpy(kernel_args + (num_work_size_bytes / 4), input, program->input_size);
+	memcpy(kernel_args + (num_work_size_bytes / 4), info->input,
+          program->input_size);
 
-	if (shader->scratch_bytes_per_wave > 0) {
+	if (shader->config.scratch_bytes_per_wave > 0) {
 
 		COMPUTE_DBG(sctx->screen, "Waves: %u; Scratch per wave: %u bytes; "
 		            "Total Scratch: %u bytes\n", num_waves_for_scratch,
-			    shader->scratch_bytes_per_wave,
-			    shader->scratch_bytes_per_wave *
+			    shader->config.scratch_bytes_per_wave,
+			    shader->config.scratch_bytes_per_wave *
 			    num_waves_for_scratch);
 
 		radeon_add_to_buffer_list(&sctx->b, &sctx->b.gfx,
@@ -312,18 +283,18 @@ static void si_launch_grid(
 	si_pm4_set_reg(pm4, R_00B900_COMPUTE_USER_DATA_0 + 8, scratch_buffer_va);
 	si_pm4_set_reg(pm4, R_00B900_COMPUTE_USER_DATA_0 + 12,
 		S_008F04_BASE_ADDRESS_HI(scratch_buffer_va >> 32)
-		|  S_008F04_STRIDE(shader->scratch_bytes_per_wave / 64));
+		|  S_008F04_STRIDE(shader->config.scratch_bytes_per_wave / 64));
 
 	si_pm4_set_reg(pm4, R_00B810_COMPUTE_START_X, 0);
 	si_pm4_set_reg(pm4, R_00B814_COMPUTE_START_Y, 0);
 	si_pm4_set_reg(pm4, R_00B818_COMPUTE_START_Z, 0);
 
 	si_pm4_set_reg(pm4, R_00B81C_COMPUTE_NUM_THREAD_X,
-				S_00B81C_NUM_THREAD_FULL(block_layout[0]));
+				S_00B81C_NUM_THREAD_FULL(info->block[0]));
 	si_pm4_set_reg(pm4, R_00B820_COMPUTE_NUM_THREAD_Y,
-				S_00B820_NUM_THREAD_FULL(block_layout[1]));
+				S_00B820_NUM_THREAD_FULL(info->block[1]));
 	si_pm4_set_reg(pm4, R_00B824_COMPUTE_NUM_THREAD_Z,
-				S_00B824_NUM_THREAD_FULL(block_layout[2]));
+				S_00B824_NUM_THREAD_FULL(info->block[2]));
 
 	/* Global buffers */
 	for (i = 0; i < MAX_GLOBAL_BUFFERS; i++) {
@@ -351,18 +322,16 @@ static void si_launch_grid(
 	}
 
 	shader_va = shader->bo->gpu_address;
+	shader_va += info->pc;
 
-#if HAVE_LLVM >= 0x0306
-	shader_va += pc;
-#endif
 	radeon_add_to_buffer_list(&sctx->b, &sctx->b.gfx, shader->bo,
 				  RADEON_USAGE_READ, RADEON_PRIO_USER_SHADER);
 	si_pm4_set_reg(pm4, R_00B830_COMPUTE_PGM_LO, shader_va >> 8);
 	si_pm4_set_reg(pm4, R_00B834_COMPUTE_PGM_HI, shader_va >> 40);
 
-	si_pm4_set_reg(pm4, R_00B848_COMPUTE_PGM_RSRC1, shader->rsrc1);
+	si_pm4_set_reg(pm4, R_00B848_COMPUTE_PGM_RSRC1, shader->config.rsrc1);
 
-	lds_blocks = shader->lds_size;
+	lds_blocks = shader->config.lds_size;
 	/* XXX: We are over allocating LDS.  For SI, the shader reports LDS in
 	 * blocks of 256 bytes, so if there are 4 bytes lds allocated in
 	 * the shader and 4 bytes allocated by the state tracker, then
@@ -376,10 +345,10 @@ static void si_launch_grid(
 
 	assert(lds_blocks <= 0xFF);
 
-	shader->rsrc2 &= C_00B84C_LDS_SIZE;
-	shader->rsrc2 |=  S_00B84C_LDS_SIZE(lds_blocks);
+	shader->config.rsrc2 &= C_00B84C_LDS_SIZE;
+	shader->config.rsrc2 |=  S_00B84C_LDS_SIZE(lds_blocks);
 
-	si_pm4_set_reg(pm4, R_00B84C_COMPUTE_PGM_RSRC2, shader->rsrc2);
+	si_pm4_set_reg(pm4, R_00B84C_COMPUTE_PGM_RSRC2, shader->config.rsrc2);
 	si_pm4_set_reg(pm4, R_00B854_COMPUTE_RESOURCE_LIMITS, 0);
 
 	si_pm4_set_reg(pm4, R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0,
@@ -394,20 +363,20 @@ static void si_launch_grid(
 
 	num_waves_for_scratch =
 		MIN2(num_waves_for_scratch,
-		     32 * sctx->screen->b.info.max_compute_units);
+		     32 * sctx->screen->b.info.num_good_compute_units);
 	si_pm4_set_reg(pm4, R_00B860_COMPUTE_TMPRING_SIZE,
 		/* The maximum value for WAVES is 32 * num CU.
 		 * If you program this value incorrectly, the GPU will hang if
 		 * COMPUTE_PGM_RSRC2.SCRATCH_EN is enabled.
 		 */
 		S_00B860_WAVES(num_waves_for_scratch)
-		| S_00B860_WAVESIZE(shader->scratch_bytes_per_wave >> 10))
+		| S_00B860_WAVESIZE(shader->config.scratch_bytes_per_wave >> 10))
 		;
 
 	si_pm4_cmd_begin(pm4, PKT3_DISPATCH_DIRECT);
-	si_pm4_cmd_add(pm4, grid_layout[0]); /* Thread groups DIM_X */
-	si_pm4_cmd_add(pm4, grid_layout[1]); /* Thread groups DIM_Y */
-	si_pm4_cmd_add(pm4, grid_layout[2]); /* Thread gropus DIM_Z */
+	si_pm4_cmd_add(pm4, info->grid[0]); /* Thread groups DIM_X */
+	si_pm4_cmd_add(pm4, info->grid[1]); /* Thread groups DIM_Y */
+	si_pm4_cmd_add(pm4, info->grid[2]); /* Thread gropus DIM_Z */
 	si_pm4_cmd_add(pm4, 1); /* DISPATCH_INITIATOR */
         si_pm4_cmd_end(pm4, false);
 
@@ -439,29 +408,9 @@ static void si_delete_compute_state(struct pipe_context *ctx, void* state){
 		return;
 	}
 
-#if HAVE_LLVM < 0x0306
-	if (program->kernels) {
-		for (int i = 0; i < program->num_kernels; i++){
-			if (program->kernels[i].bo){
-				si_shader_destroy(&program->kernels[i]);
-			}
-		}
-		FREE(program->kernels);
-	}
-
-	if (program->llvm_ctx){
-		LLVMContextDispose(program->llvm_ctx);
-	}
-#else
-	FREE(program->shader.binary.config);
-	FREE(program->shader.binary.rodata);
-	FREE(program->shader.binary.global_symbol_offsets);
 	si_shader_destroy(&program->shader);
-#endif
-
 	pipe_resource_reference(
 		(struct pipe_resource **)&program->input_buffer, NULL);
-
 	FREE(program);
 }
 

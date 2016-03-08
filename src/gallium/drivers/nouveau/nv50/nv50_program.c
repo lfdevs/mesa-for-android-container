@@ -148,7 +148,6 @@ nv50_fragprog_assign_slots(struct nv50_ir_prog_info *info)
    for (m = 0, i = 0; i < info->numInputs; ++i) {
       switch (info->in[i].sn) {
       case TGSI_SEMANTIC_POSITION:
-      case TGSI_SEMANTIC_FACE:
          continue;
       default:
          m += info->in[i].flat ? 0 : 1;
@@ -166,9 +165,6 @@ nv50_fragprog_assign_slots(struct nv50_ir_prog_info *info)
          for (c = 0; c < 4; ++c)
             if (info->in[i].mask & (1 << c))
                info->in[i].slot[c] = nintp++;
-      } else
-      if (info->in[i].sn == TGSI_SEMANTIC_FACE) {
-         info->in[i].slot[0] = 255;
       } else {
          unsigned j = info->in[i].flat ? m++ : n++;
 
@@ -335,7 +331,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    info->bin.sourceRep = NV50_PROGRAM_IR_TGSI;
    info->bin.source = (void *)prog->pipe.tokens;
 
-   info->io.ucpCBSlot = 15;
+   info->io.auxCBSlot = 15;
    info->io.ucpBase = NV50_CB_AUX_UCP_OFFSET;
    info->io.genUserClip = prog->vp.clpd_nr;
 
@@ -373,7 +369,6 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
       NOUVEAU_ERR("shader translation failed: %i\n", ret);
       goto out;
    }
-   FREE(info->bin.syms);
 
    prog->code = info->bin.code;
    prog->code_size = info->bin.codeSize;
@@ -407,10 +402,13 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
          break;
       }
       prog->gp.vert_count = info->prop.gp.maxVertices;
-   } else
+   }
+
    if (prog->type == PIPE_SHADER_COMPUTE) {
       prog->cp.syms = info->bin.syms;
       prog->cp.num_syms = info->bin.numSyms;
+   } else {
+      FREE(info->bin.syms);
    }
 
    if (prog->pipe.stream_output.num_outputs)
@@ -510,6 +508,9 @@ nv50_program_destroy(struct nv50_context *nv50, struct nv50_program *p)
    FREE(p->fixups);
    FREE(p->interps);
    FREE(p->so);
+
+   if (type == PIPE_SHADER_COMPUTE)
+      FREE(p->cp.syms);
 
    memset(p, 0, sizeof(*p));
 

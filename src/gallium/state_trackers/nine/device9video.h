@@ -35,19 +35,19 @@ NineDevice9Video( void *data )
     return (struct NineDevice9Video *)data;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Video_GetContentProtectionCaps( struct NineDevice9Video *This,
                                            const GUID *pCryptoType,
                                            const GUID *pDecodeProfile,
                                            D3DCONTENTPROTECTIONCAPS *pCaps );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Video_CreateAuthenticatedChannel( struct NineDevice9Video *This,
                                              D3DAUTHENTICATEDCHANNELTYPE ChannelType,
                                              IDirect3DAuthenticatedChannel9 **ppAuthenticatedChannel,
                                              HANDLE *pChannelHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Video_CreateCryptoSession( struct NineDevice9Video *This,
                                       const GUID *pCryptoType,
                                       const GUID *pDecodeProfile,

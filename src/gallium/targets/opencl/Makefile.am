@@ -2,9 +2,6 @@ include $(top_srcdir)/src/gallium/Automake.inc
 
 lib_LTLIBRARIES = lib@OPENCL_LIBNAME@.la
 
-AM_CPPFLAGS = \
-        $(LIBELF_CFLAGS)
-
 lib@OPENCL_LIBNAME@_la_LDFLAGS = \
 	$(LLVM_LDFLAGS) \
 	-no-undefined \

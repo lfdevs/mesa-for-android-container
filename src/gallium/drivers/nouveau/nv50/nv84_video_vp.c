@@ -81,7 +81,7 @@ nv84_decoder_vp_h264(struct nv84_decoder *dec,
       { dec->vp_params, NOUVEAU_BO_RDWR | NOUVEAU_BO_GART },
       { dec->fence, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
    };
-   int num_refs = sizeof(bo_refs)/sizeof(*bo_refs);
+   int num_refs = ARRAY_SIZE(bo_refs);
    bool is_ref = desc->is_reference;
 
    STATIC_ASSERT(sizeof(struct h264_iparm1) == 0x218);
@@ -141,7 +141,7 @@ nv84_decoder_vp_h264(struct nv84_decoder *dec,
          { bo1, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
          { bo2, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
       };
-      nouveau_pushbuf_refn(push, bo_refs, sizeof(bo_refs)/sizeof(bo_refs[0]));
+      nouveau_pushbuf_refn(push, bo_refs, ARRAY_SIZE(bo_refs));
    }
 
    memcpy(dec->vp_params->map, &param1, sizeof(param1));
@@ -490,16 +490,16 @@ nv84_decoder_vp_mpeg12(struct nv84_decoder *dec,
       { NULL, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
       { dec->mpeg12_bo, NOUVEAU_BO_RDWR | NOUVEAU_BO_GART },
    };
-   int i, num_refs = sizeof(bo_refs) / sizeof(*bo_refs);
+   int i, num_refs = ARRAY_SIZE(bo_refs);
    struct mpeg12_header header = {0};
    struct nv50_miptree *y = nv50_miptree(dest->resources[0]);
    struct nv50_miptree *uv = nv50_miptree(dest->resources[1]);
 
    STATIC_ASSERT(sizeof(struct mpeg12_header) == 0x100);
 
-   if (ref1 == NULL)
+   if (!ref1)
       ref1 = dest;
-   if (ref2 == NULL)
+   if (!ref2)
       ref2 = dest;
    bo_refs[1].bo = ref1->interlaced;
    bo_refs[2].bo = ref2->interlaced;

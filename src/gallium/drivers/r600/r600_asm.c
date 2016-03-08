@@ -37,6 +37,11 @@
 #define NUM_OF_CYCLES 3
 #define NUM_OF_COMPONENTS 4
 
+static inline bool alu_writes(struct r600_bytecode_alu *alu)
+{
+	return alu->dst.write || alu->is_op3;
+}
+
 static inline unsigned int r600_bytecode_get_num_operands(
 		struct r600_bytecode *bc, struct r600_bytecode_alu *alu)
 {
@@ -50,12 +55,13 @@ static struct r600_bytecode_cf *r600_bytecode_cf(void)
 {
 	struct r600_bytecode_cf *cf = CALLOC_STRUCT(r600_bytecode_cf);
 
-	if (cf == NULL)
+	if (!cf)
 		return NULL;
 	LIST_INITHEAD(&cf->list);
 	LIST_INITHEAD(&cf->alu);
 	LIST_INITHEAD(&cf->vtx);
 	LIST_INITHEAD(&cf->tex);
+	LIST_INITHEAD(&cf->gds);
 	return cf;
 }
 
@@ -63,7 +69,7 @@ static struct r600_bytecode_alu *r600_bytecode_alu(void)
 {
 	struct r600_bytecode_alu *alu = CALLOC_STRUCT(r600_bytecode_alu);
 
-	if (alu == NULL)
+	if (!alu)
 		return NULL;
 	LIST_INITHEAD(&alu->list);
 	return alu;
@@ -73,7 +79,7 @@ static struct r600_bytecode_vtx *r600_bytecode_vtx(void)
 {
 	struct r600_bytecode_vtx *vtx = CALLOC_STRUCT(r600_bytecode_vtx);
 
-	if (vtx == NULL)
+	if (!vtx)
 		return NULL;
 	LIST_INITHEAD(&vtx->list);
 	return vtx;
@@ -83,10 +89,20 @@ static struct r600_bytecode_tex *r600_bytecode_tex(void)
 {
 	struct r600_bytecode_tex *tex = CALLOC_STRUCT(r600_bytecode_tex);
 
-	if (tex == NULL)
+	if (!tex)
 		return NULL;
 	LIST_INITHEAD(&tex->list);
 	return tex;
+}
+
+static struct r600_bytecode_gds *r600_bytecode_gds(void)
+{
+	struct r600_bytecode_gds *gds = CALLOC_STRUCT(r600_bytecode_gds);
+
+	if (gds == NULL)
+		return NULL;
+	LIST_INITHEAD(&gds->list);
+	return gds;
 }
 
 static unsigned stack_entry_size(enum radeon_family chip) {
@@ -152,7 +168,7 @@ int r600_bytecode_add_cf(struct r600_bytecode *bc)
 {
 	struct r600_bytecode_cf *cf = r600_bytecode_cf();
 
-	if (cf == NULL)
+	if (!cf)
 		return -ENOMEM;
 	LIST_ADDTAIL(&cf->list, &bc->cf);
 	if (bc->cf_last) {
@@ -221,7 +237,7 @@ int r600_bytecode_add_output(struct r600_bytecode *bc,
 /* alu instructions that can ony exits once per group */
 static int is_alu_once_inst(struct r600_bytecode *bc, struct r600_bytecode_alu *alu)
 {
-	return r600_isa_alu(alu->op)->flags & (AF_KILL | AF_PRED);
+	return r600_isa_alu(alu->op)->flags & (AF_KILL | AF_PRED) || alu->is_lds_idx_op || alu->op == ALU_OP0_GROUP_BARRIER;
 }
 
 static int is_alu_reduction_inst(struct r600_bytecode *bc, struct r600_bytecode_alu *alu)
@@ -246,6 +262,24 @@ static int alu_uses_rel(struct r600_bytecode *bc, struct r600_bytecode_alu *alu)
 
 	for (src = 0; src < num_src; ++src) {
 		if (alu->src[src].rel) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static int is_lds_read(int sel)
+{
+  return sel == EG_V_SQ_ALU_SRC_LDS_OQ_A_POP || sel == EG_V_SQ_ALU_SRC_LDS_OQ_B_POP;
+}
+
+static int alu_uses_lds(struct r600_bytecode *bc, struct r600_bytecode_alu *alu)
+{
+	unsigned num_src = r600_bytecode_get_num_operands(bc, alu);
+	unsigned src;
+
+	for (src = 0; src < num_src; ++src) {
+		if (is_lds_read(alu->src[src].sel)) {
 			return 1;
 		}
 	}
@@ -581,7 +615,7 @@ static int replace_gpr_with_pv_ps(struct r600_bytecode *bc,
 		return r;
 
 	for (i = 0; i < max_slots; ++i) {
-		if (prev[i] && (prev[i]->dst.write || prev[i]->is_op3) && !prev[i]->dst.rel) {
+		if (prev[i] && alu_writes(prev[i]) && !prev[i]->dst.rel) {
 
 			if (is_alu_64bit_inst(bc, prev[i])) {
 				gpr[i] = -1;
@@ -600,7 +634,7 @@ static int replace_gpr_with_pv_ps(struct r600_bytecode *bc,
 
 	for (i = 0; i < max_slots; ++i) {
 		struct r600_bytecode_alu *alu = slots[i];
-		if(!alu)
+		if (!alu)
 			continue;
 
 		if (is_alu_64bit_inst(bc, alu))
@@ -771,6 +805,8 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 				}
 				have_rel = 1;
 			}
+			if (alu_uses_lds(bc, prev[i]))
+				return 0;
 
 			num_once_inst += is_alu_once_inst(bc, prev[i]);
 		}
@@ -784,13 +820,13 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 		} else if (prev[i] && slots[i]) {
 			if (max_slots == 5 && result[4] == NULL && prev[4] == NULL && slots[4] == NULL) {
 				/* Trans unit is still free try to use it. */
-				if (is_alu_any_unit_inst(bc, slots[i])) {
+				if (is_alu_any_unit_inst(bc, slots[i]) && !alu_uses_lds(bc, slots[i])) {
 					result[i] = prev[i];
 					result[4] = slots[i];
 				} else if (is_alu_any_unit_inst(bc, prev[i])) {
 					if (slots[i]->dst.sel == prev[i]->dst.sel &&
-						(slots[i]->dst.write == 1 || slots[i]->is_op3) &&
-						(prev[i]->dst.write == 1 || prev[i]->is_op3))
+					    alu_writes(slots[i]) &&
+					    alu_writes(prev[i]))
 						return 0;
 
 					result[i] = slots[i];
@@ -805,8 +841,8 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 			if (max_slots == 5 && slots[i] && prev[4] &&
 					slots[i]->dst.sel == prev[4]->dst.sel &&
 					slots[i]->dst.chan == prev[4]->dst.chan &&
-					(slots[i]->dst.write == 1 || slots[i]->is_op3) &&
-					(prev[4]->dst.write == 1 || prev[4]->is_op3))
+					alu_writes(slots[i]) &&
+					alu_writes(prev[4]))
 				return 0;
 
 			result[i] = slots[i];
@@ -846,7 +882,7 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 				continue;
 
 			for (j = 0; j < max_slots; ++j) {
-				if (!prev[j] || !(prev[j]->dst.write || prev[j]->is_op3))
+				if (!prev[j] || !alu_writes(prev[j]))
 					continue;
 
 				/* If it's relative then we can't determin which gpr is really used. */
@@ -1143,7 +1179,7 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 	struct r600_bytecode_alu *lalu;
 	int i, r;
 
-	if (nalu == NULL)
+	if (!nalu)
 		return -ENOMEM;
 	memcpy(nalu, alu, sizeof(struct r600_bytecode_alu));
 
@@ -1304,7 +1340,7 @@ int r600_bytecode_add_vtx(struct r600_bytecode *bc, const struct r600_bytecode_v
 	struct r600_bytecode_vtx *nvtx = r600_bytecode_vtx();
 	int r;
 
-	if (nvtx == NULL)
+	if (!nvtx)
 		return -ENOMEM;
 	memcpy(nvtx, vtx, sizeof(struct r600_bytecode_vtx));
 
@@ -1356,7 +1392,7 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
 	struct r600_bytecode_tex *ntex = r600_bytecode_tex();
 	int r;
 
-	if (ntex == NULL)
+	if (!ntex)
 		return -ENOMEM;
 	memcpy(ntex, tex, sizeof(struct r600_bytecode_tex));
 
@@ -1402,6 +1438,33 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
 	/* each texture fetch use 4 dwords */
 	bc->cf_last->ndw += 4;
 	bc->ndw += 4;
+	if ((bc->cf_last->ndw / 4) >= r600_bytecode_num_tex_and_vtx_instructions(bc))
+		bc->force_add_cf = 1;
+	return 0;
+}
+
+int r600_bytecode_add_gds(struct r600_bytecode *bc, const struct r600_bytecode_gds *gds)
+{
+	struct r600_bytecode_gds *ngds = r600_bytecode_gds();
+	int r;
+
+	if (ngds == NULL)
+		return -ENOMEM;
+	memcpy(ngds, gds, sizeof(struct r600_bytecode_gds));
+
+	if (bc->cf_last == NULL ||
+	    bc->cf_last->op != CF_OP_GDS ||
+	    bc->force_add_cf) {
+		r = r600_bytecode_add_cf(bc);
+		if (r) {
+			free(ngds);
+			return r;
+		}
+		bc->cf_last->op = CF_OP_GDS;
+	}
+
+	LIST_ADDTAIL(&ngds->list, &bc->cf_last->gds);
+	bc->cf_last->ndw += 4; /* each GDS uses 4 dwords */
 	if ((bc->cf_last->ndw / 4) >= r600_bytecode_num_tex_and_vtx_instructions(bc))
 		bc->force_add_cf = 1;
 	return 0;
@@ -1618,6 +1681,7 @@ int r600_bytecode_build(struct r600_bytecode *bc)
 	struct r600_bytecode_alu *alu;
 	struct r600_bytecode_vtx *vtx;
 	struct r600_bytecode_tex *tex;
+	struct r600_bytecode_gds *gds;
 	uint32_t literal[4];
 	unsigned nliteral;
 	unsigned addr;
@@ -1626,7 +1690,7 @@ int r600_bytecode_build(struct r600_bytecode *bc)
 	if (!bc->nstack) // If not 0, Stack_size already provided by llvm
 		bc->nstack = bc->stack.max_entries;
 
-	if (bc->type == TGSI_PROCESSOR_VERTEX && !bc->nstack) {
+	if ((bc->type == TGSI_PROCESSOR_VERTEX || bc->type == TGSI_PROCESSOR_TESS_EVAL || bc->type == TGSI_PROCESSOR_TESS_CTRL) && !bc->nstack) {
 		bc->nstack = 1;
 	}
 
@@ -1670,9 +1734,11 @@ int r600_bytecode_build(struct r600_bytecode *bc)
 					r = r600_bytecode_alu_build(bc, alu, addr);
 					break;
 				case R700:
-				case EVERGREEN: /* eg alu is same encoding as r700 */
-				case CAYMAN:
 					r = r700_bytecode_alu_build(bc, alu, addr);
+					break;
+				case EVERGREEN:
+				case CAYMAN:
+					r = eg_bytecode_alu_build(bc, alu, addr);
 					break;
 				default:
 					R600_ERR("unknown chip class %d.\n", bc->chip_class);
@@ -1692,6 +1758,14 @@ int r600_bytecode_build(struct r600_bytecode *bc)
 		} else if (cf->op == CF_OP_VTX) {
 			LIST_FOR_EACH_ENTRY(vtx, &cf->vtx, list) {
 				r = r600_bytecode_vtx_build(bc, vtx, addr);
+				if (r)
+					return r;
+				addr += 4;
+			}
+		} else if (cf->op == CF_OP_GDS) {
+			assert(bc->chip_class >= EVERGREEN);
+			LIST_FOR_EACH_ENTRY(gds, &cf->gds, list) {
+				r = eg_bytecode_gds_build(bc, gds, addr);
 				if (r)
 					return r;
 				addr += 4;
@@ -1726,6 +1800,7 @@ void r600_bytecode_clear(struct r600_bytecode *bc)
 		struct r600_bytecode_alu *alu = NULL, *next_alu;
 		struct r600_bytecode_tex *tex = NULL, *next_tex;
 		struct r600_bytecode_tex *vtx = NULL, *next_vtx;
+		struct r600_bytecode_gds *gds = NULL, *next_gds;
 
 		LIST_FOR_EACH_ENTRY_SAFE(alu, next_alu, &cf->alu, list) {
 			free(alu);
@@ -1744,6 +1819,12 @@ void r600_bytecode_clear(struct r600_bytecode *bc)
 		}
 
 		LIST_INITHEAD(&cf->vtx);
+
+		LIST_FOR_EACH_ENTRY_SAFE(gds, next_gds, &cf->gds, list) {
+			free(gds);
+		}
+
+		LIST_INITHEAD(&cf->gds);
 
 		free(cf);
 	}
@@ -1790,7 +1871,7 @@ static int print_dst(struct r600_bytecode_alu *alu)
 		reg_char = 'T';
 	}
 
-	if (alu->dst.write || alu->is_op3) {
+	if (alu_writes(alu)) {
 		o += fprintf(stderr, "%c", reg_char);
 		o += print_sel(alu->dst.sel, alu->dst.rel, alu->index_mode, 0);
 	} else {
@@ -1845,6 +1926,28 @@ static int print_src(struct r600_bytecode_alu *alu, unsigned idx)
 		need_sel = 0;
 		need_chan = 0;
 		switch (sel) {
+		case EG_V_SQ_ALU_SRC_LDS_DIRECT_A:
+			o += fprintf(stderr, "LDS_A[0x%08X]", src->value);
+			break;
+		case EG_V_SQ_ALU_SRC_LDS_DIRECT_B:
+			o += fprintf(stderr, "LDS_B[0x%08X]", src->value);
+			break;
+		case EG_V_SQ_ALU_SRC_LDS_OQ_A:
+			o += fprintf(stderr, "LDS_OQ_A");
+			need_chan = 1;
+			break;
+		case EG_V_SQ_ALU_SRC_LDS_OQ_B:
+			o += fprintf(stderr, "LDS_OQ_B");
+			need_chan = 1;
+			break;
+		case EG_V_SQ_ALU_SRC_LDS_OQ_A_POP:
+			o += fprintf(stderr, "LDS_OQ_A_POP");
+			need_chan = 1;
+			break;
+		case EG_V_SQ_ALU_SRC_LDS_OQ_B_POP:
+			o += fprintf(stderr, "LDS_OQ_B_POP");
+			need_chan = 1;
+			break;
 		case V_SQ_ALU_SRC_PS:
 			o += fprintf(stderr, "PS");
 			break;
@@ -1906,6 +2009,7 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 	struct r600_bytecode_alu *alu = NULL;
 	struct r600_bytecode_vtx *vtx = NULL;
 	struct r600_bytecode_tex *tex = NULL;
+	struct r600_bytecode_gds *gds = NULL;
 
 	unsigned i, id, ngr = 0, last;
 	uint32_t literal[4];
@@ -2189,6 +2293,33 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 
 			id += 4;
 		}
+
+		LIST_FOR_EACH_ENTRY(gds, &cf->gds, list) {
+			int o = 0;
+			o += fprintf(stderr, " %04d %08X %08X %08X   ", id, bc->bytecode[id],
+					bc->bytecode[id + 1], bc->bytecode[id + 2]);
+
+			o += fprintf(stderr, "%s ", r600_isa_fetch(gds->op)->name);
+
+			if (gds->op != FETCH_OP_TF_WRITE) {
+				o += fprintf(stderr, "R%d.", gds->dst_gpr);
+				o += print_swizzle(gds->dst_sel_x);
+				o += print_swizzle(gds->dst_sel_y);
+				o += print_swizzle(gds->dst_sel_z);
+				o += print_swizzle(gds->dst_sel_w);
+			}
+
+			o += fprintf(stderr, ", R%d.", gds->src_gpr);
+			o += print_swizzle(gds->src_sel_x);
+			o += print_swizzle(gds->src_sel_y);
+			o += print_swizzle(gds->src_sel_z);
+
+			if (gds->op != FETCH_OP_TF_WRITE) {
+				o += fprintf(stderr, ", R%d.", gds->src_gpr2);
+			}
+			fprintf(stderr, "\n");
+			id += 4;
+		}
 	}
 
 	fprintf(stderr, "--------------------------------------\n");
@@ -2415,7 +2546,7 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 				      &format, &num_format, &format_comp, &endian);
 
 		desc = util_format_description(elements[i].src_format);
-		if (desc == NULL) {
+		if (!desc) {
 			r600_bytecode_clear(&bc);
 			R600_ERR("unknown format %d\n", elements[i].src_format);
 			return NULL;
@@ -2502,7 +2633,7 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 	} else {
 		memcpy(bytecode, bc.bytecode, fs_size);
 	}
-	rctx->b.ws->buffer_unmap(shader->buffer->cs_buf);
+	rctx->b.ws->buffer_unmap(shader->buffer->buf);
 
 	r600_bytecode_clear(&bc);
 	return shader;

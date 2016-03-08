@@ -196,7 +196,7 @@ static void cik_sdma_copy_tile(struct si_context *ctx,
 			(tile_split << 11) | (mt << 8) | (array_mode << 3) |
 			lbpe;
 		cs->buf[cs->cdw++] = y << 16; /* | x */
-		cs->buf[cs->cdw++] = 0; /* z */;
+		cs->buf[cs->cdw++] = 0; /* z */
 		cs->buf[cs->cdw++] = addr & 0xfffffffc;
 		cs->buf[cs->cdw++] = addr >> 32;
 		cs->buf[cs->cdw++] = (pitch / bpe) - 1;
@@ -308,7 +308,7 @@ void cik_sdma_copy(struct pipe_context *ctx,
 			}
 
 			mtilew = (8 * rsrc->surface.bankw *
-				  sctx->screen->b.tiling_info.num_channels) *
+				  sctx->screen->b.info.num_tile_pipes) *
 				rsrc->surface.mtilea;
 			assert(!(mtilew & (mtilew - 1)));
 			mtileh = (8 * rsrc->surface.bankh * num_banks) /

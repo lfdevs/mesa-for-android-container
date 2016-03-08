@@ -1122,7 +1122,7 @@ namespace brw {
                                               dims, rsize, op, pred);
 
          /* An unbound surface access should give zero as result. */
-         if (rsize)
+         if (rsize && pred)
             set_predicate(pred, bld.SEL(tmp, tmp, brw_imm_d(0)));
 
          return tmp;

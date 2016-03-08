@@ -80,7 +80,7 @@ static void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op)
 	if (op & SI_SAVE_TEXTURES) {
 		util_blitter_save_fragment_sampler_states(
 			sctx->blitter, 2,
-			sctx->samplers[PIPE_SHADER_FRAGMENT].states.saved_states);
+			sctx->samplers[PIPE_SHADER_FRAGMENT].views.sampler_states);
 
 		util_blitter_save_fragment_sampler_views(sctx->blitter, 2,
 			sctx->samplers[PIPE_SHADER_FRAGMENT].views.views);
@@ -377,22 +377,39 @@ static void si_clear(struct pipe_context *ctx, unsigned buffers,
 		}
 	}
 
-	if (buffers & PIPE_CLEAR_DEPTH &&
-	    zstex && zstex->htile_buffer &&
+	if (zstex && zstex->htile_buffer &&
 	    zsbuf->u.tex.level == 0 &&
 	    zsbuf->u.tex.first_layer == 0 &&
 	    zsbuf->u.tex.last_layer == util_max_layer(&zstex->resource.b.b, 0)) {
-		/* Need to disable EXPCLEAR temporarily if clearing
-		 * to a new value. */
-		if (zstex->depth_cleared && zstex->depth_clear_value != depth) {
-			sctx->db_depth_disable_expclear = true;
+		if (buffers & PIPE_CLEAR_DEPTH) {
+			/* Need to disable EXPCLEAR temporarily if clearing
+			 * to a new value. */
+			if (zstex->depth_cleared && zstex->depth_clear_value != depth) {
+				sctx->db_depth_disable_expclear = true;
+			}
+
+			zstex->depth_clear_value = depth;
+			sctx->framebuffer.dirty_zsbuf = true;
+			si_mark_atom_dirty(sctx, &sctx->framebuffer.atom); /* updates DB_DEPTH_CLEAR */
+			sctx->db_depth_clear = true;
+			si_mark_atom_dirty(sctx, &sctx->db_render_state);
 		}
 
-		zstex->depth_clear_value = depth;
-		sctx->framebuffer.dirty_zsbuf = true;
-		si_mark_atom_dirty(sctx, &sctx->framebuffer.atom); /* updates DB_DEPTH_CLEAR */
-		sctx->db_depth_clear = true;
-		si_mark_atom_dirty(sctx, &sctx->db_render_state);
+		if (buffers & PIPE_CLEAR_STENCIL) {
+			stencil &= 0xff;
+
+			/* Need to disable EXPCLEAR temporarily if clearing
+			 * to a new value. */
+			if (zstex->stencil_cleared && zstex->stencil_clear_value != stencil) {
+				sctx->db_stencil_disable_expclear = true;
+			}
+
+			zstex->stencil_clear_value = stencil;
+			sctx->framebuffer.dirty_zsbuf = true;
+			si_mark_atom_dirty(sctx, &sctx->framebuffer.atom); /* updates DB_STENCIL_CLEAR */
+			sctx->db_stencil_clear = true;
+			si_mark_atom_dirty(sctx, &sctx->db_render_state);
+		}
 	}
 
 	si_blitter_begin(ctx, SI_CLEAR);
@@ -405,6 +422,13 @@ static void si_clear(struct pipe_context *ctx, unsigned buffers,
 		sctx->db_depth_clear = false;
 		sctx->db_depth_disable_expclear = false;
 		zstex->depth_cleared = true;
+		si_mark_atom_dirty(sctx, &sctx->db_render_state);
+	}
+
+	if (sctx->db_stencil_clear) {
+		sctx->db_stencil_clear = false;
+		sctx->db_stencil_disable_expclear = false;
+		zstex->stencil_cleared = true;
 		si_mark_atom_dirty(sctx, &sctx->db_render_state);
 	}
 }
@@ -655,6 +679,14 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
 	unsigned dst_height = u_minify(info->dst.resource->height0, info->dst.level);
 	enum pipe_format format = int_to_norm_format(info->dst.format);
 	unsigned sample_mask = ~0;
+
+	/* Hardware MSAA resolve doesn't work if SPI format = NORM16_ABGR and
+	 * the format is R16G16. Use R16A16, which does work.
+	 */
+	if (format == PIPE_FORMAT_R16G16_UNORM)
+		format = PIPE_FORMAT_R16A16_UNORM;
+	if (format == PIPE_FORMAT_R16G16_SNORM)
+		format = PIPE_FORMAT_R16A16_SNORM;
 
 	if (info->src.resource->nr_samples > 1 &&
 	    info->dst.resource->nr_samples <= 1 &&

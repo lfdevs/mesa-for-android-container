@@ -248,9 +248,10 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
                     const struct pipe_resource *templ)
 {
    struct nouveau_device *dev = nouveau_screen(pscreen)->device;
+   struct nouveau_drm *drm = nouveau_screen(pscreen)->drm;
    struct nv50_miptree *mt = CALLOC_STRUCT(nv50_miptree);
    struct pipe_resource *pt = &mt->base.base;
-   bool compressed = dev->drm_version >= 0x01000101;
+   bool compressed = drm->version >= 0x01000101;
    int ret;
    union nouveau_bo_config bo_config;
    uint32_t bo_flags;

@@ -24,14 +24,14 @@
 
 #define DBG_CHANNEL DBG_AUTHENTICATEDCHANNEL
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_GetCertificateSize( struct NineAuthenticatedChannel9 *This,
                                               UINT *pCertificateSize )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_GetCertificate( struct NineAuthenticatedChannel9 *This,
                                           UINT CertifacteSize,
                                           BYTE *ppCertificate )
@@ -39,7 +39,7 @@ NineAuthenticatedChannel9_GetCertificate( struct NineAuthenticatedChannel9 *This
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_NegotiateKeyExchange( struct NineAuthenticatedChannel9 *This,
                                                 UINT DataSize,
                                                 void *pData )
@@ -47,7 +47,7 @@ NineAuthenticatedChannel9_NegotiateKeyExchange( struct NineAuthenticatedChannel9
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_Query( struct NineAuthenticatedChannel9 *This,
                                  UINT InputSize,
                                  const void *pInput,
@@ -57,7 +57,7 @@ NineAuthenticatedChannel9_Query( struct NineAuthenticatedChannel9 *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_Configure( struct NineAuthenticatedChannel9 *This,
                                      UINT InputSize,
                                      const void *pInput,

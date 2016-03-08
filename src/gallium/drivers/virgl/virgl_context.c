@@ -198,7 +198,7 @@ static struct pipe_surface *virgl_create_surface(struct pipe_context *ctx,
    uint32_t handle;
 
    surf = CALLOC_STRUCT(virgl_surface);
-   if (surf == NULL)
+   if (!surf)
       return NULL;
 
    res->clean = FALSE;
@@ -605,7 +605,7 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
            ib.offset = vctx->index_buffer.offset + info.start * ib.index_size;
 
            if (ib.user_buffer) {
-                   u_upload_data(vctx->uploader, 0, info.count * ib.index_size,
+                   u_upload_data(vctx->uploader, 0, info.count * ib.index_size, 256,
                                  ib.user_buffer, &ib.offset, &ib.buffer);
                    ib.user_buffer = NULL;
            }
@@ -669,7 +669,7 @@ static struct pipe_sampler_view *virgl_create_sampler_view(struct pipe_context *
    uint32_t handle;
    struct virgl_resource *res;
 
-   if (state == NULL)
+   if (!state)
       return NULL;
 
    grview = CALLOC_STRUCT(virgl_sampler_view);
@@ -948,8 +948,8 @@ struct pipe_context *virgl_context_create(struct pipe_screen *pscreen,
                     16, UTIL_SLAB_SINGLETHREADED);
 
    vctx->primconvert = util_primconvert_create(&vctx->base, rs->caps.caps.v1.prim_mask);
-   vctx->uploader = u_upload_create(&vctx->base, 1024 * 1024, 256,
-                                     PIPE_BIND_INDEX_BUFFER);
+   vctx->uploader = u_upload_create(&vctx->base, 1024 * 1024,
+                                     PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_STREAM);
    if (!vctx->uploader)
            goto fail;
 

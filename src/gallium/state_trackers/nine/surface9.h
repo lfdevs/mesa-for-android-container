@@ -151,29 +151,29 @@ NineSurface9_Dump( struct NineSurface9 *This ) { }
 
 /*** Direct3D public ***/
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_GetContainer( struct NineSurface9 *This,
                            REFIID riid,
                            void **ppContainer );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_GetDesc( struct NineSurface9 *This,
                       D3DSURFACE_DESC *pDesc );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_LockRect( struct NineSurface9 *This,
                        D3DLOCKED_RECT *pLockedRect,
                        const RECT *pRect,
                        DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_UnlockRect( struct NineSurface9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_GetDC( struct NineSurface9 *This,
                     HDC *phdc );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_ReleaseDC( struct NineSurface9 *This,
                         HDC hdc );
 

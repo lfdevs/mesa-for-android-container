@@ -645,10 +645,100 @@ GLAPI OSMesaContext GLAPIENTRY
 OSMesaCreateContextExt( GLenum format, GLint depthBits, GLint stencilBits,
                         GLint accumBits, OSMesaContext sharelist )
 {
+   int attribs[100], n = 0;
+
+   attribs[n++] = OSMESA_FORMAT;
+   attribs[n++] = format;
+   attribs[n++] = OSMESA_DEPTH_BITS;
+   attribs[n++] = depthBits;
+   attribs[n++] = OSMESA_STENCIL_BITS;
+   attribs[n++] = stencilBits;
+   attribs[n++] = OSMESA_ACCUM_BITS;
+   attribs[n++] = accumBits;
+   attribs[n++] = 0;
+
+   return OSMesaCreateContextAttribs(attribs, sharelist);
+}
+
+
+/**
+ * New in Mesa 11.2
+ *
+ * Create context with attribute list.
+ */
+GLAPI OSMesaContext GLAPIENTRY
+OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
+{
    OSMesaContext osmesa;
    struct dd_function_table functions;
    GLint rind, gind, bind, aind;
    GLint redBits = 0, greenBits = 0, blueBits = 0, alphaBits =0;
+   GLenum format = OSMESA_RGBA;
+   GLint depthBits = 0, stencilBits = 0, accumBits = 0;
+   int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
+   gl_api api_profile = API_OPENGL_COMPAT;
+   int i;
+
+   for (i = 0; attribList[i]; i += 2) {
+      switch (attribList[i]) {
+      case OSMESA_FORMAT:
+         format = attribList[i+1];
+         switch (format) {
+         case OSMESA_COLOR_INDEX:
+         case OSMESA_RGBA:
+         case OSMESA_BGRA:
+         case OSMESA_ARGB:
+         case OSMESA_RGB:
+         case OSMESA_BGR:
+         case OSMESA_RGB_565:
+            /* legal */
+            break;
+         default:
+            return NULL;
+         }
+         break;
+      case OSMESA_DEPTH_BITS:
+         depthBits = attribList[i+1];
+         if (depthBits < 0)
+            return NULL;
+         break;
+      case OSMESA_STENCIL_BITS:
+         stencilBits = attribList[i+1];
+         if (stencilBits < 0)
+            return NULL;
+         break;
+      case OSMESA_ACCUM_BITS:
+         accumBits = attribList[i+1];
+         if (accumBits < 0)
+            return NULL;
+         break;
+      case OSMESA_PROFILE:
+         profile = attribList[i+1];
+         if (profile == OSMESA_COMPAT_PROFILE)
+            api_profile = API_OPENGL_COMPAT;
+         else if (profile == OSMESA_CORE_PROFILE)
+            api_profile = API_OPENGL_CORE;
+         else
+            return NULL;
+         break;
+      case OSMESA_CONTEXT_MAJOR_VERSION:
+         version_major = attribList[i+1];
+         if (version_major < 1)
+            return NULL;
+         break;
+      case OSMESA_CONTEXT_MINOR_VERSION:
+         version_minor = attribList[i+1];
+         if (version_minor < 0)
+            return NULL;
+         break;
+      case 0:
+         /* end of list */
+         break;
+      default:
+         fprintf(stderr, "Bad attribute in OSMesaCreateContextAttribs()\n");
+         return NULL;
+      }
+   }
 
    rind = gind = bind = aind = 0;
    if (format==OSMESA_RGBA) {
@@ -742,7 +832,7 @@ OSMesaCreateContextExt( GLenum format, GLint depthBits, GLint stencilBits,
       functions.UpdateState = osmesa_update_state;
 
       if (!_mesa_initialize_context(&osmesa->mesa,
-                                    API_OPENGL_COMPAT,
+                                    api_profile,
                                     osmesa->gl_visual,
                                     sharelist ? &sharelist->mesa
                                               : (struct gl_context *) NULL,
@@ -818,6 +908,13 @@ OSMesaCreateContextExt( GLenum format, GLint depthBits, GLint stencilBits,
          swrast->choose_triangle = osmesa_choose_triangle;
 
          _mesa_compute_version(ctx);
+
+         if (ctx->Version < version_major * 10 + version_minor) {
+            _mesa_destroy_visual(osmesa->gl_visual);
+            _mesa_free_context_data(ctx);
+            free(osmesa);
+            return NULL;
+         }
 
          /* Exec table initialization requires the version to be computed */
          _mesa_initialize_dispatch_tables(ctx);
@@ -1121,6 +1218,7 @@ struct name_function
 static struct name_function functions[] = {
    { "OSMesaCreateContext", (OSMESAproc) OSMesaCreateContext },
    { "OSMesaCreateContextExt", (OSMESAproc) OSMesaCreateContextExt },
+   { "OSMesaCreateContextAttribs", (OSMESAproc) OSMesaCreateContextAttribs },
    { "OSMesaDestroyContext", (OSMESAproc) OSMesaDestroyContext },
    { "OSMesaMakeCurrent", (OSMESAproc) OSMesaMakeCurrent },
    { "OSMesaGetCurrentContext", (OSMESAproc) OSMesaGetCurrentContext },

@@ -225,7 +225,7 @@ draw_create_vs_exec(struct draw_context *draw,
 {
    struct exec_vertex_shader *vs = CALLOC_STRUCT( exec_vertex_shader );
 
-   if (vs == NULL) 
+   if (!vs)
       return NULL;
 
    /* we make a private copy of the tokens */

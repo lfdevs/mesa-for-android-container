@@ -140,7 +140,7 @@ add_conv_test(struct gallivm_state *gallivm,
       LLVMBuildStore(builder, dst[i], ptr);
    }
 
-   LLVMBuildRetVoid(builder);;
+   LLVMBuildRetVoid(builder);
 
    gallivm_verify_function(gallivm, func);
 
@@ -382,7 +382,7 @@ const struct lp_type conv_types[] = {
 };
 
 
-const unsigned num_types = sizeof(conv_types)/sizeof(conv_types[0]);
+const unsigned num_types = ARRAY_SIZE(conv_types);
 
 
 boolean

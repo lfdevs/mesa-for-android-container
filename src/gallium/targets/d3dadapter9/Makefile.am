@@ -62,7 +62,6 @@ endif # HAVE_LD_VERSION_SCRIPT
 d3dadapter9_la_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/glsl/libnir.la \
 	$(top_builddir)/src/gallium/state_trackers/nine/libninetracker.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(EXPAT_LIBS) \
@@ -86,10 +85,6 @@ include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/svga/Automake.inc
-
-include $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc
-
-include $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc

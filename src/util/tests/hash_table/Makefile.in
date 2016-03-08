@@ -108,7 +108,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-TESTS = collision$(EXEEXT) delete_and_lookup$(EXEEXT) \
+TESTS = clear$(EXEEXT) collision$(EXEEXT) delete_and_lookup$(EXEEXT) \
 	delete_management$(EXEEXT) destroy_callback$(EXEEXT) \
 	insert_and_lookup$(EXEEXT) insert_many$(EXEEXT) \
 	null_destroy$(EXEEXT) random_entry$(EXEEXT) \
@@ -132,21 +132,27 @@ DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-am__EXEEXT_1 = collision$(EXEEXT) delete_and_lookup$(EXEEXT) \
-	delete_management$(EXEEXT) destroy_callback$(EXEEXT) \
-	insert_and_lookup$(EXEEXT) insert_many$(EXEEXT) \
-	null_destroy$(EXEEXT) random_entry$(EXEEXT) \
-	remove_null$(EXEEXT) replacement$(EXEEXT)
-collision_SOURCES = collision.c
-collision_OBJECTS = collision.$(OBJEXT)
-collision_LDADD = $(LDADD)
+am__EXEEXT_1 = clear$(EXEEXT) collision$(EXEEXT) \
+	delete_and_lookup$(EXEEXT) delete_management$(EXEEXT) \
+	destroy_callback$(EXEEXT) insert_and_lookup$(EXEEXT) \
+	insert_many$(EXEEXT) null_destroy$(EXEEXT) \
+	random_entry$(EXEEXT) remove_null$(EXEEXT) \
+	replacement$(EXEEXT)
+clear_SOURCES = clear.c
+clear_OBJECTS = clear.$(OBJEXT)
+clear_LDADD = $(LDADD)
 am__DEPENDENCIES_1 =
-collision_DEPENDENCIES = $(top_builddir)/src/util/libmesautil.la \
+clear_DEPENDENCIES = $(top_builddir)/src/util/libmesautil.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+collision_SOURCES = collision.c
+collision_OBJECTS = collision.$(OBJEXT)
+collision_LDADD = $(LDADD)
+collision_DEPENDENCIES = $(top_builddir)/src/util/libmesautil.la \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 delete_and_lookup_SOURCES = delete_and_lookup.c
 delete_and_lookup_OBJECTS = delete_and_lookup.$(OBJEXT)
 delete_and_lookup_LDADD = $(LDADD)
@@ -230,12 +236,13 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = collision.c delete_and_lookup.c delete_management.c \
+SOURCES = clear.c collision.c delete_and_lookup.c delete_management.c \
 	destroy_callback.c insert_and_lookup.c insert_many.c \
 	null_destroy.c random_entry.c remove_null.c replacement.c
-DIST_SOURCES = collision.c delete_and_lookup.c delete_management.c \
-	destroy_callback.c insert_and_lookup.c insert_many.c \
-	null_destroy.c random_entry.c remove_null.c replacement.c
+DIST_SOURCES = clear.c collision.c delete_and_lookup.c \
+	delete_management.c destroy_callback.c insert_and_lookup.c \
+	insert_many.c null_destroy.c random_entry.c remove_null.c \
+	replacement.c
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -591,8 +598,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -638,6 +643,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -808,6 +814,10 @@ clean-checkPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+clear$(EXEEXT): $(clear_OBJECTS) $(clear_DEPENDENCIES) $(EXTRA_clear_DEPENDENCIES) 
+	@rm -f clear$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(clear_OBJECTS) $(clear_LDADD) $(LIBS)
+
 collision$(EXEEXT): $(collision_OBJECTS) $(collision_DEPENDENCIES) $(EXTRA_collision_DEPENDENCIES) 
 	@rm -f collision$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(collision_OBJECTS) $(collision_LDADD) $(LIBS)
@@ -854,6 +864,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/clear.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/collision.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/delete_and_lookup.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/delete_management.Po@am__quote@
@@ -1088,6 +1099,13 @@ recheck: all $(check_PROGRAMS)
 	        am__force_recheck=am--force-recheck \
 	        TEST_LOGS="$$log_list"; \
 	exit $$?
+clear.log: clear$(EXEEXT)
+	@p='clear$(EXEEXT)'; \
+	b='clear'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 collision.log: collision$(EXEEXT)
 	@p='collision$(EXEEXT)'; \
 	b='collision'; \

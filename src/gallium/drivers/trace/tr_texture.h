@@ -88,7 +88,7 @@ struct trace_transfer
 static inline struct trace_resource *
 trace_resource(struct pipe_resource *texture)
 {
-   if(!texture)
+   if (!texture)
       return NULL;
    (void)trace_screen(texture->screen);
    return (struct trace_resource *)texture;
@@ -98,7 +98,7 @@ trace_resource(struct pipe_resource *texture)
 static inline struct trace_surface *
 trace_surface(struct pipe_surface *surface)
 {
-   if(!surface)
+   if (!surface)
       return NULL;
    (void)trace_resource(surface->texture);
    return (struct trace_surface *)surface;
@@ -117,7 +117,7 @@ trace_sampler_view(struct pipe_sampler_view *sampler_view)
 static inline struct trace_transfer *
 trace_transfer(struct pipe_transfer *transfer)
 {
-   if(!transfer)
+   if (!transfer)
       return NULL;
    (void)trace_resource(transfer->resource);
    return (struct trace_transfer *)transfer;

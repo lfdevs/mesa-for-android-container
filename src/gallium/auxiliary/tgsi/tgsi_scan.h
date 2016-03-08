@@ -77,11 +77,14 @@ struct tgsi_shader_info
 
    uint opcode_count[TGSI_OPCODE_LAST];  /**< opcode histogram */
 
+   ubyte colors_read; /**< which color components are read by the FS */
    ubyte colors_written;
    boolean reads_position; /**< does fragment shader read position? */
    boolean reads_z; /**< does fragment shader read depth? */
+   boolean reads_samplemask; /**< does fragment shader read sample mask? */
    boolean writes_z;  /**< does fragment shader write Z value? */
    boolean writes_stencil; /**< does fragment shader write stencil value? */
+   boolean writes_samplemask; /**< does fragment shader write sample mask? */
    boolean writes_edgeflag; /**< vertex shader outputs edgeflag */
    boolean uses_kill;  /**< KILL or KILL_IF instruction used? */
    boolean uses_persp_center;

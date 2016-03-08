@@ -64,7 +64,8 @@ create_fs_variant(struct softpipe_context *softpipe,
          /* get new shader that implements polygon stippling */
          var->tokens = 
             util_pstipple_create_fragment_shader(curfs->tokens,
-                                                 &var->stipple_sampler_unit, 0);
+                                                 &var->stipple_sampler_unit, 0,
+                                                 TGSI_FILE_INPUT);
       }
       else
 #endif
@@ -207,7 +208,7 @@ softpipe_create_vs_state(struct pipe_context *pipe,
    struct sp_vertex_shader *state;
 
    state = CALLOC_STRUCT(sp_vertex_shader);
-   if (state == NULL ) 
+   if (!state)
       goto fail;
 
    /* copy shader tokens, the ones passed in will go away.
@@ -269,7 +270,7 @@ softpipe_create_gs_state(struct pipe_context *pipe,
    struct sp_geometry_shader *state;
 
    state = CALLOC_STRUCT(sp_geometry_shader);
-   if (state == NULL )
+   if (!state)
       goto fail;
 
    state->shader = *templ;

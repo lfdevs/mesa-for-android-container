@@ -50,7 +50,7 @@ if env['gles']:
 opengl32 = env.SharedLibrary(
     target ='opengl32',
     source = sources,
-    LIBS = wgl + ws_gdi + glapi + mesa + drivers + gallium + glsl + env['LIBS'],
+    LIBS = wgl + ws_gdi + glapi + compiler + mesa + drivers + gallium + glsl + env['LIBS'],
 )
 
 env.Alias('opengl32', opengl32)

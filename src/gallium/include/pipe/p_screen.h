@@ -57,6 +57,7 @@ struct pipe_resource;
 struct pipe_surface;
 struct pipe_transfer;
 struct pipe_box;
+struct pipe_memory_info;
 
 
 /**
@@ -260,6 +261,11 @@ struct pipe_screen {
                                       unsigned index,
                                       struct pipe_driver_query_group_info *info);
 
+   /**
+    * Query information about memory usage.
+    */
+   void (*query_memory_info)(struct pipe_screen *screen,
+                             struct pipe_memory_info *info);
 };
 
 

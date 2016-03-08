@@ -36,6 +36,7 @@
 #include "main/samplerobj.h"
 #include "main/shaderimage.h"
 #include "program/prog_parameter.h"
+#include "program/prog_instruction.h"
 #include "main/framebuffer.h"
 
 #include "intel_mipmap_tree.h"
@@ -768,7 +769,7 @@ brw_update_renderbuffer_surfaces(struct brw_context *brw,
          const uint32_t surf_index = render_target_start + i;
 
 	 if (intel_renderbuffer(fb->_ColorDrawBuffers[i])) {
-            surf_offset[surf_index] = 
+            surf_offset[surf_index] =
                brw->vtbl.update_renderbuffer_surface(
                   brw, fb->_ColorDrawBuffers[i],
                   _mesa_geometric_layers(fb) > 0, i, surf_index);
@@ -861,20 +862,22 @@ brw_update_texture_surfaces(struct brw_context *brw)
    /* BRW_NEW_VERTEX_PROGRAM */
    struct gl_program *vs = (struct gl_program *) brw->vertex_program;
 
+   /* BRW_NEW_TESS_PROGRAMS */
+   struct gl_program *tcs = (struct gl_program *) brw->tess_ctrl_program;
+   struct gl_program *tes = (struct gl_program *) brw->tess_eval_program;
+
    /* BRW_NEW_GEOMETRY_PROGRAM */
    struct gl_program *gs = (struct gl_program *) brw->geometry_program;
 
    /* BRW_NEW_FRAGMENT_PROGRAM */
    struct gl_program *fs = (struct gl_program *) brw->fragment_program;
 
-   /* BRW_NEW_COMPUTE_PROGRAM */
-   struct gl_program *cs = (struct gl_program *) brw->compute_program;
-
    /* _NEW_TEXTURE */
    update_stage_texture_surfaces(brw, vs, &brw->vs.base, false);
+   update_stage_texture_surfaces(brw, tcs, &brw->tcs.base, false);
+   update_stage_texture_surfaces(brw, tes, &brw->tes.base, false);
    update_stage_texture_surfaces(brw, gs, &brw->gs.base, false);
    update_stage_texture_surfaces(brw, fs, &brw->wm.base, false);
-   update_stage_texture_surfaces(brw, cs, &brw->cs.base, false);
 
    /* emit alternate set of surface state for gather. this
     * allows the surface format to be overriden for only the
@@ -882,12 +885,14 @@ brw_update_texture_surfaces(struct brw_context *brw)
    if (brw->gen < 8) {
       if (vs && vs->UsesGather)
          update_stage_texture_surfaces(brw, vs, &brw->vs.base, true);
+      if (tcs && tcs->UsesGather)
+         update_stage_texture_surfaces(brw, tcs, &brw->tcs.base, true);
+      if (tes && tes->UsesGather)
+         update_stage_texture_surfaces(brw, tes, &brw->tes.base, true);
       if (gs && gs->UsesGather)
          update_stage_texture_surfaces(brw, gs, &brw->gs.base, true);
       if (fs && fs->UsesGather)
          update_stage_texture_surfaces(brw, fs, &brw->wm.base, true);
-      if (cs && cs->UsesGather)
-         update_stage_texture_surfaces(brw, cs, &brw->cs.base, true);
    }
 
    brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
@@ -897,17 +902,50 @@ const struct brw_tracked_state brw_texture_surfaces = {
    .dirty = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_COMPUTE_PROGRAM |
              BRW_NEW_FRAGMENT_PROGRAM |
              BRW_NEW_FS_PROG_DATA |
              BRW_NEW_GEOMETRY_PROGRAM |
              BRW_NEW_GS_PROG_DATA |
+             BRW_NEW_TESS_PROGRAMS |
+             BRW_NEW_TCS_PROG_DATA |
+             BRW_NEW_TES_PROG_DATA |
              BRW_NEW_TEXTURE_BUFFER |
              BRW_NEW_VERTEX_PROGRAM |
              BRW_NEW_VS_PROG_DATA,
    },
    .emit = brw_update_texture_surfaces,
 };
+
+static void
+brw_update_cs_texture_surfaces(struct brw_context *brw)
+{
+   /* BRW_NEW_COMPUTE_PROGRAM */
+   struct gl_program *cs = (struct gl_program *) brw->compute_program;
+
+   /* _NEW_TEXTURE */
+   update_stage_texture_surfaces(brw, cs, &brw->cs.base, false);
+
+   /* emit alternate set of surface state for gather. this
+    * allows the surface format to be overriden for only the
+    * gather4 messages.
+    */
+   if (brw->gen < 8) {
+      if (cs && cs->UsesGather)
+         update_stage_texture_surfaces(brw, cs, &brw->cs.base, true);
+   }
+
+   brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
+}
+
+const struct brw_tracked_state brw_cs_texture_surfaces = {
+   .dirty = {
+      .mesa = _NEW_TEXTURE,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_COMPUTE_PROGRAM,
+   },
+   .emit = brw_update_cs_texture_surfaces,
+};
+
 
 void
 brw_upload_ubo_surfaces(struct brw_context *brw,
@@ -932,12 +970,15 @@ brw_upload_ubo_surfaces(struct brw_context *brw,
       } else {
          struct intel_buffer_object *intel_bo =
             intel_buffer_object(binding->BufferObject);
+         GLsizeiptr size = binding->BufferObject->Size - binding->Offset;
+         if (!binding->AutomaticSize)
+            size = MIN2(size, binding->Size);
          drm_intel_bo *bo =
             intel_bufferobj_buffer(brw, intel_bo,
                                    binding->Offset,
-                                   binding->BufferObject->Size - binding->Offset);
+                                   size);
          brw_create_constant_surface(brw, bo, binding->Offset,
-                                     binding->BufferObject->Size - binding->Offset,
+                                     size,
                                      &ubo_surf_offsets[i]);
       }
    }
@@ -954,12 +995,15 @@ brw_upload_ubo_surfaces(struct brw_context *brw,
       } else {
          struct intel_buffer_object *intel_bo =
             intel_buffer_object(binding->BufferObject);
+         GLsizeiptr size = binding->BufferObject->Size - binding->Offset;
+         if (!binding->AutomaticSize)
+            size = MIN2(size, binding->Size);
          drm_intel_bo *bo =
             intel_bufferobj_buffer(brw, intel_bo,
                                    binding->Offset,
-                                   binding->BufferObject->Size - binding->Offset);
+                                   size);
          brw_create_buffer_surface(brw, bo, binding->Offset,
-                                   binding->BufferObject->Size - binding->Offset,
+                                   size,
                                    &ssbo_surf_offsets[i]);
       }
    }
@@ -1320,6 +1364,11 @@ brw_upload_image_surfaces(struct brw_context *brw,
       }
 
       brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
+      /* This may have changed the image metadata dependent on the context
+       * image unit state and passed to the program as uniforms, make sure
+       * that push and pull constants are reuploaded.
+       */
+      brw->NewGLState |= _NEW_PROGRAM_CONSTANTS;
    }
 }
 

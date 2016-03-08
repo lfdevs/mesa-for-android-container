@@ -23,9 +23,9 @@
  * IN THE SOFTWARE.
  */
 
-#include "nir/nir.h"
-#include "nir/nir_builder.h"
-#include "glsl/list.h"
+#include "compiler/nir/nir.h"
+#include "compiler/nir/nir_builder.h"
+#include "compiler/glsl/list.h"
 #include "main/imports.h"
 #include "util/ralloc.h"
 
@@ -554,8 +554,8 @@ static void
 ptn_kil(nir_builder *b, nir_alu_dest dest, nir_ssa_def **src)
 {
    nir_ssa_def *cmp = b->shader->options->native_integers ?
-      nir_bany4(b, nir_flt(b, src[0], nir_imm_float(b, 0.0))) :
-      nir_fany4(b, nir_slt(b, src[0], nir_imm_float(b, 0.0)));
+      nir_bany_inequal4(b, nir_flt(b, src[0], nir_imm_float(b, 0.0)), nir_imm_int(b, 0)) :
+      nir_fany_nequal4(b, nir_slt(b, src[0], nir_imm_float(b, 0.0)), nir_imm_float(b, 0.0));
 
    nir_intrinsic_instr *discard =
       nir_intrinsic_instr_create(b->shader, nir_intrinsic_discard_if);
@@ -609,6 +609,7 @@ ptn_tex(nir_builder *b, nir_alu_dest dest, nir_ssa_def **src,
    instr->op = op;
    instr->dest_type = nir_type_float;
    instr->is_shadow = prog_inst->TexShadow;
+   instr->texture_index = prog_inst->TexSrcUnit;
    instr->sampler_index = prog_inst->TexSrcUnit;
 
    switch (prog_inst->TexSrcTarget) {
@@ -927,6 +928,7 @@ ptn_add_output_stores(struct ptn_compile *c)
       nir_intrinsic_instr *store =
          nir_intrinsic_instr_create(b->shader, nir_intrinsic_store_var);
       store->num_components = glsl_get_vector_elements(var->type);
+      nir_intrinsic_set_write_mask(store, (1 << store->num_components) - 1);
       store->variables[0] =
          nir_deref_var_create(store, c->output_vars[var->data.location]);
 
@@ -997,6 +999,7 @@ setup_registers_and_variables(struct ptn_compile *c)
             nir_intrinsic_instr *store =
                nir_intrinsic_instr_create(shader, nir_intrinsic_store_var);
             store->num_components = 4;
+            nir_intrinsic_set_write_mask(store, WRITEMASK_XYZW);
             store->variables[0] = nir_deref_var_create(store, fullvar);
             store->src[0] = nir_src_for_ssa(f001);
             nir_builder_instr_insert(b, &store->instr);
@@ -1080,10 +1083,10 @@ prog_to_nir(const struct gl_program *prog,
    c = rzalloc(NULL, struct ptn_compile);
    if (!c)
       return NULL;
-   s = nir_shader_create(NULL, stage, options);
-   if (!s)
-      goto fail;
    c->prog = prog;
+
+   nir_builder_init_simple_shader(&c->build, NULL, stage, options);
+   s = c->build.shader;
 
    if (prog->Parameters->NumParameters > 0) {
       c->parameters = rzalloc(s, nir_variable);
@@ -1094,14 +1097,6 @@ prog_to_nir(const struct gl_program *prog,
       c->parameters->data.mode = nir_var_uniform;
       exec_list_push_tail(&s->uniforms, &c->parameters->node);
    }
-
-   nir_function *func = nir_function_create(s, "main");
-   nir_function_overload *overload = nir_function_overload_create(func);
-   nir_function_impl *impl = nir_function_impl_create(overload);
-
-   c->build.shader = s;
-   c->build.impl = impl;
-   c->build.cursor = nir_after_cf_list(&impl->body);
 
    setup_registers_and_variables(c);
    if (unlikely(c->error))

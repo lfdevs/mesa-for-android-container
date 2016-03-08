@@ -72,7 +72,7 @@ draw_create_context(struct pipe_context *pipe, void *context,
                     boolean try_llvm)
 {
    struct draw_context *draw = CALLOC_STRUCT( draw_context );
-   if (draw == NULL)
+   if (!draw)
       goto err_out;
 
    /* we need correct cpu caps for disabling denorms in draw_vbo() */

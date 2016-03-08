@@ -230,20 +230,60 @@ nouveau_vp3_fill_picparm_h264_bsp(struct nouveau_vp3_decoder *dec,
    return caps | 3;
 }
 
-uint32_t
-nouveau_vp3_bsp(struct nouveau_vp3_decoder *dec,  union pipe_desc desc,
-                struct nouveau_vp3_video_buffer *target,
-                unsigned comm_seq, unsigned num_buffers,
-                const void *const *data, const unsigned *num_bytes)
+static inline struct strparm_bsp *strparm_bsp(struct nouveau_vp3_decoder *dec)
 {
-   enum pipe_video_format codec = u_reduce_video_profile(dec->base.profile);
+   unsigned comm_seq = dec->fence_seq;
    struct nouveau_bo *bsp_bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH];
-   char *bsp;
-   uint32_t endmarker, caps;
-   struct strparm_bsp *str_bsp;
+   return (struct strparm_bsp *)(bsp_bo->map + 0x100);
+}
+
+void
+nouveau_vp3_bsp_begin(struct nouveau_vp3_decoder *dec)
+{
+   struct strparm_bsp *str_bsp = strparm_bsp(dec);
+
+   dec->bsp_ptr = (void *)str_bsp;
+   memset(str_bsp, 0, 0x80);
+   dec->bsp_ptr += 0x100;
+   /* Reserved for picparm_vp */
+   dec->bsp_ptr += 0x300;
+   /* Reserved for comm */
+#if !NOUVEAU_VP3_DEBUG_FENCE
+   memset(dec->bsp_ptr, 0, 0x200);
+#endif
+   dec->bsp_ptr += 0x200;
+}
+
+void
+nouveau_vp3_bsp_next(struct nouveau_vp3_decoder *dec, unsigned num_buffers,
+                     const void *const *data, const unsigned *num_bytes)
+{
+#ifndef NDEBUG
+   unsigned comm_seq = dec->fence_seq;
+   struct nouveau_bo *bsp_bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH];
+#endif
+   struct strparm_bsp *str_bsp = strparm_bsp(dec);
    int i;
 
-   bsp = bsp_bo->map;
+   for (i = 0; i < num_buffers; ++i) {
+#ifndef NDEBUG
+      assert(bsp_bo->size >= str_bsp->w0[0] + num_bytes[i]);
+#endif
+      memcpy(dec->bsp_ptr, data[i], num_bytes[i]);
+      dec->bsp_ptr += num_bytes[i];
+      str_bsp->w0[0] += num_bytes[i];
+   }
+}
+
+uint32_t
+nouveau_vp3_bsp_end(struct nouveau_vp3_decoder *dec, union pipe_desc desc)
+{
+   enum pipe_video_format codec = u_reduce_video_profile(dec->base.profile);
+   unsigned comm_seq = dec->fence_seq;
+   struct nouveau_bo *bsp_bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH];
+   uint32_t endmarker, caps;
+   struct strparm_bsp *str_bsp = strparm_bsp(dec);
+   char *bsp = bsp_bo->map;
    /*
     * 0x000..0x100: picparm_bsp
     * 0x200..0x500: picparm_vp
@@ -277,34 +317,21 @@ nouveau_vp3_bsp(struct nouveau_vp3_decoder *dec,  union pipe_desc desc,
    caps |= 1 << 17; // enable watchdog
    caps |= 0 << 18; // do not report error to VP, so it can continue decoding what we have
    caps |= 0 << 19; // if enabled, use crypto crap?
-   bsp += 0x100;
 
-   str_bsp = (struct strparm_bsp *)bsp;
-   memset(str_bsp, 0, 0x80);
-   str_bsp->w0[0] = 16;
+   str_bsp = strparm_bsp(dec);
    str_bsp->w1[0] = 0x1;
-   bsp += 0x100;
-   /* Reserved for picparm_vp */
-   bsp += 0x300;
-   /* Reserved for comm */
-#if !NOUVEAU_VP3_DEBUG_FENCE
-   memset(bsp, 0, 0x200);
-#endif
-   bsp += 0x200;
-   for (i = 0; i < num_buffers; ++i) {
-      memcpy(bsp, data[i], num_bytes[i]);
-      bsp += num_bytes[i];
-      str_bsp->w0[0] += num_bytes[i];
-   }
 
    /* Append end sequence */
-   *(uint32_t *)bsp = endmarker;
-   bsp += 4;
-   *(uint32_t *)bsp = 0x00000000;
-   bsp += 4;
-   *(uint32_t *)bsp = endmarker;
-   bsp += 4;
-   *(uint32_t *)bsp = 0x00000000;
+   *(uint32_t *)dec->bsp_ptr = endmarker;
+   dec->bsp_ptr += 4;
+   *(uint32_t *)dec->bsp_ptr = 0x00000000;
+   dec->bsp_ptr += 4;
+   *(uint32_t *)dec->bsp_ptr = endmarker;
+   dec->bsp_ptr += 4;
+   *(uint32_t *)dec->bsp_ptr = 0x00000000;
+   str_bsp->w0[0] += 16;
+
+   dec->bsp_ptr = NULL;
 
    return caps;
 }

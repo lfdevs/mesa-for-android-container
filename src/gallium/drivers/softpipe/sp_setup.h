@@ -30,11 +30,30 @@
 struct setup_context;
 struct softpipe_context;
 
+/**
+ * Attribute interpolation mode
+ */
+enum sp_interp_mode {
+   SP_INTERP_POS,       /**< special case for frag position */
+   SP_INTERP_CONSTANT,
+   SP_INTERP_LINEAR,
+   SP_INTERP_PERSPECTIVE
+};
+
+
+struct sp_setup_info {
+   unsigned valid;
+   struct {
+      unsigned interp:8;      /**< SP_INTERP_X */
+      int src_index:8;
+   } attrib[PIPE_MAX_SHADER_OUTPUTS];
+};
+
 void 
-sp_setup_tri( struct setup_context *setup,
-	   const float (*v0)[4],
-	   const float (*v1)[4],
-	   const float (*v2)[4] );
+sp_setup_tri(struct setup_context *setup,
+             const float (*v0)[4],
+             const float (*v1)[4],
+             const float (*v2)[4]);
 
 void
 sp_setup_line(struct setup_context *setup,
@@ -45,6 +64,11 @@ void
 sp_setup_point( struct setup_context *setup,
              const float (*v0)[4] );
 
+static inline unsigned
+sp_clamp_viewport_idx(int idx)
+{
+   return (PIPE_MAX_VIEWPORTS > idx && idx >= 0) ? idx : 0;
+}
 
 struct setup_context *sp_setup_create_context( struct softpipe_context *softpipe );
 void sp_setup_prepare( struct setup_context *setup );

@@ -87,7 +87,7 @@ llvmpipe_set_blend_color(struct pipe_context *pipe,
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
-   if(!blend_color)
+   if (!blend_color)
       return;
 
    if(memcmp(&llvmpipe->blend_color, blend_color, sizeof *blend_color) == 0)
@@ -159,7 +159,7 @@ llvmpipe_set_stencil_ref(struct pipe_context *pipe,
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
-   if(!stencil_ref)
+   if (!stencil_ref)
       return;
 
    if(memcmp(&llvmpipe->stencil_ref, stencil_ref, sizeof *stencil_ref) == 0)

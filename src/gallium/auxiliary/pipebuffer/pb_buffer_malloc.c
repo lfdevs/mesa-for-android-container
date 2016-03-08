@@ -132,7 +132,7 @@ pb_malloc_buffer_create(pb_size size,
    /* TODO: do a single allocation */
    
    buf = CALLOC_STRUCT(malloc_buffer);
-   if(!buf)
+   if (!buf)
       return NULL;
 
    pipe_reference_init(&buf->base.reference, 1);

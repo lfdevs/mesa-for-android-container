@@ -218,7 +218,7 @@ trace_dump_tag_end(const char *name)
 void
 trace_dump_trace_flush(void)
 {
-   if(stream) {
+   if (stream) {
       fflush(stream);
    }
 }
@@ -226,7 +226,7 @@ trace_dump_trace_flush(void)
 static void
 trace_dump_trace_close(void)
 {
-   if(stream) {
+   if (stream) {
       trace_dump_writes("</trace>\n");
       if (close_stream) {
          fclose(stream);
@@ -257,10 +257,10 @@ trace_dump_trace_begin(void)
    const char *filename;
 
    filename = debug_get_option("GALLIUM_TRACE", NULL);
-   if(!filename)
+   if (!filename)
       return FALSE;
 
-   if(!stream) {
+   if (!stream) {
 
       if (strcmp(filename, "stderr") == 0) {
          close_stream = FALSE;

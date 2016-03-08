@@ -165,7 +165,7 @@ static void twoside_destroy( struct draw_stage *stage )
 struct draw_stage *draw_twoside_stage( struct draw_context *draw )
 {
    struct twoside_stage *twoside = CALLOC_STRUCT(twoside_stage);
-   if (twoside == NULL)
+   if (!twoside)
       goto fail;
 
    twoside->stage.draw = draw;

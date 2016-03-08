@@ -382,6 +382,18 @@ test_all(unsigned verbose, FILE *fp)
          continue;
       }
 
+      /* only have util fetch func for etc1 */
+      if (format_desc->layout == UTIL_FORMAT_LAYOUT_ETC &&
+          format != PIPE_FORMAT_ETC1_RGB8) {
+         continue;
+      }
+
+      /* missing fetch funcs */
+      if (format_desc->layout == UTIL_FORMAT_LAYOUT_BPTC ||
+          format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
+         continue;
+      }
+
       if (!test_one(verbose, fp, format_desc)) {
            success = FALSE;
       }

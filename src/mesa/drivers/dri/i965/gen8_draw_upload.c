@@ -21,7 +21,6 @@
  * IN THE SOFTWARE.
  */
 
-#include "main/glheader.h"
 #include "main/bufferobj.h"
 #include "main/context.h"
 #include "main/enums.h"
@@ -116,7 +115,12 @@ gen8_emit_vertices(struct brw_context *brw)
    }
 
    /* Now emit 3DSTATE_VERTEX_BUFFERS and 3DSTATE_VERTEX_ELEMENTS packets. */
-   unsigned nr_buffers = brw->vb.nr_buffers + brw->vs.prog_data->uses_vertexid;
+   const bool uses_draw_params =
+      brw->vs.prog_data->uses_basevertex ||
+      brw->vs.prog_data->uses_baseinstance;
+   const unsigned nr_buffers = brw->vb.nr_buffers +
+      uses_draw_params + brw->vs.prog_data->uses_drawid;
+
    if (nr_buffers) {
       assert(nr_buffers <= 33);
 
@@ -136,7 +140,7 @@ gen8_emit_vertices(struct brw_context *brw)
          OUT_BATCH(buffer->bo->size);
       }
 
-      if (brw->vs.prog_data->uses_vertexid) {
+      if (uses_draw_params) {
          OUT_BATCH(brw->vb.nr_buffers << GEN6_VB0_INDEX_SHIFT |
                    GEN7_VB0_ADDRESS_MODIFYENABLE |
                    mocs_wb << 16);
@@ -144,21 +148,33 @@ gen8_emit_vertices(struct brw_context *brw)
                      brw->draw.draw_params_offset);
          OUT_BATCH(brw->draw.draw_params_bo->size);
       }
+
+      if (brw->vs.prog_data->uses_drawid) {
+         OUT_BATCH((brw->vb.nr_buffers + 1) << GEN6_VB0_INDEX_SHIFT |
+                   GEN7_VB0_ADDRESS_MODIFYENABLE |
+                   mocs_wb << 16);
+         OUT_RELOC64(brw->draw.draw_id_bo, I915_GEM_DOMAIN_VERTEX, 0,
+                     brw->draw.draw_id_offset);
+         OUT_BATCH(brw->draw.draw_id_bo->size);
+      }
       ADVANCE_BATCH();
    }
 
    /* Normally we don't need an element for the SGVS attribute because the
     * 3DSTATE_VF_SGVS instruction lets you store the generated attribute in an
-    * element that is past the list in 3DSTATE_VERTEX_ELEMENTS. However if the
-    * vertex ID is used then it needs an element for the base vertex buffer.
-    * Additionally if there is an edge flag element then the SGVS can't be
-    * inserted past that so we need a dummy element to ensure that the edge
-    * flag is the last one.
+    * element that is past the list in 3DSTATE_VERTEX_ELEMENTS. However if
+    * we're using draw parameters then we need an element for the those
+    * values.  Additionally if there is an edge flag element then the SGVS
+    * can't be inserted past that so we need a dummy element to ensure that
+    * the edge flag is the last one.
     */
-   bool needs_sgvs_element = (brw->vs.prog_data->uses_vertexid ||
-                              (brw->vs.prog_data->uses_instanceid &&
-                               uses_edge_flag));
-   unsigned nr_elements = brw->vb.nr_enabled + needs_sgvs_element;
+   const bool needs_sgvs_element = (brw->vs.prog_data->uses_basevertex ||
+                                    brw->vs.prog_data->uses_baseinstance ||
+                                    ((brw->vs.prog_data->uses_instanceid ||
+                                      brw->vs.prog_data->uses_vertexid) &&
+                                     uses_edge_flag));
+   const unsigned nr_elements =
+      brw->vb.nr_enabled + needs_sgvs_element + brw->vs.prog_data->uses_drawid;
 
    /* The hardware allows one more VERTEX_ELEMENTS than VERTEX_BUFFERS,
     * presumably for VertexID/InstanceID.
@@ -213,12 +229,13 @@ gen8_emit_vertices(struct brw_context *brw)
    }
 
    if (needs_sgvs_element) {
-      if (brw->vs.prog_data->uses_vertexid) {
+      if (brw->vs.prog_data->uses_basevertex ||
+          brw->vs.prog_data->uses_baseinstance) {
          OUT_BATCH(GEN6_VE0_VALID |
                    brw->vb.nr_buffers << GEN6_VE0_INDEX_SHIFT |
-                   BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT);
+                   BRW_SURFACEFORMAT_R32G32_UINT << BRW_VE0_FORMAT_SHIFT);
          OUT_BATCH((BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT) |
-                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_1_SHIFT) |
                    (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
                    (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
       } else {
@@ -228,6 +245,16 @@ gen8_emit_vertices(struct brw_context *brw)
                    (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
                    (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
       }
+   }
+
+   if (brw->vs.prog_data->uses_drawid) {
+      OUT_BATCH(GEN6_VE0_VALID |
+                ((brw->vb.nr_buffers + 1) << GEN6_VE0_INDEX_SHIFT) |
+                (BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT));
+      OUT_BATCH((BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
    }
 
    if (gen6_edgeflag_input) {
@@ -265,6 +292,15 @@ gen8_emit_vertices(struct brw_context *brw)
       OUT_BATCH(element_index |
                 (buffer->step_rate ? GEN8_VF_INSTANCING_ENABLE : 0));
       OUT_BATCH(buffer->step_rate);
+      ADVANCE_BATCH();
+   }
+
+   if (brw->vs.prog_data->uses_drawid) {
+      const unsigned element = brw->vb.nr_enabled + needs_sgvs_element;
+      BEGIN_BATCH(3);
+      OUT_BATCH(_3DSTATE_VF_INSTANCING << 16 | (3 - 2));
+      OUT_BATCH(element);
+      OUT_BATCH(0);
       ADVANCE_BATCH();
    }
 }

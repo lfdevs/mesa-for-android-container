@@ -662,7 +662,7 @@ static struct aapoint_stage *
 draw_aapoint_stage(struct draw_context *draw)
 {
    struct aapoint_stage *aapoint = CALLOC_STRUCT(aapoint_stage);
-   if (aapoint == NULL)
+   if (!aapoint)
       goto fail;
 
    aapoint->stage.draw = draw;
@@ -707,7 +707,7 @@ aapoint_create_fs_state(struct pipe_context *pipe,
 {
    struct aapoint_stage *aapoint = aapoint_stage_from_pipe(pipe);
    struct aapoint_fragment_shader *aafs = CALLOC_STRUCT(aapoint_fragment_shader);
-   if (aafs == NULL) 
+   if (!aafs)
       return NULL;
 
    aafs->state.tokens = tgsi_dup_tokens(fs->tokens);
@@ -767,7 +767,7 @@ draw_install_aapoint_stage(struct draw_context *draw,
     * Create / install AA point drawing / prim stage
     */
    aapoint = draw_aapoint_stage( draw );
-   if (aapoint == NULL)
+   if (!aapoint)
       return FALSE;
 
    /* save original driver functions */

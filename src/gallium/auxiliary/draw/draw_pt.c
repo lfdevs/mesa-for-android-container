@@ -109,7 +109,7 @@ draw_pt_arrays(struct draw_context *draw,
 
    frontend = draw->pt.frontend;
 
-   if (frontend ) {
+   if (frontend) {
       if (draw->pt.prim != prim || draw->pt.opt != opt) {
          /* In certain conditions switching primitives requires us to flush
           * and validate the different stages. One example is when smooth
@@ -524,7 +524,7 @@ draw_vbo(struct draw_context *draw,
 #endif
    {
       if (index_limit == 0) {
-      /* one of the buffers is too small to do any valid drawing */
+         /* one of the buffers is too small to do any valid drawing */
          debug_warning("draw: VBO too small to draw anything\n");
          util_fpstate_set(fpstate);
          return;

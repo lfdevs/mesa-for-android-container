@@ -20,9 +20,4 @@ struct drisw_loader_funcs
                        void *data, int x, int y, unsigned width, unsigned height, unsigned stride);
 };
 
-/**
- * Implemented by the drisw target.
- */
-struct pipe_screen * drisw_create_screen(struct drisw_loader_funcs *lf);
-
 #endif

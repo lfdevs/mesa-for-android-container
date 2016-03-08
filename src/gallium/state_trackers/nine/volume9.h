@@ -96,39 +96,39 @@ NineVolume9_UploadSelf( struct NineVolume9 *This,
 
 /*** Direct3D public ***/
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolume9_SetPrivateData( struct NineVolume9 *This,
                             REFGUID refguid,
                             const void *pData,
                             DWORD SizeOfData,
                             DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolume9_GetPrivateData( struct NineVolume9 *This,
                             REFGUID refguid,
                             void *pData,
                             DWORD *pSizeOfData );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolume9_FreePrivateData( struct NineVolume9 *This,
                              REFGUID refguid );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolume9_GetContainer( struct NineVolume9 *This,
                           REFIID riid,
                           void **ppContainer );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolume9_GetDesc( struct NineVolume9 *This,
                      D3DVOLUME_DESC *pDesc );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolume9_LockBox( struct NineVolume9 *This,
                      D3DLOCKED_BOX *pLockedVolume,
                      const D3DBOX *pBox,
                      DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolume9_UnlockBox( struct NineVolume9 *This );
 
 #endif /* _NINE_VOLUME9_H_ */

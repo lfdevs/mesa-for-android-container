@@ -173,8 +173,11 @@ make_vs_key(struct svga_context *svga, struct svga_compile_key *key)
       return;
    }
 
+   /* SVGA_NEW_PRESCALE */
    key->vs.need_prescale = svga->state.hw_clear.prescale.enabled &&
                            (svga->curr.gs == NULL);
+
+   /* SVGA_NEW_RAST */
    key->vs.allow_psiz = svga->curr.rast->templ.point_size_per_vertex;
 
    /* SVGA_NEW_FS */

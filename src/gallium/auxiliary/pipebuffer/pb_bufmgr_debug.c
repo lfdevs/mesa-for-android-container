@@ -160,7 +160,7 @@ pb_debug_buffer_fill(struct pb_debug_buffer *buf)
    
    map = pb_map(buf->buffer, PB_USAGE_CPU_WRITE, NULL);
    assert(map);
-   if(map) {
+   if (map) {
       fill_random_pattern(map, buf->underflow_size);
       fill_random_pattern(map + buf->underflow_size + buf->base.size,
                           buf->overflow_size);
@@ -183,7 +183,7 @@ pb_debug_buffer_check(struct pb_debug_buffer *buf)
                 PB_USAGE_CPU_READ |
                 PB_USAGE_UNSYNCHRONIZED, NULL);
    assert(map);
-   if(map) {
+   if (map) {
       boolean underflow, overflow;
       pb_size min_ofs, max_ofs;
       
@@ -256,15 +256,13 @@ pb_debug_buffer_map(struct pb_buffer *_buf,
    pb_debug_buffer_check(buf);
 
    map = pb_map(buf->buffer, flags, flush_ctx);
-   if(!map)
+   if (!map)
       return NULL;
    
-   if(map) {
-      pipe_mutex_lock(buf->mutex);
-      ++buf->map_count;
-      debug_backtrace_capture(buf->map_backtrace, 1, PB_DEBUG_MAP_BACKTRACE);
-      pipe_mutex_unlock(buf->mutex);
-   }
+   pipe_mutex_lock(buf->mutex);
+   ++buf->map_count;
+   debug_backtrace_capture(buf->map_backtrace, 1, PB_DEBUG_MAP_BACKTRACE);
+   pipe_mutex_unlock(buf->mutex);
    
    return (uint8_t *)map + buf->underflow_size;
 }
@@ -375,7 +373,7 @@ pb_debug_manager_create_buffer(struct pb_manager *_mgr,
    assert(desc->alignment);
 
    buf = CALLOC_STRUCT(pb_debug_buffer);
-   if(!buf)
+   if (!buf)
       return NULL;
    
    real_size = mgr->underflow_size + size + mgr->overflow_size;
@@ -462,7 +460,7 @@ pb_debug_manager_create(struct pb_manager *provider,
 {
    struct pb_debug_manager *mgr;
 
-   if(!provider)
+   if (!provider)
       return NULL;
    
    mgr = CALLOC_STRUCT(pb_debug_manager);

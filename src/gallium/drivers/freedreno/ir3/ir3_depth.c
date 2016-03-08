@@ -76,7 +76,7 @@ int ir3_delayslots(struct ir3_instruction *assigner,
 		return 6;
 	} else if ((consumer->category == 3) &&
 			(is_mad(consumer->opc) || is_madsh(consumer->opc)) &&
-			(n == 2)) {
+			(n == 3)) {
 		/* special case, 3rd src to cat3 not required on first cycle */
 		return 1;
 	} else {
@@ -118,6 +118,10 @@ ir3_instr_depth(struct ir3_instruction *instr)
 		/* visit child to compute it's depth: */
 		ir3_instr_depth(src);
 
+		/* for array writes, no need to delay on previous write: */
+		if (i == 0)
+			continue;
+
 		sd = ir3_delayslots(src, instr, i) + src->depth;
 
 		instr->depth = MAX2(instr->depth, sd);
@@ -139,7 +143,7 @@ remove_unused_by_block(struct ir3_block *block)
 			/* mark it, in case it is input, so we can
 			 * remove unused inputs:
 			 */
-			instr->depth = DEPTH_UNUSED;
+			instr->flags |= IR3_INSTR_UNUSED;
 			/* and remove from instruction list: */
 			list_delinit(&instr->node);
 		}
@@ -175,14 +179,14 @@ ir3_depth(struct ir3 *ir)
 	 */
 	for (i = 0; i < ir->indirects_count; i++) {
 		struct ir3_instruction *instr = ir->indirects[i];
-		if (instr->depth == DEPTH_UNUSED)
+		if (instr->flags & IR3_INSTR_UNUSED)
 			ir->indirects[i] = NULL;
 	}
 
 	/* cleanup unused inputs: */
 	for (i = 0; i < ir->ninputs; i++) {
 		struct ir3_instruction *in = ir->inputs[i];
-		if (in && (in->depth == DEPTH_UNUSED))
+		if (in && (in->flags & IR3_INSTR_UNUSED))
 			ir->inputs[i] = NULL;
 	}
 }

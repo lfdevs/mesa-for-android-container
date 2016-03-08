@@ -371,6 +371,37 @@ int bc_builder::build_alu(alu_node* n) {
 	const bc_alu &bc = n->bc;
 	const alu_op_info *aop = bc.op_ptr;
 
+	if (n->bc.op_ptr->flags & AF_LDS) {
+		assert(ctx.is_egcm());
+		bb << ALU_WORD0_LDS_IDX_OP_EGCM()
+			.SRC0_SEL(bc.src[0].sel)
+			.SRC0_REL(bc.src[0].rel)
+			.SRC0_CHAN(bc.src[0].chan)
+			.IDX_OFFSET_4((bc.lds_idx_offset >> 4) & 1)
+			.SRC1_SEL(bc.src[1].sel)
+			.SRC1_REL(bc.src[1].rel)
+			.SRC1_CHAN(bc.src[1].chan)
+			.IDX_OFFSET_5((bc.lds_idx_offset >> 5) & 1)
+			.INDEX_MODE(bc.index_mode)
+			.PRED_SEL(bc.pred_sel)
+			.LAST(bc.last);
+
+		bb << ALU_WORD1_LDS_IDX_OP_EGCM()
+			.SRC2_SEL(bc.src[2].sel)
+			.SRC2_REL(bc.src[2].rel)
+			.SRC2_CHAN(bc.src[2].chan)
+			.IDX_OFFSET_1((bc.lds_idx_offset >> 1) & 1)
+			.ALU_INST(ctx.alu_opcode(ALU_OP3_LDS_IDX_OP))
+			.BANK_SWIZZLE(bc.bank_swizzle)
+			.LDS_OP((bc.op_ptr->opcode[1] >> 8) & 0xff)
+			.IDX_OFFSET_0((bc.lds_idx_offset >> 0) & 1)
+			.IDX_OFFSET_2((bc.lds_idx_offset >> 2) & 1)
+			.DST_CHAN(bc.dst_chan)
+			.IDX_OFFSET_3((bc.lds_idx_offset >> 3) & 1);
+
+		return 0;
+	}
+
 	bb << ALU_WORD0_ALL()
 			.INDEX_MODE(bc.index_mode)
 			.LAST(bc.last)

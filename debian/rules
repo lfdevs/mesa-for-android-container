@@ -5,18 +5,12 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-	NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-	MAKEFLAGS += -j$(NUMJOBS)
-endif
-
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
-DEB_BUILD_DIR      ?= $(CURDIR)/build
 ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
 	confflags += --build=$(DEB_HOST_GNU_TYPE)
 else
@@ -35,16 +29,6 @@ endif
 # keep a list of files we don't install (yet), but since it's a bit
 # large, use an external file:
 include debian/not-installed
-
-# build the following configurations by default
-CONFIGS = dri
-
-STAMP_DIR = debian/stamp
-STAMP = $(STAMP_DIR)/$(DEB_BUILD_GNU_TYPE)
-BUILD_STAMPS = $(addprefix $(STAMP)-build-, $(CONFIGS))
-
-QUILT_STAMPFN = $(STAMP_DIR)/patch
-include /usr/share/quilt/quilt.make
 
 DRI_DRIVERS =
 GALLIUM_DRIVERS =
@@ -110,15 +94,15 @@ else
   else
 	DRI_DRIVERS += swrast
   endif
-
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
 	confflags_GALLIUM += --enable-vdpau
 endif
+
 confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
 confflags_GLES = --enable-gles1 --enable-gles2
 confflags_GALLIUM += --with-gallium-drivers="$(GALLIUM_DRIVERS)"
 
-confflags-dri = \
+confflags += \
 	--enable-dri \
 	--with-dri-drivers="$(DRI_DRIVERS)" \
 	--with-dri-driverdir=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
@@ -137,59 +121,8 @@ confflags-dri = \
 	$(confflags_GLES) \
 	$(buildflags)
 
-configure: $(QUILT_STAMPFN) configure.ac
-	autoreconf -vfi
-
-# list the configurations that will built
-configs:
-	@echo Building the following configurations: $(CONFIGS)
-
-$(STAMP_DIR)/stamp:
-	dh_testdir
-	mkdir -p $(STAMP_DIR)
-	>$@
-
-$(QUILT_STAMPFN): $(STAMP_DIR)/stamp
-
-build: build-stamp
-
-build-stamp: $(BUILD_STAMPS)
-	>$@
-
-$(STAMP)-build-%: configure
-	dh_testdir
-
-	mkdir -p $(DEB_BUILD_DIR)/$*
-
-	cd $(DEB_BUILD_DIR)/$* && \
-	../../configure --prefix=/usr --mandir=\$${prefix}/share/man \
-	             --infodir=\$${prefix}/share/info --sysconfdir=/etc \
-	             --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
-	             --localstatedir=/var --disable-silent-rules \
-				 $(confflags) $(confflags-$*)
-	cd $(DEB_BUILD_DIR)/$* && $(MAKE)
-	>$@
-
-install: build
-	# Add here commands to install the package into debian/tmp
-	dh_testdir
-	dh_testroot
-	dh_prep
-	dh_installdirs
-	set -e; for config in $(filter-out dri, $(CONFIGS)); do \
-		$(MAKE) -C $(DEB_BUILD_DIR)/$$config DESTDIR=$(CURDIR)/debian/tmp install; \
-	done
-	$(MAKE) -C $(DEB_BUILD_DIR)/dri DESTDIR=$(CURDIR)/debian/tmp/dri install
-	for file in debian/*.in; \
-	do \
-		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
-			$${file} > $${file%%.in}; \
-	done
-
-clean: unpatch
-	dh_testdir
+override_dh_clean:
 	rm -rf .pc
-
 	rm -f config.cache config.log config.status
 	rm -f */config.cache */config.log */config.status
 	rm -f conftest* */conftest*
@@ -199,7 +132,6 @@ clean: unpatch
 	rm -rf $$(find -name Makefile.in)
 	rm -rf aclocal.m4 bin/missing bin/depcomp install-sh bin/ltmain.sh
 	rm -f bin/ar-lib bin/compile bin/ylwrap bin/install-sh
-	rm -rf $(STAMP_DIR)
 	for file in debian/*.in; do rm -f $${file%%.in}; done
 	rm -f src/glsl/builtins/tools/texture_builtins.pyc
 	rm -f src/mapi/glapi/gen/*.pyc
@@ -209,24 +141,26 @@ clean: unpatch
 
 	dh_clean
 
-# Build architecture-independent files here.
-binary-indep: install
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		--disable-silent-rules \
+		$(confflags)
+
+override_dh_auto_install:
+	dh_auto_install
+	for file in debian/*.in; \
+	do \
+		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
+			$${file} > $${file%%.in}; \
+	done
 
 allpkg = $(shell dh_listpackages -s)
-dbgpkg = $(filter %-dbg, $(allpkg))
-otherpkg = $(filter-out %-dbg, $(allpkg))
-havedbgpkg = $(patsubst %-dbg,%,$(dbgpkg))
-nodbgpkg = $(filter-out $(havedbgpkg),$(otherpkg))
 
-# Build architecture-dependent files here.
-binary-arch: install
-	dh_testdir
-	dh_testroot
+override_dh_installchangelogs:
 	dh_installchangelogs -s
 	dh_installchangelogs -pmesa-common-dev
-	dh_installdocs -s
-	dh_installexamples -s
 
+override_dh_install:
 	# Also get rid of other files which aren't installed. Do not
 	# use -f to ensure we notice disappearing files:
 	set -e; for file in $(NOT_INSTALLED); do rm debian/tmp/$$file; done
@@ -237,43 +171,32 @@ binary-arch: install
 
 	# Copy the hardlinked *_dri.so correctly.
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-	mv debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so \
+	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so \
 	   debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
 
   ifneq ($(DEB_HOST_ARCH_OS), hurd)
 	# Copy the hardlinked vdpau drivers correctly.
 	install -m755 -d debian/mesa-vdpau-drivers/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/
-	mv debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/libvdpau*.so* \
+	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/libvdpau*.so* \
 	   debian/mesa-vdpau-drivers/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/
   endif
 
 	dh_install -s --fail-missing
-	dh_installman -s
-	dh_lintian -s
-	dh_link -s
+
 	# Install bug control and script:
 	set -e; for p in $(allpkg); do \
 		install -d debian/$$p/usr/share/bug/$$p && \
 		install -m 644 debian/local/control debian/$$p/usr/share/bug/$$p && \
 		install -m 755 debian/local/script  debian/$$p/usr/share/bug/$$p; \
 	done
-	set -e; for p in $(havedbgpkg); do \
-		dh_strip -p$${p} --dbg-package=$${p}-dbg; \
-	done
-	# dh_strip -s --remaining-packages doesn't work with resumed
-	# builds (see changelog for mesa 7.10-1):
-	dh_strip $(foreach p,$(nodbgpkg),-p$(p))
-	dh_compress -s
-	dh_fixperms -s
-	dh_makeshlibs -s -- -c4
-	dh_installdeb -s
-	dh_shlibdeps -s
-	dh_gencontrol -s
-	dh_md5sums -s
+
+override_dh_builddeb:
 	dh_builddeb -s -- -Zxz
 
-binary: binary-indep binary-arch
-.PHONY: configs build clean binary-indep binary-arch binary install
+%:
+	dh $@ --with quilt,autoreconf \
+		--parallel \
+		--builddirectory=build/
 
 # For maintainer use only, generate a tarball:
 gentarball: SOURCE=mesa

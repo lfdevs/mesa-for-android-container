@@ -101,9 +101,11 @@ protected:
    bool handleTXQ(TexInstruction *);
    virtual bool handleManualTXD(TexInstruction *);
    bool handleTXLQ(TexInstruction *);
+   bool handleSUQ(Instruction *);
    bool handleATOM(Instruction *);
    bool handleCasExch(Instruction *, bool needCctl);
    void handleSurfaceOpNVE4(TexInstruction *);
+   void handleSharedATOM(Instruction *);
 
    void checkPredicate(Instruction *);
 
@@ -116,6 +118,8 @@ private:
    void readTessCoord(LValue *dst, int c);
 
    Value *loadResInfo32(Value *ptr, uint32_t off);
+   Value *loadResInfo64(Value *ptr, uint32_t off);
+   Value *loadResLength32(Value *ptr, uint32_t off);
    Value *loadMsInfo32(Value *ptr, uint32_t off);
    Value *loadTexHandle(Value *ptr, unsigned int slot);
 

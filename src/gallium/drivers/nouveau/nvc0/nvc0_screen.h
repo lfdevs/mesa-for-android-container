@@ -22,6 +22,8 @@
 
 #define NVC0_MAX_VIEWPORTS 16
 
+#define NVC0_MAX_BUFFERS 32
+
 
 struct nvc0_context;
 
@@ -49,8 +51,9 @@ struct nvc0_graph_state {
    uint8_t c14_bound; /* whether immediate array constbuf is bound */
    uint8_t clip_enable;
    uint32_t clip_mode;
-   uint32_t uniform_buffer_bound[5];
+   uint32_t uniform_buffer_bound[6];
    struct nvc0_transform_feedback_state *tfb;
+   bool seamless_cube_map;
 };
 
 struct nvc0_screen {
@@ -81,6 +84,7 @@ struct nvc0_screen {
       void **entries;
       int next;
       uint32_t lock[NVC0_TIC_MAX_ENTRIES / 32];
+      bool maxwell;
    } tic;
 
    struct {
@@ -162,12 +166,27 @@ nvc0_resource_validate(struct nv04_resource *res, uint32_t flags)
 
 struct nvc0_format {
    uint32_t rt;
-   uint32_t tic;
+   struct {
+      unsigned format:7;
+      unsigned type_r:3;
+      unsigned type_g:3;
+      unsigned type_b:3;
+      unsigned type_a:3;
+      unsigned src_x:3;
+      unsigned src_y:3;
+      unsigned src_z:3;
+      unsigned src_w:3;
+   } tic;
+   uint32_t usage;
+};
+
+struct nvc0_vertex_format {
    uint32_t vtx;
    uint32_t usage;
 };
 
 extern const struct nvc0_format nvc0_format_table[];
+extern const struct nvc0_vertex_format nvc0_vertex_format[];
 
 static inline void
 nvc0_screen_tic_unlock(struct nvc0_screen *screen, struct nv50_tic_entry *tic)

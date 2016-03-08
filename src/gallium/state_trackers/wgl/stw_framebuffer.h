@@ -30,6 +30,9 @@
 
 #include <windows.h>
 
+#include <GL/gl.h>
+#include <GL/wglext.h>
+
 #include "util/u_debug.h"
 
 
@@ -85,6 +88,15 @@ struct stw_framebuffer
    unsigned width;
    unsigned height;
    
+   /** WGL_ARB_render_texture - set at Pbuffer creation time */
+   unsigned textureFormat;  /**< WGL_NO_TEXTURE or WGL_TEXTURE_RGB[A]_ARB */
+   unsigned textureTarget;  /**< WGL_NO_TEXTURE or WGL_TEXTURE_1D/2D/
+                                 CUBE_MAP_ARB */
+   boolean textureMipmap;   /**< TRUE/FALSE */
+   /** WGL_ARB_render_texture - set with wglSetPbufferAttribARB() */
+   unsigned textureLevel;
+   unsigned textureFace;    /**< [0..6] */
+
    /**
     * Client area rectangle, relative to the window upper-left corner.
     *
@@ -176,5 +188,20 @@ stw_framebuffer_unlock(struct stw_framebuffer *fb)
  */
 void
 stw_framebuffer_cleanup(void);
+
+
+static inline struct stw_st_framebuffer *
+stw_st_framebuffer(struct st_framebuffer_iface *stfb)
+{
+   return (struct stw_st_framebuffer *) stfb;
+}
+
+
+static inline struct stw_framebuffer *
+stw_framebuffer_from_HPBUFFERARB(HPBUFFERARB hPbuffer)
+{
+   return (struct stw_framebuffer *) hPbuffer;
+}
+
 
 #endif /* STW_FRAMEBUFFER_H */

@@ -179,6 +179,8 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 1;
+   case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
+      return 0;
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
       return 65536;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
@@ -187,7 +189,7 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 0;
    case PIPE_CAP_MAX_VIEWPORTS:
-      return 1;
+      return PIPE_MAX_VIEWPORTS;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_NATIVE;
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
@@ -251,6 +253,19 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_SHAREABLE_SHADERS:
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
    case PIPE_CAP_CLEAR_TEXTURE:
+   case PIPE_CAP_DRAW_PARAMETERS:
+   case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
+   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+   case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
+   case PIPE_CAP_INVALIDATE_BUFFER:
+   case PIPE_CAP_GENERATE_MIPMAP:
+   case PIPE_CAP_STRING_MARKER:
+   case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
+   case PIPE_CAP_QUERY_BUFFER_OBJECT:
+   case PIPE_CAP_QUERY_MEMORY_INFO:
       return 0;
    }
    /* should only get here on unhandled cases */
@@ -362,7 +377,8 @@ softpipe_is_format_supported( struct pipe_screen *screen,
          return FALSE;
    }
 
-   if (format_desc->layout == UTIL_FORMAT_LAYOUT_BPTC) {
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_BPTC ||
+       format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
       /* Software decoding is not hooked up. */
       return FALSE;
    }

@@ -847,7 +847,7 @@ static void rc_emulate_negative_addressing(struct radeon_compiler *compiler, voi
 			if (inst->U.I.SrcReg[i].RelAddr &&
 			    inst->U.I.SrcReg[i].Index < 0) {
 				/* ARL must precede any indirect addressing. */
-				if (lastARL == NULL) {
+				if (!lastARL) {
 					rc_error(&c->Base, "Vertex shader: Found relative addressing without ARL/ARR.");
 					return;
 				}

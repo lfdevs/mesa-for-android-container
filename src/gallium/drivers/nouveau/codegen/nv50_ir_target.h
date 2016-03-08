@@ -191,6 +191,8 @@ public:
 
    virtual bool insnCanLoad(const Instruction *insn, int s,
                             const Instruction *ld) const = 0;
+   virtual bool insnCanLoadOffset(const Instruction *insn, int s,
+                                  int offset) const = 0;
    virtual bool isOpSupported(operation, DataType) const = 0;
    virtual bool isAccessSupported(DataFile, DataType) const = 0;
    virtual bool isModSupported(const Instruction *,

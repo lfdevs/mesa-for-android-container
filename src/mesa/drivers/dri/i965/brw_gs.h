@@ -27,15 +27,12 @@
 #include <stdbool.h>
 
 #include "brw_context.h"
-#include "brw_program.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct gl_context;
 struct gl_shader_program;
-struct gl_program;
 
 void
 brw_upload_gs_prog(struct brw_context *brw);

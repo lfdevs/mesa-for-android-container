@@ -1125,7 +1125,7 @@ static void r300_bind_fs_state(struct pipe_context* pipe, void* shader)
     struct r300_context* r300 = r300_context(pipe);
     struct r300_fragment_shader* fs = (struct r300_fragment_shader*)shader;
 
-    if (fs == NULL) {
+    if (!fs) {
         r300->fs.state = NULL;
         return;
     }
@@ -1950,7 +1950,7 @@ static void r300_bind_vertex_elements_state(struct pipe_context *pipe,
     struct r300_context *r300 = r300_context(pipe);
     struct r300_vertex_element_state *velems = state;
 
-    if (velems == NULL) {
+    if (!velems) {
         return;
     }
 
@@ -1996,7 +1996,7 @@ static void r300_bind_vs_state(struct pipe_context* pipe, void* shader)
     struct r300_context* r300 = r300_context(pipe);
     struct r300_vertex_shader* vs = (struct r300_vertex_shader*)shader;
 
-    if (vs == NULL) {
+    if (!vs) {
         r300->vs_state.state = NULL;
         return;
     }

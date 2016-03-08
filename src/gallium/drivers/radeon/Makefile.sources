@@ -4,6 +4,7 @@ C_SOURCES := \
 	r600_cs.h \
 	r600d_common.h \
 	r600_gpu_load.c \
+	r600_perfcounter.c \
 	r600_pipe_common.c \
 	r600_pipe_common.h \
 	r600_query.c \

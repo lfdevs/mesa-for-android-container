@@ -22,8 +22,8 @@
  */
 
 #include "brw_fs.h"
-#include "brw_fs_live_variables.h"
 #include "brw_cfg.h"
+#include "brw_eu.h"
 
 /** @file brw_fs_cmod_propagation.cpp
  *
@@ -90,7 +90,8 @@ opt_cmod_propagation_local(bblock_t *block)
       foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
          if (scan_inst->overwrites_reg(inst->src[0])) {
             if (scan_inst->is_partial_write() ||
-                scan_inst->dst.reg_offset != inst->src[0].reg_offset)
+                scan_inst->dst.reg_offset != inst->src[0].reg_offset ||
+                scan_inst->exec_size != inst->exec_size)
                break;
 
             /* CMP's result is the same regardless of dest type. */

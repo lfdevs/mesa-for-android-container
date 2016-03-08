@@ -75,6 +75,8 @@ is_expression(const vec4_instruction *const inst)
    case VEC4_OPCODE_UNPACK_UNIFORM:
    case SHADER_OPCODE_FIND_LIVE_CHANNEL:
    case SHADER_OPCODE_BROADCAST:
+   case TCS_OPCODE_SET_INPUT_URB_OFFSETS:
+   case TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
       return true;
    case SHADER_OPCODE_RCP:
    case SHADER_OPCODE_RSQ:

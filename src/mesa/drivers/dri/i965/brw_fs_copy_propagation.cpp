@@ -37,6 +37,7 @@
 #include "util/bitset.h"
 #include "brw_fs.h"
 #include "brw_cfg.h"
+#include "brw_eu.h"
 
 namespace { /* avoid conflict with opt_copy_propagation_elements */
 struct acp_entry : public exec_node {
@@ -86,7 +87,7 @@ public:
    void setup_initial_values();
    void run();
 
-   void dump_block_data() const;
+   void dump_block_data() const UNUSED;
 
    void *mem_ctx;
    cfg_t *cfg;
@@ -275,6 +276,59 @@ is_logic_op(enum opcode opcode)
            opcode == BRW_OPCODE_NOT);
 }
 
+static bool
+can_take_stride(fs_inst *inst, unsigned arg, unsigned stride,
+                const brw_device_info *devinfo)
+{
+   if (stride > 4)
+      return false;
+
+   /* 3-source instructions can only be Align16, which restricts what strides
+    * they can take. They can only take a stride of 1 (the usual case), or 0
+    * with a special "repctrl" bit. But the repctrl bit doesn't work for
+    * 64-bit datatypes, so if the source type is 64-bit then only a stride of
+    * 1 is allowed. From the Broadwell PRM, Volume 7 "3D Media GPGPU", page
+    * 944:
+    *
+    *    This is applicable to 32b datatypes and 16b datatype. 64b datatypes
+    *    cannot use the replicate control.
+    */
+   if (inst->is_3src()) {
+      if (type_sz(inst->src[arg].type) > 4)
+         return stride == 1;
+      else
+         return stride == 1 || stride == 0;
+   }
+
+   /* From the Broadwell PRM, Volume 2a "Command Reference - Instructions",
+    * page 391 ("Extended Math Function"):
+    *
+    *     The following restrictions apply for align1 mode: Scalar source is
+    *     supported. Source and destination horizontal stride must be the
+    *     same.
+    *
+    * From the Haswell PRM Volume 2b "Command Reference - Instructions", page
+    * 134 ("Extended Math Function"):
+    *
+    *    Scalar source is supported. Source and destination horizontal stride
+    *    must be 1.
+    *
+    * and similar language exists for IVB and SNB. Pre-SNB, math instructions
+    * are sends, so the sources are moved to MRF's and there are no
+    * restrictions.
+    */
+   if (inst->is_math()) {
+      if (devinfo->gen == 6 || devinfo->gen == 7) {
+         assert(inst->dst.stride == 1);
+         return stride == 1 || stride == 0;
+      } else if (devinfo->gen >= 8) {
+         return stride == inst->dst.stride || stride == 0;
+      }
+   }
+
+   return true;
+}
+
 bool
 fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 {
@@ -326,7 +380,8 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
    /* Bail if the result of composing both strides would exceed the
     * hardware limit.
     */
-   if (entry->src.stride * inst->src[arg].stride > 4)
+   if (!can_take_stride(inst, arg, entry->src.stride * inst->src[arg].stride,
+                        devinfo))
       return false;
 
    /* Bail if the instruction type is larger than the execution type of the
@@ -478,14 +533,14 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
 
       if (inst->src[i].abs) {
          if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
-             !brw_abs_immediate(val.type, &val)) {
+             !brw_abs_immediate(val.type, &val.as_brw_reg())) {
             continue;
          }
       }
 
       if (inst->src[i].negate) {
          if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
-             !brw_negate_immediate(val.type, &val)) {
+             !brw_negate_immediate(val.type, &val.as_brw_reg())) {
             continue;
          }
       }

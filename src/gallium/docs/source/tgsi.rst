@@ -458,7 +458,11 @@ while DDY is allowed to be the same for the entire 2x2 quad.
 
 .. opcode:: PK2H - Pack Two 16-bit Floats
 
-  TBD
+This instruction replicates its result.
+
+.. math::
+
+  dst = f32\_to\_f16(src.x) | f32\_to\_f16(src.y) << 16
 
 
 .. opcode:: PK2US - Pack Two Unsigned 16-bit Scalars
@@ -615,7 +619,15 @@ This instruction replicates its result.
 
 .. opcode:: UP2H - Unpack Two 16-Bit Floats
 
-  TBD
+.. math::
+
+  dst.x = f16\_to\_f32(src0.x \& 0xffff)
+
+  dst.y = f16\_to\_f32(src0.x >> 16)
+
+  dst.z = f16\_to\_f32(src0.x \& 0xffff)
+
+  dst.w = f16\_to\_f32(src0.x >> 16)
 
 .. note::
 
@@ -2252,11 +2264,11 @@ after lookup.
 Resource Access Opcodes
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. opcode:: LOAD - Fetch data from a shader resource
+.. opcode:: LOAD - Fetch data from a shader buffer or image
 
                Syntax: ``LOAD dst, resource, address``
 
-               Example: ``LOAD TEMP[0], RES[0], TEMP[1]``
+               Example: ``LOAD TEMP[0], BUFFER[0], TEMP[1]``
 
                Using the provided integer address, LOAD fetches data
                from the specified buffer or texture without any
@@ -2280,7 +2292,7 @@ Resource Access Opcodes
 
                Syntax: ``STORE resource, address, src``
 
-               Example: ``STORE RES[0], TEMP[0], TEMP[1]``
+               Example: ``STORE BUFFER[0], TEMP[0], TEMP[1]``
 
                Using the provided integer address, STORE writes data
                to the specified buffer or texture.
@@ -2298,6 +2310,18 @@ Resource Access Opcodes
                buffers and 1D textures.  address.z is ignored for 1D
                texture arrays and 2D textures.  address.w is always
                ignored.
+
+.. opcode:: RESQ - Query information about a resource
+
+  Syntax: ``RESQ dst, resource``
+
+  Example: ``RESQ TEMP[0], BUFFER[0]``
+
+  Returns information about the buffer or image resource. For buffer
+  resources, the size (in bytes) is returned in the x component. For
+  image resources, .xyz will contain the width/height/layers of the
+  image, while .w will contain the number of samples for multi-sampled
+  images.
 
 
 .. _threadsyncopcodes:
@@ -2348,6 +2372,23 @@ programs.
   the program.  Results are unspecified if any of the remaining
   threads terminates or never reaches an executed BARRIER instruction.
 
+.. opcode:: MEMBAR - Memory barrier
+
+  ``MEMBAR type``
+
+  This opcode waits for the completion of all memory accesses based on
+  the type passed in. The type is an immediate bitfield with the following
+  meaning:
+
+  Bit 0: Shader storage buffers
+  Bit 1: Atomic buffers
+  Bit 2: Images
+  Bit 3: Shared memory
+  Bit 4: Thread group
+
+  These may be passed in in any combination. An implementation is free to not
+  distinguish between these as it sees fit. However these map to all the
+  possibilities made available by GLSL.
 
 .. _atomopcodes:
 
@@ -2358,158 +2399,159 @@ These opcodes provide atomic variants of some common arithmetic and
 logical operations.  In this context atomicity means that another
 concurrent memory access operation that affects the same memory
 location is guaranteed to be performed strictly before or after the
-entire execution of the atomic operation.
-
-For the moment they're only valid in compute programs.
+entire execution of the atomic operation. The resource may be a buffer
+or an image. In the case of an image, the offset works the same as for
+``LOAD`` and ``STORE``, specified above. These atomic operations may
+only be used with 32-bit integer image formats.
 
 .. opcode:: ATOMUADD - Atomic integer addition
 
   Syntax: ``ATOMUADD dst, resource, offset, src``
 
-  Example: ``ATOMUADD TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMUADD TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = dst_i + src_i
+  resource[offset] = dst_x + src_x
 
 
 .. opcode:: ATOMXCHG - Atomic exchange
 
   Syntax: ``ATOMXCHG dst, resource, offset, src``
 
-  Example: ``ATOMXCHG TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMXCHG TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = src_i
+  resource[offset] = src_x
 
 
 .. opcode:: ATOMCAS - Atomic compare-and-exchange
 
   Syntax: ``ATOMCAS dst, resource, offset, cmp, src``
 
-  Example: ``ATOMCAS TEMP[0], RES[0], TEMP[1], TEMP[2], TEMP[3]``
+  Example: ``ATOMCAS TEMP[0], BUFFER[0], TEMP[1], TEMP[2], TEMP[3]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = (dst_i == cmp_i ? src_i : dst_i)
+  resource[offset] = (dst_x == cmp_x ? src_x : dst_x)
 
 
 .. opcode:: ATOMAND - Atomic bitwise And
 
   Syntax: ``ATOMAND dst, resource, offset, src``
 
-  Example: ``ATOMAND TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMAND TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = dst_i \& src_i
+  resource[offset] = dst_x \& src_x
 
 
 .. opcode:: ATOMOR - Atomic bitwise Or
 
   Syntax: ``ATOMOR dst, resource, offset, src``
 
-  Example: ``ATOMOR TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMOR TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = dst_i | src_i
+  resource[offset] = dst_x | src_x
 
 
 .. opcode:: ATOMXOR - Atomic bitwise Xor
 
   Syntax: ``ATOMXOR dst, resource, offset, src``
 
-  Example: ``ATOMXOR TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMXOR TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = dst_i \oplus src_i
+  resource[offset] = dst_x \oplus src_x
 
 
 .. opcode:: ATOMUMIN - Atomic unsigned minimum
 
   Syntax: ``ATOMUMIN dst, resource, offset, src``
 
-  Example: ``ATOMUMIN TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMUMIN TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = (dst_i < src_i ? dst_i : src_i)
+  resource[offset] = (dst_x < src_x ? dst_x : src_x)
 
 
 .. opcode:: ATOMUMAX - Atomic unsigned maximum
 
   Syntax: ``ATOMUMAX dst, resource, offset, src``
 
-  Example: ``ATOMUMAX TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMUMAX TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = (dst_i > src_i ? dst_i : src_i)
+  resource[offset] = (dst_x > src_x ? dst_x : src_x)
 
 
 .. opcode:: ATOMIMIN - Atomic signed minimum
 
   Syntax: ``ATOMIMIN dst, resource, offset, src``
 
-  Example: ``ATOMIMIN TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMIMIN TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = (dst_i < src_i ? dst_i : src_i)
+  resource[offset] = (dst_x < src_x ? dst_x : src_x)
 
 
 .. opcode:: ATOMIMAX - Atomic signed maximum
 
   Syntax: ``ATOMIMAX dst, resource, offset, src``
 
-  Example: ``ATOMIMAX TEMP[0], RES[0], TEMP[1], TEMP[2]``
+  Example: ``ATOMIMAX TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
 
-  The following operation is performed atomically on each component:
+  The following operation is performed atomically:
 
 .. math::
 
-  dst_i = resource[offset]_i
+  dst_x = resource[offset]
 
-  resource[offset]_i = (dst_i > src_i ? dst_i : src_i)
+  resource[offset] = (dst_x > src_x ? dst_x : src_x)
 
 
 
@@ -2646,7 +2688,8 @@ space coordinate system.  After clipping, the X, Y and Z components of the
 vertex will be divided by the W value to get normalized device coordinates.
 
 For fragment shaders, TGSI_SEMANTIC_POSITION is used to indicate that
-fragment shader input contains the fragment's window position.  The X
+fragment shader input (or system value, depending on which one is
+supported by the driver) contains the fragment's window position.  The X
 component starts at zero and always increases from left to right.
 The Y component starts at zero and always increases but Y=0 may either
 indicate the top of the window or the bottom depending on the fragment
@@ -2758,11 +2801,17 @@ typically only used for legacy graphics APIs.
 TGSI_SEMANTIC_FACE
 """"""""""""""""""
 
-This label applies to fragment shader inputs only and indicates that
-the register contains front/back-face information of the form (F, 0,
-0, 1).  The first component will be positive when the fragment belongs
-to a front-facing polygon, and negative when the fragment belongs to a
-back-facing polygon.
+This label applies to fragment shader inputs (or system values,
+depending on which one is supported by the driver) and indicates that
+the register contains front/back-face information.
+
+If it is an input, it will be a floating-point vector in the form (F, 0, 0, 1),
+where F will be positive when the fragment belongs to a front-facing polygon,
+and negative when the fragment belongs to a back-facing polygon.
+
+If it is a system value, it will be an integer vector in the form (F, 0, 0, 1),
+where F is 0xffffffff when the fragment belongs to a front-facing polygon and
+0 when the fragment belongs to a back-facing polygon.
 
 
 TGSI_SEMANTIC_EDGEFLAG
@@ -2948,6 +2997,19 @@ For fragment shaders, this semantic indicates whether the current
 invocation is covered or not. Helper invocations are created in order
 to properly compute derivatives, however it may be desirable to skip
 some of the logic in those cases. See ``gl_HelperInvocation`` documentation.
+
+TGSI_SEMANTIC_BASEINSTANCE
+""""""""""""""""""""""""""
+
+For vertex shaders, the base instance argument supplied for this
+draw. This is an integer value, and only the X component is used.
+
+TGSI_SEMANTIC_DRAWID
+""""""""""""""""""""
+
+For vertex shaders, the zero-based index of the current draw in a
+``glMultiDraw*`` invocation. This is an integer value, and only the X
+component is used.
 
 
 Declaration Interpolate

@@ -33,6 +33,7 @@
 #include "util/u_format.h"
 
 #include "freedreno_resource.h"
+#include "freedreno_query_hw.h"
 
 #include "fd3_emit.h"
 #include "fd3_blend.h"
@@ -145,7 +146,8 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	void *ptr;
 
 	u_upload_alloc(fd3_ctx->border_color_uploader,
-			0, 2 * PIPE_MAX_SAMPLERS * BORDERCOLOR_SIZE, &off,
+			0, BORDER_COLOR_UPLOAD_SIZE,
+		       BORDER_COLOR_UPLOAD_SIZE, &off,
 			&fd3_ctx->border_color_buf,
 			&ptr);
 
@@ -887,7 +889,16 @@ fd3_emit_restore(struct fd_context *ctx)
 
 	fd_wfi(ctx, ring);
 
+	fd_hw_query_enable(ctx, ring);
+
 	ctx->needs_rb_fbd = true;
+}
+
+static void
+fd3_emit_ib(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
+		struct fd_ringmarker *end)
+{
+	__OUT_IB(ring, true, start, end);
 }
 
 void
@@ -896,4 +907,5 @@ fd3_emit_init(struct pipe_context *pctx)
 	struct fd_context *ctx = fd_context(pctx);
 	ctx->emit_const = fd3_emit_const;
 	ctx->emit_const_bo = fd3_emit_const_bo;
+	ctx->emit_ib = fd3_emit_ib;
 }

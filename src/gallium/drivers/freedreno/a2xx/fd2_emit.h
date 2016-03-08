@@ -45,4 +45,6 @@ void fd2_emit_vertex_bufs(struct fd_ringbuffer *ring, uint32_t val,
 void fd2_emit_state(struct fd_context *ctx, uint32_t dirty);
 void fd2_emit_setup(struct fd_context *ctx);
 
+void fd2_emit_init(struct pipe_context *pctx);
+
 #endif /* FD2_EMIT_H */

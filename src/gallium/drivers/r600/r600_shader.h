@@ -30,6 +30,16 @@
 extern "C" {
 #endif
 
+/* Valid shader configurations:
+ *
+ * API shaders       VS | TCS | TES | GS |pass| PS
+ * are compiled as:     |     |     |    |thru|
+ *                      |     |     |    |    |
+ * Only VS & PS:     VS | --  | --  | -- | -- | PS
+ * With GS:          ES | --  | --  | GS | VS | PS
+ * With Tessel.:     LS | HS  | VS  | -- | -- | PS
+ * With both:        LS | HS  | ES  | GS | VS | PS
+ */
 
 struct r600_shader_io {
 	unsigned		name;
@@ -52,8 +62,8 @@ struct r600_shader {
 	unsigned		ninput;
 	unsigned		noutput;
 	unsigned		nlds;
-	struct r600_shader_io	input[40];
-	struct r600_shader_io	output[40];
+	struct r600_shader_io	input[64];
+	struct r600_shader_io	output[64];
 	boolean			uses_kill;
 	boolean			fs_write_all;
 	boolean			two_side;
@@ -86,7 +96,10 @@ struct r600_shader {
 	unsigned		max_arrays;
 	unsigned		num_arrays;
 	unsigned		vs_as_es;
+	unsigned		vs_as_ls;
 	unsigned		vs_as_gs_a;
+	unsigned                tes_as_es;
+	unsigned                tcs_prim_mode;
 	unsigned                ps_prim_id_input;
 	struct r600_shader_array * arrays;
 
@@ -102,8 +115,15 @@ union r600_shader_key {
 	struct {
 		unsigned	prim_id_out:8;
 		unsigned	as_es:1; /* export shader */
+		unsigned	as_ls:1; /* local shader */
 		unsigned	as_gs_a:1;
 	} vs;
+	struct {
+		unsigned	as_es:1;
+	} tes;
+	struct {
+		unsigned	prim_mode:3;
+	} tcs;
 };
 
 struct r600_shader_array {
@@ -134,6 +154,7 @@ struct r600_pipe_shader {
  TGSI_INTERPOLATE_LOC_CENTER/SAMPLE/COUNT. Other input values return -1. */
 int eg_get_interpolator_index(unsigned interpolate, unsigned location);
 
+int r600_get_lds_unique_index(unsigned semantic_name, unsigned index);
 
 #ifdef __cplusplus
 }  // extern "C"

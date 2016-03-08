@@ -29,6 +29,7 @@
 #include "pipe/p_shader_tokens.h"
 #include "tgsi_parse.h"
 #include "tgsi_util.h"
+#include "tgsi_exec.h"
 
 union pointer_hack
 {
@@ -53,17 +54,17 @@ tgsi_util_get_src_register_swizzle(
    const struct tgsi_src_register *reg,
    unsigned component )
 {
-   switch( component ) {
-   case 0:
+   switch (component) {
+   case TGSI_CHAN_X:
       return reg->SwizzleX;
-   case 1:
+   case TGSI_CHAN_Y:
       return reg->SwizzleY;
-   case 2:
+   case TGSI_CHAN_Z:
       return reg->SwizzleZ;
-   case 3:
+   case TGSI_CHAN_W:
       return reg->SwizzleW;
    default:
-      assert( 0 );
+      assert(0);
    }
    return 0;
 }

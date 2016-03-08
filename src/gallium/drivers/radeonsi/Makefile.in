@@ -140,8 +140,8 @@ LTLIBRARIES = $(noinst_LTLIBRARIES)
 libradeonsi_la_LIBADD =
 am__objects_1 = cik_sdma.lo si_blit.lo si_compute.lo si_cp_dma.lo \
 	si_debug.lo si_descriptors.lo si_dma.lo si_hw_context.lo \
-	si_pipe.lo si_pm4.lo si_shader.lo si_state.lo si_state_draw.lo \
-	si_state_shaders.lo si_uvd.lo
+	si_pipe.lo si_pm4.lo si_perfcounter.lo si_shader.lo \
+	si_state.lo si_state_draw.lo si_state_shaders.lo si_uvd.lo
 am__objects_2 =
 am_libradeonsi_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libradeonsi_la_OBJECTS = $(am_libradeonsi_la_OBJECTS)
@@ -337,8 +337,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -384,6 +382,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -515,6 +514,7 @@ C_SOURCES := \
 	si_pipe.h \
 	si_pm4.c \
 	si_pm4.h \
+	si_perfcounter.c \
 	si_public.h \
 	si_shader.c \
 	si_shader.h \
@@ -669,6 +669,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_descriptors.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_dma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_hw_context.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_perfcounter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_pipe.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_pm4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_shader.Plo@am__quote@

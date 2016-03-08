@@ -270,13 +270,11 @@ nv50_compute_find_symbol(struct nv50_context *nv50, uint32_t label)
 }
 
 void
-nv50_launch_grid(struct pipe_context *pipe,
-                 const uint *block_layout, const uint *grid_layout,
-                 uint32_t label, const void *input)
+nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
-   unsigned block_size = block_layout[0] * block_layout[1] * block_layout[2];
+   unsigned block_size = info->block[0] * info->block[1] * info->block[2];
    struct nv50_program *cp = nv50->compprog;
    bool ret;
 
@@ -286,10 +284,10 @@ nv50_launch_grid(struct pipe_context *pipe,
       return;
    }
 
-   nv50_compute_upload_input(nv50, input);
+   nv50_compute_upload_input(nv50, info->input);
 
    BEGIN_NV04(push, NV50_COMPUTE(CP_START_ID), 1);
-   PUSH_DATA (push, nv50_compute_find_symbol(nv50, label));
+   PUSH_DATA (push, nv50_compute_find_symbol(nv50, info->pc));
 
    BEGIN_NV04(push, NV50_COMPUTE(SHARED_SIZE), 1);
    PUSH_DATA (push, align(cp->cp.smem_size + cp->parm_size + 0x10, 0x40));
@@ -298,14 +296,14 @@ nv50_launch_grid(struct pipe_context *pipe,
 
    /* grid/block setup */
    BEGIN_NV04(push, NV50_COMPUTE(BLOCKDIM_XY), 2);
-   PUSH_DATA (push, block_layout[1] << 16 | block_layout[0]);
-   PUSH_DATA (push, block_layout[2]);
+   PUSH_DATA (push, info->block[1] << 16 | info->block[0]);
+   PUSH_DATA (push, info->block[2]);
    BEGIN_NV04(push, NV50_COMPUTE(BLOCK_ALLOC), 1);
    PUSH_DATA (push, 1 << 16 | block_size);
    BEGIN_NV04(push, NV50_COMPUTE(BLOCKDIM_LATCH), 1);
    PUSH_DATA (push, 1);
    BEGIN_NV04(push, NV50_COMPUTE(GRIDDIM), 1);
-   PUSH_DATA (push, grid_layout[1] << 16 | grid_layout[0]);
+   PUSH_DATA (push, info->grid[1] << 16 | info->grid[0]);
    BEGIN_NV04(push, NV50_COMPUTE(GRIDID), 1);
    PUSH_DATA (push, 1);
 

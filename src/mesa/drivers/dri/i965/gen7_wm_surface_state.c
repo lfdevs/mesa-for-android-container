@@ -26,6 +26,7 @@
 #include "main/texformat.h"
 #include "main/teximage.h"
 #include "program/prog_parameter.h"
+#include "program/prog_instruction.h"
 
 #include "intel_mipmap_tree.h"
 #include "intel_batchbuffer.h"
@@ -499,7 +500,7 @@ gen7_update_renderbuffer_surface(struct brw_context *brw,
       /* fallthrough */
    default:
       surftype = translate_tex_target(gl_target);
-      is_array = _mesa_tex_target_is_array(gl_target);
+      is_array = _mesa_is_array_texture(gl_target);
       break;
    }
 

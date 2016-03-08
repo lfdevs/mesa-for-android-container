@@ -48,18 +48,18 @@ NineCubeTexture9_new( struct NineDevice9 *pDevice,
                       struct NineCubeTexture9 **ppOut,
                       HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCubeTexture9_GetLevelDesc( struct NineCubeTexture9 *This,
                                UINT Level,
                                D3DSURFACE_DESC *pDesc );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCubeTexture9_GetCubeMapSurface( struct NineCubeTexture9 *This,
                                     D3DCUBEMAP_FACES FaceType,
                                     UINT Level,
                                     IDirect3DSurface9 **ppCubeMapSurface );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCubeTexture9_LockRect( struct NineCubeTexture9 *This,
                            D3DCUBEMAP_FACES FaceType,
                            UINT Level,
@@ -67,12 +67,12 @@ NineCubeTexture9_LockRect( struct NineCubeTexture9 *This,
                            const RECT *pRect,
                            DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCubeTexture9_UnlockRect( struct NineCubeTexture9 *This,
                              D3DCUBEMAP_FACES FaceType,
                              UINT Level );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCubeTexture9_AddDirtyRect( struct NineCubeTexture9 *This,
                                D3DCUBEMAP_FACES FaceType,
                                const RECT *pDirtyRect );

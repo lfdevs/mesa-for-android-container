@@ -35,6 +35,7 @@
 
 #include "glheader.h"
 
+struct gl_bitmap_atlas;
 struct gl_buffer_object;
 struct gl_context;
 struct gl_display_list;
@@ -48,6 +49,7 @@ struct gl_shader;
 struct gl_shader_program;
 struct gl_texture_image;
 struct gl_texture_object;
+struct gl_memory_info;
 
 /* GL_ARB_vertex_buffer_object */
 /* Modifies GL_MAP_UNSYNCHRONIZED_BIT to allow driver to fail (return
@@ -153,6 +155,14 @@ struct dd_function_table {
 		   GLint x, GLint y, GLsizei width, GLsizei height,
 		   const struct gl_pixelstore_attrib *unpack,
 		   const GLubyte *bitmap );
+
+   /**
+    * Called by display list code for optimized glCallLists/glBitmap rendering
+    * The driver must support texture rectangles of width 1024 or more.
+    */
+   void (*DrawAtlasBitmaps)(struct gl_context *ctx,
+                            const struct gl_bitmap_atlas *atlas,
+                            GLuint count, const GLubyte *ids);
    /*@}*/
 
    
@@ -634,6 +644,11 @@ struct dd_function_table {
                               GLintptr readOffset, GLintptr writeOffset,
                               GLsizeiptr size );
 
+   void (*InvalidateBufferSubData)( struct gl_context *ctx,
+                                    struct gl_buffer_object *obj,
+                                    GLintptr offset,
+                                    GLsizeiptr length );
+
    /* Returns pointer to the start of the mapped range.
     * May return NULL if MESA_MAP_NOWAIT_BIT is set in access:
     */
@@ -721,12 +736,22 @@ struct dd_function_table {
    void (*EndQuery)(struct gl_context *ctx, struct gl_query_object *q);
    void (*CheckQuery)(struct gl_context *ctx, struct gl_query_object *q);
    void (*WaitQuery)(struct gl_context *ctx, struct gl_query_object *q);
+   /*
+    * \pname the value requested to be written (GL_QUERY_RESULT, etc)
+    * \ptype the type of the value requested to be written:
+    *    GL_UNSIGNED_INT, GL_UNSIGNED_INT64_ARB,
+    *    GL_INT, GL_INT64_ARB
+    */
+   void (*StoreQueryResult)(struct gl_context *ctx, struct gl_query_object *q,
+                            struct gl_buffer_object *buf, intptr_t offset,
+                            GLenum pname, GLenum ptype);
    /*@}*/
 
    /**
     * \name Performance monitors
     */
    /*@{*/
+   void (*InitPerfMonitorGroups)(struct gl_context *ctx);
    struct gl_perf_monitor_object * (*NewPerfMonitor)(struct gl_context *ctx);
    void (*DeletePerfMonitor)(struct gl_context *ctx,
                              struct gl_perf_monitor_object *m);
@@ -756,6 +781,12 @@ struct dd_function_table {
    void (*UseProgram)(struct gl_context *ctx, struct gl_shader_program *shProg);
    /*@}*/
 
+   /**
+    * \name GREMEDY debug/marker functions
+    */
+   /*@{*/
+   void (*EmitStringMarker)(struct gl_context *ctx, const GLchar *string, GLsizei len);
+   /*@}*/
 
    /**
     * \name Support for multiple T&L engines
@@ -927,6 +958,13 @@ struct dd_function_table {
    void (*DispatchCompute)(struct gl_context *ctx, const GLuint *num_groups);
    void (*DispatchComputeIndirect)(struct gl_context *ctx, GLintptr indirect);
    /*@}*/
+
+   /**
+    * Query information about memory. Device memory is e.g. VRAM. Staging
+    * memory is e.g. GART. All sizes are in kilobytes.
+    */
+   void (*QueryMemoryInfo)(struct gl_context *ctx,
+                           struct gl_memory_info *info);
 };
 
 

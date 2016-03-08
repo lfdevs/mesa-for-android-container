@@ -99,6 +99,7 @@ static const struct opProperties _initProps[] =
    { OP_SET,    0x3, 0x3, 0x0, 0x0, 0x2, 0x1, 0x1, 0x0 },
    { OP_PREEX2, 0x1, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 },
    { OP_PRESIN, 0x1, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 },
+   { OP_EX2,    0x0, 0x0, 0x0, 0x8, 0x0, 0x0, 0x0, 0x0 },
    { OP_LG2,    0x1, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 },
    { OP_RCP,    0x1, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 },
    { OP_RSQ,    0x1, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 },
@@ -268,6 +269,12 @@ TargetNV50::insnCanLoad(const Instruction *i, int s,
 {
    DataFile sf = ld->src(0).getFile();
 
+   // immediate 0 can be represented by GPR $r63/$r127
+   if (sf == FILE_IMMEDIATE && ld->getSrc(0)->reg.data.u64 == 0)
+      return (!i->isPseudo() &&
+              !i->asTex() &&
+              i->op != OP_EXPORT && i->op != OP_STORE);
+
    if (sf == FILE_IMMEDIATE && (i->predSrc >= 0 || i->flagsDef >= 0))
       return false;
    if (s >= opInfo[i->op].srcNr)
@@ -376,6 +383,21 @@ TargetNV50::insnCanLoad(const Instruction *i, int s,
       return sf == FILE_MEMORY_CONST;
    }
    return true;
+}
+
+bool
+TargetNV50::insnCanLoadOffset(const Instruction *i, int s, int offset) const
+{
+   if (!i->src(s).isIndirect(0))
+      return true;
+   offset += i->src(s).get()->reg.data.offset;
+   if (i->op == OP_LOAD || i->op == OP_STORE) {
+      // There are some restrictions in theory, but in practice they're never
+      // going to be hit. When we enable shared/global memory, this will
+      // become more important.
+      return true;
+   }
+   return offset >= 0 && offset <= (int32_t)(127 * i->src(s).get()->reg.size);
 }
 
 bool

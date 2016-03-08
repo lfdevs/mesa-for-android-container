@@ -45,6 +45,8 @@ struct NineResource9
 
     /* for [GS]etPrivateData/FreePrivateData */
     struct util_hash_table *pdata;
+
+    long long size;
 };
 static inline struct NineResource9 *
 NineResource9( void *data )
@@ -74,34 +76,34 @@ NineResource9_GetPool( struct NineResource9 *This );
 
 /*** Direct3D public methods ***/
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineResource9_SetPrivateData( struct NineResource9 *This,
                               REFGUID refguid,
                               const void *pData,
                               DWORD SizeOfData,
                               DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineResource9_GetPrivateData( struct NineResource9 *This,
                               REFGUID refguid,
                               void *pData,
                               DWORD *pSizeOfData );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineResource9_FreePrivateData( struct NineResource9 *This,
                                REFGUID refguid );
 
-DWORD WINAPI
+DWORD NINE_WINAPI
 NineResource9_SetPriority( struct NineResource9 *This,
                            DWORD PriorityNew );
 
-DWORD WINAPI
+DWORD NINE_WINAPI
 NineResource9_GetPriority( struct NineResource9 *This );
 
-void WINAPI
+void NINE_WINAPI
 NineResource9_PreLoad( struct NineResource9 *This );
 
-D3DRESOURCETYPE WINAPI
+D3DRESOURCETYPE NINE_WINAPI
 NineResource9_GetType( struct NineResource9 *This );
 
 #endif /* _NINE_RESOURCE9_H_ */

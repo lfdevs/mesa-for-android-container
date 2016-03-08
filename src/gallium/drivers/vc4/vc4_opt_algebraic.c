@@ -145,41 +145,22 @@ qir_opt_algebraic(struct vc4_compile *c)
 
         list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 switch (inst->op) {
-                case QOP_SEL_X_Y_ZS:
-                case QOP_SEL_X_Y_ZC:
-                case QOP_SEL_X_Y_NS:
-                case QOP_SEL_X_Y_NC:
-                case QOP_SEL_X_Y_CS:
-                case QOP_SEL_X_Y_CC:
-                        if (is_zero(c, inst->src[1])) {
-                                /* Replace references to a 0 uniform value
-                                 * with the SEL_X_0 equivalent.
-                                 */
-                                dump_from(c, inst);
-                                inst->op -= (QOP_SEL_X_Y_ZS - QOP_SEL_X_0_ZS);
-                                inst->src[1] = c->undef;
+                case QOP_FMIN:
+                        if (is_1f(c, inst->src[1]) &&
+                            inst->src[0].pack >= QPU_UNPACK_8D_REP &&
+                            inst->src[0].pack <= QPU_UNPACK_8D) {
+                                replace_with_mov(c, inst, inst->src[0]);
                                 progress = true;
-                                dump_to(c, inst);
-                                break;
                         }
+                        break;
 
-                        if (is_zero(c, inst->src[0])) {
-                                /* Replace references to a 0 uniform value
-                                 * with the SEL_X_0 equivalent, flipping the
-                                 * condition being evaluated since the operand
-                                 * order is flipped.
-                                 */
-                                dump_from(c, inst);
-                                inst->op -= QOP_SEL_X_Y_ZS;
-                                inst->op ^= 1;
-                                inst->op += QOP_SEL_X_0_ZS;
-                                inst->src[0] = inst->src[1];
-                                inst->src[1] = c->undef;
+                case QOP_FMAX:
+                        if (is_zero(c, inst->src[1]) &&
+                            inst->src[0].pack >= QPU_UNPACK_8D_REP &&
+                            inst->src[0].pack <= QPU_UNPACK_8D) {
+                                replace_with_mov(c, inst, inst->src[0]);
                                 progress = true;
-                                dump_to(c, inst);
-                                break;
                         }
-
                         break;
 
                 case QOP_FSUB:

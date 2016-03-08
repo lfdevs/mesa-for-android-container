@@ -48,7 +48,7 @@ struct svga_hwtnl *
 svga_hwtnl_create(struct svga_context *svga)
 {
    struct svga_hwtnl *hwtnl = CALLOC_STRUCT(svga_hwtnl);
-   if (hwtnl == NULL)
+   if (!hwtnl)
       goto fail;
 
    hwtnl->svga = svga;
@@ -189,7 +189,7 @@ draw_vgpu9(struct svga_hwtnl *hwtnl)
    for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
       unsigned j = hwtnl->cmd.vdecl_buffer_index[i];
       handle = svga_buffer_handle(svga, hwtnl->cmd.vbufs[j].buffer);
-      if (handle == NULL)
+      if (!handle)
          return PIPE_ERROR_OUT_OF_MEMORY;
 
       vb_handle[i] = handle;
@@ -198,7 +198,7 @@ draw_vgpu9(struct svga_hwtnl *hwtnl)
    for (i = 0; i < hwtnl->cmd.prim_count; i++) {
       if (hwtnl->cmd.prim_ib[i]) {
          handle = svga_buffer_handle(svga, hwtnl->cmd.prim_ib[i]);
-         if (handle == NULL)
+         if (!handle)
             return PIPE_ERROR_OUT_OF_MEMORY;
       }
       else
@@ -491,7 +491,7 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
       (void) sbuf; /* silence unused var warning */
 
       ib_handle = svga_buffer_handle(svga, ib);
-      if (ib_handle == NULL)
+      if (!ib_handle)
          return PIPE_ERROR_OUT_OF_MEMORY;
    }
    else {
@@ -517,11 +517,27 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
          buffers[i].offset = hwtnl->cmd.vbufs[i].buffer_offset;
       }
       if (vbuf_count > 0) {
-         ret = SVGA3D_vgpu10_SetVertexBuffers(svga->swc, vbuf_count,
-                                              0,    /* startBuffer */
-                                              buffers, vb_handle);
-         if (ret != PIPE_OK)
-            return ret;
+         /* If we haven't yet emitted a drawing command or if any
+          * vertex buffer state is changing, issue that state now.
+          */
+         if (((hwtnl->cmd.swc->hints & SVGA_HINT_FLAG_CAN_PRE_FLUSH) == 0) ||
+             vbuf_count != svga->state.hw_draw.num_vbuffers ||
+             memcmp(buffers, svga->state.hw_draw.vbuffers,
+                    vbuf_count * sizeof(buffers[0])) ||
+             memcmp(vb_handle, svga->state.hw_draw.vbuffer_handles,
+                    vbuf_count * sizeof(vb_handle[0]))) {
+            ret = SVGA3D_vgpu10_SetVertexBuffers(svga->swc, vbuf_count,
+                                                 0,    /* startBuffer */
+                                                 buffers, vb_handle);
+            if (ret != PIPE_OK)
+               return ret;
+
+            svga->state.hw_draw.num_vbuffers = vbuf_count;
+            memcpy(svga->state.hw_draw.vbuffers, buffers,
+                   vbuf_count * sizeof(buffers[0]));
+            memcpy(svga->state.hw_draw.vbuffer_handles, vb_handle,
+                   vbuf_count * sizeof(vb_handle[0]));
+         }
       }
    }
 
@@ -539,11 +555,18 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
       SVGA3dSurfaceFormat indexFormat = xlate_index_format(range->indexWidth);
 
       /* setup index buffer */
-      ret = SVGA3D_vgpu10_SetIndexBuffer(svga->swc, ib_handle,
-                                         indexFormat,
-                                         range->indexArray.offset);
-      if (ret != PIPE_OK)
-         return ret;
+      if (ib_handle != svga->state.hw_draw.ib ||
+          indexFormat != svga->state.hw_draw.ib_format ||
+          range->indexArray.offset != svga->state.hw_draw.ib_offset) {
+         ret = SVGA3D_vgpu10_SetIndexBuffer(svga->swc, ib_handle,
+                                            indexFormat,
+                                            range->indexArray.offset);
+         if (ret != PIPE_OK)
+            return ret;
+         svga->state.hw_draw.ib = ib_handle;
+         svga->state.hw_draw.ib_format = indexFormat;
+         svga->state.hw_draw.ib_offset = range->indexArray.offset;
+      }
 
       if (instance_count > 1) {
          ret = SVGA3D_vgpu10_DrawIndexedInstanced(svga->swc,

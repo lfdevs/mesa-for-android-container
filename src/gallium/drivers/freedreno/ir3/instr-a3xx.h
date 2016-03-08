@@ -261,6 +261,7 @@ typedef union PACKED {
 	/* to make compiler happy: */
 	uint32_t dummy32;
 	uint32_t dummy10   : 10;
+	int32_t  idummy10  : 10;
 	uint32_t dummy11   : 11;
 	uint32_t dummy12   : 12;
 	uint32_t dummy13   : 13;

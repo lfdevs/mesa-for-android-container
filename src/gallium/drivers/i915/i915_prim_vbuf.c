@@ -761,11 +761,11 @@ struct draw_stage *i915_draw_vbuf_stage(struct i915_context *i915)
    struct draw_stage *stage;
    
    render = i915_vbuf_render_create(i915);
-   if(!render)
+   if (!render)
       return NULL;
    
    stage = draw_vbuf_stage(i915->draw, render);
-   if(!stage) {
+   if (!stage) {
       render->destroy(render);
       return NULL;
    }

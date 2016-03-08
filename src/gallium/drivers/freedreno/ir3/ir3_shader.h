@@ -30,7 +30,7 @@
 #define IR3_SHADER_H_
 
 #include "pipe/p_state.h"
-#include "glsl/nir/shader_enums.h"
+#include "compiler/shader_enums.h"
 
 #include "ir3.h"
 #include "disasm.h"
@@ -195,7 +195,15 @@ struct ir3_shader_variant {
 		enum glsl_interp_qualifier interpolate;
 	} inputs[16 + 2];  /* +POSITION +FACE */
 
-	unsigned total_in;       /* sum of inputs (scalar) */
+	/* sum of input components (scalar).  For frag shaders, it only counts
+	 * the varying inputs:
+	 */
+	unsigned total_in;
+
+	/* For frag shaders, the total number of inputs (not scalar,
+	 * ie. SP_VS_PARAM_REG.TOTALVSOUTVAR)
+	 */
+	unsigned varying_in;
 
 	/* do we have one or more texture sample instructions: */
 	bool has_samp;
@@ -222,6 +230,8 @@ struct ir3_shader_variant {
 	struct ir3_shader *shader;
 };
 
+typedef struct nir_shader nir_shader;
+
 struct ir3_shader {
 	enum shader_t type;
 
@@ -232,7 +242,7 @@ struct ir3_shader {
 	struct ir3_compiler *compiler;
 
 	struct pipe_context *pctx;    /* TODO replace w/ pipe_screen */
-	const struct tgsi_token *tokens;
+	nir_shader *nir;
 	struct pipe_stream_output_info stream_output;
 
 	struct ir3_shader_variant *variants;

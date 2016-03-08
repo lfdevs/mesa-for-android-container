@@ -26,10 +26,7 @@
 #include "intel_fbo.h"
 
 #include "brw_blorp.h"
-#include "brw_defines.h"
 #include "brw_state.h"
-#include "gen6_blorp.h"
-#include "gen7_blorp.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BLORP
 
@@ -322,8 +319,14 @@ brw_hiz_op_params::brw_hiz_op_params(struct intel_mipmap_tree *mt,
     * not 8. But commit 1f112cc increased the alignment from 4 to 8, which
     * prevents the clobbering.
     */
-   depth.width = ALIGN(depth.width, 8);
-   depth.height = ALIGN(depth.height, 4);
+   dst.num_samples = mt->num_samples;
+   if (dst.num_samples > 1) {
+      depth.width = ALIGN(mt->logical_width0, 8);
+      depth.height = ALIGN(mt->logical_height0, 4);
+   } else {
+      depth.width = ALIGN(depth.width, 8);
+      depth.height = ALIGN(depth.height, 4);
+   }
 
    x1 = depth.width;
    y1 = depth.height;

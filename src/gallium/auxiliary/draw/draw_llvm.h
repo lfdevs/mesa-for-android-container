@@ -104,8 +104,7 @@ enum {
 
 enum {
    DRAW_JIT_VERTEX_VERTEX_ID = 0,
-   DRAW_JIT_VERTEX_CLIP,
-   DRAW_JIT_VERTEX_PRE_CLIP_POS,
+   DRAW_JIT_VERTEX_CLIP_POS,
    DRAW_JIT_VERTEX_DATA
 };
 
@@ -162,11 +161,8 @@ enum {
 #define draw_jit_header_id(_gallivm, _ptr)              \
    lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_VERTEX_ID, "id")
 
-#define draw_jit_header_clip(_gallivm, _ptr) \
-   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_CLIP, "clip")
-
-#define draw_jit_header_pre_clip_pos(_gallivm, _ptr) \
-   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_PRE_CLIP_POS, "pre_clip_pos")
+#define draw_jit_header_clip_pos(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_CLIP_POS, "clip_pos")
 
 #define draw_jit_header_data(_gallivm, _ptr)            \
    lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_DATA, "data")
@@ -315,12 +311,8 @@ struct draw_llvm_variant_key
    unsigned need_edgeflags:1;
    unsigned has_gs:1;
    unsigned num_outputs:8;
-   /*
-    * it is important there are no holes in this struct
-    * (and all padding gets zeroed).
-    */
    unsigned ucp_enable:PIPE_MAX_CLIP_PLANES;
-   unsigned pad1:24-PIPE_MAX_CLIP_PLANES;
+   /* note padding here - must use memset */
 
    /* Variable number of vertex elements:
     */
@@ -336,6 +328,7 @@ struct draw_gs_llvm_variant_key
    unsigned nr_samplers:8;
    unsigned nr_sampler_views:8;
    unsigned num_outputs:8;
+   /* note padding here - must use memset */
 
    struct draw_sampler_static_state samplers[1];
 };

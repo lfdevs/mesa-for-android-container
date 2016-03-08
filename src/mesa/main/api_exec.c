@@ -51,6 +51,7 @@
 #include "main/convolve.h"
 #include "main/copyimage.h"
 #include "main/depth.h"
+#include "main/debug_output.h"
 #include "main/dlist.h"
 #include "main/drawpix.h"
 #include "main/drawtex.h"
@@ -258,6 +259,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_SamplerParameterIuiv(exec, _mesa_SamplerParameterIuiv);
       SET_SelectPerfMonitorCountersAMD(exec, _mesa_SelectPerfMonitorCountersAMD);
       SET_ShaderStorageBlockBinding(exec, _mesa_ShaderStorageBlockBinding);
+      SET_StringMarkerGREMEDY(exec, _mesa_StringMarkerGREMEDY);
       SET_TexImage1D(exec, _mesa_TexImage1D);
       SET_TexImage2DMultisample(exec, _mesa_TexImage2DMultisample);
       SET_TexImage3DMultisample(exec, _mesa_TexImage3DMultisample);
@@ -1190,7 +1192,6 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_DisableVertexArrayAttrib(exec, _mesa_DisableVertexArrayAttrib);
       SET_EnableVertexArrayAttrib(exec, _mesa_EnableVertexArrayAttrib);
       SET_FlushMappedNamedBufferRange(exec, _mesa_FlushMappedNamedBufferRange);
-      SET_FramebufferTexture(exec, _mesa_FramebufferTexture);
       SET_GenerateTextureMipmap(exec, _mesa_GenerateTextureMipmap);
       SET_GetActiveSubroutineName(exec, _mesa_GetActiveSubroutineName);
       SET_GetActiveSubroutineUniformName(exec, _mesa_GetActiveSubroutineUniformName);
@@ -1304,6 +1305,9 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_ViewportArrayv(exec, _mesa_ViewportArrayv);
       SET_ViewportIndexedf(exec, _mesa_ViewportIndexedf);
       SET_ViewportIndexedfv(exec, _mesa_ViewportIndexedfv);
+   }
+   if (ctx->API == API_OPENGL_CORE || (ctx->API == API_OPENGLES2 && ctx->Version >= 31)) {
+      SET_FramebufferTexture(exec, _mesa_FramebufferTexture);
    }
 
 }

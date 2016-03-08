@@ -149,9 +149,6 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
          draw_vs_reset_so(lp->vs);
       }
    }
-   
-   llvmpipe_cleanup_vertex_sampling(lp);
-   llvmpipe_cleanup_geometry_sampling(lp);
 
    /*
     * TODO: Flush only when a user vertex/index buffer is present

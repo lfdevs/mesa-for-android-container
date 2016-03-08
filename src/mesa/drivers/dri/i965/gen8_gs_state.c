@@ -48,7 +48,7 @@ gen8_upload_gs_state(struct brw_context *brw)
       OUT_BATCH(_3DSTATE_GS << 16 | (10 - 2));
       OUT_BATCH(stage_state->prog_offset);
       OUT_BATCH(0);
-      OUT_BATCH(brw->geometry_program->VerticesIn |
+      OUT_BATCH(brw->gs.prog_data->vertices_in |
                 ((ALIGN(stage_state->sampler_count, 4)/4) <<
                  GEN6_GS_SAMPLER_COUNT_SHIFT) |
                 ((prog_data->base.binding_table.size_bytes / 4) <<

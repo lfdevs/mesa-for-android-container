@@ -51,7 +51,7 @@ NineUnknown_dtor( struct NineUnknown *This )
     FREE(This);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineUnknown_QueryInterface( struct NineUnknown *This,
                             REFIID riid,
                             void **ppvObject )
@@ -75,7 +75,7 @@ NineUnknown_QueryInterface( struct NineUnknown *This,
     return E_NOINTERFACE;
 }
 
-ULONG WINAPI
+ULONG NINE_WINAPI
 NineUnknown_AddRef( struct NineUnknown *This )
 {
     ULONG r;
@@ -94,7 +94,7 @@ NineUnknown_AddRef( struct NineUnknown *This )
     return r;
 }
 
-ULONG WINAPI
+ULONG NINE_WINAPI
 NineUnknown_Release( struct NineUnknown *This )
 {
     if (This->forward)
@@ -117,7 +117,7 @@ NineUnknown_Release( struct NineUnknown *This )
     return r;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineUnknown_GetDevice( struct NineUnknown *This,
                        IDirect3DDevice9 **ppDevice )
 {

@@ -309,7 +309,7 @@ lp_llvm_sampler_soa_create(const struct lp_sampler_static_state *static_state)
    struct lp_llvm_sampler_soa *sampler;
 
    sampler = CALLOC_STRUCT(lp_llvm_sampler_soa);
-   if(!sampler)
+   if (!sampler)
       return NULL;
 
    sampler->base.destroy = lp_llvm_sampler_soa_destroy;

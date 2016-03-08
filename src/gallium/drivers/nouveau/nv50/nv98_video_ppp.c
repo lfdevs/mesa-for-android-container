@@ -40,7 +40,7 @@ nv98_decoder_setup_ppp(struct nouveau_vp3_decoder *dec, struct nouveau_vp3_video
       { dec->fence_bo, NOUVEAU_BO_WR | NOUVEAU_BO_GART },
 #endif
    };
-   unsigned num_refs = sizeof(bo_refs)/sizeof(*bo_refs);
+   unsigned num_refs = ARRAY_SIZE(bo_refs);
 
    for (i = 0; i < 2; ++i) {
       struct nv50_miptree *mt = (struct nv50_miptree *)target->resources[i];

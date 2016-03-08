@@ -148,11 +148,11 @@ am__objects_1 = kernel/vc4_gem.lo kernel/vc4_render_cl.lo \
 	vc4_opt_copy_propagation.lo vc4_opt_cse.lo \
 	vc4_opt_dead_code.lo vc4_opt_small_immediates.lo \
 	vc4_opt_vpm_writes.lo vc4_program.lo vc4_qir.lo \
-	vc4_qir_lower_uniforms.lo vc4_qpu.lo vc4_qpu_disasm.lo \
-	vc4_qpu_emit.lo vc4_qpu_schedule.lo vc4_qpu_validate.lo \
-	vc4_query.lo vc4_register_allocate.lo vc4_reorder_uniforms.lo \
-	vc4_resource.lo vc4_screen.lo vc4_simulator.lo vc4_state.lo \
-	vc4_tiling.lo vc4_uniforms.lo
+	vc4_qir_lower_uniforms.lo vc4_qir_schedule.lo vc4_qpu.lo \
+	vc4_qpu_disasm.lo vc4_qpu_emit.lo vc4_qpu_schedule.lo \
+	vc4_qpu_validate.lo vc4_query.lo vc4_register_allocate.lo \
+	vc4_reorder_uniforms.lo vc4_resource.lo vc4_screen.lo \
+	vc4_simulator.lo vc4_state.lo vc4_tiling.lo vc4_uniforms.lo
 am_libvc4_la_OBJECTS = $(am__objects_1)
 libvc4_la_OBJECTS = $(am_libvc4_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -350,8 +350,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -397,6 +395,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -548,6 +547,7 @@ C_SOURCES := \
 	vc4_program.c \
 	vc4_qir.c \
 	vc4_qir_lower_uniforms.c \
+	vc4_qir_schedule.c \
 	vc4_qir.h \
 	vc4_qpu.c \
 	vc4_qpu_defines.h \
@@ -638,7 +638,7 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(am__append_1) $(am__append_2)
 @USE_VC4_SIMULATOR_TRUE@SIM_LDFLAGS = -lsimpenrose
 AM_CFLAGS = \
-	-I$(top_builddir)/src/glsl/nir \
+	-I$(top_builddir)/src/compiler/nir \
 	$(LIBDRM_CFLAGS) \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(SIM_CFLAGS) \
@@ -742,6 +742,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_program.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir_lower_uniforms.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir_schedule.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qpu.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qpu_disasm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qpu_emit.Plo@am__quote@

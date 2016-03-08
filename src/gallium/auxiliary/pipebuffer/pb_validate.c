@@ -66,7 +66,7 @@ pb_validate_add_buffer(struct pb_validate *vl,
                        unsigned flags)
 {
    assert(buf);
-   if(!buf)
+   if (!buf)
       return PIPE_ERROR;
 
    assert(flags & PB_USAGE_GPU_READ_WRITE);
@@ -94,7 +94,7 @@ pb_validate_add_buffer(struct pb_validate *vl,
       new_entries = (struct pb_validate_entry *)REALLOC(vl->entries,
                                                         vl->size*sizeof(struct pb_validate_entry),
                                                         new_size*sizeof(struct pb_validate_entry));
-      if(!new_entries)
+      if (!new_entries)
          return PIPE_ERROR_OUT_OF_MEMORY;
       
       memset(new_entries + vl->size, 0, (new_size - vl->size)*sizeof(struct pb_validate_entry));
@@ -177,7 +177,7 @@ pb_validate_create()
    struct pb_validate *vl;
    
    vl = CALLOC_STRUCT(pb_validate);
-   if(!vl)
+   if (!vl)
       return NULL;
    
    vl->size = PB_VALIDATE_INITIAL_SIZE;

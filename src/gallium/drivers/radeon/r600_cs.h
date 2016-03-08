@@ -50,7 +50,7 @@ static inline unsigned radeon_add_to_buffer_list(struct r600_common_context *rct
 						 enum radeon_bo_priority priority)
 {
 	assert(usage);
-	return rctx->ws->cs_add_buffer(ring->cs, rbo->cs_buf, usage,
+	return rctx->ws->cs_add_buffer(ring->cs, rbo->buf, usage,
 				      rbo->domains, priority) * 4;
 }
 
@@ -60,7 +60,7 @@ static inline void r600_emit_reloc(struct r600_common_context *rctx,
 				   enum radeon_bo_priority priority)
 {
 	struct radeon_winsys_cs *cs = ring->cs;
-	bool has_vm = ((struct r600_common_screen*)rctx->b.screen)->info.r600_virtual_address;
+	bool has_vm = ((struct r600_common_screen*)rctx->b.screen)->info.has_virtual_memory;
 	unsigned reloc = radeon_add_to_buffer_list(rctx, ring, rbo, usage, priority);
 
 	if (!has_vm) {

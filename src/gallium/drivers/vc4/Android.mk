@@ -28,9 +28,11 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
 	$(C_SOURCES)
 
+LOCAL_GENERATED_SOURCES := $(MESA_GEN_NIR_H)
+
 LOCAL_SHARED_LIBRARIES := libdrm
-# We need libmesa_glsl to get NIR's generated include directories.
-LOCAL_STATIC_LIBRARIES := libmesa_glsl
+# We need libmesa_nir to get NIR's generated include directories.
+LOCAL_STATIC_LIBRARIES := libmesa_nir
 LOCAL_MODULE := libmesa_pipe_vc4
 
 include $(GALLIUM_COMMON_MK)

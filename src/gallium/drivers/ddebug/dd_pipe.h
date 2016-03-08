@@ -45,6 +45,8 @@ struct dd_screen
    unsigned timeout_ms;
    enum dd_mode mode;
    bool no_flush;
+   bool verbose;
+   unsigned skip_count;
 };
 
 struct dd_query
@@ -92,7 +94,7 @@ struct dd_context
    struct pipe_constant_buffer constant_buffers[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
    struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
    struct dd_state *sampler_states[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
-   struct pipe_image_view *shader_images[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];
+   struct pipe_image_view shader_images[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];
    struct pipe_shader_buffer shader_buffers[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
 
    struct dd_state *velems;
@@ -110,6 +112,8 @@ struct dd_context
    struct pipe_scissor_state scissors[PIPE_MAX_VIEWPORTS];
    struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    float tess_default_levels[6];
+
+   unsigned num_draw_calls;
 };
 
 

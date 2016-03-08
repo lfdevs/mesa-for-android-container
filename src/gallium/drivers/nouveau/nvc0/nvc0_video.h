@@ -30,12 +30,18 @@
 #include "util/u_video.h"
 
 extern unsigned
-nvc0_decoder_bsp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
-                 struct nouveau_vp3_video_buffer *target,
-                 unsigned comm_seq, unsigned num_buffers,
-                 const void *const *data, const unsigned *num_bytes,
-                 unsigned *vp_caps, unsigned *is_ref,
-                 struct nouveau_vp3_video_buffer *refs[16]);
+nvc0_decoder_bsp_begin(struct nouveau_vp3_decoder *dec, unsigned comm_seq);
+
+extern unsigned
+nvc0_decoder_bsp_next(struct nouveau_vp3_decoder *dec,
+                      unsigned comm_seq, unsigned num_buffers,
+                      const void *const *data, const unsigned *num_bytes);
+
+extern unsigned
+nvc0_decoder_bsp_end(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
+                     struct nouveau_vp3_video_buffer *target,
+                     unsigned comm_seq, unsigned *vp_caps, unsigned *is_ref,
+                     struct nouveau_vp3_video_buffer *refs[16]);
 
 extern void
 nvc0_decoder_vp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,

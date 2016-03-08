@@ -36,10 +36,13 @@
 #include "main/varray.h"
 #include "main/uniforms.h"
 #include "main/fbobject.h"
+#include "main/renderbuffer.h"
 #include "main/texobj.h"
 
 #include "main/api_validate.h"
 #include "main/state.h"
+
+#include "util/format_srgb.h"
 
 #include "vbo/vbo_context.h"
 
@@ -48,6 +51,7 @@
 #include "brw_defines.h"
 #include "brw_context.h"
 #include "brw_draw.h"
+#include "brw_state.h"
 #include "intel_fbo.h"
 #include "intel_batchbuffer.h"
 
@@ -224,7 +228,9 @@ get_fast_clear_rect(struct brw_context *brw, struct gl_framebuffer *fb,
    unsigned int x_align, y_align;
    unsigned int x_scaledown, y_scaledown;
 
-   if (irb->mt->msaa_layout == INTEL_MSAA_LAYOUT_NONE) {
+   /* Only single sampled surfaces need to (and actually can) be resolved. */
+   if (irb->mt->msaa_layout == INTEL_MSAA_LAYOUT_NONE ||
+       intel_miptree_is_lossless_compressed(brw, irb->mt)) {
       /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
        * Target(s)", beneath the "Fast Color Clear" bullet (p327):
        *
@@ -424,6 +430,15 @@ set_fast_clear_color(struct brw_context *brw,
          override_color.f[3] = 1.0f;
    }
 
+   /* Handle linear→SRGB conversion */
+   if (brw->ctx.Color.sRGBEnabled &&
+       _mesa_get_srgb_format_linear(mt->format) != mt->format) {
+      for (int i = 0; i < 3; i++) {
+         override_color.f[i] =
+            util_format_linear_to_srgb_float(override_color.f[i]);
+      }
+   }
+
    if (brw->gen >= 9) {
       mt->gen9_fast_clear_color = override_color;
    } else {
@@ -493,7 +508,20 @@ fast_clear_attachments(struct brw_context *brw,
                        uint32_t fast_clear_buffers,
                        struct rect fast_clear_rect)
 {
+   struct gl_context *ctx = &brw->ctx;
+   const bool srgb_enabled = ctx->Color.sRGBEnabled;
+
    assert(brw->gen >= 9);
+
+   /* Make sure the GL_FRAMEBUFFER_SRGB is disabled during fast clear so that
+    * the surface state will always be uploaded with a linear buffer. SRGB
+    * buffers are not supported on Gen9 because they are not marked as
+    * losslessly compressible. This shouldn't matter for the fast clear
+    * because the color is not written to the framebuffer yet so the hardware
+    * doesn't need to do any SRGB conversion.
+    */
+   if (srgb_enabled)
+      _mesa_set_framebuffer_srgb(ctx, GL_FALSE);
 
    brw_bind_rep_write_shader(brw, (float *) fast_clear_color);
 
@@ -521,6 +549,9 @@ fast_clear_attachments(struct brw_context *brw,
    }
 
    set_fast_clear_op(brw, 0);
+
+   if (srgb_enabled)
+      _mesa_set_framebuffer_srgb(ctx, GL_TRUE);
 }
 
 bool
@@ -562,11 +593,28 @@ brw_meta_fast_clear(struct brw_context *brw, struct gl_framebuffer *fb,
       if (brw->gen < 7)
          clear_type = REP_CLEAR;
 
-      /* Certain formats have unresolved issues with sampling from the MCS
-       * buffer on Gen9. This disables fast clears altogether for MSRTs until
-       * we can figure out what's going on.
+      /* If we're mapping the render format to a different format than the
+       * format we use for texturing then it is a bit questionable whether it
+       * should be possible to use a fast clear. Although we only actually
+       * render using a renderable format, without the override workaround it
+       * wouldn't be possible to have a non-renderable surface in a fast clear
+       * state so the hardware probably legitimately doesn't need to support
+       * this case. At least on Gen9 this really does seem to cause problems.
        */
-      if (brw->gen >= 9 && irb->mt->num_samples > 1)
+      if (brw->gen >= 9 &&
+          brw_format_for_mesa_format(irb->mt->format) !=
+          brw->render_target_format[irb->mt->format])
+         clear_type = REP_CLEAR;
+
+      /* Gen9 doesn't support fast clear on single-sampled SRGB buffers. When
+       * GL_FRAMEBUFFER_SRGB is enabled any color renderbuffers will be
+       * resolved in intel_update_state. In that case it's pointless to do a
+       * fast clear because it's very likely to be immediately resolved.
+       */
+      if (brw->gen >= 9 &&
+          irb->mt->num_samples <= 1 &&
+          brw->ctx.Color.sRGBEnabled &&
+          _mesa_get_srgb_format_linear(irb->mt->format) != irb->mt->format)
          clear_type = REP_CLEAR;
 
       if (irb->mt->fast_clear_state == INTEL_FAST_CLEAR_STATE_NO_MCS)
@@ -800,7 +848,8 @@ brw_meta_resolve_color(struct brw_context *brw,
                        struct intel_mipmap_tree *mt)
 {
    struct gl_context *ctx = &brw->ctx;
-   GLuint fbo, rbo;
+   GLuint fbo;
+   struct gl_renderbuffer *rb;
    struct rect rect;
 
    brw_emit_mi_flush(brw);
@@ -808,12 +857,11 @@ brw_meta_resolve_color(struct brw_context *brw,
    _mesa_meta_begin(ctx, MESA_META_ALL);
 
    _mesa_GenFramebuffers(1, &fbo);
-   rbo = brw_get_rb_for_slice(brw, mt, 0, 0, false);
+   rb = brw_get_rb_for_slice(brw, mt, 0, 0, false);
 
    _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
-   _mesa_FramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER,
-                                 GL_COLOR_ATTACHMENT0,
-                                 GL_RENDERBUFFER, rbo);
+   _mesa_framebuffer_renderbuffer(ctx, ctx->DrawBuffer, GL_COLOR_ATTACHMENT0,
+                                  rb);
    _mesa_DrawBuffer(GL_COLOR_ATTACHMENT0);
 
    brw_fast_clear_init(brw);
@@ -826,7 +874,10 @@ brw_meta_resolve_color(struct brw_context *brw,
     * bits to let us select the type of resolve.  For fast clear resolves, it
     * turns out we can use the same value as pre-SKL though.
     */
-   set_fast_clear_op(brw, GEN7_PS_RENDER_TARGET_RESOLVE_ENABLE);
+   if (intel_miptree_is_lossless_compressed(brw, mt))
+      set_fast_clear_op(brw, GEN9_PS_RENDER_TARGET_RESOLVE_FULL);
+   else
+      set_fast_clear_op(brw, GEN7_PS_RENDER_TARGET_RESOLVE_ENABLE);
 
    mt->fast_clear_state = INTEL_FAST_CLEAR_STATE_RESOLVED;
    get_resolve_rect(brw, mt, &rect);
@@ -836,7 +887,7 @@ brw_meta_resolve_color(struct brw_context *brw,
    set_fast_clear_op(brw, 0);
    use_rectlist(brw, false);
 
-   _mesa_DeleteRenderbuffers(1, &rbo);
+   _mesa_reference_renderbuffer(&rb, NULL);
    _mesa_DeleteFramebuffers(1, &fbo);
 
    _mesa_meta_end(ctx);

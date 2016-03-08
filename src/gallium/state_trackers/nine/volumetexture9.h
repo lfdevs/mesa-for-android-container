@@ -47,28 +47,28 @@ NineVolumeTexture9_new( struct NineDevice9 *pDevice,
                         struct NineVolumeTexture9 **ppOut,
                         HANDLE *pSharedHandle );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolumeTexture9_GetLevelDesc( struct NineVolumeTexture9 *This,
                                  UINT Level,
                                  D3DVOLUME_DESC *pDesc );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolumeTexture9_GetVolumeLevel( struct NineVolumeTexture9 *This,
                                    UINT Level,
                                    IDirect3DVolume9 **ppVolumeLevel );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolumeTexture9_LockBox( struct NineVolumeTexture9 *This,
                             UINT Level,
                             D3DLOCKED_BOX *pLockedVolume,
                             const D3DBOX *pBox,
                             DWORD Flags );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolumeTexture9_UnlockBox( struct NineVolumeTexture9 *This,
                               UINT Level );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVolumeTexture9_AddDirtyBox( struct NineVolumeTexture9 *This,
                                 const D3DBOX *pDirtyBox );
 

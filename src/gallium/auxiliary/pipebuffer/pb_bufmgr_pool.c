@@ -261,7 +261,7 @@ pool_bufmgr_create(struct pb_manager *provider,
    struct pool_buffer *pool_buf;
    pb_size i;
 
-   if(!provider)
+   if (!provider)
       return NULL;
    
    pool = CALLOC_STRUCT(pool_pb_manager);

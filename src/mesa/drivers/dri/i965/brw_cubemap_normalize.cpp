@@ -30,8 +30,8 @@
  * \author Eric Anholt <eric@anholt.net>
  */
 
-#include "glsl/nir/glsl_types.h"
-#include "glsl/ir.h"
+#include "compiler/glsl_types.h"
+#include "compiler/glsl/ir.h"
 #include "program/prog_instruction.h" /* For WRITEMASK_* */
 
 class brw_cubemap_normalize_visitor : public ir_hierarchical_visitor {

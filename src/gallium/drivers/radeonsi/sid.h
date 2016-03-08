@@ -32,7 +32,7 @@
 #define SI_CONTEXT_REG_OFFSET                0x00028000
 #define SI_CONTEXT_REG_END                   0x00029000
 #define CIK_UCONFIG_REG_OFFSET               0x00030000
-#define CIK_UCONFIG_REG_END                  0x00031000
+#define CIK_UCONFIG_REG_END                  0x00038000
 
 #define EVENT_TYPE_CACHE_FLUSH                  0x6
 #define EVENT_TYPE_PS_PARTIAL_FLUSH            0x10
@@ -127,7 +127,10 @@
 #define		COPY_DATA_SRC_SEL(x)		((x) & 0xf)
 #define			COPY_DATA_REG		0
 #define			COPY_DATA_MEM		1
+#define                 COPY_DATA_PERF          4
+#define                 COPY_DATA_IMM           5
 #define		COPY_DATA_DST_SEL(x)		(((x) & 0xf) << 8)
+#define		COPY_DATA_COUNT_SEL		(1 << 16)
 #define		COPY_DATA_WR_CONFIRM		(1 << 20)
 #define PKT3_SURFACE_SYNC                      0x43 /* deprecated on CIK, use ACQUIRE_MEM */
 #define PKT3_ME_INITIALIZE                     0x44 /* not on CIK */
@@ -2059,12 +2062,12 @@
 #define     V_008F14_IMG_DATA_FORMAT_8_24                           0x14
 #define     V_008F14_IMG_DATA_FORMAT_24_8                           0x15
 #define     V_008F14_IMG_DATA_FORMAT_X24_8_32                       0x16
-#define     V_008F14_IMG_DATA_FORMAT_RESERVED_23                    0x17
-#define     V_008F14_IMG_DATA_FORMAT_RESERVED_24                    0x18
-#define     V_008F14_IMG_DATA_FORMAT_RESERVED_25                    0x19
-#define     V_008F14_IMG_DATA_FORMAT_RESERVED_26                    0x1A
-#define     V_008F14_IMG_DATA_FORMAT_RESERVED_27                    0x1B
-#define     V_008F14_IMG_DATA_FORMAT_RESERVED_28                    0x1C
+#define     V_008F14_IMG_DATA_FORMAT_8_AS_8_8_8_8                   0x17 /* stoney+ */
+#define     V_008F14_IMG_DATA_FORMAT_ETC2_RGB                       0x18 /* stoney+ */
+#define     V_008F14_IMG_DATA_FORMAT_ETC2_RGBA                      0x19 /* stoney+ */
+#define     V_008F14_IMG_DATA_FORMAT_ETC2_R                         0x1A /* stoney+ */
+#define     V_008F14_IMG_DATA_FORMAT_ETC2_RG                        0x1B /* stoney+ */
+#define     V_008F14_IMG_DATA_FORMAT_ETC2_RGBA1                     0x1C /* stoney+ */
 #define     V_008F14_IMG_DATA_FORMAT_RESERVED_29                    0x1D
 #define     V_008F14_IMG_DATA_FORMAT_RESERVED_30                    0x1E
 #define     V_008F14_IMG_DATA_FORMAT_RESERVED_31                    0x1F
@@ -2078,8 +2081,8 @@
 #define     V_008F14_IMG_DATA_FORMAT_BC5                            0x27
 #define     V_008F14_IMG_DATA_FORMAT_BC6                            0x28
 #define     V_008F14_IMG_DATA_FORMAT_BC7                            0x29
-#define     V_008F14_IMG_DATA_FORMAT_RESERVED_42                    0x2A
-#define     V_008F14_IMG_DATA_FORMAT_RESERVED_43                    0x2B
+#define     V_008F14_IMG_DATA_FORMAT_16_AS_16_16_16_16              0x2A /* stoney+ */
+#define     V_008F14_IMG_DATA_FORMAT_16_AS_32_32_32_32              0x2B /* stoney+ */
 #define     V_008F14_IMG_DATA_FORMAT_FMASK8_S2_F1                   0x2C
 #define     V_008F14_IMG_DATA_FORMAT_FMASK8_S4_F1                   0x2D
 #define     V_008F14_IMG_DATA_FORMAT_FMASK8_S8_F1                   0x2E
@@ -2097,8 +2100,8 @@
 #define     V_008F14_IMG_DATA_FORMAT_6_5_5                          0x3A
 #define     V_008F14_IMG_DATA_FORMAT_1                              0x3B
 #define     V_008F14_IMG_DATA_FORMAT_1_REVERSED                     0x3C
-#define     V_008F14_IMG_DATA_FORMAT_32_AS_8                        0x3D
-#define     V_008F14_IMG_DATA_FORMAT_32_AS_8_8                      0x3E
+#define     V_008F14_IMG_DATA_FORMAT_32_AS_8                        0x3D /* not on stoney */
+#define     V_008F14_IMG_DATA_FORMAT_32_AS_8_8                      0x3E /* not on stoney */
 #define     V_008F14_IMG_DATA_FORMAT_32_AS_32_32_32_32              0x3F
 #define   S_008F14_NUM_FORMAT(x)                                      (((x) & 0x0F) << 26)
 #define   G_008F14_NUM_FORMAT(x)                                      (((x) >> 26) & 0x0F)
@@ -2842,6 +2845,9 @@
 #define   S_00B028_FLOAT_MODE(x)                                      (((x) & 0xFF) << 12)
 #define   G_00B028_FLOAT_MODE(x)                                      (((x) >> 12) & 0xFF)
 #define   C_00B028_FLOAT_MODE                                         0xFFF00FFF
+#define     V_00B028_FP_32_DENORMS					0x30
+#define     V_00B028_FP_64_DENORMS					0xc0
+#define     V_00B028_FP_ALL_DENORMS					0xf0
 #define   S_00B028_PRIV(x)                                            (((x) & 0x1) << 20)
 #define   G_00B028_PRIV(x)                                            (((x) >> 20) & 0x1)
 #define   C_00B028_PRIV                                               0xFFEFFFFF
@@ -3727,6 +3733,1019 @@
 #define R_00B938_COMPUTE_USER_DATA_14                                   0x00B938
 #define R_00B93C_COMPUTE_USER_DATA_15                                   0x00B93C
 #define R_00B9FC_COMPUTE_NOWHERE                                        0x00B9FC
+#define R_034000_CPG_PERFCOUNTER1_LO                                    0x034000
+#define R_034004_CPG_PERFCOUNTER1_HI                                    0x034004
+#define R_034008_CPG_PERFCOUNTER0_LO                                    0x034008
+#define R_03400C_CPG_PERFCOUNTER0_HI                                    0x03400C
+#define R_034010_CPC_PERFCOUNTER1_LO                                    0x034010
+#define R_034014_CPC_PERFCOUNTER1_HI                                    0x034014
+#define R_034018_CPC_PERFCOUNTER0_LO                                    0x034018
+#define R_03401C_CPC_PERFCOUNTER0_HI                                    0x03401C
+#define R_034020_CPF_PERFCOUNTER1_LO                                    0x034020
+#define R_034024_CPF_PERFCOUNTER1_HI                                    0x034024
+#define R_034028_CPF_PERFCOUNTER0_LO                                    0x034028
+#define R_03402C_CPF_PERFCOUNTER0_HI                                    0x03402C
+#define R_034100_GRBM_PERFCOUNTER0_LO                                   0x034100
+#define R_034104_GRBM_PERFCOUNTER0_HI                                   0x034104
+#define R_03410C_GRBM_PERFCOUNTER1_LO                                   0x03410C
+#define R_034110_GRBM_PERFCOUNTER1_HI                                   0x034110
+#define R_034114_GRBM_SE0_PERFCOUNTER_LO                                0x034114
+#define R_034118_GRBM_SE0_PERFCOUNTER_HI                                0x034118
+#define R_03411C_GRBM_SE1_PERFCOUNTER_LO                                0x03411C
+#define R_034120_GRBM_SE1_PERFCOUNTER_HI                                0x034120
+#define R_034124_GRBM_SE2_PERFCOUNTER_LO                                0x034124
+#define R_034128_GRBM_SE2_PERFCOUNTER_HI                                0x034128
+#define R_03412C_GRBM_SE3_PERFCOUNTER_LO                                0x03412C
+#define R_034130_GRBM_SE3_PERFCOUNTER_HI                                0x034130
+#define R_034200_WD_PERFCOUNTER0_LO                                     0x034200
+#define R_034204_WD_PERFCOUNTER0_HI                                     0x034204
+#define R_034208_WD_PERFCOUNTER1_LO                                     0x034208
+#define R_03420C_WD_PERFCOUNTER1_HI                                     0x03420C
+#define R_034210_WD_PERFCOUNTER2_LO                                     0x034210
+#define R_034214_WD_PERFCOUNTER2_HI                                     0x034214
+#define R_034218_WD_PERFCOUNTER3_LO                                     0x034218
+#define R_03421C_WD_PERFCOUNTER3_HI                                     0x03421C
+#define R_034220_IA_PERFCOUNTER0_LO                                     0x034220
+#define R_034224_IA_PERFCOUNTER0_HI                                     0x034224
+#define R_034228_IA_PERFCOUNTER1_LO                                     0x034228
+#define R_03422C_IA_PERFCOUNTER1_HI                                     0x03422C
+#define R_034230_IA_PERFCOUNTER2_LO                                     0x034230
+#define R_034234_IA_PERFCOUNTER2_HI                                     0x034234
+#define R_034238_IA_PERFCOUNTER3_LO                                     0x034238
+#define R_03423C_IA_PERFCOUNTER3_HI                                     0x03423C
+#define R_034240_VGT_PERFCOUNTER0_LO                                    0x034240
+#define R_034244_VGT_PERFCOUNTER0_HI                                    0x034244
+#define R_034248_VGT_PERFCOUNTER1_LO                                    0x034248
+#define R_03424C_VGT_PERFCOUNTER1_HI                                    0x03424C
+#define R_034250_VGT_PERFCOUNTER2_LO                                    0x034250
+#define R_034254_VGT_PERFCOUNTER2_HI                                    0x034254
+#define R_034258_VGT_PERFCOUNTER3_LO                                    0x034258
+#define R_03425C_VGT_PERFCOUNTER3_HI                                    0x03425C
+#define R_034400_PA_SU_PERFCOUNTER0_LO                                  0x034400
+#define R_034404_PA_SU_PERFCOUNTER0_HI                                  0x034404
+#define   S_034404_PERFCOUNTER_HI(x)                                  (((x) & 0xFFFF) << 0)
+#define   G_034404_PERFCOUNTER_HI(x)                                  (((x) >> 0) & 0xFFFF)
+#define   C_034404_PERFCOUNTER_HI                                     0xFFFF0000
+#define R_034408_PA_SU_PERFCOUNTER1_LO                                  0x034408
+#define R_03440C_PA_SU_PERFCOUNTER1_HI                                  0x03440C
+#define R_034410_PA_SU_PERFCOUNTER2_LO                                  0x034410
+#define R_034414_PA_SU_PERFCOUNTER2_HI                                  0x034414
+#define R_034418_PA_SU_PERFCOUNTER3_LO                                  0x034418
+#define R_03441C_PA_SU_PERFCOUNTER3_HI                                  0x03441C
+#define R_034500_PA_SC_PERFCOUNTER0_LO                                  0x034500
+#define R_034504_PA_SC_PERFCOUNTER0_HI                                  0x034504
+#define R_034508_PA_SC_PERFCOUNTER1_LO                                  0x034508
+#define R_03450C_PA_SC_PERFCOUNTER1_HI                                  0x03450C
+#define R_034510_PA_SC_PERFCOUNTER2_LO                                  0x034510
+#define R_034514_PA_SC_PERFCOUNTER2_HI                                  0x034514
+#define R_034518_PA_SC_PERFCOUNTER3_LO                                  0x034518
+#define R_03451C_PA_SC_PERFCOUNTER3_HI                                  0x03451C
+#define R_034520_PA_SC_PERFCOUNTER4_LO                                  0x034520
+#define R_034524_PA_SC_PERFCOUNTER4_HI                                  0x034524
+#define R_034528_PA_SC_PERFCOUNTER5_LO                                  0x034528
+#define R_03452C_PA_SC_PERFCOUNTER5_HI                                  0x03452C
+#define R_034530_PA_SC_PERFCOUNTER6_LO                                  0x034530
+#define R_034534_PA_SC_PERFCOUNTER6_HI                                  0x034534
+#define R_034538_PA_SC_PERFCOUNTER7_LO                                  0x034538
+#define R_03453C_PA_SC_PERFCOUNTER7_HI                                  0x03453C
+#define R_034600_SPI_PERFCOUNTER0_HI                                    0x034600
+#define R_034604_SPI_PERFCOUNTER0_LO                                    0x034604
+#define R_034608_SPI_PERFCOUNTER1_HI                                    0x034608
+#define R_03460C_SPI_PERFCOUNTER1_LO                                    0x03460C
+#define R_034610_SPI_PERFCOUNTER2_HI                                    0x034610
+#define R_034614_SPI_PERFCOUNTER2_LO                                    0x034614
+#define R_034618_SPI_PERFCOUNTER3_HI                                    0x034618
+#define R_03461C_SPI_PERFCOUNTER3_LO                                    0x03461C
+#define R_034620_SPI_PERFCOUNTER4_HI                                    0x034620
+#define R_034624_SPI_PERFCOUNTER4_LO                                    0x034624
+#define R_034628_SPI_PERFCOUNTER5_HI                                    0x034628
+#define R_03462C_SPI_PERFCOUNTER5_LO                                    0x03462C
+#define R_034700_SQ_PERFCOUNTER0_LO                                     0x034700
+#define R_034704_SQ_PERFCOUNTER0_HI                                     0x034704
+#define R_034708_SQ_PERFCOUNTER1_LO                                     0x034708
+#define R_03470C_SQ_PERFCOUNTER1_HI                                     0x03470C
+#define R_034710_SQ_PERFCOUNTER2_LO                                     0x034710
+#define R_034714_SQ_PERFCOUNTER2_HI                                     0x034714
+#define R_034718_SQ_PERFCOUNTER3_LO                                     0x034718
+#define R_03471C_SQ_PERFCOUNTER3_HI                                     0x03471C
+#define R_034720_SQ_PERFCOUNTER4_LO                                     0x034720
+#define R_034724_SQ_PERFCOUNTER4_HI                                     0x034724
+#define R_034728_SQ_PERFCOUNTER5_LO                                     0x034728
+#define R_03472C_SQ_PERFCOUNTER5_HI                                     0x03472C
+#define R_034730_SQ_PERFCOUNTER6_LO                                     0x034730
+#define R_034734_SQ_PERFCOUNTER6_HI                                     0x034734
+#define R_034738_SQ_PERFCOUNTER7_LO                                     0x034738
+#define R_03473C_SQ_PERFCOUNTER7_HI                                     0x03473C
+#define R_034740_SQ_PERFCOUNTER8_LO                                     0x034740
+#define R_034744_SQ_PERFCOUNTER8_HI                                     0x034744
+#define R_034748_SQ_PERFCOUNTER9_LO                                     0x034748
+#define R_03474C_SQ_PERFCOUNTER9_HI                                     0x03474C
+#define R_034750_SQ_PERFCOUNTER10_LO                                    0x034750
+#define R_034754_SQ_PERFCOUNTER10_HI                                    0x034754
+#define R_034758_SQ_PERFCOUNTER11_LO                                    0x034758
+#define R_03475C_SQ_PERFCOUNTER11_HI                                    0x03475C
+#define R_034760_SQ_PERFCOUNTER12_LO                                    0x034760
+#define R_034764_SQ_PERFCOUNTER12_HI                                    0x034764
+#define R_034768_SQ_PERFCOUNTER13_LO                                    0x034768
+#define R_03476C_SQ_PERFCOUNTER13_HI                                    0x03476C
+#define R_034770_SQ_PERFCOUNTER14_LO                                    0x034770
+#define R_034774_SQ_PERFCOUNTER14_HI                                    0x034774
+#define R_034778_SQ_PERFCOUNTER15_LO                                    0x034778
+#define R_03477C_SQ_PERFCOUNTER15_HI                                    0x03477C
+#define R_034900_SX_PERFCOUNTER0_LO                                     0x034900
+#define R_034904_SX_PERFCOUNTER0_HI                                     0x034904
+#define R_034908_SX_PERFCOUNTER1_LO                                     0x034908
+#define R_03490C_SX_PERFCOUNTER1_HI                                     0x03490C
+#define R_034910_SX_PERFCOUNTER2_LO                                     0x034910
+#define R_034914_SX_PERFCOUNTER2_HI                                     0x034914
+#define R_034918_SX_PERFCOUNTER3_LO                                     0x034918
+#define R_03491C_SX_PERFCOUNTER3_HI                                     0x03491C
+#define R_034A00_GDS_PERFCOUNTER0_LO                                    0x034A00
+#define R_034A04_GDS_PERFCOUNTER0_HI                                    0x034A04
+#define R_034A08_GDS_PERFCOUNTER1_LO                                    0x034A08
+#define R_034A0C_GDS_PERFCOUNTER1_HI                                    0x034A0C
+#define R_034A10_GDS_PERFCOUNTER2_LO                                    0x034A10
+#define R_034A14_GDS_PERFCOUNTER2_HI                                    0x034A14
+#define R_034A18_GDS_PERFCOUNTER3_LO                                    0x034A18
+#define R_034A1C_GDS_PERFCOUNTER3_HI                                    0x034A1C
+#define R_034B00_TA_PERFCOUNTER0_LO                                     0x034B00
+#define R_034B04_TA_PERFCOUNTER0_HI                                     0x034B04
+#define R_034B08_TA_PERFCOUNTER1_LO                                     0x034B08
+#define R_034B0C_TA_PERFCOUNTER1_HI                                     0x034B0C
+#define R_034C00_TD_PERFCOUNTER0_LO                                     0x034C00
+#define R_034C04_TD_PERFCOUNTER0_HI                                     0x034C04
+#define R_034C08_TD_PERFCOUNTER1_LO                                     0x034C08
+#define R_034C0C_TD_PERFCOUNTER1_HI                                     0x034C0C
+#define R_034D00_TCP_PERFCOUNTER0_LO                                    0x034D00
+#define R_034D04_TCP_PERFCOUNTER0_HI                                    0x034D04
+#define R_034D08_TCP_PERFCOUNTER1_LO                                    0x034D08
+#define R_034D0C_TCP_PERFCOUNTER1_HI                                    0x034D0C
+#define R_034D10_TCP_PERFCOUNTER2_LO                                    0x034D10
+#define R_034D14_TCP_PERFCOUNTER2_HI                                    0x034D14
+#define R_034D18_TCP_PERFCOUNTER3_LO                                    0x034D18
+#define R_034D1C_TCP_PERFCOUNTER3_HI                                    0x034D1C
+#define R_034E00_TCC_PERFCOUNTER0_LO                                    0x034E00
+#define R_034E04_TCC_PERFCOUNTER0_HI                                    0x034E04
+#define R_034E08_TCC_PERFCOUNTER1_LO                                    0x034E08
+#define R_034E0C_TCC_PERFCOUNTER1_HI                                    0x034E0C
+#define R_034E10_TCC_PERFCOUNTER2_LO                                    0x034E10
+#define R_034E14_TCC_PERFCOUNTER2_HI                                    0x034E14
+#define R_034E18_TCC_PERFCOUNTER3_LO                                    0x034E18
+#define R_034E1C_TCC_PERFCOUNTER3_HI                                    0x034E1C
+#define R_034E40_TCA_PERFCOUNTER0_LO                                    0x034E40
+#define R_034E44_TCA_PERFCOUNTER0_HI                                    0x034E44
+#define R_034E48_TCA_PERFCOUNTER1_LO                                    0x034E48
+#define R_034E4C_TCA_PERFCOUNTER1_HI                                    0x034E4C
+#define R_034E50_TCA_PERFCOUNTER2_LO                                    0x034E50
+#define R_034E54_TCA_PERFCOUNTER2_HI                                    0x034E54
+#define R_034E58_TCA_PERFCOUNTER3_LO                                    0x034E58
+#define R_034E5C_TCA_PERFCOUNTER3_HI                                    0x034E5C
+#define R_035018_CB_PERFCOUNTER0_LO                                     0x035018
+#define R_03501C_CB_PERFCOUNTER0_HI                                     0x03501C
+#define R_035020_CB_PERFCOUNTER1_LO                                     0x035020
+#define R_035024_CB_PERFCOUNTER1_HI                                     0x035024
+#define R_035028_CB_PERFCOUNTER2_LO                                     0x035028
+#define R_03502C_CB_PERFCOUNTER2_HI                                     0x03502C
+#define R_035030_CB_PERFCOUNTER3_LO                                     0x035030
+#define R_035034_CB_PERFCOUNTER3_HI                                     0x035034
+#define R_035100_DB_PERFCOUNTER0_LO                                     0x035100
+#define R_035104_DB_PERFCOUNTER0_HI                                     0x035104
+#define R_035108_DB_PERFCOUNTER1_LO                                     0x035108
+#define R_03510C_DB_PERFCOUNTER1_HI                                     0x03510C
+#define R_035110_DB_PERFCOUNTER2_LO                                     0x035110
+#define R_035114_DB_PERFCOUNTER2_HI                                     0x035114
+#define R_035118_DB_PERFCOUNTER3_LO                                     0x035118
+#define R_03511C_DB_PERFCOUNTER3_HI                                     0x03511C
+#define R_035200_RLC_PERFCOUNTER0_LO                                    0x035200
+#define R_035204_RLC_PERFCOUNTER0_HI                                    0x035204
+#define R_035208_RLC_PERFCOUNTER1_LO                                    0x035208
+#define R_03520C_RLC_PERFCOUNTER1_HI                                    0x03520C
+#define R_036000_CPG_PERFCOUNTER1_SELECT                                0x036000
+#define R_036004_CPG_PERFCOUNTER0_SELECT1                               0x036004
+#define   S_036004_PERF_SEL2(x)                                       (((x) & 0x3F) << 0)
+#define   G_036004_PERF_SEL2(x)                                       (((x) >> 0) & 0x3F)
+#define   C_036004_PERF_SEL2                                          0xFFFFFFC0
+#define   S_036004_PERF_SEL3(x)                                       (((x) & 0x3F) << 10)
+#define   G_036004_PERF_SEL3(x)                                       (((x) >> 10) & 0x3F)
+#define   C_036004_PERF_SEL3                                          0xFFFF03FF
+#define R_036008_CPG_PERFCOUNTER0_SELECT                                0x036008
+#define   S_036008_PERF_SEL(x)                                        (((x) & 0x3F) << 0)
+#define   G_036008_PERF_SEL(x)                                        (((x) >> 0) & 0x3F)
+#define   C_036008_PERF_SEL                                           0xFFFFFFC0
+#define   S_036008_PERF_SEL1(x)                                       (((x) & 0x3F) << 10)
+#define   G_036008_PERF_SEL1(x)                                       (((x) >> 10) & 0x3F)
+#define   C_036008_PERF_SEL1                                          0xFFFF03FF
+#define   S_036008_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036008_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036008_CNTR_MODE                                          0xFF0FFFFF
+#define R_03600C_CPC_PERFCOUNTER1_SELECT                                0x03600C
+#define R_036010_CPC_PERFCOUNTER0_SELECT1                               0x036010
+#define   S_036010_PERF_SEL2(x)                                       (((x) & 0x3F) << 0)
+#define   G_036010_PERF_SEL2(x)                                       (((x) >> 0) & 0x3F)
+#define   C_036010_PERF_SEL2                                          0xFFFFFFC0
+#define   S_036010_PERF_SEL3(x)                                       (((x) & 0x3F) << 10)
+#define   G_036010_PERF_SEL3(x)                                       (((x) >> 10) & 0x3F)
+#define   C_036010_PERF_SEL3                                          0xFFFF03FF
+#define R_036014_CPF_PERFCOUNTER1_SELECT                                0x036014
+#define R_036018_CPF_PERFCOUNTER0_SELECT1                               0x036018
+#define   S_036018_PERF_SEL2(x)                                       (((x) & 0x3F) << 0)
+#define   G_036018_PERF_SEL2(x)                                       (((x) >> 0) & 0x3F)
+#define   C_036018_PERF_SEL2                                          0xFFFFFFC0
+#define   S_036018_PERF_SEL3(x)                                       (((x) & 0x3F) << 10)
+#define   G_036018_PERF_SEL3(x)                                       (((x) >> 10) & 0x3F)
+#define   C_036018_PERF_SEL3                                          0xFFFF03FF
+#define R_03601C_CPF_PERFCOUNTER0_SELECT                                0x03601C
+#define   S_03601C_PERF_SEL(x)                                        (((x) & 0x3F) << 0)
+#define   G_03601C_PERF_SEL(x)                                        (((x) >> 0) & 0x3F)
+#define   C_03601C_PERF_SEL                                           0xFFFFFFC0
+#define   S_03601C_PERF_SEL1(x)                                       (((x) & 0x3F) << 10)
+#define   G_03601C_PERF_SEL1(x)                                       (((x) >> 10) & 0x3F)
+#define   C_03601C_PERF_SEL1                                          0xFFFF03FF
+#define   S_03601C_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_03601C_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_03601C_CNTR_MODE                                          0xFF0FFFFF
+#define R_036020_CP_PERFMON_CNTL                                        0x036020
+#define   S_036020_PERFMON_STATE(x)                                   (((x) & 0x0F) << 0)
+#define   G_036020_PERFMON_STATE(x)                                   (((x) >> 0) & 0x0F)
+#define   C_036020_PERFMON_STATE                                      0xFFFFFFF0
+#define     V_036020_DISABLE_AND_RESET                              0x00
+#define     V_036020_START_COUNTING                                 0x01
+#define     V_036020_STOP_COUNTING                                  0x02
+#define   S_036020_SPM_PERFMON_STATE(x)                               (((x) & 0x0F) << 4)
+#define   G_036020_SPM_PERFMON_STATE(x)                               (((x) >> 4) & 0x0F)
+#define   C_036020_SPM_PERFMON_STATE                                  0xFFFFFF0F
+#define   S_036020_PERFMON_ENABLE_MODE(x)                             (((x) & 0x03) << 8)
+#define   G_036020_PERFMON_ENABLE_MODE(x)                             (((x) >> 8) & 0x03)
+#define   C_036020_PERFMON_ENABLE_MODE                                0xFFFFFCFF
+#define   S_036020_PERFMON_SAMPLE_ENABLE(x)                           (((x) & 0x1) << 10)
+#define   G_036020_PERFMON_SAMPLE_ENABLE(x)                           (((x) >> 10) & 0x1)
+#define   C_036020_PERFMON_SAMPLE_ENABLE                              0xFFFFFBFF
+#define R_036024_CPC_PERFCOUNTER0_SELECT                                0x036024
+#define   S_036024_PERF_SEL(x)                                        (((x) & 0x3F) << 0)
+#define   G_036024_PERF_SEL(x)                                        (((x) >> 0) & 0x3F)
+#define   C_036024_PERF_SEL                                           0xFFFFFFC0
+#define   S_036024_PERF_SEL1(x)                                       (((x) & 0x3F) << 10)
+#define   G_036024_PERF_SEL1(x)                                       (((x) >> 10) & 0x3F)
+#define   C_036024_PERF_SEL1                                          0xFFFF03FF
+#define   S_036024_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036024_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036024_CNTR_MODE                                          0xFF0FFFFF
+#define R_036100_GRBM_PERFCOUNTER0_SELECT                               0x036100
+#define   S_036100_PERF_SEL(x)                                        (((x) & 0x3F) << 0)
+#define   G_036100_PERF_SEL(x)                                        (((x) >> 0) & 0x3F)
+#define   C_036100_PERF_SEL                                           0xFFFFFFC0
+#define   S_036100_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 10)
+#define   G_036100_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 10) & 0x1)
+#define   C_036100_DB_CLEAN_USER_DEFINED_MASK                         0xFFFFFBFF
+#define   S_036100_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 11)
+#define   G_036100_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 11) & 0x1)
+#define   C_036100_CB_CLEAN_USER_DEFINED_MASK                         0xFFFFF7FF
+#define   S_036100_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 12)
+#define   G_036100_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 12) & 0x1)
+#define   C_036100_VGT_BUSY_USER_DEFINED_MASK                         0xFFFFEFFF
+#define   S_036100_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 13)
+#define   G_036100_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 13) & 0x1)
+#define   C_036100_TA_BUSY_USER_DEFINED_MASK                          0xFFFFDFFF
+#define   S_036100_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 14)
+#define   G_036100_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 14) & 0x1)
+#define   C_036100_SX_BUSY_USER_DEFINED_MASK                          0xFFFFBFFF
+#define   S_036100_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 16)
+#define   G_036100_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 16) & 0x1)
+#define   C_036100_SPI_BUSY_USER_DEFINED_MASK                         0xFFFEFFFF
+#define   S_036100_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 17)
+#define   G_036100_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 17) & 0x1)
+#define   C_036100_SC_BUSY_USER_DEFINED_MASK                          0xFFFDFFFF
+#define   S_036100_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 18)
+#define   G_036100_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 18) & 0x1)
+#define   C_036100_PA_BUSY_USER_DEFINED_MASK                          0xFFFBFFFF
+#define   S_036100_GRBM_BUSY_USER_DEFINED_MASK(x)                     (((x) & 0x1) << 19)
+#define   G_036100_GRBM_BUSY_USER_DEFINED_MASK(x)                     (((x) >> 19) & 0x1)
+#define   C_036100_GRBM_BUSY_USER_DEFINED_MASK                        0xFFF7FFFF
+#define   S_036100_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 20)
+#define   G_036100_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 20) & 0x1)
+#define   C_036100_DB_BUSY_USER_DEFINED_MASK                          0xFFEFFFFF
+#define   S_036100_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 21)
+#define   G_036100_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 21) & 0x1)
+#define   C_036100_CB_BUSY_USER_DEFINED_MASK                          0xFFDFFFFF
+#define   S_036100_CP_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 22)
+#define   G_036100_CP_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 22) & 0x1)
+#define   C_036100_CP_BUSY_USER_DEFINED_MASK                          0xFFBFFFFF
+#define   S_036100_IA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 23)
+#define   G_036100_IA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 23) & 0x1)
+#define   C_036100_IA_BUSY_USER_DEFINED_MASK                          0xFF7FFFFF
+#define   S_036100_GDS_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 24)
+#define   G_036100_GDS_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 24) & 0x1)
+#define   C_036100_GDS_BUSY_USER_DEFINED_MASK                         0xFEFFFFFF
+#define   S_036100_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 25)
+#define   G_036100_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 25) & 0x1)
+#define   C_036100_BCI_BUSY_USER_DEFINED_MASK                         0xFDFFFFFF
+#define   S_036100_RLC_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 26)
+#define   G_036100_RLC_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 26) & 0x1)
+#define   C_036100_RLC_BUSY_USER_DEFINED_MASK                         0xFBFFFFFF
+#define   S_036100_TC_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 27)
+#define   G_036100_TC_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 27) & 0x1)
+#define   C_036100_TC_BUSY_USER_DEFINED_MASK                          0xF7FFFFFF
+#define   S_036100_WD_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 28)
+#define   G_036100_WD_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 28) & 0x1)
+#define   C_036100_WD_BUSY_USER_DEFINED_MASK                          0xEFFFFFFF
+#define R_036104_GRBM_PERFCOUNTER1_SELECT                               0x036104
+#define R_036108_GRBM_SE0_PERFCOUNTER_SELECT                            0x036108
+#define   S_036108_PERF_SEL(x)                                        (((x) & 0x3F) << 0)
+#define   G_036108_PERF_SEL(x)                                        (((x) >> 0) & 0x3F)
+#define   C_036108_PERF_SEL                                           0xFFFFFFC0
+#define   S_036108_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 10)
+#define   G_036108_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 10) & 0x1)
+#define   C_036108_DB_CLEAN_USER_DEFINED_MASK                         0xFFFFFBFF
+#define   S_036108_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 11)
+#define   G_036108_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 11) & 0x1)
+#define   C_036108_CB_CLEAN_USER_DEFINED_MASK                         0xFFFFF7FF
+#define   S_036108_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 12)
+#define   G_036108_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 12) & 0x1)
+#define   C_036108_TA_BUSY_USER_DEFINED_MASK                          0xFFFFEFFF
+#define   S_036108_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 13)
+#define   G_036108_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 13) & 0x1)
+#define   C_036108_SX_BUSY_USER_DEFINED_MASK                          0xFFFFDFFF
+#define   S_036108_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 15)
+#define   G_036108_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 15) & 0x1)
+#define   C_036108_SPI_BUSY_USER_DEFINED_MASK                         0xFFFF7FFF
+#define   S_036108_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 16)
+#define   G_036108_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 16) & 0x1)
+#define   C_036108_SC_BUSY_USER_DEFINED_MASK                          0xFFFEFFFF
+#define   S_036108_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 17)
+#define   G_036108_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 17) & 0x1)
+#define   C_036108_DB_BUSY_USER_DEFINED_MASK                          0xFFFDFFFF
+#define   S_036108_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 18)
+#define   G_036108_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 18) & 0x1)
+#define   C_036108_CB_BUSY_USER_DEFINED_MASK                          0xFFFBFFFF
+#define   S_036108_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 19)
+#define   G_036108_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 19) & 0x1)
+#define   C_036108_VGT_BUSY_USER_DEFINED_MASK                         0xFFF7FFFF
+#define   S_036108_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 20)
+#define   G_036108_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 20) & 0x1)
+#define   C_036108_PA_BUSY_USER_DEFINED_MASK                          0xFFEFFFFF
+#define   S_036108_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 21)
+#define   G_036108_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 21) & 0x1)
+#define   C_036108_BCI_BUSY_USER_DEFINED_MASK                         0xFFDFFFFF
+#define R_03610C_GRBM_SE1_PERFCOUNTER_SELECT                            0x03610C
+#define   S_03610C_PERF_SEL(x)                                        (((x) & 0x3F) << 0)
+#define   G_03610C_PERF_SEL(x)                                        (((x) >> 0) & 0x3F)
+#define   C_03610C_PERF_SEL                                           0xFFFFFFC0
+#define   S_03610C_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 10)
+#define   G_03610C_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 10) & 0x1)
+#define   C_03610C_DB_CLEAN_USER_DEFINED_MASK                         0xFFFFFBFF
+#define   S_03610C_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 11)
+#define   G_03610C_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 11) & 0x1)
+#define   C_03610C_CB_CLEAN_USER_DEFINED_MASK                         0xFFFFF7FF
+#define   S_03610C_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 12)
+#define   G_03610C_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 12) & 0x1)
+#define   C_03610C_TA_BUSY_USER_DEFINED_MASK                          0xFFFFEFFF
+#define   S_03610C_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 13)
+#define   G_03610C_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 13) & 0x1)
+#define   C_03610C_SX_BUSY_USER_DEFINED_MASK                          0xFFFFDFFF
+#define   S_03610C_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 15)
+#define   G_03610C_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 15) & 0x1)
+#define   C_03610C_SPI_BUSY_USER_DEFINED_MASK                         0xFFFF7FFF
+#define   S_03610C_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 16)
+#define   G_03610C_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 16) & 0x1)
+#define   C_03610C_SC_BUSY_USER_DEFINED_MASK                          0xFFFEFFFF
+#define   S_03610C_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 17)
+#define   G_03610C_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 17) & 0x1)
+#define   C_03610C_DB_BUSY_USER_DEFINED_MASK                          0xFFFDFFFF
+#define   S_03610C_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 18)
+#define   G_03610C_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 18) & 0x1)
+#define   C_03610C_CB_BUSY_USER_DEFINED_MASK                          0xFFFBFFFF
+#define   S_03610C_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 19)
+#define   G_03610C_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 19) & 0x1)
+#define   C_03610C_VGT_BUSY_USER_DEFINED_MASK                         0xFFF7FFFF
+#define   S_03610C_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 20)
+#define   G_03610C_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 20) & 0x1)
+#define   C_03610C_PA_BUSY_USER_DEFINED_MASK                          0xFFEFFFFF
+#define   S_03610C_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 21)
+#define   G_03610C_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 21) & 0x1)
+#define   C_03610C_BCI_BUSY_USER_DEFINED_MASK                         0xFFDFFFFF
+#define R_036110_GRBM_SE2_PERFCOUNTER_SELECT                            0x036110
+#define   S_036110_PERF_SEL(x)                                        (((x) & 0x3F) << 0)
+#define   G_036110_PERF_SEL(x)                                        (((x) >> 0) & 0x3F)
+#define   C_036110_PERF_SEL                                           0xFFFFFFC0
+#define   S_036110_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 10)
+#define   G_036110_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 10) & 0x1)
+#define   C_036110_DB_CLEAN_USER_DEFINED_MASK                         0xFFFFFBFF
+#define   S_036110_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 11)
+#define   G_036110_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 11) & 0x1)
+#define   C_036110_CB_CLEAN_USER_DEFINED_MASK                         0xFFFFF7FF
+#define   S_036110_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 12)
+#define   G_036110_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 12) & 0x1)
+#define   C_036110_TA_BUSY_USER_DEFINED_MASK                          0xFFFFEFFF
+#define   S_036110_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 13)
+#define   G_036110_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 13) & 0x1)
+#define   C_036110_SX_BUSY_USER_DEFINED_MASK                          0xFFFFDFFF
+#define   S_036110_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 15)
+#define   G_036110_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 15) & 0x1)
+#define   C_036110_SPI_BUSY_USER_DEFINED_MASK                         0xFFFF7FFF
+#define   S_036110_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 16)
+#define   G_036110_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 16) & 0x1)
+#define   C_036110_SC_BUSY_USER_DEFINED_MASK                          0xFFFEFFFF
+#define   S_036110_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 17)
+#define   G_036110_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 17) & 0x1)
+#define   C_036110_DB_BUSY_USER_DEFINED_MASK                          0xFFFDFFFF
+#define   S_036110_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 18)
+#define   G_036110_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 18) & 0x1)
+#define   C_036110_CB_BUSY_USER_DEFINED_MASK                          0xFFFBFFFF
+#define   S_036110_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 19)
+#define   G_036110_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 19) & 0x1)
+#define   C_036110_VGT_BUSY_USER_DEFINED_MASK                         0xFFF7FFFF
+#define   S_036110_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 20)
+#define   G_036110_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 20) & 0x1)
+#define   C_036110_PA_BUSY_USER_DEFINED_MASK                          0xFFEFFFFF
+#define   S_036110_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 21)
+#define   G_036110_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 21) & 0x1)
+#define   C_036110_BCI_BUSY_USER_DEFINED_MASK                         0xFFDFFFFF
+#define R_036114_GRBM_SE3_PERFCOUNTER_SELECT                            0x036114
+#define   S_036114_PERF_SEL(x)                                        (((x) & 0x3F) << 0)
+#define   G_036114_PERF_SEL(x)                                        (((x) >> 0) & 0x3F)
+#define   C_036114_PERF_SEL                                           0xFFFFFFC0
+#define   S_036114_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 10)
+#define   G_036114_DB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 10) & 0x1)
+#define   C_036114_DB_CLEAN_USER_DEFINED_MASK                         0xFFFFFBFF
+#define   S_036114_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 11)
+#define   G_036114_CB_CLEAN_USER_DEFINED_MASK(x)                      (((x) >> 11) & 0x1)
+#define   C_036114_CB_CLEAN_USER_DEFINED_MASK                         0xFFFFF7FF
+#define   S_036114_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 12)
+#define   G_036114_TA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 12) & 0x1)
+#define   C_036114_TA_BUSY_USER_DEFINED_MASK                          0xFFFFEFFF
+#define   S_036114_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 13)
+#define   G_036114_SX_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 13) & 0x1)
+#define   C_036114_SX_BUSY_USER_DEFINED_MASK                          0xFFFFDFFF
+#define   S_036114_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 15)
+#define   G_036114_SPI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 15) & 0x1)
+#define   C_036114_SPI_BUSY_USER_DEFINED_MASK                         0xFFFF7FFF
+#define   S_036114_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 16)
+#define   G_036114_SC_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 16) & 0x1)
+#define   C_036114_SC_BUSY_USER_DEFINED_MASK                          0xFFFEFFFF
+#define   S_036114_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 17)
+#define   G_036114_DB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 17) & 0x1)
+#define   C_036114_DB_BUSY_USER_DEFINED_MASK                          0xFFFDFFFF
+#define   S_036114_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 18)
+#define   G_036114_CB_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 18) & 0x1)
+#define   C_036114_CB_BUSY_USER_DEFINED_MASK                          0xFFFBFFFF
+#define   S_036114_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 19)
+#define   G_036114_VGT_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 19) & 0x1)
+#define   C_036114_VGT_BUSY_USER_DEFINED_MASK                         0xFFF7FFFF
+#define   S_036114_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) & 0x1) << 20)
+#define   G_036114_PA_BUSY_USER_DEFINED_MASK(x)                       (((x) >> 20) & 0x1)
+#define   C_036114_PA_BUSY_USER_DEFINED_MASK                          0xFFEFFFFF
+#define   S_036114_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) & 0x1) << 21)
+#define   G_036114_BCI_BUSY_USER_DEFINED_MASK(x)                      (((x) >> 21) & 0x1)
+#define   C_036114_BCI_BUSY_USER_DEFINED_MASK                         0xFFDFFFFF
+#define R_036200_WD_PERFCOUNTER0_SELECT                                 0x036200
+#define   S_036200_PERF_SEL(x)                                        (((x) & 0xFF) << 0)
+#define   G_036200_PERF_SEL(x)                                        (((x) >> 0) & 0xFF)
+#define   C_036200_PERF_SEL                                           0xFFFFFF00
+#define   S_036200_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036200_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036200_PERF_MODE                                          0x0FFFFFFF
+#define R_036204_WD_PERFCOUNTER1_SELECT                                 0x036204
+#define R_036208_WD_PERFCOUNTER2_SELECT                                 0x036208
+#define R_03620C_WD_PERFCOUNTER3_SELECT                                 0x03620C
+#define R_036210_IA_PERFCOUNTER0_SELECT                                 0x036210
+#define   S_036210_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_036210_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_036210_PERF_SEL                                           0xFFFFFC00
+#define   S_036210_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036210_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036210_PERF_SEL1                                          0xFFF003FF
+#define   S_036210_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036210_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036210_CNTR_MODE                                          0xFF0FFFFF
+#define   S_036210_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_036210_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036210_PERF_MODE1                                         0xF0FFFFFF
+#define   S_036210_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036210_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036210_PERF_MODE                                          0x0FFFFFFF
+#define R_036214_IA_PERFCOUNTER1_SELECT                                 0x036214
+#define R_036218_IA_PERFCOUNTER2_SELECT                                 0x036218
+#define R_03621C_IA_PERFCOUNTER3_SELECT                                 0x03621C
+#define R_036220_IA_PERFCOUNTER0_SELECT1                                0x036220
+#define   S_036220_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_036220_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_036220_PERF_SEL2                                          0xFFFFFC00
+#define   S_036220_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036220_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036220_PERF_SEL3                                          0xFFF003FF
+#define   S_036220_PERF_MODE3(x)                                      (((x) & 0x0F) << 24)
+#define   G_036220_PERF_MODE3(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036220_PERF_MODE3                                         0xF0FFFFFF
+#define   S_036220_PERF_MODE2(x)                                      (((x) & 0x0F) << 28)
+#define   G_036220_PERF_MODE2(x)                                      (((x) >> 28) & 0x0F)
+#define   C_036220_PERF_MODE2                                         0x0FFFFFFF
+#define R_036230_VGT_PERFCOUNTER0_SELECT                                0x036230
+#define   S_036230_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_036230_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_036230_PERF_SEL                                           0xFFFFFC00
+#define   S_036230_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036230_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036230_PERF_SEL1                                          0xFFF003FF
+#define   S_036230_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036230_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036230_CNTR_MODE                                          0xFF0FFFFF
+#define   S_036230_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_036230_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036230_PERF_MODE1                                         0xF0FFFFFF
+#define   S_036230_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036230_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036230_PERF_MODE                                          0x0FFFFFFF
+#define R_036234_VGT_PERFCOUNTER1_SELECT                                0x036234
+#define R_036238_VGT_PERFCOUNTER2_SELECT                                0x036238
+#define R_03623C_VGT_PERFCOUNTER3_SELECT                                0x03623C
+#define R_036240_VGT_PERFCOUNTER0_SELECT1                               0x036240
+#define   S_036240_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_036240_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_036240_PERF_SEL2                                          0xFFFFFC00
+#define   S_036240_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036240_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036240_PERF_SEL3                                          0xFFF003FF
+#define   S_036240_PERF_MODE3(x)                                      (((x) & 0x0F) << 24)
+#define   G_036240_PERF_MODE3(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036240_PERF_MODE3                                         0xF0FFFFFF
+#define   S_036240_PERF_MODE2(x)                                      (((x) & 0x0F) << 28)
+#define   G_036240_PERF_MODE2(x)                                      (((x) >> 28) & 0x0F)
+#define   C_036240_PERF_MODE2                                         0x0FFFFFFF
+#define R_036244_VGT_PERFCOUNTER1_SELECT1                               0x036244
+#define R_036250_VGT_PERFCOUNTER_SEID_MASK                              0x036250
+#define   S_036250_PERF_SEID_IGNORE_MASK(x)                           (((x) & 0xFF) << 0)
+#define   G_036250_PERF_SEID_IGNORE_MASK(x)                           (((x) >> 0) & 0xFF)
+#define   C_036250_PERF_SEID_IGNORE_MASK                              0xFFFFFF00
+#define R_036400_PA_SU_PERFCOUNTER0_SELECT                              0x036400
+#define   S_036400_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_036400_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_036400_PERF_SEL                                           0xFFFFFC00
+#define   S_036400_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036400_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036400_PERF_SEL1                                          0xFFF003FF
+#define   S_036400_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036400_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036400_CNTR_MODE                                          0xFF0FFFFF
+#define R_036404_PA_SU_PERFCOUNTER0_SELECT1                             0x036404
+#define   S_036404_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_036404_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_036404_PERF_SEL2                                          0xFFFFFC00
+#define   S_036404_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036404_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036404_PERF_SEL3                                          0xFFF003FF
+#define R_036408_PA_SU_PERFCOUNTER1_SELECT                              0x036408
+#define R_03640C_PA_SU_PERFCOUNTER1_SELECT1                             0x03640C
+#define R_036410_PA_SU_PERFCOUNTER2_SELECT                              0x036410
+#define R_036414_PA_SU_PERFCOUNTER3_SELECT                              0x036414
+#define R_036500_PA_SC_PERFCOUNTER0_SELECT                              0x036500
+#define   S_036500_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_036500_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_036500_PERF_SEL                                           0xFFFFFC00
+#define   S_036500_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036500_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036500_PERF_SEL1                                          0xFFF003FF
+#define   S_036500_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036500_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036500_CNTR_MODE                                          0xFF0FFFFF
+#define R_036504_PA_SC_PERFCOUNTER0_SELECT1                             0x036504
+#define   S_036504_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_036504_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_036504_PERF_SEL2                                          0xFFFFFC00
+#define   S_036504_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036504_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036504_PERF_SEL3                                          0xFFF003FF
+#define R_036508_PA_SC_PERFCOUNTER1_SELECT                              0x036508
+#define R_03650C_PA_SC_PERFCOUNTER2_SELECT                              0x03650C
+#define R_036510_PA_SC_PERFCOUNTER3_SELECT                              0x036510
+#define R_036514_PA_SC_PERFCOUNTER4_SELECT                              0x036514
+#define R_036518_PA_SC_PERFCOUNTER5_SELECT                              0x036518
+#define R_03651C_PA_SC_PERFCOUNTER6_SELECT                              0x03651C
+#define R_036520_PA_SC_PERFCOUNTER7_SELECT                              0x036520
+#define R_036600_SPI_PERFCOUNTER0_SELECT                                0x036600
+#define   S_036600_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_036600_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_036600_PERF_SEL                                           0xFFFFFC00
+#define   S_036600_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036600_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036600_PERF_SEL1                                          0xFFF003FF
+#define   S_036600_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036600_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036600_CNTR_MODE                                          0xFF0FFFFF
+#define R_036604_SPI_PERFCOUNTER1_SELECT                                0x036604
+#define R_036608_SPI_PERFCOUNTER2_SELECT                                0x036608
+#define R_03660C_SPI_PERFCOUNTER3_SELECT                                0x03660C
+#define R_036610_SPI_PERFCOUNTER0_SELECT1                               0x036610
+#define   S_036610_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_036610_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_036610_PERF_SEL2                                          0xFFFFFC00
+#define   S_036610_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036610_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036610_PERF_SEL3                                          0xFFF003FF
+#define R_036614_SPI_PERFCOUNTER1_SELECT1                               0x036614
+#define R_036618_SPI_PERFCOUNTER2_SELECT1                               0x036618
+#define R_03661C_SPI_PERFCOUNTER3_SELECT1                               0x03661C
+#define R_036620_SPI_PERFCOUNTER4_SELECT                                0x036620
+#define R_036624_SPI_PERFCOUNTER5_SELECT                                0x036624
+#define R_036628_SPI_PERFCOUNTER_BINS                                   0x036628
+#define   S_036628_BIN0_MIN(x)                                        (((x) & 0x0F) << 0)
+#define   G_036628_BIN0_MIN(x)                                        (((x) >> 0) & 0x0F)
+#define   C_036628_BIN0_MIN                                           0xFFFFFFF0
+#define   S_036628_BIN0_MAX(x)                                        (((x) & 0x0F) << 4)
+#define   G_036628_BIN0_MAX(x)                                        (((x) >> 4) & 0x0F)
+#define   C_036628_BIN0_MAX                                           0xFFFFFF0F
+#define   S_036628_BIN1_MIN(x)                                        (((x) & 0x0F) << 8)
+#define   G_036628_BIN1_MIN(x)                                        (((x) >> 8) & 0x0F)
+#define   C_036628_BIN1_MIN                                           0xFFFFF0FF
+#define   S_036628_BIN1_MAX(x)                                        (((x) & 0x0F) << 12)
+#define   G_036628_BIN1_MAX(x)                                        (((x) >> 12) & 0x0F)
+#define   C_036628_BIN1_MAX                                           0xFFFF0FFF
+#define   S_036628_BIN2_MIN(x)                                        (((x) & 0x0F) << 16)
+#define   G_036628_BIN2_MIN(x)                                        (((x) >> 16) & 0x0F)
+#define   C_036628_BIN2_MIN                                           0xFFF0FFFF
+#define   S_036628_BIN2_MAX(x)                                        (((x) & 0x0F) << 20)
+#define   G_036628_BIN2_MAX(x)                                        (((x) >> 20) & 0x0F)
+#define   C_036628_BIN2_MAX                                           0xFF0FFFFF
+#define   S_036628_BIN3_MIN(x)                                        (((x) & 0x0F) << 24)
+#define   G_036628_BIN3_MIN(x)                                        (((x) >> 24) & 0x0F)
+#define   C_036628_BIN3_MIN                                           0xF0FFFFFF
+#define   S_036628_BIN3_MAX(x)                                        (((x) & 0x0F) << 28)
+#define   G_036628_BIN3_MAX(x)                                        (((x) >> 28) & 0x0F)
+#define   C_036628_BIN3_MAX                                           0x0FFFFFFF
+#define R_036700_SQ_PERFCOUNTER0_SELECT                                 0x036700
+#define   S_036700_PERF_SEL(x)                                        (((x) & 0x1FF) << 0)
+#define   G_036700_PERF_SEL(x)                                        (((x) >> 0) & 0x1FF)
+#define   C_036700_PERF_SEL                                           0xFFFFFE00
+#define   S_036700_SQC_BANK_MASK(x)                                   (((x) & 0x0F) << 12)
+#define   G_036700_SQC_BANK_MASK(x)                                   (((x) >> 12) & 0x0F)
+#define   C_036700_SQC_BANK_MASK                                      0xFFFF0FFF
+#define   S_036700_SQC_CLIENT_MASK(x)                                 (((x) & 0x0F) << 16)
+#define   G_036700_SQC_CLIENT_MASK(x)                                 (((x) >> 16) & 0x0F)
+#define   C_036700_SQC_CLIENT_MASK                                    0xFFF0FFFF
+#define   S_036700_SPM_MODE(x)                                        (((x) & 0x0F) << 20)
+#define   G_036700_SPM_MODE(x)                                        (((x) >> 20) & 0x0F)
+#define   C_036700_SPM_MODE                                           0xFF0FFFFF
+#define   S_036700_SIMD_MASK(x)                                       (((x) & 0x0F) << 24)
+#define   G_036700_SIMD_MASK(x)                                       (((x) >> 24) & 0x0F)
+#define   C_036700_SIMD_MASK                                          0xF0FFFFFF
+#define   S_036700_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036700_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036700_PERF_MODE                                          0x0FFFFFFF
+#define R_036704_SQ_PERFCOUNTER1_SELECT                                 0x036704
+#define R_036708_SQ_PERFCOUNTER2_SELECT                                 0x036708
+#define R_03670C_SQ_PERFCOUNTER3_SELECT                                 0x03670C
+#define R_036710_SQ_PERFCOUNTER4_SELECT                                 0x036710
+#define R_036714_SQ_PERFCOUNTER5_SELECT                                 0x036714
+#define R_036718_SQ_PERFCOUNTER6_SELECT                                 0x036718
+#define R_03671C_SQ_PERFCOUNTER7_SELECT                                 0x03671C
+#define R_036720_SQ_PERFCOUNTER8_SELECT                                 0x036720
+#define R_036724_SQ_PERFCOUNTER9_SELECT                                 0x036724
+#define R_036728_SQ_PERFCOUNTER10_SELECT                                0x036728
+#define R_03672C_SQ_PERFCOUNTER11_SELECT                                0x03672C
+#define R_036730_SQ_PERFCOUNTER12_SELECT                                0x036730
+#define R_036734_SQ_PERFCOUNTER13_SELECT                                0x036734
+#define R_036738_SQ_PERFCOUNTER14_SELECT                                0x036738
+#define R_03673C_SQ_PERFCOUNTER15_SELECT                                0x03673C
+#define R_036780_SQ_PERFCOUNTER_CTRL                                    0x036780
+#define   S_036780_PS_EN(x)                                           (((x) & 0x1) << 0)
+#define   G_036780_PS_EN(x)                                           (((x) >> 0) & 0x1)
+#define   C_036780_PS_EN                                              0xFFFFFFFE
+#define   S_036780_VS_EN(x)                                           (((x) & 0x1) << 1)
+#define   G_036780_VS_EN(x)                                           (((x) >> 1) & 0x1)
+#define   C_036780_VS_EN                                              0xFFFFFFFD
+#define   S_036780_GS_EN(x)                                           (((x) & 0x1) << 2)
+#define   G_036780_GS_EN(x)                                           (((x) >> 2) & 0x1)
+#define   C_036780_GS_EN                                              0xFFFFFFFB
+#define   S_036780_ES_EN(x)                                           (((x) & 0x1) << 3)
+#define   G_036780_ES_EN(x)                                           (((x) >> 3) & 0x1)
+#define   C_036780_ES_EN                                              0xFFFFFFF7
+#define   S_036780_HS_EN(x)                                           (((x) & 0x1) << 4)
+#define   G_036780_HS_EN(x)                                           (((x) >> 4) & 0x1)
+#define   C_036780_HS_EN                                              0xFFFFFFEF
+#define   S_036780_LS_EN(x)                                           (((x) & 0x1) << 5)
+#define   G_036780_LS_EN(x)                                           (((x) >> 5) & 0x1)
+#define   C_036780_LS_EN                                              0xFFFFFFDF
+#define   S_036780_CS_EN(x)                                           (((x) & 0x1) << 6)
+#define   G_036780_CS_EN(x)                                           (((x) >> 6) & 0x1)
+#define   C_036780_CS_EN                                              0xFFFFFFBF
+#define   S_036780_CNTR_RATE(x)                                       (((x) & 0x1F) << 8)
+#define   G_036780_CNTR_RATE(x)                                       (((x) >> 8) & 0x1F)
+#define   C_036780_CNTR_RATE                                          0xFFFFE0FF
+#define   S_036780_DISABLE_FLUSH(x)                                   (((x) & 0x1) << 13)
+#define   G_036780_DISABLE_FLUSH(x)                                   (((x) >> 13) & 0x1)
+#define   C_036780_DISABLE_FLUSH                                      0xFFFFDFFF
+#define R_036784_SQ_PERFCOUNTER_MASK                                    0x036784
+#define   S_036784_SH0_MASK(x)                                        (((x) & 0xFFFF) << 0)
+#define   G_036784_SH0_MASK(x)                                        (((x) >> 0) & 0xFFFF)
+#define   C_036784_SH0_MASK                                           0xFFFF0000
+#define   S_036784_SH1_MASK(x)                                        (((x) & 0xFFFF) << 16)
+#define   G_036784_SH1_MASK(x)                                        (((x) >> 16) & 0xFFFF)
+#define   C_036784_SH1_MASK                                           0x0000FFFF
+#define R_036788_SQ_PERFCOUNTER_CTRL2                                   0x036788
+#define   S_036788_FORCE_EN(x)                                        (((x) & 0x1) << 0)
+#define   G_036788_FORCE_EN(x)                                        (((x) >> 0) & 0x1)
+#define   C_036788_FORCE_EN                                           0xFFFFFFFE
+#define R_036900_SX_PERFCOUNTER0_SELECT                                 0x036900
+#define   S_036900_PERFCOUNTER_SELECT(x)                              (((x) & 0x3FF) << 0)
+#define   G_036900_PERFCOUNTER_SELECT(x)                              (((x) >> 0) & 0x3FF)
+#define   C_036900_PERFCOUNTER_SELECT                                 0xFFFFFC00
+#define   S_036900_PERFCOUNTER_SELECT1(x)                             (((x) & 0x3FF) << 10)
+#define   G_036900_PERFCOUNTER_SELECT1(x)                             (((x) >> 10) & 0x3FF)
+#define   C_036900_PERFCOUNTER_SELECT1                                0xFFF003FF
+#define   S_036900_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036900_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036900_CNTR_MODE                                          0xFF0FFFFF
+#define R_036904_SX_PERFCOUNTER1_SELECT                                 0x036904
+#define R_036908_SX_PERFCOUNTER2_SELECT                                 0x036908
+#define R_03690C_SX_PERFCOUNTER3_SELECT                                 0x03690C
+#define R_036910_SX_PERFCOUNTER0_SELECT1                                0x036910
+#define   S_036910_PERFCOUNTER_SELECT2(x)                             (((x) & 0x3FF) << 0)
+#define   G_036910_PERFCOUNTER_SELECT2(x)                             (((x) >> 0) & 0x3FF)
+#define   C_036910_PERFCOUNTER_SELECT2                                0xFFFFFC00
+#define   S_036910_PERFCOUNTER_SELECT3(x)                             (((x) & 0x3FF) << 10)
+#define   G_036910_PERFCOUNTER_SELECT3(x)                             (((x) >> 10) & 0x3FF)
+#define   C_036910_PERFCOUNTER_SELECT3                                0xFFF003FF
+#define R_036914_SX_PERFCOUNTER1_SELECT1                                0x036914
+#define R_036A00_GDS_PERFCOUNTER0_SELECT                                0x036A00
+#define   S_036A00_PERFCOUNTER_SELECT(x)                              (((x) & 0x3FF) << 0)
+#define   G_036A00_PERFCOUNTER_SELECT(x)                              (((x) >> 0) & 0x3FF)
+#define   C_036A00_PERFCOUNTER_SELECT                                 0xFFFFFC00
+#define   S_036A00_PERFCOUNTER_SELECT1(x)                             (((x) & 0x3FF) << 10)
+#define   G_036A00_PERFCOUNTER_SELECT1(x)                             (((x) >> 10) & 0x3FF)
+#define   C_036A00_PERFCOUNTER_SELECT1                                0xFFF003FF
+#define   S_036A00_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036A00_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036A00_CNTR_MODE                                          0xFF0FFFFF
+#define R_036A04_GDS_PERFCOUNTER1_SELECT                                0x036A04
+#define R_036A08_GDS_PERFCOUNTER2_SELECT                                0x036A08
+#define R_036A0C_GDS_PERFCOUNTER3_SELECT                                0x036A0C
+#define R_036A10_GDS_PERFCOUNTER0_SELECT1                               0x036A10
+#define   S_036A10_PERFCOUNTER_SELECT2(x)                             (((x) & 0x3FF) << 0)
+#define   G_036A10_PERFCOUNTER_SELECT2(x)                             (((x) >> 0) & 0x3FF)
+#define   C_036A10_PERFCOUNTER_SELECT2                                0xFFFFFC00
+#define   S_036A10_PERFCOUNTER_SELECT3(x)                             (((x) & 0x3FF) << 10)
+#define   G_036A10_PERFCOUNTER_SELECT3(x)                             (((x) >> 10) & 0x3FF)
+#define   C_036A10_PERFCOUNTER_SELECT3                                0xFFF003FF
+#define R_036B00_TA_PERFCOUNTER0_SELECT                                 0x036B00
+#define   S_036B00_PERF_SEL(x)                                        (((x) & 0xFF) << 0)
+#define   G_036B00_PERF_SEL(x)                                        (((x) >> 0) & 0xFF)
+#define   C_036B00_PERF_SEL                                           0xFFFFFF00
+#define   S_036B00_PERF_SEL1(x)                                       (((x) & 0xFF) << 10)
+#define   G_036B00_PERF_SEL1(x)                                       (((x) >> 10) & 0xFF)
+#define   C_036B00_PERF_SEL1                                          0xFFFC03FF
+#define   S_036B00_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036B00_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036B00_CNTR_MODE                                          0xFF0FFFFF
+#define   S_036B00_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_036B00_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036B00_PERF_MODE1                                         0xF0FFFFFF
+#define   S_036B00_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036B00_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036B00_PERF_MODE                                          0x0FFFFFFF
+#define R_036B04_TA_PERFCOUNTER0_SELECT1                                0x036B04
+#define   S_036B04_PERF_SEL2(x)                                       (((x) & 0xFF) << 0)
+#define   G_036B04_PERF_SEL2(x)                                       (((x) >> 0) & 0xFF)
+#define   C_036B04_PERF_SEL2                                          0xFFFFFF00
+#define   S_036B04_PERF_SEL3(x)                                       (((x) & 0xFF) << 10)
+#define   G_036B04_PERF_SEL3(x)                                       (((x) >> 10) & 0xFF)
+#define   C_036B04_PERF_SEL3                                          0xFFFC03FF
+#define   S_036B04_PERF_MODE3(x)                                      (((x) & 0x0F) << 24)
+#define   G_036B04_PERF_MODE3(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036B04_PERF_MODE3                                         0xF0FFFFFF
+#define   S_036B04_PERF_MODE2(x)                                      (((x) & 0x0F) << 28)
+#define   G_036B04_PERF_MODE2(x)                                      (((x) >> 28) & 0x0F)
+#define   C_036B04_PERF_MODE2                                         0x0FFFFFFF
+#define R_036B08_TA_PERFCOUNTER1_SELECT                                 0x036B08
+#define R_036C00_TD_PERFCOUNTER0_SELECT                                 0x036C00
+#define   S_036C00_PERF_SEL(x)                                        (((x) & 0xFF) << 0)
+#define   G_036C00_PERF_SEL(x)                                        (((x) >> 0) & 0xFF)
+#define   C_036C00_PERF_SEL                                           0xFFFFFF00
+#define   S_036C00_PERF_SEL1(x)                                       (((x) & 0xFF) << 10)
+#define   G_036C00_PERF_SEL1(x)                                       (((x) >> 10) & 0xFF)
+#define   C_036C00_PERF_SEL1                                          0xFFFC03FF
+#define   S_036C00_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036C00_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036C00_CNTR_MODE                                          0xFF0FFFFF
+#define   S_036C00_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_036C00_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036C00_PERF_MODE1                                         0xF0FFFFFF
+#define   S_036C00_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036C00_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036C00_PERF_MODE                                          0x0FFFFFFF
+#define R_036C04_TD_PERFCOUNTER0_SELECT1                                0x036C04
+#define   S_036C04_PERF_SEL2(x)                                       (((x) & 0xFF) << 0)
+#define   G_036C04_PERF_SEL2(x)                                       (((x) >> 0) & 0xFF)
+#define   C_036C04_PERF_SEL2                                          0xFFFFFF00
+#define   S_036C04_PERF_SEL3(x)                                       (((x) & 0xFF) << 10)
+#define   G_036C04_PERF_SEL3(x)                                       (((x) >> 10) & 0xFF)
+#define   C_036C04_PERF_SEL3                                          0xFFFC03FF
+#define   S_036C04_PERF_MODE3(x)                                      (((x) & 0x0F) << 24)
+#define   G_036C04_PERF_MODE3(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036C04_PERF_MODE3                                         0xF0FFFFFF
+#define   S_036C04_PERF_MODE2(x)                                      (((x) & 0x0F) << 28)
+#define   G_036C04_PERF_MODE2(x)                                      (((x) >> 28) & 0x0F)
+#define   C_036C04_PERF_MODE2                                         0x0FFFFFFF
+#define R_036C08_TD_PERFCOUNTER1_SELECT                                 0x036C08
+#define R_036D00_TCP_PERFCOUNTER0_SELECT                                0x036D00
+#define   S_036D00_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_036D00_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_036D00_PERF_SEL                                           0xFFFFFC00
+#define   S_036D00_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036D00_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036D00_PERF_SEL1                                          0xFFF003FF
+#define   S_036D00_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036D00_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036D00_CNTR_MODE                                          0xFF0FFFFF
+#define   S_036D00_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_036D00_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036D00_PERF_MODE1                                         0xF0FFFFFF
+#define   S_036D00_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036D00_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036D00_PERF_MODE                                          0x0FFFFFFF
+#define R_036D04_TCP_PERFCOUNTER0_SELECT1                               0x036D04
+#define   S_036D04_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_036D04_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_036D04_PERF_SEL2                                          0xFFFFFC00
+#define   S_036D04_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036D04_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036D04_PERF_SEL3                                          0xFFF003FF
+#define   S_036D04_PERF_MODE3(x)                                      (((x) & 0x0F) << 24)
+#define   G_036D04_PERF_MODE3(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036D04_PERF_MODE3                                         0xF0FFFFFF
+#define   S_036D04_PERF_MODE2(x)                                      (((x) & 0x0F) << 28)
+#define   G_036D04_PERF_MODE2(x)                                      (((x) >> 28) & 0x0F)
+#define   C_036D04_PERF_MODE2                                         0x0FFFFFFF
+#define R_036D08_TCP_PERFCOUNTER1_SELECT                                0x036D08
+#define R_036D0C_TCP_PERFCOUNTER1_SELECT1                               0x036D0C
+#define R_036D10_TCP_PERFCOUNTER2_SELECT                                0x036D10
+#define R_036D14_TCP_PERFCOUNTER3_SELECT                                0x036D14
+#define R_036E00_TCC_PERFCOUNTER0_SELECT                                0x036E00
+#define   S_036E00_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_036E00_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_036E00_PERF_SEL                                           0xFFFFFC00
+#define   S_036E00_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036E00_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036E00_PERF_SEL1                                          0xFFF003FF
+#define   S_036E00_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036E00_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036E00_CNTR_MODE                                          0xFF0FFFFF
+#define   S_036E00_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_036E00_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036E00_PERF_MODE1                                         0xF0FFFFFF
+#define   S_036E00_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036E00_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036E00_PERF_MODE                                          0x0FFFFFFF
+#define R_036E04_TCC_PERFCOUNTER0_SELECT1                               0x036E04
+#define   S_036E04_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_036E04_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_036E04_PERF_SEL2                                          0xFFFFFC00
+#define   S_036E04_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036E04_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036E04_PERF_SEL3                                          0xFFF003FF
+#define   S_036E04_PERF_MODE2(x)                                      (((x) & 0x0F) << 24)
+#define   G_036E04_PERF_MODE2(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036E04_PERF_MODE2                                         0xF0FFFFFF
+#define   S_036E04_PERF_MODE3(x)                                      (((x) & 0x0F) << 28)
+#define   G_036E04_PERF_MODE3(x)                                      (((x) >> 28) & 0x0F)
+#define   C_036E04_PERF_MODE3                                         0x0FFFFFFF
+#define R_036E08_TCC_PERFCOUNTER1_SELECT                                0x036E08
+#define R_036E0C_TCC_PERFCOUNTER1_SELECT1                               0x036E0C
+#define R_036E10_TCC_PERFCOUNTER2_SELECT                                0x036E10
+#define R_036E14_TCC_PERFCOUNTER3_SELECT                                0x036E14
+#define R_036E40_TCA_PERFCOUNTER0_SELECT                                0x036E40
+#define   S_036E40_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_036E40_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_036E40_PERF_SEL                                           0xFFFFFC00
+#define   S_036E40_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036E40_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036E40_PERF_SEL1                                          0xFFF003FF
+#define   S_036E40_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_036E40_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_036E40_CNTR_MODE                                          0xFF0FFFFF
+#define   S_036E40_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_036E40_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036E40_PERF_MODE1                                         0xF0FFFFFF
+#define   S_036E40_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_036E40_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_036E40_PERF_MODE                                          0x0FFFFFFF
+#define R_036E44_TCA_PERFCOUNTER0_SELECT1                               0x036E44
+#define   S_036E44_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_036E44_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_036E44_PERF_SEL2                                          0xFFFFFC00
+#define   S_036E44_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_036E44_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_036E44_PERF_SEL3                                          0xFFF003FF
+#define   S_036E44_PERF_MODE2(x)                                      (((x) & 0x0F) << 24)
+#define   G_036E44_PERF_MODE2(x)                                      (((x) >> 24) & 0x0F)
+#define   C_036E44_PERF_MODE2                                         0xF0FFFFFF
+#define   S_036E44_PERF_MODE3(x)                                      (((x) & 0x0F) << 28)
+#define   G_036E44_PERF_MODE3(x)                                      (((x) >> 28) & 0x0F)
+#define   C_036E44_PERF_MODE3                                         0x0FFFFFFF
+#define R_036E48_TCA_PERFCOUNTER1_SELECT                                0x036E48
+#define R_036E4C_TCA_PERFCOUNTER1_SELECT1                               0x036E4C
+#define R_036E50_TCA_PERFCOUNTER2_SELECT                                0x036E50
+#define R_036E54_TCA_PERFCOUNTER3_SELECT                                0x036E54
+#define R_037000_CB_PERFCOUNTER_FILTER                                  0x037000
+#define   S_037000_OP_FILTER_ENABLE(x)                                (((x) & 0x1) << 0)
+#define   G_037000_OP_FILTER_ENABLE(x)                                (((x) >> 0) & 0x1)
+#define   C_037000_OP_FILTER_ENABLE                                   0xFFFFFFFE
+#define   S_037000_OP_FILTER_SEL(x)                                   (((x) & 0x07) << 1)
+#define   G_037000_OP_FILTER_SEL(x)                                   (((x) >> 1) & 0x07)
+#define   C_037000_OP_FILTER_SEL                                      0xFFFFFFF1
+#define   S_037000_FORMAT_FILTER_ENABLE(x)                            (((x) & 0x1) << 4)
+#define   G_037000_FORMAT_FILTER_ENABLE(x)                            (((x) >> 4) & 0x1)
+#define   C_037000_FORMAT_FILTER_ENABLE                               0xFFFFFFEF
+#define   S_037000_FORMAT_FILTER_SEL(x)                               (((x) & 0x1F) << 5)
+#define   G_037000_FORMAT_FILTER_SEL(x)                               (((x) >> 5) & 0x1F)
+#define   C_037000_FORMAT_FILTER_SEL                                  0xFFFFFC1F
+#define   S_037000_CLEAR_FILTER_ENABLE(x)                             (((x) & 0x1) << 10)
+#define   G_037000_CLEAR_FILTER_ENABLE(x)                             (((x) >> 10) & 0x1)
+#define   C_037000_CLEAR_FILTER_ENABLE                                0xFFFFFBFF
+#define   S_037000_CLEAR_FILTER_SEL(x)                                (((x) & 0x1) << 11)
+#define   G_037000_CLEAR_FILTER_SEL(x)                                (((x) >> 11) & 0x1)
+#define   C_037000_CLEAR_FILTER_SEL                                   0xFFFFF7FF
+#define   S_037000_MRT_FILTER_ENABLE(x)                               (((x) & 0x1) << 12)
+#define   G_037000_MRT_FILTER_ENABLE(x)                               (((x) >> 12) & 0x1)
+#define   C_037000_MRT_FILTER_ENABLE                                  0xFFFFEFFF
+#define   S_037000_MRT_FILTER_SEL(x)                                  (((x) & 0x07) << 13)
+#define   G_037000_MRT_FILTER_SEL(x)                                  (((x) >> 13) & 0x07)
+#define   C_037000_MRT_FILTER_SEL                                     0xFFFF1FFF
+#define   S_037000_NUM_SAMPLES_FILTER_ENABLE(x)                       (((x) & 0x1) << 17)
+#define   G_037000_NUM_SAMPLES_FILTER_ENABLE(x)                       (((x) >> 17) & 0x1)
+#define   C_037000_NUM_SAMPLES_FILTER_ENABLE                          0xFFFDFFFF
+#define   S_037000_NUM_SAMPLES_FILTER_SEL(x)                          (((x) & 0x07) << 18)
+#define   G_037000_NUM_SAMPLES_FILTER_SEL(x)                          (((x) >> 18) & 0x07)
+#define   C_037000_NUM_SAMPLES_FILTER_SEL                             0xFFE3FFFF
+#define   S_037000_NUM_FRAGMENTS_FILTER_ENABLE(x)                     (((x) & 0x1) << 21)
+#define   G_037000_NUM_FRAGMENTS_FILTER_ENABLE(x)                     (((x) >> 21) & 0x1)
+#define   C_037000_NUM_FRAGMENTS_FILTER_ENABLE                        0xFFDFFFFF
+#define   S_037000_NUM_FRAGMENTS_FILTER_SEL(x)                        (((x) & 0x03) << 22)
+#define   G_037000_NUM_FRAGMENTS_FILTER_SEL(x)                        (((x) >> 22) & 0x03)
+#define   C_037000_NUM_FRAGMENTS_FILTER_SEL                           0xFF3FFFFF
+#define R_037004_CB_PERFCOUNTER0_SELECT                                 0x037004
+#define   S_037004_PERF_SEL(x)                                        (((x) & 0x1FF) << 0)
+#define   G_037004_PERF_SEL(x)                                        (((x) >> 0) & 0x1FF)
+#define   C_037004_PERF_SEL                                           0xFFFFFE00
+#define   S_037004_PERF_SEL1(x)                                       (((x) & 0x1FF) << 10)
+#define   G_037004_PERF_SEL1(x)                                       (((x) >> 10) & 0x1FF)
+#define   C_037004_PERF_SEL1                                          0xFFF803FF
+#define   S_037004_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_037004_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_037004_CNTR_MODE                                          0xFF0FFFFF
+#define   S_037004_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_037004_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_037004_PERF_MODE1                                         0xF0FFFFFF
+#define   S_037004_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_037004_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_037004_PERF_MODE                                          0x0FFFFFFF
+#define R_037008_CB_PERFCOUNTER0_SELECT1                                0x037008
+#define   S_037008_PERF_SEL2(x)                                       (((x) & 0x1FF) << 0)
+#define   G_037008_PERF_SEL2(x)                                       (((x) >> 0) & 0x1FF)
+#define   C_037008_PERF_SEL2                                          0xFFFFFE00
+#define   S_037008_PERF_SEL3(x)                                       (((x) & 0x1FF) << 10)
+#define   G_037008_PERF_SEL3(x)                                       (((x) >> 10) & 0x1FF)
+#define   C_037008_PERF_SEL3                                          0xFFF803FF
+#define   S_037008_PERF_MODE3(x)                                      (((x) & 0x0F) << 24)
+#define   G_037008_PERF_MODE3(x)                                      (((x) >> 24) & 0x0F)
+#define   C_037008_PERF_MODE3                                         0xF0FFFFFF
+#define   S_037008_PERF_MODE2(x)                                      (((x) & 0x0F) << 28)
+#define   G_037008_PERF_MODE2(x)                                      (((x) >> 28) & 0x0F)
+#define   C_037008_PERF_MODE2                                         0x0FFFFFFF
+#define R_03700C_CB_PERFCOUNTER1_SELECT                                 0x03700C
+#define R_037010_CB_PERFCOUNTER2_SELECT                                 0x037010
+#define R_037014_CB_PERFCOUNTER3_SELECT                                 0x037014
+#define R_037100_DB_PERFCOUNTER0_SELECT                                 0x037100
+#define   S_037100_PERF_SEL(x)                                        (((x) & 0x3FF) << 0)
+#define   G_037100_PERF_SEL(x)                                        (((x) >> 0) & 0x3FF)
+#define   C_037100_PERF_SEL                                           0xFFFFFC00
+#define   S_037100_PERF_SEL1(x)                                       (((x) & 0x3FF) << 10)
+#define   G_037100_PERF_SEL1(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_037100_PERF_SEL1                                          0xFFF003FF
+#define   S_037100_CNTR_MODE(x)                                       (((x) & 0x0F) << 20)
+#define   G_037100_CNTR_MODE(x)                                       (((x) >> 20) & 0x0F)
+#define   C_037100_CNTR_MODE                                          0xFF0FFFFF
+#define   S_037100_PERF_MODE1(x)                                      (((x) & 0x0F) << 24)
+#define   G_037100_PERF_MODE1(x)                                      (((x) >> 24) & 0x0F)
+#define   C_037100_PERF_MODE1                                         0xF0FFFFFF
+#define   S_037100_PERF_MODE(x)                                       (((x) & 0x0F) << 28)
+#define   G_037100_PERF_MODE(x)                                       (((x) >> 28) & 0x0F)
+#define   C_037100_PERF_MODE                                          0x0FFFFFFF
+#define R_037104_DB_PERFCOUNTER0_SELECT1                                0x037104
+#define   S_037104_PERF_SEL2(x)                                       (((x) & 0x3FF) << 0)
+#define   G_037104_PERF_SEL2(x)                                       (((x) >> 0) & 0x3FF)
+#define   C_037104_PERF_SEL2                                          0xFFFFFC00
+#define   S_037104_PERF_SEL3(x)                                       (((x) & 0x3FF) << 10)
+#define   G_037104_PERF_SEL3(x)                                       (((x) >> 10) & 0x3FF)
+#define   C_037104_PERF_SEL3                                          0xFFF003FF
+#define   S_037104_PERF_MODE3(x)                                      (((x) & 0x0F) << 24)
+#define   G_037104_PERF_MODE3(x)                                      (((x) >> 24) & 0x0F)
+#define   C_037104_PERF_MODE3                                         0xF0FFFFFF
+#define   S_037104_PERF_MODE2(x)                                      (((x) & 0x0F) << 28)
+#define   G_037104_PERF_MODE2(x)                                      (((x) >> 28) & 0x0F)
+#define   C_037104_PERF_MODE2                                         0x0FFFFFFF
+#define R_037108_DB_PERFCOUNTER1_SELECT                                 0x037108
+#define R_03710C_DB_PERFCOUNTER1_SELECT1                                0x03710C
+#define R_037110_DB_PERFCOUNTER2_SELECT                                 0x037110
+#define R_037118_DB_PERFCOUNTER3_SELECT                                 0x037118
 #define R_028000_DB_RENDER_CONTROL                                      0x028000
 #define   S_028000_DEPTH_CLEAR_ENABLE(x)                              (((x) & 0x1) << 0)
 #define   G_028000_DEPTH_CLEAR_ENABLE(x)                              (((x) >> 0) & 0x1)
@@ -5755,6 +6774,9 @@
 #define   G_028804_ENABLE_POSTZ_OVERRASTERIZATION(x)                  (((x) >> 27) & 0x1)
 #define   C_028804_ENABLE_POSTZ_OVERRASTERIZATION                     0xF7FFFFFF
 #define R_028808_CB_COLOR_CONTROL                                       0x028808
+#define   S_028808_DISABLE_DUAL_QUAD(x)                               (((x) & 0x1) << 0)
+#define   G_028808_DISABLE_DUAL_QUAD(x)                               (((x) >> 0) & 0x1)
+#define   C_028808_DISABLE_DUAL_QUAD                                  0xFFFFFFFE
 #define   S_028808_DEGAMMA_ENABLE(x)                                  (((x) & 0x1) << 3)
 #define   G_028808_DEGAMMA_ENABLE(x)                                  (((x) >> 3) & 0x1)
 #define   C_028808_DEGAMMA_ENABLE                                     0xFFFFFFF7

@@ -155,7 +155,7 @@ nv30_transfer_rect_blit(XFER_ARGS)
    u32 format, stride;
 
    if (nouveau_pushbuf_space(push, 512, 8, 0) ||
-       nouveau_pushbuf_refn (push, refs, sizeof(refs) / sizeof(refs[0])))
+       nouveau_pushbuf_refn (push, refs, ARRAY_SIZE(refs)))
       return;
 
    /* various switches depending on cpp of the transfer */

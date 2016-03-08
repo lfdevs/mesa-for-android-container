@@ -47,7 +47,7 @@ llvmpipe_create_gs_state(struct pipe_context *pipe,
    struct lp_geometry_shader *state;
 
    state = CALLOC_STRUCT(lp_geometry_shader);
-   if (state == NULL )
+   if (!state)
       goto no_state;
 
    /* debug */

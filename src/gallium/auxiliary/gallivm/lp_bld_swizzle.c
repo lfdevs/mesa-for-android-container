@@ -720,7 +720,7 @@ lp_build_transpose_aos_n(struct gallivm_state *gallivm,
 
       default:
          assert(0);
-   };
+   }
 }
 
 

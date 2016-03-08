@@ -47,6 +47,8 @@ extern const struct brw_tracked_state brw_cc_unit;
 extern const struct brw_tracked_state brw_clip_prog;
 extern const struct brw_tracked_state brw_clip_unit;
 extern const struct brw_tracked_state brw_vs_pull_constants;
+extern const struct brw_tracked_state brw_tcs_pull_constants;
+extern const struct brw_tracked_state brw_tes_pull_constants;
 extern const struct brw_tracked_state brw_gs_pull_constants;
 extern const struct brw_tracked_state brw_wm_pull_constants;
 extern const struct brw_tracked_state brw_cs_pull_constants;
@@ -70,20 +72,34 @@ extern const struct brw_tracked_state brw_state_base_address;
 extern const struct brw_tracked_state brw_urb_fence;
 extern const struct brw_tracked_state brw_vs_prog;
 extern const struct brw_tracked_state brw_vs_samplers;
+extern const struct brw_tracked_state brw_tcs_samplers;
+extern const struct brw_tracked_state brw_tes_samplers;
 extern const struct brw_tracked_state brw_gs_samplers;
+extern const struct brw_tracked_state brw_cs_samplers;
+extern const struct brw_tracked_state brw_cs_texture_surfaces;
 extern const struct brw_tracked_state brw_vs_ubo_surfaces;
 extern const struct brw_tracked_state brw_vs_abo_surfaces;
 extern const struct brw_tracked_state brw_vs_image_surfaces;
+extern const struct brw_tracked_state brw_tcs_ubo_surfaces;
+extern const struct brw_tracked_state brw_tcs_abo_surfaces;
+extern const struct brw_tracked_state brw_tcs_image_surfaces;
+extern const struct brw_tracked_state brw_tes_ubo_surfaces;
+extern const struct brw_tracked_state brw_tes_abo_surfaces;
+extern const struct brw_tracked_state brw_tes_image_surfaces;
 extern const struct brw_tracked_state brw_gs_ubo_surfaces;
 extern const struct brw_tracked_state brw_gs_abo_surfaces;
 extern const struct brw_tracked_state brw_gs_image_surfaces;
 extern const struct brw_tracked_state brw_vs_unit;
+extern const struct brw_tracked_state brw_hs_prog;
+extern const struct brw_tracked_state brw_ds_prog;
 extern const struct brw_tracked_state brw_gs_prog;
 extern const struct brw_tracked_state brw_wm_prog;
 extern const struct brw_tracked_state brw_renderbuffer_surfaces;
 extern const struct brw_tracked_state brw_texture_surfaces;
 extern const struct brw_tracked_state brw_wm_binding_table;
 extern const struct brw_tracked_state brw_gs_binding_table;
+extern const struct brw_tracked_state brw_tes_binding_table;
+extern const struct brw_tracked_state brw_tcs_binding_table;
 extern const struct brw_tracked_state brw_vs_binding_table;
 extern const struct brw_tracked_state brw_wm_ubo_surfaces;
 extern const struct brw_tracked_state brw_wm_abo_surfaces;
@@ -127,14 +143,19 @@ extern const struct brw_tracked_state gen6_wm_push_constants;
 extern const struct brw_tracked_state gen6_wm_state;
 extern const struct brw_tracked_state gen7_depthbuffer;
 extern const struct brw_tracked_state gen7_clip_state;
-extern const struct brw_tracked_state gen7_disable_stages;
+extern const struct brw_tracked_state gen7_ds_state;
 extern const struct brw_tracked_state gen7_gs_state;
+extern const struct brw_tracked_state gen7_tcs_push_constants;
+extern const struct brw_tracked_state gen7_hs_state;
+extern const struct brw_tracked_state gen7_l3_state;
 extern const struct brw_tracked_state gen7_ps_state;
 extern const struct brw_tracked_state gen7_push_constant_space;
 extern const struct brw_tracked_state gen7_sbe_state;
 extern const struct brw_tracked_state gen7_sf_clip_viewport;
 extern const struct brw_tracked_state gen7_sf_state;
 extern const struct brw_tracked_state gen7_sol_state;
+extern const struct brw_tracked_state gen7_te_state;
+extern const struct brw_tracked_state gen7_tes_push_constants;
 extern const struct brw_tracked_state gen7_urb;
 extern const struct brw_tracked_state gen7_vs_state;
 extern const struct brw_tracked_state gen7_wm_state;
@@ -142,7 +163,9 @@ extern const struct brw_tracked_state gen7_hw_binding_tables;
 extern const struct brw_tracked_state haswell_cut_index;
 extern const struct brw_tracked_state gen8_blend_state;
 extern const struct brw_tracked_state gen8_disable_stages;
+extern const struct brw_tracked_state gen8_ds_state;
 extern const struct brw_tracked_state gen8_gs_state;
+extern const struct brw_tracked_state gen8_hs_state;
 extern const struct brw_tracked_state gen8_index_buffer;
 extern const struct brw_tracked_state gen8_multisample_state;
 extern const struct brw_tracked_state gen8_pma_fix;
@@ -375,8 +398,13 @@ void gen7_update_binding_table_from_array(struct brw_context *brw,
                                           gl_shader_stage stage,
                                           const uint32_t* binding_table,
                                           int num_surfaces);
+void gen7_enable_hw_binding_tables(struct brw_context *brw);
 void gen7_disable_hw_binding_tables(struct brw_context *brw);
 void gen7_reset_hw_bt_pool_offsets(struct brw_context *brw);
+
+/* gen7_l3_state.c */
+void
+gen7_restore_default_l3_config(struct brw_context *brw);
 
 #ifdef __cplusplus
 }

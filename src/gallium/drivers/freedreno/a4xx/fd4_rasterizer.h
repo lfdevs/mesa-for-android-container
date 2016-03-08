@@ -42,6 +42,7 @@ struct fd4_rasterizer_stateobj {
 	uint32_t gras_su_mode_control;
 	uint32_t gras_cl_clip_cntl;
 	uint32_t pc_prim_vtx_cntl;
+	uint32_t pc_prim_vtx_cntl2;
 };
 
 static inline struct fd4_rasterizer_stateobj *

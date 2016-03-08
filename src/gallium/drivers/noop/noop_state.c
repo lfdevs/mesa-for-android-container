@@ -44,7 +44,7 @@ static void *noop_create_blend_state(struct pipe_context *ctx,
 {
 	struct pipe_blend_state *nstate = CALLOC_STRUCT(pipe_blend_state);
 
-	if (nstate == NULL) {
+	if (!nstate) {
 		return NULL;
 	}
 	*nstate = *state;
@@ -56,7 +56,7 @@ static void *noop_create_dsa_state(struct pipe_context *ctx,
 {
 	struct pipe_depth_stencil_alpha_state *nstate = CALLOC_STRUCT(pipe_depth_stencil_alpha_state);
 
-	if (nstate == NULL) {
+	if (!nstate) {
 		return NULL;
 	}
 	*nstate = *state;
@@ -68,7 +68,7 @@ static void *noop_create_rs_state(struct pipe_context *ctx,
 {
 	struct pipe_rasterizer_state *nstate = CALLOC_STRUCT(pipe_rasterizer_state);
 
-	if (nstate == NULL) {
+	if (!nstate) {
 		return NULL;
 	}
 	*nstate = *state;
@@ -80,7 +80,7 @@ static void *noop_create_sampler_state(struct pipe_context *ctx,
 {
 	struct pipe_sampler_state *nstate = CALLOC_STRUCT(pipe_sampler_state);
 
-	if (nstate == NULL) {
+	if (!nstate) {
 		return NULL;
 	}
 	*nstate = *state;
@@ -93,7 +93,7 @@ static struct pipe_sampler_view *noop_create_sampler_view(struct pipe_context *c
 {
 	struct pipe_sampler_view *sampler_view = CALLOC_STRUCT(pipe_sampler_view);
 
-	if (sampler_view == NULL)
+	if (!sampler_view)
 		return NULL;
 	/* initialize base object */
 	pipe_resource_reference(&sampler_view->texture, texture);
@@ -108,7 +108,7 @@ static struct pipe_surface *noop_create_surface(struct pipe_context *ctx,
 {
 	struct pipe_surface *surface = CALLOC_STRUCT(pipe_surface);
 
-	if (surface == NULL)
+	if (!surface)
 		return NULL;
 	pipe_reference_init(&surface->reference, 1);
 	pipe_resource_reference(&surface->texture, texture);
@@ -228,7 +228,7 @@ static void *noop_create_vertex_elements(struct pipe_context *ctx,
 {
 	struct pipe_vertex_element *nstate = CALLOC_STRUCT(pipe_vertex_element);
 
-	if (nstate == NULL) {
+	if (!nstate) {
 		return NULL;
 	}
 	*nstate = *state;
@@ -240,7 +240,7 @@ static void *noop_create_shader_state(struct pipe_context *ctx,
 {
 	struct pipe_shader_state *nstate = CALLOC_STRUCT(pipe_shader_state);
 
-	if (nstate == NULL) {
+	if (!nstate) {
 		return NULL;
 	}
 	*nstate = *state;

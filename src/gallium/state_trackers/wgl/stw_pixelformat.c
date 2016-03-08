@@ -205,6 +205,12 @@ stw_pixelformat_add(
    pfi->stvis.samples = samples;
    pfi->stvis.render_buffer = ST_ATTACHMENT_INVALID;
    
+   /* WGL_ARB_render_texture */
+   if (color->bits.alpha)
+      pfi->bindToTextureRGBA = TRUE;
+   else
+      pfi->bindToTextureRGB = TRUE;
+
    ++stw_dev->pixelformat_extended_count;
    
    if(!extended) {

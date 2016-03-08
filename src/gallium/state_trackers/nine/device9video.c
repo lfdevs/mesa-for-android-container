@@ -24,7 +24,7 @@
 
 #define DBG_CHANNEL DBG_DEVICEVIDEO
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Video_GetContentProtectionCaps( struct NineDevice9Video *This,
                                            const GUID *pCryptoType,
                                            const GUID *pDecodeProfile,
@@ -33,7 +33,7 @@ NineDevice9Video_GetContentProtectionCaps( struct NineDevice9Video *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Video_CreateAuthenticatedChannel( struct NineDevice9Video *This,
                                              D3DAUTHENTICATEDCHANNELTYPE ChannelType,
                                              IDirect3DAuthenticatedChannel9 **ppAuthenticatedChannel,
@@ -42,7 +42,7 @@ NineDevice9Video_CreateAuthenticatedChannel( struct NineDevice9Video *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineDevice9Video_CreateCryptoSession( struct NineDevice9Video *This,
                                       const GUID *pCryptoType,
                                       const GUID *pDecodeProfile,

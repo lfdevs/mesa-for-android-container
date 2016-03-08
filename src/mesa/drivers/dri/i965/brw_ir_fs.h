@@ -36,7 +36,7 @@ public:
    void init();
 
    fs_reg();
-   fs_reg(struct brw_reg reg);
+   fs_reg(struct ::brw_reg reg);
    fs_reg(enum brw_reg_file file, int nr);
    fs_reg(enum brw_reg_file file, int nr, enum brw_reg_type type);
 
@@ -205,6 +205,7 @@ public:
    bool can_do_source_mods(const struct brw_device_info *devinfo);
    bool can_change_types() const;
    bool has_side_effects() const;
+   bool has_source_and_destination_hazard() const;
 
    bool reads_flag() const;
    bool writes_flag() const;

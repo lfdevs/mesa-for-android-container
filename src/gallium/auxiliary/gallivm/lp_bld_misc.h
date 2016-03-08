@@ -32,6 +32,7 @@
 
 #include "lp_bld.h"
 #include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/Target.h>
 
 
 #ifdef __cplusplus
@@ -43,6 +44,12 @@ struct lp_generated_code;
 
 extern void
 gallivm_init_llvm_targets(void);
+
+extern LLVMTargetLibraryInfoRef
+gallivm_create_target_library_info(const char *triple);
+
+extern void
+gallivm_dispose_target_library_info(LLVMTargetLibraryInfoRef library_info);
 
 extern void
 lp_set_target_options(void);

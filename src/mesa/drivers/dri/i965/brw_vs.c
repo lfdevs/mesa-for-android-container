@@ -39,6 +39,7 @@
 #include "program/prog_print.h"
 #include "program/prog_parameter.h"
 #include "brw_nir.h"
+#include "brw_program.h"
 
 #include "util/ralloc.h"
 
@@ -147,7 +148,9 @@ brw_codegen_vs_prog(struct brw_context *brw,
 
    brw_compute_vue_map(brw->intelScreen->devinfo,
                        &prog_data.base.vue_map, outputs_written,
-                       prog ? prog->SeparateShader : false);
+                       prog ? prog->SeparateShader ||
+                              prog->_LinkedShaders[MESA_SHADER_TESS_EVAL]
+                            : false);
 
    if (0) {
       _mesa_fprint_program_opt(stderr, &vp->program.Base, PROG_PRINT_DEBUG,
@@ -217,16 +220,6 @@ brw_codegen_vs_prog(struct brw_context *brw,
    ralloc_free(mem_ctx);
 
    return true;
-}
-
-static bool
-key_debug(struct brw_context *brw, const char *name, int a, int b)
-{
-   if (a != b) {
-      perf_debug("  %s %d->%d\n", name, a, b);
-      return true;
-   }
-   return false;
 }
 
 void

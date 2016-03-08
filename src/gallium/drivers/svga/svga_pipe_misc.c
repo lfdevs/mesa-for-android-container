@@ -244,6 +244,22 @@ static void svga_set_viewport_states( struct pipe_context *pipe,
 }
 
 
+/**
+ * Called by state tracker to specify a callback function the driver
+ * can use to report info back to the state tracker.
+ */
+static void
+svga_set_debug_callback(struct pipe_context *pipe,
+                        const struct pipe_debug_callback *cb)
+{
+   struct svga_context *svga = svga_context(pipe);
+
+   if (cb)
+      svga->debug.callback = *cb;
+   else
+      memset(&svga->debug.callback, 0, sizeof(svga->debug.callback));
+}
+
 
 void svga_init_misc_functions( struct svga_context *svga )
 {
@@ -252,6 +268,7 @@ void svga_init_misc_functions( struct svga_context *svga )
    svga->pipe.set_framebuffer_state = svga_set_framebuffer_state;
    svga->pipe.set_clip_state = svga_set_clip_state;
    svga->pipe.set_viewport_states = svga_set_viewport_states;
+   svga->pipe.set_debug_callback = svga_set_debug_callback;
 }
 
 

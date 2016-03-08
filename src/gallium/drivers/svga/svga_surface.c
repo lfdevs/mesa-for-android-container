@@ -357,7 +357,7 @@ create_backed_surface_view(struct svga_context *svga, struct svga_surface *s)
 {
    struct svga_surface *bs = s->backed;
 
-   if (bs == NULL) {
+   if (!bs) {
       struct svga_texture *tex = svga_texture(s->base.texture);
       struct pipe_surface *backed_view;
 

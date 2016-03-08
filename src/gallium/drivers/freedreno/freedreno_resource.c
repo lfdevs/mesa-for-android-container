@@ -337,10 +337,8 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	}
 
 	buf = fd_bo_map(rsc->bo);
-	if (!buf) {
-		fd_resource_transfer_unmap(pctx, ptrans);
-		return NULL;
-	}
+	if (!buf)
+		goto fail;
 
 	offset = slice->offset +
 		box->y / util_format_get_blockheight(format) * ptrans->stride +
@@ -484,6 +482,7 @@ static uint32_t
 setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format format)
 {
 	struct pipe_resource *prsc = &rsc->base.b;
+	enum util_format_layout layout = util_format_description(format)->layout;
 	uint32_t level, size = 0;
 	uint32_t width = prsc->width0;
 	uint32_t height = prsc->height0;
@@ -497,7 +496,11 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 		struct fd_resource_slice *slice = fd_resource_slice(rsc, level);
 		uint32_t blocks;
 
-		slice->pitch = width = align(width, 32);
+		if (layout == UTIL_FORMAT_LAYOUT_ASTC)
+			slice->pitch = width =
+				util_align_npot(width, 32 * util_format_get_blockwidth(format));
+		else
+			slice->pitch = width = align(width, 32);
 		slice->offset = size;
 		blocks = util_format_get_nblocks(format, width, height);
 		/* 1d array and 2d array textures must all have the same layer size

@@ -41,7 +41,7 @@ public:
 
    src_reg(enum brw_reg_file file, int nr, const glsl_type *type);
    src_reg();
-   src_reg(struct brw_reg reg);
+   src_reg(struct ::brw_reg reg);
 
    bool equals(const src_reg &r) const;
 
@@ -108,7 +108,7 @@ public:
            unsigned writemask);
    dst_reg(enum brw_reg_file file, int nr, brw_reg_type type,
            unsigned writemask);
-   dst_reg(struct brw_reg reg);
+   dst_reg(struct ::brw_reg reg);
    dst_reg(class vec4_visitor *v, const struct glsl_type *type);
 
    explicit dst_reg(const src_reg &reg);
@@ -169,6 +169,7 @@ public:
    void reswizzle(int dst_writemask, int swizzle);
    bool can_do_source_mods(const struct brw_device_info *devinfo);
    bool can_change_types() const;
+   bool has_source_and_destination_hazard() const;
 
    bool reads_flag()
    {

@@ -135,6 +135,11 @@ vertex_attrib_binding(struct gl_context *ctx,
 {
    struct gl_vertex_attrib_array *array = &vao->VertexAttrib[attribIndex];
 
+   if (!_mesa_is_bufferobj(vao->VertexBinding[bindingIndex].BufferObj))
+     vao->VertexAttribBufferMask &= ~VERT_BIT(attribIndex);
+   else
+     vao->VertexAttribBufferMask |= VERT_BIT(attribIndex);
+
    if (array->VertexBinding != bindingIndex) {
       const GLbitfield64 array_bit = VERT_BIT(attribIndex);
 
@@ -173,6 +178,11 @@ _mesa_bind_vertex_buffer(struct gl_context *ctx,
 
       binding->Offset = offset;
       binding->Stride = stride;
+
+      if (!_mesa_is_bufferobj(vbo))
+         vao->VertexAttribBufferMask &= ~binding->_BoundArrays;
+      else
+         vao->VertexAttribBufferMask |= binding->_BoundArrays;
 
       vao->NewArrays |= binding->_BoundArrays;
    }
@@ -1734,6 +1744,10 @@ vertex_array_vertex_buffer(struct gl_context *ctx,
    } else if (buffer != 0) {
       vbo = _mesa_lookup_bufferobj(ctx, buffer);
 
+      if (!vbo && _mesa_is_gles31(ctx)) {
+         _mesa_error(ctx, GL_INVALID_OPERATION, "%s(non-gen name)", func);
+         return;
+      }
       /* From the GL_ARB_vertex_attrib_array spec:
        *
        *   "[Core profile only:]

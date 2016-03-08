@@ -94,7 +94,7 @@ static void print_instr_name(struct ir3_instruction *instr)
 	}
 }
 
-static void print_reg_name(struct ir3_register *reg, bool followssa)
+static void print_reg_name(struct ir3_register *reg)
 {
 	if ((reg->flags & (IR3_REG_FABS | IR3_REG_SABS)) &&
 			(reg->flags & (IR3_REG_FNEG | IR3_REG_SNEG | IR3_REG_BNOT)))
@@ -106,20 +106,29 @@ static void print_reg_name(struct ir3_register *reg, bool followssa)
 
 	if (reg->flags & IR3_REG_IMMED) {
 		printf("imm[%f,%d,0x%x]", reg->fim_val, reg->iim_val, reg->iim_val);
-	} else if (reg->flags & IR3_REG_SSA) {
-		printf("_");
-		if (followssa) {
-			printf("[");
+	} else if (reg->flags & IR3_REG_ARRAY) {
+		printf("arr[id=%u, offset=%d, size=%u", reg->array.id,
+				reg->array.offset, reg->size);
+		/* for ARRAY we could have null src, for example first write
+		 * instruction..
+		 */
+		if (reg->instr) {
+			printf(", _[");
 			print_instr_name(reg->instr);
 			printf("]");
 		}
+		printf("]");
+	} else if (reg->flags & IR3_REG_SSA) {
+		printf("_[");
+		print_instr_name(reg->instr);
+		printf("]");
 	} else if (reg->flags & IR3_REG_RELATIV) {
 		if (reg->flags & IR3_REG_HALF)
 			printf("h");
 		if (reg->flags & IR3_REG_CONST)
-			printf("c<a0.x + %u>", reg->num);
+			printf("c<a0.x + %d>", reg->array.offset);
 		else
-			printf("\x1b[0;31mr<a0.x + %u>\x1b[0m (%u)", reg->num, reg->size);
+			printf("\x1b[0;31mr<a0.x + %d>\x1b[0m (%u)", reg->array.offset, reg->size);
 	} else {
 		if (reg->flags & IR3_REG_HALF)
 			printf("h");
@@ -158,20 +167,13 @@ print_instr(struct ir3_instruction *instr, int lvl)
 	for (i = 0; i < instr->regs_count; i++) {
 		struct ir3_register *reg = instr->regs[i];
 		printf(i ? ", " : " ");
-		print_reg_name(reg, !!i);
+		print_reg_name(reg);
 	}
 
 	if (instr->address) {
 		printf(", address=_");
 		printf("[");
 		print_instr_name(instr->address);
-		printf("]");
-	}
-
-	if (instr->fanin) {
-		printf(", fanin=_");
-		printf("[");
-		print_instr_name(instr->fanin);
 		printf("]");
 	}
 
@@ -192,8 +194,6 @@ print_instr(struct ir3_instruction *instr, int lvl)
 	if (is_meta(instr)) {
 		if (instr->opc == OPC_META_FO) {
 			printf(", off=%d", instr->fo.off);
-		} else if ((instr->opc == OPC_META_FI) && instr->fi.aid) {
-			printf(", aid=%d", instr->fi.aid);
 		}
 	}
 

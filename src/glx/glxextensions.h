@@ -45,6 +45,7 @@ enum
    EXT_import_context_bit,
    EXT_framebuffer_sRGB_bit,
    EXT_fbconfig_packed_float_bit,
+   EXT_create_context_es_profile_bit,
    EXT_create_context_es2_profile_bit,
    MESA_copy_sub_buffer_bit,
    MESA_depth_float_bit,

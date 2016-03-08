@@ -24,7 +24,6 @@
 #include <sys/errno.h>
 
 #include "main/condrender.h"
-#include "main/glheader.h"
 #include "main/mtypes.h"
 #include "main/state.h"
 #include "brw_context.h"
@@ -34,6 +33,84 @@
 #include "intel_buffer_objects.h"
 #include "brw_defines.h"
 
+
+static void
+prepare_indirect_gpgpu_walker(struct brw_context *brw)
+{
+   GLintptr indirect_offset = brw->compute.num_work_groups_offset;
+   drm_intel_bo *bo = brw->compute.num_work_groups_bo;
+
+   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMX, bo,
+                         I915_GEM_DOMAIN_VERTEX, 0,
+                         indirect_offset + 0);
+   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMY, bo,
+                         I915_GEM_DOMAIN_VERTEX, 0,
+                         indirect_offset + 4);
+   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMZ, bo,
+                         I915_GEM_DOMAIN_VERTEX, 0,
+                         indirect_offset + 8);
+
+   if (brw->gen > 7)
+      return;
+
+   /* Clear upper 32-bits of SRC0 and all 64-bits of SRC1 */
+   BEGIN_BATCH(7);
+   OUT_BATCH(MI_LOAD_REGISTER_IMM | (7 - 2));
+   OUT_BATCH(MI_PREDICATE_SRC0 + 4);
+   OUT_BATCH(0u);
+   OUT_BATCH(MI_PREDICATE_SRC1 + 0);
+   OUT_BATCH(0u);
+   OUT_BATCH(MI_PREDICATE_SRC1 + 4);
+   OUT_BATCH(0u);
+   ADVANCE_BATCH();
+
+   /* Load compute_dispatch_indirect_x_size into SRC0 */
+   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo,
+                         I915_GEM_DOMAIN_INSTRUCTION, 0,
+                         indirect_offset + 0);
+
+   /* predicate = (compute_dispatch_indirect_x_size == 0); */
+   BEGIN_BATCH(1);
+   OUT_BATCH(GEN7_MI_PREDICATE |
+             MI_PREDICATE_LOADOP_LOAD |
+             MI_PREDICATE_COMBINEOP_SET |
+             MI_PREDICATE_COMPAREOP_SRCS_EQUAL);
+   ADVANCE_BATCH();
+
+   /* Load compute_dispatch_indirect_y_size into SRC0 */
+   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo,
+                         I915_GEM_DOMAIN_INSTRUCTION, 0,
+                         indirect_offset + 4);
+
+   /* predicate |= (compute_dispatch_indirect_y_size == 0); */
+   BEGIN_BATCH(1);
+   OUT_BATCH(GEN7_MI_PREDICATE |
+             MI_PREDICATE_LOADOP_LOAD |
+             MI_PREDICATE_COMBINEOP_OR |
+             MI_PREDICATE_COMPAREOP_SRCS_EQUAL);
+   ADVANCE_BATCH();
+
+   /* Load compute_dispatch_indirect_z_size into SRC0 */
+   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo,
+                         I915_GEM_DOMAIN_INSTRUCTION, 0,
+                         indirect_offset + 8);
+
+   /* predicate |= (compute_dispatch_indirect_z_size == 0); */
+   BEGIN_BATCH(1);
+   OUT_BATCH(GEN7_MI_PREDICATE |
+             MI_PREDICATE_LOADOP_LOAD |
+             MI_PREDICATE_COMBINEOP_OR |
+             MI_PREDICATE_COMPAREOP_SRCS_EQUAL);
+   ADVANCE_BATCH();
+
+   /* predicate = !predicate; */
+   BEGIN_BATCH(1);
+   OUT_BATCH(GEN7_MI_PREDICATE |
+             MI_PREDICATE_LOADOP_LOADINV |
+             MI_PREDICATE_COMBINEOP_OR |
+             MI_PREDICATE_COMPAREOP_FALSE);
+   ADVANCE_BATCH();
+}
 
 static void
 brw_emit_gpgpu_walker(struct brw_context *brw)
@@ -46,20 +123,10 @@ brw_emit_gpgpu_walker(struct brw_context *brw)
    if (brw->compute.num_work_groups_bo == NULL) {
       indirect_flag = 0;
    } else {
-      GLintptr indirect_offset = brw->compute.num_work_groups_offset;
-      drm_intel_bo *bo = brw->compute.num_work_groups_bo;
-
-      indirect_flag = GEN7_GPGPU_INDIRECT_PARAMETER_ENABLE;
-
-      brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMX, bo,
-                            I915_GEM_DOMAIN_VERTEX, 0,
-                            indirect_offset + 0);
-      brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMY, bo,
-                            I915_GEM_DOMAIN_VERTEX, 0,
-                            indirect_offset + 4);
-      brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMZ, bo,
-                            I915_GEM_DOMAIN_VERTEX, 0,
-                            indirect_offset + 8);
+      indirect_flag =
+         GEN7_GPGPU_INDIRECT_PARAMETER_ENABLE |
+         (brw->gen == 7 ? GEN7_GPGPU_PREDICATE_ENABLE : 0);
+      prepare_indirect_gpgpu_walker(brw);
    }
 
    const unsigned simd_size = prog_data->simd_size;

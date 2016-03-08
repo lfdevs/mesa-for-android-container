@@ -113,6 +113,7 @@ struct radeon_llvm_context {
 	struct tgsi_declaration_range *arrays;
 
 	LLVMValueRef main_fn;
+	LLVMTypeRef return_type;
 
 	struct gallivm_state gallivm;
 };
@@ -158,10 +159,12 @@ void radeon_llvm_emit_prepare_cube_coords(struct lp_build_tgsi_context * bld_bas
 					  LLVMValueRef *coords_arg,
 					  LLVMValueRef *derivs_arg);
 
-void radeon_llvm_context_init(struct radeon_llvm_context * ctx);
+void radeon_llvm_context_init(struct radeon_llvm_context * ctx,
+                              const char *triple);
 
 void radeon_llvm_create_func(struct radeon_llvm_context * ctx,
-                             LLVMTypeRef *ParamTypes, unsigned ParamCount);
+			     LLVMTypeRef *return_types, unsigned num_return_elems,
+			     LLVMTypeRef *ParamTypes, unsigned ParamCount);
 
 void radeon_llvm_dispose(struct radeon_llvm_context * ctx);
 

@@ -57,6 +57,8 @@ fd4_screen_is_format_supported(struct pipe_screen *pscreen,
 	}
 
 	if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
+			(target == PIPE_BUFFER ||
+			 util_format_get_blocksize(format) != 12) &&
 			(fd4_pipe2tex(format) != ~0)) {
 		retval |= PIPE_BIND_SAMPLER_VIEW;
 	}

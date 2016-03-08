@@ -160,7 +160,7 @@ i915_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
    struct i915_context *i915;
 
    i915 = CALLOC_STRUCT(i915_context);
-   if (i915 == NULL)
+   if (!i915)
       return NULL;
 
    i915->iws = i915_screen(screen)->iws;

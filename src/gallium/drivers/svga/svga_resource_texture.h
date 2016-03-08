@@ -217,7 +217,14 @@ svga_texture_from_handle(struct pipe_screen * screen,
 			const struct pipe_resource *template,
 			struct winsys_handle *whandle);
 
-
+boolean
+svga_texture_generate_mipmap(struct pipe_context *pipe,
+                             struct pipe_resource *pt,
+                             enum pipe_format format,
+                             unsigned base_level,
+                             unsigned last_level,
+                             unsigned first_layer,
+                             unsigned last_layer);
 
 
 #endif /* SVGA_TEXTURE_H */

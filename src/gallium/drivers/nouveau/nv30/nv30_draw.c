@@ -208,17 +208,16 @@ nv30_render_release_vertices(struct vbuf_render *render)
 
 static const struct {
    unsigned emit;
-   unsigned interp;
    unsigned vp30;
    unsigned vp40;
    unsigned ow40;
 } vroute [] = {
-   [TGSI_SEMANTIC_POSITION] = { EMIT_4F, INTERP_PERSPECTIVE, 0, 0, 0x00000000 },
-   [TGSI_SEMANTIC_COLOR   ] = { EMIT_4F, INTERP_LINEAR     , 3, 1, 0x00000001 },
-   [TGSI_SEMANTIC_BCOLOR  ] = { EMIT_4F, INTERP_LINEAR     , 1, 3, 0x00000004 },
-   [TGSI_SEMANTIC_FOG     ] = { EMIT_4F, INTERP_PERSPECTIVE, 5, 5, 0x00000010 },
-   [TGSI_SEMANTIC_PSIZE   ] = { EMIT_1F_PSIZE, INTERP_POS  , 6, 6, 0x00000020 },
-   [TGSI_SEMANTIC_TEXCOORD] = { EMIT_4F, INTERP_PERSPECTIVE, 8, 7, 0x00004000 },
+   [TGSI_SEMANTIC_POSITION] = { EMIT_4F, 0, 0, 0x00000000 },
+   [TGSI_SEMANTIC_COLOR   ] = { EMIT_4F, 3, 1, 0x00000001 },
+   [TGSI_SEMANTIC_BCOLOR  ] = { EMIT_4F, 1, 3, 0x00000004 },
+   [TGSI_SEMANTIC_FOG     ] = { EMIT_4F, 5, 5, 0x00000010 },
+   [TGSI_SEMANTIC_PSIZE   ] = { EMIT_1F_PSIZE, 6, 6, 0x00000020 },
+   [TGSI_SEMANTIC_TEXCOORD] = { EMIT_4F, 8, 7, 0x00004000 },
 };
 
 static bool
@@ -247,7 +246,7 @@ vroute_add(struct nv30_render *r, uint attrib, uint sem, uint *idx)
    if (emit == EMIT_OMIT)
       return false;
 
-   draw_emit_vertex_attr(vinfo, emit, vroute[sem].interp, attrib);
+   draw_emit_vertex_attr(vinfo, emit, attrib);
    format = draw_translate_vinfo_format(emit);
 
    r->vtxfmt[attrib] = nv30_vtxfmt(&screen->base.base, format)->hw;

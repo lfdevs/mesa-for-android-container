@@ -38,6 +38,7 @@ static const char *nve4_hw_sm_query_names[] =
    /* MP counters */
    "active_cycles",
    "active_warps",
+   "atom_cas_count",
    "atom_count",
    "branch",
    "divergent_branch",
@@ -48,11 +49,12 @@ static const char *nve4_hw_sm_query_names[] =
    "gred_count",
    "gst_request",
    "inst_executed",
-   "inst_issued",
    "inst_issued1",
    "inst_issued2",
    "l1_global_load_hit",
    "l1_global_load_miss",
+   "__l1_global_load_transactions",
+   "__l1_global_store_transactions",
    "l1_local_load_hit",
    "l1_local_load_miss",
    "l1_local_store_hit",
@@ -79,13 +81,6 @@ static const char *nve4_hw_sm_query_names[] =
    "threads_launched",
    "uncached_global_load_transaction",
    "warps_launched",
-   /* metrics, i.e. functions of the MP counters */
-   "metric-ipc",                   /* inst_executed, clock */
-   "metric-ipac",                  /* inst_executed, active_cycles */
-   "metric-ipec",                  /* inst_executed, (bool)inst_executed */
-   "metric-achieved_occupancy",    /* active_warps, active_cycles */
-   "metric-sm_efficiency",         /* active_cycles, clock */
-   "metric-inst_replay_overhead"   /* inst_issued, inst_executed */
 };
 
 /* Code to read out MP counters: They are accessible via mmio, too, but let's
@@ -190,47 +185,25 @@ struct nvc0_hw_sm_counter_cfg
    uint32_t src_sel;      /* signal selection for up to 4 sources */
 };
 
-#define NVC0_COUNTER_OPn_SUM            0
-#define NVC0_COUNTER_OPn_OR             1
-#define NVC0_COUNTER_OPn_AND            2
-#define NVC0_COUNTER_OP2_REL_SUM_MM     3 /* (sum(ctr0) - sum(ctr1)) / sum(ctr0) */
-#define NVC0_COUNTER_OP2_DIV_SUM_M0     4 /* sum(ctr0) / ctr1 of MP[0]) */
-#define NVC0_COUNTER_OP2_AVG_DIV_MM     5 /* avg(ctr0 / ctr1) */
-#define NVC0_COUNTER_OP2_AVG_DIV_M0     6 /* avg(ctr0) / ctr1 of MP[0]) */
-
 struct nvc0_hw_sm_query_cfg
 {
    struct nvc0_hw_sm_counter_cfg ctr[8];
    uint8_t num_counters;
-   uint8_t op;
    uint8_t norm[2]; /* normalization num,denom */
 };
 
-#define _Q1A(n, f, m, g, s, nu, dn) [NVE4_HW_SM_QUERY_##n] = { { { f, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m, 0, NVE4_COMPUTE_MP_PM_A_SIGSEL_##g, 0, s }, {}, {}, {} }, 1, NVC0_COUNTER_OPn_SUM, { nu, dn } }
-#define _Q1B(n, f, m, g, s, nu, dn) [NVE4_HW_SM_QUERY_##n] = { { { f, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m, 1, NVE4_COMPUTE_MP_PM_B_SIGSEL_##g, 0, s }, {}, {}, {} }, 1, NVC0_COUNTER_OPn_SUM, { nu, dn } }
-#define _M2A(n, f0, m0, g0, s0, f1, m1, g1, s1, o, nu, dn) [NVE4_HW_SM_QUERY_METRIC_##n] = { { \
-   { f0, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m0, 0, NVE4_COMPUTE_MP_PM_A_SIGSEL_##g0, 0, s0 }, \
-   { f1, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m1, 0, NVE4_COMPUTE_MP_PM_A_SIGSEL_##g1, 0, s1 }, \
-   {}, {}, }, 2, NVC0_COUNTER_OP2_##o, { nu, dn } }
-#define _M2B(n, f0, m0, g0, s0, f1, m1, g1, s1, o, nu, dn) [NVE4_HW_SM_QUERY_METRIC_##n] = { { \
-   { f0, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m0, 1, NVE4_COMPUTE_MP_PM_B_SIGSEL_##g0, 0, s0 }, \
-   { f1, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m1, 1, NVE4_COMPUTE_MP_PM_B_SIGSEL_##g1, 0, s1 }, \
-   {}, {}, }, 2, NVC0_COUNTER_OP2_##o, { nu, dn } }
-#define _M2AB(n, f0, m0, g0, s0, f1, m1, g1, s1, o, nu, dn) [NVE4_HW_SM_QUERY_METRIC_##n] = { { \
-   { f0, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m0, 0, NVE4_COMPUTE_MP_PM_A_SIGSEL_##g0, 0, s0 }, \
-   { f1, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m1, 1, NVE4_COMPUTE_MP_PM_B_SIGSEL_##g1, 0, s1 }, \
-   {}, {}, }, 2, NVC0_COUNTER_OP2_##o, { nu, dn } }
+#define _Q1A(n, f, m, g, s, nu, dn) [NVE4_HW_SM_QUERY_##n] = { { { f, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m, 0, NVE4_COMPUTE_MP_PM_A_SIGSEL_##g, 0, s }, {}, {}, {} }, 1, { nu, dn } }
+#define _Q1B(n, f, m, g, s, nu, dn) [NVE4_HW_SM_QUERY_##n] = { { { f, NVE4_COMPUTE_MP_PM_FUNC_MODE_##m, 1, NVE4_COMPUTE_MP_PM_B_SIGSEL_##g, 0, s }, {}, {}, {} }, 1, { nu, dn } }
 
 /* NOTES:
  * active_warps: bit 0 alternates btw 0 and 1 for odd nr of warps
  * inst_executed etc.: we only count a single warp scheduler
- * metric-ipXc: we simply multiply by 4 to account for the 4 warp schedulers;
- *  this is inaccurate !
  */
 static const struct nvc0_hw_sm_query_cfg nve4_hw_sm_queries[] =
 {
    _Q1B(ACTIVE_CYCLES, 0x0001, B6, WARP, 0x00000000, 1, 1),
    _Q1B(ACTIVE_WARPS,  0x003f, B6, WARP, 0x31483104, 2, 1),
+   _Q1A(ATOM_CAS_COUNT, 0x0001, B6, BRANCH, 0x000000004, 1, 1),
    _Q1A(ATOM_COUNT, 0x0001, B6, BRANCH, 0x00000000, 1, 1),
    _Q1A(BRANCH,           0x0001, B6, BRANCH, 0x0000000c, 1, 1),
    _Q1A(DIVERGENT_BRANCH, 0x0001, B6, BRANCH, 0x00000010, 1, 1),
@@ -241,11 +214,12 @@ static const struct nvc0_hw_sm_query_cfg nve4_hw_sm_queries[] =
    _Q1A(GRED_COUNT, 0x0001, B6, BRANCH, 0x00000008, 1, 1),
    _Q1A(GST_REQUEST, 0x0001, B6, LDST, 0x00000014, 1, 1),
    _Q1A(INST_EXECUTED, 0x0003, B6, EXEC,  0x00000398, 1, 1),
-   _Q1A(INST_ISSUED,   0x0003, B6, ISSUE, 0x00000104, 1, 1),
    _Q1A(INST_ISSUED1,  0x0001, B6, ISSUE, 0x00000004, 1, 1),
    _Q1A(INST_ISSUED2,  0x0001, B6, ISSUE, 0x00000008, 1, 1),
    _Q1B(L1_GLD_HIT,  0x0001, B6, L1, 0x00000010, 1, 1),
    _Q1B(L1_GLD_MISS, 0x0001, B6, L1, 0x00000014, 1, 1),
+   _Q1B(L1_GLD_TRANSACTIONS,  0x0001, B6, UNK0F, 0x00000000, 1, 1),
+   _Q1B(L1_GST_TRANSACTIONS,  0x0001, B6, UNK0F, 0x00000004, 1, 1),
    _Q1B(L1_LOCAL_LD_HIT,   0x0001, B6, L1, 0x00000000, 1, 1),
    _Q1B(L1_LOCAL_LD_MISS,  0x0001, B6, L1, 0x00000004, 1, 1),
    _Q1B(L1_LOCAL_ST_HIT,  0x0001, B6, L1, 0x00000008, 1, 1),
@@ -272,18 +246,10 @@ static const struct nvc0_hw_sm_query_cfg nve4_hw_sm_queries[] =
    _Q1A(THREADS_LAUNCHED,  0x003f, B6, LAUNCH, 0x398a4188, 1, 1),
    _Q1B(UNCACHED_GLD_TRANSACTIONS, 0x0001, B6, MEM, 0x00000000, 1, 1),
    _Q1A(WARPS_LAUNCHED,    0x0001, B6, LAUNCH, 0x00000004, 1, 1),
-   _M2AB(IPC, 0x3, B6, EXEC, 0x398, 0xffff, LOGOP, WARP, 0x0, DIV_SUM_M0, 10, 1),
-   _M2AB(IPAC, 0x3, B6, EXEC, 0x398, 0x1, B6, WARP, 0x0, AVG_DIV_MM, 10, 1),
-   _M2A(IPEC, 0x3, B6, EXEC, 0x398, 0xe, LOGOP, EXEC, 0x398, AVG_DIV_MM, 10, 1),
-   _M2A(INST_REPLAY_OHEAD, 0x3, B6, ISSUE, 0x104, 0x3, B6, EXEC, 0x398, REL_SUM_MM, 100, 1),
-   _M2B(MP_OCCUPANCY, 0x3f, B6, WARP, 0x31483104, 0x01, B6, WARP, 0x0, AVG_DIV_MM, 200, 64),
-   _M2B(MP_EFFICIENCY, 0x01, B6, WARP, 0x0, 0xffff, LOGOP, WARP, 0x0, AVG_DIV_M0, 100, 1),
 };
 
 #undef _Q1A
 #undef _Q1B
-#undef _M2A
-#undef _M2B
 
 /* === PERFORMANCE MONITORING COUNTERS for NVC0:NVE4 === */
 /* NOTES:
@@ -387,7 +353,6 @@ sm20_active_cycles =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x11, 0x000000ff, 0x00000000),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -401,7 +366,6 @@ sm20_active_warps =
    .ctr[4]       = _C(0xaaaa, LOGOP, 0x24, 0x000000ff, 0x00000050),
    .ctr[5]       = _C(0xaaaa, LOGOP, 0x24, 0x000000ff, 0x00000060),
    .num_counters = 6,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -410,7 +374,6 @@ sm20_atom_count =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x63, 0x000000ff, 0x00000030),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -420,7 +383,6 @@ sm20_branch =
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x1a, 0x000000ff, 0x00000000),
    .ctr[1]       = _C(0xaaaa, LOGOP, 0x1a, 0x000000ff, 0x00000010),
    .num_counters = 2,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -430,7 +392,6 @@ sm20_divergent_branch =
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x19, 0x000000ff, 0x00000020),
    .ctr[1]       = _C(0xaaaa, LOGOP, 0x19, 0x000000ff, 0x00000030),
    .num_counters = 2,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -439,7 +400,6 @@ sm20_gld_request =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x64, 0x000000ff, 0x00000030),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -448,7 +408,6 @@ sm20_gred_count =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x63, 0x000000ff, 0x00000040),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -457,7 +416,6 @@ sm20_gst_request =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x64, 0x000000ff, 0x00000060),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -467,7 +425,6 @@ sm20_inst_executed =
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x2d, 0x0000ffff, 0x00001000),
    .ctr[1]       = _C(0xaaaa, LOGOP, 0x2d, 0x0000ffff, 0x00001010),
    .num_counters = 2,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -477,7 +434,6 @@ sm20_inst_issued =
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x27, 0x0000ffff, 0x00007060),
    .ctr[1]       = _C(0xaaaa, LOGOP, 0x27, 0x0000ffff, 0x00007070),
    .num_counters = 2,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -486,7 +442,6 @@ sm20_local_ld =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x64, 0x000000ff, 0x00000020),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -495,7 +450,6 @@ sm20_local_st =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x64, 0x000000ff, 0x00000050),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -504,7 +458,6 @@ sm20_prof_trigger_0 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x01, 0x000000ff, 0x00000000),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -513,7 +466,6 @@ sm20_prof_trigger_1 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x01, 0x000000ff, 0x00000010),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -522,7 +474,6 @@ sm20_prof_trigger_2 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x01, 0x000000ff, 0x00000020),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -531,7 +482,6 @@ sm20_prof_trigger_3 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x01, 0x000000ff, 0x00000030),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -540,7 +490,6 @@ sm20_prof_trigger_4 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x01, 0x000000ff, 0x00000040),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -549,7 +498,6 @@ sm20_prof_trigger_5 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x01, 0x000000ff, 0x00000050),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -558,7 +506,6 @@ sm20_prof_trigger_6 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x01, 0x000000ff, 0x00000060),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -567,7 +514,6 @@ sm20_prof_trigger_7 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x01, 0x000000ff, 0x00000070),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -576,7 +522,6 @@ sm20_shared_ld =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x64, 0x000000ff, 0x00000010),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -585,7 +530,6 @@ sm20_shared_st =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x64, 0x000000ff, 0x00000040),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -599,7 +543,6 @@ sm20_threads_launched =
    .ctr[4]       = _C(0xaaaa, LOGOP, 0x26, 0x000000ff, 0x00000050),
    .ctr[5]       = _C(0xaaaa, LOGOP, 0x26, 0x000000ff, 0x00000060),
    .num_counters = 6,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -613,7 +556,6 @@ sm20_th_inst_executed_0 =
    .ctr[4]       = _C(0xaaaa, LOGOP, 0x2f, 0x000000ff, 0x00000040),
    .ctr[5]       = _C(0xaaaa, LOGOP, 0x2f, 0x000000ff, 0x00000050),
    .num_counters = 6,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -627,7 +569,6 @@ sm20_th_inst_executed_1 =
    .ctr[4]       = _C(0xaaaa, LOGOP, 0x30, 0x000000ff, 0x00000040),
    .ctr[5]       = _C(0xaaaa, LOGOP, 0x30, 0x000000ff, 0x00000050),
    .num_counters = 6,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -636,7 +577,6 @@ sm20_warps_launched =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x26, 0x000000ff, 0x00000000),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -684,7 +624,6 @@ sm21_inst_executed =
    .ctr[1]       = _C(0xaaaa, LOGOP, 0x2d, 0x000000ff, 0x00000010),
    .ctr[2]       = _C(0xaaaa, LOGOP, 0x2d, 0x000000ff, 0x00000020),
    .num_counters = 3,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -693,7 +632,6 @@ sm21_inst_issued1_0 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x7e, 0x000000ff, 0x00000010),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -702,7 +640,6 @@ sm21_inst_issued1_1 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x7e, 0x000000ff, 0x00000040),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -711,7 +648,6 @@ sm21_inst_issued2_0 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x7e, 0x000000ff, 0x00000020),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -720,7 +656,6 @@ sm21_inst_issued2_1 =
 {
    .ctr[0]       = _C(0xaaaa, LOGOP, 0x7e, 0x000000ff, 0x00000050),
    .num_counters = 1,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -734,7 +669,6 @@ sm21_th_inst_executed_0 =
    .ctr[4]       = _C(0xaaaa, LOGOP, 0xa3, 0x000000ff, 0x00000040),
    .ctr[5]       = _C(0xaaaa, LOGOP, 0xa3, 0x000000ff, 0x00000050),
    .num_counters = 6,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -748,7 +682,6 @@ sm21_th_inst_executed_1 =
    .ctr[4]       = _C(0xaaaa, LOGOP, 0xa5, 0x000000ff, 0x00000040),
    .ctr[5]       = _C(0xaaaa, LOGOP, 0xa5, 0x000000ff, 0x00000050),
    .num_counters = 6,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -762,7 +695,6 @@ sm21_th_inst_executed_2 =
    .ctr[4]       = _C(0xaaaa, LOGOP, 0xa4, 0x000000ff, 0x00000040),
    .ctr[5]       = _C(0xaaaa, LOGOP, 0xa4, 0x000000ff, 0x00000050),
    .num_counters = 6,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -776,7 +708,6 @@ sm21_th_inst_executed_3 =
    .ctr[4]       = _C(0xaaaa, LOGOP, 0xa6, 0x000000ff, 0x00000040),
    .ctr[5]       = _C(0xaaaa, LOGOP, 0xa6, 0x000000ff, 0x00000050),
    .num_counters = 6,
-   .op           = NVC0_COUNTER_OPn_SUM,
    .norm         = { 1, 1 },
 };
 
@@ -1006,11 +937,12 @@ nvc0_hw_sm_end_query(struct nvc0_context *nvc0, struct nvc0_hw_query *hq)
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    const bool is_nve4 = screen->base.class_3d >= NVE4_3D_CLASS;
    struct nvc0_hw_sm_query *hsq = nvc0_hw_sm_query(hq);
+   struct pipe_grid_info info = {};
    uint32_t mask;
    uint32_t input[3];
    const uint block[3] = { 32, is_nve4 ? 4 : 1, 1 };
    const uint grid[3] = { screen->mp_count, screen->gpc_count, 1 };
-   unsigned c;
+   unsigned c, i;
 
    if (unlikely(!screen->pm.prog)) {
       struct nvc0_program *prog = CALLOC_STRUCT(nvc0_program);
@@ -1058,7 +990,14 @@ nvc0_hw_sm_end_query(struct nvc0_context *nvc0, struct nvc0_hw_query *hq)
    input[0] = (hq->bo->offset + hq->base_offset);
    input[1] = (hq->bo->offset + hq->base_offset) >> 32;
    input[2] = hq->sequence;
-   pipe->launch_grid(pipe, block, grid, 0, input);
+
+   for (i = 0; i < 3; i++) {
+      info.block[i] = block[i];
+      info.grid[i] = grid[i];
+   }
+   info.pc = 0;
+   info.input = input;
+   pipe->launch_grid(pipe, &info);
 
    nouveau_bufctx_reset(nvc0->bufctx_cp, NVC0_BIND_CP_QUERY);
 
@@ -1146,17 +1085,6 @@ nve4_hw_sm_query_read_data(uint32_t count[32][8],
    return true;
 }
 
-/* Metric calculations:
- * sum(x) ... sum of x over all MPs
- * avg(x) ... average of x over all MPs
- *
- * IPC              : sum(inst_executed) / clock
- * INST_REPLAY_OHEAD: (sum(inst_issued) - sum(inst_executed)) / sum(inst_issued)
- * MP_OCCUPANCY     : avg((active_warps / 64) / active_cycles)
- * MP_EFFICIENCY    : avg(active_cycles / clock)
- *
- * NOTE: Interpretation of IPC requires knowledge of MP count.
- */
 static boolean
 nvc0_hw_sm_get_query_result(struct nvc0_context *nvc0, struct nvc0_hw_query *hq,
                             boolean wait, union pipe_query_result *result)
@@ -1177,62 +1105,10 @@ nvc0_hw_sm_get_query_result(struct nvc0_context *nvc0, struct nvc0_hw_query *hq,
    if (!ret)
       return false;
 
-   if (cfg->op == NVC0_COUNTER_OPn_SUM) {
-      for (c = 0; c < cfg->num_counters; ++c)
-         for (p = 0; p < mp_count; ++p)
-            value += count[p][c];
-      value = (value * cfg->norm[0]) / cfg->norm[1];
-   } else
-   if (cfg->op == NVC0_COUNTER_OPn_OR) {
-      uint32_t v = 0;
-      for (c = 0; c < cfg->num_counters; ++c)
-         for (p = 0; p < mp_count; ++p)
-            v |= count[p][c];
-      value = ((uint64_t)v * cfg->norm[0]) / cfg->norm[1];
-   } else
-   if (cfg->op == NVC0_COUNTER_OPn_AND) {
-      uint32_t v = ~0;
-      for (c = 0; c < cfg->num_counters; ++c)
-         for (p = 0; p < mp_count; ++p)
-            v &= count[p][c];
-      value = ((uint64_t)v * cfg->norm[0]) / cfg->norm[1];
-   } else
-   if (cfg->op == NVC0_COUNTER_OP2_REL_SUM_MM) {
-      uint64_t v[2] = { 0, 0 };
-      for (p = 0; p < mp_count; ++p) {
-         v[0] += count[p][0];
-         v[1] += count[p][1];
-      }
-      if (v[0])
-         value = ((v[0] - v[1]) * cfg->norm[0]) / (v[0] * cfg->norm[1]);
-   } else
-   if (cfg->op == NVC0_COUNTER_OP2_DIV_SUM_M0) {
+   for (c = 0; c < cfg->num_counters; ++c)
       for (p = 0; p < mp_count; ++p)
-         value += count[p][0];
-      if (count[0][1])
-         value = (value * cfg->norm[0]) / (count[0][1] * cfg->norm[1]);
-      else
-         value = 0;
-   } else
-   if (cfg->op == NVC0_COUNTER_OP2_AVG_DIV_MM) {
-      unsigned mp_used = 0;
-      for (p = 0; p < mp_count; ++p, mp_used += !!count[p][0])
-         if (count[p][1])
-            value += (count[p][0] * cfg->norm[0]) / count[p][1];
-      if (mp_used)
-         value /= (uint64_t)mp_used * cfg->norm[1];
-   } else
-   if (cfg->op == NVC0_COUNTER_OP2_AVG_DIV_M0) {
-      unsigned mp_used = 0;
-      for (p = 0; p < mp_count; ++p, mp_used += !!count[p][0])
-         value += count[p][0];
-      if (count[0][1] && mp_used) {
-         value *= cfg->norm[0];
-         value /= (uint64_t)count[0][1] * mp_used * cfg->norm[1];
-      } else {
-         value = 0;
-      }
-   }
+         value += count[p][c];
+   value = (value * cfg->norm[0]) / cfg->norm[1];
 
    *(uint64_t *)result = value;
    return true;
@@ -1253,7 +1129,7 @@ nvc0_hw_sm_create_query(struct nvc0_context *nvc0, unsigned type)
    struct nvc0_hw_query *hq;
    unsigned space;
 
-   if (nvc0->screen->base.device->drm_version < 0x01000101)
+   if (nvc0->screen->base.drm->version < 0x01000101)
       return NULL;
 
    if ((type < NVE4_HW_SM_QUERY(0) || type > NVE4_HW_SM_QUERY_LAST) &&
@@ -1274,6 +1150,11 @@ nvc0_hw_sm_create_query(struct nvc0_context *nvc0, unsigned type)
         * [04] = WS0.C1
         * [08] = WS0.C2
         * [0c] = WS0.C3
+        * [10] = WS1.C0
+        * [14] = WS1.C1
+        * [18] = WS1.C2
+        * [1c] = WS1.C3
+        * [20] = WS2.C0
         * [24] = WS2.C1
         * [28] = WS2.C2
         * [2c] = WS2.C3
@@ -1343,7 +1224,7 @@ nvc0_hw_sm_get_driver_query_info(struct nvc0_screen *screen, unsigned id,
 {
    int count = 0;
 
-   if (screen->base.device->drm_version >= 0x01000101) {
+   if (screen->base.drm->version >= 0x01000101) {
       if (screen->compute) {
          if (screen->base.class_3d == NVE4_3D_CLASS) {
             count += NVE4_HW_SM_QUERY_COUNT;
@@ -1369,8 +1250,6 @@ nvc0_hw_sm_get_driver_query_info(struct nvc0_screen *screen, unsigned id,
          if (screen->base.class_3d == NVE4_3D_CLASS) {
             info->name = nve4_hw_sm_query_names[id];
             info->query_type = NVE4_HW_SM_QUERY(id);
-            info->max_value.u64 =
-               (id < NVE4_HW_SM_QUERY_METRIC_MP_OCCUPANCY) ? 0 : 100;
             info->group_id = NVC0_HW_SM_QUERY_GROUP;
             return 1;
          } else

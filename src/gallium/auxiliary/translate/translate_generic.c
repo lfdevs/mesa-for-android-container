@@ -772,7 +772,7 @@ struct translate *translate_generic_create( const struct translate_key *key )
    struct translate_generic *tg = CALLOC_STRUCT(translate_generic);
    unsigned i;
 
-   if (tg == NULL)
+   if (!tg)
       return NULL;
 
    assert(key->nr_elements <= TRANSLATE_MAX_ATTRIBS);

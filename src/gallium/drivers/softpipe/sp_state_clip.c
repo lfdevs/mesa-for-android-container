@@ -47,15 +47,16 @@ static void
 softpipe_set_viewport_states(struct pipe_context *pipe,
                              unsigned start_slot,
                              unsigned num_viewports,
-                             const struct pipe_viewport_state *viewport)
+                             const struct pipe_viewport_state *viewports)
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);
 
    /* pass the viewport info to the draw module */
    draw_set_viewport_states(softpipe->draw, start_slot, num_viewports,
-                            viewport);
+                            viewports);
 
-   softpipe->viewport = *viewport; /* struct copy */
+   memcpy(softpipe->viewports + start_slot, viewports,
+          sizeof(struct pipe_viewport_state) * num_viewports);
    softpipe->dirty |= SP_NEW_VIEWPORT;
 }
 
@@ -64,13 +65,17 @@ static void
 softpipe_set_scissor_states(struct pipe_context *pipe,
                             unsigned start_slot,
                             unsigned num_scissors,
-                            const struct pipe_scissor_state *scissor)
+                            const struct pipe_scissor_state *scissors)
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);
 
    draw_flush(softpipe->draw);
 
-   softpipe->scissor = *scissor; /* struct copy */
+   debug_assert(start_slot < PIPE_MAX_VIEWPORTS);
+   debug_assert((start_slot + num_scissors) <= PIPE_MAX_VIEWPORTS);
+
+   memcpy(softpipe->scissors + start_slot, scissors,
+          sizeof(struct pipe_scissor_state) * num_scissors);
    softpipe->dirty |= SP_NEW_SCISSOR;
 }
 

@@ -21,17 +21,12 @@
  * IN THE SOFTWARE.
  */
 
-#include "glsl/ir.h"
-#include "glsl/ir_optimization.h"
-#include "glsl/nir/glsl_to_nir.h"
+#include "compiler/glsl/ir.h"
 #include "main/shaderimage.h"
-#include "program/prog_to_nir.h"
 #include "brw_fs.h"
 #include "brw_fs_surface_builder.h"
-#include "brw_vec4_gs_visitor.h"
 #include "brw_nir.h"
-#include "brw_fs_surface_builder.h"
-#include "brw_vec4_gs_visitor.h"
+#include "brw_program.h"
 
 using namespace brw;
 using namespace brw::surface_access;
@@ -48,10 +43,10 @@ fs_visitor::emit_nir_code()
    nir_emit_system_values();
 
    /* get the main function and emit it */
-   nir_foreach_overload(nir, overload) {
-      assert(strcmp(overload->function->name, "main") == 0);
-      assert(overload->impl);
-      nir_emit_impl(overload->impl);
+   nir_foreach_function(nir, function) {
+      assert(strcmp(function->name, "main") == 0);
+      assert(function->impl);
+      nir_emit_impl(function->impl);
    }
 }
 
@@ -128,13 +123,18 @@ fs_visitor::nir_setup_outputs()
 
       switch (stage) {
       case MESA_SHADER_VERTEX:
+      case MESA_SHADER_TESS_EVAL:
       case MESA_SHADER_GEOMETRY: {
          unsigned location = var->data.location;
          nir_setup_single_output_varying(&reg, var->type, &location);
          break;
       }
       case MESA_SHADER_FRAGMENT:
-         if (var->data.index > 0) {
+         if (key->force_dual_color_blend &&
+             var->data.location == FRAG_RESULT_DATA1) {
+            this->dual_src_output = reg;
+            this->do_dual_src = true;
+         } else if (var->data.index > 0) {
             assert(var->data.location == FRAG_RESULT_DATA0);
             assert(var->data.index == 1);
             this->dual_src_output = reg;
@@ -178,7 +178,7 @@ fs_visitor::nir_setup_uniforms()
    if (dispatch_width != 8)
       return;
 
-   uniforms = nir->num_uniforms;
+   uniforms = nir->num_uniforms / 4;
 
    nir_foreach_variable(var, &nir->uniforms) {
       /* UBO's and atomics don't take up space in the uniform file */
@@ -186,7 +186,7 @@ fs_visitor::nir_setup_uniforms()
          continue;
 
       if (type_size_scalar(var->type) > 0)
-         param_size[var->data.driver_location] = type_size_scalar(var->type);
+         param_size[var->data.driver_location / 4] = type_size_scalar(var->type);
    }
 }
 
@@ -224,6 +224,20 @@ emit_system_values_block(nir_block *block, void *void_visitor)
          reg = &v->nir_system_values[SYSTEM_VALUE_INSTANCE_ID];
          if (reg->file == BAD_FILE)
             *reg = *v->emit_vs_system_value(SYSTEM_VALUE_INSTANCE_ID);
+         break;
+
+      case nir_intrinsic_load_base_instance:
+         assert(v->stage == MESA_SHADER_VERTEX);
+         reg = &v->nir_system_values[SYSTEM_VALUE_BASE_INSTANCE];
+         if (reg->file == BAD_FILE)
+            *reg = *v->emit_vs_system_value(SYSTEM_VALUE_BASE_INSTANCE);
+         break;
+
+      case nir_intrinsic_load_draw_id:
+         assert(v->stage == MESA_SHADER_VERTEX);
+         reg = &v->nir_system_values[SYSTEM_VALUE_DRAW_ID];
+         if (reg->file == BAD_FILE)
+            *reg = *v->emit_vs_system_value(SYSTEM_VALUE_DRAW_ID);
          break;
 
       case nir_intrinsic_load_invocation_id:
@@ -342,10 +356,10 @@ fs_visitor::nir_emit_system_values()
       nir_system_values[i] = fs_reg();
    }
 
-   nir_foreach_overload(nir, overload) {
-      assert(strcmp(overload->function->name, "main") == 0);
-      assert(overload->impl);
-      nir_foreach_block(overload->impl, emit_system_values_block, this);
+   nir_foreach_function(nir, function) {
+      assert(strcmp(function->name, "main") == 0);
+      assert(function->impl);
+      nir_foreach_block(function->impl, emit_system_values_block, this);
    }
 }
 
@@ -447,6 +461,9 @@ fs_visitor::nir_emit_instr(nir_instr *instr)
       switch (stage) {
       case MESA_SHADER_VERTEX:
          nir_emit_vs_intrinsic(abld, nir_instr_as_intrinsic(instr));
+         break;
+      case MESA_SHADER_TESS_EVAL:
+         nir_emit_tes_intrinsic(abld, nir_instr_as_intrinsic(instr));
          break;
       case MESA_SHADER_GEOMETRY:
          nir_emit_gs_intrinsic(abld, nir_instr_as_intrinsic(instr));
@@ -846,12 +863,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
    case nir_op_fdot2:
    case nir_op_fdot3:
    case nir_op_fdot4:
-   case nir_op_bany2:
-   case nir_op_bany3:
-   case nir_op_bany4:
-   case nir_op_ball2:
-   case nir_op_ball3:
-   case nir_op_ball4:
    case nir_op_ball_fequal2:
    case nir_op_ball_iequal2:
    case nir_op_ball_fequal3:
@@ -939,28 +950,14 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
    case nir_op_fmin:
    case nir_op_imin:
    case nir_op_umin:
-      if (devinfo->gen >= 6) {
-         inst = bld.emit(BRW_OPCODE_SEL, result, op[0], op[1]);
-         inst->conditional_mod = BRW_CONDITIONAL_L;
-      } else {
-         bld.CMP(bld.null_reg_d(), op[0], op[1], BRW_CONDITIONAL_L);
-         inst = bld.SEL(result, op[0], op[1]);
-         inst->predicate = BRW_PREDICATE_NORMAL;
-      }
+      inst = bld.emit_minmax(result, op[0], op[1], BRW_CONDITIONAL_L);
       inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fmax:
    case nir_op_imax:
    case nir_op_umax:
-      if (devinfo->gen >= 6) {
-         inst = bld.emit(BRW_OPCODE_SEL, result, op[0], op[1]);
-         inst->conditional_mod = BRW_CONDITIONAL_GE;
-      } else {
-         bld.CMP(bld.null_reg_d(), op[0], op[1], BRW_CONDITIONAL_GE);
-         inst = bld.SEL(result, op[0], op[1]);
-         inst->predicate = BRW_PREDICATE_NORMAL;
-      }
+      inst = bld.emit_minmax(result, op[0], op[1], BRW_CONDITIONAL_GE);
       inst->saturate = instr->dest.saturate;
       break;
 
@@ -1020,6 +1017,9 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
 
    case nir_op_ubitfield_extract:
    case nir_op_ibitfield_extract:
+      unreachable("should have been lowered");
+   case nir_op_ubfe:
+   case nir_op_ibfe:
       bld.BFE(result, op[2], op[1], op[0]);
       break;
    case nir_op_bfm:
@@ -1030,8 +1030,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
       break;
 
    case nir_op_bitfield_insert:
-      unreachable("not reached: should be handled by "
-                  "lower_instructions::bitfield_insert_to_bfm_bfi");
+      unreachable("not reached: should have been lowered");
 
    case nir_op_ishl:
       bld.SHL(result, op[0], op[1]);
@@ -1065,6 +1064,22 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
       inst = bld.SEL(result, op[1], op[2]);
       inst->predicate = BRW_PREDICATE_NORMAL;
       break;
+
+   case nir_op_extract_u8:
+   case nir_op_extract_i8: {
+      nir_const_value *byte = nir_src_as_const_value(instr->src[1].src);
+      bld.emit(SHADER_OPCODE_EXTRACT_BYTE,
+               result, op[0], brw_imm_ud(byte->u[0]));
+      break;
+   }
+
+   case nir_op_extract_u16:
+   case nir_op_extract_i16: {
+      nir_const_value *word = nir_src_as_const_value(instr->src[1].src);
+      bld.emit(SHADER_OPCODE_EXTRACT_WORD,
+               result, op[0], brw_imm_ud(word->u[0]));
+      break;
+   }
 
    default:
       unreachable("unhandled instruction");
@@ -1139,7 +1154,7 @@ fs_visitor::get_nir_dest(nir_dest dest)
 fs_reg
 fs_visitor::get_nir_image_deref(const nir_deref_var *deref)
 {
-   fs_reg image(UNIFORM, deref->var->data.driver_location,
+   fs_reg image(UNIFORM, deref->var->data.driver_location / 4,
                 BRW_REGISTER_TYPE_UD);
 
    for (const nir_deref *tail = &deref->deref; tail->child;
@@ -1170,7 +1185,7 @@ fs_visitor::get_nir_image_deref(const nir_deref_var *deref)
             bld.MOV(tmp, get_nir_src(deref_array->indirect));
          }
 
-         bld.MUL(tmp, tmp, brw_imm_ud(element_size));
+         bld.MUL(tmp, tmp, brw_imm_ud(element_size * 4));
          if (image.reladdr)
             bld.ADD(*image.reladdr, *image.reladdr, tmp);
          else
@@ -1206,7 +1221,7 @@ fs_visitor::emit_percomp(const fs_builder &bld, const fs_inst &inst,
 static brw_reg_type
 get_image_base_type(const glsl_type *type)
 {
-   switch ((glsl_base_type)type->sampler_type) {
+   switch ((glsl_base_type)type->sampled_type) {
    case GLSL_TYPE_UINT:
       return BRW_REGISTER_TYPE_UD;
    case GLSL_TYPE_INT:
@@ -1608,28 +1623,30 @@ fs_visitor::emit_gs_vertex(const nir_src &vertex_count_nir_src,
 void
 fs_visitor::emit_gs_input_load(const fs_reg &dst,
                                const nir_src &vertex_src,
-                               const fs_reg &indirect_offset,
-                               unsigned imm_offset,
+                               unsigned base_offset,
+                               const nir_src &offset_src,
                                unsigned num_components)
 {
    struct brw_gs_prog_data *gs_prog_data = (struct brw_gs_prog_data *) prog_data;
+
+   nir_const_value *vertex_const = nir_src_as_const_value(vertex_src);
+   nir_const_value *offset_const = nir_src_as_const_value(offset_src);
+   const unsigned push_reg_count = gs_prog_data->base.urb_read_length * 8;
 
    /* Offset 0 is the VUE header, which contains VARYING_SLOT_LAYER [.y],
     * VARYING_SLOT_VIEWPORT [.z], and VARYING_SLOT_PSIZ [.w].  Only
     * gl_PointSize is available as a GS input, however, so it must be that.
     */
-   const bool is_point_size =
-      indirect_offset.file == BAD_FILE && imm_offset == 0;
+   const bool is_point_size = (base_offset == 0);
 
-   nir_const_value *vertex_const = nir_src_as_const_value(vertex_src);
-   const unsigned push_reg_count = gs_prog_data->base.urb_read_length * 8;
-
-   if (indirect_offset.file == BAD_FILE && vertex_const != NULL &&
-       4 * imm_offset < push_reg_count) {
-      imm_offset = 4 * imm_offset + vertex_const->u[0] * push_reg_count;
+   if (offset_const != NULL && vertex_const != NULL &&
+       4 * (base_offset + offset_const->u[0]) < push_reg_count) {
+      int imm_offset = (base_offset + offset_const->u[0]) * 4 +
+                       vertex_const->u[0] * push_reg_count;
       /* This input was pushed into registers. */
       if (is_point_size) {
          /* gl_PointSize comes in .w */
+         assert(imm_offset == 0);
          bld.MOV(dst, fs_reg(ATTR, imm_offset + 3, dst.type));
       } else {
          for (unsigned i = 0; i < num_components; i++) {
@@ -1688,21 +1705,21 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
       }
 
       fs_inst *inst;
-      if (indirect_offset.file == BAD_FILE) {
+      if (offset_const) {
          /* Constant indexing - use global offset. */
          inst = bld.emit(SHADER_OPCODE_URB_READ_SIMD8, dst, icp_handle);
-         inst->offset = imm_offset;
+         inst->offset = base_offset + offset_const->u[0];
          inst->base_mrf = -1;
          inst->mlen = 1;
          inst->regs_written = num_components;
       } else {
          /* Indirect indexing - use per-slot offsets as well. */
-         const fs_reg srcs[] = { icp_handle, indirect_offset };
+         const fs_reg srcs[] = { icp_handle, get_nir_src(offset_src) };
          fs_reg payload = bld.vgrf(BRW_REGISTER_TYPE_UD, 2);
          bld.LOAD_PAYLOAD(payload, srcs, ARRAY_SIZE(srcs), 0);
 
          inst = bld.emit(SHADER_OPCODE_URB_READ_SIMD8_PER_SLOT, dst, payload);
-         inst->offset = imm_offset;
+         inst->offset = base_offset;
          inst->base_mrf = -1;
          inst->mlen = 2;
          inst->regs_written = num_components;
@@ -1716,6 +1733,24 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
          bld.MOV(dst, offset(tmp, bld, 3));
       }
    }
+}
+
+fs_reg
+fs_visitor::get_indirect_offset(nir_intrinsic_instr *instr)
+{
+   nir_src *offset_src = nir_get_io_offset_src(instr);
+   nir_const_value *const_value = nir_src_as_const_value(*offset_src);
+
+   if (const_value) {
+      /* The only constant offset we should find is 0.  brw_nir.c's
+       * add_const_offset_to_base() will fold other constant offsets
+       * into instr->const_index[0].
+       */
+      assert(const_value->u[0] == 0);
+      return fs_reg();
+   }
+
+   return get_nir_src(*offset_src);
 }
 
 void
@@ -1734,7 +1769,9 @@ fs_visitor::nir_emit_vs_intrinsic(const fs_builder &bld,
 
    case nir_intrinsic_load_vertex_id_zero_base:
    case nir_intrinsic_load_base_vertex:
-   case nir_intrinsic_load_instance_id: {
+   case nir_intrinsic_load_instance_id:
+   case nir_intrinsic_load_base_instance:
+   case nir_intrinsic_load_draw_id: {
       gl_system_value sv = nir_system_value_from_intrinsic(instr->intrinsic);
       fs_reg val = nir_system_values[sv];
       assert(val.file != BAD_FILE);
@@ -1743,6 +1780,127 @@ fs_visitor::nir_emit_vs_intrinsic(const fs_builder &bld,
       break;
    }
 
+   default:
+      nir_emit_intrinsic(bld, instr);
+      break;
+   }
+}
+
+void
+fs_visitor::nir_emit_tes_intrinsic(const fs_builder &bld,
+                                   nir_intrinsic_instr *instr)
+{
+   assert(stage == MESA_SHADER_TESS_EVAL);
+   struct brw_tes_prog_data *tes_prog_data = (struct brw_tes_prog_data *) prog_data;
+
+   fs_reg dest;
+   if (nir_intrinsic_infos[instr->intrinsic].has_dest)
+      dest = get_nir_dest(instr->dest);
+
+   switch (instr->intrinsic) {
+   case nir_intrinsic_load_primitive_id:
+      bld.MOV(dest, fs_reg(brw_vec1_grf(0, 1)));
+      break;
+   case nir_intrinsic_load_tess_coord:
+      /* gl_TessCoord is part of the payload in g1-3 */
+      for (unsigned i = 0; i < 3; i++) {
+         bld.MOV(offset(dest, bld, i), fs_reg(brw_vec8_grf(1 + i, 0)));
+      }
+      break;
+
+   case nir_intrinsic_load_tess_level_outer:
+      /* When the TES reads gl_TessLevelOuter, we ensure that the patch header
+       * appears as a push-model input.  So, we can simply use the ATTR file
+       * rather than issuing URB read messages.  The data is stored in the
+       * high DWords in reverse order - DWord 7 contains .x, DWord 6 contains
+       * .y, and so on.
+       */
+      switch (tes_prog_data->domain) {
+      case BRW_TESS_DOMAIN_QUAD:
+         for (unsigned i = 0; i < 4; i++)
+            bld.MOV(offset(dest, bld, i), component(fs_reg(ATTR, 0), 7 - i));
+         break;
+      case BRW_TESS_DOMAIN_TRI:
+         for (unsigned i = 0; i < 3; i++)
+            bld.MOV(offset(dest, bld, i), component(fs_reg(ATTR, 0), 7 - i));
+         break;
+      case BRW_TESS_DOMAIN_ISOLINE:
+         for (unsigned i = 0; i < 2; i++)
+            bld.MOV(offset(dest, bld, i), component(fs_reg(ATTR, 0), 7 - i));
+         break;
+      }
+      break;
+
+   case nir_intrinsic_load_tess_level_inner:
+      /* When the TES reads gl_TessLevelInner, we ensure that the patch header
+       * appears as a push-model input.  So, we can simply use the ATTR file
+       * rather than issuing URB read messages.
+       */
+      switch (tes_prog_data->domain) {
+      case BRW_TESS_DOMAIN_QUAD:
+         bld.MOV(dest, component(fs_reg(ATTR, 0), 3));
+         bld.MOV(offset(dest, bld, 1), component(fs_reg(ATTR, 0), 2));
+         break;
+      case BRW_TESS_DOMAIN_TRI:
+         bld.MOV(dest, component(fs_reg(ATTR, 0), 4));
+         break;
+      case BRW_TESS_DOMAIN_ISOLINE:
+         /* ignore - value is undefined */
+         break;
+      }
+      break;
+
+   case nir_intrinsic_load_input:
+   case nir_intrinsic_load_per_vertex_input: {
+      fs_reg indirect_offset = get_indirect_offset(instr);
+      unsigned imm_offset = instr->const_index[0];
+
+      fs_inst *inst;
+      if (indirect_offset.file == BAD_FILE) {
+         /* Arbitrarily only push up to 32 vec4 slots worth of data,
+          * which is 16 registers (since each holds 2 vec4 slots).
+          */
+         const unsigned max_push_slots = 32;
+         if (imm_offset < max_push_slots) {
+            fs_reg src = fs_reg(ATTR, imm_offset / 2, dest.type);
+            for (int i = 0; i < instr->num_components; i++) {
+               bld.MOV(offset(dest, bld, i),
+                       component(src, 4 * (imm_offset % 2) + i));
+            }
+            tes_prog_data->base.urb_read_length =
+               MAX2(tes_prog_data->base.urb_read_length,
+                    DIV_ROUND_UP(imm_offset + 1, 2));
+         } else {
+            /* Replicate the patch handle to all enabled channels */
+            const fs_reg srcs[] = {
+               retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UD)
+            };
+            fs_reg patch_handle = bld.vgrf(BRW_REGISTER_TYPE_UD, 1);
+            bld.LOAD_PAYLOAD(patch_handle, srcs, ARRAY_SIZE(srcs), 0);
+
+            inst = bld.emit(SHADER_OPCODE_URB_READ_SIMD8, dest, patch_handle);
+            inst->mlen = 1;
+            inst->offset = imm_offset;
+            inst->base_mrf = -1;
+            inst->regs_written = instr->num_components;
+         }
+      } else {
+         /* Indirect indexing - use per-slot offsets as well. */
+         const fs_reg srcs[] = {
+            retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UD),
+            indirect_offset
+         };
+         fs_reg payload = bld.vgrf(BRW_REGISTER_TYPE_UD, 2);
+         bld.LOAD_PAYLOAD(payload, srcs, ARRAY_SIZE(srcs), 0);
+
+         inst = bld.emit(SHADER_OPCODE_URB_READ_SIMD8_PER_SLOT, dest, payload);
+         inst->mlen = 2;
+         inst->offset = imm_offset;
+         inst->base_mrf = -1;
+         inst->regs_written = instr->num_components;
+      }
+      break;
+   }
    default:
       nir_emit_intrinsic(bld, instr);
       break;
@@ -1768,17 +1926,12 @@ fs_visitor::nir_emit_gs_intrinsic(const fs_builder &bld,
               retype(fs_reg(brw_vec8_grf(2, 0)), BRW_REGISTER_TYPE_UD));
       break;
 
-   case nir_intrinsic_load_input_indirect:
    case nir_intrinsic_load_input:
       unreachable("load_input intrinsics are invalid for the GS stage");
 
-   case nir_intrinsic_load_per_vertex_input_indirect:
-      indirect_offset = retype(get_nir_src(instr->src[1]), BRW_REGISTER_TYPE_D);
-      /* fallthrough */
    case nir_intrinsic_load_per_vertex_input:
-      emit_gs_input_load(dest, instr->src[0],
-                         indirect_offset, instr->const_index[0],
-                         instr->num_components);
+      emit_gs_input_load(dest, instr->src[0], instr->const_index[0],
+                         instr->src[1], instr->num_components);
       break;
 
    case nir_intrinsic_emit_vertex_with_counter:
@@ -2098,6 +2251,37 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
       break;
    }
 
+   case nir_intrinsic_shared_atomic_add:
+      nir_emit_shared_atomic(bld, BRW_AOP_ADD, instr);
+      break;
+   case nir_intrinsic_shared_atomic_imin:
+      nir_emit_shared_atomic(bld, BRW_AOP_IMIN, instr);
+      break;
+   case nir_intrinsic_shared_atomic_umin:
+      nir_emit_shared_atomic(bld, BRW_AOP_UMIN, instr);
+      break;
+   case nir_intrinsic_shared_atomic_imax:
+      nir_emit_shared_atomic(bld, BRW_AOP_IMAX, instr);
+      break;
+   case nir_intrinsic_shared_atomic_umax:
+      nir_emit_shared_atomic(bld, BRW_AOP_UMAX, instr);
+      break;
+   case nir_intrinsic_shared_atomic_and:
+      nir_emit_shared_atomic(bld, BRW_AOP_AND, instr);
+      break;
+   case nir_intrinsic_shared_atomic_or:
+      nir_emit_shared_atomic(bld, BRW_AOP_OR, instr);
+      break;
+   case nir_intrinsic_shared_atomic_xor:
+      nir_emit_shared_atomic(bld, BRW_AOP_XOR, instr);
+      break;
+   case nir_intrinsic_shared_atomic_exchange:
+      nir_emit_shared_atomic(bld, BRW_AOP_MOV, instr);
+      break;
+   case nir_intrinsic_shared_atomic_comp_swap:
+      nir_emit_shared_atomic(bld, BRW_AOP_CMPWR, instr);
+      break;
+
    default:
       nir_emit_intrinsic(bld, instr);
       break;
@@ -2110,8 +2294,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
    fs_reg dest;
    if (nir_intrinsic_infos[instr->intrinsic].has_dest)
       dest = get_nir_dest(instr->dest);
-
-   bool has_indirect = false;
 
    switch (instr->intrinsic) {
    case nir_intrinsic_atomic_counter_inc:
@@ -2301,27 +2483,27 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       bld.MOV(retype(dest, BRW_REGISTER_TYPE_D), brw_imm_d(1));
       break;
 
-   case nir_intrinsic_load_uniform_indirect:
-      has_indirect = true;
-      /* fallthrough */
    case nir_intrinsic_load_uniform: {
-      fs_reg uniform_reg(UNIFORM, instr->const_index[0]);
-      uniform_reg.reg_offset = instr->const_index[1];
+      /* Offsets are in bytes but they should always be multiples of 4 */
+      assert(instr->const_index[0] % 4 == 0);
+
+      fs_reg src(UNIFORM, instr->const_index[0] / 4, dest.type);
+
+      nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
+      if (const_offset) {
+         /* Offsets are in bytes but they should always be multiples of 4 */
+         assert(const_offset->u[0] % 4 == 0);
+         src.reg_offset = const_offset->u[0] / 4;
+      } else {
+         src.reladdr = new(mem_ctx) fs_reg(get_nir_src(instr->src[0]));
+      }
 
       for (unsigned j = 0; j < instr->num_components; j++) {
-         fs_reg src = offset(retype(uniform_reg, dest.type), bld, j);
-         if (has_indirect)
-            src.reladdr = new(mem_ctx) fs_reg(get_nir_src(instr->src[0]));
-
-         bld.MOV(dest, src);
-         dest = offset(dest, bld, 1);
+         bld.MOV(offset(dest, bld, j), offset(src, bld, j));
       }
       break;
    }
 
-   case nir_intrinsic_load_ubo_indirect:
-      has_indirect = true;
-      /* fallthrough */
    case nir_intrinsic_load_ubo: {
       nir_const_value *const_index = nir_src_as_const_value(instr->src[0]);
       fs_reg surf_index;
@@ -2349,24 +2531,24 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
                                nir->info.num_ubos - 1);
       }
 
-      if (has_indirect) {
+      nir_const_value *const_offset = nir_src_as_const_value(instr->src[1]);
+      if (const_offset == NULL) {
          fs_reg base_offset = retype(get_nir_src(instr->src[1]),
                                      BRW_REGISTER_TYPE_D);
 
-         unsigned vec4_offset = instr->const_index[0];
          for (int i = 0; i < instr->num_components; i++)
             VARYING_PULL_CONSTANT_LOAD(bld, offset(dest, bld, i), surf_index,
-                                       base_offset, vec4_offset + i * 4);
+                                       base_offset, i * 4);
       } else {
          fs_reg packed_consts = vgrf(glsl_type::float_type);
          packed_consts.type = dest.type;
 
-         struct brw_reg const_offset_reg = brw_imm_ud(instr->const_index[0] & ~15);
+         struct brw_reg const_offset_reg = brw_imm_ud(const_offset->u[0] & ~15);
          bld.emit(FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD, packed_consts,
                   surf_index, const_offset_reg);
 
          for (unsigned i = 0; i < instr->num_components; i++) {
-            packed_consts.set_smear(instr->const_index[0] % 16 / 4 + i);
+            packed_consts.set_smear(const_offset->u[0] % 16 / 4 + i);
 
             /* The std140 packing rules don't allow vectors to cross 16-byte
              * boundaries, and a reg is 32 bytes.
@@ -2380,9 +2562,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       break;
    }
 
-   case nir_intrinsic_load_ssbo_indirect:
-      has_indirect = true;
-      /* fallthrough */
    case nir_intrinsic_load_ssbo: {
       assert(devinfo->gen >= 7);
 
@@ -2408,12 +2587,12 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
                                nir->info.num_ssbos - 1);
       }
 
-      /* Get the offset to read from */
       fs_reg offset_reg;
-      if (has_indirect) {
-         offset_reg = get_nir_src(instr->src[1]);
+      nir_const_value *const_offset = nir_src_as_const_value(instr->src[1]);
+      if (const_offset) {
+         offset_reg = brw_imm_ud(const_offset->u[0]);
       } else {
-         offset_reg = brw_imm_ud(instr->const_index[0]);
+         offset_reg = get_nir_src(instr->src[1]);
       }
 
       /* Read the vector */
@@ -2428,30 +2607,101 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       break;
    }
 
-   case nir_intrinsic_load_input_indirect:
-      unreachable("Not allowed");
-      /* fallthrough */
-   case nir_intrinsic_load_input: {
-      unsigned index = 0;
-      for (unsigned j = 0; j < instr->num_components; j++) {
-         fs_reg src;
-         if (stage == MESA_SHADER_VERTEX) {
-            src = offset(fs_reg(ATTR, instr->const_index[0], dest.type), bld, index);
-         } else {
-            src = offset(retype(nir_inputs, dest.type), bld,
-                         instr->const_index[0] + index);
-         }
-         index++;
+   case nir_intrinsic_load_shared: {
+      assert(devinfo->gen >= 7);
 
-         bld.MOV(dest, src);
-         dest = offset(dest, bld, 1);
+      fs_reg surf_index = brw_imm_ud(GEN7_BTI_SLM);
+
+      /* Get the offset to read from */
+      fs_reg offset_reg;
+      nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
+      if (const_offset) {
+         offset_reg = brw_imm_ud(instr->const_index[0] + const_offset->u[0]);
+      } else {
+         offset_reg = vgrf(glsl_type::uint_type);
+         bld.ADD(offset_reg,
+                 retype(get_nir_src(instr->src[0]), BRW_REGISTER_TYPE_UD),
+                 brw_imm_ud(instr->const_index[0]));
+      }
+
+      /* Read the vector */
+      fs_reg read_result = emit_untyped_read(bld, surf_index, offset_reg,
+                                             1 /* dims */,
+                                             instr->num_components,
+                                             BRW_PREDICATE_NONE);
+      read_result.type = dest.type;
+      for (int i = 0; i < instr->num_components; i++)
+         bld.MOV(offset(dest, bld, i), offset(read_result, bld, i));
+
+      break;
+   }
+
+   case nir_intrinsic_store_shared: {
+      assert(devinfo->gen >= 7);
+
+      /* Block index */
+      fs_reg surf_index = brw_imm_ud(GEN7_BTI_SLM);
+
+      /* Value */
+      fs_reg val_reg = get_nir_src(instr->src[0]);
+
+      /* Writemask */
+      unsigned writemask = instr->const_index[1];
+
+      /* Combine groups of consecutive enabled channels in one write
+       * message. We use ffs to find the first enabled channel and then ffs on
+       * the bit-inverse, down-shifted writemask to determine the length of
+       * the block of enabled bits.
+       */
+      while (writemask) {
+         unsigned first_component = ffs(writemask) - 1;
+         unsigned length = ffs(~(writemask >> first_component)) - 1;
+         fs_reg offset_reg;
+
+         nir_const_value *const_offset = nir_src_as_const_value(instr->src[1]);
+         if (const_offset) {
+            offset_reg = brw_imm_ud(instr->const_index[0] + const_offset->u[0] +
+                                    4 * first_component);
+         } else {
+            offset_reg = vgrf(glsl_type::uint_type);
+            bld.ADD(offset_reg,
+                    retype(get_nir_src(instr->src[1]), BRW_REGISTER_TYPE_UD),
+                    brw_imm_ud(instr->const_index[0] + 4 * first_component));
+         }
+
+         emit_untyped_write(bld, surf_index, offset_reg,
+                            offset(val_reg, bld, first_component),
+                            1 /* dims */, length,
+                            BRW_PREDICATE_NONE);
+
+         /* Clear the bits in the writemask that we just wrote, then try
+          * again to see if more channels are left.
+          */
+         writemask &= (15 << (first_component + length));
+      }
+
+      break;
+   }
+
+   case nir_intrinsic_load_input: {
+      fs_reg src;
+      if (stage == MESA_SHADER_VERTEX) {
+         src = fs_reg(ATTR, instr->const_index[0], dest.type);
+      } else {
+         src = offset(retype(nir_inputs, dest.type), bld,
+                      instr->const_index[0]);
+      }
+
+      nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
+      assert(const_offset && "Indirect input loads not allowed");
+      src = offset(src, bld, const_offset->u[0]);
+
+      for (unsigned j = 0; j < instr->num_components; j++) {
+         bld.MOV(offset(dest, bld, j), offset(src, bld, j));
       }
       break;
    }
 
-   case nir_intrinsic_store_ssbo_indirect:
-      has_indirect = true;
-      /* fallthrough */
    case nir_intrinsic_store_ssbo: {
       assert(devinfo->gen >= 7);
 
@@ -2478,7 +2728,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       fs_reg val_reg = get_nir_src(instr->src[0]);
 
       /* Writemask */
-      unsigned writemask = instr->const_index[1];
+      unsigned writemask = instr->const_index[0];
 
       /* Combine groups of consecutive enabled channels in one write
        * message. We use ffs to find the first enabled channel and then ffs on
@@ -2488,10 +2738,11 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       while (writemask) {
          unsigned first_component = ffs(writemask) - 1;
          unsigned length = ffs(~(writemask >> first_component)) - 1;
-         fs_reg offset_reg;
 
-         if (!has_indirect) {
-            offset_reg = brw_imm_ud(instr->const_index[0] + 4 * first_component);
+         fs_reg offset_reg;
+         nir_const_value *const_offset = nir_src_as_const_value(instr->src[2]);
+         if (const_offset) {
+            offset_reg = brw_imm_ud(const_offset->u[0] + 4 * first_component);
          } else {
             offset_reg = vgrf(glsl_type::uint_type);
             bld.ADD(offset_reg,
@@ -2512,18 +2763,17 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       break;
    }
 
-   case nir_intrinsic_store_output_indirect:
-      unreachable("Not allowed");
-      /* fallthrough */
    case nir_intrinsic_store_output: {
       fs_reg src = get_nir_src(instr->src[0]);
-      unsigned index = 0;
+      fs_reg new_dest = offset(retype(nir_outputs, src.type), bld,
+                               instr->const_index[0]);
+
+      nir_const_value *const_offset = nir_src_as_const_value(instr->src[1]);
+      assert(const_offset && "Indirect output stores not allowed");
+      new_dest = offset(new_dest, bld, const_offset->u[0]);
+
       for (unsigned j = 0; j < instr->num_components; j++) {
-         fs_reg new_dest = offset(retype(nir_outputs, src.type), bld,
-                                  instr->const_index[0] + index);
-         index++;
-         bld.MOV(new_dest, src);
-         src = offset(src, bld, 1);
+         bld.MOV(offset(new_dest, bld, j), offset(src, bld, j));
       }
       break;
    }
@@ -2647,20 +2897,46 @@ fs_visitor::nir_emit_ssbo_atomic(const fs_builder &bld,
 }
 
 void
+fs_visitor::nir_emit_shared_atomic(const fs_builder &bld,
+                                   int op, nir_intrinsic_instr *instr)
+{
+   fs_reg dest;
+   if (nir_intrinsic_infos[instr->intrinsic].has_dest)
+      dest = get_nir_dest(instr->dest);
+
+   fs_reg surface = brw_imm_ud(GEN7_BTI_SLM);
+   fs_reg offset = get_nir_src(instr->src[0]);
+   fs_reg data1 = get_nir_src(instr->src[1]);
+   fs_reg data2;
+   if (op == BRW_AOP_CMPWR)
+      data2 = get_nir_src(instr->src[2]);
+
+   /* Emit the actual atomic operation operation */
+
+   fs_reg atomic_result =
+      surface_access::emit_untyped_atomic(bld, surface, offset,
+                                          data1, data2,
+                                          1 /* dims */, 1 /* rsize */,
+                                          op,
+                                          BRW_PREDICATE_NONE);
+   dest.type = atomic_result.type;
+   bld.MOV(dest, atomic_result);
+}
+
+void
 fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
 {
+   unsigned texture = instr->texture_index;
    unsigned sampler = instr->sampler_index;
+   fs_reg texture_reg(brw_imm_ud(texture));
    fs_reg sampler_reg(brw_imm_ud(sampler));
 
    int gather_component = instr->component;
-
-   bool is_rect = instr->sampler_dim == GLSL_SAMPLER_DIM_RECT;
 
    bool is_cube_array = instr->sampler_dim == GLSL_SAMPLER_DIM_CUBE &&
                         instr->is_array;
 
    int lod_components = 0;
-   int UNUSED offset_components = 0;
 
    fs_reg coordinate, shadow_comparitor, lod, lod2, sample_index, mcs, tex_offset;
 
@@ -2708,19 +2984,24 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
       case nir_tex_src_ms_index:
          sample_index = retype(src, BRW_REGISTER_TYPE_UD);
          break;
-      case nir_tex_src_offset:
-         tex_offset = retype(src, BRW_REGISTER_TYPE_D);
-         if (instr->is_array)
-            offset_components = instr->coord_components - 1;
-         else
-            offset_components = instr->coord_components;
+
+      case nir_tex_src_offset: {
+         nir_const_value *const_offset =
+            nir_src_as_const_value(instr->src[i].src);
+         if (const_offset) {
+            tex_offset = brw_imm_ud(brw_texture_offset(const_offset->i, 3));
+         } else {
+            tex_offset = retype(src, BRW_REGISTER_TYPE_D);
+         }
          break;
+      }
+
       case nir_tex_src_projector:
          unreachable("should be lowered");
 
-      case nir_tex_src_sampler_offset: {
-         /* Figure out the highest possible sampler index and mark it as used */
-         uint32_t max_used = sampler + instr->sampler_array_size - 1;
+      case nir_tex_src_texture_offset: {
+         /* Figure out the highest possible texture index and mark it as used */
+         uint32_t max_used = texture + instr->texture_array_size - 1;
          if (instr->op == nir_texop_tg4 && devinfo->gen < 8) {
             max_used += stage_prog_data->binding_table.gather_texture_start;
          } else {
@@ -2728,6 +3009,14 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
          }
          brw_mark_surface_used(prog_data, max_used);
 
+         /* Emit code to evaluate the actual indexing expression */
+         texture_reg = vgrf(glsl_type::uint_type);
+         bld.ADD(texture_reg, src, brw_imm_ud(texture));
+         texture_reg = bld.emit_uniformize(texture_reg);
+         break;
+      }
+
+      case nir_tex_src_sampler_offset: {
          /* Emit code to evaluate the actual indexing expression */
          sampler_reg = vgrf(glsl_type::uint_type);
          bld.ADD(sampler_reg, src, brw_imm_ud(sampler));
@@ -2743,18 +3032,10 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
    if (instr->op == nir_texop_txf_ms ||
        instr->op == nir_texop_samples_identical) {
       if (devinfo->gen >= 7 &&
-          key_tex->compressed_multisample_layout_mask & (1 << sampler)) {
-         mcs = emit_mcs_fetch(coordinate, instr->coord_components, sampler_reg);
+          key_tex->compressed_multisample_layout_mask & (1 << texture)) {
+         mcs = emit_mcs_fetch(coordinate, instr->coord_components, texture_reg);
       } else {
          mcs = brw_imm_ud(0u);
-      }
-   }
-
-   for (unsigned i = 0; i < 3; i++) {
-      if (instr->const_offset[i] != 0) {
-         assert(offset_components == 0);
-         tex_offset = brw_imm_ud(brw_texture_offset(instr->const_offset, 3));
-         break;
       }
    }
 
@@ -2781,7 +3062,7 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
       fs_reg dst = retype(get_nir_dest(instr->dest), BRW_REGISTER_TYPE_D);
       fs_inst *inst = bld.emit(SHADER_OPCODE_SAMPLEINFO, dst,
                                bld.vgrf(BRW_REGISTER_TYPE_D, 1),
-                               sampler_reg);
+                               texture_reg, texture_reg);
       inst->mlen = 1;
       inst->header_size = 1;
       inst->base_mrf = -1;
@@ -2794,8 +3075,8 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
 
    emit_texture(op, dest_type, coordinate, instr->coord_components,
                 shadow_comparitor, lod, lod2, lod_components, sample_index,
-                tex_offset, mcs, gather_component,
-                is_cube_array, is_rect, sampler, sampler_reg);
+                tex_offset, mcs, gather_component, is_cube_array,
+                texture, texture_reg, sampler, sampler_reg);
 
    fs_reg dest = get_nir_dest(instr->dest);
    dest.type = this->result.type;

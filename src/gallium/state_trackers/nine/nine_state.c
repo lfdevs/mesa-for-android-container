@@ -23,6 +23,7 @@
 
 #include "device9.h"
 #include "basetexture9.h"
+#include "buffer9.h"
 #include "indexbuffer9.h"
 #include "surface9.h"
 #include "vertexdeclaration9.h"
@@ -260,6 +261,7 @@ prepare_vs_constants_userbuf(struct NineDevice9 *device)
         u_upload_data(device->constbuf_uploader,
                       0,
                       cb.buffer_size,
+                      device->constbuf_alignment,
                       cb.user_buffer,
                       &cb.buffer_offset,
                       &cb.buffer);
@@ -336,6 +338,7 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
         u_upload_data(device->constbuf_uploader,
                       0,
                       cb.buffer_size,
+                      device->constbuf_alignment,
                       cb.user_buffer,
                       &cb.buffer_offset,
                       &cb.buffer);
@@ -365,14 +368,14 @@ prepare_vs(struct NineDevice9 *device, uint8_t shader_changed)
     uint32_t changed_group = 0;
     int has_key_changed = 0;
 
-    if (likely(vs))
+    if (likely(state->programmable_vs))
         has_key_changed = NineVertexShader9_UpdateKey(vs, state);
 
     if (!shader_changed && !has_key_changed)
         return 0;
 
     /* likely because we dislike FF */
-    if (likely(vs)) {
+    if (likely(state->programmable_vs)) {
         state->cso.vs = NineVertexShader9_GetVariant(vs);
     } else {
         vs = device->ff.vs;
@@ -425,8 +428,8 @@ prepare_ps(struct NineDevice9 *device, uint8_t shader_changed)
 
 /* State preparation + State commit */
 
-static uint32_t
-update_framebuffer(struct NineDevice9 *device)
+static void
+update_framebuffer(struct NineDevice9 *device, bool is_clear)
 {
     struct pipe_context *pipe = device->pipe;
     struct nine_state *state = &device->state;
@@ -436,7 +439,8 @@ update_framebuffer(struct NineDevice9 *device)
     unsigned w = rt0->desc.Width;
     unsigned h = rt0->desc.Height;
     D3DMULTISAMPLE_TYPE nr_samples = rt0->desc.MultiSampleType;
-    unsigned mask = state->ps ? state->ps->rt_mask : 1;
+    unsigned ps_mask = state->ps ? state->ps->rt_mask : 1;
+    unsigned mask = is_clear ? 0xf : ps_mask;
     const int sRGB = state->rs[D3DRS_SRGBWRITEENABLE] ? 1 : 0;
 
     DBG("\n");
@@ -496,13 +500,13 @@ update_framebuffer(struct NineDevice9 *device)
 
     pipe->set_framebuffer_state(pipe, fb); /* XXX: cso ? */
 
-    return state->changed.group;
+    if (is_clear && state->rt_mask == ps_mask)
+        state->changed.group &= ~NINE_STATE_FB;
 }
 
 static void
 update_viewport(struct NineDevice9 *device)
 {
-    struct pipe_context *pipe = device->pipe;
     const D3DVIEWPORT9 *vport = &device->state.viewport;
     struct pipe_viewport_state pvport;
 
@@ -541,7 +545,7 @@ update_viewport(struct NineDevice9 *device)
         pvport.translate[1] -= 1.0f / 128.0f;
     }
 
-    pipe->set_viewport_states(pipe, 0, 1, &pvport);
+    cso_set_viewport(device->cso, &pvport);
 }
 
 /* Loop through VS inputs and pick the vertex elements with the declared
@@ -565,7 +569,7 @@ update_vertex_elements(struct NineDevice9 *device)
     state->stream_usage_mask = 0;
     memset(vdecl_index_map, -1, 16);
     memset(used_streams, 0, device->caps.MaxStreams);
-    vs = device->state.vs ? device->state.vs : device->ff.vs;
+    vs = state->programmable_vs ? device->state.vs : device->ff.vs;
 
     if (vdecl) {
         for (n = 0; n < vs->num_inputs; ++n) {
@@ -759,7 +763,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
         cso_single_sampler_done(device->cso, PIPE_SHADER_FRAGMENT);
 
     commit_samplers = FALSE;
-    sampler_mask = state->vs ? state->vs->sampler_mask : 0;
+    sampler_mask = state->programmable_vs ? state->vs->sampler_mask : 0;
     state->bound_samplers_mask_vs = 0;
     for (num_textures = 0, i = 0; i < NINE_MAX_SAMPLERS_VS; ++i) {
         const unsigned s = NINE_SAMPLER_VS(i);
@@ -852,7 +856,7 @@ commit_vs_constants(struct NineDevice9 *device)
 {
     struct pipe_context *pipe = device->pipe;
 
-    if (unlikely(!device->state.vs))
+    if (unlikely(!device->state.programmable_vs))
         pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, &device->state.pipe.cb_vs_ff);
     else
         pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, &device->state.pipe.cb_vs);
@@ -911,7 +915,8 @@ commit_ps(struct NineDevice9 *device)
     NINE_STATE_DSA |      \
     NINE_STATE_VIEWPORT | \
     NINE_STATE_VDECL |    \
-    NINE_STATE_IDXBUF)
+    NINE_STATE_IDXBUF |   \
+    NINE_STATE_STREAMFREQ)
 
 #define NINE_STATE_RARE      \
    (NINE_STATE_SCISSOR |     \
@@ -931,17 +936,25 @@ validate_textures(struct NineDevice9 *device)
     }
 }
 
+static void
+update_managed_buffers(struct NineDevice9 *device)
+{
+    struct NineBuffer9 *buf, *ptr;
+    LIST_FOR_EACH_ENTRY_SAFE(buf, ptr, &device->update_buffers, managed.list) {
+        list_delinit(&buf->managed.list);
+        NineBuffer9_Upload(buf);
+    }
+}
+
 void
-nine_update_state_framebuffer(struct NineDevice9 *device)
+nine_update_state_framebuffer_clear(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
 
     validate_textures(device);
 
     if (state->changed.group & NINE_STATE_FB)
-        update_framebuffer(device);
-
-    state->changed.group &= ~NINE_STATE_FB;
+        update_framebuffer(device, TRUE);
 }
 
 boolean
@@ -960,9 +973,10 @@ nine_update_state(struct NineDevice9 *device)
      * may be dirty anyway, even if no texture bindings changed.
      */
     validate_textures(device); /* may clobber state */
+    update_managed_buffers(device);
 
     /* ff_update may change VS/PS dirty bits */
-    if (unlikely(!state->vs || !state->ps))
+    if (unlikely(!state->programmable_vs || !state->ps))
         nine_ff_update(device);
     group = state->changed.group;
 
@@ -975,15 +989,14 @@ nine_update_state(struct NineDevice9 *device)
 
     if (group & (NINE_STATE_COMMON | NINE_STATE_VS)) {
         if (group & NINE_STATE_FB)
-            group |= update_framebuffer(device); /* may set NINE_STATE_RASTERIZER */
+            update_framebuffer(device, FALSE);
         if (group & NINE_STATE_BLEND)
             prepare_blend(device);
         if (group & NINE_STATE_DSA)
             prepare_dsa(device);
         if (group & NINE_STATE_VIEWPORT)
             update_viewport(device);
-        if ((group & (NINE_STATE_VDECL | NINE_STATE_VS)) ||
-            state->changed.stream_freq & ~1)
+        if (group & (NINE_STATE_VDECL | NINE_STATE_VS | NINE_STATE_STREAMFREQ))
             update_vertex_elements(device);
         if (group & NINE_STATE_IDXBUF)
             commit_index_buffer(device);
@@ -995,12 +1008,12 @@ nine_update_state(struct NineDevice9 *device)
         if (group & (NINE_STATE_TEXTURE | NINE_STATE_SAMPLER))
             update_textures_and_samplers(device);
         if (device->prefer_user_constbuf) {
-            if ((group & (NINE_STATE_VS_CONST | NINE_STATE_VS)) && state->vs)
+            if ((group & (NINE_STATE_VS_CONST | NINE_STATE_VS)) && state->programmable_vs)
                 prepare_vs_constants_userbuf(device);
             if ((group & (NINE_STATE_PS_CONST | NINE_STATE_PS)) && state->ps)
                 prepare_ps_constants_userbuf(device);
         } else {
-            if ((group & NINE_STATE_VS_CONST) && state->vs)
+            if ((group & NINE_STATE_VS_CONST) && state->programmable_vs)
                 upload_constants(device, PIPE_SHADER_VERTEX);
             if ((group & NINE_STATE_PS_CONST) && state->ps)
                 upload_constants(device, PIPE_SHADER_FRAGMENT);
@@ -1260,6 +1273,8 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
      */
     state->rs[D3DRS_POINTSIZE_MAX] = fui(caps->MaxPointSize);
 
+    memcpy(state->rs_advertised, state->rs, sizeof(state->rs));
+
     /* Set changed flags to initialize driver.
      */
     state->changed.group = NINE_STATE_ALL;
@@ -1312,8 +1327,10 @@ nine_state_clear(struct nine_state *state, const boolean device)
     nine_bind(&state->vs, NULL);
     nine_bind(&state->ps, NULL);
     nine_bind(&state->vdecl, NULL);
-    for (i = 0; i < PIPE_MAX_ATTRIBS; ++i)
+    for (i = 0; i < PIPE_MAX_ATTRIBS; ++i) {
         nine_bind(&state->stream[i], NULL);
+        pipe_resource_reference(&state->vtxbuf[i].buffer, NULL);
+    }
     nine_bind(&state->idxbuf, NULL);
     for (i = 0; i < NINE_MAX_SAMPLERS; ++i) {
         if (device &&

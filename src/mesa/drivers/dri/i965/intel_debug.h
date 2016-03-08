@@ -71,6 +71,7 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_NO_COMPACTION       (1ull << 35)
 #define DEBUG_TCS                 (1ull << 36)
 #define DEBUG_TES                 (1ull << 37)
+#define DEBUG_L3                  (1ull << 38)
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"
@@ -120,5 +121,3 @@ extern uint64_t INTEL_DEBUG;
 extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);
 
 extern void brw_process_intel_debug_variable(void);
-
-extern bool brw_env_var_as_boolean(const char *var_name, bool default_value);

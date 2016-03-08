@@ -248,7 +248,6 @@ lp_build_tgsi_inst_llvm(
    /* Ignore deprecated instructions */
    switch (inst->Instruction.Opcode) {
 
-   case TGSI_OPCODE_UP2H:
    case TGSI_OPCODE_UP2US:
    case TGSI_OPCODE_UP4B:
    case TGSI_OPCODE_UP4UB:

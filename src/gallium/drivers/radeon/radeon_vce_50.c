@@ -95,7 +95,7 @@ static void encode(struct rvce_encoder *enc)
 	enc->task_info(enc, 0x00000003, dep, 0, bs_idx);
 
 	RVCE_BEGIN(0x05000001); // context buffer
-	RVCE_READWRITE(enc->cpb.res->cs_buf, enc->cpb.res->domains, 0); // encodeContextAddressHi/Lo
+	RVCE_READWRITE(enc->cpb.res->buf, enc->cpb.res->domains, 0); // encodeContextAddressHi/Lo
 	RVCE_END();
 
 	bs_offset = -(signed)(bs_idx * enc->bs_size);

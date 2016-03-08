@@ -56,6 +56,9 @@ NineSurface9_ctor( struct NineSurface9 *This,
                    D3DSURFACE_DESC *pDesc )
 {
     HRESULT hr;
+    union pipe_color_union rgba = {0};
+    struct pipe_surface *surf;
+    struct pipe_context *pipe = pParams->device->pipe;
 
     DBG("This=%p pDevice=%p pResource=%p Level=%u Layer=%u pDesc=%p\n",
         This, pParams->device, pResource, Level, Layer, pDesc);
@@ -94,7 +97,8 @@ NineSurface9_ctor( struct NineSurface9 *This,
                                                          This->base.info.target,
                                                          This->base.info.nr_samples,
                                                          This->base.info.bind,
-                                                         FALSE);
+                                                         FALSE,
+                                                         pDesc->Pool == D3DPOOL_SCRATCH);
 
     if (pDesc->Usage & D3DUSAGE_RENDERTARGET)
         This->base.info.bind |= PIPE_BIND_RENDER_TARGET;
@@ -113,13 +117,10 @@ NineSurface9_ctor( struct NineSurface9 *This,
             return E_OUTOFMEMORY;
     }
 
-    if (pDesc->Pool == D3DPOOL_SYSTEMMEM) {
-        This->base.info.usage = PIPE_USAGE_STAGING;
-        assert(!pResource);
-    } else {
-        if (pResource && (pDesc->Usage & D3DUSAGE_DYNAMIC))
-            pResource->flags |= NINE_RESOURCE_FLAG_LOCKABLE;
-    }
+    assert(pDesc->Pool != D3DPOOL_SYSTEMMEM || !pResource);
+
+    if (pResource && (pDesc->Usage & D3DUSAGE_DYNAMIC))
+        pResource->flags |= NINE_RESOURCE_FLAG_LOCKABLE;
 
     hr = NineResource9_ctor(&This->base, pParams, pResource, FALSE, D3DRTYPE_SURFACE,
                             pDesc->Pool, pDesc->Usage);
@@ -140,6 +141,12 @@ NineSurface9_ctor( struct NineSurface9 *This,
     if (pResource && NineSurface9_IsOffscreenPlain(This))
         pResource->flags |= NINE_RESOURCE_FLAG_LOCKABLE;
 
+    /* TODO: investigate what else exactly needs to be cleared */
+    if (This->base.resource && (pDesc->Usage & D3DUSAGE_RENDERTARGET)) {
+        surf = NineSurface9_GetSurface(This, 0);
+        pipe->clear_render_target(pipe, surf, &rgba, 0, 0, pDesc->Width, pDesc->Height);
+    }
+
     NineSurface9_Dump(This);
 
     return D3D_OK;
@@ -156,7 +163,7 @@ NineSurface9_dtor( struct NineSurface9 *This )
 
     /* Release system memory when we have to manage it (no parent) */
     if (!This->base.base.container && This->data)
-        FREE(This->data);
+        align_free(This->data);
     NineResource9_dtor(&This->base);
 }
 
@@ -218,7 +225,7 @@ NineSurface9_Dump( struct NineSurface9 *This )
 }
 #endif /* DEBUG */
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_GetContainer( struct NineSurface9 *This,
                            REFIID riid,
                            void **ppContainer )
@@ -251,7 +258,7 @@ NineSurface9_MarkContainerDirty( struct NineSurface9 *This )
     }
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_GetDesc( struct NineSurface9 *This,
                       D3DSURFACE_DESC *pDesc )
 {
@@ -306,7 +313,7 @@ NineSurface9_GetSystemMemPointer(struct NineSurface9 *This, int x, int y)
     return This->data + (y * This->stride + x_offset);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_LockRect( struct NineSurface9 *This,
                        D3DLOCKED_RECT *pLockedRect,
                        const RECT *pRect,
@@ -348,7 +355,7 @@ NineSurface9_LockRect( struct NineSurface9 *This,
                 D3DERR_INVALIDCALL);
 
     if (pRect && This->desc.Pool == D3DPOOL_DEFAULT &&
-        compressed_format (This->desc.Format)) {
+        util_format_is_compressed(This->base.info.format)) {
         const unsigned w = util_format_get_blockwidth(This->base.info.format);
         const unsigned h = util_format_get_blockheight(This->base.info.format);
         user_assert((pRect->left == 0 && pRect->right == This->desc.Width &&
@@ -384,8 +391,8 @@ NineSurface9_LockRect( struct NineSurface9 *This,
          * and bpp 8, and the app has a workaround to work with the fact
          * that it is actually compressed. */
         if (is_ATI1_ATI2(This->base.info.format)) {
-            pLockedRect->Pitch = This->desc.Height;
-            pLockedRect->pBits = This->data + box.y * This->desc.Height + box.x;
+            pLockedRect->Pitch = This->desc.Width;
+            pLockedRect->pBits = This->data + box.y * This->desc.Width + box.x;
         } else {
             pLockedRect->Pitch = This->stride;
             pLockedRect->pBits = NineSurface9_GetSystemMemPointer(This,
@@ -417,7 +424,7 @@ NineSurface9_LockRect( struct NineSurface9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_UnlockRect( struct NineSurface9 *This )
 {
     DBG("This=%p lock_count=%u\n", This, This->lock_count);
@@ -430,14 +437,14 @@ NineSurface9_UnlockRect( struct NineSurface9 *This )
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_GetDC( struct NineSurface9 *This,
                     HDC *phdc )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSurface9_ReleaseDC( struct NineSurface9 *This,
                         HDC hdc )
 {

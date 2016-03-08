@@ -326,7 +326,7 @@ static void validate_destroy( struct draw_stage *stage )
 struct draw_stage *draw_validate_stage( struct draw_context *draw )
 {
    struct draw_stage *stage = CALLOC_STRUCT(draw_stage);
-   if (stage == NULL)
+   if (!stage)
       return NULL;
 
    stage->draw = draw;

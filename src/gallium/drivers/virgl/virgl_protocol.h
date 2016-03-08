@@ -388,6 +388,8 @@ enum virgl_context_cmd {
 #define VIRGL_CMD_BLIT_S0_MASK(x) (((x) & 0xff) << 0)
 #define VIRGL_CMD_BLIT_S0_FILTER(x) (((x) & 0x3) << 8)
 #define VIRGL_CMD_BLIT_S0_SCISSOR_ENABLE(x) (((x) & 0x1) << 10)
+#define VIRGL_CMD_BLIT_S0_RENDER_CONDITION_ENABLE(x) (((x) & 0x1) << 11)
+#define VIRGL_CMD_BLIT_S0_ALPHA_BLEND(x) (((x) & 0x1) << 12)
 #define VIRGL_CMD_BLIT_SCISSOR_MINX_MINY 2
 #define VIRGL_CMD_BLIT_SCISSOR_MAXX_MAXY 3
 #define VIRGL_CMD_BLIT_DST_RES_HANDLE 4

@@ -118,8 +118,10 @@ create_pass_manager(struct gallivm_state *gallivm)
     * simple, or constant propagation into them, etc.
     */
 
+#if HAVE_LLVM < 0x0309
    // Old versions of LLVM get the DataLayout from the pass manager.
    LLVMAddTargetData(gallivm->target, gallivm->passmgr);
+#endif
 
    /* Setting the module's DataLayout to an empty string will cause the
     * ExecutionEngine to copy to the DataLayout string from its target

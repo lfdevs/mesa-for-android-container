@@ -388,8 +388,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -435,6 +433,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -886,9 +885,10 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+@BUILD_SHARED_FALSE@clean-local:
 clean: clean-am
 
-clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
+clean-am: clean-generic clean-libLTLIBRARIES clean-libtool clean-local \
 	mostlyclean-am
 
 distclean: distclean-am
@@ -959,8 +959,8 @@ uninstall-am: uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 .MAKE: install-am install-strip
 
 .PHONY: all all-am all-local check check-am clean clean-generic \
-	clean-libLTLIBRARIES clean-libtool cscopelist-am ctags-am \
-	distclean distclean-compile distclean-generic \
+	clean-libLTLIBRARIES clean-libtool clean-local cscopelist-am \
+	ctags-am distclean distclean-compile distclean-generic \
 	distclean-libtool distdir dvi dvi-am html html-am info info-am \
 	install install-am install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
@@ -976,9 +976,9 @@ uninstall-am: uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 .PRECIOUS: Makefile
 
 
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .libs/install-gallium-links
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .install-gallium-links
 
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-gallium-links : $(dri_LTLIBRARIES) $(egl_LTLIBRARIES) $(lib_LTLIBRARIES)
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.install-gallium-links : $(dri_LTLIBRARIES) $(egl_LTLIBRARIES) $(lib_LTLIBRARIES)
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $(top_builddir)/$(LIB_DIR);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	link_dir=$(top_builddir)/$(LIB_DIR)/gallium;		\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	if test x$(egl_LTLIBRARIES) != x; then			\
@@ -995,6 +995,16 @@ uninstall-am: uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			ln -f $$f $$link_dir;			\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		fi;						\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	done && touch $@
+
+@BUILD_SHARED_TRUE@clean-local:
+@BUILD_SHARED_TRUE@	for f in $(notdir $(dri_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)) \
+@BUILD_SHARED_TRUE@		 $(notdir $(egl_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)) \
+@BUILD_SHARED_TRUE@		 $(notdir $(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)); do \
+@BUILD_SHARED_TRUE@		echo $$f; \
+@BUILD_SHARED_TRUE@		$(RM) $(top_builddir)/$(LIB_DIR)/gallium/$$f;   \
+@BUILD_SHARED_TRUE@	done;
+@BUILD_SHARED_TRUE@	rmdir $(top_builddir)/$(LIB_DIR)/gallium || true
+@BUILD_SHARED_TRUE@	$(RM) .install-gallium-links
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

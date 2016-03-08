@@ -87,6 +87,7 @@ DominatorTree::DominatorTree(Graph *cfgraph) : cfg(cfgraph),
       LABEL(i) = i;
       SEMI(i) = ANCESTOR(i) = -1;
    }
+   assert(i == count);
 
    build();
 

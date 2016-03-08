@@ -302,7 +302,7 @@ draw_vs_create_variant_generic( struct draw_vertex_shader *vs,
    struct translate_key fetch, emit;
 
    struct draw_vs_variant_generic *vsvg = CALLOC_STRUCT( draw_vs_variant_generic );
-   if (vsvg == NULL)
+   if (!vsvg)
       return NULL;
 
    vsvg->base.key = *key;

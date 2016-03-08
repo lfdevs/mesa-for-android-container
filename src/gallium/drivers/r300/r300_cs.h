@@ -108,9 +108,9 @@
 
 #define OUT_CS_RELOC(r) do { \
     assert((r)); \
-    assert((r)->cs_buf); \
+    assert((r)->buf); \
     OUT_CS(0xc0001000); /* PKT3_NOP */ \
-    OUT_CS(cs_winsys->cs_lookup_buffer(cs_copy, (r)->cs_buf) * 4); \
+    OUT_CS(cs_winsys->cs_lookup_buffer(cs_copy, (r)->buf) * 4); \
 } while (0)
 
 

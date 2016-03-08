@@ -5,6 +5,7 @@
 #include "pipe/p_state.h"
 #include "tgsi/tgsi_text.h"
 #include "util/u_debug.h"
+#include "util/u_debug_image.h"
 #include "util/u_memory.h"
 #include "state_tracker/graw.h"
 

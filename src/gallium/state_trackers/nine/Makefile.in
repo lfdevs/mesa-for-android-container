@@ -117,15 +117,16 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libninetracker_la_LIBADD =
 am__objects_1 = adapter9.lo authenticatedchannel9.lo basetexture9.lo \
-	cryptosession9.lo cubetexture9.lo device9.lo device9ex.lo \
-	device9video.lo guid.lo indexbuffer9.lo iunknown.lo \
-	nine_debug.lo nine_dump.lo nineexoverlayextension.lo \
-	nine_ff.lo nine_helpers.lo nine_lock.lo nine_pipe.lo \
-	nine_quirk.lo nine_shader.lo nine_state.lo pixelshader9.lo \
-	query9.lo resource9.lo stateblock9.lo surface9.lo \
-	swapchain9.lo swapchain9ex.lo texture9.lo threadpool.lo \
-	vertexbuffer9.lo vertexdeclaration9.lo vertexshader9.lo \
-	volume9.lo volumetexture9.lo
+	buffer9.lo cryptosession9.lo cubetexture9.lo device9.lo \
+	device9ex.lo device9video.lo guid.lo indexbuffer9.lo \
+	iunknown.lo nine_debug.lo nine_dump.lo \
+	nineexoverlayextension.lo nine_ff.lo nine_helpers.lo \
+	nine_lock.lo nine_pipe.lo nine_quirk.lo nine_shader.lo \
+	nine_state.lo pixelshader9.lo query9.lo resource9.lo \
+	stateblock9.lo surface9.lo swapchain9.lo swapchain9ex.lo \
+	texture9.lo threadpool.lo vertexbuffer9.lo \
+	vertexdeclaration9.lo vertexshader9.lo volume9.lo \
+	volumetexture9.lo
 am_libninetracker_la_OBJECTS = $(am__objects_1)
 libninetracker_la_OBJECTS = $(am_libninetracker_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -320,8 +321,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -367,6 +366,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -491,6 +491,8 @@ C_SOURCES := \
 	authenticatedchannel9.h \
 	basetexture9.c \
 	basetexture9.h \
+	buffer9.c \
+	buffer9.h \
 	cryptosession9.c \
 	cryptosession9.h \
 	cubetexture9.c \
@@ -516,8 +518,10 @@ C_SOURCES := \
 	nineexoverlayextension.h \
 	nine_ff.c \
 	nine_ff.h \
+	nine_flags.h \
 	nine_helpers.c \
 	nine_helpers.h \
+	nine_limits.h \
 	nine_lock.c \
 	nine_lock.h \
 	nine_pdata.h \
@@ -689,6 +693,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/adapter9.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/authenticatedchannel9.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/basetexture9.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/buffer9.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cryptosession9.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cubetexture9.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/device9.Plo@am__quote@

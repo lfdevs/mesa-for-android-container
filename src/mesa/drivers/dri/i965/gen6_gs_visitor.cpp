@@ -30,6 +30,7 @@
  */
 
 #include "gen6_gs_visitor.h"
+#include "brw_eu.h"
 
 namespace brw {
 

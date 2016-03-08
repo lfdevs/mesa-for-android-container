@@ -194,7 +194,7 @@ lp_build_min_simple(struct lp_build_context *bld,
       }
    }
 
-   if(intrinsic) {
+   if (intrinsic) {
       /* We need to handle nan's for floating point numbers. If one of the
        * inputs is nan the other should be returned (required by both D3D10+
        * and OpenCL).
@@ -376,7 +376,7 @@ lp_build_max_simple(struct lp_build_context *bld,
      }
    }
 
-   if(intrinsic) {
+   if (intrinsic) {
       if (util_cpu_caps.has_sse && type.floating &&
           nan_behavior != GALLIVM_NAN_BEHAVIOR_UNDEFINED &&
           nan_behavior != GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN &&
@@ -518,7 +518,7 @@ lp_build_add(struct lp_build_context *bld,
          }
       }
    
-      if(intrinsic)
+      if (intrinsic)
          return lp_build_intrinsic_binary(builder, intrinsic, lp_build_vec_type(bld->gallivm, bld->type), a, b);
    }
 
@@ -810,7 +810,7 @@ lp_build_sub(struct lp_build_context *bld,
          }
       }
    
-      if(intrinsic)
+      if (intrinsic)
          return lp_build_intrinsic_binary(builder, intrinsic, lp_build_vec_type(bld->gallivm, bld->type), a, b);
    }
 
@@ -3287,7 +3287,7 @@ lp_build_log2_approx(struct lp_build_context *bld,
       logexp = LLVMBuildSIToFP(builder, logexp, vec_type, "");
    }
 
-   if(p_log2) {
+   if (p_log2) {
       /* mant = 1 + (float) mantissa(x) */
       mant = LLVMBuildAnd(builder, i, mantmask, "");
       mant = LLVMBuildOr(builder, mant, one, "");
@@ -3335,15 +3335,15 @@ lp_build_log2_approx(struct lp_build_context *bld,
       }
    }
 
-   if(p_exp) {
+   if (p_exp) {
       exp = LLVMBuildBitCast(builder, exp, vec_type, "");
       *p_exp = exp;
    }
 
-   if(p_floor_log2)
+   if (p_floor_log2)
       *p_floor_log2 = logexp;
 
-   if(p_log2)
+   if (p_log2)
       *p_log2 = res;
 }
 

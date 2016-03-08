@@ -29,7 +29,6 @@
   *   Keith Whitwell <keithw@vmware.com>
   */
 
-#include "main/glheader.h"
 #include "main/macros.h"
 #include "main/enums.h"
 #include "program/program.h"
@@ -307,7 +306,7 @@ void brw_clip_tri( struct brw_clip_compile *c )
 	    brw_MOV(p, c->reg.plane_equation, deref_4f(plane_ptr, 0));
 	 else
 	    brw_MOV(p, c->reg.plane_equation, deref_4b(plane_ptr, 0));
-	
+
 	 brw_MOV(p, c->reg.loopcount, c->reg.nr_verts);
 	 brw_MOV(p, c->reg.nr_verts, brw_imm_ud(0));
 
@@ -352,7 +351,7 @@ void brw_clip_tri( struct brw_clip_compile *c )
 		  brw_MOV(p, get_addr_reg(vtxOut), brw_imm_uw(0) );
 	       }
 	       brw_ENDIF(p);
-	
+
 	    }
 	    brw_ELSE(p);
 	    {
@@ -392,11 +391,11 @@ void brw_clip_tri( struct brw_clip_compile *c )
 		  brw_ADD(p, get_addr_reg(outlist_ptr), get_addr_reg(outlist_ptr), brw_imm_uw(sizeof(short)));
 		  brw_ADD(p, c->reg.nr_verts, c->reg.nr_verts, brw_imm_ud(1));
 		  brw_MOV(p, get_addr_reg(vtxOut), brw_imm_uw(0) );
-	       } 	
+	       }
 	       brw_ENDIF(p);
 	    }
 	    brw_ENDIF(p);
-	
+
 	    /* vtxPrev = vtx;
 	     * inlist_ptr++;
 	     */

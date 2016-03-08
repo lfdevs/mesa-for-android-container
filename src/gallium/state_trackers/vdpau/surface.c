@@ -183,16 +183,9 @@ vlVdpVideoSurfaceSize(vlVdpSurface *p_surf, int component,
    *width = p_surf->templat.width;
    *height = p_surf->templat.height;
 
-   if (component > 0) {
-      if (p_surf->templat.chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420) {
-         *width /= 2;
-         *height /= 2;
-      } else if (p_surf->templat.chroma_format == PIPE_VIDEO_CHROMA_FORMAT_422) {
-         *width /= 2;
-      }
-   }
-   if (p_surf->templat.interlaced)
-      *height /= 2;
+   vl_video_buffer_adjust_size(width, height, component,
+                               p_surf->templat.chroma_format,
+                               p_surf->templat.interlaced);
 }
 
 /**

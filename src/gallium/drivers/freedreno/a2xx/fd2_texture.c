@@ -106,6 +106,9 @@ fd2_sampler_states_bind(struct pipe_context *pctx,
 		unsigned shader, unsigned start,
 		unsigned nr, void **hwcso)
 {
+	if (!hwcso)
+		nr = 0;
+
 	if (shader == PIPE_SHADER_FRAGMENT) {
 		struct fd_context *ctx = fd_context(pctx);
 

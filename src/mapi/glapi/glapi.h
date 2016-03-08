@@ -61,7 +61,7 @@ extern "C" {
 #    else
 #      define _GLAPI_EXPORT __declspec(dllimport)
 #    endif
-#  elif defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
+#  elif defined(__GNUC__)
 #    define _GLAPI_EXPORT __attribute__((visibility("default")))
 #  else
 #    define _GLAPI_EXPORT
@@ -158,8 +158,10 @@ _GLAPI_EXPORT const char *
 _glapi_get_proc_name(unsigned int offset);
 
 
+#ifdef GLX_USE_APPLEGL
 _GLAPI_EXPORT struct _glapi_table *
 _glapi_create_table_from_handle(void *handle, const char *symbol_prefix);
+#endif
 
 
 _GLAPI_EXPORT void

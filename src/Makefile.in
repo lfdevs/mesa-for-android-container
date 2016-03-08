@@ -110,7 +110,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@NEED_OPENGL_COMMON_TRUE@am__append_1 = glsl mesa
+@NEED_OPENGL_COMMON_TRUE@am__append_1 = mesa
 @HAVE_DRI_GLX_TRUE@am__append_2 = glx
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_3 = egl/wayland/wayland-egl egl/wayland/wayland-drm
 @HAVE_GBM_TRUE@am__append_4 = gbm
@@ -221,8 +221,8 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = . gtest util mapi/glapi/gen mapi glsl mesa loader glx \
-	egl/wayland/wayland-egl egl/wayland/wayland-drm gbm egl \
+DIST_SUBDIRS = . gtest util mapi/glapi/gen mapi compiler mesa loader \
+	glx egl/wayland/wayland-egl egl/wayland/wayland-drm gbm egl \
 	gallium
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/bin/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -375,8 +375,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -422,6 +420,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -539,8 +538,10 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = . gtest util mapi/glapi/gen mapi $(am__append_1) loader \
-	$(am__append_2) $(am__append_3) $(am__append_4) \
+
+# include only conditionally ?
+SUBDIRS = . gtest util mapi/glapi/gen mapi compiler $(am__append_1) \
+	loader $(am__append_2) $(am__append_3) $(am__append_4) \
 	$(am__append_5) $(am__append_6)
 EXTRA_DIST = \
 	getopt hgl SConscript

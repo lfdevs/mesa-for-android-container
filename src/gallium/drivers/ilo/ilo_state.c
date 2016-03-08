@@ -376,7 +376,7 @@ finalize_cbuf_state(struct ilo_context *ilo,
       if (cbuf->cso[i].resource)
          continue;
 
-      u_upload_data(ilo->uploader, 0, cbuf->cso[i].info.size,
+      u_upload_data(ilo->uploader, 0, cbuf->cso[i].info.size, 16,
             cbuf->cso[i].user_buffer, &offset, &cbuf->cso[i].resource);
 
       cbuf->cso[i].info.vma = ilo_resource_get_vma(cbuf->cso[i].resource);
@@ -426,12 +426,12 @@ finalize_index_buffer(struct ilo_context *ilo)
       unsigned hw_offset;
 
       if (vec->ib.state.user_buffer) {
-         u_upload_data(ilo->uploader, 0, size,
+         u_upload_data(ilo->uploader, 0, size, 16,
                vec->ib.state.user_buffer + offset,
                &hw_offset, &vec->ib.hw_resource);
       } else {
          u_upload_buffer(ilo->uploader, 0,
-               vec->ib.state.offset + offset, size, vec->ib.state.buffer,
+               vec->ib.state.offset + offset, size, 16, vec->ib.state.buffer,
                &hw_offset, &vec->ib.hw_resource);
       }
 
@@ -1851,7 +1851,7 @@ ilo_set_sampler_views(struct pipe_context *pipe, unsigned shader,
 static void
 ilo_set_shader_images(struct pipe_context *pipe, unsigned shader,
                       unsigned start, unsigned count,
-                      struct pipe_image_view **views)
+                      struct pipe_image_view *views)
 {
 #if 0
    struct ilo_state_vector *vec = &ilo_context(pipe)->state_vector;

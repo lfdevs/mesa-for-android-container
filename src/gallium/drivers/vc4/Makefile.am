@@ -27,7 +27,7 @@ SIM_LDFLAGS = -lsimpenrose
 endif
 
 AM_CFLAGS = \
-	-I$(top_builddir)/src/glsl/nir \
+	-I$(top_builddir)/src/compiler/nir \
 	$(LIBDRM_CFLAGS) \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(SIM_CFLAGS) \

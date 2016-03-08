@@ -207,7 +207,7 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
         /* If the resource is multisampled, we need to resolve to single
          * sample.  This seems like it should be handled at a higher layer.
          */
-        if (prsc->nr_samples) {
+        if (prsc->nr_samples > 1) {
                 trans->ss_resource = vc4_get_temp_resource(pctx, prsc, box);
                 if (!trans->ss_resource)
                         goto fail;
@@ -377,7 +377,7 @@ vc4_setup_slices(struct vc4_resource *rsc)
 
                 if (!rsc->tiled) {
                         slice->tiling = VC4_TILING_FORMAT_LINEAR;
-                        if (prsc->nr_samples) {
+                        if (prsc->nr_samples > 1) {
                                 /* MSAA (4x) surfaces are stored as raw tile buffer contents. */
                                 level_width = align(level_width, 32);
                                 level_height = align(level_height, 32);
@@ -458,7 +458,7 @@ vc4_resource_setup(struct pipe_screen *pscreen,
         prsc->screen = pscreen;
 
         rsc->base.vtbl = &vc4_resource_vtbl;
-        if (prsc->nr_samples == 0)
+        if (prsc->nr_samples <= 1)
                 rsc->cpp = util_format_get_blocksize(tmpl->format);
         else
                 rsc->cpp = sizeof(uint32_t);
@@ -475,7 +475,7 @@ get_resource_texture_format(struct pipe_resource *prsc)
         uint8_t format = vc4_get_tex_format(prsc->format);
 
         if (!rsc->tiled) {
-                if (prsc->nr_samples) {
+                if (prsc->nr_samples > 1) {
                         return ~0;
                 } else {
                         assert(format == VC4_TEXTURE_TYPE_RGBA8888);
@@ -497,7 +497,7 @@ vc4_resource_create(struct pipe_screen *pscreen,
          * communicate metadata about tiling currently.
          */
         if (tmpl->target == PIPE_BUFFER ||
-            tmpl->nr_samples ||
+            tmpl->nr_samples > 1 ||
             (tmpl->bind & (PIPE_BIND_SCANOUT |
                            PIPE_BIND_LINEAR |
                            PIPE_BIND_SHARED |
@@ -832,7 +832,7 @@ vc4_dump_surface(struct pipe_surface *psurf)
         if (!psurf)
                 return;
 
-        if (psurf->texture->nr_samples)
+        if (psurf->texture->nr_samples > 1)
                 vc4_dump_surface_msaa(psurf);
         else
                 vc4_dump_surface_non_msaa(psurf);
@@ -921,7 +921,7 @@ vc4_get_shadow_index_buffer(struct pipe_context *pctx,
 
         void *data;
         struct pipe_resource *shadow_rsc = NULL;
-        u_upload_alloc(vc4->uploader, 0, count * 2,
+        u_upload_alloc(vc4->uploader, 0, count * 2, 4,
                        shadow_offset, &shadow_rsc, &data);
         uint16_t *dst = data;
 

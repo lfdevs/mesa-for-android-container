@@ -27,8 +27,6 @@
 
 #include "brw_context.h"
 #include "intel_batchbuffer.h"
-#include "intel_reg.h"
-#include "utils.h"
 
 /**
  * Test if we can use MI_LOAD_REGISTER_MEM from an untrusted batchbuffer.
@@ -40,8 +38,11 @@
 static bool
 can_do_pipelined_register_writes(struct brw_context *brw)
 {
-   /* Supposedly, Broadwell just works. */
-   if (brw->gen >= 8)
+   /**
+    * gen >= 8 specifically allows these writes. gen <= 6 also
+    * doesn't block them.
+    */
+   if (brw->gen != 7)
       return true;
 
    static int result = -1;
@@ -202,6 +203,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.ARB_point_sprite = true;
    ctx->Extensions.ARB_seamless_cube_map = true;
    ctx->Extensions.ARB_shader_bit_encoding = true;
+   ctx->Extensions.ARB_shader_draw_parameters = true;
    ctx->Extensions.ARB_shader_texture_lod = true;
    ctx->Extensions.ARB_shadow = true;
    ctx->Extensions.ARB_sync = true;
@@ -319,6 +321,8 @@ intelInitExtensions(struct gl_context *ctx)
    }
 
    brw->predicate.supported = false;
+   brw->can_do_pipelined_register_writes =
+      can_do_pipelined_register_writes(brw);
 
    if (brw->gen >= 7) {
       ctx->Extensions.ARB_conservative_depth = true;
@@ -330,16 +334,21 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_shader_image_load_store = true;
       ctx->Extensions.ARB_shader_image_size = true;
       ctx->Extensions.ARB_shader_texture_image_samples = true;
+      ctx->Extensions.ARB_tessellation_shader = true;
       ctx->Extensions.ARB_texture_compression_bptc = true;
       ctx->Extensions.ARB_texture_view = true;
       ctx->Extensions.ARB_shader_storage_buffer_object = true;
       ctx->Extensions.EXT_shader_samples_identical = true;
 
-      if (can_do_pipelined_register_writes(brw)) {
+      if (brw->can_do_pipelined_register_writes) {
          ctx->Extensions.ARB_draw_indirect = true;
          ctx->Extensions.ARB_transform_feedback2 = true;
          ctx->Extensions.ARB_transform_feedback3 = true;
          ctx->Extensions.ARB_transform_feedback_instanced = true;
+
+         if ((brw->gen >= 8 || brw->intelScreen->cmd_parser_version >= 5) &&
+             ctx->Const.MaxComputeWorkGroupSize[0] >= 1024)
+            ctx->Extensions.ARB_compute_shader = true;
 
          if (brw->intelScreen->cmd_parser_version >= 2)
             brw->predicate.supported = true;

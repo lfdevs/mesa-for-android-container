@@ -109,6 +109,7 @@ fd2_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	fd2_gmem_init(pctx);
 	fd2_texture_init(pctx);
 	fd2_prog_init(pctx);
+	fd2_emit_init(pctx);
 
 	pctx = fd_context_init(&fd2_ctx->base, pscreen,
 			(screen->gpu_id >= 220) ? a22x_primtypes : a20x_primtypes,

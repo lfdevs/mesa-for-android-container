@@ -352,6 +352,11 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
       define_rasterizer_object(svga, rast);
    }
 
+   if (templ->poly_smooth) {
+      pipe_debug_message(&svga->debug.callback, CONFORMANCE,
+                         "GL_POLYGON_SMOOTH not supported");
+   }
+
    svga->hud.num_state_objects++;
 
    return rast;
@@ -363,13 +368,16 @@ static void svga_bind_rasterizer_state( struct pipe_context *pipe,
    struct svga_context *svga = svga_context(pipe);
    struct svga_rasterizer_state *raster = (struct svga_rasterizer_state *)state;
 
+   if (!raster ||
+       !svga->curr.rast ||
+       raster->templ.poly_stipple_enable !=
+       svga->curr.rast->templ.poly_stipple_enable) {
+      svga->dirty |= SVGA_NEW_STIPPLE;
+   }
+
    svga->curr.rast = raster;
 
    svga->dirty |= SVGA_NEW_RAST;
-
-   if (raster && raster->templ.poly_stipple_enable) {
-      svga->dirty |= SVGA_NEW_STIPPLE;
-   }
 }
 
 static void

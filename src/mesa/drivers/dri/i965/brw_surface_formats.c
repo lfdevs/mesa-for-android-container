@@ -20,13 +20,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "main/context.h"
 #include "main/mtypes.h"
 
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
-#include "brw_wm.h"
 
 struct surface_format_info {
    bool exists;
@@ -167,8 +165,8 @@ const struct surface_format_info surface_formats[] = {
    SF( Y, 50,  Y,  x,  x,  x,  x,  x,  x,    x,   I32_FLOAT)
    SF( Y, 50,  Y,  x,  x,  x,  x,  x,  x,    x,   L32_FLOAT)
    SF( Y, 50,  Y,  x,  x,  x,  x,  x,  x,    x,   A32_FLOAT)
-   SF( Y,  Y,  x,  Y,  x,  x,  x,  x, 60,   90,   B8G8R8X8_UNORM)
-   SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   B8G8R8X8_UNORM_SRGB)
+   SF( Y,  Y,  x,  Y, 80, 80,  x,  x, 60,   90,   B8G8R8X8_UNORM)
+   SF( Y,  Y,  x,  x, 80, 80,  x,  x,  x,    x,   B8G8R8X8_UNORM_SRGB)
    SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   R8G8B8X8_UNORM)
    SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   R8G8B8X8_UNORM_SRGB)
    SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   R9G9B9E5_SHAREDEXP)
@@ -671,9 +669,10 @@ brw_init_surface_formats(struct brw_context *brw)
 	  * mask writes to alpha (ala glColorMask) and reconfigure the
 	  * alpha blending hardware to use GL_ONE (or GL_ZERO) for
 	  * cases where GL_DST_ALPHA (or GL_ONE_MINUS_DST_ALPHA) is
-	  * used.
+	  * used. On Gen8+ BGRX is actually allowed (but not RGBX).
 	  */
-	 render = BRW_SURFACEFORMAT_B8G8R8A8_UNORM;
+         if (gen < tinfo->render_target)
+            render = BRW_SURFACEFORMAT_B8G8R8A8_UNORM;
 	 break;
       case BRW_SURFACEFORMAT_B8G8R8X8_UNORM_SRGB:
          if (gen < tinfo->render_target)
@@ -737,6 +736,34 @@ brw_init_surface_formats(struct brw_context *brw)
    if (brw->gen >= 8)
       ctx->TextureFormatSupported[MESA_FORMAT_Z_UNORM16] = true;
 
+   /* The RGBX formats are not renderable. Normally these get mapped
+    * internally to RGBA formats when rendering. However on Gen9+ when this
+    * internal override is used fast clears don't work so they are disabled in
+    * brw_meta_fast_clear. To avoid this problem we can just pretend not to
+    * support RGBX formats at all. This will cause the upper layers of Mesa to
+    * pick the RGBA formats instead. This works fine because when it is used
+    * as a texture source the swizzle state is programmed to force the alpha
+    * channel to 1.0 anyway. We could also do this for all gens except that
+    * it's a bit more difficult when the hardware doesn't support texture
+    * swizzling. Gens using the blorp have further problems because that
+    * doesn't implement this swizzle override. We don't need to do this for
+    * BGRX because that actually is supported natively on Gen8+.
+    */
+   if (brw->gen >= 9) {
+      static const mesa_format rgbx_formats[] = {
+         MESA_FORMAT_R8G8B8X8_UNORM,
+         MESA_FORMAT_R8G8B8X8_SRGB,
+         MESA_FORMAT_RGBX_UNORM16,
+         MESA_FORMAT_RGBX_FLOAT16,
+         MESA_FORMAT_RGBX_FLOAT32
+      };
+
+      for (int i = 0; i < ARRAY_SIZE(rgbx_formats); i++) {
+         ctx->TextureFormatSupported[rgbx_formats[i]] = false;
+         brw->format_supported_as_render_target[rgbx_formats[i]] = false;
+      }
+   }
+
    /* On hardware that lacks support for ETC1, we map ETC1 to RGBX
     * during glCompressedTexImage2D(). See intel_mipmap_tree::wraps_etc1.
     */
@@ -797,7 +824,7 @@ brw_render_target_supported(struct brw_context *brw,
  * compression.
  */
 bool
-brw_losslessly_compressible_format(struct brw_context *brw,
+brw_losslessly_compressible_format(const struct brw_context *brw,
                                    uint32_t brw_format)
 {
    const struct surface_format_info * const sinfo =

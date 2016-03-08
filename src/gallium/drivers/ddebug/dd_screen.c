@@ -270,7 +270,7 @@ ddebug_screen_create(struct pipe_screen *screen)
 {
    struct dd_screen *dscreen;
    const char *option = debug_get_option("GALLIUM_DDEBUG", NULL);
-   bool dump_always = option && !strcmp(option, "always");
+   bool dump_always = option && !strncmp(option, "always", 6);
    bool no_flush = option && strstr(option, "noflush");
    bool help = option && !strcmp(option, "help");
    unsigned timeout = 0;
@@ -280,15 +280,21 @@ ddebug_screen_create(struct pipe_screen *screen)
       puts("");
       puts("Usage:");
       puts("");
-      puts("  GALLIUM_DDEBUG=always");
-      puts("    Dump context and driver information after every draw call into");
+      puts("  GALLIUM_DDEBUG=\"always [noflush] [verbose]\"");
+      puts("    Flush and dump context and driver information after every draw call into");
       puts("    $HOME/"DD_DIR"/.");
       puts("");
-      puts("  GALLIUM_DDEBUG=[timeout in ms] noflush");
+      puts("  GALLIUM_DDEBUG=\"[timeout in ms] [noflush] [verbose]\"");
       puts("    Flush and detect a device hang after every draw call based on the given");
       puts("    fence timeout and dump context and driver information into");
       puts("    $HOME/"DD_DIR"/ when a hang is detected.");
-      puts("    If 'noflush' is specified, only detect hangs in pipe->flush.");
+      puts("");
+      puts("  If 'noflush' is specified, do not flush on every draw call. In hang");
+      puts("  detection mode, this only detect hangs in pipe->flush.");
+      puts("  If 'verbose' is specified, additional information is written to stderr.");
+      puts("");
+      puts("  GALLIUM_DDEBUG_SKIP=[count]");
+      puts("    Skip flush and hang detection for the given initial number of draw calls.");
       puts("");
       exit(0);
    }
@@ -336,6 +342,7 @@ ddebug_screen_create(struct pipe_screen *screen)
    dscreen->timeout_ms = timeout;
    dscreen->mode = dump_always ? DD_DUMP_ALL_CALLS : DD_DETECT_HANGS;
    dscreen->no_flush = no_flush;
+   dscreen->verbose = strstr(option, "verbose") != NULL;
 
    switch (dscreen->mode) {
    case DD_DUMP_ALL_CALLS:
@@ -347,6 +354,12 @@ ddebug_screen_create(struct pipe_screen *screen)
       break;
    default:
       assert(0);
+   }
+
+   dscreen->skip_count = debug_get_num_option("GALLIUM_DDEBUG_SKIP", 0);
+   if (dscreen->skip_count > 0) {
+      fprintf(stderr, "Gallium debugger skipping the first %u draw calls.\n",
+              dscreen->skip_count);
    }
 
    return &dscreen->base;

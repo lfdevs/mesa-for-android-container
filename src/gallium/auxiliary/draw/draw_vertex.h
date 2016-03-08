@@ -44,6 +44,7 @@
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 
+#define DRAW_ATTR_NONEXIST 255
 
 /**
  * Vertex attribute emit modes
@@ -61,18 +62,6 @@ enum attrib_emit {
 
 
 /**
- * Attribute interpolation mode
- */
-enum interp_mode {
-   INTERP_NONE,      /**< never interpolate vertex header info */
-   INTERP_POS,       /**< special case for frag position */
-   INTERP_CONSTANT,
-   INTERP_LINEAR,
-   INTERP_PERSPECTIVE
-};
-
-
-/**
  * Information about hardware/rasterization vertex layout.
  */
 struct vertex_info
@@ -85,8 +74,7 @@ struct vertex_info
     * memcmp() comparisons.
     */
    struct {
-      unsigned interp_mode:4;      /**< INTERP_x */
-      unsigned emit:4;             /**< EMIT_x */
+      unsigned emit:8;             /**< EMIT_x */
       unsigned src_index:8;          /**< map to post-xform attribs */
    } attrib[PIPE_MAX_SHADER_OUTPUTS];
 };
@@ -124,20 +112,18 @@ draw_vinfo_copy( struct vertex_info *dst,
 static inline uint
 draw_emit_vertex_attr(struct vertex_info *vinfo,
                       enum attrib_emit emit, 
-                      enum interp_mode interp, /* only used by softpipe??? */
                       int src_index)
 {
    const uint n = vinfo->num_attribs;
 
    /* If the src_index is negative, meaning it hasn't been found
-    * lets just redirect it to the first output slot */
+    * we'll assign it all zeros later - set to DRAW_ATTR_NONEXIST */
    if (src_index < 0) {
-      src_index = 0;
+      src_index = DRAW_ATTR_NONEXIST;
    }
 
    assert(n < Elements(vinfo->attrib));
    vinfo->attrib[n].emit = emit;
-   vinfo->attrib[n].interp_mode = interp;
    vinfo->attrib[n].src_index = src_index;
    vinfo->num_attribs++;
    return n;

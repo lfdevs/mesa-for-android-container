@@ -73,7 +73,7 @@ st_perf_monitor_object(struct gl_perf_monitor_object *q)
 }
 
 bool
-st_init_perfmon(struct st_context *st);
+st_have_perfmon(struct st_context *st);
 
 void
 st_destroy_perfmon(struct st_context *st);

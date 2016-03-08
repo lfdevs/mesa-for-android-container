@@ -265,8 +265,8 @@ OUT_WFI(struct fd_ringbuffer *ring)
 }
 
 static inline void
-OUT_IB(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
-		struct fd_ringmarker *end)
+__OUT_IB(struct fd_ringbuffer *ring, bool prefetch,
+		struct fd_ringmarker *start, struct fd_ringmarker *end)
 {
 	uint32_t dwords = fd_ringmarker_dwords(start, end);
 
@@ -280,7 +280,7 @@ OUT_IB(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
 	 */
 	emit_marker(ring, 6);
 
-	OUT_PKT3(ring, CP_INDIRECT_BUFFER_PFD, 2);
+	OUT_PKT3(ring, prefetch ? CP_INDIRECT_BUFFER_PFE : CP_INDIRECT_BUFFER_PFD, 2);
 	fd_ringbuffer_emit_reloc_ring(ring, start, end);
 	OUT_RING(ring, dwords);
 

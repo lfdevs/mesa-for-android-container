@@ -33,8 +33,7 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/mesa/drivers/dri/intel/server \
 	-I$(top_srcdir)/src/gtest/include \
-	-I$(top_srcdir)/src/glsl/nir \
-	-I$(top_builddir)/src/glsl/nir \
+	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS) \

@@ -49,7 +49,7 @@
 /* Global mutex as described by MSDN */
 pipe_static_mutex(d3dlock_global);
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockAuthenticatedChannel9_GetCertificateSize( struct NineAuthenticatedChannel9 *This,
                                               UINT *pCertificateSize )
 {
@@ -60,7 +60,7 @@ LockAuthenticatedChannel9_GetCertificateSize( struct NineAuthenticatedChannel9 *
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockAuthenticatedChannel9_GetCertificate( struct NineAuthenticatedChannel9 *This,
                                           UINT CertifacteSize,
                                           BYTE *ppCertificate )
@@ -72,7 +72,7 @@ LockAuthenticatedChannel9_GetCertificate( struct NineAuthenticatedChannel9 *This
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockAuthenticatedChannel9_NegotiateKeyExchange( struct NineAuthenticatedChannel9 *This,
                                                 UINT DataSize,
                                                 void *pData )
@@ -84,7 +84,7 @@ LockAuthenticatedChannel9_NegotiateKeyExchange( struct NineAuthenticatedChannel9
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockAuthenticatedChannel9_Query( struct NineAuthenticatedChannel9 *This,
                                  UINT InputSize,
                                  const void *pInput,
@@ -98,7 +98,7 @@ LockAuthenticatedChannel9_Query( struct NineAuthenticatedChannel9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockAuthenticatedChannel9_Configure( struct NineAuthenticatedChannel9 *This,
                                      UINT InputSize,
                                      const void *pInput,
@@ -123,7 +123,7 @@ IDirect3DAuthenticatedChannel9Vtbl LockAuthenticatedChannel9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockResource9_GetDevice( struct NineResource9 *This,
                          IDirect3DDevice9 **ppDevice )
 {
@@ -135,7 +135,7 @@ LockResource9_GetDevice( struct NineResource9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockResource9_SetPrivateData( struct NineResource9 *This,
                               REFGUID refguid,
                               const void *pData,
@@ -149,7 +149,7 @@ LockResource9_SetPrivateData( struct NineResource9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockResource9_GetPrivateData( struct NineResource9 *This,
                               REFGUID refguid,
                               void *pData,
@@ -162,7 +162,7 @@ LockResource9_GetPrivateData( struct NineResource9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockResource9_FreePrivateData( struct NineResource9 *This,
                                REFGUID refguid )
 {
@@ -173,7 +173,7 @@ LockResource9_FreePrivateData( struct NineResource9 *This,
     return r;
 }
 
-static DWORD WINAPI
+static DWORD NINE_WINAPI
 LockResource9_SetPriority( struct NineResource9 *This,
                            DWORD PriorityNew )
 {
@@ -184,7 +184,7 @@ LockResource9_SetPriority( struct NineResource9 *This,
     return r;
 }
 
-static DWORD WINAPI
+static DWORD NINE_WINAPI
 LockResource9_GetPriority( struct NineResource9 *This )
 {
     DWORD r;
@@ -195,7 +195,7 @@ LockResource9_GetPriority( struct NineResource9 *This )
 }
 
 #if 0
-static void WINAPI
+static void NINE_WINAPI
 LockResource9_PreLoad( struct NineResource9 *This )
 {
     pipe_mutex_lock(d3dlock_global);
@@ -205,7 +205,7 @@ LockResource9_PreLoad( struct NineResource9 *This )
 #endif
 
 #if 0
-static D3DRESOURCETYPE WINAPI
+static D3DRESOURCETYPE NINE_WINAPI
 LockResource9_GetType( struct NineResource9 *This )
 {
     D3DRESOURCETYPE r;
@@ -216,7 +216,7 @@ LockResource9_GetType( struct NineResource9 *This )
 }
 #endif
 
-static DWORD WINAPI
+static DWORD NINE_WINAPI
 LockBaseTexture9_SetLOD( struct NineBaseTexture9 *This,
                          DWORD LODNew )
 {
@@ -227,7 +227,7 @@ LockBaseTexture9_SetLOD( struct NineBaseTexture9 *This,
     return r;
 }
 
-static DWORD WINAPI
+static DWORD NINE_WINAPI
 LockBaseTexture9_GetLOD( struct NineBaseTexture9 *This )
 {
     DWORD r;
@@ -237,7 +237,7 @@ LockBaseTexture9_GetLOD( struct NineBaseTexture9 *This )
     return r;
 }
 
-static DWORD WINAPI
+static DWORD NINE_WINAPI
 LockBaseTexture9_GetLevelCount( struct NineBaseTexture9 *This )
 {
     DWORD r;
@@ -247,7 +247,7 @@ LockBaseTexture9_GetLevelCount( struct NineBaseTexture9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockBaseTexture9_SetAutoGenFilterType( struct NineBaseTexture9 *This,
                                        D3DTEXTUREFILTERTYPE FilterType )
 {
@@ -258,7 +258,7 @@ LockBaseTexture9_SetAutoGenFilterType( struct NineBaseTexture9 *This,
     return r;
 }
 
-static D3DTEXTUREFILTERTYPE WINAPI
+static D3DTEXTUREFILTERTYPE NINE_WINAPI
 LockBaseTexture9_GetAutoGenFilterType( struct NineBaseTexture9 *This )
 {
     D3DTEXTUREFILTERTYPE r;
@@ -268,7 +268,7 @@ LockBaseTexture9_GetAutoGenFilterType( struct NineBaseTexture9 *This )
     return r;
 }
 
-static void WINAPI
+static void NINE_WINAPI
 LockBaseTexture9_PreLoad( struct NineBaseTexture9 *This )
 {
     pipe_mutex_lock(d3dlock_global);
@@ -276,7 +276,7 @@ LockBaseTexture9_PreLoad( struct NineBaseTexture9 *This )
     pipe_mutex_unlock(d3dlock_global);
 }
 
-static void WINAPI
+static void NINE_WINAPI
 LockBaseTexture9_GenerateMipSubLevels( struct NineBaseTexture9 *This )
 {
     pipe_mutex_lock(d3dlock_global);
@@ -284,7 +284,7 @@ LockBaseTexture9_GenerateMipSubLevels( struct NineBaseTexture9 *This )
     pipe_mutex_unlock(d3dlock_global);
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_GetCertificateSize( struct NineCryptoSession9 *This,
                                        UINT *pCertificateSize )
 {
@@ -295,7 +295,7 @@ LockCryptoSession9_GetCertificateSize( struct NineCryptoSession9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_GetCertificate( struct NineCryptoSession9 *This,
                                    UINT CertifacteSize,
                                    BYTE *ppCertificate )
@@ -307,7 +307,7 @@ LockCryptoSession9_GetCertificate( struct NineCryptoSession9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_NegotiateKeyExchange( struct NineCryptoSession9 *This,
                                          UINT DataSize,
                                          void *pData )
@@ -319,7 +319,7 @@ LockCryptoSession9_NegotiateKeyExchange( struct NineCryptoSession9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_EncryptionBlt( struct NineCryptoSession9 *This,
                                   IDirect3DSurface9 *pSrcSurface,
                                   IDirect3DSurface9 *pDstSurface,
@@ -333,7 +333,7 @@ LockCryptoSession9_EncryptionBlt( struct NineCryptoSession9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_DecryptionBlt( struct NineCryptoSession9 *This,
                                   IDirect3DSurface9 *pSrcSurface,
                                   IDirect3DSurface9 *pDstSurface,
@@ -349,7 +349,7 @@ LockCryptoSession9_DecryptionBlt( struct NineCryptoSession9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_GetSurfacePitch( struct NineCryptoSession9 *This,
                                     IDirect3DSurface9 *pSrcSurface,
                                     UINT *pSurfacePitch )
@@ -361,7 +361,7 @@ LockCryptoSession9_GetSurfacePitch( struct NineCryptoSession9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_StartSessionKeyRefresh( struct NineCryptoSession9 *This,
                                            void *pRandomNumber,
                                            UINT RandomNumberSize )
@@ -373,7 +373,7 @@ LockCryptoSession9_StartSessionKeyRefresh( struct NineCryptoSession9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_FinishSessionKeyRefresh( struct NineCryptoSession9 *This )
 {
     HRESULT r;
@@ -383,7 +383,7 @@ LockCryptoSession9_FinishSessionKeyRefresh( struct NineCryptoSession9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCryptoSession9_GetEncryptionBltKey( struct NineCryptoSession9 *This,
                                         void *pReadbackKey,
                                         UINT KeySize )
@@ -411,7 +411,7 @@ IDirect3DCryptoSession9Vtbl LockCryptoSession9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCubeTexture9_GetLevelDesc( struct NineCubeTexture9 *This,
                                UINT Level,
                                D3DSURFACE_DESC *pDesc )
@@ -425,7 +425,7 @@ LockCubeTexture9_GetLevelDesc( struct NineCubeTexture9 *This,
 #endif
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCubeTexture9_GetCubeMapSurface( struct NineCubeTexture9 *This,
                                     D3DCUBEMAP_FACES FaceType,
                                     UINT Level,
@@ -439,7 +439,7 @@ LockCubeTexture9_GetCubeMapSurface( struct NineCubeTexture9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCubeTexture9_LockRect( struct NineCubeTexture9 *This,
                            D3DCUBEMAP_FACES FaceType,
                            UINT Level,
@@ -454,7 +454,7 @@ LockCubeTexture9_LockRect( struct NineCubeTexture9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCubeTexture9_UnlockRect( struct NineCubeTexture9 *This,
                              D3DCUBEMAP_FACES FaceType,
                              UINT Level )
@@ -466,7 +466,7 @@ LockCubeTexture9_UnlockRect( struct NineCubeTexture9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockCubeTexture9_AddDirtyRect( struct NineCubeTexture9 *This,
                                D3DCUBEMAP_FACES FaceType,
                                const RECT *pDirtyRect )
@@ -503,7 +503,7 @@ IDirect3DCubeTexture9Vtbl LockCubeTexture9_vtable = {
     (void *)LockCubeTexture9_AddDirtyRect
 };
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_TestCooperativeLevel( struct NineDevice9 *This )
 {
     HRESULT r;
@@ -513,7 +513,7 @@ LockDevice9_TestCooperativeLevel( struct NineDevice9 *This )
     return r;
 }
 
-static UINT WINAPI
+static UINT NINE_WINAPI
 LockDevice9_GetAvailableTextureMem( struct NineDevice9 *This )
 {
     UINT r;
@@ -523,7 +523,7 @@ LockDevice9_GetAvailableTextureMem( struct NineDevice9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_EvictManagedResources( struct NineDevice9 *This )
 {
     HRESULT r;
@@ -533,7 +533,7 @@ LockDevice9_EvictManagedResources( struct NineDevice9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetDirect3D( struct NineDevice9 *This,
                          IDirect3D9 **ppD3D9 )
 {
@@ -545,7 +545,7 @@ LockDevice9_GetDirect3D( struct NineDevice9 *This,
 }
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetDeviceCaps( struct NineDevice9 *This,
                            D3DCAPS9 *pCaps )
 {
@@ -557,7 +557,7 @@ LockDevice9_GetDeviceCaps( struct NineDevice9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetDisplayMode( struct NineDevice9 *This,
                             UINT iSwapChain,
                             D3DDISPLAYMODE *pMode )
@@ -570,7 +570,7 @@ LockDevice9_GetDisplayMode( struct NineDevice9 *This,
 }
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetCreationParameters( struct NineDevice9 *This,
                                    D3DDEVICE_CREATION_PARAMETERS *pParameters )
 {
@@ -582,7 +582,7 @@ LockDevice9_GetCreationParameters( struct NineDevice9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetCursorProperties( struct NineDevice9 *This,
                                  UINT XHotSpot,
                                  UINT YHotSpot,
@@ -595,7 +595,7 @@ LockDevice9_SetCursorProperties( struct NineDevice9 *This,
     return r;
 }
 
-static void WINAPI
+static void NINE_WINAPI
 LockDevice9_SetCursorPosition( struct NineDevice9 *This,
                                int X,
                                int Y,
@@ -606,7 +606,7 @@ LockDevice9_SetCursorPosition( struct NineDevice9 *This,
     pipe_mutex_unlock(d3dlock_global);
 }
 
-static BOOL WINAPI
+static BOOL NINE_WINAPI
 LockDevice9_ShowCursor( struct NineDevice9 *This,
                         BOOL bShow )
 {
@@ -617,7 +617,7 @@ LockDevice9_ShowCursor( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateAdditionalSwapChain( struct NineDevice9 *This,
                                        D3DPRESENT_PARAMETERS *pPresentationParameters,
                                        IDirect3DSwapChain9 **pSwapChain )
@@ -629,7 +629,7 @@ LockDevice9_CreateAdditionalSwapChain( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetSwapChain( struct NineDevice9 *This,
                           UINT iSwapChain,
                           IDirect3DSwapChain9 **pSwapChain )
@@ -641,7 +641,7 @@ LockDevice9_GetSwapChain( struct NineDevice9 *This,
     return r;
 }
 
-static UINT WINAPI
+static UINT NINE_WINAPI
 LockDevice9_GetNumberOfSwapChains( struct NineDevice9 *This )
 {
     UINT r;
@@ -651,7 +651,7 @@ LockDevice9_GetNumberOfSwapChains( struct NineDevice9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_Reset( struct NineDevice9 *This,
                    D3DPRESENT_PARAMETERS *pPresentationParameters )
 {
@@ -662,7 +662,7 @@ LockDevice9_Reset( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_Present( struct NineDevice9 *This,
                      const RECT *pSourceRect,
                      const RECT *pDestRect,
@@ -676,7 +676,7 @@ LockDevice9_Present( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetBackBuffer( struct NineDevice9 *This,
                            UINT iSwapChain,
                            UINT iBackBuffer,
@@ -690,7 +690,7 @@ LockDevice9_GetBackBuffer( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetRasterStatus( struct NineDevice9 *This,
                              UINT iSwapChain,
                              D3DRASTER_STATUS *pRasterStatus )
@@ -702,7 +702,7 @@ LockDevice9_GetRasterStatus( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetDialogBoxMode( struct NineDevice9 *This,
                               BOOL bEnableDialogs )
 {
@@ -713,7 +713,7 @@ LockDevice9_SetDialogBoxMode( struct NineDevice9 *This,
     return r;
 }
 
-static void WINAPI
+static void NINE_WINAPI
 LockDevice9_SetGammaRamp( struct NineDevice9 *This,
                           UINT iSwapChain,
                           DWORD Flags,
@@ -724,7 +724,7 @@ LockDevice9_SetGammaRamp( struct NineDevice9 *This,
     pipe_mutex_unlock(d3dlock_global);
 }
 
-static void WINAPI
+static void NINE_WINAPI
 LockDevice9_GetGammaRamp( struct NineDevice9 *This,
                           UINT iSwapChain,
                           D3DGAMMARAMP *pRamp )
@@ -734,7 +734,7 @@ LockDevice9_GetGammaRamp( struct NineDevice9 *This,
     pipe_mutex_unlock(d3dlock_global);
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateTexture( struct NineDevice9 *This,
                            UINT Width,
                            UINT Height,
@@ -752,7 +752,7 @@ LockDevice9_CreateTexture( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateVolumeTexture( struct NineDevice9 *This,
                                  UINT Width,
                                  UINT Height,
@@ -771,7 +771,7 @@ LockDevice9_CreateVolumeTexture( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateCubeTexture( struct NineDevice9 *This,
                                UINT EdgeLength,
                                UINT Levels,
@@ -788,7 +788,7 @@ LockDevice9_CreateCubeTexture( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateVertexBuffer( struct NineDevice9 *This,
                                 UINT Length,
                                 DWORD Usage,
@@ -804,7 +804,7 @@ LockDevice9_CreateVertexBuffer( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateIndexBuffer( struct NineDevice9 *This,
                                UINT Length,
                                DWORD Usage,
@@ -820,7 +820,7 @@ LockDevice9_CreateIndexBuffer( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateRenderTarget( struct NineDevice9 *This,
                                 UINT Width,
                                 UINT Height,
@@ -838,7 +838,7 @@ LockDevice9_CreateRenderTarget( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateDepthStencilSurface( struct NineDevice9 *This,
                                        UINT Width,
                                        UINT Height,
@@ -856,7 +856,7 @@ LockDevice9_CreateDepthStencilSurface( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_UpdateSurface( struct NineDevice9 *This,
                            IDirect3DSurface9 *pSourceSurface,
                            const RECT *pSourceRect,
@@ -870,7 +870,7 @@ LockDevice9_UpdateSurface( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_UpdateTexture( struct NineDevice9 *This,
                            IDirect3DBaseTexture9 *pSourceTexture,
                            IDirect3DBaseTexture9 *pDestinationTexture )
@@ -882,7 +882,7 @@ LockDevice9_UpdateTexture( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetRenderTargetData( struct NineDevice9 *This,
                                  IDirect3DSurface9 *pRenderTarget,
                                  IDirect3DSurface9 *pDestSurface )
@@ -894,7 +894,7 @@ LockDevice9_GetRenderTargetData( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetFrontBufferData( struct NineDevice9 *This,
                                 UINT iSwapChain,
                                 IDirect3DSurface9 *pDestSurface )
@@ -906,7 +906,7 @@ LockDevice9_GetFrontBufferData( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_StretchRect( struct NineDevice9 *This,
                          IDirect3DSurface9 *pSourceSurface,
                          const RECT *pSourceRect,
@@ -921,7 +921,7 @@ LockDevice9_StretchRect( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_ColorFill( struct NineDevice9 *This,
                        IDirect3DSurface9 *pSurface,
                        const RECT *pRect,
@@ -934,7 +934,7 @@ LockDevice9_ColorFill( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateOffscreenPlainSurface( struct NineDevice9 *This,
                                          UINT Width,
                                          UINT Height,
@@ -950,7 +950,7 @@ LockDevice9_CreateOffscreenPlainSurface( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetRenderTarget( struct NineDevice9 *This,
                              DWORD RenderTargetIndex,
                              IDirect3DSurface9 *pRenderTarget )
@@ -962,7 +962,7 @@ LockDevice9_SetRenderTarget( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetRenderTarget( struct NineDevice9 *This,
                              DWORD RenderTargetIndex,
                              IDirect3DSurface9 **ppRenderTarget )
@@ -974,7 +974,7 @@ LockDevice9_GetRenderTarget( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetDepthStencilSurface( struct NineDevice9 *This,
                                     IDirect3DSurface9 *pNewZStencil )
 {
@@ -985,7 +985,7 @@ LockDevice9_SetDepthStencilSurface( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetDepthStencilSurface( struct NineDevice9 *This,
                                     IDirect3DSurface9 **ppZStencilSurface )
 {
@@ -996,7 +996,7 @@ LockDevice9_GetDepthStencilSurface( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_BeginScene( struct NineDevice9 *This )
 {
     HRESULT r;
@@ -1006,7 +1006,7 @@ LockDevice9_BeginScene( struct NineDevice9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_EndScene( struct NineDevice9 *This )
 {
     HRESULT r;
@@ -1016,7 +1016,7 @@ LockDevice9_EndScene( struct NineDevice9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_Clear( struct NineDevice9 *This,
                    DWORD Count,
                    const D3DRECT *pRects,
@@ -1032,7 +1032,7 @@ LockDevice9_Clear( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetTransform( struct NineDevice9 *This,
                           D3DTRANSFORMSTATETYPE State,
                           const D3DMATRIX *pMatrix )
@@ -1044,7 +1044,7 @@ LockDevice9_SetTransform( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetTransform( struct NineDevice9 *This,
                           D3DTRANSFORMSTATETYPE State,
                           D3DMATRIX *pMatrix )
@@ -1056,7 +1056,7 @@ LockDevice9_GetTransform( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_MultiplyTransform( struct NineDevice9 *This,
                                D3DTRANSFORMSTATETYPE State,
                                const D3DMATRIX *pMatrix )
@@ -1068,7 +1068,7 @@ LockDevice9_MultiplyTransform( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetViewport( struct NineDevice9 *This,
                          const D3DVIEWPORT9 *pViewport )
 {
@@ -1079,7 +1079,7 @@ LockDevice9_SetViewport( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetViewport( struct NineDevice9 *This,
                          D3DVIEWPORT9 *pViewport )
 {
@@ -1090,7 +1090,7 @@ LockDevice9_GetViewport( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetMaterial( struct NineDevice9 *This,
                          const D3DMATERIAL9 *pMaterial )
 {
@@ -1101,7 +1101,7 @@ LockDevice9_SetMaterial( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetMaterial( struct NineDevice9 *This,
                          D3DMATERIAL9 *pMaterial )
 {
@@ -1112,7 +1112,7 @@ LockDevice9_GetMaterial( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetLight( struct NineDevice9 *This,
                       DWORD Index,
                       const D3DLIGHT9 *pLight )
@@ -1124,7 +1124,7 @@ LockDevice9_SetLight( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetLight( struct NineDevice9 *This,
                       DWORD Index,
                       D3DLIGHT9 *pLight )
@@ -1136,7 +1136,7 @@ LockDevice9_GetLight( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_LightEnable( struct NineDevice9 *This,
                          DWORD Index,
                          BOOL Enable )
@@ -1148,7 +1148,7 @@ LockDevice9_LightEnable( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetLightEnable( struct NineDevice9 *This,
                             DWORD Index,
                             BOOL *pEnable )
@@ -1160,7 +1160,7 @@ LockDevice9_GetLightEnable( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetClipPlane( struct NineDevice9 *This,
                           DWORD Index,
                           const float *pPlane )
@@ -1172,7 +1172,7 @@ LockDevice9_SetClipPlane( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetClipPlane( struct NineDevice9 *This,
                           DWORD Index,
                           float *pPlane )
@@ -1184,7 +1184,7 @@ LockDevice9_GetClipPlane( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetRenderState( struct NineDevice9 *This,
                             D3DRENDERSTATETYPE State,
                             DWORD Value )
@@ -1196,7 +1196,7 @@ LockDevice9_SetRenderState( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetRenderState( struct NineDevice9 *This,
                             D3DRENDERSTATETYPE State,
                             DWORD *pValue )
@@ -1208,7 +1208,7 @@ LockDevice9_GetRenderState( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateStateBlock( struct NineDevice9 *This,
                               D3DSTATEBLOCKTYPE Type,
                               IDirect3DStateBlock9 **ppSB )
@@ -1220,7 +1220,7 @@ LockDevice9_CreateStateBlock( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_BeginStateBlock( struct NineDevice9 *This )
 {
     HRESULT r;
@@ -1230,7 +1230,7 @@ LockDevice9_BeginStateBlock( struct NineDevice9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_EndStateBlock( struct NineDevice9 *This,
                            IDirect3DStateBlock9 **ppSB )
 {
@@ -1241,7 +1241,7 @@ LockDevice9_EndStateBlock( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetClipStatus( struct NineDevice9 *This,
                            const D3DCLIPSTATUS9 *pClipStatus )
 {
@@ -1252,7 +1252,7 @@ LockDevice9_SetClipStatus( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetClipStatus( struct NineDevice9 *This,
                            D3DCLIPSTATUS9 *pClipStatus )
 {
@@ -1263,7 +1263,7 @@ LockDevice9_GetClipStatus( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetTexture( struct NineDevice9 *This,
                         DWORD Stage,
                         IDirect3DBaseTexture9 **ppTexture )
@@ -1275,7 +1275,7 @@ LockDevice9_GetTexture( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetTexture( struct NineDevice9 *This,
                         DWORD Stage,
                         IDirect3DBaseTexture9 *pTexture )
@@ -1287,7 +1287,7 @@ LockDevice9_SetTexture( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetTextureStageState( struct NineDevice9 *This,
                                   DWORD Stage,
                                   D3DTEXTURESTAGESTATETYPE Type,
@@ -1300,7 +1300,7 @@ LockDevice9_GetTextureStageState( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetTextureStageState( struct NineDevice9 *This,
                                   DWORD Stage,
                                   D3DTEXTURESTAGESTATETYPE Type,
@@ -1313,7 +1313,7 @@ LockDevice9_SetTextureStageState( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetSamplerState( struct NineDevice9 *This,
                              DWORD Sampler,
                              D3DSAMPLERSTATETYPE Type,
@@ -1326,7 +1326,7 @@ LockDevice9_GetSamplerState( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetSamplerState( struct NineDevice9 *This,
                              DWORD Sampler,
                              D3DSAMPLERSTATETYPE Type,
@@ -1339,7 +1339,7 @@ LockDevice9_SetSamplerState( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_ValidateDevice( struct NineDevice9 *This,
                             DWORD *pNumPasses )
 {
@@ -1350,7 +1350,7 @@ LockDevice9_ValidateDevice( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetPaletteEntries( struct NineDevice9 *This,
                                UINT PaletteNumber,
                                const PALETTEENTRY *pEntries )
@@ -1362,7 +1362,7 @@ LockDevice9_SetPaletteEntries( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetPaletteEntries( struct NineDevice9 *This,
                                UINT PaletteNumber,
                                PALETTEENTRY *pEntries )
@@ -1374,7 +1374,7 @@ LockDevice9_GetPaletteEntries( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetCurrentTexturePalette( struct NineDevice9 *This,
                                       UINT PaletteNumber )
 {
@@ -1385,7 +1385,7 @@ LockDevice9_SetCurrentTexturePalette( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetCurrentTexturePalette( struct NineDevice9 *This,
                                       UINT *PaletteNumber )
 {
@@ -1396,7 +1396,7 @@ LockDevice9_GetCurrentTexturePalette( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetScissorRect( struct NineDevice9 *This,
                             const RECT *pRect )
 {
@@ -1407,7 +1407,7 @@ LockDevice9_SetScissorRect( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetScissorRect( struct NineDevice9 *This,
                             RECT *pRect )
 {
@@ -1418,7 +1418,7 @@ LockDevice9_GetScissorRect( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetSoftwareVertexProcessing( struct NineDevice9 *This,
                                          BOOL bSoftware )
 {
@@ -1429,7 +1429,7 @@ LockDevice9_SetSoftwareVertexProcessing( struct NineDevice9 *This,
     return r;
 }
 
-static BOOL WINAPI
+static BOOL NINE_WINAPI
 LockDevice9_GetSoftwareVertexProcessing( struct NineDevice9 *This )
 {
     BOOL r;
@@ -1439,7 +1439,7 @@ LockDevice9_GetSoftwareVertexProcessing( struct NineDevice9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetNPatchMode( struct NineDevice9 *This,
                            float nSegments )
 {
@@ -1450,7 +1450,7 @@ LockDevice9_SetNPatchMode( struct NineDevice9 *This,
     return r;
 }
 
-static float WINAPI
+static float NINE_WINAPI
 LockDevice9_GetNPatchMode( struct NineDevice9 *This )
 {
     float r;
@@ -1460,7 +1460,7 @@ LockDevice9_GetNPatchMode( struct NineDevice9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_DrawPrimitive( struct NineDevice9 *This,
                            D3DPRIMITIVETYPE PrimitiveType,
                            UINT StartVertex,
@@ -1473,7 +1473,7 @@ LockDevice9_DrawPrimitive( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_DrawIndexedPrimitive( struct NineDevice9 *This,
                                   D3DPRIMITIVETYPE PrimitiveType,
                                   INT BaseVertexIndex,
@@ -1489,7 +1489,7 @@ LockDevice9_DrawIndexedPrimitive( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
                              D3DPRIMITIVETYPE PrimitiveType,
                              UINT PrimitiveCount,
@@ -1503,7 +1503,7 @@ LockDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
                                     D3DPRIMITIVETYPE PrimitiveType,
                                     UINT MinVertexIndex,
@@ -1521,7 +1521,7 @@ LockDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_ProcessVertices( struct NineDevice9 *This,
                              UINT SrcStartIndex,
                              UINT DestIndex,
@@ -1537,7 +1537,7 @@ LockDevice9_ProcessVertices( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateVertexDeclaration( struct NineDevice9 *This,
                                      const D3DVERTEXELEMENT9 *pVertexElements,
                                      IDirect3DVertexDeclaration9 **ppDecl )
@@ -1549,7 +1549,7 @@ LockDevice9_CreateVertexDeclaration( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetVertexDeclaration( struct NineDevice9 *This,
                                   IDirect3DVertexDeclaration9 *pDecl )
 {
@@ -1560,7 +1560,7 @@ LockDevice9_SetVertexDeclaration( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetVertexDeclaration( struct NineDevice9 *This,
                                   IDirect3DVertexDeclaration9 **ppDecl )
 {
@@ -1571,7 +1571,7 @@ LockDevice9_GetVertexDeclaration( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetFVF( struct NineDevice9 *This,
                     DWORD FVF )
 {
@@ -1582,7 +1582,7 @@ LockDevice9_SetFVF( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetFVF( struct NineDevice9 *This,
                     DWORD *pFVF )
 {
@@ -1593,7 +1593,7 @@ LockDevice9_GetFVF( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateVertexShader( struct NineDevice9 *This,
                                 const DWORD *pFunction,
                                 IDirect3DVertexShader9 **ppShader )
@@ -1605,7 +1605,7 @@ LockDevice9_CreateVertexShader( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetVertexShader( struct NineDevice9 *This,
                              IDirect3DVertexShader9 *pShader )
 {
@@ -1616,7 +1616,7 @@ LockDevice9_SetVertexShader( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetVertexShader( struct NineDevice9 *This,
                              IDirect3DVertexShader9 **ppShader )
 {
@@ -1627,7 +1627,7 @@ LockDevice9_GetVertexShader( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       const float *pConstantData,
@@ -1640,7 +1640,7 @@ LockDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetVertexShaderConstantF( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       float *pConstantData,
@@ -1653,7 +1653,7 @@ LockDevice9_GetVertexShaderConstantF( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       const int *pConstantData,
@@ -1666,7 +1666,7 @@ LockDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetVertexShaderConstantI( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       int *pConstantData,
@@ -1679,7 +1679,7 @@ LockDevice9_GetVertexShaderConstantI( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       const BOOL *pConstantData,
@@ -1692,7 +1692,7 @@ LockDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetVertexShaderConstantB( struct NineDevice9 *This,
                                       UINT StartRegister,
                                       BOOL *pConstantData,
@@ -1705,7 +1705,7 @@ LockDevice9_GetVertexShaderConstantB( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetStreamSource( struct NineDevice9 *This,
                              UINT StreamNumber,
                              IDirect3DVertexBuffer9 *pStreamData,
@@ -1719,7 +1719,7 @@ LockDevice9_SetStreamSource( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetStreamSource( struct NineDevice9 *This,
                              UINT StreamNumber,
                              IDirect3DVertexBuffer9 **ppStreamData,
@@ -1733,7 +1733,7 @@ LockDevice9_GetStreamSource( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetStreamSourceFreq( struct NineDevice9 *This,
                                  UINT StreamNumber,
                                  UINT Setting )
@@ -1745,7 +1745,7 @@ LockDevice9_SetStreamSourceFreq( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetStreamSourceFreq( struct NineDevice9 *This,
                                  UINT StreamNumber,
                                  UINT *pSetting )
@@ -1757,7 +1757,7 @@ LockDevice9_GetStreamSourceFreq( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetIndices( struct NineDevice9 *This,
                         IDirect3DIndexBuffer9 *pIndexData )
 {
@@ -1768,7 +1768,7 @@ LockDevice9_SetIndices( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetIndices( struct NineDevice9 *This,
                         IDirect3DIndexBuffer9 **ppIndexData )
 {
@@ -1779,7 +1779,7 @@ LockDevice9_GetIndices( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreatePixelShader( struct NineDevice9 *This,
                                const DWORD *pFunction,
                                IDirect3DPixelShader9 **ppShader )
@@ -1791,7 +1791,7 @@ LockDevice9_CreatePixelShader( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetPixelShader( struct NineDevice9 *This,
                             IDirect3DPixelShader9 *pShader )
 {
@@ -1802,7 +1802,7 @@ LockDevice9_SetPixelShader( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetPixelShader( struct NineDevice9 *This,
                             IDirect3DPixelShader9 **ppShader )
 {
@@ -1813,7 +1813,7 @@ LockDevice9_GetPixelShader( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      const float *pConstantData,
@@ -1826,7 +1826,7 @@ LockDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetPixelShaderConstantF( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      float *pConstantData,
@@ -1839,7 +1839,7 @@ LockDevice9_GetPixelShaderConstantF( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      const int *pConstantData,
@@ -1852,7 +1852,7 @@ LockDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetPixelShaderConstantI( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      int *pConstantData,
@@ -1865,7 +1865,7 @@ LockDevice9_GetPixelShaderConstantI( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_SetPixelShaderConstantB( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      const BOOL *pConstantData,
@@ -1878,7 +1878,7 @@ LockDevice9_SetPixelShaderConstantB( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_GetPixelShaderConstantB( struct NineDevice9 *This,
                                      UINT StartRegister,
                                      BOOL *pConstantData,
@@ -1891,7 +1891,7 @@ LockDevice9_GetPixelShaderConstantB( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_DrawRectPatch( struct NineDevice9 *This,
                            UINT Handle,
                            const float *pNumSegs,
@@ -1904,7 +1904,7 @@ LockDevice9_DrawRectPatch( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_DrawTriPatch( struct NineDevice9 *This,
                           UINT Handle,
                           const float *pNumSegs,
@@ -1917,7 +1917,7 @@ LockDevice9_DrawTriPatch( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_DeletePatch( struct NineDevice9 *This,
                          UINT Handle )
 {
@@ -1928,7 +1928,7 @@ LockDevice9_DeletePatch( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9_CreateQuery( struct NineDevice9 *This,
                          D3DQUERYTYPE Type,
                          IDirect3DQuery9 **ppQuery )
@@ -2062,7 +2062,7 @@ IDirect3DDevice9Vtbl LockDevice9_vtable = {
     (void *)LockDevice9_CreateQuery
 };
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_SetConvolutionMonoKernel( struct NineDevice9Ex *This,
                                         UINT width,
                                         UINT height,
@@ -2076,7 +2076,7 @@ LockDevice9Ex_SetConvolutionMonoKernel( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_ComposeRects( struct NineDevice9Ex *This,
                             IDirect3DSurface9 *pSrc,
                             IDirect3DSurface9 *pDst,
@@ -2094,7 +2094,7 @@ LockDevice9Ex_ComposeRects( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_PresentEx( struct NineDevice9Ex *This,
                          const RECT *pSourceRect,
                          const RECT *pDestRect,
@@ -2109,7 +2109,7 @@ LockDevice9Ex_PresentEx( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_GetGPUThreadPriority( struct NineDevice9Ex *This,
                                     INT *pPriority )
 {
@@ -2120,7 +2120,7 @@ LockDevice9Ex_GetGPUThreadPriority( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_SetGPUThreadPriority( struct NineDevice9Ex *This,
                                     INT Priority )
 {
@@ -2131,7 +2131,7 @@ LockDevice9Ex_SetGPUThreadPriority( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_WaitForVBlank( struct NineDevice9Ex *This,
                              UINT iSwapChain )
 {
@@ -2142,7 +2142,7 @@ LockDevice9Ex_WaitForVBlank( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_CheckResourceResidency( struct NineDevice9Ex *This,
                                       IDirect3DResource9 **pResourceArray,
                                       UINT32 NumResources )
@@ -2154,7 +2154,7 @@ LockDevice9Ex_CheckResourceResidency( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_SetMaximumFrameLatency( struct NineDevice9Ex *This,
                                       UINT MaxLatency )
 {
@@ -2165,7 +2165,7 @@ LockDevice9Ex_SetMaximumFrameLatency( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_GetMaximumFrameLatency( struct NineDevice9Ex *This,
                                       UINT *pMaxLatency )
 {
@@ -2176,7 +2176,7 @@ LockDevice9Ex_GetMaximumFrameLatency( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_CheckDeviceState( struct NineDevice9Ex *This,
                                 HWND hDestinationWindow )
 {
@@ -2187,7 +2187,7 @@ LockDevice9Ex_CheckDeviceState( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_CreateRenderTargetEx( struct NineDevice9Ex *This,
                                     UINT Width,
                                     UINT Height,
@@ -2206,7 +2206,7 @@ LockDevice9Ex_CreateRenderTargetEx( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_CreateOffscreenPlainSurfaceEx( struct NineDevice9Ex *This,
                                              UINT Width,
                                              UINT Height,
@@ -2223,7 +2223,7 @@ LockDevice9Ex_CreateOffscreenPlainSurfaceEx( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_CreateDepthStencilSurfaceEx( struct NineDevice9Ex *This,
                                            UINT Width,
                                            UINT Height,
@@ -2242,7 +2242,7 @@ LockDevice9Ex_CreateDepthStencilSurfaceEx( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_ResetEx( struct NineDevice9Ex *This,
                        D3DPRESENT_PARAMETERS *pPresentationParameters,
                        D3DDISPLAYMODEEX *pFullscreenDisplayMode )
@@ -2254,7 +2254,7 @@ LockDevice9Ex_ResetEx( struct NineDevice9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Ex_GetDisplayModeEx( struct NineDevice9Ex *This,
                                 UINT iSwapChain,
                                 D3DDISPLAYMODEEX *pMode,
@@ -2404,7 +2404,7 @@ IDirect3DDevice9ExVtbl LockDevice9Ex_vtable = {
     (void *)LockDevice9Ex_GetDisplayModeEx
 };
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Video_GetContentProtectionCaps( struct NineDevice9Video *This,
                                            const GUID *pCryptoType,
                                            const GUID *pDecodeProfile,
@@ -2417,7 +2417,7 @@ LockDevice9Video_GetContentProtectionCaps( struct NineDevice9Video *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Video_CreateAuthenticatedChannel( struct NineDevice9Video *This,
                                              D3DAUTHENTICATEDCHANNELTYPE ChannelType,
                                              IDirect3DAuthenticatedChannel9 **ppAuthenticatedChannel,
@@ -2430,7 +2430,7 @@ LockDevice9Video_CreateAuthenticatedChannel( struct NineDevice9Video *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockDevice9Video_CreateCryptoSession( struct NineDevice9Video *This,
                                       const GUID *pCryptoType,
                                       const GUID *pDecodeProfile,
@@ -2453,7 +2453,7 @@ IDirect3DDevice9VideoVtbl LockDevice9Video_vtable = {
     (void *)LockDevice9Video_CreateCryptoSession
 };
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockIndexBuffer9_Lock( struct NineIndexBuffer9 *This,
                        UINT OffsetToLock,
                        UINT SizeToLock,
@@ -2467,7 +2467,7 @@ LockIndexBuffer9_Lock( struct NineIndexBuffer9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockIndexBuffer9_Unlock( struct NineIndexBuffer9 *This )
 {
     HRESULT r;
@@ -2478,7 +2478,7 @@ LockIndexBuffer9_Unlock( struct NineIndexBuffer9 *This )
 }
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockIndexBuffer9_GetDesc( struct NineIndexBuffer9 *This,
                           D3DINDEXBUFFER_DESC *pDesc )
 {
@@ -2508,7 +2508,7 @@ IDirect3DIndexBuffer9Vtbl LockIndexBuffer9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockPixelShader9_GetDevice( struct NinePixelShader9 *This,
                             IDirect3DDevice9 **ppDevice )
 {
@@ -2520,7 +2520,7 @@ LockPixelShader9_GetDevice( struct NinePixelShader9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockPixelShader9_GetFunction( struct NinePixelShader9 *This,
                               void *pData,
                               UINT *pSizeOfData )
@@ -2541,7 +2541,7 @@ IDirect3DPixelShader9Vtbl LockPixelShader9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockQuery9_GetDevice( struct NineQuery9 *This,
                       IDirect3DDevice9 **ppDevice )
 {
@@ -2554,7 +2554,7 @@ LockQuery9_GetDevice( struct NineQuery9 *This,
 #endif
 
 #if 0
-static D3DQUERYTYPE WINAPI
+static D3DQUERYTYPE NINE_WINAPI
 LockQuery9_GetType( struct NineQuery9 *This )
 {
     D3DQUERYTYPE r;
@@ -2566,7 +2566,7 @@ LockQuery9_GetType( struct NineQuery9 *This )
 #endif
 
 #if 0
-static DWORD WINAPI
+static DWORD NINE_WINAPI
 LockQuery9_GetDataSize( struct NineQuery9 *This )
 {
     DWORD r;
@@ -2577,7 +2577,7 @@ LockQuery9_GetDataSize( struct NineQuery9 *This )
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockQuery9_Issue( struct NineQuery9 *This,
                   DWORD dwIssueFlags )
 {
@@ -2588,7 +2588,7 @@ LockQuery9_Issue( struct NineQuery9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockQuery9_GetData( struct NineQuery9 *This,
                     void *pData,
                     DWORD dwSize,
@@ -2613,7 +2613,7 @@ IDirect3DQuery9Vtbl LockQuery9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockStateBlock9_GetDevice( struct NineStateBlock9 *This,
                            IDirect3DDevice9 **ppDevice )
 {
@@ -2625,7 +2625,7 @@ LockStateBlock9_GetDevice( struct NineStateBlock9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockStateBlock9_Capture( struct NineStateBlock9 *This )
 {
     HRESULT r;
@@ -2635,7 +2635,7 @@ LockStateBlock9_Capture( struct NineStateBlock9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockStateBlock9_Apply( struct NineStateBlock9 *This )
 {
     HRESULT r;
@@ -2654,7 +2654,7 @@ IDirect3DStateBlock9Vtbl LockStateBlock9_vtable = {
     (void *)LockStateBlock9_Apply
 };
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSurface9_GetContainer( struct NineSurface9 *This,
                            REFIID riid,
                            void **ppContainer )
@@ -2667,7 +2667,7 @@ LockSurface9_GetContainer( struct NineSurface9 *This,
 }
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSurface9_GetDesc( struct NineSurface9 *This,
                       D3DSURFACE_DESC *pDesc )
 {
@@ -2679,7 +2679,7 @@ LockSurface9_GetDesc( struct NineSurface9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSurface9_LockRect( struct NineSurface9 *This,
                        D3DLOCKED_RECT *pLockedRect,
                        const RECT *pRect,
@@ -2692,7 +2692,7 @@ LockSurface9_LockRect( struct NineSurface9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSurface9_UnlockRect( struct NineSurface9 *This )
 {
     HRESULT r;
@@ -2702,7 +2702,7 @@ LockSurface9_UnlockRect( struct NineSurface9 *This )
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSurface9_GetDC( struct NineSurface9 *This,
                     HDC *phdc )
 {
@@ -2713,7 +2713,7 @@ LockSurface9_GetDC( struct NineSurface9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSurface9_ReleaseDC( struct NineSurface9 *This,
                         HDC hdc )
 {
@@ -2744,7 +2744,7 @@ IDirect3DSurface9Vtbl LockSurface9_vtable = {
     (void *)LockSurface9_ReleaseDC
 };
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9_Present( struct NineSwapChain9 *This,
                         const RECT *pSourceRect,
                         const RECT *pDestRect,
@@ -2759,7 +2759,7 @@ LockSwapChain9_Present( struct NineSwapChain9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9_GetFrontBufferData( struct NineSwapChain9 *This,
                                    IDirect3DSurface9 *pDestSurface )
 {
@@ -2770,7 +2770,7 @@ LockSwapChain9_GetFrontBufferData( struct NineSwapChain9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9_GetBackBuffer( struct NineSwapChain9 *This,
                               UINT iBackBuffer,
                               D3DBACKBUFFER_TYPE Type,
@@ -2783,7 +2783,7 @@ LockSwapChain9_GetBackBuffer( struct NineSwapChain9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9_GetRasterStatus( struct NineSwapChain9 *This,
                                 D3DRASTER_STATUS *pRasterStatus )
 {
@@ -2794,7 +2794,7 @@ LockSwapChain9_GetRasterStatus( struct NineSwapChain9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9_GetDisplayMode( struct NineSwapChain9 *This,
                                D3DDISPLAYMODE *pMode )
 {
@@ -2806,7 +2806,7 @@ LockSwapChain9_GetDisplayMode( struct NineSwapChain9 *This,
 }
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9_GetDevice( struct NineSwapChain9 *This,
                           IDirect3DDevice9 **ppDevice )
 {
@@ -2818,7 +2818,7 @@ LockSwapChain9_GetDevice( struct NineSwapChain9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9_GetPresentParameters( struct NineSwapChain9 *This,
                                      D3DPRESENT_PARAMETERS *pPresentationParameters )
 {
@@ -2842,7 +2842,7 @@ IDirect3DSwapChain9Vtbl LockSwapChain9_vtable = {
     (void *)LockSwapChain9_GetPresentParameters
 };
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9Ex_GetLastPresentCount( struct NineSwapChain9Ex *This,
                                       UINT *pLastPresentCount )
 {
@@ -2853,7 +2853,7 @@ LockSwapChain9Ex_GetLastPresentCount( struct NineSwapChain9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9Ex_GetPresentStats( struct NineSwapChain9Ex *This,
                                   D3DPRESENTSTATS *pPresentationStatistics )
 {
@@ -2864,7 +2864,7 @@ LockSwapChain9Ex_GetPresentStats( struct NineSwapChain9Ex *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockSwapChain9Ex_GetDisplayModeEx( struct NineSwapChain9Ex *This,
                                    D3DDISPLAYMODEEX *pMode,
                                    D3DDISPLAYROTATION *pRotation )
@@ -2893,7 +2893,7 @@ IDirect3DSwapChain9ExVtbl LockSwapChain9Ex_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockTexture9_GetLevelDesc( struct NineTexture9 *This,
                            UINT Level,
                            D3DSURFACE_DESC *pDesc )
@@ -2907,7 +2907,7 @@ LockTexture9_GetLevelDesc( struct NineTexture9 *This,
 #endif
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockTexture9_GetSurfaceLevel( struct NineTexture9 *This,
                               UINT Level,
                               IDirect3DSurface9 **ppSurfaceLevel )
@@ -2920,7 +2920,7 @@ LockTexture9_GetSurfaceLevel( struct NineTexture9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockTexture9_LockRect( struct NineTexture9 *This,
                        UINT Level,
                        D3DLOCKED_RECT *pLockedRect,
@@ -2934,7 +2934,7 @@ LockTexture9_LockRect( struct NineTexture9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockTexture9_UnlockRect( struct NineTexture9 *This,
                          UINT Level )
 {
@@ -2945,7 +2945,7 @@ LockTexture9_UnlockRect( struct NineTexture9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockTexture9_AddDirtyRect( struct NineTexture9 *This,
                            const RECT *pDirtyRect )
 {
@@ -2981,7 +2981,7 @@ IDirect3DTexture9Vtbl LockTexture9_vtable = {
     (void *)LockTexture9_AddDirtyRect
 };
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVertexBuffer9_Lock( struct NineVertexBuffer9 *This,
                         UINT OffsetToLock,
                         UINT SizeToLock,
@@ -2995,7 +2995,7 @@ LockVertexBuffer9_Lock( struct NineVertexBuffer9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVertexBuffer9_Unlock( struct NineVertexBuffer9 *This )
 {
     HRESULT r;
@@ -3006,7 +3006,7 @@ LockVertexBuffer9_Unlock( struct NineVertexBuffer9 *This )
 }
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVertexBuffer9_GetDesc( struct NineVertexBuffer9 *This,
                            D3DVERTEXBUFFER_DESC *pDesc )
 {
@@ -3036,7 +3036,7 @@ IDirect3DVertexBuffer9Vtbl LockVertexBuffer9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVertexDeclaration9_GetDevice( struct NineVertexDeclaration9 *This,
                                   IDirect3DDevice9 **ppDevice )
 {
@@ -3048,7 +3048,7 @@ LockVertexDeclaration9_GetDevice( struct NineVertexDeclaration9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVertexDeclaration9_GetDeclaration( struct NineVertexDeclaration9 *This,
                                        D3DVERTEXELEMENT9 *pElement,
                                        UINT *pNumElements )
@@ -3069,7 +3069,7 @@ IDirect3DVertexDeclaration9Vtbl LockVertexDeclaration9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVertexShader9_GetDevice( struct NineVertexShader9 *This,
                              IDirect3DDevice9 **ppDevice )
 {
@@ -3081,7 +3081,7 @@ LockVertexShader9_GetDevice( struct NineVertexShader9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVertexShader9_GetFunction( struct NineVertexShader9 *This,
                                void *pData,
                                UINT *pSizeOfData )
@@ -3102,7 +3102,7 @@ IDirect3DVertexShader9Vtbl LockVertexShader9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolume9_GetDevice( struct NineVolume9 *This,
                        IDirect3DDevice9 **ppDevice )
 {
@@ -3114,7 +3114,7 @@ LockVolume9_GetDevice( struct NineVolume9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolume9_SetPrivateData( struct NineVolume9 *This,
                             REFGUID refguid,
                             const void *pData,
@@ -3128,7 +3128,7 @@ LockVolume9_SetPrivateData( struct NineVolume9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolume9_GetPrivateData( struct NineVolume9 *This,
                             REFGUID refguid,
                             void *pData,
@@ -3141,7 +3141,7 @@ LockVolume9_GetPrivateData( struct NineVolume9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolume9_FreePrivateData( struct NineVolume9 *This,
                              REFGUID refguid )
 {
@@ -3152,7 +3152,7 @@ LockVolume9_FreePrivateData( struct NineVolume9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolume9_GetContainer( struct NineVolume9 *This,
                           REFIID riid,
                           void **ppContainer )
@@ -3165,7 +3165,7 @@ LockVolume9_GetContainer( struct NineVolume9 *This,
 }
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolume9_GetDesc( struct NineVolume9 *This,
                      D3DVOLUME_DESC *pDesc )
 {
@@ -3177,7 +3177,7 @@ LockVolume9_GetDesc( struct NineVolume9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolume9_LockBox( struct NineVolume9 *This,
                      D3DLOCKED_BOX *pLockedVolume,
                      const D3DBOX *pBox,
@@ -3190,7 +3190,7 @@ LockVolume9_LockBox( struct NineVolume9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolume9_UnlockBox( struct NineVolume9 *This )
 {
     HRESULT r;
@@ -3215,7 +3215,7 @@ IDirect3DVolume9Vtbl LockVolume9_vtable = {
 };
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolumeTexture9_GetLevelDesc( struct NineVolumeTexture9 *This,
                                  UINT Level,
                                  D3DVOLUME_DESC *pDesc )
@@ -3229,7 +3229,7 @@ LockVolumeTexture9_GetLevelDesc( struct NineVolumeTexture9 *This,
 #endif
 
 #if 0
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolumeTexture9_GetVolumeLevel( struct NineVolumeTexture9 *This,
                                    UINT Level,
                                    IDirect3DVolume9 **ppVolumeLevel )
@@ -3242,7 +3242,7 @@ LockVolumeTexture9_GetVolumeLevel( struct NineVolumeTexture9 *This,
 }
 #endif
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolumeTexture9_LockBox( struct NineVolumeTexture9 *This,
                             UINT Level,
                             D3DLOCKED_BOX *pLockedVolume,
@@ -3256,7 +3256,7 @@ LockVolumeTexture9_LockBox( struct NineVolumeTexture9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolumeTexture9_UnlockBox( struct NineVolumeTexture9 *This,
                               UINT Level )
 {
@@ -3267,7 +3267,7 @@ LockVolumeTexture9_UnlockBox( struct NineVolumeTexture9 *This,
     return r;
 }
 
-static HRESULT WINAPI
+static HRESULT NINE_WINAPI
 LockVolumeTexture9_AddDirtyBox( struct NineVolumeTexture9 *This,
                                 const D3DBOX *pDirtyBox )
 {

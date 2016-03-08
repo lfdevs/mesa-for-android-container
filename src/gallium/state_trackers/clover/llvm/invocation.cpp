@@ -661,7 +661,11 @@ namespace {
 
       if (dump_asm) {
          LLVMSetTargetMachineAsmVerbosity(tm, true);
+#if HAVE_LLVM >= 0x0308
+         LLVMModuleRef debug_mod = wrap(llvm::CloneModule(mod).release());
+#else
          LLVMModuleRef debug_mod = wrap(llvm::CloneModule(mod));
+#endif
          emit_code(tm, debug_mod, LLVMAssemblyFile, &out_buffer, r_log);
          buffer_size = LLVMGetBufferSize(out_buffer);
          buffer_data = LLVMGetBufferStart(out_buffer);

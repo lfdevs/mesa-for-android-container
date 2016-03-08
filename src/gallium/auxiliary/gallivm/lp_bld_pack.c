@@ -257,6 +257,32 @@ lp_build_concat_n(struct gallivm_state *gallivm,
 
 
 /**
+ * Un-interleave vector.
+ * This will return a vector consisting of every second element
+ * (depending on lo_hi, beginning at 0 or 1).
+ * The returned vector size (elems and width) will only be half
+ * that of the source vector.
+ */
+LLVMValueRef
+lp_build_uninterleave1(struct gallivm_state *gallivm,
+                       unsigned num_elems,
+                       LLVMValueRef a,
+                       unsigned lo_hi)
+{
+   LLVMValueRef shuffle, elems[LP_MAX_VECTOR_LENGTH];
+   unsigned i;
+   assert(num_elems <= LP_MAX_VECTOR_LENGTH);
+
+   for (i = 0; i < num_elems / 2; ++i)
+      elems[i] = lp_build_const_int32(gallivm, 2*i + lo_hi);
+
+   shuffle = LLVMConstVector(elems, num_elems / 2);
+
+   return LLVMBuildShuffleVector(gallivm->builder, a, a, shuffle, "");
+}
+
+
+/**
  * Interleave vector elements.
  *
  * Matches the PUNPCKLxx and PUNPCKHxx SSE instructions
@@ -461,50 +487,49 @@ lp_build_pack2(struct gallivm_state *gallivm,
    assert(src_type.length * 2 == dst_type.length);
 
    /* Check for special cases first */
-   if((util_cpu_caps.has_sse2 || util_cpu_caps.has_altivec) &&
-       src_type.width * src_type.length >= 128) {
+   if ((util_cpu_caps.has_sse2 || util_cpu_caps.has_altivec) &&
+        src_type.width * src_type.length >= 128) {
       const char *intrinsic = NULL;
       boolean swap_intrinsic_operands = FALSE;
 
       switch(src_type.width) {
       case 32:
          if (util_cpu_caps.has_sse2) {
-           if(dst_type.sign) {
+           if (dst_type.sign) {
               intrinsic = "llvm.x86.sse2.packssdw.128";
-           }
-           else {
+           } else {
               if (util_cpu_caps.has_sse4_1) {
                  intrinsic = "llvm.x86.sse41.packusdw";
               }
            }
          } else if (util_cpu_caps.has_altivec) {
             if (dst_type.sign) {
-              intrinsic = "llvm.ppc.altivec.vpkswus";
-           } else {
-              intrinsic = "llvm.ppc.altivec.vpkuwus";
-           }
+               intrinsic = "llvm.ppc.altivec.vpkswss";
+            } else {
+               intrinsic = "llvm.ppc.altivec.vpkuwus";
+            }
 #ifdef PIPE_ARCH_LITTLE_ENDIAN
-           swap_intrinsic_operands = TRUE;
+            swap_intrinsic_operands = TRUE;
 #endif
          }
          break;
       case 16:
          if (dst_type.sign) {
             if (util_cpu_caps.has_sse2) {
-              intrinsic = "llvm.x86.sse2.packsswb.128";
+               intrinsic = "llvm.x86.sse2.packsswb.128";
             } else if (util_cpu_caps.has_altivec) {
-              intrinsic = "llvm.ppc.altivec.vpkshss";
+               intrinsic = "llvm.ppc.altivec.vpkshss";
 #ifdef PIPE_ARCH_LITTLE_ENDIAN
-              swap_intrinsic_operands = TRUE;
+               swap_intrinsic_operands = TRUE;
 #endif
             }
          } else {
             if (util_cpu_caps.has_sse2) {
-              intrinsic = "llvm.x86.sse2.packuswb.128";
+               intrinsic = "llvm.x86.sse2.packuswb.128";
             } else if (util_cpu_caps.has_altivec) {
-	      intrinsic = "llvm.ppc.altivec.vpkshus";
+               intrinsic = "llvm.ppc.altivec.vpkshus";
 #ifdef PIPE_ARCH_LITTLE_ENDIAN
-              swap_intrinsic_operands = TRUE;
+               swap_intrinsic_operands = TRUE;
 #endif
             }
          }

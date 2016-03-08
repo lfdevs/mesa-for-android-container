@@ -55,11 +55,6 @@ bool
 TargetGM107::isOpSupported(operation op, DataType ty) const
 {
    switch (op) {
-   case OP_MAD:
-   case OP_FMA:
-      if (ty != TYPE_F32)
-         return false;
-      break;
    case OP_SAD:
    case OP_POW:
    case OP_SQRT:

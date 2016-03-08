@@ -723,7 +723,7 @@ generate_setup_variant(struct lp_setup_variant_key *key,
       goto fail;
 
    variant = CALLOC_STRUCT(lp_setup_variant);
-   if (variant == NULL)
+   if (!variant)
       goto fail;
 
    variant->no = setup_no++;
@@ -848,14 +848,10 @@ lp_make_setup_variant_key(struct llvmpipe_context *lp,
    key->size = Offset(struct lp_setup_variant_key,
                       inputs[key->num_inputs]);
 
-   key->color_slot  = lp->color_slot [0];
+   key->color_slot = lp->color_slot[0];
    key->bcolor_slot = lp->bcolor_slot[0];
-   key->spec_slot   = lp->color_slot [1];
-   key->bspec_slot  = lp->bcolor_slot[1];
-   assert(key->color_slot  == lp->color_slot [0]);
-   assert(key->bcolor_slot == lp->bcolor_slot[0]);
-   assert(key->spec_slot   == lp->color_slot [1]);
-   assert(key->bspec_slot  == lp->bcolor_slot[1]);
+   key->spec_slot = lp->color_slot[1];
+   key->bspec_slot = lp->bcolor_slot[1];
 
    /*
     * If depth is floating point, depth bias is calculated with respect

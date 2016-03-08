@@ -91,34 +91,34 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
          }
 
          for (i = 0; i < 4; i++) {
-            out->clip[i] = clipvertex[i];
-            out->pre_clip_pos[i] = position[i];
+            out->clip_pos[i] = position[i];
          }
 
+         /* Be careful with NaNs. Comparisons must be true for them. */
          /* Do the hardwired planes first:
           */
          if (flags & DO_CLIP_XY_GUARD_BAND) {
-            if (-0.50 * position[0] + position[3] < 0) mask |= (1<<0);
-            if ( 0.50 * position[0] + position[3] < 0) mask |= (1<<1);
-            if (-0.50 * position[1] + position[3] < 0) mask |= (1<<2);
-            if ( 0.50 * position[1] + position[3] < 0) mask |= (1<<3);
+            if (!(-0.50 * position[0] + position[3] >= 0)) mask |= (1<<0);
+            if (!( 0.50 * position[0] + position[3] >= 0)) mask |= (1<<1);
+            if (!(-0.50 * position[1] + position[3] >= 0)) mask |= (1<<2);
+            if (!( 0.50 * position[1] + position[3] >= 0)) mask |= (1<<3);
          }
          else if (flags & DO_CLIP_XY) {
-            if (-position[0] + position[3] < 0) mask |= (1<<0);
-            if ( position[0] + position[3] < 0) mask |= (1<<1);
-            if (-position[1] + position[3] < 0) mask |= (1<<2);
-            if ( position[1] + position[3] < 0) mask |= (1<<3);
+            if (!(-position[0] + position[3] >= 0)) mask |= (1<<0);
+            if (!( position[0] + position[3] >= 0)) mask |= (1<<1);
+            if (!(-position[1] + position[3] >= 0)) mask |= (1<<2);
+            if (!( position[1] + position[3] >= 0)) mask |= (1<<3);
          }
 
          /* Clip Z planes according to full cube, half cube or none.
           */
          if (flags & DO_CLIP_FULL_Z) {
-            if ( position[2] + position[3] < 0) mask |= (1<<4);
-            if (-position[2] + position[3] < 0) mask |= (1<<5);
+            if (!( position[2] + position[3] >= 0)) mask |= (1<<4);
+            if (!(-position[2] + position[3] >= 0)) mask |= (1<<5);
          }
          else if (flags & DO_CLIP_HALF_Z) {
-            if ( position[2]               < 0) mask |= (1<<4);
-            if (-position[2] + position[3] < 0) mask |= (1<<5);
+            if (!( position[2]               >= 0)) mask |= (1<<4);
+            if (!(-position[2] + position[3] >= 0)) mask |= (1<<5);
          }
 
          if (flags & DO_CLIP_USER) {
@@ -137,7 +137,6 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
                if (have_cd && num_written_clipdistance) {
                   float clipdist;
                   i = plane_idx - 6;
-                  out->have_clipdist = 1;
                   /* first four clip distance in first vector etc. */
                   if (i < 4)
                      clipdist = out->data[cd[0]][i];
@@ -146,7 +145,7 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
                   if (clipdist < 0 || util_is_inf_or_nan(clipdist))
                      mask |= 1 << plane_idx;
                } else {
-                  if (dot4(clipvertex, plane[plane_idx]) < 0)
+                  if (!(dot4(clipvertex, plane[plane_idx]) >= 0))
                      mask |= 1 << plane_idx;
                }
             }
@@ -192,7 +191,6 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
 
       out = (struct vertex_header *)( (char *)out + info->stride );
    }
-
    return need_pipeline != 0;
 }
 

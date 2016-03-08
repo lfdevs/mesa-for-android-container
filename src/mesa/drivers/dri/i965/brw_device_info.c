@@ -28,6 +28,7 @@
 static const struct brw_device_info brw_device_info_i965 = {
    .gen = 4,
    .has_negative_rhw_bug = true,
+   .num_slices = 1,
    .max_vs_threads = 16,
    .max_gs_threads = 2,
    .max_wm_threads = 8 * 4,
@@ -42,6 +43,7 @@ static const struct brw_device_info brw_device_info_g4x = {
    .has_compr4 = true,
    .has_surface_tile_offset = true,
    .is_g4x = true,
+   .num_slices = 1,
    .max_vs_threads = 32,
    .max_gs_threads = 2,
    .max_wm_threads = 10 * 5,
@@ -55,6 +57,7 @@ static const struct brw_device_info brw_device_info_ilk = {
    .has_pln = true,
    .has_compr4 = true,
    .has_surface_tile_offset = true,
+   .num_slices = 1,
    .max_vs_threads = 72,
    .max_gs_threads = 32,
    .max_wm_threads = 12 * 6,
@@ -71,6 +74,7 @@ static const struct brw_device_info brw_device_info_snb_gt1 = {
    .has_pln = true,
    .has_surface_tile_offset = true,
    .needs_unlit_centroid_workaround = true,
+   .num_slices = 1,
    .max_vs_threads = 24,
    .max_gs_threads = 21, /* conservative; 24 if rendering disabled. */
    .max_wm_threads = 40,
@@ -90,6 +94,7 @@ static const struct brw_device_info brw_device_info_snb_gt2 = {
    .has_pln = true,
    .has_surface_tile_offset = true,
    .needs_unlit_centroid_workaround = true,
+   .num_slices = 1,
    .max_vs_threads = 60,
    .max_gs_threads = 60,
    .max_wm_threads = 80,
@@ -112,6 +117,7 @@ static const struct brw_device_info brw_device_info_snb_gt2 = {
 static const struct brw_device_info brw_device_info_ivb_gt1 = {
    GEN7_FEATURES, .is_ivybridge = true, .gt = 1,
    .needs_unlit_centroid_workaround = true,
+   .num_slices = 1,
    .max_vs_threads = 36,
    .max_hs_threads = 36,
    .max_ds_threads = 36,
@@ -123,6 +129,7 @@ static const struct brw_device_info brw_device_info_ivb_gt1 = {
       .min_vs_entries = 32,
       .max_vs_entries = 512,
       .max_hs_entries = 32,
+      .min_ds_entries = 10,
       .max_ds_entries = 288,
       .max_gs_entries = 192,
    },
@@ -131,6 +138,7 @@ static const struct brw_device_info brw_device_info_ivb_gt1 = {
 static const struct brw_device_info brw_device_info_ivb_gt2 = {
    GEN7_FEATURES, .is_ivybridge = true, .gt = 2,
    .needs_unlit_centroid_workaround = true,
+   .num_slices = 1,
    .max_vs_threads = 128,
    .max_hs_threads = 128,
    .max_ds_threads = 128,
@@ -142,6 +150,7 @@ static const struct brw_device_info brw_device_info_ivb_gt2 = {
       .min_vs_entries = 32,
       .max_vs_entries = 704,
       .max_hs_entries = 64,
+      .min_ds_entries = 10,
       .max_ds_entries = 448,
       .max_gs_entries = 320,
    },
@@ -150,6 +159,7 @@ static const struct brw_device_info brw_device_info_ivb_gt2 = {
 static const struct brw_device_info brw_device_info_byt = {
    GEN7_FEATURES, .is_baytrail = true, .gt = 1,
    .needs_unlit_centroid_workaround = true,
+   .num_slices = 1,
    .has_llc = false,
    .max_vs_threads = 36,
    .max_hs_threads = 36,
@@ -162,6 +172,7 @@ static const struct brw_device_info brw_device_info_byt = {
       .min_vs_entries = 32,
       .max_vs_entries = 512,
       .max_hs_entries = 32,
+      .min_ds_entries = 10,
       .max_ds_entries = 288,
       .max_gs_entries = 192,
    },
@@ -175,6 +186,7 @@ static const struct brw_device_info brw_device_info_byt = {
 
 static const struct brw_device_info brw_device_info_hsw_gt1 = {
    HSW_FEATURES, .gt = 1,
+   .num_slices = 1,
    .max_vs_threads = 70,
    .max_hs_threads = 70,
    .max_ds_threads = 70,
@@ -186,6 +198,7 @@ static const struct brw_device_info brw_device_info_hsw_gt1 = {
       .min_vs_entries = 32,
       .max_vs_entries = 640,
       .max_hs_entries = 64,
+      .min_ds_entries = 10,
       .max_ds_entries = 384,
       .max_gs_entries = 256,
    },
@@ -193,6 +206,7 @@ static const struct brw_device_info brw_device_info_hsw_gt1 = {
 
 static const struct brw_device_info brw_device_info_hsw_gt2 = {
    HSW_FEATURES, .gt = 2,
+   .num_slices = 1,
    .max_vs_threads = 280,
    .max_hs_threads = 256,
    .max_ds_threads = 280,
@@ -204,6 +218,7 @@ static const struct brw_device_info brw_device_info_hsw_gt2 = {
       .min_vs_entries = 64,
       .max_vs_entries = 1664,
       .max_hs_entries = 128,
+      .min_ds_entries = 10,
       .max_ds_entries = 960,
       .max_gs_entries = 640,
    },
@@ -211,6 +226,7 @@ static const struct brw_device_info brw_device_info_hsw_gt2 = {
 
 static const struct brw_device_info brw_device_info_hsw_gt3 = {
    HSW_FEATURES, .gt = 3,
+   .num_slices = 2,
    .max_vs_threads = 280,
    .max_hs_threads = 256,
    .max_ds_threads = 280,
@@ -222,6 +238,7 @@ static const struct brw_device_info brw_device_info_hsw_gt3 = {
       .min_vs_entries = 64,
       .max_vs_entries = 1664,
       .max_hs_entries = 128,
+      .min_ds_entries = 10,
       .max_ds_entries = 960,
       .max_gs_entries = 640,
    },
@@ -243,12 +260,14 @@ static const struct brw_device_info brw_device_info_hsw_gt3 = {
 
 static const struct brw_device_info brw_device_info_bdw_gt1 = {
    GEN8_FEATURES, .gt = 1,
+   .num_slices = 1,
    .max_cs_threads = 42,
    .urb = {
       .size = 192,
       .min_vs_entries = 64,
       .max_vs_entries = 2560,
       .max_hs_entries = 504,
+      .min_ds_entries = 34,
       .max_ds_entries = 1536,
       .max_gs_entries = 960,
    }
@@ -256,12 +275,14 @@ static const struct brw_device_info brw_device_info_bdw_gt1 = {
 
 static const struct brw_device_info brw_device_info_bdw_gt2 = {
    GEN8_FEATURES, .gt = 2,
+   .num_slices = 1,
    .max_cs_threads = 56,
    .urb = {
       .size = 384,
       .min_vs_entries = 64,
       .max_vs_entries = 2560,
       .max_hs_entries = 504,
+      .min_ds_entries = 34,
       .max_ds_entries = 1536,
       .max_gs_entries = 960,
    }
@@ -269,12 +290,14 @@ static const struct brw_device_info brw_device_info_bdw_gt2 = {
 
 static const struct brw_device_info brw_device_info_bdw_gt3 = {
    GEN8_FEATURES, .gt = 3,
+   .num_slices = 2,
    .max_cs_threads = 56,
    .urb = {
       .size = 384,
       .min_vs_entries = 64,
       .max_vs_entries = 2560,
       .max_hs_entries = 504,
+      .min_ds_entries = 34,
       .max_ds_entries = 1536,
       .max_gs_entries = 960,
    }
@@ -283,6 +306,7 @@ static const struct brw_device_info brw_device_info_bdw_gt3 = {
 static const struct brw_device_info brw_device_info_chv = {
    GEN8_FEATURES, .is_cherryview = 1, .gt = 1,
    .has_llc = false,
+   .num_slices = 1,
    .max_vs_threads = 80,
    .max_hs_threads = 80,
    .max_ds_threads = 80,
@@ -294,6 +318,7 @@ static const struct brw_device_info brw_device_info_chv = {
       .min_vs_entries = 34,
       .max_vs_entries = 640,
       .max_hs_entries = 80,
+      .min_ds_entries = 34,
       .max_ds_entries = 384,
       .max_gs_entries = 256,
    }
@@ -318,25 +343,30 @@ static const struct brw_device_info brw_device_info_chv = {
       .min_vs_entries = 64,                         \
       .max_vs_entries = 1856,                       \
       .max_hs_entries = 672,                        \
+      .min_ds_entries = 34,                         \
       .max_ds_entries = 1120,                       \
       .max_gs_entries = 640,                        \
    }
 
 static const struct brw_device_info brw_device_info_skl_gt1 = {
    GEN9_FEATURES, .gt = 1,
+   .num_slices = 1,
    .urb.size = 192,
 };
 
 static const struct brw_device_info brw_device_info_skl_gt2 = {
    GEN9_FEATURES, .gt = 2,
+   .num_slices = 1,
 };
 
 static const struct brw_device_info brw_device_info_skl_gt3 = {
    GEN9_FEATURES, .gt = 3,
+   .num_slices = 2,
 };
 
 static const struct brw_device_info brw_device_info_skl_gt4 = {
    GEN9_FEATURES, .gt = 4,
+   .num_slices = 3,
    /* From the "L3 Allocation and Programming" documentation:
     *
     * "URB is limited to 1008KB due to programming restrictions.  This is not a
@@ -354,19 +384,19 @@ static const struct brw_device_info brw_device_info_bxt = {
    .gt = 1,
    .has_llc = false,
 
-   /* XXX: These are preliminary thread counts and URB sizes. */
-   .max_vs_threads = 56,
-   .max_hs_threads = 56,
-   .max_ds_threads = 56,
-   .max_gs_threads = 56,
+   .num_slices = 1,
+   .max_vs_threads = 112,
+   .max_hs_threads = 112,
+   .max_ds_threads = 112,
+   .max_gs_threads = 112,
    .max_wm_threads = 64 * 3,
-   .max_cs_threads = 28,
+   .max_cs_threads = 6 * 6,
    .urb = {
-      .size = 64,
+      .size = 192,
       .min_vs_entries = 34,
-      .max_vs_entries = 640,
-      .max_hs_entries = 80,
-      .max_ds_entries = 80,
+      .max_vs_entries = 704,
+      .max_hs_entries = 256,
+      .max_ds_entries = 416,
       .max_gs_entries = 256,
    }
 };
@@ -389,6 +419,7 @@ static const struct brw_device_info brw_device_info_kbl_gt1 = {
    .max_cs_threads = 7 * 6,
    .max_wm_threads = KBL_MAX_THREADS_PER_PSD * 2,
    .urb.size = 192,
+   .num_slices = 1,
 };
 
 static const struct brw_device_info brw_device_info_kbl_gt1_5 = {
@@ -397,6 +428,7 @@ static const struct brw_device_info brw_device_info_kbl_gt1_5 = {
 
    .max_cs_threads = 7 * 6,
    .max_wm_threads = KBL_MAX_THREADS_PER_PSD * 3,
+   .num_slices = 1,
 };
 
 static const struct brw_device_info brw_device_info_kbl_gt2 = {
@@ -404,6 +436,7 @@ static const struct brw_device_info brw_device_info_kbl_gt2 = {
    .gt = 2,
 
    .max_wm_threads = KBL_MAX_THREADS_PER_PSD * 3,
+   .num_slices = 1,
 };
 
 static const struct brw_device_info brw_device_info_kbl_gt3 = {
@@ -411,6 +444,7 @@ static const struct brw_device_info brw_device_info_kbl_gt3 = {
    .gt = 3,
 
    .max_wm_threads = KBL_MAX_THREADS_PER_PSD * 6,
+   .num_slices = 2,
 };
 
 static const struct brw_device_info brw_device_info_kbl_gt4 = {
@@ -429,6 +463,7 @@ static const struct brw_device_info brw_device_info_kbl_gt4 = {
     *  will be used."
     */
    .urb.size = 1008 / 3,
+   .num_slices = 3,
 };
 
 const struct brw_device_info *

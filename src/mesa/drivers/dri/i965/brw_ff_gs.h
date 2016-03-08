@@ -37,7 +37,7 @@
 #include "brw_context.h"
 #include "brw_eu.h"
 
-#define MAX_GS_VERTS (4)	
+#define MAX_GS_VERTS (4)
 
 struct brw_ff_gs_prog_key {
    GLbitfield64 attrs;

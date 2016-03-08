@@ -41,13 +41,13 @@ trace_resource_create(struct trace_screen *tr_scr,
 {
    struct trace_resource *tr_res;
 
-   if(!texture)
+   if (!texture)
       goto error;
 
    assert(texture->screen == tr_scr->screen);
 
    tr_res = CALLOC_STRUCT(trace_resource);
-   if(!tr_res)
+   if (!tr_res)
       goto error;
 
    memcpy(&tr_res->base, texture, sizeof(struct pipe_resource));
@@ -80,13 +80,13 @@ trace_surf_create(struct trace_context *tr_ctx,
 {
    struct trace_surface *tr_surf;
 
-   if(!surface)
+   if (!surface)
       goto error;
 
    assert(surface->texture == tr_res->resource);
 
    tr_surf = CALLOC_STRUCT(trace_surface);
-   if(!tr_surf)
+   if (!tr_surf)
       goto error;
 
    memcpy(&tr_surf->base, surface, sizeof(struct pipe_surface));
@@ -122,13 +122,13 @@ trace_transfer_create(struct trace_context *tr_ctx,
 {
    struct trace_transfer *tr_trans;
 
-   if(!transfer)
+   if (!transfer)
       goto error;
 
    assert(transfer->resource == tr_res->resource);
 
    tr_trans = CALLOC_STRUCT(trace_transfer);
-   if(!tr_trans)
+   if (!tr_trans)
       goto error;
 
    memcpy(&tr_trans->base, transfer, sizeof(struct pipe_transfer));

@@ -76,6 +76,11 @@ struct fd_hw_sample_provider {
 	/* stages applicable to the query type: */
 	enum fd_render_stage active;
 
+	/* Optional hook for enabling a counter.  Guaranteed to happen
+	 * at least once before the first ->get_sample() in a batch.
+	 */
+	void (*enable)(struct fd_context *ctx, struct fd_ringbuffer *ring);
+
 	/* when a new sample is required, emit appropriate cmdstream
 	 * and return a sample object:
 	 */
@@ -144,6 +149,7 @@ void fd_hw_query_prepare_tile(struct fd_context *ctx, uint32_t n,
 		struct fd_ringbuffer *ring);
 void fd_hw_query_set_stage(struct fd_context *ctx,
 		struct fd_ringbuffer *ring, enum fd_render_stage stage);
+void fd_hw_query_enable(struct fd_context *ctx, struct fd_ringbuffer *ring);
 void fd_hw_query_register_provider(struct pipe_context *pctx,
 		const struct fd_hw_sample_provider *provider);
 void fd_hw_query_init(struct pipe_context *pctx);

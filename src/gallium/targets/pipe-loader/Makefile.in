@@ -199,7 +199,7 @@ am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 @HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1)
 am__DEPENDENCIES_4 = $(am__append_3) $(am__append_4) $(am__append_5) \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
@@ -537,8 +537,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -584,6 +582,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -778,7 +777,7 @@ pipe_LTLIBRARIES = $(am__append_9) $(am__append_10) $(am__append_11) \
 	$(am__append_15) $(am__append_16) $(am__append_18)
 PIPE_LIBS = $(am__append_3) $(am__append_4) $(am__append_5) \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \

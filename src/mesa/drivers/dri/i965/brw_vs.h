@@ -34,10 +34,7 @@
 #define BRW_VS_H
 
 
-#include "brw_context.h"
-#include "brw_eu.h"
 #include "brw_vec4.h"
-#include "program/program.h"
 
 /**
  * The VF can't natively handle certain types of attributes, such as GL_FIXED

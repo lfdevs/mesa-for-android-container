@@ -235,7 +235,6 @@ enum radeon_bo_priority {
 };
 
 struct winsys_handle;
-struct radeon_winsys_cs_handle;
 struct radeon_winsys_ctx;
 
 struct radeon_winsys_cs {
@@ -246,46 +245,49 @@ struct radeon_winsys_cs {
 };
 
 struct radeon_info {
+    /* Device info. */
     uint32_t                    pci_id;
     enum radeon_family          family;
     enum chip_class             chip_class;
     uint64_t                    gart_size;
     uint64_t                    vram_size;
-    uint32_t                    max_sclk;
-    uint32_t                    max_compute_units;
-    uint32_t                    max_se;
-    uint32_t                    max_sh_per_se;
+    boolean                     has_virtual_memory;
+    bool                        gfx_ib_pad_with_type2;
+    boolean                     has_sdma;
+    boolean                     has_uvd;
+    uint32_t                    vce_fw_version;
+    uint32_t                    vce_harvest_config;
+    uint32_t                    clock_crystal_freq;
 
+    /* Kernel info. */
     uint32_t                    drm_major; /* version */
     uint32_t                    drm_minor;
     uint32_t                    drm_patchlevel;
-
-    boolean                     has_uvd;
-    uint32_t                    vce_fw_version;
     boolean                     has_userptr;
-    bool                        gfx_ib_pad_with_type2;
 
+    /* Shader cores. */
+    uint32_t                    r600_max_quad_pipes; /* wave size / 16 */
+    uint32_t                    max_shader_clock;
+    uint32_t                    num_good_compute_units;
+    uint32_t                    max_se; /* shader engines */
+    uint32_t                    max_sh_per_se; /* shader arrays per shader engine */
+
+    /* Render backends (color + depth blocks). */
     uint32_t                    r300_num_gb_pipes;
     uint32_t                    r300_num_z_pipes;
+    uint32_t                    r600_gb_backend_map; /* R600 harvest config */
+    boolean                     r600_gb_backend_map_valid;
+    uint32_t                    r600_num_banks;
+    uint32_t                    num_render_backends;
+    uint32_t                    num_tile_pipes; /* pipe count from PIPE_CONFIG */
+    uint32_t                    pipe_interleave_bytes;
+    uint32_t                    enabled_rb_mask; /* GCN harvest config */
 
-    uint32_t                    r600_num_backends;
-    uint32_t                    r600_clock_crystal_freq;
-    uint32_t                    r600_tiling_config;
-    uint32_t                    r600_num_tile_pipes;
-    uint32_t                    r600_max_pipes;
-    boolean                     r600_virtual_address;
-    boolean                     r600_has_dma;
-
-    uint32_t                    r600_backend_map;
-    boolean                     r600_backend_map_valid;
-
+    /* Tile modes. */
     boolean                     si_tile_mode_array_valid;
     uint32_t                    si_tile_mode_array[32];
-    uint32_t                    si_backend_enabled_mask;
-
     boolean                     cik_macrotile_mode_array_valid;
     uint32_t                    cik_macrotile_mode_array[16];
-    uint32_t                    vce_harvest_config;
 };
 
 enum radeon_feature_id {
@@ -434,9 +436,6 @@ struct radeon_winsys {
                                        enum radeon_bo_domain domain,
                                        enum radeon_bo_flag flags);
 
-    struct radeon_winsys_cs_handle *(*buffer_get_cs_handle)(
-            struct pb_buffer *buf);
-
     /**
      * Map the entire data store of a buffer object into the client's address
      * space.
@@ -446,7 +445,7 @@ struct radeon_winsys {
      * \param usage     A bitmask of the PIPE_TRANSFER_* flags.
      * \return          The pointer at the beginning of the buffer.
      */
-    void *(*buffer_map)(struct radeon_winsys_cs_handle *buf,
+    void *(*buffer_map)(struct pb_buffer *buf,
                         struct radeon_winsys_cs *cs,
                         enum pipe_transfer_usage usage);
 
@@ -455,7 +454,7 @@ struct radeon_winsys {
      *
      * \param buf       A winsys buffer object to unmap.
      */
-    void (*buffer_unmap)(struct radeon_winsys_cs_handle *buf);
+    void (*buffer_unmap)(struct pb_buffer *buf);
 
     /**
      * Wait for the buffer and return true if the buffer is not used
@@ -534,6 +533,14 @@ struct radeon_winsys {
                                          void *pointer, unsigned size);
 
     /**
+     * Whether the buffer was created from a user pointer.
+     *
+     * \param buf       A winsys buffer object
+     * \return          whether \p buf was created via buffer_from_ptr
+     */
+    bool (*buffer_is_user_ptr)(struct pb_buffer *buf);
+
+    /**
      * Get a winsys handle from a winsys buffer. The internal structure
      * of the handle is platform-specific and only a winsys should access it.
      *
@@ -552,12 +559,12 @@ struct radeon_winsys {
      * \param buf       A winsys buffer object
      * \return          virtual address
      */
-    uint64_t (*buffer_get_virtual_address)(struct radeon_winsys_cs_handle *buf);
+    uint64_t (*buffer_get_virtual_address)(struct pb_buffer *buf);
 
     /**
      * Query the initial placement of the buffer from the kernel driver.
      */
-    enum radeon_bo_domain (*buffer_get_initial_domain)(struct radeon_winsys_cs_handle *buf);
+    enum radeon_bo_domain (*buffer_get_initial_domain)(struct pb_buffer *buf);
 
     /**************************************************************************
      * Command submission.
@@ -596,7 +603,7 @@ struct radeon_winsys {
                                           void (*flush)(void *ctx, unsigned flags,
 							struct pipe_fence_handle **fence),
                                           void *flush_ctx,
-                                          struct radeon_winsys_cs_handle *trace_buf);
+                                          struct pb_buffer *trace_buf);
 
     /**
      * Destroy a command stream.
@@ -617,7 +624,7 @@ struct radeon_winsys {
      * \return Buffer index.
      */
     unsigned (*cs_add_buffer)(struct radeon_winsys_cs *cs,
-                             struct radeon_winsys_cs_handle *buf,
+                             struct pb_buffer *buf,
                              enum radeon_bo_usage usage,
                              enum radeon_bo_domain domain,
                              enum radeon_bo_priority priority);
@@ -630,7 +637,7 @@ struct radeon_winsys {
      * \return          The buffer index, or -1 if the buffer has not been added.
      */
     int (*cs_lookup_buffer)(struct radeon_winsys_cs *cs,
-                            struct radeon_winsys_cs_handle *buf);
+                            struct pb_buffer *buf);
 
     /**
      * Return TRUE if there is enough memory in VRAM and GTT for the buffers
@@ -683,7 +690,7 @@ struct radeon_winsys {
      * \param buf       A winsys buffer.
      */
     boolean (*cs_is_buffer_referenced)(struct radeon_winsys_cs *cs,
-                                       struct radeon_winsys_cs_handle *buf,
+                                       struct pb_buffer *buf,
                                        enum radeon_bo_usage usage);
 
     /**

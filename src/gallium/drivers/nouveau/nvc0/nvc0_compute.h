@@ -1,7 +1,6 @@
 #ifndef NVC0_COMPUTE_H
 #define NVC0_COMPUTE_H
 
-#include "nv50/nv50_defs.xml.h"
 #include "nvc0/nvc0_compute.xml.h"
 
 bool

@@ -38,6 +38,7 @@
 #include "sp_state.h"
 #include "sp_tile_cache.h"
 #include "sp_tex_tile_cache.h"
+#include "util/u_debug_image.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
 

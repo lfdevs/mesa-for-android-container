@@ -126,7 +126,7 @@ vs_lower_opcode_tgsi_const_gen6(struct vs_compile_context *vcc,
    tc_MOV(tc, block_offsets, idx);
 
    msg_type = GEN6_MSG_DP_OWORD_DUAL_BLOCK_READ;
-   msg_ctrl = GEN6_MSG_DP_OWORD_DUAL_BLOCK_SIZE_1;;
+   msg_ctrl = GEN6_MSG_DP_OWORD_DUAL_BLOCK_SIZE_1;
    msg_len = 2;
 
    desc = tsrc_imm_mdesc_data_port(tc, false, msg_len, 1, true, false,
@@ -522,7 +522,7 @@ vs_prepare_tgsi_sampling(struct vs_compile_context *vcc,
       if (num_coords >= 3) {
          struct toy_dst tmp, max;
          struct toy_src abs_coords[3];
-         int i;
+         unsigned i;
 
          tmp = tc_alloc_tmp(tc);
          max = tdst_writemask(tmp, TOY_WRITEMASK_W);
@@ -804,7 +804,7 @@ static int
 vs_collect_outputs(struct vs_compile_context *vcc, struct toy_src *outs)
 {
    const struct toy_tgsi *tgsi = &vcc->tgsi;
-   int i;
+   unsigned i;
 
    for (i = 0; i < vcc->shader->out.count; i++) {
       const int slot = vcc->output_map[i];

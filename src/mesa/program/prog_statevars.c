@@ -40,6 +40,7 @@
 #include "prog_statevars.h"
 #include "prog_parameter.h"
 #include "main/samplerobj.h"
+#include "main/framebuffer.h"
 
 
 #define ONE_DIV_SQRT_LN2 (1.201122408786449815)
@@ -352,7 +353,7 @@ _mesa_fetch_state(struct gl_context *ctx, const gl_state_index state[],
       }
       return;
    case STATE_NUM_SAMPLES:
-      ((int *)value)[0] = ctx->DrawBuffer->Visual.samples;
+      ((int *)value)[0] = MAX2(1, _mesa_geometric_samples(ctx->DrawBuffer));
       return;
    case STATE_DEPTH_RANGE:
       value[0] = ctx->ViewportArray[0].Near;                /* near       */
@@ -474,7 +475,7 @@ _mesa_fetch_state(struct gl_context *ctx, const gl_state_index state[],
           * single MAD.
           * linear: fogcoord * -1/(end-start) + end/(end-start)
           * exp: 2^-(density/ln(2) * fogcoord)
-          * exp2: 2^-((density/(ln(2)^2) * fogcoord)^2)
+          * exp2: 2^-((density/(sqrt(ln(2))) * fogcoord)^2)
           */
          value[0] = (ctx->Fog.End == ctx->Fog.Start)
             ? 1.0f : (GLfloat)(-1.0F / (ctx->Fog.End - ctx->Fog.Start));

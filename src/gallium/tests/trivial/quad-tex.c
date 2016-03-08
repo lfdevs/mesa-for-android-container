@@ -50,7 +50,7 @@
 /* u_sampler_view_default_template */
 #include "util/u_sampler.h"
 /* debug_dump_surface_bmp */
-#include "util/u_debug.h"
+#include "util/u_debug_image.h"
 /* util_draw_vertex_buffer helper */
 #include "util/u_draw_quad.h"
 /* FREE & CALLOC_STRUCT */

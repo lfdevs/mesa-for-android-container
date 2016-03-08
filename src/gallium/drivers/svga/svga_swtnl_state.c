@@ -220,8 +220,6 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
    struct draw_context *draw = svga->swtnl.draw;
    struct vertex_info *vinfo = &svga_render->vertex_info;
    SVGA3dVertexDecl vdecl[PIPE_MAX_ATTRIBS];
-   const enum interp_mode colorInterp =
-      svga->curr.rast->templ.flatshade ? INTERP_CONSTANT : INTERP_LINEAR;
    struct svga_fragment_shader *fs = svga->curr.fs;
    int offset = 0;
    int nr_decls = 0;
@@ -236,7 +234,7 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
 
    /* always add position */
    src = draw_find_shader_output(draw, TGSI_SEMANTIC_POSITION, 0);
-   draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_LINEAR, src);
+   draw_emit_vertex_attr(vinfo, EMIT_4F, src);
    vinfo->attrib[0].emit = EMIT_4F;
    vdecl[0].array.offset = offset;
    vdecl[0].identity.method = SVGA3D_DECLMETHOD_DEFAULT;
@@ -257,14 +255,14 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
 
       switch (sem_name) {
       case TGSI_SEMANTIC_COLOR:
-         draw_emit_vertex_attr(vinfo, EMIT_4F, colorInterp, src);
+         draw_emit_vertex_attr(vinfo, EMIT_4F, src);
          vdecl[nr_decls].identity.usage = SVGA3D_DECLUSAGE_COLOR;
          vdecl[nr_decls].identity.type = SVGA3D_DECLTYPE_FLOAT4;
          offset += 16;
          nr_decls++;
          break;
       case TGSI_SEMANTIC_GENERIC:
-         draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_PERSPECTIVE, src);
+         draw_emit_vertex_attr(vinfo, EMIT_4F, src);
          vdecl[nr_decls].identity.usage = SVGA3D_DECLUSAGE_TEXCOORD;
          vdecl[nr_decls].identity.type = SVGA3D_DECLTYPE_FLOAT4;
          vdecl[nr_decls].identity.usageIndex =
@@ -273,7 +271,7 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
          nr_decls++;
          break;
       case TGSI_SEMANTIC_FOG:
-         draw_emit_vertex_attr(vinfo, EMIT_1F, INTERP_PERSPECTIVE, src);
+         draw_emit_vertex_attr(vinfo, EMIT_1F, src);
          vdecl[nr_decls].identity.usage = SVGA3D_DECLUSAGE_TEXCOORD;
          vdecl[nr_decls].identity.type = SVGA3D_DECLTYPE_FLOAT1;
          assert(vdecl[nr_decls].identity.usageIndex == 0);

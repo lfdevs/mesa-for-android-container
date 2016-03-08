@@ -189,6 +189,14 @@
  * 255  SQ_ALU_SRC_PS: previous scalar result.
  * 448  EG - INTERP SRC BASE
  */
+/* LDS are Evergreen/Cayman only */
+#define     EG_V_SQ_ALU_SRC_LDS_OQ_A                                 0x000000DB
+#define     EG_V_SQ_ALU_SRC_LDS_OQ_B                                 0x000000DC
+#define     EG_V_SQ_ALU_SRC_LDS_OQ_A_POP                             0x000000DD
+#define     EG_V_SQ_ALU_SRC_LDS_OQ_B_POP                             0x000000DE
+#define     EG_V_SQ_ALU_SRC_LDS_DIRECT_A                             0x000000DF
+#define     EG_V_SQ_ALU_SRC_LDS_DIRECT_B                             0x000000E0
+
 #define     V_SQ_ALU_SRC_0                                           0x000000F8
 #define     V_SQ_ALU_SRC_1                                           0x000000F9
 #define     V_SQ_ALU_SRC_1_INT                                       0x000000FA

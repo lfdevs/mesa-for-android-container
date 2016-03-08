@@ -43,8 +43,8 @@
 #include "main/shaderobj.h"
 #include "main/transformfeedback.h"
 #include "main/uniforms.h"
-#include "glsl/glsl_parser_extras.h"
-#include "glsl/ir_uniform.h"
+#include "compiler/glsl/glsl_parser_extras.h"
+#include "compiler/glsl/ir_uniform.h"
 #include "program/program.h"
 #include "program/prog_parameter.h"
 #include "util/ralloc.h"
@@ -341,6 +341,8 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
 
    if ((stages & GL_COMPUTE_SHADER_BIT) != 0)
       _mesa_use_shader_program(ctx, GL_COMPUTE_SHADER, shProg, pipe);
+
+   pipe->Validated = false;
 }
 
 /**
@@ -757,8 +759,7 @@ program_stages_interleaved_illegally(const struct gl_pipeline_object *pipe)
 
 extern GLboolean
 _mesa_validate_program_pipeline(struct gl_context* ctx,
-                                struct gl_pipeline_object *pipe,
-                                GLboolean IsBound)
+                                struct gl_pipeline_object *pipe)
 {
    unsigned i;
    bool program_empty = true;
@@ -789,7 +790,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
     */
    for (i = 0; i < MESA_SHADER_STAGES; i++) {
       if (!program_stages_all_active(pipe, pipe->CurrentProgram[i])) {
-         goto err;
+         return GL_FALSE;
       }
    }
 
@@ -810,7 +811,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
          ralloc_strdup(pipe,
                        "Program is active for multiple shader stages with an "
                        "intervening stage provided by another program");
-      goto err;
+      return GL_FALSE;
    }
 
    /* Section 2.11.11 (Shader Execution), subheading "Validation," of the
@@ -831,7 +832,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
            pipe->CurrentProgram[MESA_SHADER_TESS_CTRL] ||
            pipe->CurrentProgram[MESA_SHADER_TESS_EVAL])) {
       pipe->InfoLog = ralloc_strdup(pipe, "Program lacks a vertex shader");
-      goto err;
+      return GL_FALSE;
    }
 
    /* Section 2.11.11 (Shader Execution), subheading "Validation," of the
@@ -854,7 +855,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
                                          "Program %d was relinked without "
                                          "PROGRAM_SEPARABLE state",
                                          pipe->CurrentProgram[i]->Name);
-         goto err;
+         return GL_FALSE;
       }
    }
 
@@ -878,7 +879,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
    }
 
    if (program_empty) {
-      goto err;
+      return GL_FALSE;
    }
 
    /* Section 2.11.11 (Shader Execution), subheading "Validation," of the
@@ -896,7 +897,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
     *           maximum number of texture image units allowed."
     */
    if (!_mesa_sampler_uniforms_pipeline_are_valid(pipe))
-      goto err;
+      return GL_FALSE;
 
    /* Validate inputs against outputs, this cannot be done during linking
     * since programs have been linked separately from each other.
@@ -911,17 +912,10 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
     * OpenGL ES 3.1 specification has the same text.
     */
    if (!_mesa_validate_pipeline_io(pipe))
-      goto err;
+      return GL_FALSE;
 
    pipe->Validated = GL_TRUE;
    return GL_TRUE;
-
-err:
-   if (IsBound)
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glValidateProgramPipeline failed to validate the pipeline");
-
-   return GL_FALSE;
 }
 
 /**
@@ -943,11 +937,7 @@ _mesa_ValidateProgramPipeline(GLuint pipeline)
       return;
    }
 
-   /* ValidateProgramPipeline should not throw errors when pipeline validation
-    * fails and should instead only update the validation status. We pass
-    * false for IsBound to avoid an error being thrown.
-    */
-   _mesa_validate_program_pipeline(ctx, pipe, false);
+   _mesa_validate_program_pipeline(ctx, pipe);
 }
 
 void GLAPIENTRY
@@ -974,8 +964,5 @@ _mesa_GetProgramPipelineInfoLog(GLuint pipeline, GLsizei bufSize,
       return;
    }
 
-   if (pipe->InfoLog)
-      _mesa_copy_string(infoLog, bufSize, length, pipe->InfoLog);
-   else
-      *length = 0;
+   _mesa_copy_string(infoLog, bufSize, length, pipe->InfoLog);
 }

@@ -59,8 +59,9 @@
 #define SVGA_QUERY_NUM_RESOURCES           (PIPE_QUERY_DRIVER_SPECIFIC + 9)
 #define SVGA_QUERY_NUM_STATE_OBJECTS       (PIPE_QUERY_DRIVER_SPECIFIC + 10)
 #define SVGA_QUERY_NUM_SURFACE_VIEWS       (PIPE_QUERY_DRIVER_SPECIFIC + 11)
+#define SVGA_QUERY_NUM_GENERATE_MIPMAP     (PIPE_QUERY_DRIVER_SPECIFIC + 12)
 /*SVGA_QUERY_MAX has to be last because it is size of an array*/
-#define SVGA_QUERY_MAX                     (PIPE_QUERY_DRIVER_SPECIFIC + 12)
+#define SVGA_QUERY_MAX                     (PIPE_QUERY_DRIVER_SPECIFIC + 13)
 
 /**
  * Maximum supported number of constant buffers per shader
@@ -73,6 +74,8 @@
  * DX10 constant buffer element count * 4 4-bytes components
  */
 #define SVGA_MAX_CONST_BUF_SIZE (4096 * 4 * sizeof(int))
+
+#define CONST0_UPLOAD_ALIGNMENT 256
 
 struct draw_vertex_shader;
 struct draw_fragment_shader;
@@ -312,7 +315,7 @@ struct svga_hw_view_state
    struct svga_sampler_view *v;
    unsigned min_lod;
    unsigned max_lod;
-   int dirty;
+   boolean dirty;
 };
 
 /* Updated by calling svga_update_state( SVGA_STATE_HW_DRAW )
@@ -342,6 +345,18 @@ struct svga_hw_draw_state
    SVGA3dRasterizerStateId rasterizer_id;
    SVGA3dElementLayoutId layout_id;
    SVGA3dPrimitiveType topology;
+
+   /** Vertex buffer state */
+   SVGA3dVertexBuffer vbuffers[PIPE_MAX_ATTRIBS];
+   struct svga_winsys_surface *vbuffer_handles[PIPE_MAX_ATTRIBS];
+   unsigned num_vbuffers;
+
+   struct svga_winsys_surface *ib;  /**< index buffer for drawing */
+   SVGA3dSurfaceFormat ib_format;
+   unsigned ib_offset;
+
+   unsigned num_samplers[PIPE_SHADER_TYPES];
+   SVGA3dSamplerId samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
 
    /* used for rebinding */
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
@@ -392,6 +407,9 @@ struct svga_context
 
       boolean no_line_width;
       boolean force_hw_line_stipple;
+
+      /** To report perf/conformance/etc issues to the state tracker */
+      struct pipe_debug_callback callback;
    } debug;
 
    struct {
@@ -488,6 +506,7 @@ struct svga_context
       uint64_t num_state_objects;    /**< SVGA_QUERY_NUM_STATE_OBJECTS */
       uint64_t num_surface_views;    /**< SVGA_QUERY_NUM_SURFACE_VIEWS */
       uint64_t num_bytes_uploaded;   /**< SVGA_QUERY_NUM_BYTES_UPLOADED */
+      uint64_t num_generate_mipmap;  /**< SVGA_QUERY_NUM_GENERATE_MIPMAP */
    } hud;
 
    /** The currently bound stream output targets */

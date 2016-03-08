@@ -472,6 +472,8 @@ dri2_x11_get_buffers(__DRIdrawable * driDrawable,
 					    dri2_surf->drawable,
 					    count, count, attachments);
    reply = xcb_dri2_get_buffers_reply (dri2_dpy->conn, cookie, NULL);
+   if (reply == NULL)
+      return NULL;
    buffers = xcb_dri2_get_buffers_buffers (reply);
    if (buffers == NULL)
       return NULL;
@@ -870,7 +872,12 @@ dri2_x11_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
 
    if (dri2_dpy->dri2) {
-      return dri2_x11_swap_buffers_msc(drv, disp, draw, 0, 0, 0) != -1;
+      if (dri2_x11_swap_buffers_msc(drv, disp, draw, 0, 0, 0) != -1) {
+          return EGL_TRUE;
+      }
+      /* Swap failed with a window drawable. */
+      _eglError(EGL_BAD_NATIVE_WINDOW, __FUNCTION__);
+      return EGL_FALSE;
    } else {
       assert(dri2_dpy->swrast);
 

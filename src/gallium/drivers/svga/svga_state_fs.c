@@ -452,6 +452,7 @@ struct svga_tracked_state svga_hw_fs =
     SVGA_NEW_TEXTURE_BINDING |
     SVGA_NEW_NEED_SWTNL |
     SVGA_NEW_RAST |
+    SVGA_NEW_STIPPLE |
     SVGA_NEW_REDUCED_PRIMITIVE |
     SVGA_NEW_SAMPLER |
     SVGA_NEW_FRAME_BUFFER |

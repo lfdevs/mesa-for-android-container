@@ -88,9 +88,13 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__append_1 = $(MESA_GLAPI_DIR)/glapi_x86-64.S
-@HAVE_X86_64_ASM_FALSE@@HAVE_X86_ASM_TRUE@am__append_2 = $(MESA_GLAPI_DIR)/glapi_x86.S
-@HAVE_SPARC_ASM_TRUE@am__append_3 = $(MESA_GLAPI_DIR)/glapi_sparc.S
+@HAVE_APPLEDRI_TRUE@am__append_1 = $(MESA_GLAPI_DIR)/glapi_gentable.c
+@HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__append_2 = $(MESA_GLAPI_DIR)/glapi_x86-64.S
+@HAVE_X86_64_ASM_FALSE@@HAVE_X86_ASM_TRUE@am__append_3 = $(MESA_GLAPI_DIR)/glapi_x86.S
+@HAVE_SPARC_ASM_TRUE@am__append_4 = $(MESA_GLAPI_DIR)/glapi_sparc.S
+@HAVE_APPLEDRI_TRUE@am__append_5 = \
+@HAVE_APPLEDRI_TRUE@	$(XORG_GLAPI_DIR)/glapi_gentable.c
+
 subdir = src/mapi/glapi/gen
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -255,8 +259,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -302,6 +304,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -443,15 +446,11 @@ MESA_DIR = $(top_builddir)/src/mesa
 MESA_GLAPI_DIR = $(top_builddir)/src/mapi/glapi
 MESA_MAPI_DIR = $(top_srcdir)/src/mapi
 MESA_GLX_DIR = $(top_builddir)/src/glx
-MESA_GLAPI_OUTPUTS = \
-	$(MESA_GLAPI_DIR)/glapi_mapi_tmp.h \
-	$(MESA_GLAPI_DIR)/glprocs.h \
-	$(MESA_GLAPI_DIR)/glapitemp.h \
-	$(MESA_GLAPI_DIR)/glapitable.h \
-	$(MESA_GLAPI_DIR)/glapi_gentable.c
-
-MESA_GLAPI_ASM_OUTPUTS = $(am__append_1) $(am__append_2) \
-	$(am__append_3)
+MESA_GLAPI_OUTPUTS = $(MESA_GLAPI_DIR)/glapi_mapi_tmp.h \
+	$(MESA_GLAPI_DIR)/glprocs.h $(MESA_GLAPI_DIR)/glapitemp.h \
+	$(MESA_GLAPI_DIR)/glapitable.h $(am__append_1)
+MESA_GLAPI_ASM_OUTPUTS = $(am__append_2) $(am__append_3) \
+	$(am__append_4)
 BUILT_SOURCES = \
 	$(MESA_GLAPI_OUTPUTS) \
 	$(MESA_GLAPI_ASM_OUTPUTS) \
@@ -467,6 +466,7 @@ BUILT_SOURCES = \
 
 EXTRA_DIST = \
 	$(BUILT_SOURCES) \
+	$(MESA_GLAPI_DIR)/glapi_gentable.c \
 	$(MESA_GLAPI_DIR)/glapi_x86.S \
 	$(MESA_GLAPI_DIR)/glapi_x86-64.S \
 	$(MESA_GLAPI_DIR)/glapi_sparc.S \
@@ -494,12 +494,9 @@ EXTRA_DIST = \
 ######################################################################
 XORG_GLX_DIR = $(XORG_BASE)/glx
 XORG_GLAPI_DIR = $(XORG_BASE)/glx
-XORG_GLAPI_OUTPUTS = \
-	$(XORG_GLAPI_DIR)/glprocs.h \
-	$(XORG_GLAPI_DIR)/glapitable.h \
-	$(XORG_GLAPI_DIR)/dispatch.h \
-	$(XORG_GLAPI_DIR)/glapi_gentable.c
-
+XORG_GLAPI_OUTPUTS = $(XORG_GLAPI_DIR)/glprocs.h \
+	$(XORG_GLAPI_DIR)/glapitable.h $(XORG_GLAPI_DIR)/dispatch.h \
+	$(am__append_5)
 XORG_OUTPUTS = \
 	$(XORG_GLAPI_OUTPUTS) \
 	$(XORG_GLX_DIR)/indirect_dispatch.c \
@@ -542,11 +539,11 @@ API_XML = \
 	ARB_ES3_compatibility.xml \
 	ARB_framebuffer_no_attachments.xml \
 	ARB_framebuffer_object.xml \
-	ARB_geometry_shader4.xml \
 	ARB_get_program_binary.xml \
 	ARB_get_texture_sub_image.xml \
 	ARB_gpu_shader_fp64.xml \
 	ARB_gpu_shader5.xml \
+	ARB_indirect_parameters.xml \
 	ARB_instanced_arrays.xml \
 	ARB_internalformat_query.xml \
 	ARB_invalidate_subdata.xml \
@@ -597,6 +594,7 @@ API_XML = \
 	EXT_texture_array.xml \
 	EXT_texture_integer.xml \
 	EXT_transform_feedback.xml \
+	GREMEDY_string_marker.xml \
 	INTEL_performance_query.xml \
 	KHR_debug.xml \
 	KHR_context_flush_control.xml \
@@ -874,8 +872,8 @@ $(MESA_GLAPI_DIR)/glapi_sparc.S: gl_SPARC_asm.py $(COMMON)
 
 ######################################################################
 
-$(MESA_DIR)/main/enums.c: gl_enums.py $(COMMON)
-	$(PYTHON_GEN) $(srcdir)/gl_enums.py -f $(srcdir)/gl_and_es_API.xml > $@
+$(MESA_DIR)/main/enums.c: gl_enums.py $(srcdir)/../registry/gl.xml
+	$(PYTHON_GEN) $(srcdir)/gl_enums.py -f $(srcdir)/../registry/gl.xml > $@
 
 $(MESA_DIR)/main/api_exec.c: gl_genexec.py apiexec.py $(COMMON)
 	$(PYTHON_GEN) $(srcdir)/gl_genexec.py -f $(srcdir)/gl_and_es_API.xml > $@

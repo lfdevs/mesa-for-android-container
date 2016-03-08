@@ -76,7 +76,7 @@ nv50_vertex_state_create(struct pipe_context *pipe,
         enum pipe_format fmt = ve->src_format;
 
         so->element[i].pipe = elements[i];
-        so->element[i].state = nv50_format_table[fmt].vtx;
+        so->element[i].state = nv50_vertex_format[fmt].vtx;
 
         if (!so->element[i].state) {
             switch (util_format_get_nr_components(fmt)) {
@@ -89,8 +89,11 @@ nv50_vertex_state_create(struct pipe_context *pipe,
                 FREE(so);
                 return NULL;
             }
-            so->element[i].state = nv50_format_table[fmt].vtx;
+            so->element[i].state = nv50_vertex_format[fmt].vtx;
             so->need_conversion = true;
+            pipe_debug_message(&nouveau_context(pipe)->debug, FALLBACK,
+                               "Converting vertex element %d, no hw format %s",
+                               i, util_format_name(ve->src_format));
         }
         so->element[i].state |= i;
 
@@ -762,7 +765,7 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    struct nv50_context *nv50 = nv50_context(pipe);
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    bool tex_dirty = false;
-   int i, s;
+   int s;
 
    /* NOTE: caller must ensure that (min_index + index_bias) is >= 0 */
    nv50->vb_elt_first = info->min_index + info->index_bias;
@@ -787,31 +790,13 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (unlikely(nv50->num_so_targets && !nv50->gmtyprog))
       nv50->state.prim_size = nv50_pipe_prim_to_prim_size[info->mode];
 
-   nv50_state_validate(nv50, ~0, 8); /* 8 as minimum, we use flush_notify */
+   nv50_state_validate(nv50, ~0);
 
    push->kick_notify = nv50_draw_vbo_kick_notify;
 
-   /* TODO: Instead of iterating over all the buffer resources looking for
-    * coherent buffers, keep track of a context-wide count.
-    */
    for (s = 0; s < 3 && !nv50->cb_dirty; ++s) {
-      uint32_t valid = nv50->constbuf_valid[s];
-
-      while (valid && !nv50->cb_dirty) {
-         const unsigned i = ffs(valid) - 1;
-         struct pipe_resource *res;
-
-         valid &= ~(1 << i);
-         if (nv50->constbuf[s][i].user)
-            continue;
-
-         res = nv50->constbuf[s][i].u.buf;
-         if (!res)
-            continue;
-
-         if (res->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT)
-            nv50->cb_dirty = true;
-      }
+      if (nv50->constbuf_coherent[s])
+         nv50->cb_dirty = true;
    }
 
    /* If there are any coherent constbufs, flush the cache */
@@ -822,18 +807,20 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    }
 
    for (s = 0; s < 3 && !tex_dirty; ++s) {
-      for (i = 0; i < nv50->num_textures[s] && !tex_dirty; ++i) {
-         if (!nv50->textures[s][i] ||
-             nv50->textures[s][i]->texture->target != PIPE_BUFFER)
-            continue;
-         if (nv50->textures[s][i]->texture->flags &
-             PIPE_RESOURCE_FLAG_MAP_COHERENT)
-            tex_dirty = true;
-      }
+      if (nv50->textures_coherent[s])
+         tex_dirty = true;
    }
+
    if (tex_dirty) {
       BEGIN_NV04(push, NV50_3D(TEX_CACHE_CTL), 1);
       PUSH_DATA (push, 0x20);
+   }
+
+   if (nv50->screen->base.class_3d >= NVA0_3D_CLASS &&
+       nv50->seamless_cube_map != nv50->state.seamless_cube_map) {
+      nv50->state.seamless_cube_map = nv50->seamless_cube_map;
+      BEGIN_NV04(push, SUBC_3D(NVA0_3D_TEX_MISC), 1);
+      PUSH_DATA (push, nv50->seamless_cube_map ? NVA0_3D_TEX_MISC_SEAMLESS_CUBE_MAP : 0);
    }
 
    if (nv50->vbo_fifo) {
@@ -850,12 +837,7 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       PUSH_DATA (push, info->start_instance);
    }
 
-   for (i = 0; i < nv50->num_vtxbufs && !nv50->base.vbo_dirty; ++i) {
-      if (!nv50->vtxbuf[i].buffer)
-         continue;
-      if (nv50->vtxbuf[i].buffer->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT)
-         nv50->base.vbo_dirty = true;
-   }
+   nv50->base.vbo_dirty |= !!nv50->vtxbufs_coherent;
 
    if (nv50->base.vbo_dirty) {
       BEGIN_NV04(push, NV50_3D(VERTEX_ARRAY_FLUSH), 1);

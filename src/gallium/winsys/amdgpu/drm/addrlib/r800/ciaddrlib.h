@@ -167,6 +167,8 @@ private:
     VOID ReadGbMacroTileCfg(
         UINT_32 regValue, ADDR_TILEINFO* pCfg) const;
 
+    UINT_32 GetPrtSwitchP4Threshold() const;
+
     BOOL_32 InitTileSettingTable(
         const UINT_32 *pSetting, UINT_32 noOfEntries);
 

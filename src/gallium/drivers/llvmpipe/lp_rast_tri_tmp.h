@@ -50,9 +50,15 @@ TAG(do_block_4)(struct lp_rasterizer_task *task,
    int j;
 
    for (j = 0; j < NR_PLANES; j++) {
-      mask &= ~BUILD_MASK_LINEAR(c[j] - 1, 
-				 -plane[j].dcdx,
-				 plane[j].dcdy);
+#ifdef RASTER_64
+      mask &= ~BUILD_MASK_LINEAR(((c[j] - 1) >> (int64_t)FIXED_ORDER),
+                                 -plane[j].dcdx >> FIXED_ORDER,
+                                 plane[j].dcdy >> FIXED_ORDER);
+#else
+      mask &= ~BUILD_MASK_LINEAR((c[j] - 1),
+                                 -plane[j].dcdx,
+                                 plane[j].dcdy);
+#endif
    }
 
    /* Now pass to the shader:
@@ -79,17 +85,33 @@ TAG(do_block_16)(struct lp_rasterizer_task *task,
    partmask = 0;                /* outside one or more trivial accept planes */
 
    for (j = 0; j < NR_PLANES; j++) {
+#ifdef RASTER_64
+      int32_t dcdx = -plane[j].dcdx >> FIXED_ORDER;
+      int32_t dcdy = plane[j].dcdy >> FIXED_ORDER;
+      const int32_t cox = plane[j].eo >> FIXED_ORDER;
+      const int32_t ei = (dcdy + dcdx - cox) << 2;
+      const int32_t cox_s = cox << 2;
+      const int32_t co = (int32_t)(c[j] >> (int64_t)FIXED_ORDER) + cox_s;
+      int32_t cdiff;
+      cdiff = ei - cox_s + ((int32_t)((c[j] - 1) >> (int64_t)FIXED_ORDER) -
+                            (int32_t)(c[j] >> (int64_t)FIXED_ORDER));
+      dcdx <<= 2;
+      dcdy <<= 2;
+#else
       const int64_t dcdx = -IMUL64(plane[j].dcdx, 4);
       const int64_t dcdy = IMUL64(plane[j].dcdy, 4);
       const int64_t cox = IMUL64(plane[j].eo, 4);
-      const int64_t ei = plane[j].dcdy - plane[j].dcdx - plane[j].eo;
+      const int32_t ei = plane[j].dcdy - plane[j].dcdx - (int64_t)plane[j].eo;
       const int64_t cio = IMUL64(ei, 4) - 1;
+      int32_t co, cdiff;
+      co = c[j] + cox;
+      cdiff = cio - cox;
+#endif
 
-      BUILD_MASKS(c[j] + cox,
-		  cio - cox,
-		  dcdx, dcdy, 
-		  &outmask,   /* sign bits from c[i][0..15] + cox */
-		  &partmask); /* sign bits from c[i][0..15] + cio */
+      BUILD_MASKS(co, cdiff,
+                  dcdx, dcdy,
+                  &outmask,   /* sign bits from c[i][0..15] + cox */
+                  &partmask); /* sign bits from c[i][0..15] + cio */
    }
 
    if (outmask == 0xffff)
@@ -179,14 +201,65 @@ TAG(lp_rast_triangle)(struct lp_rasterizer_task *task,
       c[j] = plane[j].c + IMUL64(plane[j].dcdy, y) - IMUL64(plane[j].dcdx, x);
 
       {
-         const int64_t dcdx = -IMUL64(plane[j].dcdx, 16);
-         const int64_t dcdy = IMUL64(plane[j].dcdy, 16);
-         const int64_t cox = IMUL64(plane[j].eo, 16);
-         const int64_t ei = plane[j].dcdy - plane[j].dcdx - plane[j].eo;
-         const int64_t cio = IMUL64(ei, 16) - 1;
-
-         BUILD_MASKS(c[j] + cox,
-                     cio - cox,
+#ifdef RASTER_64
+         /*
+          * Strip off lower FIXED_ORDER bits. Note that those bits from
+          * dcdx, dcdy, eo are always 0 (by definition).
+          * c values, however, are not. This means that for every
+          * addition of the form c + n*dcdx the lower FIXED_ORDER bits will
+          * NOT change. And those bits are not relevant to the sign bit (which
+          * is only what we need!) that is,
+          * sign(c + n*dcdx) == sign((c >> FIXED_ORDER) + n*(dcdx >> FIXED_ORDER))
+          * This means we can get away with using 32bit math for the most part.
+          * Only tricky part is the -1 adjustment for cdiff.
+          */
+         int32_t dcdx = -plane[j].dcdx >> FIXED_ORDER;
+         int32_t dcdy = plane[j].dcdy >> FIXED_ORDER;
+         const int32_t cox = plane[j].eo >> FIXED_ORDER;
+         const int32_t ei = (dcdy + dcdx - cox) << 4;
+         const int32_t cox_s = cox << 4;
+         const int32_t co = (int32_t)(c[j] >> (int64_t)FIXED_ORDER) + cox_s;
+         int32_t cdiff;
+         /*
+          * Plausibility check to ensure the 32bit math works.
+          * Note that within a tile, the max we can move the edge function
+          * is essentially dcdx * TILE_SIZE + dcdy * TILE_SIZE.
+          * TILE_SIZE is 64, dcdx/dcdy are nominally 21 bit (for 8192 max size
+          * and 8 subpixel bits), I'd be happy with 2 bits more too (1 for
+          * increasing fb size to 16384, the required d3d11 value, another one
+          * because I'm not quite sure we can't be _just_ above the max value
+          * here). This gives us 30 bits max - hence if c would exceed that here
+          * that means the plane is either trivial reject for the whole tile
+          * (in which case the tri will not get binned), or trivial accept for
+          * the whole tile (in which case plane_mask will not include it).
+          */
+         assert((c[j] >> (int64_t)FIXED_ORDER) > (int32_t)0xb0000000 &&
+                (c[j] >> (int64_t)FIXED_ORDER) < (int32_t)0x3fffffff);
+         /*
+          * Note the fixup part is constant throughout the tile - thus could
+          * just calculate this and avoid _all_ 64bit math in rasterization
+          * (except exactly this fixup calc).
+          * In fact theoretically could move that even to setup, albeit that
+          * seems tricky (pre-bin certainly can have values larger than 32bit,
+          * and would need to communicate that fixup value through).
+          * And if we want to support msaa, we'd probably don't want to do the
+          * downscaling in setup in any case...
+          */
+         cdiff = ei - cox_s + ((int32_t)((c[j] - 1) >> (int64_t)FIXED_ORDER) -
+                               (int32_t)(c[j] >> (int64_t)FIXED_ORDER));
+         dcdx <<= 4;
+         dcdy <<= 4;
+#else
+         const int32_t dcdx = -plane[j].dcdx << 4;
+         const int32_t dcdy = plane[j].dcdy << 4;
+         const int32_t cox = plane[j].eo << 4;
+         const int32_t ei = plane[j].dcdy - plane[j].dcdx - (int32_t)plane[j].eo;
+         const int32_t cio = (ei << 4) - 1;
+         int32_t co, cdiff;
+         co = c[j] + cox;
+         cdiff = cio - cox;
+#endif
+         BUILD_MASKS(co, cdiff,
                      dcdx, dcdy,
                      &outmask,   /* sign bits from c[i][0..15] + cox */
                      &partmask); /* sign bits from c[i][0..15] + cio */

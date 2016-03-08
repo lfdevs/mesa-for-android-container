@@ -116,20 +116,6 @@ adjust_for_oes_float_texture(GLenum format, GLenum type)
    return format;
 }
 
-/**
- * For cube map faces, return a face index in [0,5].
- * For other targets return 0;
- */
-GLuint
-_mesa_tex_target_to_face(GLenum target)
-{
-   if (_mesa_is_cube_face(target))
-      return (GLuint) target - (GLuint) GL_TEXTURE_CUBE_MAP_POSITIVE_X;
-   else
-      return 0;
-}
-
-
 
 /**
  * Install gl_texture_image in a gl_texture_object according to the target
@@ -273,15 +259,15 @@ proxy_target(GLenum target)
    case GL_TEXTURE_3D:
    case GL_PROXY_TEXTURE_3D:
       return GL_PROXY_TEXTURE_3D;
-   case GL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB:
-   case GL_TEXTURE_CUBE_MAP_NEGATIVE_X_ARB:
-   case GL_TEXTURE_CUBE_MAP_POSITIVE_Y_ARB:
-   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_ARB:
-   case GL_TEXTURE_CUBE_MAP_POSITIVE_Z_ARB:
-   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_ARB:
-   case GL_TEXTURE_CUBE_MAP_ARB:
-   case GL_PROXY_TEXTURE_CUBE_MAP_ARB:
-      return GL_PROXY_TEXTURE_CUBE_MAP_ARB;
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_X:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_X:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_Y:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
+   case GL_TEXTURE_CUBE_MAP:
+   case GL_PROXY_TEXTURE_CUBE_MAP:
+      return GL_PROXY_TEXTURE_CUBE_MAP;
    case GL_TEXTURE_RECTANGLE_NV:
    case GL_PROXY_TEXTURE_RECTANGLE_NV:
       return GL_PROXY_TEXTURE_RECTANGLE_NV;
@@ -472,13 +458,13 @@ _mesa_max_texture_levels(struct gl_context *ctx, GLenum target)
    case GL_PROXY_TEXTURE_3D:
       return ctx->Const.Max3DTextureLevels;
    case GL_TEXTURE_CUBE_MAP:
-   case GL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB:
-   case GL_TEXTURE_CUBE_MAP_NEGATIVE_X_ARB:
-   case GL_TEXTURE_CUBE_MAP_POSITIVE_Y_ARB:
-   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_ARB:
-   case GL_TEXTURE_CUBE_MAP_POSITIVE_Z_ARB:
-   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_ARB:
-   case GL_PROXY_TEXTURE_CUBE_MAP_ARB:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_X:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_X:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_Y:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
+   case GL_PROXY_TEXTURE_CUBE_MAP:
       return ctx->Extensions.ARB_texture_cube_map
          ? ctx->Const.MaxCubeTextureLevels : 0;
    case GL_TEXTURE_RECTANGLE_NV:
@@ -1016,7 +1002,7 @@ _mesa_legal_texture_dimensions(struct gl_context *ctx, GLenum target,
    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
    case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
-   case GL_PROXY_TEXTURE_CUBE_MAP_ARB:
+   case GL_PROXY_TEXTURE_CUBE_MAP:
       maxSize = 1 << (ctx->Const.MaxCubeTextureLevels - 1);
       maxSize >>= level;
       if (width != height)
@@ -2028,7 +2014,7 @@ compressed_texture_error_check(struct gl_context *ctx, GLint dimensions,
        * if <imageSize> is not consistent with the format, dimensions, and
        * contents of the specified image.
        */
-      reason = "imageSize inconsistant with width/height/format";
+      reason = "imageSize inconsistent with width/height/format";
       error = GL_INVALID_VALUE;
       goto error;
    }
@@ -2247,6 +2233,22 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
                      _mesa_enum_to_string(internalFormat));
          return GL_TRUE;
       }
+   } else {
+      /*
+       * Section 8.6 (Alternate Texture Image Specification Commands) of the
+       * OpenGL 4.5 (Compatibility Profile) spec says:
+       *
+       *     "Parameters level, internalformat, and border are specified using
+       *     the same values, with the same meanings, as the corresponding
+       *     arguments of TexImage2D, except that internalformat may not be
+       *     specified as 1, 2, 3, or 4."
+       */
+      if (internalFormat >= 1 && internalFormat <= 4) {
+         _mesa_error(ctx, GL_INVALID_ENUM,
+                     "glCopyTexImage%dD(internalFormat=%d)", dimensions,
+                     internalFormat);
+         return GL_TRUE;
+      }
    }
 
    baseFormat = _mesa_base_tex_format(ctx, internalFormat);
@@ -2283,8 +2285,10 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
       }
       if (baseFormat == GL_DEPTH_COMPONENT ||
           baseFormat == GL_DEPTH_STENCIL ||
+          baseFormat == GL_STENCIL_INDEX ||
           rb_base_format == GL_DEPTH_COMPONENT ||
           rb_base_format == GL_DEPTH_STENCIL ||
+          rb_base_format == GL_STENCIL_INDEX ||
           ((baseFormat == GL_LUMINANCE_ALPHA ||
             baseFormat == GL_ALPHA) &&
            rb_base_format != GL_RGBA) ||
@@ -2492,8 +2496,8 @@ copytexsubimage_error_check(struct gl_context *ctx, GLuint dimensions,
 
    if (!_mesa_source_buffer_exists(ctx, texImage->_BaseFormat)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s(missing readbuffer, format=0x%x)", caller,
-                  texImage->_BaseFormat);
+                  "%s(missing readbuffer, format=%s)", caller,
+                  _mesa_enum_to_string(texImage->_BaseFormat));
       return GL_TRUE;
    }
 
@@ -4303,15 +4307,15 @@ compressed_subtexture_error_check(struct gl_context *ctx, GLint dims,
 
    if ((GLint) format != texImage->InternalFormat) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s(format=0x%x)",
-                  callerName, format);
+                  "%s(format=%s)",
+                  callerName, _mesa_enum_to_string(format));
       return GL_TRUE;
    }
 
    if (compressedteximage_only_format(ctx, format)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
-               "%s(format=0x%x cannot be updated)",
-               callerName, format);
+                  "%s(format=%s cannot be updated)",
+                  callerName, _mesa_enum_to_string(format));
       return GL_TRUE;
    }
 
@@ -4901,8 +4905,8 @@ _mesa_texture_buffer_range(struct gl_context *ctx,
 
    format = _mesa_validate_texbuffer_format(ctx, internalFormat);
    if (format == MESA_FORMAT_NONE) {
-      _mesa_error(ctx, GL_INVALID_ENUM,
-                  "%s(internalFormat 0x%x)", caller, internalFormat);
+      _mesa_error(ctx, GL_INVALID_ENUM, "%s(internalFormat %s)",
+                  caller, _mesa_enum_to_string(internalFormat));
       return;
    }
 

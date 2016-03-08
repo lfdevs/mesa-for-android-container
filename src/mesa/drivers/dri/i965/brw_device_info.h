@@ -68,6 +68,11 @@ struct brw_device_info
     * GPU Limits:
     *  @{
     */
+   /**
+    * Total number of slices present on the device whether or not they've been
+    * fused off.
+    */
+   unsigned num_slices;
    unsigned max_vs_threads;
    unsigned max_hs_threads;
    unsigned max_ds_threads;
@@ -76,10 +81,16 @@ struct brw_device_info
    unsigned max_cs_threads;
 
    struct {
+      /**
+       * Hardware default URB size.  The units this is expressed in are
+       * somewhat inconsistent: 512b units on Gen4-5, KB on Gen6-7, and KB
+       * times the slice count on Gen8+.
+       */
       unsigned size;
       unsigned min_vs_entries;
       unsigned max_vs_entries;
       unsigned max_hs_entries;
+      unsigned min_ds_entries;
       unsigned max_ds_entries;
       unsigned max_gs_entries;
    } urb;

@@ -32,7 +32,7 @@
  * may be set to "softpipe" or "llvmpipe" to override.
  *
  * With softpipe we could render directly into the user's buffer by using a
- * display target resource.  However, softpipe doesn't suport "upside-down"
+ * display target resource.  However, softpipe doesn't support "upside-down"
  * rendering which would be needed for the OSMESA_Y_UP=TRUE case.
  *
  * With llvmpipe we could only render directly into the user's buffer when its
@@ -544,17 +544,103 @@ GLAPI OSMesaContext GLAPIENTRY
 OSMesaCreateContextExt(GLenum format, GLint depthBits, GLint stencilBits,
                        GLint accumBits, OSMesaContext sharelist)
 {
+   int attribs[100], n = 0;
+
+   attribs[n++] = OSMESA_FORMAT;
+   attribs[n++] = format;
+   attribs[n++] = OSMESA_DEPTH_BITS;
+   attribs[n++] = depthBits;
+   attribs[n++] = OSMESA_STENCIL_BITS;
+   attribs[n++] = stencilBits;
+   attribs[n++] = OSMESA_ACCUM_BITS;
+   attribs[n++] = accumBits;
+   attribs[n++] = 0;
+
+   return OSMesaCreateContextAttribs(attribs, sharelist);
+}
+
+
+/**
+ * New in Mesa 11.2
+ *
+ * Create context with attribute list.
+ */
+GLAPI OSMesaContext GLAPIENTRY
+OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
+{
    OSMesaContext osmesa;
    struct st_context_iface *st_shared;
    enum st_context_error st_error = 0;
    struct st_context_attribs attribs;
    struct st_api *stapi = get_st_api();
+   GLenum format = GL_RGBA;
+   int depthBits = 0, stencilBits = 0, accumBits = 0;
+   int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
+   int i;
 
    if (sharelist) {
       st_shared = sharelist->stctx;
    }
    else {
       st_shared = NULL;
+   }
+
+   for (i = 0; attribList[i]; i += 2) {
+      switch (attribList[i]) {
+      case OSMESA_FORMAT:
+         format = attribList[i+1];
+         switch (format) {
+         case OSMESA_COLOR_INDEX:
+         case OSMESA_RGBA:
+         case OSMESA_BGRA:
+         case OSMESA_ARGB:
+         case OSMESA_RGB:
+         case OSMESA_BGR:
+         case OSMESA_RGB_565:
+            /* legal */
+            break;
+         default:
+            return NULL;
+         }
+         break;
+      case OSMESA_DEPTH_BITS:
+         depthBits = attribList[i+1];
+         if (depthBits < 0)
+            return NULL;
+         break;
+      case OSMESA_STENCIL_BITS:
+         stencilBits = attribList[i+1];
+         if (stencilBits < 0)
+            return NULL;
+         break;
+      case OSMESA_ACCUM_BITS:
+         accumBits = attribList[i+1];
+         if (accumBits < 0)
+            return NULL;
+         break;
+      case OSMESA_PROFILE:
+         profile = attribList[i+1];
+         if (profile != OSMESA_CORE_PROFILE &&
+             profile != OSMESA_COMPAT_PROFILE)
+            return NULL;
+         break;
+      case OSMESA_CONTEXT_MAJOR_VERSION:
+         version_major = attribList[i+1];
+         if (version_major < 1)
+            return NULL;
+         break;
+      case OSMESA_CONTEXT_MINOR_VERSION:
+         version_minor = attribList[i+1];
+         if (version_minor < 0)
+            return NULL;
+         break;
+      case 0:
+         /* end of list */
+         break;
+      default:
+         fprintf(stderr, "Bad attribute in OSMesaCreateContextAttribs()\n");
+         return NULL;
+      }
    }
 
    osmesa = (OSMesaContext) CALLOC_STRUCT(osmesa_context);
@@ -581,9 +667,11 @@ OSMesaCreateContextExt(GLenum format, GLint depthBits, GLint stencilBits,
    /*
     * Create the rendering context
     */
-   attribs.profile = ST_PROFILE_DEFAULT;
-   attribs.major = 2;
-   attribs.minor = 1;
+   memset(&attribs, 0, sizeof(attribs));
+   attribs.profile = (profile == OSMESA_CORE_PROFILE)
+      ? ST_PROFILE_OPENGL_CORE : ST_PROFILE_DEFAULT;
+   attribs.major = version_major;
+   attribs.minor = version_minor;
    attribs.flags = 0;  /* ST_CONTEXT_FLAG_x */
    attribs.options.force_glsl_extensions_warn = FALSE;
    attribs.options.disable_blend_func_extended = FALSE;
@@ -612,6 +700,7 @@ OSMesaCreateContextExt(GLenum format, GLint depthBits, GLint stencilBits,
 
    return osmesa;
 }
+
 
 
 /**
@@ -883,6 +972,7 @@ struct name_function
 static struct name_function functions[] = {
    { "OSMesaCreateContext", (OSMESAproc) OSMesaCreateContext },
    { "OSMesaCreateContextExt", (OSMESAproc) OSMesaCreateContextExt },
+   { "OSMesaCreateContextAttribs", (OSMESAproc) OSMesaCreateContextAttribs },
    { "OSMesaDestroyContext", (OSMESAproc) OSMesaDestroyContext },
    { "OSMesaMakeCurrent", (OSMESAproc) OSMesaMakeCurrent },
    { "OSMesaGetCurrentContext", (OSMESAproc) OSMesaGetCurrentContext },

@@ -294,7 +294,7 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
    default:
       pipe_mutex_unlock(vmixer->device->mutex);
       return VDP_STATUS_INVALID_VIDEO_MIXER_PICTURE_STRUCTURE;
-   };
+   }
 
    if (deinterlace != VL_COMPOSITOR_WEAVE && vmixer->deint.enabled &&
        video_surface_past_count > 1 && video_surface_future_count > 0) {

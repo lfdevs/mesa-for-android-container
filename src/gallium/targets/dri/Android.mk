@@ -28,9 +28,10 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := gallium_dri
 
 ifeq ($(MESA_LOLLIPOP_BUILD),true)
-LOCAL_MODULE_RELATIVE_PATH := $(notdir $(MESA_DRI_MODULE_PATH))
+LOCAL_MODULE_RELATIVE_PATH := $(MESA_DRI_MODULE_REL_PATH)
 else
 LOCAL_MODULE_PATH := $(MESA_DRI_MODULE_PATH)
+LOCAL_UNSTRIPPED_PATH := $(MESA_DRI_MODULE_UNSTRIPPED_PATH)
 endif
 
 LOCAL_SRC_FILES := target.c
@@ -92,6 +93,10 @@ ifneq ($(filter vc4,$(MESA_GPU_DRIVERS)),)
 LOCAL_CFLAGS += -DGALLIUM_VC4
 gallium_DRIVERS += libmesa_winsys_vc4 libmesa_pipe_vc4
 endif
+ifneq ($(filter virgl,$(MESA_GPU_DRIVERS)),)
+LOCAL_CFLAGS += -DGALLIUM_VIRGL
+gallium_DRIVERS += libmesa_winsys_virgl libmesa_winsys_virgl_vtest libmesa_pipe_virgl
+endif
 ifneq ($(filter vmwgfx,$(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_winsys_svga libmesa_pipe_svga
 LOCAL_CFLAGS += -DGALLIUM_VMWGFX
@@ -105,6 +110,8 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_st_dri \
 	libmesa_st_mesa \
 	libmesa_glsl \
+	libmesa_compiler \
+	libmesa_nir \
 	libmesa_dri_common \
 	libmesa_megadriver_stub \
 	libmesa_gallium \

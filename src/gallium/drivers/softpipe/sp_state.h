@@ -175,9 +175,6 @@ softpipe_unmap_texture_surfaces(struct softpipe_context *sp);
 
 
 struct vertex_info *
-softpipe_get_vertex_info(struct softpipe_context *softpipe);
-
-struct vertex_info *
 softpipe_get_vbuf_vertex_info(struct softpipe_context *softpipe);
 
 

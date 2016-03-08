@@ -40,6 +40,7 @@
 #include "freedreno_util.h"
 
 #include "ir3_compiler.h"
+#include "ir3_nir.h"
 #include "instr-a3xx.h"
 #include "ir3.h"
 
@@ -105,16 +106,14 @@ int main(int argc, char **argv)
 	const char *filename;
 	struct tgsi_token toks[65536];
 	struct tgsi_parse_context parse;
-	struct ir3_compiler *compiler;
 	struct ir3_shader_variant v;
 	struct ir3_shader s;
 	struct ir3_shader_key key = {};
+	/* TODO cmdline option to target different gpus: */
 	unsigned gpu_id = 320;
 	const char *info;
 	void *ptr;
 	size_t size;
-
-	fd_mesa_debug |= FD_DBG_DISASM;
 
 	memset(&s, 0, sizeof(s));
 	memset(&v, 0, sizeof(v));
@@ -128,7 +127,7 @@ int main(int argc, char **argv)
 
 	while (n < argc) {
 		if (!strcmp(argv[n], "--verbose")) {
-			fd_mesa_debug |= FD_DBG_MSGS | FD_DBG_OPTMSGS;
+			fd_mesa_debug |= FD_DBG_MSGS | FD_DBG_OPTMSGS | FD_DBG_DISASM;
 			n++;
 			continue;
 		}
@@ -230,7 +229,12 @@ int main(int argc, char **argv)
 	if (!tgsi_text_translate(ptr, toks, Elements(toks)))
 		errx(1, "could not parse `%s'", filename);
 
-	s.tokens = toks;
+	if (fd_mesa_debug & FD_DBG_OPTMSGS)
+		tgsi_dump(toks, 0);
+
+	nir_shader *nir = ir3_tgsi_to_nir(toks);
+	s.compiler = ir3_compiler_create(gpu_id);
+	s.nir = ir3_optimize_nir(&s, nir, NULL);
 
 	v.key = key;
 	v.shader = &s;
@@ -248,11 +252,8 @@ int main(int argc, char **argv)
 		break;
 	}
 
-	/* TODO cmdline option to target different gpus: */
-	compiler = ir3_compiler_create(gpu_id);
-
 	info = "NIR compiler";
-	ret = ir3_compile_shader_nir(compiler, &v);
+	ret = ir3_compile_shader_nir(s.compiler, &v);
 	if (ret) {
 		fprintf(stderr, "compiler failed!\n");
 		return ret;

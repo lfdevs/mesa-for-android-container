@@ -31,6 +31,7 @@
 #include "util/u_memory.h"
 #include "util/u_handle_table.h"
 #include "util/u_video.h"
+#include "vl/vl_deint_filter.h"
 #include "vl/vl_winsys.h"
 
 #include "va_private.h"
@@ -155,6 +156,7 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
 
    vl_csc_get_matrix(VL_CSC_COLOR_STANDARD_BT_601, NULL, true, &drv->csc);
    vl_compositor_set_csc_matrix(&drv->cstate, (const vl_csc_matrix *)&drv->csc);
+   pipe_mutex_init(drv->mutex);
 
    ctx->pDriverData = (void *)drv;
    ctx->version_major = 0;
@@ -187,7 +189,6 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
                   int picture_height, int flag, VASurfaceID *render_targets,
                   int num_render_targets, VAContextID *context_id)
 {
-   struct pipe_video_codec templat = {};
    vlVaDriver *drv;
    vlVaContext *context;
    int is_vpp;
@@ -213,27 +214,22 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
          return VA_STATUS_ERROR_INVALID_CONTEXT;
       }
    } else {
-      templat.profile = config_id;
-      templat.entrypoint = PIPE_VIDEO_ENTRYPOINT_BITSTREAM;
-      templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
-      templat.width = picture_width;
-      templat.height = picture_height;
-      templat.max_references = num_render_targets;
-      templat.expect_chunked_decode = true;
+      context->templat.profile = config_id;
+      context->templat.entrypoint = PIPE_VIDEO_ENTRYPOINT_BITSTREAM;
+      context->templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
+      context->templat.width = picture_width;
+      context->templat.height = picture_height;
+      context->templat.expect_chunked_decode = true;
 
-      if (u_reduce_video_profile(templat.profile) ==
-        PIPE_VIDEO_FORMAT_MPEG4_AVC)
-        templat.level = u_get_h264_level(templat.width, templat.height,
-                             &templat.max_references);
+      switch (u_reduce_video_profile(context->templat.profile)) {
+      case PIPE_VIDEO_FORMAT_MPEG12:
+      case PIPE_VIDEO_FORMAT_VC1:
+      case PIPE_VIDEO_FORMAT_MPEG4:
+         context->templat.max_references = 2;
+         break;
 
-      context->decoder = drv->pipe->create_video_codec(drv->pipe, &templat);
-      if (!context->decoder) {
-         FREE(context);
-         return VA_STATUS_ERROR_ALLOCATION_FAILED;
-      }
-
-      if (u_reduce_video_profile(context->decoder->profile) ==
-         PIPE_VIDEO_FORMAT_MPEG4_AVC) {
+      case PIPE_VIDEO_FORMAT_MPEG4_AVC:
+         context->templat.max_references = 0;
          context->desc.h264.pps = CALLOC_STRUCT(pipe_h264_pps);
          if (!context->desc.h264.pps) {
             FREE(context);
@@ -245,10 +241,10 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
             FREE(context);
             return VA_STATUS_ERROR_ALLOCATION_FAILED;
          }
-      }
+         break;
 
-      if (u_reduce_video_profile(context->decoder->profile) ==
-            PIPE_VIDEO_FORMAT_HEVC) {
+     case PIPE_VIDEO_FORMAT_HEVC:
+         context->templat.max_references = num_render_targets;
          context->desc.h265.pps = CALLOC_STRUCT(pipe_h265_pps);
          if (!context->desc.h265.pps) {
             FREE(context);
@@ -260,11 +256,17 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
             FREE(context);
             return VA_STATUS_ERROR_ALLOCATION_FAILED;
          }
+         break;
+
+      default:
+         break;
       }
    }
 
    context->desc.base.profile = config_id;
+   pipe_mutex_lock(drv->mutex);
    *context_id = handle_table_add(drv->htab, context);
+   pipe_mutex_unlock(drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }
@@ -279,6 +281,7 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
    drv = VL_VA_DRIVER(ctx);
+   pipe_mutex_lock(drv->mutex);
    context = handle_table_get(drv->htab, context_id);
 
    if (context->decoder) {
@@ -294,8 +297,13 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
       }
       context->decoder->destroy(context->decoder);
    }
+   if (context->deint) {
+      vl_deint_filter_cleanup(context->deint);
+      FREE(context->deint);
+   }
    FREE(context);
    handle_table_remove(drv->htab, context_id);
+   pipe_mutex_unlock(drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }
@@ -314,6 +322,7 @@ vlVaTerminate(VADriverContextP ctx)
    drv->pipe->destroy(drv->pipe);
    drv->vscreen->destroy(drv->vscreen);
    handle_table_destroy(drv->htab);
+   pipe_mutex_destroy(drv->mutex);
    FREE(drv);
 
    return VA_STATUS_SUCCESS;

@@ -28,6 +28,7 @@
 #include "main/imports.h"
 #include "main/bufferobj.h"
 #include "main/varray.h"
+#include "vbo/vbo.h"
 
 #include "brw_context.h"
 #include "brw_defines.h"

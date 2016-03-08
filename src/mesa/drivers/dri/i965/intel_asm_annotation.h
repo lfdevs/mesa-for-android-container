@@ -28,9 +28,6 @@
 extern "C" {
 #endif
 
-struct bblock_t;
-struct brw_context;
-struct gl_program;
 struct backend_instruction;
 struct cfg_t;
 

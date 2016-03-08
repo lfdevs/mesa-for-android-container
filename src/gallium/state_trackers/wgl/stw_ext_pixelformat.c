@@ -107,6 +107,16 @@ stw_query_attrib(
    case WGL_NUMBER_UNDERLAYS_ARB:
       *pvalue = 0;
       return TRUE;
+
+   case WGL_BIND_TO_TEXTURE_RGB_ARB:
+      /* WGL_ARB_render_texture */
+      *pvalue = pfi->bindToTextureRGB;
+      return TRUE;
+
+   case WGL_BIND_TO_TEXTURE_RGBA_ARB:
+      /* WGL_ARB_render_texture */
+      *pvalue = pfi->bindToTextureRGBA;
+      return TRUE;
    }
 
    if (iLayerPlane != 0)
@@ -311,7 +321,11 @@ static const struct attrib_match_info attrib_match[] = {
 
    /* WGL_ARB_multisample */
    { WGL_SAMPLE_BUFFERS_ARB,      2, FALSE },
-   { WGL_SAMPLES_ARB,             2, FALSE }
+   { WGL_SAMPLES_ARB,             2, FALSE },
+
+   /* WGL_ARB_render_texture */
+   { WGL_BIND_TO_TEXTURE_RGB_ARB, 0, FALSE },
+   { WGL_BIND_TO_TEXTURE_RGBA_ARB, 0, FALSE },
 };
 
 struct stw_pixelformat_score

@@ -139,7 +139,7 @@ am__objects_4 = a4xx/fd4_blend.lo a4xx/fd4_context.lo a4xx/fd4_draw.lo \
 	a4xx/fd4_screen.lo a4xx/fd4_texture.lo a4xx/fd4_zsa.lo
 am__objects_5 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler_nir.lo \
 	ir3/ir3_compiler.lo ir3/ir3_cp.lo ir3/ir3_depth.lo \
-	ir3/ir3_group.lo ir3/ir3_legalize.lo \
+	ir3/ir3_group.lo ir3/ir3_legalize.lo ir3/ir3_nir.lo \
 	ir3/ir3_nir_lower_if_else.lo ir3/ir3_print.lo ir3/ir3_ra.lo \
 	ir3/ir3_sched.lo ir3/ir3_shader.lo
 am_libfreedreno_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
@@ -157,7 +157,7 @@ am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 ir3_compiler_DEPENDENCIES = libfreedreno.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_2) \
 	$(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -367,8 +367,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -414,6 +412,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -661,6 +660,7 @@ ir3_SOURCES := \
 	ir3/ir3_group.c \
 	ir3/ir3.h \
 	ir3/ir3_legalize.c \
+	ir3/ir3_nir.c \
 	ir3/ir3_nir.h \
 	ir3/ir3_nir_lower_if_else.c \
 	ir3/ir3_print.c \
@@ -737,7 +737,7 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 AM_CFLAGS = \
 	-Wno-packed-bitfield-compat \
 	-I$(top_srcdir)/src/gallium/drivers/freedreno/ir3 \
-	-I$(top_builddir)/src/glsl/nir \
+	-I$(top_builddir)/src/compiler/nir \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(FREEDRENO_CFLAGS)
 
@@ -758,7 +758,7 @@ ir3_compiler_SOURCES = \
 ir3_compiler_LDADD = \
 	libfreedreno.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_COMMON_LIB_DEPS) \
 	$(FREEDRENO_LIBS)
@@ -898,6 +898,7 @@ ir3/ir3_cp.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_depth.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_group.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_legalize.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_nir.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_nir_lower_if_else.lo: ir3/$(am__dirstamp) \
 	ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_print.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
@@ -999,6 +1000,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_depth.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_group.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_legalize.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir_lower_if_else.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_print.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_ra.Plo@am__quote@

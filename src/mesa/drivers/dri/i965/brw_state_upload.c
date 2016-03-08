@@ -186,6 +186,7 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &brw_cc_vp,
    &gen7_sf_clip_viewport,
 
+   &gen7_l3_state,
    &gen7_push_constant_space,
    &gen7_urb,
    &gen6_blend_state,		/* must do before cc unit */
@@ -195,10 +196,14 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &gen7_hw_binding_tables, /* Enable hw-generated binding tables for Haswell */
 
    &brw_vs_image_surfaces, /* Before vs push/pull constants and binding table */
+   &brw_tcs_image_surfaces, /* Before tcs push/pull constants and binding table */
+   &brw_tes_image_surfaces, /* Before tes push/pull constants and binding table */
    &brw_gs_image_surfaces, /* Before gs push/pull constants and binding table */
    &brw_wm_image_surfaces, /* Before wm push/pull constants and binding table */
 
    &gen6_vs_push_constants, /* Before vs_state */
+   &gen7_tcs_push_constants,
+   &gen7_tes_push_constants,
    &gen6_gs_push_constants, /* Before gs_state */
    &gen6_wm_push_constants, /* Before wm_surfaces and constant_buffer */
 
@@ -208,6 +213,12 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &brw_vs_pull_constants,
    &brw_vs_ubo_surfaces,
    &brw_vs_abo_surfaces,
+   &brw_tcs_pull_constants,
+   &brw_tcs_ubo_surfaces,
+   &brw_tcs_abo_surfaces,
+   &brw_tes_pull_constants,
+   &brw_tes_ubo_surfaces,
+   &brw_tes_abo_surfaces,
    &brw_gs_pull_constants,
    &brw_gs_ubo_surfaces,
    &brw_gs_abo_surfaces,
@@ -217,16 +228,22 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &gen6_renderbuffer_surfaces,
    &brw_texture_surfaces,
    &brw_vs_binding_table,
+   &brw_tcs_binding_table,
+   &brw_tes_binding_table,
    &brw_gs_binding_table,
    &brw_wm_binding_table,
 
    &brw_fs_samplers,
    &brw_vs_samplers,
+   &brw_tcs_samplers,
+   &brw_tes_samplers,
    &brw_gs_samplers,
    &gen6_multisample_state,
 
-   &gen7_disable_stages,
    &gen7_vs_state,
+   &gen7_hs_state,
+   &gen7_te_state,
+   &gen7_ds_state,
    &gen7_gs_state,
    &gen7_sol_state,
    &gen7_clip_state,
@@ -257,13 +274,15 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
 static const struct brw_tracked_state *gen7_compute_atoms[] =
 {
    &brw_state_base_address,
+   &gen7_l3_state,
    &brw_cs_image_surfaces,
    &gen7_cs_push_constants,
    &brw_cs_pull_constants,
    &brw_cs_ubo_surfaces,
    &brw_cs_abo_surfaces,
-   &brw_texture_surfaces,
+   &brw_cs_texture_surfaces,
    &brw_cs_work_groups_surface,
+   &brw_cs_samplers,
    &brw_cs_state,
 };
 
@@ -275,6 +294,7 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &brw_cc_vp,
    &gen8_sf_clip_viewport,
 
+   &gen7_l3_state,
    &gen7_push_constant_space,
    &gen7_urb,
    &gen8_blend_state,
@@ -283,10 +303,14 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &gen7_hw_binding_tables, /* Enable hw-generated binding tables for Broadwell */
 
    &brw_vs_image_surfaces, /* Before vs push/pull constants and binding table */
+   &brw_tcs_image_surfaces, /* Before tcs push/pull constants and binding table */
+   &brw_tes_image_surfaces, /* Before tes push/pull constants and binding table */
    &brw_gs_image_surfaces, /* Before gs push/pull constants and binding table */
    &brw_wm_image_surfaces, /* Before wm push/pull constants and binding table */
 
    &gen6_vs_push_constants, /* Before vs_state */
+   &gen7_tcs_push_constants,
+   &gen7_tes_push_constants,
    &gen6_gs_push_constants, /* Before gs_state */
    &gen6_wm_push_constants, /* Before wm_surfaces and constant_buffer */
 
@@ -296,6 +320,12 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &brw_vs_pull_constants,
    &brw_vs_ubo_surfaces,
    &brw_vs_abo_surfaces,
+   &brw_tcs_pull_constants,
+   &brw_tcs_ubo_surfaces,
+   &brw_tcs_abo_surfaces,
+   &brw_tes_pull_constants,
+   &brw_tes_ubo_surfaces,
+   &brw_tes_abo_surfaces,
    &brw_gs_pull_constants,
    &brw_gs_ubo_surfaces,
    &brw_gs_abo_surfaces,
@@ -305,16 +335,23 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &gen6_renderbuffer_surfaces,
    &brw_texture_surfaces,
    &brw_vs_binding_table,
+   &brw_tcs_binding_table,
+   &brw_tes_binding_table,
    &brw_gs_binding_table,
    &brw_wm_binding_table,
 
    &brw_fs_samplers,
    &brw_vs_samplers,
+   &brw_tcs_samplers,
+   &brw_tes_samplers,
    &brw_gs_samplers,
    &gen8_multisample_state,
 
    &gen8_disable_stages,
    &gen8_vs_state,
+   &gen8_hs_state,
+   &gen7_te_state,
+   &gen8_ds_state,
    &gen8_gs_state,
    &gen8_sol_state,
    &gen6_clip_state,
@@ -352,13 +389,15 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
 static const struct brw_tracked_state *gen8_compute_atoms[] =
 {
    &gen8_state_base_address,
+   &gen7_l3_state,
    &brw_cs_image_surfaces,
    &gen7_cs_push_constants,
    &brw_cs_pull_constants,
    &brw_cs_ubo_surfaces,
    &brw_cs_abo_surfaces,
-   &brw_texture_surfaces,
+   &brw_cs_texture_surfaces,
    &brw_cs_work_groups_surface,
+   &brw_cs_samplers,
    &brw_cs_state,
 };
 
@@ -382,7 +421,7 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
       BEGIN_BATCH(3);
       OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
       OUT_BATCH(GEN7_CACHE_MODE_1);
-      OUT_BATCH((GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC << 16) |
+      OUT_BATCH(REG_MASK(GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC) |
                 GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC);
       ADVANCE_BATCH();
    }
@@ -494,6 +533,7 @@ void brw_init_state( struct brw_context *brw )
    ctx->DriverFlags.NewTextureBuffer = BRW_NEW_TEXTURE_BUFFER;
    ctx->DriverFlags.NewAtomicBuffer = BRW_NEW_ATOMIC_BUFFER;
    ctx->DriverFlags.NewImageUnits = BRW_NEW_IMAGE_UNITS;
+   ctx->DriverFlags.NewDefaultTessLevels = BRW_NEW_DEFAULT_TESS_LEVELS;
 }
 
 
@@ -577,14 +617,18 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_VS_PROG_DATA),
    DEFINE_BIT(BRW_NEW_FF_GS_PROG_DATA),
    DEFINE_BIT(BRW_NEW_GS_PROG_DATA),
+   DEFINE_BIT(BRW_NEW_TCS_PROG_DATA),
+   DEFINE_BIT(BRW_NEW_TES_PROG_DATA),
    DEFINE_BIT(BRW_NEW_CLIP_PROG_DATA),
    DEFINE_BIT(BRW_NEW_CS_PROG_DATA),
    DEFINE_BIT(BRW_NEW_URB_FENCE),
    DEFINE_BIT(BRW_NEW_FRAGMENT_PROGRAM),
    DEFINE_BIT(BRW_NEW_GEOMETRY_PROGRAM),
+   DEFINE_BIT(BRW_NEW_TESS_PROGRAMS),
    DEFINE_BIT(BRW_NEW_VERTEX_PROGRAM),
    DEFINE_BIT(BRW_NEW_CURBE_OFFSETS),
    DEFINE_BIT(BRW_NEW_REDUCED_PRIMITIVE),
+   DEFINE_BIT(BRW_NEW_PATCH_PRIMITIVE),
    DEFINE_BIT(BRW_NEW_PRIMITIVE),
    DEFINE_BIT(BRW_NEW_CONTEXT),
    DEFINE_BIT(BRW_NEW_PSP),
@@ -592,9 +636,12 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_BINDING_TABLE_POINTERS),
    DEFINE_BIT(BRW_NEW_INDICES),
    DEFINE_BIT(BRW_NEW_VERTICES),
+   DEFINE_BIT(BRW_NEW_DEFAULT_TESS_LEVELS),
    DEFINE_BIT(BRW_NEW_BATCH),
    DEFINE_BIT(BRW_NEW_INDEX_BUFFER),
    DEFINE_BIT(BRW_NEW_VS_CONSTBUF),
+   DEFINE_BIT(BRW_NEW_TCS_CONSTBUF),
+   DEFINE_BIT(BRW_NEW_TES_CONSTBUF),
    DEFINE_BIT(BRW_NEW_GS_CONSTBUF),
    DEFINE_BIT(BRW_NEW_PROGRAM_CACHE),
    DEFINE_BIT(BRW_NEW_STATE_BASE_ADDRESS),
@@ -618,6 +665,8 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_VS_ATTRIB_WORKAROUNDS),
    DEFINE_BIT(BRW_NEW_COMPUTE_PROGRAM),
    DEFINE_BIT(BRW_NEW_CS_WORK_GROUPS),
+   DEFINE_BIT(BRW_NEW_URB_SIZE),
+   DEFINE_BIT(BRW_NEW_CC_STATE),
    {0, 0, 0}
 };
 
@@ -642,11 +691,40 @@ brw_print_dirty_count(struct dirty_bit_map *bit_map)
 }
 
 static inline void
+brw_upload_tess_programs(struct brw_context *brw)
+{
+   if (brw->tess_eval_program) {
+      uint64_t per_vertex_slots = brw->tess_eval_program->Base.InputsRead;
+      uint32_t per_patch_slots =
+         brw->tess_eval_program->Base.PatchInputsRead;
+
+      /* The TCS may have additional outputs which aren't read by the
+       * TES (possibly for cross-thread communication).  These need to
+       * be stored in the Patch URB Entry as well.
+       */
+      if (brw->tess_ctrl_program) {
+         per_vertex_slots |= brw->tess_ctrl_program->Base.OutputsWritten;
+         per_patch_slots |=
+            brw->tess_ctrl_program->Base.PatchOutputsWritten;
+      }
+
+      brw_upload_tcs_prog(brw, per_vertex_slots, per_patch_slots);
+      brw_upload_tes_prog(brw, per_vertex_slots, per_patch_slots);
+   } else {
+      brw->tcs.prog_data = NULL;
+      brw->tcs.base.prog_data = NULL;
+      brw->tes.prog_data = NULL;
+      brw->tes.base.prog_data = NULL;
+   }
+}
+
+static inline void
 brw_upload_programs(struct brw_context *brw,
                     enum brw_pipeline pipeline)
 {
    if (pipeline == BRW_RENDER_PIPELINE) {
       brw_upload_vs_prog(brw);
+      brw_upload_tess_programs(brw);
 
       if (brw->gen < 6)
          brw_upload_ff_gs_prog(brw);
@@ -660,6 +738,8 @@ brw_upload_programs(struct brw_context *brw,
       bool old_separate = brw->vue_map_geom_out.separate;
       if (brw->geometry_program)
          brw->vue_map_geom_out = brw->gs.prog_data->base.vue_map;
+      else if (brw->tess_eval_program)
+         brw->vue_map_geom_out = brw->tes.prog_data->base.vue_map;
       else
          brw->vue_map_geom_out = brw->vs.prog_data->base.vue_map;
 
@@ -715,6 +795,16 @@ brw_upload_pipeline_state(struct brw_context *brw,
       if (brw->fragment_program != ctx->FragmentProgram._Current) {
          brw->fragment_program = ctx->FragmentProgram._Current;
          brw->ctx.NewDriverState |= BRW_NEW_FRAGMENT_PROGRAM;
+      }
+
+      if (brw->tess_eval_program != ctx->TessEvalProgram._Current) {
+         brw->tess_eval_program = ctx->TessEvalProgram._Current;
+         brw->ctx.NewDriverState |= BRW_NEW_TESS_PROGRAMS;
+      }
+
+      if (brw->tess_ctrl_program != ctx->TessCtrlProgram._Current) {
+         brw->tess_ctrl_program = ctx->TessCtrlProgram._Current;
+         brw->ctx.NewDriverState |= BRW_NEW_TESS_PROGRAMS;
       }
 
       if (brw->geometry_program != ctx->GeometryProgram._Current) {

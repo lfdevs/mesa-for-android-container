@@ -86,6 +86,9 @@ wglCreatePbufferARB(HDC hCurrentDC,
    int iDisplayablePixelFormat;
    PIXELFORMATDESCRIPTOR pfd;
    BOOL bRet;
+   int textureFormat = WGL_NO_TEXTURE_ARB;
+   int textureTarget = WGL_NO_TEXTURE_ARB;
+   BOOL textureMipmap = FALSE;
 
    info = stw_pixelformat_get_info(iPixelFormat - 1);
    if (!info) {
@@ -104,8 +107,38 @@ wglCreatePbufferARB(HDC hCurrentDC,
          piAttrib++;
          useLargest = *piAttrib;
          break;
+       case WGL_TEXTURE_FORMAT_ARB:
+          /* WGL_ARB_render_texture */
+          piAttrib++;
+          textureFormat = *piAttrib;
+          if (textureFormat != WGL_TEXTURE_RGB_ARB &&
+             textureFormat != WGL_TEXTURE_RGBA_ARB &&
+             textureFormat != WGL_NO_TEXTURE_ARB) {
+             SetLastError(ERROR_INVALID_DATA);
+             return 0;
+          }
+          break;
+       case WGL_TEXTURE_TARGET_ARB:
+          /* WGL_ARB_render_texture */
+          piAttrib++;
+          textureTarget = *piAttrib;
+          if (textureTarget != WGL_TEXTURE_CUBE_MAP_ARB &&
+              textureTarget != WGL_TEXTURE_1D_ARB &&
+              textureTarget != WGL_TEXTURE_2D_ARB &&
+              textureTarget != WGL_NO_TEXTURE_ARB) {
+             SetLastError(ERROR_INVALID_DATA);
+             return 0;
+          }
+          break;
+      case WGL_MIPMAP_TEXTURE_ARB:
+         /* WGL_ARB_render_texture */
+         piAttrib++;
+         textureMipmap = !!*piAttrib;
+         break;
       default:
          SetLastError(ERROR_INVALID_DATA);
+         debug_printf("wgl: Unsupported attribute 0x%x in %s\n",
+                      *piAttrib, __func__);
          return 0;
       }
    }
@@ -220,6 +253,12 @@ wglCreatePbufferARB(HDC hCurrentDC,
    }
 
    fb->bPbuffer = TRUE;
+
+   /* WGL_ARB_render_texture fields */
+   fb->textureTarget = textureTarget;
+   fb->textureFormat = textureFormat;
+   fb->textureMipmap = textureMipmap;
+
    iDisplayablePixelFormat = fb->iDisplayablePixelFormat;
 
    stw_framebuffer_unlock(fb);
@@ -246,7 +285,7 @@ wglGetPbufferDCARB(HPBUFFERARB hPbuffer)
       return NULL;
    }
 
-   fb = (struct stw_framebuffer *)hPbuffer;
+   fb = stw_framebuffer_from_HPBUFFERARB(hPbuffer);
 
    hDC = GetDC(fb->hWnd);
 
@@ -265,7 +304,7 @@ wglReleasePbufferDCARB(HPBUFFERARB hPbuffer,
       return 0;
    }
 
-   fb = (struct stw_framebuffer *)hPbuffer;
+   fb = stw_framebuffer_from_HPBUFFERARB(hPbuffer);
 
    return ReleaseDC(fb->hWnd, hDC);
 }
@@ -281,7 +320,7 @@ wglDestroyPbufferARB(HPBUFFERARB hPbuffer)
       return FALSE;
    }
 
-   fb = (struct stw_framebuffer *)hPbuffer;
+   fb = stw_framebuffer_from_HPBUFFERARB(hPbuffer);
 
    /* This will destroy all our data */
    return DestroyWindow(fb->hWnd);
@@ -300,7 +339,7 @@ wglQueryPbufferARB(HPBUFFERARB hPbuffer,
       return FALSE;
    }
 
-   fb = (struct stw_framebuffer *)hPbuffer;
+   fb = stw_framebuffer_from_HPBUFFERARB(hPbuffer);
 
    switch (iAttribute) {
    case WGL_PBUFFER_WIDTH_ARB:
@@ -312,6 +351,22 @@ wglQueryPbufferARB(HPBUFFERARB hPbuffer,
    case WGL_PBUFFER_LOST_ARB:
       /* We assume that no content is ever lost due to display mode change */
       *piValue = FALSE;
+      return TRUE;
+   /* WGL_ARB_render_texture */
+   case WGL_TEXTURE_TARGET_ARB:
+      *piValue = fb->textureTarget;
+      return TRUE;
+   case WGL_TEXTURE_FORMAT_ARB:
+      *piValue = fb->textureFormat;
+      return TRUE;
+   case WGL_MIPMAP_TEXTURE_ARB:
+      *piValue = fb->textureMipmap;
+      return TRUE;
+   case WGL_MIPMAP_LEVEL_ARB:
+      *piValue = fb->textureLevel;
+      return TRUE;
+   case WGL_CUBE_MAP_FACE_ARB:
+      *piValue = fb->textureFace + WGL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB;
       return TRUE;
    default:
       SetLastError(ERROR_INVALID_DATA);

@@ -264,7 +264,7 @@ libxatracker_la_DEPENDENCIES =  \
 	$(top_builddir)/src/gallium/state_trackers/xa/libxatracker.la \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_11) $(am__append_21) \
 	$(am__DEPENDENCIES_12)
@@ -494,8 +494,6 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
-MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
-MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
@@ -541,6 +539,7 @@ PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
+PWR8_CFLAGS = @PWR8_CFLAGS@
 PYTHON2 = @PYTHON2@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
@@ -735,7 +734,7 @@ libxatracker_la_LIBADD =  \
 	$(top_builddir)/src/gallium/state_trackers/xa/libxatracker.la \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la $(LIBDRM_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_20) $(am__append_21) \
 	$(am__append_22)

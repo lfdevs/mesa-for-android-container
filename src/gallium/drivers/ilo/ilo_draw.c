@@ -71,6 +71,7 @@ query_process_bo(const struct ilo_context *ilo, struct ilo_query *q)
 
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_TIME_ELAPSED:
    case PIPE_QUERY_PRIMITIVES_GENERATED:
    case PIPE_QUERY_PRIMITIVES_EMITTED:
@@ -157,6 +158,7 @@ ilo_init_draw_query(struct ilo_context *ilo, struct ilo_query *q)
 
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_TIME_ELAPSED:
    case PIPE_QUERY_PRIMITIVES_GENERATED:
    case PIPE_QUERY_PRIMITIVES_EMITTED:

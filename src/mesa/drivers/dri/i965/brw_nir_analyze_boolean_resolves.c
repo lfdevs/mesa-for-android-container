@@ -109,9 +109,6 @@ analyze_boolean_resolves_block(nir_block *block, void *void_state)
          uint8_t resolve_status;
          nir_alu_instr *alu = nir_instr_as_alu(instr);
          switch (alu->op) {
-         case nir_op_bany2:
-         case nir_op_bany3:
-         case nir_op_bany4:
          case nir_op_ball_fequal2:
          case nir_op_ball_iequal2:
          case nir_op_ball_fequal3:
@@ -263,7 +260,8 @@ analyze_boolean_resolves_impl(nir_function_impl *impl)
 void
 brw_nir_analyze_boolean_resolves(nir_shader *shader)
 {
-   nir_foreach_overload(shader, overload)
-      if (overload->impl)
-         analyze_boolean_resolves_impl(overload->impl);
+   nir_foreach_function(shader, function) {
+      if (function->impl)
+         analyze_boolean_resolves_impl(function->impl);
+   }
 }

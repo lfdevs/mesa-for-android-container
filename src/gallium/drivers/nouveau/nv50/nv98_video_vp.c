@@ -86,7 +86,7 @@ nv98_decoder_vp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
 #endif
       { dec->fw_bo, NOUVEAU_BO_RD | NOUVEAU_BO_VRAM },
    };
-   int num_refs = sizeof(bo_refs)/sizeof(*bo_refs) - !dec->fw_bo;
+   int num_refs = ARRAY_SIZE(bo_refs) - !dec->fw_bo;
 
 #if NOUVEAU_VP3_DEBUG_FENCE
    fence_extra = 4;

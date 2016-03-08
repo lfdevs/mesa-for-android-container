@@ -287,6 +287,7 @@ svga_bind_sampler_states(struct pipe_context *pipe,
 {
    struct svga_context *svga = svga_context(pipe);
    unsigned i;
+   boolean any_change = FALSE;
 
    assert(shader < PIPE_SHADER_TYPES);
    assert(start + num <= PIPE_MAX_SAMPLERS);
@@ -295,8 +296,15 @@ svga_bind_sampler_states(struct pipe_context *pipe,
    if (!svga_have_vgpu10(svga) && shader != PIPE_SHADER_FRAGMENT)
       return;
 
-   for (i = 0; i < num; i++)
+   for (i = 0; i < num; i++) {
+      if (svga->curr.sampler[shader][start + i] != samplers[i])
+         any_change = TRUE;
       svga->curr.sampler[shader][start + i] = samplers[i];
+   }
+
+   if (!any_change) {
+      return;
+   }
 
    /* find highest non-null sampler[] entry */
    {
@@ -405,6 +413,7 @@ svga_set_sampler_views(struct pipe_context *pipe,
    unsigned flag_1d = 0;
    unsigned flag_srgb = 0;
    uint i;
+   boolean any_change = FALSE;
 
    assert(shader < PIPE_SHADER_TYPES);
    assert(start + num <= Elements(svga->curr.sampler_views[shader]));
@@ -422,6 +431,7 @@ svga_set_sampler_views(struct pipe_context *pipe,
          pipe_sampler_view_release(pipe, &svga->curr.sampler_views[shader][start + i]);
          pipe_sampler_view_reference(&svga->curr.sampler_views[shader][start + i],
                                      views[i]);
+         any_change = TRUE;
       }
 
       if (!views[i])
@@ -432,6 +442,10 @@ svga_set_sampler_views(struct pipe_context *pipe,
 
       if (views[i]->texture->target == PIPE_TEXTURE_1D)
          flag_1d |= 1 << (start + i);
+   }
+
+   if (!any_change) {
+      return;
    }
 
    /* find highest non-null sampler_views[] entry */

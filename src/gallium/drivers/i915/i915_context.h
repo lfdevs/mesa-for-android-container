@@ -195,7 +195,6 @@ struct i915_rasterizer_state {
 
    unsigned light_twoside : 1;
    unsigned st;
-   enum interp_mode color_interp;
 
    unsigned LIS4;
    unsigned LIS7;

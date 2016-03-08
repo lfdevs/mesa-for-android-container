@@ -1593,7 +1593,7 @@ ra_get_type(struct toy_tgsi *tgsi, const struct tgsi_full_instruction *tgsi_inst
       tgsi_inst->Src[operand].Register.File;
    switch (file) {
    case TGSI_FILE_SAMPLER:
-   case TGSI_FILE_RESOURCE:
+   case TGSI_FILE_IMAGE:
    case TGSI_FILE_SAMPLER_VIEW:
       type = TOY_TYPE_D;
       break;
@@ -1834,7 +1834,7 @@ ra_get_src_indirect(struct toy_tgsi *tgsi,
       src = tsrc_null();
       break;
    case TGSI_FILE_SAMPLER:
-   case TGSI_FILE_RESOURCE:
+   case TGSI_FILE_IMAGE:
    case TGSI_FILE_SAMPLER_VIEW:
       is_resource = true;
       /* fall through */
@@ -1918,7 +1918,7 @@ ra_get_src(struct toy_tgsi *tgsi,
       need_vrf = true;
       break;
    case TGSI_FILE_SAMPLER:
-   case TGSI_FILE_RESOURCE:
+   case TGSI_FILE_IMAGE:
    case TGSI_FILE_SAMPLER_VIEW:
       assert(!s->Register.Dimension);
       src = tsrc_imm_d(s->Register.Index);
@@ -2256,7 +2256,7 @@ parse_declaration(struct toy_tgsi *tgsi,
    case TGSI_FILE_SAMPLER:
    case TGSI_FILE_PREDICATE:
    case TGSI_FILE_ADDRESS:
-   case TGSI_FILE_RESOURCE:
+   case TGSI_FILE_IMAGE:
    case TGSI_FILE_SAMPLER_VIEW:
       /* nothing to do */
       break;

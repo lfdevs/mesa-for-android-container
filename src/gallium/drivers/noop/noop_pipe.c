@@ -96,7 +96,7 @@ static struct pipe_resource *noop_resource_create(struct pipe_screen *screen,
 	unsigned stride;
 
 	nresource = CALLOC_STRUCT(noop_resource);
-	if (nresource == NULL)
+	if (!nresource)
 		return NULL;
 
 	stride = util_format_get_stride(templ->format, templ->width0);
@@ -158,7 +158,7 @@ static void *noop_transfer_map(struct pipe_context *pipe,
    struct noop_resource *nresource = (struct noop_resource *)resource;
 
    transfer = CALLOC_STRUCT(pipe_transfer);
-   if (transfer == NULL)
+   if (!transfer)
            return NULL;
    pipe_resource_reference(&transfer->resource, resource);
    transfer->level = level;
@@ -265,7 +265,7 @@ static struct pipe_context *noop_create_context(struct pipe_screen *screen,
 {
 	struct pipe_context *ctx = CALLOC_STRUCT(pipe_context);
 
-	if (ctx == NULL)
+	if (!ctx)
 		return NULL;
 	ctx->screen = screen;
 	ctx->priv = priv;
@@ -374,7 +374,7 @@ struct pipe_screen *noop_screen_create(struct pipe_screen *oscreen)
 	}
 
 	noop_screen = CALLOC_STRUCT(noop_pipe_screen);
-	if (noop_screen == NULL) {
+	if (!noop_screen) {
 		return NULL;
 	}
 	noop_screen->oscreen = oscreen;

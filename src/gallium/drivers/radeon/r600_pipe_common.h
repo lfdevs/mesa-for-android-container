@@ -56,7 +56,7 @@
 /* Debug flags. */
 /* logging */
 #define DBG_TEX			(1 << 0)
-#define DBG_TEXMIP		(1 << 1)
+/* gap - reuse */
 #define DBG_COMPUTE		(1 << 2)
 #define DBG_VM			(1 << 3)
 #define DBG_TRACE_CS		(1 << 4)
@@ -71,6 +71,7 @@
 #define DBG_NO_IR		(1 << 12)
 #define DBG_NO_TGSI		(1 << 13)
 #define DBG_NO_ASM		(1 << 14)
+#define DBG_PREOPT_IR		(1 << 15)
 /* Bits 21-31 are reserved for the r600g driver. */
 /* features */
 #define DBG_NO_ASYNC_DMA	(1llu << 32)
@@ -86,13 +87,17 @@
 #define DBG_CHECK_VM		(1llu << 42)
 #define DBG_NO_DCC		(1llu << 43)
 #define DBG_NO_DCC_CLEAR	(1llu << 44)
+#define DBG_NO_RB_PLUS		(1llu << 45)
+#define DBG_SI_SCHED		(1llu << 46)
+#define DBG_MONOLITHIC_SHADERS	(1llu << 47)
 
 #define R600_MAP_BUFFER_ALIGNMENT 64
 
 struct r600_common_context;
+struct r600_perfcounters;
 
 struct radeon_shader_reloc {
-	char *name;
+	char name[32];
 	uint64_t offset;
 };
 
@@ -127,12 +132,14 @@ struct radeon_shader_binary {
 	char *disasm_string;
 };
 
+void radeon_shader_binary_init(struct radeon_shader_binary *b);
+void radeon_shader_binary_clean(struct radeon_shader_binary *b);
+
 struct r600_resource {
 	struct u_resource		b;
 
 	/* Winsys objects. */
 	struct pb_buffer		*buf;
-	struct radeon_winsys_cs_handle	*cs_buf;
 	uint64_t			gpu_address;
 
 	/* Resource state. */
@@ -171,7 +178,7 @@ struct r600_fmask_info {
 	unsigned offset;
 	unsigned size;
 	unsigned alignment;
-	unsigned pitch;
+	unsigned pitch_in_pixels;
 	unsigned bank_height;
 	unsigned slice_tile_max;
 	unsigned tile_mode_index;
@@ -181,15 +188,25 @@ struct r600_cmask_info {
 	unsigned offset;
 	unsigned size;
 	unsigned alignment;
+	unsigned pitch;
+	unsigned height;
+	unsigned xalign;
+	unsigned yalign;
 	unsigned slice_tile_max;
 	unsigned base_address_reg;
+};
+
+struct r600_htile_info {
+	unsigned pitch;
+	unsigned height;
+	unsigned xalign;
+	unsigned yalign;
 };
 
 struct r600_texture {
 	struct r600_resource		resource;
 
 	unsigned			size;
-	unsigned			pitch_override;
 	bool				is_depth;
 	unsigned			dirty_level_mask; /* each bit says if that mipmap is compressed */
 	unsigned			stencil_dirty_level_mask; /* each bit says if that mipmap is compressed */
@@ -206,9 +223,12 @@ struct r600_texture {
 	unsigned			color_clear_value[2];
 
 	/* Depth buffer compression and fast clear. */
+	struct r600_htile_info		htile;
 	struct r600_resource		*htile_buffer;
 	bool				depth_cleared; /* if it was cleared at least once */
 	float				depth_clear_value;
+	bool				stencil_cleared; /* if it was cleared at least once */
+	uint8_t				stencil_clear_value;
 
 	bool				non_disp_tiling; /* R600-Cayman only */
 };
@@ -222,6 +242,7 @@ struct r600_surface {
 	/* Misc. color flags. */
 	bool alphatest_bypass;
 	bool export_16bpc;
+	bool color_is_int8;
 
 	/* Color registers. */
 	unsigned cb_color_info;
@@ -238,6 +259,10 @@ struct r600_surface {
 	unsigned cb_color_fmask_slice;	/* EG and later */
 	unsigned cb_color_cmask;	/* CB_COLORn_TILE (r600 only) */
 	unsigned cb_color_mask;		/* R600 only */
+	unsigned spi_shader_col_format;		/* SI+, no blending, no alpha-to-coverage. */
+	unsigned spi_shader_col_format_alpha;	/* SI+, alpha-to-coverage */
+	unsigned spi_shader_col_format_blend;	/* SI+, blending without alpha. */
+	unsigned spi_shader_col_format_blend_alpha; /* SI+, blending with alpha. */
 	struct r600_resource *cb_buffer_fmask; /* Used for FMASK relocations. R600 only */
 	struct r600_resource *cb_buffer_cmask; /* Used for CMASK relocations. R600 only */
 
@@ -257,19 +282,12 @@ struct r600_surface {
 	unsigned pa_su_poly_offset_db_fmt_cntl;
 };
 
-struct r600_tiling_info {
-	unsigned num_channels;
-	unsigned num_banks;
-	unsigned group_bytes;
-};
-
 struct r600_common_screen {
 	struct pipe_screen		b;
 	struct radeon_winsys		*ws;
 	enum radeon_family		family;
 	enum chip_class			chip_class;
 	struct radeon_info		info;
-	struct r600_tiling_info		tiling_info;
 	uint64_t			debug_flags;
 	bool				has_cp_dma;
 	bool				has_streamout;
@@ -300,6 +318,9 @@ struct r600_common_screen {
 	volatile unsigned		gpu_load_stop_thread; /* bool */
 
 	char				renderer_string[64];
+
+	/* Performance counters. */
+	struct r600_perfcounters	*perfcounters;
 };
 
 /* This encapsulates a state or an operation which can emitted into the GPU
@@ -421,6 +442,8 @@ struct r600_common_context {
 	 * the GPU addresses are updated. */
 	struct list_head		texture_buffers;
 
+	struct pipe_debug_callback	debug;
+
 	/* Copy one resource to another using async DMA. */
 	void (*dma_copy)(struct pipe_context *ctx,
 			 struct pipe_resource *dst,
@@ -458,7 +481,7 @@ struct r600_common_context {
 
 /* r600_buffer.c */
 boolean r600_rings_is_buffer_referenced(struct r600_common_context *ctx,
-					struct radeon_winsys_cs_handle *buf,
+					struct pb_buffer *buf,
 					enum radeon_bo_usage usage);
 void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
                                       struct r600_resource *resource,
@@ -479,6 +502,9 @@ struct pipe_resource *
 r600_buffer_from_user_memory(struct pipe_screen *screen,
 			     const struct pipe_resource *templ,
 			     void *user_memory);
+void
+r600_invalidate_resource(struct pipe_context *ctx,
+			 struct pipe_resource *resource);
 
 /* r600_common_pipe.c */
 void r600_draw_rectangle(struct blitter_context *blitter,
@@ -495,7 +521,7 @@ bool r600_common_context_init(struct r600_common_context *rctx,
 void r600_common_context_cleanup(struct r600_common_context *rctx);
 void r600_context_add_resource_size(struct pipe_context *ctx, struct pipe_resource *r);
 bool r600_can_dump_shader(struct r600_common_screen *rscreen,
-			  const struct tgsi_token *tokens);
+			  unsigned processor);
 void r600_screen_clear_buffer(struct r600_common_screen *rscreen, struct pipe_resource *dst,
 			      unsigned offset, unsigned size, unsigned value,
 			      bool is_framebuffer);
@@ -508,6 +534,9 @@ void r600_need_dma_space(struct r600_common_context *ctx, unsigned num_dw);
 void r600_gpu_load_kill_thread(struct r600_common_screen *rscreen);
 uint64_t r600_gpu_load_begin(struct r600_common_screen *rscreen);
 unsigned r600_gpu_load_end(struct r600_common_screen *rscreen, uint64_t begin);
+
+/* r600_perfcounters.c */
+void r600_perfcounters_destroy(struct r600_common_screen *rscreen);
 
 /* r600_query.c */
 void r600_init_screen_query_functions(struct r600_common_screen *rscreen);
@@ -540,6 +569,7 @@ void r600_texture_get_cmask_info(struct r600_common_screen *rscreen,
 bool r600_init_flushed_depth_texture(struct pipe_context *ctx,
 				     struct pipe_resource *texture,
 				     struct r600_texture **staging);
+void r600_print_texture_info(struct r600_texture *rtex, FILE *f);
 struct pipe_resource *r600_texture_create(struct pipe_screen *screen,
 					const struct pipe_resource *templ);
 struct pipe_surface *r600_create_surface_custom(struct pipe_context *pipe,
@@ -629,7 +659,7 @@ r600_get_sampler_view_priority(struct r600_resource *res)
 	} while (0);
 
 #define R600_ERR(fmt, args...) \
-	fprintf(stderr, "EE %s:%d %s - "fmt, __FILE__, __LINE__, __func__, ##args)
+	fprintf(stderr, "EE %s:%d %s - " fmt, __FILE__, __LINE__, __func__, ##args)
 
 /* For MSAA sample positions. */
 #define FILL_SREG(s0x, s0y, s1x, s1y, s2x, s2y, s3x, s3y)  \

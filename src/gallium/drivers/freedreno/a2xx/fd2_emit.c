@@ -446,3 +446,17 @@ fd2_emit_setup(struct fd_context *ctx)
 	fd_ringbuffer_flush(ring);
 	fd_ringmarker_mark(ctx->draw_start);
 }
+
+static void
+fd2_emit_ib(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
+		struct fd_ringmarker *end)
+{
+	__OUT_IB(ring, false, start, end);
+}
+
+void
+fd2_emit_init(struct pipe_context *pctx)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	ctx->emit_ib = fd2_emit_ib;
+}

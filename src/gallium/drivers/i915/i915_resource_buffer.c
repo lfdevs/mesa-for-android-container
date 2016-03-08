@@ -72,7 +72,7 @@ i915_buffer_transfer_map(struct pipe_context *pipe,
    struct i915_buffer *buffer = i915_buffer(resource);
    struct pipe_transfer *transfer = util_slab_alloc(&i915->transfer_pool);
 
-   if (transfer == NULL)
+   if (!transfer)
       return NULL;
 
    transfer->resource = resource;

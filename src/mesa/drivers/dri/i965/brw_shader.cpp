@@ -21,130 +21,16 @@
  * IN THE SOFTWARE.
  */
 
-#include "main/macros.h"
 #include "brw_context.h"
-#include "brw_vs.h"
-#include "brw_gs.h"
-#include "brw_fs.h"
 #include "brw_cfg.h"
+#include "brw_eu.h"
+#include "brw_fs.h"
 #include "brw_nir.h"
-#include "glsl/ir_optimization.h"
-#include "glsl/glsl_parser_extras.h"
-#include "main/shaderapi.h"
+#include "brw_vec4_tes.h"
+#include "main/shaderobj.h"
+#include "main/uniforms.h"
 
-static void
-shader_debug_log_mesa(void *data, const char *fmt, ...)
-{
-   struct brw_context *brw = (struct brw_context *)data;
-   va_list args;
-
-   va_start(args, fmt);
-   GLuint msg_id = 0;
-   _mesa_gl_vdebug(&brw->ctx, &msg_id,
-                   MESA_DEBUG_SOURCE_SHADER_COMPILER,
-                   MESA_DEBUG_TYPE_OTHER,
-                   MESA_DEBUG_SEVERITY_NOTIFICATION, fmt, args);
-   va_end(args);
-}
-
-static void
-shader_perf_log_mesa(void *data, const char *fmt, ...)
-{
-   struct brw_context *brw = (struct brw_context *)data;
-
-   va_list args;
-   va_start(args, fmt);
-
-   if (unlikely(INTEL_DEBUG & DEBUG_PERF)) {
-      va_list args_copy;
-      va_copy(args_copy, args);
-      vfprintf(stderr, fmt, args_copy);
-      va_end(args_copy);
-   }
-
-   if (brw->perf_debug) {
-      GLuint msg_id = 0;
-      _mesa_gl_vdebug(&brw->ctx, &msg_id,
-                      MESA_DEBUG_SOURCE_SHADER_COMPILER,
-                      MESA_DEBUG_TYPE_PERFORMANCE,
-                      MESA_DEBUG_SEVERITY_MEDIUM, fmt, args);
-   }
-   va_end(args);
-}
-
-struct brw_compiler *
-brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
-{
-   struct brw_compiler *compiler = rzalloc(mem_ctx, struct brw_compiler);
-
-   compiler->devinfo = devinfo;
-   compiler->shader_debug_log = shader_debug_log_mesa;
-   compiler->shader_perf_log = shader_perf_log_mesa;
-
-   brw_fs_alloc_reg_sets(compiler);
-   brw_vec4_alloc_reg_set(compiler);
-
-   compiler->scalar_stage[MESA_SHADER_VERTEX] =
-      devinfo->gen >= 8 && !(INTEL_DEBUG & DEBUG_VEC4VS);
-   compiler->scalar_stage[MESA_SHADER_GEOMETRY] =
-      devinfo->gen >= 8 && brw_env_var_as_boolean("INTEL_SCALAR_GS", false);
-   compiler->scalar_stage[MESA_SHADER_FRAGMENT] = true;
-   compiler->scalar_stage[MESA_SHADER_COMPUTE] = true;
-
-   nir_shader_compiler_options *nir_options =
-      rzalloc(compiler, nir_shader_compiler_options);
-   nir_options->native_integers = true;
-   nir_options->lower_fdiv = true;
-   /* In order to help allow for better CSE at the NIR level we tell NIR
-    * to split all ffma instructions during opt_algebraic and we then
-    * re-combine them as a later step.
-    */
-   nir_options->lower_ffma = true;
-   nir_options->lower_sub = true;
-   /* In the vec4 backend, our dpN instruction replicates its result to all
-    * the components of a vec4.  We would like NIR to give us replicated fdot
-    * instructions because it can optimize better for us.
-    *
-    * For the FS backend, it should be lowered away by the scalarizing pass so
-    * we should never see fdot anyway.
-    */
-   nir_options->fdot_replicates = true;
-
-   /* We want the GLSL compiler to emit code that uses condition codes */
-   for (int i = 0; i < MESA_SHADER_STAGES; i++) {
-      compiler->glsl_compiler_options[i].MaxUnrollIterations = 32;
-      compiler->glsl_compiler_options[i].MaxIfDepth =
-         devinfo->gen < 6 ? 16 : UINT_MAX;
-
-      compiler->glsl_compiler_options[i].EmitCondCodes = true;
-      compiler->glsl_compiler_options[i].EmitNoNoise = true;
-      compiler->glsl_compiler_options[i].EmitNoMainReturn = true;
-      compiler->glsl_compiler_options[i].EmitNoIndirectInput = true;
-      compiler->glsl_compiler_options[i].EmitNoIndirectUniform = false;
-      compiler->glsl_compiler_options[i].LowerClipDistance = true;
-
-      bool is_scalar = compiler->scalar_stage[i];
-
-      compiler->glsl_compiler_options[i].EmitNoIndirectOutput = is_scalar;
-      compiler->glsl_compiler_options[i].EmitNoIndirectTemp = is_scalar;
-      compiler->glsl_compiler_options[i].OptimizeForAOS = !is_scalar;
-
-      /* !ARB_gpu_shader5 */
-      if (devinfo->gen < 7)
-         compiler->glsl_compiler_options[i].EmitNoIndirectSampler = true;
-
-      compiler->glsl_compiler_options[i].NirOptions = nir_options;
-
-      compiler->glsl_compiler_options[i].LowerBufferInterfaceBlocks = true;
-   }
-
-   if (compiler->scalar_stage[MESA_SHADER_GEOMETRY])
-      compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].EmitNoIndirectInput = false;
-
-   return compiler;
-}
-
-struct gl_shader *
+extern "C" struct gl_shader *
 brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
 {
    struct brw_shader *shader;
@@ -160,7 +46,7 @@ brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
    return &shader->base;
 }
 
-void
+extern "C" void
 brw_mark_surface_used(struct brw_stage_prog_data *prog_data,
                       unsigned surf_index)
 {
@@ -198,6 +84,7 @@ brw_type_for_base_type(const struct glsl_type *type)
    case GLSL_TYPE_ERROR:
    case GLSL_TYPE_INTERFACE:
    case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_FUNCTION:
       unreachable("not reached");
    }
 
@@ -426,6 +313,10 @@ brw_instruction_name(enum opcode op)
    case SHADER_OPCODE_BROADCAST:
       return "broadcast";
 
+   case SHADER_OPCODE_EXTRACT_BYTE:
+      return "extract_byte";
+   case SHADER_OPCODE_EXTRACT_WORD:
+      return "extract_word";
    case VEC4_OPCODE_MOV_BYTES:
       return "mov_bytes";
    case VEC4_OPCODE_PACK_BYTES:
@@ -545,6 +436,33 @@ brw_instruction_name(enum opcode op)
       return "mulh";
    case SHADER_OPCODE_MOV_INDIRECT:
       return "mov_indirect";
+
+   case VEC4_OPCODE_URB_READ:
+      return "urb_read";
+   case TCS_OPCODE_GET_INSTANCE_ID:
+      return "tcs_get_instance_id";
+   case TCS_OPCODE_URB_WRITE:
+      return "tcs_urb_write";
+   case TCS_OPCODE_SET_INPUT_URB_OFFSETS:
+      return "tcs_set_input_urb_offsets";
+   case TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
+      return "tcs_set_output_urb_offsets";
+   case TCS_OPCODE_GET_PRIMITIVE_ID:
+      return "tcs_get_primitive_id";
+   case TCS_OPCODE_CREATE_BARRIER_HEADER:
+      return "tcs_create_barrier_header";
+   case TCS_OPCODE_SRC0_010_IS_ZERO:
+      return "tcs_src0<0,1,0>_is_zero";
+   case TCS_OPCODE_RELEASE_INPUT:
+      return "tcs_release_input";
+   case TCS_OPCODE_THREAD_END:
+      return "tcs_thread_end";
+   case TES_OPCODE_CREATE_INPUT_READ_HEADER:
+      return "tes_create_input_read_header";
+   case TES_OPCODE_ADD_INDIRECT_URB_OFFSET:
+      return "tes_add_indirect_urb_offset";
+   case TES_OPCODE_GET_PRIMITIVE_ID:
+      return "tes_get_primitive_id";
    }
 
    unreachable("not reached");
@@ -681,6 +599,13 @@ backend_shader::backend_shader(const struct brw_compiler *compiler,
    debug_enabled = INTEL_DEBUG & intel_debug_flag_for_shader_stage(stage);
    stage_name = _mesa_shader_stage_to_string(stage);
    stage_abbrev = _mesa_shader_stage_to_abbrev(stage);
+}
+
+bool
+backend_reg::equals(const backend_reg &r) const
+{
+   return memcmp((brw_reg *)this, (brw_reg *)&r, sizeof(brw_reg)) == 0 &&
+          reg_offset == r.reg_offset;
 }
 
 bool
@@ -973,6 +898,8 @@ backend_instruction::has_side_effects() const
    case SHADER_OPCODE_URB_WRITE_SIMD8_MASKED_PER_SLOT:
    case FS_OPCODE_FB_WRITE:
    case SHADER_OPCODE_BARRIER:
+   case TCS_OPCODE_URB_WRITE:
+   case TCS_OPCODE_RELEASE_INPUT:
       return true;
    default:
       return false;
@@ -1282,3 +1209,109 @@ gl_clip_plane *brw_select_clip_planes(struct gl_context *ctx)
    }
 }
 
+extern "C" const unsigned *
+brw_compile_tes(const struct brw_compiler *compiler,
+                void *log_data,
+                void *mem_ctx,
+                const struct brw_tes_prog_key *key,
+                struct brw_tes_prog_data *prog_data,
+                const nir_shader *src_shader,
+                struct gl_shader_program *shader_prog,
+                int shader_time_index,
+                unsigned *final_assembly_size,
+                char **error_str)
+{
+   const struct brw_device_info *devinfo = compiler->devinfo;
+   struct gl_shader *shader =
+      shader_prog->_LinkedShaders[MESA_SHADER_TESS_EVAL];
+   const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_EVAL];
+
+   nir_shader *nir = nir_shader_clone(mem_ctx, src_shader);
+   nir = brw_nir_apply_sampler_key(nir, devinfo, &key->tex, is_scalar);
+   nir->info.inputs_read = key->inputs_read;
+   nir->info.patch_inputs_read = key->patch_inputs_read;
+   nir = brw_nir_lower_io(nir, compiler->devinfo, is_scalar, false, NULL);
+   nir = brw_postprocess_nir(nir, compiler->devinfo, is_scalar);
+
+   brw_compute_vue_map(devinfo, &prog_data->base.vue_map,
+                       nir->info.outputs_written,
+                       nir->info.separate_shader);
+
+   unsigned output_size_bytes = prog_data->base.vue_map.num_slots * 4 * 4;
+
+   assert(output_size_bytes >= 1);
+   if (output_size_bytes > GEN7_MAX_DS_URB_ENTRY_SIZE_BYTES) {
+      if (error_str)
+         *error_str = ralloc_strdup(mem_ctx, "DS outputs exceed maximum size");
+      return NULL;
+   }
+
+   /* URB entry sizes are stored as a multiple of 64 bytes. */
+   prog_data->base.urb_entry_size = ALIGN(output_size_bytes, 64) / 64;
+
+   struct brw_vue_map input_vue_map;
+   brw_compute_tess_vue_map(&input_vue_map,
+                            nir->info.inputs_read & ~VARYING_BIT_PRIMITIVE_ID,
+                            nir->info.patch_inputs_read);
+
+   bool need_patch_header = nir->info.system_values_read &
+      (BITFIELD64_BIT(SYSTEM_VALUE_TESS_LEVEL_OUTER) |
+       BITFIELD64_BIT(SYSTEM_VALUE_TESS_LEVEL_INNER));
+
+   /* The TES will pull most inputs using URB read messages.
+    *
+    * However, we push the patch header for TessLevel factors when required,
+    * as it's a tiny amount of extra data.
+    */
+   prog_data->base.urb_read_length = need_patch_header ? 1 : 0;
+
+   if (unlikely(INTEL_DEBUG & DEBUG_TES)) {
+      fprintf(stderr, "TES Input ");
+      brw_print_vue_map(stderr, &input_vue_map);
+      fprintf(stderr, "TES Output ");
+      brw_print_vue_map(stderr, &prog_data->base.vue_map);
+   }
+
+   if (is_scalar) {
+      fs_visitor v(compiler, log_data, mem_ctx, (void *) key,
+                   &prog_data->base.base, shader->Program, nir, 8,
+                   shader_time_index, &input_vue_map);
+      if (!v.run_tes()) {
+         if (error_str)
+            *error_str = ralloc_strdup(mem_ctx, v.fail_msg);
+         return NULL;
+      }
+
+      prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
+
+      fs_generator g(compiler, log_data, mem_ctx, (void *) key,
+                     &prog_data->base.base, v.promoted_constants, false,
+                     MESA_SHADER_TESS_EVAL);
+      if (unlikely(INTEL_DEBUG & DEBUG_TES)) {
+         g.enable_debug(ralloc_asprintf(mem_ctx,
+                                        "%s tessellation evaluation shader %s",
+                                        nir->info.label ? nir->info.label
+                                                        : "unnamed",
+                                        nir->info.name));
+      }
+
+      g.generate_code(v.cfg, 8);
+
+      return g.get_assembly(final_assembly_size);
+   } else {
+      brw::vec4_tes_visitor v(compiler, log_data, key, prog_data,
+			      nir, mem_ctx, shader_time_index);
+      if (!v.run()) {
+	 if (error_str)
+	    *error_str = ralloc_strdup(mem_ctx, v.fail_msg);
+	 return NULL;
+      }
+
+      if (unlikely(INTEL_DEBUG & DEBUG_TES))
+	 v.dump_instructions();
+
+      return brw_vec4_generate_assembly(compiler, log_data, mem_ctx, nir,
+					&prog_data->base, v.cfg,
+					final_assembly_size);
+   }
+}

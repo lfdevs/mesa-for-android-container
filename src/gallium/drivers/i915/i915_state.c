@@ -423,7 +423,7 @@ i915_prepare_vertex_sampling(struct i915_context *i915)
          for (j = view->u.tex.first_level; j <= tex->last_level; j++) {
             mip_offsets[j] = i915_texture_offset(i915_tex, j , 0 /* FIXME depth */);
             row_stride[j] = i915_tex->stride;
-            img_stride[j] = 0; /* FIXME */;
+            img_stride[j] = 0; /* FIXME */
          }
 
          draw_set_mapped_texture(i915->draw,
@@ -920,7 +920,6 @@ i915_create_rasterizer_state(struct pipe_context *pipe,
    struct i915_rasterizer_state *cso = CALLOC_STRUCT( i915_rasterizer_state );
 
    cso->templ = *rasterizer;
-   cso->color_interp = rasterizer->flatshade ? INTERP_CONSTANT : INTERP_LINEAR;
    cso->light_twoside = rasterizer->light_twoside;
    cso->ds[0].u = _3DSTATE_DEPTH_OFFSET_SCALE;
    cso->ds[1].f = rasterizer->offset_scale;

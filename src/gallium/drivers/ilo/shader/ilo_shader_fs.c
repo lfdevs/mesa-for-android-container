@@ -266,7 +266,7 @@ fs_lower_opcode_tgsi_indirect_const(struct fs_compile_context *fcc,
    struct toy_inst *inst;
    struct toy_src desc, real_src[4];
    struct toy_dst tmp, real_dst[4];
-   int i;
+   unsigned i;
 
    tsrc_transpose(idx, real_src);
 
@@ -319,7 +319,7 @@ fs_lower_opcode_tgsi_const_pcb(struct fs_compile_context *fcc,
    const int grf_subreg = (idx.val32 & 1) * 16;
    struct toy_src src;
    struct toy_dst real_dst[4];
-   int i;
+   unsigned i;
 
    if (!fcc->variant->use_pcb || dim != 0 || idx.file != TOY_FILE_IMM ||
        grf >= fcc->first_attr_grf)
@@ -350,7 +350,7 @@ fs_lower_opcode_tgsi_const_gen6(struct fs_compile_context *fcc,
    struct toy_inst *inst;
    struct toy_src desc;
    struct toy_dst tmp, real_dst[4];
-   int i;
+   unsigned i;
 
    if (fs_lower_opcode_tgsi_const_pcb(fcc, dst, dim, idx))
       return;
@@ -396,7 +396,7 @@ fs_lower_opcode_tgsi_const_gen7(struct fs_compile_context *fcc,
    struct toy_src desc;
    struct toy_inst *inst;
    struct toy_dst tmp, real_dst[4];
-   int i;
+   unsigned i;
 
    if (fs_lower_opcode_tgsi_const_pcb(fcc, dst, dim, idx))
       return;
@@ -1168,7 +1168,7 @@ fs_lower_opcode_derivative(struct toy_compiler *tc, struct toy_inst *inst)
 {
    struct toy_dst dst[4];
    struct toy_src src[4];
-   int i;
+   unsigned i;
 
    tdst_transpose(inst->dst, dst);
    tsrc_transpose(inst->src[0], src);
@@ -1257,7 +1257,7 @@ fs_lower_opcode_kil(struct toy_compiler *tc, struct toy_inst *inst)
    }
    else {
       struct toy_src src[4];
-      int i;
+      unsigned i;
 
       tsrc_transpose(inst->src[0], src);
       /* mask out killed pixels */
@@ -1583,7 +1583,7 @@ fs_write_fb(struct fs_compile_context *fcc)
 static void
 fs_setup_shader_out(struct ilo_shader *sh, const struct toy_tgsi *tgsi)
 {
-   int i;
+   unsigned i;
 
    sh->out.count = tgsi->num_outputs;
    for (i = 0; i < tgsi->num_outputs; i++) {
@@ -1603,7 +1603,7 @@ static void
 fs_setup_shader_in(struct ilo_shader *sh, const struct toy_tgsi *tgsi,
                    bool flatshade)
 {
-   int i;
+   unsigned i;
 
    sh->in.count = tgsi->num_inputs;
    for (i = 0; i < tgsi->num_inputs; i++) {

@@ -46,6 +46,8 @@ struct NineVertexDeclaration9
 
     D3DVERTEXELEMENT9 *decls;
     DWORD fvf;
+
+    BOOL position_t;
 };
 static inline struct NineVertexDeclaration9 *
 NineVertexDeclaration9( void *data )
@@ -71,7 +73,7 @@ NineVertexDeclaration9_ctor( struct NineVertexDeclaration9 *This,
 void
 NineVertexDeclaration9_dtor( struct NineVertexDeclaration9 *This );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineVertexDeclaration9_GetDeclaration( struct NineVertexDeclaration9 *This,
                                        D3DVERTEXELEMENT9 *pElement,
                                        UINT *pNumElements );

@@ -55,6 +55,8 @@ gen7_emit_sampler_state_pointers_xs(struct brw_context *brw,
 {
    static const uint16_t packet_headers[] = {
       [MESA_SHADER_VERTEX] = _3DSTATE_SAMPLER_STATE_POINTERS_VS,
+      [MESA_SHADER_TESS_CTRL] = _3DSTATE_SAMPLER_STATE_POINTERS_HS,
+      [MESA_SHADER_TESS_EVAL] = _3DSTATE_SAMPLER_STATE_POINTERS_DS,
       [MESA_SHADER_GEOMETRY] = _3DSTATE_SAMPLER_STATE_POINTERS_GS,
       [MESA_SHADER_FRAGMENT] = _3DSTATE_SAMPLER_STATE_POINTERS_PS,
    };
@@ -580,7 +582,7 @@ brw_upload_sampler_state_table(struct brw_context *brw,
       batch_offset_for_sampler_state += size_in_bytes;
    }
 
-   if (brw->gen >= 7) {
+   if (brw->gen >= 7 && stage_state->stage != MESA_SHADER_COMPUTE) {
       /* Emit a 3DSTATE_SAMPLER_STATE_POINTERS_XS packet. */
       gen7_emit_sampler_state_pointers_xs(brw, stage_state);
    } else {
@@ -646,4 +648,68 @@ const struct brw_tracked_state brw_gs_samplers = {
              BRW_NEW_GEOMETRY_PROGRAM,
    },
    .emit = brw_upload_gs_samplers,
+};
+
+
+static void
+brw_upload_tcs_samplers(struct brw_context *brw)
+{
+   /* BRW_NEW_TESS_PROGRAMS */
+   struct gl_program *tcs = (struct gl_program *) brw->tess_ctrl_program;
+   if (!tcs)
+      return;
+
+   brw_upload_sampler_state_table(brw, tcs, &brw->tcs.base);
+}
+
+
+const struct brw_tracked_state brw_tcs_samplers = {
+   .dirty = {
+      .mesa = _NEW_TEXTURE,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_TESS_PROGRAMS,
+   },
+   .emit = brw_upload_tcs_samplers,
+};
+
+
+static void
+brw_upload_tes_samplers(struct brw_context *brw)
+{
+   /* BRW_NEW_TESS_PROGRAMS */
+   struct gl_program *tes = (struct gl_program *) brw->tess_eval_program;
+   if (!tes)
+      return;
+
+   brw_upload_sampler_state_table(brw, tes, &brw->tes.base);
+}
+
+
+const struct brw_tracked_state brw_tes_samplers = {
+   .dirty = {
+      .mesa = _NEW_TEXTURE,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_TESS_PROGRAMS,
+   },
+   .emit = brw_upload_tes_samplers,
+};
+
+static void
+brw_upload_cs_samplers(struct brw_context *brw)
+{
+   /* BRW_NEW_COMPUTE_PROGRAM */
+   struct gl_program *cs = (struct gl_program *) brw->compute_program;
+   if (!cs)
+      return;
+
+   brw_upload_sampler_state_table(brw, cs, &brw->cs.base);
+}
+
+const struct brw_tracked_state brw_cs_samplers = {
+   .dirty = {
+      .mesa = _NEW_TEXTURE,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_COMPUTE_PROGRAM,
+   },
+   .emit = brw_upload_cs_samplers,
 };

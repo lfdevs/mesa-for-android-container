@@ -142,6 +142,17 @@ DRI_CONF_OPT_BEGIN_B(disable_blend_func_extended, def) \
         DRI_CONF_DESC(sv,"Disable dual source blending") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_DUAL_COLOR_BLEND_BY_LOCATION(def) \
+DRI_CONF_OPT_BEGIN_B(dual_color_blend_by_location, def) \
+        DRI_CONF_DESC(en,"Identify dual color blending sources by location rather than index") \
+        DRI_CONF_DESC(ca,"Identify dual color blending sources by location rather than index") \
+        DRI_CONF_DESC(de,"Identify dual color blending sources by location rather than index") \
+        DRI_CONF_DESC(es,"Identify dual color blending sources by location rather than index") \
+        DRI_CONF_DESC(nl,"Identify dual color blending sources by location rather than index") \
+        DRI_CONF_DESC(fr,"Identify dual color blending sources by location rather than index") \
+        DRI_CONF_DESC(sv,"Identify dual color blending sources by location rather than index") \
+DRI_CONF_OPT_END
+
 #define DRI_CONF_DISABLE_GLSL_LINE_CONTINUATIONS(def) \
 DRI_CONF_OPT_BEGIN_B(disable_glsl_line_continuations, def) \
         DRI_CONF_DESC(en,"Disable backslash-based line continuations in GLSL source") \
@@ -823,4 +834,9 @@ DRI_CONF_OPT_BEGIN_B(thread_submit, def) \
         DRI_CONF_DESC(nl,"Use an additional thread to submit buffers.") \
         DRI_CONF_DESC(fr,"Use an additional thread to submit buffers.") \
         DRI_CONF_DESC(sv,"Use an additional thread to submit buffers.") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_NINE_OVERRIDEVENDOR(def) \
+DRI_CONF_OPT_BEGIN(override_vendorid, int, def) \
+        DRI_CONF_DESC(en,"Define the vendor_id to report. This allows faking another hardware vendor.") \
 DRI_CONF_OPT_END

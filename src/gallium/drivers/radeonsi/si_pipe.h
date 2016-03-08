@@ -80,10 +80,36 @@
 #define SI_MAX_BORDER_COLORS	4096
 
 struct si_compute;
+struct hash_table;
 
 struct si_screen {
 	struct r600_common_screen	b;
 	unsigned			gs_table_depth;
+
+	/* Whether shaders are monolithic (1-part) or separate (3-part). */
+	bool				use_monolithic_shaders;
+
+	pipe_mutex			shader_parts_mutex;
+	struct si_shader_part		*vs_prologs;
+	struct si_shader_part		*vs_epilogs;
+	struct si_shader_part		*tcs_epilogs;
+	struct si_shader_part		*ps_prologs;
+	struct si_shader_part		*ps_epilogs;
+
+	/* Shader cache in memory.
+	 *
+	 * Design & limitations:
+	 * - The shader cache is per screen (= per process), never saved to
+	 *   disk, and skips redundant shader compilations from TGSI to bytecode.
+	 * - It can only be used with one-variant-per-shader support, in which
+	 *   case only the main (typically middle) part of shaders is cached.
+	 * - Only VS, TCS, TES, PS are cached, out of which only the hw VS
+	 *   variants of VS and TES are cached, so LS and ES aren't.
+	 * - GS and CS aren't cached, but it's certainly possible to cache
+	 *   those as well.
+	 */
+	pipe_mutex			shader_cache_mutex;
+	struct hash_table		*shader_cache;
 };
 
 struct si_blend_color {
@@ -113,7 +139,6 @@ struct si_cs_shader_state {
 
 struct si_textures_info {
 	struct si_sampler_views		views;
-	struct si_sampler_states	states;
 	uint32_t			depth_texture_mask; /* which textures are depth */
 	uint32_t			compressed_colortex_mask;
 };
@@ -125,7 +150,11 @@ struct si_framebuffer {
 	unsigned			log_samples;
 	unsigned			cb0_is_integer;
 	unsigned			compressed_cb_mask;
-	unsigned			export_16bpc;
+	unsigned			spi_shader_col_format;
+	unsigned			spi_shader_col_format_alpha;
+	unsigned			spi_shader_col_format_blend;
+	unsigned			spi_shader_col_format_blend_alpha;
+	unsigned			color_is_int8; /* bitmask */
 	unsigned			dirty_cbufs;
 	bool				dirty_zsbuf;
 };
@@ -189,7 +218,7 @@ struct si_context {
 	struct r600_atom		db_render_state;
 	struct r600_atom		msaa_config;
 	struct si_sample_mask		sample_mask;
-	struct r600_atom		cb_target_mask;
+	struct r600_atom		cb_render_state;
 	struct si_blend_color		blend_color;
 	struct r600_atom		clip_regs;
 	struct si_clip_state		clip_state;
@@ -198,7 +227,6 @@ struct si_context {
 	struct si_viewports		viewports;
 	struct si_stencil_ref		stencil_ref;
 	struct r600_atom		spi_map;
-	struct r600_atom		spi_ps_input;
 
 	/* Precomputed states. */
 	struct si_pm4_state		*init_config;
@@ -218,7 +246,6 @@ struct si_context {
 	struct si_vertex_element	*vertex_elements;
 	unsigned			sprite_coord_enable;
 	bool				flatshade;
-	bool				force_persample_interp;
 
 	/* shader descriptors */
 	struct si_descriptors		vertex_buffers;
@@ -253,6 +280,8 @@ struct si_context {
 	bool			db_flush_stencil_inplace;
 	bool			db_depth_clear;
 	bool			db_depth_disable_expclear;
+	bool			db_stencil_clear;
+	bool			db_stencil_disable_expclear;
 	unsigned		ps_db_shader_control;
 
 	/* Emitted draw state. */
@@ -327,6 +356,7 @@ void si_init_cp_dma_functions(struct si_context *sctx);
 /* si_debug.c */
 void si_init_debug_functions(struct si_context *sctx);
 void si_check_vm_faults(struct si_context *sctx);
+bool si_replace_shader(unsigned num, struct radeon_shader_binary *binary);
 
 /* si_dma.c */
 void si_dma_copy(struct pipe_context *ctx,
@@ -345,6 +375,9 @@ void si_need_cs_space(struct si_context *ctx);
 
 /* si_compute.c */
 void si_init_compute_functions(struct si_context *sctx);
+
+/* si_perfcounters.c */
+void si_init_perfcounters(struct si_screen *screen);
 
 /* si_uvd.c */
 struct pipe_video_codec *si_uvd_create_decoder(struct pipe_context *context,

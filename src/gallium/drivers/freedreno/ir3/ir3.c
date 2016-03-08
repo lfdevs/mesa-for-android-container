@@ -81,6 +81,7 @@ struct ir3 * ir3_create(struct ir3_compiler *compiler,
 	shader->outputs = ir3_alloc(shader, sizeof(shader->outputs[0]) * nout);
 
 	list_inithead(&shader->block_list);
+	list_inithead(&shader->array_list);
 
 	return shader;
 }
@@ -121,17 +122,18 @@ static uint32_t reg(struct ir3_register *reg, struct ir3_info *info,
 		val.iim_val = reg->iim_val;
 	} else {
 		unsigned components;
+		int16_t max;
 
 		if (reg->flags & IR3_REG_RELATIV) {
 			components = reg->size;
-			val.dummy10 = reg->offset;
+			val.idummy10 = reg->array.offset;
+			max = (reg->array.offset + repeat + components - 1) >> 2;
 		} else {
 			components = util_last_bit(reg->wrmask);
 			val.comp = reg->num & 0x3;
 			val.num  = reg->num >> 2;
+			max = (reg->num + repeat + components - 1) >> 2;
 		}
-
-		int16_t max = (reg->num + repeat + components - 1) >> 2;
 
 		if (reg->flags & IR3_REG_CONST) {
 			info->max_const = MAX2(info->max_const, max);
@@ -233,7 +235,7 @@ static int emit_cat2(struct ir3_instruction *instr, void *ptr,
 	iassert((instr->regs_count == 2) || (instr->regs_count == 3));
 
 	if (src1->flags & IR3_REG_RELATIV) {
-		iassert(src1->num < (1 << 10));
+		iassert(src1->array.offset < (1 << 10));
 		cat2->rel1.src1      = reg(src1, info, instr->repeat,
 				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_R |
 				IR3_REG_HALF | absneg);
@@ -260,7 +262,7 @@ static int emit_cat2(struct ir3_instruction *instr, void *ptr,
 				!((src1->flags ^ src2->flags) & IR3_REG_HALF));
 
 		if (src2->flags & IR3_REG_RELATIV) {
-			iassert(src2->num < (1 << 10));
+			iassert(src2->array.offset < (1 << 10));
 			cat2->rel2.src2      = reg(src2, info, instr->repeat,
 					IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_R |
 					IR3_REG_HALF | absneg);
@@ -333,7 +335,7 @@ static int emit_cat3(struct ir3_instruction *instr, void *ptr,
 	iassert(!((src3->flags ^ src_flags) & IR3_REG_HALF));
 
 	if (src1->flags & IR3_REG_RELATIV) {
-		iassert(src1->num < (1 << 10));
+		iassert(src1->array.offset < (1 << 10));
 		cat3->rel1.src1      = reg(src1, info, instr->repeat,
 				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_R |
 				IR3_REG_HALF | absneg);
@@ -361,7 +363,7 @@ static int emit_cat3(struct ir3_instruction *instr, void *ptr,
 
 
 	if (src3->flags & IR3_REG_RELATIV) {
-		iassert(src3->num < (1 << 10));
+		iassert(src3->array.offset < (1 << 10));
 		cat3->rel2.src3      = reg(src3, info, instr->repeat,
 				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_R |
 				IR3_REG_HALF | absneg);
@@ -404,7 +406,7 @@ static int emit_cat4(struct ir3_instruction *instr, void *ptr,
 	iassert(instr->regs_count == 2);
 
 	if (src->flags & IR3_REG_RELATIV) {
-		iassert(src->num < (1 << 10));
+		iassert(src->array.offset < (1 << 10));
 		cat4->rel.src      = reg(src, info, instr->repeat,
 				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_FNEG |
 				IR3_REG_FABS | IR3_REG_R | IR3_REG_HALF);
@@ -737,6 +739,14 @@ struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,
 	return reg;
 }
 
+struct ir3_register * ir3_reg_clone(struct ir3 *shader,
+		struct ir3_register *reg)
+{
+	struct ir3_register *new_reg = reg_create(shader, 0, 0);
+	*new_reg = *reg;
+	return new_reg;
+}
+
 void
 ir3_instr_set_address(struct ir3_instruction *instr,
 		struct ir3_instruction *addr)
@@ -776,4 +786,13 @@ ir3_count_instructions(struct ir3 *ir)
 		block->end_ip = list_last_entry(&block->instr_list, struct ir3_instruction, node)->ip;
 	}
 	return cnt;
+}
+
+struct ir3_array *
+ir3_lookup_array(struct ir3 *ir, unsigned id)
+{
+	list_for_each_entry (struct ir3_array, arr, &ir->array_list, node)
+		if (arr->id == id)
+			return arr;
+	return NULL;
 }

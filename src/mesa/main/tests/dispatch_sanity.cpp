@@ -940,6 +940,9 @@ const struct function common_desktop_functions_possible[] = {
    { "glGetTextureSubImage", 20, -1 },
    { "glGetCompressedTextureSubImage", 20, -1 },
 
+   /* GL_GREMEDY_string_marker */
+   { "glStringMarkerGREMEDY", 15, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -1844,6 +1847,10 @@ const struct function gl_core_functions_possible[] = {
    { "glGetQueryBufferObjecti64v", 45, -1 },
    { "glGetQueryBufferObjectui64v", 45, -1 },
 
+   /* GL_ARB_indirect_parameters */
+   { "glMultiDrawArraysIndirectCountARB", 31, -1 },
+   { "glMultiDrawElementsIndirectCountARB", 31, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -2519,6 +2526,9 @@ const struct function gles31_functions_possible[] = {
 
    /* GL_EXT_blend_func_extended */
    { "glGetProgramResourceLocationIndexEXT", 31, -1 },
+
+   /* GL_OES_geometry_shader */
+   { "glFramebufferTextureOES", 31, -1},
 
    { NULL, 0, -1 },
  };

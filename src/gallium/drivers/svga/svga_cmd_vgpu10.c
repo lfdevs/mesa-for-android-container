@@ -535,7 +535,7 @@ SVGA3D_vgpu10_Draw(struct svga_winsys_context *swc,
 
    SVGA3D_COPY_BASIC_2(vertexCount, startVertexLocation);
 
-   swc->hints |= SVGA_HINT_FLAG_DRAW_EMITTED;
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
    return PIPE_OK;
 }
@@ -551,7 +551,7 @@ SVGA3D_vgpu10_DrawIndexed(struct svga_winsys_context *swc,
    SVGA3D_COPY_BASIC_3(indexCount, startIndexLocation,
                        baseVertexLocation);
 
-   swc->hints |= SVGA_HINT_FLAG_DRAW_EMITTED;
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
    return PIPE_OK;
 }
@@ -568,7 +568,7 @@ SVGA3D_vgpu10_DrawInstanced(struct svga_winsys_context *swc,
    SVGA3D_COPY_BASIC_4(vertexCountPerInstance, instanceCount,
                        startVertexLocation, startInstanceLocation);
 
-   swc->hints |= SVGA_HINT_FLAG_DRAW_EMITTED;
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
    return PIPE_OK;
 }
@@ -588,7 +588,7 @@ SVGA3D_vgpu10_DrawIndexedInstanced(struct svga_winsys_context *swc,
                        startInstanceLocation);
 
 
-   swc->hints |= SVGA_HINT_FLAG_DRAW_EMITTED;
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
    return PIPE_OK;
 }
@@ -598,7 +598,7 @@ SVGA3D_vgpu10_DrawAuto(struct svga_winsys_context *swc)
 {
    SVGA3D_CREATE_COMMAND(DrawAuto, DRAW_AUTO);
 
-   swc->hints |= SVGA_HINT_FLAG_DRAW_EMITTED;
+   swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
    return PIPE_OK;
 }
@@ -1289,6 +1289,27 @@ SVGA3D_vgpu10_UpdateSubResource(struct svga_winsys_context *swc,
                            SVGA_RELOC_WRITE | SVGA_RELOC_INTERNAL);
    cmd->subResource = subResource;
    cmd->box = *box;
+
+   swc->commit(swc);
+   return PIPE_OK;
+}
+
+enum pipe_error
+SVGA3D_vgpu10_GenMips(struct svga_winsys_context *swc,
+                      SVGA3dShaderResourceViewId shaderResourceViewId,
+                      struct svga_winsys_surface *view)
+{
+   SVGA3dCmdDXGenMips *cmd;
+
+   cmd = SVGA3D_FIFOReserve(swc, SVGA_3D_CMD_DX_GENMIPS,
+                            sizeof(SVGA3dCmdDXGenMips), 1);
+
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   swc->surface_relocation(swc, &cmd->shaderResourceViewId, NULL, view,
+                           SVGA_RELOC_WRITE);
+   cmd->shaderResourceViewId = shaderResourceViewId;
 
    swc->commit(swc);
    return PIPE_OK;

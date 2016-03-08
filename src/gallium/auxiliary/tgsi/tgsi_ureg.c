@@ -50,6 +50,7 @@ union tgsi_any_token {
    struct tgsi_declaration_range decl_range;
    struct tgsi_declaration_dimension decl_dim;
    struct tgsi_declaration_interp decl_interp;
+   struct tgsi_declaration_image decl_image;
    struct tgsi_declaration_semantic decl_semantic;
    struct tgsi_declaration_sampler_view decl_sampler_view;
    struct tgsi_declaration_array array;
@@ -59,6 +60,7 @@ union tgsi_any_token {
    struct tgsi_instruction_predicate insn_predicate;
    struct tgsi_instruction_label insn_label;
    struct tgsi_instruction_texture insn_texture;
+   struct tgsi_instruction_memory insn_memory;
    struct tgsi_texture_offset insn_texture_offset;
    struct tgsi_src_register src;
    struct tgsi_ind_register ind;
@@ -115,7 +117,6 @@ struct ureg_program
    unsigned vs_inputs[PIPE_MAX_ATTRIBS/32];
 
    struct {
-      unsigned index;
       unsigned semantic_name;
       unsigned semantic_index;
    } system_value[UREG_MAX_SYSTEM_VALUE];
@@ -155,6 +156,21 @@ struct ureg_program
    } sampler_view[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    unsigned nr_sampler_views;
 
+   struct {
+      unsigned index;
+      unsigned target;
+      unsigned format;
+      boolean wr;
+      boolean raw;
+   } image[PIPE_MAX_SHADER_IMAGES];
+   unsigned nr_images;
+
+   struct {
+      unsigned index;
+      bool atomic;
+   } buffer[PIPE_MAX_SHADER_BUFFERS];
+   unsigned nr_buffers;
+
    struct util_bitmask *free_temps;
    struct util_bitmask *local_temps;
    struct util_bitmask *decl_temps;
@@ -173,6 +189,8 @@ struct ureg_program
    unsigned nr_instructions;
 
    struct ureg_tokens domain[2];
+
+   bool use_shared_memory;
 };
 
 static union tgsi_any_token error_tokens[32];
@@ -320,20 +338,29 @@ ureg_DECL_input(struct ureg_program *ureg,
 
 struct ureg_src
 ureg_DECL_system_value(struct ureg_program *ureg,
-                       unsigned index,
                        unsigned semantic_name,
                        unsigned semantic_index)
 {
+   unsigned i;
+
+   for (i = 0; i < ureg->nr_system_values; i++) {
+      if (ureg->system_value[i].semantic_name == semantic_name &&
+          ureg->system_value[i].semantic_index == semantic_index) {
+         goto out;
+      }
+   }
+
    if (ureg->nr_system_values < UREG_MAX_SYSTEM_VALUE) {
-      ureg->system_value[ureg->nr_system_values].index = index;
       ureg->system_value[ureg->nr_system_values].semantic_name = semantic_name;
       ureg->system_value[ureg->nr_system_values].semantic_index = semantic_index;
+      i = ureg->nr_system_values;
       ureg->nr_system_values++;
    } else {
       set_bad(ureg);
    }
 
-   return ureg_src_register(TGSI_FILE_SYSTEM_VALUE, index);
+out:
+   return ureg_src_register(TGSI_FILE_SYSTEM_VALUE, i);
 }
 
 
@@ -645,6 +672,70 @@ ureg_DECL_sampler_view(struct ureg_program *ureg,
    }
 
    assert(0);
+   return reg;
+}
+
+/* Allocate a new image.
+ */
+struct ureg_src
+ureg_DECL_image(struct ureg_program *ureg,
+                unsigned index,
+                unsigned target,
+                unsigned format,
+                boolean wr,
+                boolean raw)
+{
+   struct ureg_src reg = ureg_src_register(TGSI_FILE_IMAGE, index);
+   unsigned i;
+
+   for (i = 0; i < ureg->nr_images; i++)
+      if (ureg->image[i].index == index)
+         return reg;
+
+   if (i < PIPE_MAX_SHADER_IMAGES) {
+      ureg->image[i].index = index;
+      ureg->image[i].target = target;
+      ureg->image[i].wr = wr;
+      ureg->image[i].raw = raw;
+      ureg->image[i].format = format;
+      ureg->nr_images++;
+      return reg;
+   }
+
+   assert(0);
+   return reg;
+}
+
+/* Allocate a new buffer.
+ */
+struct ureg_src ureg_DECL_buffer(struct ureg_program *ureg, unsigned nr,
+                                 bool atomic)
+{
+   struct ureg_src reg = ureg_src_register(TGSI_FILE_BUFFER, nr);
+   unsigned i;
+
+   for (i = 0; i < ureg->nr_buffers; i++)
+      if (ureg->buffer[i].index == nr)
+         return reg;
+
+   if (i < PIPE_MAX_SHADER_BUFFERS) {
+      ureg->buffer[i].index = nr;
+      ureg->buffer[i].atomic = atomic;
+      ureg->nr_buffers++;
+      return reg;
+   }
+
+   assert(0);
+   return reg;
+}
+
+/* Allocate a shared memory area.
+ */
+struct ureg_src ureg_DECL_shared_memory(struct ureg_program *ureg)
+{
+   struct ureg_src reg = ureg_src_register(TGSI_FILE_MEMORY, 0);
+
+   ureg->use_shared_memory = true;
    return reg;
 }
 
@@ -1018,7 +1109,7 @@ static void validate( unsigned opcode,
 #ifdef DEBUG
    const struct tgsi_opcode_info *info = tgsi_get_opcode_info( opcode );
    assert(info);
-   if(info) {
+   if (info) {
       assert(nr_dst == info->num_dst);
       assert(nr_src == info->num_src);
    }
@@ -1083,7 +1174,7 @@ ureg_emit_label(struct ureg_program *ureg,
 {
    union tgsi_any_token *out, *insn;
 
-   if(!label_token)
+   if (!label_token)
       return;
 
    out = get_tokens( ureg, DOMAIN_INSN, 1 );
@@ -1148,6 +1239,21 @@ ureg_emit_texture_offset(struct ureg_program *ureg,
    
 }
 
+void
+ureg_emit_memory(struct ureg_program *ureg,
+                 unsigned extended_token,
+                 unsigned qualifier)
+{
+   union tgsi_any_token *out, *insn;
+
+   out = get_tokens( ureg, DOMAIN_INSN, 1 );
+   insn = retrieve_token( ureg, DOMAIN_INSN, extended_token );
+
+   insn->insn.Memory = 1;
+
+   out[0].value = 0;
+   out[0].insn_memory.Qualifier = qualifier;
+}
 
 void
 ureg_fixup_insn_size(struct ureg_program *ureg,
@@ -1297,6 +1403,42 @@ ureg_label_insn(struct ureg_program *ureg,
       ureg_emit_src( ureg, src[i] );
 
    ureg_fixup_insn_size( ureg, insn.insn_token );
+}
+
+
+void
+ureg_memory_insn(struct ureg_program *ureg,
+                 unsigned opcode,
+                 const struct ureg_dst *dst,
+                 unsigned nr_dst,
+                 const struct ureg_src *src,
+                 unsigned nr_src,
+                 unsigned qualifier)
+{
+   struct ureg_emit_insn_result insn;
+   unsigned i;
+
+   insn = ureg_emit_insn(ureg,
+                         opcode,
+                         FALSE,
+                         FALSE,
+                         FALSE,
+                         TGSI_SWIZZLE_X,
+                         TGSI_SWIZZLE_Y,
+                         TGSI_SWIZZLE_Z,
+                         TGSI_SWIZZLE_W,
+                         nr_dst,
+                         nr_src);
+
+   ureg_emit_memory(ureg, insn.extended_token, qualifier);
+
+   for (i = 0; i < nr_dst; i++)
+      ureg_emit_dst(ureg, dst[i]);
+
+   for (i = 0; i < nr_src; i++)
+      ureg_emit_src(ureg, src[i]);
+
+   ureg_fixup_insn_size(ureg, insn.insn_token);
 }
 
 
@@ -1463,7 +1605,7 @@ emit_decl_sampler_view(struct ureg_program *ureg,
    out[0].decl.Type = TGSI_TOKEN_TYPE_DECLARATION;
    out[0].decl.NrTokens = 3;
    out[0].decl.File = TGSI_FILE_SAMPLER_VIEW;
-   out[0].decl.UsageMask = 0xf;
+   out[0].decl.UsageMask = TGSI_WRITEMASK_XYZW;
 
    out[1].value = 0;
    out[1].decl_range.First = index;
@@ -1475,6 +1617,69 @@ emit_decl_sampler_view(struct ureg_program *ureg,
    out[2].decl_sampler_view.ReturnTypeY = return_type_y;
    out[2].decl_sampler_view.ReturnTypeZ = return_type_z;
    out[2].decl_sampler_view.ReturnTypeW = return_type_w;
+}
+
+static void
+emit_decl_image(struct ureg_program *ureg,
+                unsigned index,
+                unsigned target,
+                unsigned format,
+                boolean wr,
+                boolean raw)
+{
+   union tgsi_any_token *out = get_tokens(ureg, DOMAIN_DECL, 3);
+
+   out[0].value = 0;
+   out[0].decl.Type = TGSI_TOKEN_TYPE_DECLARATION;
+   out[0].decl.NrTokens = 3;
+   out[0].decl.File = TGSI_FILE_IMAGE;
+   out[0].decl.UsageMask = TGSI_WRITEMASK_XYZW;
+
+   out[1].value = 0;
+   out[1].decl_range.First = index;
+   out[1].decl_range.Last = index;
+
+   out[2].value = 0;
+   out[2].decl_image.Resource = target;
+   out[2].decl_image.Writable = wr;
+   out[2].decl_image.Raw      = raw;
+   out[2].decl_image.Format   = format;
+}
+
+static void
+emit_decl_buffer(struct ureg_program *ureg,
+                 unsigned index,
+                 bool atomic)
+{
+   union tgsi_any_token *out = get_tokens(ureg, DOMAIN_DECL, 2);
+
+   out[0].value = 0;
+   out[0].decl.Type = TGSI_TOKEN_TYPE_DECLARATION;
+   out[0].decl.NrTokens = 2;
+   out[0].decl.File = TGSI_FILE_BUFFER;
+   out[0].decl.UsageMask = TGSI_WRITEMASK_XYZW;
+   out[0].decl.Atomic = atomic;
+
+   out[1].value = 0;
+   out[1].decl_range.First = index;
+   out[1].decl_range.Last = index;
+}
+
+static void
+emit_decl_shared_memory(struct ureg_program *ureg)
+{
+   union tgsi_any_token *out = get_tokens(ureg, DOMAIN_DECL, 2);
+
+   out[0].value = 0;
+   out[0].decl.Type = TGSI_TOKEN_TYPE_DECLARATION;
+   out[0].decl.NrTokens = 2;
+   out[0].decl.File = TGSI_FILE_MEMORY;
+   out[0].decl.UsageMask = TGSI_WRITEMASK_XYZW;
+   out[0].decl.Shared = true;
+
+   out[1].value = 0;
+   out[1].decl_range.First = 0;
+   out[1].decl_range.Last = 0;
 }
 
 static void
@@ -1587,8 +1792,8 @@ static void emit_decls( struct ureg_program *ureg )
    for (i = 0; i < ureg->nr_system_values; i++) {
       emit_decl_semantic(ureg,
                          TGSI_FILE_SYSTEM_VALUE,
-                         ureg->system_value[i].index,
-                         ureg->system_value[i].index,
+                         i,
+                         i,
                          ureg->system_value[i].semantic_name,
                          ureg->system_value[i].semantic_index,
                          TGSI_WRITEMASK_XYZW, 0);
@@ -1635,6 +1840,22 @@ static void emit_decls( struct ureg_program *ureg )
                              ureg->sampler_view[i].return_type_z,
                              ureg->sampler_view[i].return_type_w);
    }
+
+   for (i = 0; i < ureg->nr_images; i++) {
+      emit_decl_image(ureg,
+                      ureg->image[i].index,
+                      ureg->image[i].target,
+                      ureg->image[i].format,
+                      ureg->image[i].wr,
+                      ureg->image[i].raw);
+   }
+
+   for (i = 0; i < ureg->nr_buffers; i++) {
+      emit_decl_buffer(ureg, ureg->buffer[i].index, ureg->buffer[i].atomic);
+   }
+
+   if (ureg->use_shared_memory)
+      emit_decl_shared_memory(ureg);
 
    if (ureg->const_decls.nr_constant_ranges) {
       for (i = 0; i < ureg->const_decls.nr_constant_ranges; i++) {
@@ -1843,7 +2064,7 @@ ureg_create_with_screen(unsigned processor, struct pipe_screen *screen)
 {
    int i;
    struct ureg_program *ureg = CALLOC_STRUCT( ureg_program );
-   if (ureg == NULL)
+   if (!ureg)
       goto no_ureg;
 
    ureg->processor = processor;

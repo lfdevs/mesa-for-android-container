@@ -24,18 +24,21 @@ SUBDIRS = src
 AM_DISTCHECK_CONFIGURE_FLAGS = \
 	--enable-dri3 \
 	--enable-gallium-tests \
+	--enable-gallium-osmesa \
 	--enable-gbm \
 	--enable-gles1 \
 	--enable-gles2 \
 	--enable-glx-tls \
+	--enable-nine \
+	--enable-opencl \
 	--enable-va \
 	--enable-vdpau \
 	--enable-xa \
 	--enable-xvmc \
 	--disable-llvm-shared-libs \
-	--with-egl-platforms=x11,wayland,drm \
+	--with-egl-platforms=x11,wayland,drm,surfaceless \
 	--with-dri-drivers=i915,i965,nouveau,radeon,r200,swrast \
-	--with-gallium-drivers=i915,ilo,nouveau,r300,r600,radeonsi,freedreno,svga,swrast
+	--with-gallium-drivers=i915,ilo,nouveau,r300,r600,radeonsi,freedreno,svga,swrast,vc4,virgl
 
 ACLOCAL_AMFLAGS = -I m4
 
@@ -51,7 +54,6 @@ noinst_HEADERS = \
 	include/c99_alloca.h \
 	include/c99_compat.h \
 	include/c99_math.h \
-	include/c99 \
 	include/c11 \
 	include/D3D9 \
 	include/HaikuGL \

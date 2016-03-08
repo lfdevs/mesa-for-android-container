@@ -35,28 +35,28 @@ NineAuthenticatedChannel9( void *data )
     return (struct NineAuthenticatedChannel9 *)data;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_GetCertificateSize( struct NineAuthenticatedChannel9 *This,
                                               UINT *pCertificateSize );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_GetCertificate( struct NineAuthenticatedChannel9 *This,
                                           UINT CertifacteSize,
                                           BYTE *ppCertificate );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_NegotiateKeyExchange( struct NineAuthenticatedChannel9 *This,
                                                 UINT DataSize,
                                                 void *pData );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_Query( struct NineAuthenticatedChannel9 *This,
                                  UINT InputSize,
                                  const void *pInput,
                                  UINT OutputSize,
                                  void *pOutput );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAuthenticatedChannel9_Configure( struct NineAuthenticatedChannel9 *This,
                                      UINT InputSize,
                                      const void *pInput,

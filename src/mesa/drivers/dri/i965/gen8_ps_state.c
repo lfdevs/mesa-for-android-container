@@ -46,14 +46,17 @@ gen8_upload_ps_extra(struct brw_context *brw,
    if (prog_data->num_varying_inputs != 0)
       dw1 |= GEN8_PSX_ATTRIBUTE_ENABLE;
 
-   if (fp->Base.InputsRead & VARYING_BIT_POS)
-      dw1 |= GEN8_PSX_USES_SOURCE_DEPTH | GEN8_PSX_USES_SOURCE_W;
+   if (prog_data->uses_src_depth)
+      dw1 |= GEN8_PSX_USES_SOURCE_DEPTH;
+
+   if (prog_data->uses_src_w)
+      dw1 |= GEN8_PSX_USES_SOURCE_W;
 
    if (multisampled_fbo &&
        _mesa_get_min_invocations_per_fragment(ctx, fp, false) > 1)
       dw1 |= GEN8_PSX_SHADER_IS_PER_SAMPLE;
 
-   if (fp->Base.SystemValuesRead & SYSTEM_BIT_SAMPLE_MASK_IN) {
+   if (prog_data->uses_sample_mask) {
       if (brw->gen >= 9)
          dw1 |= BRW_PSICMS_INNER << GEN9_PSX_SHADER_NORMAL_COVERAGE_MASK_SHIFT;
       else
@@ -90,8 +93,7 @@ gen8_upload_ps_extra(struct brw_context *brw,
     *
     * BRW_NEW_FS_PROG_DATA | BRW_NEW_FRAGMENT_PROGRAM | _NEW_BUFFERS | _NEW_COLOR
     */
-   if ((_mesa_active_fragment_shader_has_atomic_ops(&brw->ctx) ||
-        prog_data->base.nr_image_params) &&
+   if (_mesa_active_fragment_shader_has_side_effects(&brw->ctx) &&
        !brw_color_buffer_write_enabled(brw))
       dw1 |= GEN8_PSX_SHADER_HAS_UAV;
 
@@ -157,7 +159,7 @@ upload_wm_state(struct brw_context *brw)
    /* BRW_NEW_FS_PROG_DATA */
    if (brw->wm.prog_data->early_fragment_tests)
       dw1 |= GEN7_WM_EARLY_DS_CONTROL_PREPS;
-   else if (brw->wm.prog_data->base.nr_image_params)
+   else if (_mesa_active_fragment_shader_has_side_effects(&brw->ctx))
       dw1 |= GEN7_WM_EARLY_DS_CONTROL_PSEXEC;
 
    BEGIN_BATCH(2);
@@ -194,7 +196,7 @@ gen8_upload_ps_state(struct brw_context *brw,
 
    const unsigned sampler_count =
       DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4);
-   dw3 |= SET_FIELD(sampler_count, GEN7_PS_SAMPLER_COUNT); 
+   dw3 |= SET_FIELD(sampler_count, GEN7_PS_SAMPLER_COUNT);
 
    /* BRW_NEW_FS_PROG_DATA */
    dw3 |=

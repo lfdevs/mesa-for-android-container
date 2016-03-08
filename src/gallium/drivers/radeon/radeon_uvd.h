@@ -421,7 +421,7 @@ struct ruvd_msg {
 };
 
 /* driver dependent callback */
-typedef struct radeon_winsys_cs_handle* (*ruvd_set_dtb)
+typedef struct pb_buffer* (*ruvd_set_dtb)
 (struct ruvd_msg* msg, struct vl_video_buffer *vb);
 
 /* create an UVD decode */

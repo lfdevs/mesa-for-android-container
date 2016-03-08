@@ -169,7 +169,7 @@ radeon_drm_cs_create(struct radeon_winsys_ctx *ctx,
                      void (*flush)(void *ctx, unsigned flags,
                                    struct pipe_fence_handle **fence),
                      void *flush_ctx,
-                     struct radeon_winsys_cs_handle *trace_buf)
+                     struct pb_buffer *trace_buf)
 {
     struct radeon_drm_winsys *ws = (struct radeon_drm_winsys*)ctx;
     struct radeon_drm_cs *cs;
@@ -283,7 +283,7 @@ static unsigned radeon_add_buffer(struct radeon_drm_cs *cs,
          * This doesn't have to be done if virtual memory is enabled,
          * because there is no offset patching with virtual memory.
          */
-        if (cs->base.ring_type != RING_DMA || cs->ws->info.r600_virtual_address) {
+        if (cs->base.ring_type != RING_DMA || cs->ws->info.has_virtual_memory) {
             return i;
         }
     }
@@ -322,7 +322,7 @@ static unsigned radeon_add_buffer(struct radeon_drm_cs *cs,
 }
 
 static unsigned radeon_drm_cs_add_buffer(struct radeon_winsys_cs *rcs,
-                                        struct radeon_winsys_cs_handle *buf,
+                                        struct pb_buffer *buf,
                                         enum radeon_bo_usage usage,
                                         enum radeon_bo_domain domains,
                                         enum radeon_bo_priority priority)
@@ -342,7 +342,7 @@ static unsigned radeon_drm_cs_add_buffer(struct radeon_winsys_cs *rcs,
 }
 
 static int radeon_drm_cs_lookup_buffer(struct radeon_winsys_cs *rcs,
-                                   struct radeon_winsys_cs_handle *buf)
+                                   struct pb_buffer *buf)
 {
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
 
@@ -540,7 +540,7 @@ static void radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
             cs->cst->flags[0] = 0;
             cs->cst->flags[1] = RADEON_CS_RING_DMA;
             cs->cst->cs.num_chunks = 3;
-            if (cs->ws->info.r600_virtual_address) {
+            if (cs->ws->info.has_virtual_memory) {
                 cs->cst->flags[0] |= RADEON_CS_USE_VM;
             }
             break;
@@ -567,7 +567,7 @@ static void radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
                 cs->cst->flags[0] |= RADEON_CS_KEEP_TILING_FLAGS;
                 cs->cst->cs.num_chunks = 3;
             }
-            if (cs->ws->info.r600_virtual_address) {
+            if (cs->ws->info.has_virtual_memory) {
                 cs->cst->flags[0] |= RADEON_CS_USE_VM;
                 cs->cst->cs.num_chunks = 3;
             }
@@ -616,7 +616,7 @@ static void radeon_drm_cs_destroy(struct radeon_winsys_cs *rcs)
 }
 
 static boolean radeon_bo_is_referenced(struct radeon_winsys_cs *rcs,
-                                       struct radeon_winsys_cs_handle *_buf,
+                                       struct pb_buffer *_buf,
                                        enum radeon_bo_usage usage)
 {
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
@@ -650,7 +650,7 @@ radeon_cs_create_fence(struct radeon_winsys_cs *rcs)
     fence = cs->ws->base.buffer_create(&cs->ws->base, 1, 1, TRUE,
                                        RADEON_DOMAIN_GTT, 0);
     /* Add the fence as a dummy relocation. */
-    cs->ws->base.cs_add_buffer(rcs, cs->ws->base.buffer_get_cs_handle(fence),
+    cs->ws->base.cs_add_buffer(rcs, fence,
                               RADEON_USAGE_READWRITE, RADEON_DOMAIN_GTT,
                               RADEON_PRIO_FENCE);
     return (struct pipe_fence_handle*)fence;

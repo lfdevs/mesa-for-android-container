@@ -65,19 +65,6 @@ static const struct qir_op_info qir_op_info[] = {
         [QOP_XOR] = { "xor", 1, 2 },
         [QOP_NOT] = { "not", 1, 1 },
 
-        [QOP_SEL_X_0_NS] = { "fsel_x_0_ns", 1, 1, false, true },
-        [QOP_SEL_X_0_NC] = { "fsel_x_0_nc", 1, 1, false, true },
-        [QOP_SEL_X_0_ZS] = { "fsel_x_0_zs", 1, 1, false, true },
-        [QOP_SEL_X_0_ZC] = { "fsel_x_0_zc", 1, 1, false, true },
-        [QOP_SEL_X_0_CS] = { "fsel_x_0_cs", 1, 1, false, true },
-        [QOP_SEL_X_0_CC] = { "fsel_x_0_cc", 1, 1, false, true },
-        [QOP_SEL_X_Y_NS] = { "fsel_x_y_ns", 1, 2, false, true },
-        [QOP_SEL_X_Y_NC] = { "fsel_x_y_nc", 1, 2, false, true },
-        [QOP_SEL_X_Y_ZS] = { "fsel_x_y_zs", 1, 2, false, true },
-        [QOP_SEL_X_Y_ZC] = { "fsel_x_y_zc", 1, 2, false, true },
-        [QOP_SEL_X_Y_CS] = { "fsel_x_y_cs", 1, 2, false, true },
-        [QOP_SEL_X_Y_CC] = { "fsel_x_y_cc", 1, 2, false, true },
-
         [QOP_RCP] = { "rcp", 1, 1, false, true },
         [QOP_RSQ] = { "rsq", 1, 1, false, true },
         [QOP_EXP2] = { "exp2", 1, 2, false, true },
@@ -206,6 +193,7 @@ qir_is_raw_mov(struct qinst *inst)
         return ((inst->op == QOP_MOV ||
                  inst->op == QOP_FMOV ||
                  inst->op == QOP_MMOV) &&
+                inst->cond == QPU_COND_ALWAYS &&
                 !inst->dst.pack &&
                 !inst->src[0].pack);
 }
@@ -219,23 +207,8 @@ qir_is_tex(struct qinst *inst)
 bool
 qir_depends_on_flags(struct qinst *inst)
 {
-        switch (inst->op) {
-        case QOP_SEL_X_0_NS:
-        case QOP_SEL_X_0_NC:
-        case QOP_SEL_X_0_ZS:
-        case QOP_SEL_X_0_ZC:
-        case QOP_SEL_X_0_CS:
-        case QOP_SEL_X_0_CC:
-        case QOP_SEL_X_Y_NS:
-        case QOP_SEL_X_Y_NC:
-        case QOP_SEL_X_Y_ZS:
-        case QOP_SEL_X_Y_ZC:
-        case QOP_SEL_X_Y_CS:
-        case QOP_SEL_X_Y_CC:
-                return true;
-        default:
-                return false;
-        }
+        return (inst->cond != QPU_COND_ALWAYS &&
+                inst->cond != QPU_COND_NEVER);
 }
 
 bool
@@ -292,8 +265,19 @@ qir_print_reg(struct vc4_compile *c, struct qreg reg, bool write)
 void
 qir_dump_inst(struct vc4_compile *c, struct qinst *inst)
 {
-        fprintf(stderr, "%s%s ",
+        static const char *conditions[] = {
+                [QPU_COND_ALWAYS] = "",
+                [QPU_COND_NEVER] = ".never",
+                [QPU_COND_ZS] = ".zs",
+                [QPU_COND_ZC] = ".zc",
+                [QPU_COND_NS] = ".ns",
+                [QPU_COND_NC] = ".nc",
+                [QPU_COND_CS] = ".cs",
+                [QPU_COND_CC] = ".cc",
+        };
+        fprintf(stderr, "%s%s%s ",
                 qir_get_op_name(inst->op),
+                conditions[inst->cond],
                 inst->sf ? ".sf" : "");
 
         qir_print_reg(c, inst->dst, true);
@@ -352,6 +336,7 @@ qir_inst(enum qop op, struct qreg dst, struct qreg src0, struct qreg src1)
         inst->src = calloc(2, sizeof(inst->src[0]));
         inst->src[0] = src0;
         inst->src[1] = src1;
+        inst->cond = QPU_COND_ALWAYS;
 
         return inst;
 }
@@ -503,9 +488,9 @@ qir_SF(struct vc4_compile *c, struct qreg src)
         if (!list_empty(&c->instructions))
                 last_inst = (struct qinst *)c->instructions.prev;
 
-        if (!last_inst ||
-            last_inst->dst.file != src.file ||
-            last_inst->dst.index != src.index ||
+        if (src.file != QFILE_TEMP ||
+            !c->defs[src.index] ||
+            last_inst != c->defs[src.index] ||
             qir_is_multi_instruction(last_inst)) {
                 src = qir_MOV(c, src);
                 last_inst = (struct qinst *)c->instructions.prev;

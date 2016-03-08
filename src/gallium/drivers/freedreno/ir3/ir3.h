@@ -83,7 +83,8 @@ struct ir3_register {
 		 * before register assignment is done:
 		 */
 		IR3_REG_SSA    = 0x2000,   /* 'instr' is ptr to assigning instr */
-		IR3_REG_PHI_SRC= 0x4000,   /* phi src, regs[0]->instr points to phi */
+		IR3_REG_ARRAY  = 0x4000,
+		IR3_REG_PHI_SRC= 0x8000,   /* phi src, regs[0]->instr points to phi */
 
 	} flags;
 	union {
@@ -97,11 +98,18 @@ struct ir3_register {
 		uint32_t uim_val;
 		float    fim_val;
 		/* relative: */
-		int   offset;
+		struct {
+			uint16_t id;
+			int16_t offset;
+		} array;
 	};
 
-	/* for IR3_REG_SSA, src registers contain ptr back to
-	 * assigning instruction.
+	/* For IR3_REG_SSA, src registers contain ptr back to assigning
+	 * instruction.
+	 *
+	 * For IR3_REG_ARRAY, the pointer is back to the last dependent
+	 * array access (although the net effect is the same, it points
+	 * back to a previous instruction that we depend on).
 	 */
 	struct ir3_instruction *instr;
 
@@ -177,6 +185,7 @@ struct ir3_instruction {
 		 * before register assignment is done:
 		 */
 		IR3_INSTR_MARK  = 0x1000,
+		IR3_INSTR_UNUSED= 0x2000,
 	} flags;
 	int repeat;
 #ifdef DEBUG
@@ -221,9 +230,6 @@ struct ir3_instruction {
 			int off;              /* component/offset */
 		} fo;
 		struct {
-			int aid;
-		} fi;
-		struct {
 			/* used to temporarily hold reference to nir_phi_instr
 			 * until we resolve the phi srcs
 			 */
@@ -243,11 +249,7 @@ struct ir3_instruction {
 		 * result of moving a const to a reg would have a low cost,  so to
 		 * it could make sense to duplicate the instruction at various
 		 * points where the result is needed to reduce register footprint.
-		 *
-		 * DEPTH_UNUSED used to mark unused instructions after depth
-		 * calculation pass.
 		 */
-#define DEPTH_UNUSED  ~0
 		unsigned depth;
 		/* When we get to the RA stage, we no longer need depth, but
 		 * we do need instruction's position/name:
@@ -257,6 +259,10 @@ struct ir3_instruction {
 			uint16_t name;
 		};
 	};
+
+	/* used for per-pass extra instruction data.
+	 */
+	void *data;
 
 	/* Used during CP and RA stages.  For fanin and shader inputs/
 	 * outputs where we need a sequence of consecutive registers,
@@ -291,19 +297,6 @@ struct ir3_instruction {
 	 * NOTE: do not write this directly, use ir3_instr_set_address()
 	 */
 	struct ir3_instruction *address;
-
-	/* in case of a instruction with relative dst instruction, we need to
-	 * capture the dependency on the fanin for the previous values of
-	 * the array elements.  Since we don't know at compile time actually
-	 * which array elements are written, this serves to preserve the
-	 * unconditional write to array elements prior to the conditional
-	 * write.
-	 *
-	 * TODO only cat1 can do indirect write.. we could maybe move this
-	 * into instr->cat1.fanin (but would require the frontend to insert
-	 * the extra mov)
-	 */
-	struct ir3_instruction *fanin;
 
 	/* Entry in ir3_block's instruction list: */
 	struct list_head node;
@@ -378,9 +371,40 @@ struct ir3 {
 	/* List of blocks: */
 	struct list_head block_list;
 
+	/* List of ir3_array's: */
+	struct list_head array_list;
+
 	unsigned heap_idx;
 	struct ir3_heap_chunk *chunk;
 };
+
+typedef struct nir_variable nir_variable;
+
+struct ir3_array {
+	struct list_head node;
+	unsigned length;
+	unsigned id;
+
+	nir_variable *var;
+
+	/* We track the last write and last access (read or write) to
+	 * setup dependencies on instructions that read or write the
+	 * array.  Reads can be re-ordered wrt. other reads, but should
+	 * not be re-ordered wrt. to writes.  Writes cannot be reordered
+	 * wrt. any other access to the array.
+	 *
+	 * So array reads depend on last write, and array writes depend
+	 * on the last access.
+	 */
+	struct ir3_instruction *last_write, *last_access;
+
+	/* extra stuff used in RA pass: */
+	unsigned base;      /* base vreg name */
+	unsigned reg;       /* base physical reg */
+	uint16_t start_ip, end_ip;
+};
+
+struct ir3_array * ir3_lookup_array(struct ir3 *ir, unsigned id);
 
 typedef struct nir_block nir_block;
 
@@ -404,7 +428,7 @@ struct ir3_block {
 	/* used for per-pass extra block data.  Mainly used right
 	 * now in RA step to track livein/liveout.
 	 */
-	void *bd;
+	void *data;
 
 #ifdef DEBUG
 	uint32_t serialno;
@@ -429,6 +453,8 @@ const char *ir3_instr_name(struct ir3_instruction *instr);
 
 struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,
 		int num, int flags);
+struct ir3_register * ir3_reg_clone(struct ir3 *shader,
+		struct ir3_register *reg);
 
 void ir3_instr_set_address(struct ir3_instruction *instr,
 		struct ir3_instruction *addr);
@@ -507,6 +533,9 @@ static inline bool is_same_type_mov(struct ir3_instruction *instr)
 	if (dst->num == regid(REG_P0, 0))
 		return false;
 	if (dst->num == regid(REG_A0, 0))
+		return false;
+
+	if (dst->flags & (IR3_REG_RELATIV | IR3_REG_ARRAY))
 		return false;
 
 	if ((instr->category == 1) &&
@@ -622,8 +651,10 @@ static inline bool writes_pred(struct ir3_instruction *instr)
 /* TODO better name */
 static inline struct ir3_instruction *ssa(struct ir3_register *reg)
 {
-	if (reg->flags & IR3_REG_SSA)
+	if (reg->flags & (IR3_REG_SSA | IR3_REG_ARRAY)) {
+		debug_assert(!(reg->instr && (reg->instr->flags & IR3_INSTR_UNUSED)));
 		return reg->instr;
+	}
 	return NULL;
 }
 
@@ -812,8 +843,6 @@ static inline unsigned ir3_cat3_absneg(opc_t opc)
 
 static inline unsigned __ssa_src_cnt(struct ir3_instruction *instr)
 {
-	if (instr->fanin)
-		return instr->regs_count + 2;
 	if (instr->address)
 		return instr->regs_count + 1;
 	return instr->regs_count;
@@ -821,8 +850,6 @@ static inline unsigned __ssa_src_cnt(struct ir3_instruction *instr)
 
 static inline struct ir3_instruction * __ssa_src_n(struct ir3_instruction *instr, unsigned n)
 {
-	if (n == (instr->regs_count + 1))
-		return instr->fanin;
 	if (n == (instr->regs_count + 0))
 		return instr->address;
 	return ssa(instr->regs[n]);
@@ -833,8 +860,8 @@ static inline struct ir3_instruction * __ssa_src_n(struct ir3_instruction *instr
 /* iterator for an instruction's SSA sources (instr), also returns src #: */
 #define foreach_ssa_src_n(__srcinst, __n, __instr) \
 	if ((__instr)->regs_count) \
-		for (unsigned __cnt = __ssa_src_cnt(__instr) - 1, __n = 0; __n < __cnt; __n++) \
-			if ((__srcinst = __ssa_src_n(__instr, __n + 1)))
+		for (unsigned __cnt = __ssa_src_cnt(__instr), __n = 0; __n < __cnt; __n++) \
+			if ((__srcinst = __ssa_src_n(__instr, __n)))
 
 /* iterator for an instruction's SSA sources (instr): */
 #define foreach_ssa_src(__srcinst, __instr) \
@@ -877,7 +904,15 @@ ir3_MOV(struct ir3_block *block, struct ir3_instruction *src, type_t type)
 	struct ir3_instruction *instr =
 		ir3_instr_create(block, 1, 0);
 	ir3_reg_create(instr, 0, 0);   /* dst */
-	ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = src;
+	if (src->regs[0]->flags & IR3_REG_ARRAY) {
+		struct ir3_register *src_reg =
+			ir3_reg_create(instr, 0, IR3_REG_ARRAY);
+		src_reg->array = src->regs[0]->array;
+		src_reg->instr = src;
+	} else {
+		ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = src;
+	}
+	debug_assert(!(src->regs[0]->flags & IR3_REG_RELATIV));
 	instr->cat1.src_type = type;
 	instr->cat1.dst_type = type;
 	return instr;
@@ -893,6 +928,7 @@ ir3_COV(struct ir3_block *block, struct ir3_instruction *src,
 	ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = src;
 	instr->cat1.src_type = src_type;
 	instr->cat1.dst_type = dst_type;
+	debug_assert(!(src->regs[0]->flags & IR3_REG_ARRAY));
 	return instr;
 }
 
@@ -1082,7 +1118,7 @@ typedef uint8_t regmask_t[2 * MAX_REG / 8];
 
 static inline unsigned regmask_idx(struct ir3_register *reg)
 {
-	unsigned num = reg->num;
+	unsigned num = (reg->flags & IR3_REG_RELATIV) ? reg->array.offset : reg->num;
 	debug_assert(num < MAX_REG);
 	if (reg->flags & IR3_REG_HALF)
 		num += MAX_REG;

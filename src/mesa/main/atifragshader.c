@@ -345,6 +345,9 @@ _mesa_BeginFragmentShaderATI(void)
    ctx->ATIFragmentShader.Current->isValid = GL_FALSE;
    ctx->ATIFragmentShader.Current->swizzlerq = 0;
    ctx->ATIFragmentShader.Compiling = 1;
+#if MESA_DEBUG_ATI_FS
+   _mesa_debug(ctx, "%s %u\n", __func__, ctx->ATIFragmentShader.Current->Id);
+#endif
 }
 
 void GLAPIENTRY

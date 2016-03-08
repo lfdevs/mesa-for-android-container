@@ -295,7 +295,7 @@ BuildUtil::mkOp3v(operation op, DataType ty, Value *dst,
 inline LValue *
 BuildUtil::mkLoadv(DataType ty, Symbol *mem, Value *ptr)
 {
-   LValue *dst = getScratch();
+   LValue *dst = getScratch(typeSizeof(ty));
    mkLoad(ty, dst, mem, ptr);
    return dst;
 }

@@ -33,6 +33,46 @@
 #include "brw_state.h"
 #include "brw_ff_gs.h"
 #include "brw_nir.h"
+#include "brw_program.h"
+#include "compiler/glsl/ir_uniform.h"
+
+static void
+brw_gs_debug_recompile(struct brw_context *brw,
+                       struct gl_shader_program *shader_prog,
+                       const struct brw_gs_prog_key *key)
+{
+   struct brw_cache_item *c = NULL;
+   const struct brw_gs_prog_key *old_key = NULL;
+   bool found = false;
+
+   perf_debug("Recompiling geometry shader for program %d\n",
+              shader_prog->Name);
+
+   for (unsigned int i = 0; i < brw->cache.size; i++) {
+      for (c = brw->cache.items[i]; c; c = c->next) {
+         if (c->cache_id == BRW_CACHE_GS_PROG) {
+            old_key = c->key;
+
+            if (old_key->program_string_id == key->program_string_id)
+               break;
+         }
+      }
+      if (c)
+         break;
+   }
+
+   if (!c) {
+      perf_debug("  Didn't find previous compile in the shader cache for "
+                 "debug\n");
+      return;
+   }
+
+   found |= brw_debug_recompile_sampler_key(brw, &old_key->tex, &key->tex);
+
+   if (!found) {
+      perf_debug("  Something else\n");
+   }
+}
 
 static void
 assign_gs_binding_table_offsets(const struct brw_device_info *devinfo,
@@ -61,6 +101,9 @@ brw_codegen_gs_prog(struct brw_context *brw,
    struct gl_shader *shader = prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
    struct brw_stage_state *stage_state = &brw->gs.base;
    struct brw_gs_prog_data prog_data;
+   bool start_busy = false;
+   double start_time = 0;
+
    memset(&prog_data, 0, sizeof(prog_data));
 
    assign_gs_binding_table_offsets(brw->intelScreen->devinfo, prog,
@@ -75,7 +118,10 @@ brw_codegen_gs_prog(struct brw_context *brw,
     * every uniform is a float which gets padded to the size of a vec4.
     */
    struct gl_shader *gs = prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
-   int param_count = gp->program.Base.nir->num_uniforms * 4;
+   struct brw_shader *bgs = (struct brw_shader *) gs;
+   int param_count = gp->program.Base.nir->num_uniforms;
+   if (!compiler->scalar_stage[MESA_SHADER_GEOMETRY])
+      param_count *= 4;
 
    prog_data.base.base.param =
       rzalloc_array(NULL, const gl_constant_value *, param_count);
@@ -103,6 +149,11 @@ brw_codegen_gs_prog(struct brw_context *brw,
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       st_index = brw_get_shader_time_index(brw, prog, NULL, ST_GS);
 
+   if (unlikely(brw->perf_debug)) {
+      start_busy = brw->batch.last_bo && drm_intel_bo_busy(brw->batch.last_bo);
+      start_time = get_time();
+   }
+
    void *mem_ctx = ralloc_context(NULL);
    unsigned program_size;
    char *error_str;
@@ -113,6 +164,17 @@ brw_codegen_gs_prog(struct brw_context *brw,
    if (program == NULL) {
       ralloc_free(mem_ctx);
       return false;
+   }
+
+   if (unlikely(brw->perf_debug)) {
+      if (bgs->compiled_once) {
+         brw_gs_debug_recompile(brw, prog, key);
+      }
+      if (start_busy && !drm_intel_bo_busy(brw->batch.last_bo)) {
+         perf_debug("GS compile took %.03f ms and stalled the GPU\n",
+                    (get_time() - start_time) * 1000);
+      }
+      bgs->compiled_once = true;
    }
 
    /* Scratch space is used for register spilling */

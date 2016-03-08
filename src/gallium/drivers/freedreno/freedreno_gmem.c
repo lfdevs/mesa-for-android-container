@@ -331,7 +331,7 @@ render_tiles(struct fd_context *ctx)
 		fd_hw_query_prepare_tile(ctx, i, ctx->ring);
 
 		/* emit IB to drawcmds: */
-		OUT_IB(ctx->ring, ctx->draw_start, ctx->draw_end);
+		ctx->emit_ib(ctx->ring, ctx->draw_start, ctx->draw_end);
 		fd_reset_wfi(ctx);
 
 		/* emit gmem2mem to transfer tile back to system memory: */
@@ -349,7 +349,7 @@ render_sysmem(struct fd_context *ctx)
 	fd_hw_query_prepare_tile(ctx, 0, ctx->ring);
 
 	/* emit IB to drawcmds: */
-	OUT_IB(ctx->ring, ctx->draw_start, ctx->draw_end);
+	ctx->emit_ib(ctx->ring, ctx->draw_start, ctx->draw_end);
 	fd_reset_wfi(ctx);
 }
 

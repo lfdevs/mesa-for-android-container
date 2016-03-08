@@ -462,9 +462,9 @@ vc4_set_framebuffer_state(struct pipe_context *pctx,
 
         vc4->msaa = false;
         if (cso->cbufs[0])
-                vc4->msaa = cso->cbufs[0]->texture->nr_samples != 0;
+                vc4->msaa = cso->cbufs[0]->texture->nr_samples > 1;
         else if (cso->zsbuf)
-                vc4->msaa = cso->zsbuf->texture->nr_samples != 0;
+                vc4->msaa = cso->zsbuf->texture->nr_samples > 1;
 
         if (vc4->msaa) {
                 vc4->tile_width = 32;

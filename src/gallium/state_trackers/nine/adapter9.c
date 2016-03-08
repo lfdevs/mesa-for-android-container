@@ -146,7 +146,7 @@ NineAdapter9_GetScreen( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_GetAdapterIdentifier( struct NineAdapter9 *This,
                                    DWORD Flags,
                                    D3DADAPTER_IDENTIFIER9 *pIdentifier )
@@ -182,7 +182,7 @@ backbuffer_format( D3DFORMAT dfmt,
     return FALSE;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDeviceType( struct NineAdapter9 *This,
                               D3DDEVTYPE DevType,
                               D3DFORMAT AdapterFormat,
@@ -207,11 +207,11 @@ NineAdapter9_CheckDeviceType( struct NineAdapter9 *This,
     dfmt = d3d9_to_pipe_format_checked(screen, AdapterFormat, PIPE_TEXTURE_2D,
                                        1,
                                        PIPE_BIND_DISPLAY_TARGET |
-                                       PIPE_BIND_SHARED, FALSE);
+                                       PIPE_BIND_SHARED, FALSE, FALSE);
     bfmt = d3d9_to_pipe_format_checked(screen, BackBufferFormat, PIPE_TEXTURE_2D,
                                        1,
                                        PIPE_BIND_DISPLAY_TARGET |
-                                       PIPE_BIND_SHARED, FALSE);
+                                       PIPE_BIND_SHARED, FALSE, FALSE);
     if (dfmt == PIPE_FORMAT_NONE || bfmt == PIPE_FORMAT_NONE) {
         DBG("Unsupported Adapter/BackBufferFormat.\n");
         return D3DERR_NOTAVAILABLE;
@@ -241,7 +241,7 @@ display_format( D3DFORMAT fmt,
     return FALSE;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
                                 D3DDEVTYPE DeviceType,
                                 D3DFORMAT AdapterFormat,
@@ -270,7 +270,7 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
         return hr;
     pf = d3d9_to_pipe_format_checked(screen, AdapterFormat, PIPE_TEXTURE_2D, 0,
                                      PIPE_BIND_DISPLAY_TARGET |
-                                     PIPE_BIND_SHARED, FALSE);
+                                     PIPE_BIND_SHARED, FALSE, FALSE);
     if (pf == PIPE_FORMAT_NONE) {
         DBG("AdapterFormat %s not available.\n",
             d3dformat_to_string(AdapterFormat));
@@ -332,14 +332,16 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
 
 
     srgb = (Usage & (D3DUSAGE_QUERY_SRGBREAD | D3DUSAGE_QUERY_SRGBWRITE)) != 0;
-    pf = d3d9_to_pipe_format_checked(screen, CheckFormat, target, 0, bind, srgb);
+    pf = d3d9_to_pipe_format_checked(screen, CheckFormat, target,
+                                     0, bind, srgb, FALSE);
     if (pf == PIPE_FORMAT_NONE) {
         DBG("NOT AVAILABLE\n");
         return D3DERR_NOTAVAILABLE;
     }
 
-    /* we support ATI1 and ATI2 hack only for 2D textures */
-    if (RType != D3DRTYPE_TEXTURE && (CheckFormat == D3DFMT_ATI1 || CheckFormat == D3DFMT_ATI2))
+    /* we support ATI1 and ATI2 hack only for 2D and Cube textures */
+    if (RType != D3DRTYPE_TEXTURE && RType != D3DRTYPE_CUBETEXTURE &&
+        (CheckFormat == D3DFMT_ATI1 || CheckFormat == D3DFMT_ATI2))
         return D3DERR_NOTAVAILABLE;
     /* if (Usage & D3DUSAGE_NONSECURE) { don't know the implications of this } */
     /* if (Usage & D3DUSAGE_SOFTWAREPROCESSING) { we can always support this } */
@@ -349,7 +351,7 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
                                          D3DDEVTYPE DeviceType,
                                          D3DFORMAT SurfaceFormat,
@@ -378,7 +380,7 @@ NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
                PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_RENDER_TARGET;
 
     pf = d3d9_to_pipe_format_checked(screen, SurfaceFormat, PIPE_TEXTURE_2D,
-                                     MultiSampleType, bind, FALSE);
+                                     MultiSampleType, bind, FALSE, FALSE);
 
     if (pf == PIPE_FORMAT_NONE) {
         DBG("%s with %u samples not available.\n",
@@ -392,7 +394,7 @@ NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDepthStencilMatch( struct NineAdapter9 *This,
                                      D3DDEVTYPE DeviceType,
                                      D3DFORMAT AdapterFormat,
@@ -417,16 +419,16 @@ NineAdapter9_CheckDepthStencilMatch( struct NineAdapter9 *This,
 
     dfmt = d3d9_to_pipe_format_checked(screen, AdapterFormat, PIPE_TEXTURE_2D, 0,
                                        PIPE_BIND_DISPLAY_TARGET |
-                                       PIPE_BIND_SHARED, FALSE);
+                                       PIPE_BIND_SHARED, FALSE, FALSE);
     bfmt = d3d9_to_pipe_format_checked(screen, RenderTargetFormat,
                                        PIPE_TEXTURE_2D, 0,
-                                       PIPE_BIND_RENDER_TARGET, FALSE);
+                                       PIPE_BIND_RENDER_TARGET, FALSE, FALSE);
     if (RenderTargetFormat == D3DFMT_NULL)
         bfmt = dfmt;
     zsfmt = d3d9_to_pipe_format_checked(screen, DepthStencilFormat,
                                         PIPE_TEXTURE_2D, 0,
                                         d3d9_get_pipe_depth_format_bindings(DepthStencilFormat),
-                                        FALSE);
+                                        FALSE, FALSE);
     if (dfmt == PIPE_FORMAT_NONE ||
         bfmt == PIPE_FORMAT_NONE ||
         zsfmt == PIPE_FORMAT_NONE) {
@@ -436,7 +438,7 @@ NineAdapter9_CheckDepthStencilMatch( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CheckDeviceFormatConversion( struct NineAdapter9 *This,
                                           D3DDEVTYPE DeviceType,
                                           D3DFORMAT SourceFormat,
@@ -461,10 +463,10 @@ NineAdapter9_CheckDeviceFormatConversion( struct NineAdapter9 *This,
 
     dfmt = d3d9_to_pipe_format_checked(screen, TargetFormat, PIPE_TEXTURE_2D, 1,
                                        PIPE_BIND_DISPLAY_TARGET |
-                                       PIPE_BIND_SHARED, FALSE);
+                                       PIPE_BIND_SHARED, FALSE, FALSE);
     bfmt = d3d9_to_pipe_format_checked(screen, SourceFormat, PIPE_TEXTURE_2D, 1,
                                        PIPE_BIND_DISPLAY_TARGET |
-                                       PIPE_BIND_SHARED, FALSE);
+                                       PIPE_BIND_SHARED, FALSE, FALSE);
 
     if (dfmt == PIPE_FORMAT_NONE || bfmt == PIPE_FORMAT_NONE) {
         DBG("%s to %s not supported.\n",
@@ -476,7 +478,7 @@ NineAdapter9_CheckDeviceFormatConversion( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                             D3DDEVTYPE DeviceType,
                             D3DCAPS9 *pCaps )
@@ -563,7 +565,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                                D3DPIPECAP(INDEP_BLEND_ENABLE, D3DPMISCCAPS_INDEPENDENTWRITEMASKS) |
                                /*D3DPMISCCAPS_PERSTAGECONSTANT |*/ /* TODO */
                                /*D3DPMISCCAPS_POSTBLENDSRGBCONVERT |*/ /* TODO */
-                               D3DPMISCCAPS_FOGANDSPECULARALPHA |
+                               D3DPMISCCAPS_FOGANDSPECULARALPHA | /* Note: documentation of the flag is wrong */
                                D3DPIPECAP(BLEND_EQUATION_SEPARATE, D3DPMISCCAPS_SEPARATEALPHABLEND) |
                                D3DPIPECAP(MIXED_COLORBUFFER_FORMATS, D3DPMISCCAPS_MRTINDEPENDENTBITDEPTHS) |
                                D3DPMISCCAPS_MRTPOSTPIXELSHADERBLENDING |
@@ -618,7 +620,8 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
 
     pCaps->DestBlendCaps = pCaps->SrcBlendCaps;
 
-    pCaps->AlphaCmpCaps = D3DPCMPCAPS_LESS |
+    pCaps->AlphaCmpCaps = D3DPCMPCAPS_NEVER |
+                          D3DPCMPCAPS_LESS |
                           D3DPCMPCAPS_EQUAL |
                           D3DPCMPCAPS_LESSEQUAL |
                           D3DPCMPCAPS_GREATER |
@@ -931,7 +934,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CreateDevice( struct NineAdapter9 *This,
                            UINT RealAdapter,
                            D3DDEVTYPE DeviceType,
@@ -980,7 +983,8 @@ NineAdapter9_CreateDevice( struct NineAdapter9 *This,
 
     hr = NineDevice9_new(screen, &params, &caps, pPresentationParameters,
                          pD3D9, pPresentationGroup, This->ctx, FALSE, NULL,
-                         (struct NineDevice9 **)ppReturnedDeviceInterface);
+                         (struct NineDevice9 **)ppReturnedDeviceInterface,
+                         minor);
     if (FAILED(hr)) {
         DBG("Failed to create device.\n");
         return hr;
@@ -990,7 +994,7 @@ NineAdapter9_CreateDevice( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineAdapter9_CreateDeviceEx( struct NineAdapter9 *This,
                              UINT RealAdapter,
                              D3DDEVTYPE DeviceType,
@@ -1041,7 +1045,8 @@ NineAdapter9_CreateDeviceEx( struct NineAdapter9 *This,
     hr = NineDevice9Ex_new(screen, &params, &caps, pPresentationParameters,
                            pFullscreenDisplayMode,
                            pD3D9Ex, pPresentationGroup, This->ctx,
-                           (struct NineDevice9Ex **)ppReturnedDeviceInterface);
+                           (struct NineDevice9Ex **)ppReturnedDeviceInterface,
+                           minor);
     if (FAILED(hr)) {
         DBG("Failed to create device.\n");
         return hr;

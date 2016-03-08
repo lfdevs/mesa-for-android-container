@@ -33,15 +33,14 @@
 #include "pipe/p_defines.h"
 #include "st_context.h"
 #include "st_atom.h"
-#include "st_cb_bitmap.h"
 #include "st_program.h"
 #include "st_manager.h"
 
 
 /**
- * This is used to initialize st->atoms[].
+ * This is used to initialize st->render_atoms[].
  */
-static const struct st_tracked_state *atoms[] =
+static const struct st_tracked_state *render_atoms[] =
 {
    &st_update_depth_stencil_alpha,
    &st_update_clip,
@@ -76,11 +75,42 @@ static const struct st_tracked_state *atoms[] =
    &st_bind_tes_ubos,
    &st_bind_fs_ubos,
    &st_bind_gs_ubos,
+   &st_bind_vs_atomics,
+   &st_bind_tcs_atomics,
+   &st_bind_tes_atomics,
+   &st_bind_fs_atomics,
+   &st_bind_gs_atomics,
+   &st_bind_vs_ssbos,
+   &st_bind_tcs_ssbos,
+   &st_bind_tes_ssbos,
+   &st_bind_fs_ssbos,
+   &st_bind_gs_ssbos,
+   &st_bind_vs_images,
+   &st_bind_tcs_images,
+   &st_bind_tes_images,
+   &st_bind_gs_images,
+   &st_bind_fs_images,
    &st_update_pixel_transfer,
    &st_update_tess,
 
    /* this must be done after the vertex program update */
    &st_update_array
+};
+
+
+/**
+ * This is used to initialize st->compute_atoms[].
+ */
+static const struct st_tracked_state *compute_atoms[] =
+{
+   &st_update_cp,
+   &st_update_compute_texture,
+   &st_update_sampler, /* depends on update_compute_texture for swizzle */
+   &st_update_cs_constants,
+   &st_bind_cs_ubos,
+   &st_bind_cs_atomics,
+   &st_bind_cs_ssbos,
+   &st_bind_cs_images,
 };
 
 
@@ -96,27 +126,26 @@ void st_destroy_atoms( struct st_context *st )
 }
 
 
-/***********************************************************************
- */
 
-static GLboolean check_state( const struct st_state_flags *a,
-			      const struct st_state_flags *b )
+static bool
+check_state(const struct st_state_flags *a, const struct st_state_flags *b)
 {
-   return ((a->mesa & b->mesa) ||
-	   (a->st & b->st));
+   return (a->mesa & b->mesa) || (a->st & b->st);
 }
 
-static void accumulate_state( struct st_state_flags *a,
-			      const struct st_state_flags *b )
+
+static void
+accumulate_state(struct st_state_flags *a, const struct st_state_flags *b)
 {
    a->mesa |= b->mesa;
    a->st |= b->st;
 }
 
 
-static void xor_states( struct st_state_flags *result,
-			     const struct st_state_flags *a,
-			      const struct st_state_flags *b )
+static void
+xor_states(struct st_state_flags *result,
+           const struct st_state_flags *a,
+           const struct st_state_flags *b)
 {
    result->mesa = a->mesa ^ b->mesa;
    result->st = a->st ^ b->st;
@@ -170,23 +199,41 @@ static void check_attrib_edgeflag(struct st_context *st)
  * Update all derived state:
  */
 
-void st_validate_state( struct st_context *st )
+void st_validate_state( struct st_context *st, enum st_pipeline pipeline )
 {
-   struct st_state_flags *state = &st->dirty;
+   const struct st_tracked_state **atoms;
+   struct st_state_flags *state;
+   GLuint num_atoms;
    GLuint i;
+
+   /* Get pipeline state. */
+   switch (pipeline) {
+    case ST_PIPELINE_RENDER:
+      atoms     = render_atoms;
+      num_atoms = ARRAY_SIZE(render_atoms);
+      state     = &st->dirty;
+      break;
+   case ST_PIPELINE_COMPUTE:
+      atoms     = compute_atoms;
+      num_atoms = ARRAY_SIZE(compute_atoms);
+      state     = &st->dirty_cp;
+      break;
+   default:
+      unreachable("Invalid pipeline specified");
+   }
 
    /* Get Mesa driver state. */
    st->dirty.st |= st->ctx->NewDriverState;
+   st->dirty_cp.st |= st->ctx->NewDriverState;
    st->ctx->NewDriverState = 0;
 
-   check_attrib_edgeflag(st);
+   if (pipeline == ST_PIPELINE_RENDER) {
+      check_attrib_edgeflag(st);
 
-   if (state->mesa)
-      st_flush_bitmap_cache(st);
+      check_program_state(st);
 
-   check_program_state( st );
-
-   st_manager_validate_framebuffers(st);
+      st_manager_validate_framebuffers(st);
+   }
 
    if (state->st == 0 && state->mesa == 0)
       return;
@@ -206,7 +253,7 @@ void st_validate_state( struct st_context *st )
       memset(&examined, 0, sizeof(examined));
       prev = *state;
 
-      for (i = 0; i < ARRAY_SIZE(atoms); i++) {	 
+      for (i = 0; i < num_atoms; i++) {
 	 const struct st_tracked_state *atom = atoms[i];
 	 struct st_state_flags generated;
 	 
@@ -237,7 +284,7 @@ void st_validate_state( struct st_context *st )
 
    }
    else {
-      for (i = 0; i < ARRAY_SIZE(atoms); i++) {	 
+      for (i = 0; i < num_atoms; i++) {
 	 if (check_state(state, &atoms[i]->dirty))
 	    atoms[i]->update( st );
       }
@@ -245,6 +292,3 @@ void st_validate_state( struct st_context *st )
 
    memset(state, 0, sizeof(*state));
 }
-
-
-

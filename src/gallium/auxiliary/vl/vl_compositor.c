@@ -716,6 +716,7 @@ gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u
    /* Allocate new memory for vertices. */
    u_upload_alloc(c->upload, 0,
                   c->vertex_buf.stride * VL_COMPOSITOR_MAX_LAYERS * 4, /* size */
+                  4, /* alignment */
                   &c->vertex_buf.buffer_offset, &c->vertex_buf.buffer,
                   (void**)&vb);
 
@@ -1090,7 +1091,8 @@ vl_compositor_init(struct vl_compositor *c, struct pipe_context *pipe)
 
    c->pipe = pipe;
 
-   c->upload = u_upload_create(pipe, 128 * 1024, 4, PIPE_BIND_VERTEX_BUFFER);
+   c->upload = u_upload_create(pipe, 128 * 1024, PIPE_BIND_VERTEX_BUFFER,
+                               PIPE_USAGE_STREAM);
 
    if (!c->upload)
       return false;

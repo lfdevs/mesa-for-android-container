@@ -48,6 +48,24 @@ struct vl_video_buffer
    struct pipe_surface      *surfaces[VL_MAX_SURFACES];
 };
 
+static inline void
+vl_video_buffer_adjust_size(unsigned *width, unsigned *height, unsigned plane,
+                            enum pipe_video_chroma_format chroma_format,
+                            bool interlaced)
+{
+   if (interlaced) {
+      *height /= 2;
+   }
+   if (plane > 0) {
+      if (chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420) {
+         *width /= 2;
+         *height /= 2;
+      } else if (chroma_format == PIPE_VIDEO_CHROMA_FORMAT_422) {
+         *width /= 2;
+      }
+   }
+}
+
 /**
  * get subformats for each plane
  */

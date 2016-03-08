@@ -31,10 +31,10 @@
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
 #include "main/uniforms.h"
-#include "glsl/ir.h"
-#include "glsl/ir_uniform.h"
-#include "glsl/glsl_parser_extras.h"
-#include "glsl/program.h"
+#include "compiler/glsl/ir.h"
+#include "compiler/glsl/ir_uniform.h"
+#include "compiler/glsl/glsl_parser_extras.h"
+#include "compiler/glsl/program.h"
 #include "program/hash_table.h"
 
 
@@ -437,7 +437,7 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
 		  dst[didx].i = src[sidx].i ? 1 : 0;
 		  break;
 	       case GLSL_TYPE_DOUBLE:
-		  dst[didx].i = *(double *)&src[sidx].f;
+		  dst[didx].i = IROUNDD(*(double *)&src[sidx].f);
 		  break;
 	       default:
 		  assert(!"Should not get here.");

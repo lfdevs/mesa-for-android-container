@@ -39,7 +39,7 @@
 
 #include "ir3_shader.h"
 #include "ir3_compiler.h"
-
+#include "ir3_nir.h"
 
 static void
 delete_variant(struct ir3_shader_variant *v)
@@ -187,12 +187,6 @@ create_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 	v->key = key;
 	v->type = shader->type;
 
-	if (fd_mesa_debug & FD_DBG_DISASM) {
-		DBG("dump tgsi: type=%d, k={bp=%u,cts=%u,hp=%u}", shader->type,
-			key.binning_pass, key.color_two_side, key.half_precision);
-		tgsi_dump(shader->tokens, 0);
-	}
-
 	ret = ir3_compile_shader_nir(shader->compiler, v);
 	if (ret) {
 		debug_error("compile failed!");
@@ -267,7 +261,7 @@ ir3_shader_destroy(struct ir3_shader *shader)
 		v = v->next;
 		delete_variant(t);
 	}
-	free((void *)shader->tokens);
+	ralloc_free(shader->nir);
 	free(shader);
 }
 
@@ -281,14 +275,24 @@ ir3_shader_create(struct pipe_context *pctx,
 	shader->id = ++shader->compiler->shader_count;
 	shader->pctx = pctx;
 	shader->type = type;
-	shader->tokens = tgsi_dup_tokens(cso->tokens);
+	if (fd_mesa_debug & FD_DBG_DISASM) {
+		DBG("dump tgsi: type=%d", shader->type);
+		tgsi_dump(cso->tokens, 0);
+	}
+	nir_shader *nir = ir3_tgsi_to_nir(cso->tokens);
+	/* do first pass optimization, ignoring the key: */
+	shader->nir = ir3_optimize_nir(shader, nir, NULL);
+	if (fd_mesa_debug & FD_DBG_DISASM) {
+		DBG("dump nir%d: type=%d", shader->id, shader->type);
+		nir_print_shader(shader->nir, stdout);
+	}
 	shader->stream_output = cso->stream_output;
 	if (fd_mesa_debug & FD_DBG_SHADERDB) {
 		/* if shader-db run, create a standard variant immediately
 		 * (as otherwise nothing will trigger the shader to be
 		 * actually compiled)
 		 */
-		static struct ir3_shader_key key = {};
+		static struct ir3_shader_key key = {0};
 		ir3_shader_variant(shader, key);
 	}
 	return shader;

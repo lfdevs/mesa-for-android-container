@@ -1,3 +1,3 @@
-dri/etc/OpenCL/vendors/mesa.icd etc/OpenCL/vendors
-dri/usr/lib/${DEB_HOST_MULTIARCH}/gallium-pipe/*.so usr/lib/${DEB_HOST_MULTIARCH}/gallium-pipe
-dri/usr/lib/${DEB_HOST_MULTIARCH}/libMesaOpenCL* usr/lib/${DEB_HOST_MULTIARCH}
+etc/OpenCL/vendors/mesa.icd
+usr/lib/${DEB_HOST_MULTIARCH}/gallium-pipe/*.so
+usr/lib/${DEB_HOST_MULTIARCH}/libMesaOpenCL*

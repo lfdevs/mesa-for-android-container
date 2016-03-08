@@ -5,6 +5,12 @@ C_SOURCES := \
 	display.c \
 	image.c \
 	picture.c \
+	picture_mpeg12.c \
+	picture_mpeg4.c \
+	picture_h264.c \
+	picture_hevc.c \
+	picture_vc1.c \
+	postproc.c \
 	subpicture.c \
 	surface.c \
 	va_private.h

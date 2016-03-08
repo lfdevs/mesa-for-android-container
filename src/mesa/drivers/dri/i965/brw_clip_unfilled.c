@@ -29,7 +29,6 @@
   *   Keith Whitwell <keithw@vmware.com>
   */
 
-#include "main/glheader.h"
 #include "main/macros.h"
 #include "main/enums.h"
 #include "program/program.h"
@@ -302,9 +301,9 @@ static void emit_lines(struct brw_clip_compile *c,
       {
 	 brw_MOV(p, get_addr_reg(v0), deref_1uw(v0ptr, 0));
 	 brw_ADD(p, get_addr_reg(v0ptr), get_addr_reg(v0ptr), brw_imm_uw(2));
-	
+
 	 apply_one_offset(c, v0);
-	
+
 	 brw_ADD(p, c->reg.loopcount, c->reg.loopcount, brw_imm_d(-1));
          brw_inst_set_cond_modifier(p->devinfo, brw_last_inst, BRW_CONDITIONAL_G);
       }
@@ -534,6 +533,3 @@ void brw_emit_unfilled_clip( struct brw_clip_compile *c )
    emit_unfilled_primitives(c);
    brw_clip_kill_thread(c);
 }
-
-
-

@@ -39,8 +39,14 @@ struct si_shader;
 struct si_state_blend {
 	struct si_pm4_state	pm4;
 	uint32_t		cb_target_mask;
+	bool			alpha_to_coverage;
 	bool			alpha_to_one;
 	bool			dual_src_blend;
+	/* Set 0xf or 0x0 (4 bits) per render target if the following is
+	 * true. ANDed with spi_shader_col_format.
+	 */
+	unsigned		blend_enable_4bit;
+	unsigned		need_src_alpha_4bit;
 };
 
 struct si_state_rasterizer {
@@ -118,7 +124,7 @@ union si_state_atoms {
 		struct r600_atom *db_render_state;
 		struct r600_atom *msaa_config;
 		struct r600_atom *sample_mask;
-		struct r600_atom *cb_target_mask;
+		struct r600_atom *cb_render_state;
 		struct r600_atom *blend_color;
 		struct r600_atom *clip_regs;
 		struct r600_atom *clip_state;
@@ -127,7 +133,6 @@ union si_state_atoms {
 		struct r600_atom *viewports;
 		struct r600_atom *stencil_ref;
 		struct r600_atom *spi_map;
-		struct r600_atom *spi_ps_input;
 	} s;
 	struct r600_atom *array[0];
 };
@@ -139,17 +144,12 @@ struct si_shader_data {
 	uint32_t		sh_base[SI_NUM_SHADERS];
 };
 
+/* User sampler views:   0..15
+ * Polygon stipple tex:  16
+ */
 #define SI_NUM_USER_SAMPLERS            16 /* AKA OpenGL textures units per shader */
 #define SI_POLY_STIPPLE_SAMPLER         SI_NUM_USER_SAMPLERS
 #define SI_NUM_SAMPLERS                 (SI_POLY_STIPPLE_SAMPLER + 1)
-
-/* User sampler views:   0..15
- * Polygon stipple tex:  16
- * FMASK sampler views:  17..33 (no sampler states)
- */
-#define SI_FMASK_TEX_OFFSET		SI_NUM_SAMPLERS
-#define SI_NUM_SAMPLER_VIEWS		(SI_FMASK_TEX_OFFSET + SI_NUM_SAMPLERS)
-#define SI_NUM_SAMPLER_STATES		SI_NUM_SAMPLERS
 
 /* User constant buffers:   0..15
  * Driver state constants:  16
@@ -205,12 +205,8 @@ struct si_descriptors {
 
 struct si_sampler_views {
 	struct si_descriptors		desc;
-	struct pipe_sampler_view	*views[SI_NUM_SAMPLER_VIEWS];
-};
-
-struct si_sampler_states {
-	struct si_descriptors		desc;
-	void				*saved_states[2]; /* saved for u_blitter */
+	struct pipe_sampler_view	*views[SI_NUM_SAMPLERS];
+	void				*sampler_states[SI_NUM_SAMPLERS];
 };
 
 struct si_buffer_resources {
@@ -284,6 +280,8 @@ si_create_sampler_view_custom(struct pipe_context *ctx,
 /* si_state_shader.c */
 bool si_update_shaders(struct si_context *sctx);
 void si_init_shader_functions(struct si_context *sctx);
+bool si_init_shader_cache(struct si_screen *sscreen);
+void si_destroy_shader_cache(struct si_screen *sscreen);
 
 /* si_state_draw.c */
 void si_emit_cache_flush(struct si_context *sctx, struct r600_atom *atom);

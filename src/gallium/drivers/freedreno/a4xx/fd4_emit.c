@@ -33,6 +33,7 @@
 #include "util/u_format.h"
 
 #include "freedreno_resource.h"
+#include "freedreno_query_hw.h"
 
 #include "fd4_emit.h"
 #include "fd4_blend.h"
@@ -133,7 +134,8 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	void *ptr;
 
 	u_upload_alloc(fd4_ctx->border_color_uploader,
-			0, 2 * PIPE_MAX_SAMPLERS * BORDERCOLOR_SIZE, &off,
+			0, BORDER_COLOR_UPLOAD_SIZE,
+		       BORDER_COLOR_UPLOAD_SIZE, &off,
 			&fd4_ctx->border_color_buf,
 			&ptr);
 
@@ -185,7 +187,6 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			const struct fd4_pipe_sampler_view *view = tex->textures[i] ?
 					fd4_pipe_sampler_view(tex->textures[i]) :
 					&dummy_view;
-			unsigned start = fd_sampler_first_level(&view->base);
 
 			OUT_RING(ring, view->texconst0);
 			OUT_RING(ring, view->texconst1);
@@ -193,8 +194,7 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			OUT_RING(ring, view->texconst3);
 			if (view->base.texture) {
 				struct fd_resource *rsc = fd_resource(view->base.texture);
-				uint32_t offset = fd_resource_offset(rsc, start, 0);
-				OUT_RELOC(ring, rsc->bo, offset, view->texconst4, 0);
+				OUT_RELOC(ring, rsc->bo, view->offset, view->texconst4, 0);
 			} else {
 				OUT_RING(ring, 0x00000000);
 			}
@@ -286,7 +286,8 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 							PIPE_SWIZZLE_BLUE, PIPE_SWIZZLE_ALPHA));
 			OUT_RING(ring, A4XX_TEX_CONST_1_WIDTH(bufs[i]->width) |
 					A4XX_TEX_CONST_1_HEIGHT(bufs[i]->height));
-			OUT_RING(ring, A4XX_TEX_CONST_2_PITCH(slice->pitch * rsc->cpp));
+			OUT_RING(ring, A4XX_TEX_CONST_2_PITCH(slice->pitch * rsc->cpp) |
+					A4XX_TEX_CONST_2_FETCHSIZE(fd4_pipe2fetchsize(format)));
 			OUT_RING(ring, 0x00000000);
 			OUT_RELOC(ring, rsc->bo, offset, 0, 0);
 			OUT_RING(ring, 0x00000000);
@@ -530,14 +531,16 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 		OUT_PKT0(ring, REG_A4XX_RB_DEPTH_CONTROL, 1);
 		OUT_RING(ring, zsa->rb_depth_control |
-				COND(fragz, A4XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE));
+				COND(fragz, A4XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE) |
+				COND(fragz && fp->frag_coord, A4XX_RB_DEPTH_CONTROL_FORCE_FRAGZ_TO_FS));
 
 		/* maybe this register/bitfield needs a better name.. this
 		 * appears to be just disabling early-z
 		 */
 		OUT_PKT0(ring, REG_A4XX_GRAS_ALPHA_CONTROL, 1);
 		OUT_RING(ring, zsa->gras_alpha_control |
-				COND(fragz, A4XX_GRAS_ALPHA_CONTROL_ALPHA_TEST_ENABLE));
+				COND(fragz, A4XX_GRAS_ALPHA_CONTROL_ALPHA_TEST_ENABLE) |
+				COND(fragz && fp->frag_coord, A4XX_GRAS_ALPHA_CONTROL_FORCE_FRAGZ_TO_FS));
 	}
 
 	if (dirty & FD_DIRTY_RASTERIZER) {
@@ -567,8 +570,9 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	 */
 	if (emit->info) {
 		const struct pipe_draw_info *info = emit->info;
-		uint32_t val = fd4_rasterizer_stateobj(ctx->rasterizer)
-				->pc_prim_vtx_cntl;
+		struct fd4_rasterizer_stateobj *rast =
+			fd4_rasterizer_stateobj(ctx->rasterizer);
+		uint32_t val = rast->pc_prim_vtx_cntl;
 
 		if (info->indexed && info->primitive_restart)
 			val |= A4XX_PC_PRIM_VTX_CNTL_PRIMITIVE_RESTART;
@@ -584,7 +588,7 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 		OUT_PKT0(ring, REG_A4XX_PC_PRIM_VTX_CNTL, 2);
 		OUT_RING(ring, val);
-		OUT_RING(ring, 0x12);     /* XXX UNKNOWN_21C5 */
+		OUT_RING(ring, rast->pc_prim_vtx_cntl2);
 	}
 
 	if (dirty & FD_DIRTY_SCISSOR) {
@@ -613,7 +617,7 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_RING(ring, A4XX_GRAS_CL_VPORT_ZSCALE_0(ctx->viewport.scale[2]));
 	}
 
-	if (dirty & FD_DIRTY_PROG) {
+	if (dirty & (FD_DIRTY_PROG | FD_DIRTY_FRAMEBUFFER)) {
 		struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
 		fd4_program_emit(ring, emit, pfb->nr_cbufs, pfb->cbufs);
 	}
@@ -879,7 +883,16 @@ fd4_emit_restore(struct fd_context *ctx)
 	OUT_PKT0(ring, REG_A4XX_GRAS_ALPHA_CONTROL, 1);
 	OUT_RING(ring, 0x0);
 
+	fd_hw_query_enable(ctx, ring);
+
 	ctx->needs_rb_fbd = true;
+}
+
+static void
+fd4_emit_ib(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
+		struct fd_ringmarker *end)
+{
+	__OUT_IB(ring, true, start, end);
 }
 
 void
@@ -888,4 +901,5 @@ fd4_emit_init(struct pipe_context *pctx)
 	struct fd_context *ctx = fd_context(pctx);
 	ctx->emit_const = fd4_emit_const;
 	ctx->emit_const_bo = fd4_emit_const_bo;
+	ctx->emit_ib = fd4_emit_ib;
 }

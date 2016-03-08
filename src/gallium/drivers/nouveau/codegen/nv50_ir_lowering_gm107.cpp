@@ -57,7 +57,7 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
    Instruction *tex, *add;
    Value *zero = bld.loadImm(bld.getSSA(), 0);
    int l, c;
-   const int dim = i->tex.target.getDim();
+   const int dim = i->tex.target.getDim() + i->tex.target.isCube();
    const int array = i->tex.target.isArray();
 
    i->op = OP_TEX; // no need to clone dPdx/dPdy later

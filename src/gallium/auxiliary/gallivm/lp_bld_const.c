@@ -373,7 +373,7 @@ lp_build_const_aos(struct gallivm_state *gallivm,
 
    lp_build_elem_type(gallivm, type);
 
-   if(swizzle == NULL)
+   if (!swizzle)
       swizzle = default_swizzle;
 
    elems[swizzle[0]] = lp_build_const_elem(gallivm, type, r);

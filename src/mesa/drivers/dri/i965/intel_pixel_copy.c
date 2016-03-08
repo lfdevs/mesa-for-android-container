@@ -23,7 +23,6 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "main/glheader.h"
 #include "main/image.h"
 #include "main/state.h"
 #include "main/mtypes.h"
@@ -143,7 +142,7 @@ do_blit_copypixels(struct gl_context * ctx,
    }
 
    if (ctx->Pixel.ZoomX != 1.0F || ctx->Pixel.ZoomY != 1.0F) {
-      perf_debug("glCopyPixles(): Unsupported pixel zoom\n");
+      perf_debug("glCopyPixels(): Unsupported pixel zoom\n");
       return false;
    }
 

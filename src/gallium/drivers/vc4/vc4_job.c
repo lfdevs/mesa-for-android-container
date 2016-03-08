@@ -89,7 +89,7 @@ vc4_submit_setup_rcl_surface(struct vc4_context *vc4,
         submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
         submit_surf->offset = surf->offset;
 
-        if (psurf->texture->nr_samples == 0) {
+        if (psurf->texture->nr_samples <= 1) {
                 if (is_depth) {
                         submit_surf->bits =
                                 VC4_SET_FIELD(VC4_LOADSTORE_TILE_BUFFER_ZS,
@@ -132,7 +132,7 @@ vc4_submit_setup_rcl_render_config_surface(struct vc4_context *vc4,
         submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
         submit_surf->offset = surf->offset;
 
-        if (psurf->texture->nr_samples == 0) {
+        if (psurf->texture->nr_samples <= 1) {
                 submit_surf->bits =
                         VC4_SET_FIELD(vc4_rt_format_is_565(surf->base.format) ?
                                       VC4_RENDER_CONFIG_FORMAT_BGR565 :

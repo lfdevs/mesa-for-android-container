@@ -45,15 +45,15 @@ NineSwapChain9Ex_new( struct NineDevice9 *pDevice,
                       D3DDISPLAYMODEEX *mode,
                       struct NineSwapChain9Ex **ppOut );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9Ex_GetLastPresentCount( struct NineSwapChain9Ex *This,
                                       UINT *pLastPresentCount );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9Ex_GetPresentStats( struct NineSwapChain9Ex *This,
                                   D3DPRESENTSTATS *pPresentationStatistics );
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineSwapChain9Ex_GetDisplayModeEx( struct NineSwapChain9Ex *This,
                                    D3DDISPLAYMODEEX *pMode,
                                    D3DDISPLAYROTATION *pRotation );

@@ -52,7 +52,6 @@ enum r300_rs_col_write_type {
 
 static void r300_draw_emit_attrib(struct r300_context* r300,
                                   enum attrib_emit emit,
-                                  enum interp_mode interp,
                                   int index)
 {
     struct r300_vertex_shader* vs = r300->vs_state.state;
@@ -62,7 +61,7 @@ static void r300_draw_emit_attrib(struct r300_context* r300,
     output = draw_find_shader_output(r300->draw,
                                      info->output_semantic_name[index],
                                      info->output_semantic_index[index]);
-    draw_emit_vertex_attr(&r300->vertex_info, emit, interp, output);
+    draw_emit_vertex_attr(&r300->vertex_info, emit, output);
 }
 
 static void r300_draw_emit_all_attribs(struct r300_context* r300)
@@ -73,31 +72,27 @@ static void r300_draw_emit_all_attribs(struct r300_context* r300)
 
     /* Position. */
     if (vs_outputs->pos != ATTR_UNUSED) {
-        r300_draw_emit_attrib(r300, EMIT_4F, INTERP_PERSPECTIVE,
-                              vs_outputs->pos);
+        r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->pos);
     } else {
         assert(0);
     }
 
     /* Point size. */
     if (vs_outputs->psize != ATTR_UNUSED) {
-        r300_draw_emit_attrib(r300, EMIT_1F_PSIZE, INTERP_POS,
-                              vs_outputs->psize);
+        r300_draw_emit_attrib(r300, EMIT_1F_PSIZE, vs_outputs->psize);
     }
 
     /* Colors. */
     for (i = 0; i < ATTR_COLOR_COUNT; i++) {
         if (vs_outputs->color[i] != ATTR_UNUSED) {
-            r300_draw_emit_attrib(r300, EMIT_4F, INTERP_LINEAR,
-                                  vs_outputs->color[i]);
+            r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->color[i]);
         }
     }
 
     /* Back-face colors. */
     for (i = 0; i < ATTR_COLOR_COUNT; i++) {
         if (vs_outputs->bcolor[i] != ATTR_UNUSED) {
-            r300_draw_emit_attrib(r300, EMIT_4F, INTERP_LINEAR,
-                                  vs_outputs->bcolor[i]);
+            r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->bcolor[i]);
         }
     }
 
@@ -108,16 +103,14 @@ static void r300_draw_emit_all_attribs(struct r300_context* r300)
     for (i = 0; i < ATTR_GENERIC_COUNT && gen_count < 8; i++) {
         if (vs_outputs->generic[i] != ATTR_UNUSED &&
             !(r300->sprite_coord_enable & (1 << i))) {
-            r300_draw_emit_attrib(r300, EMIT_4F, INTERP_PERSPECTIVE,
-                                  vs_outputs->generic[i]);
+            r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->generic[i]);
             gen_count++;
         }
     }
 
     /* Fog coordinates. */
     if (gen_count < 8 && vs_outputs->fog != ATTR_UNUSED) {
-        r300_draw_emit_attrib(r300, EMIT_4F, INTERP_PERSPECTIVE,
-                              vs_outputs->fog);
+        r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->fog);
         gen_count++;
     }
 
@@ -125,8 +118,7 @@ static void r300_draw_emit_all_attribs(struct r300_context* r300)
     if (r300_fs(r300)->shader->inputs.wpos != ATTR_UNUSED && gen_count < 8) {
         DBG(r300, DBG_SWTCL, "draw_emit_attrib: WPOS, index: %i\n",
             vs_outputs->wpos);
-        r300_draw_emit_attrib(r300, EMIT_4F, INTERP_PERSPECTIVE,
-                              vs_outputs->wpos);
+        r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->wpos);
     }
 }
 

@@ -138,6 +138,10 @@ The integer capabilities:
 * ``PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT``: Describes the required
   alignment for pipe_sampler_view::u.buf.first_element, in bytes.
   If a driver does not support first/last_element, it should return 0.
+* ``PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY``: Whether the driver only
+  supports R, RG, RGB and RGBA formats for PIPE_BUFFER sampler views.
+  When this is the case it should be assumed that the swizzle parameters
+  in the sampler view have no effect.
 * ``PIPE_CAP_TGSI_TEXCOORD``: This CAP describes a hw limitation.
   If true, the hardware cannot replace arbitrary shader inputs with sprite
   coordinates and hence the inputs that are desired to be replaceable must
@@ -164,7 +168,7 @@ The integer capabilities:
   view it is intended to be used with, or herein undefined results may occur
   for permutational swizzles.
 * ``PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE``: The maximum accessible size with
-  a buffer sampler view, in bytes.
+  a buffer sampler view, in texels.
 * ``PIPE_CAP_MAX_VIEWPORTS``: The maximum number of viewports (and scissors
   since they are linked) a driver can support. Returning 0 is equivalent
   to returning 1 because every driver has to support at least a single
@@ -213,6 +217,11 @@ The integer capabilities:
 * ``PIPE_CAP_DRAW_INDIRECT``: Whether the driver supports taking draw arguments
   { count, instance_count, start, index_bias } from a PIPE_BUFFER resource.
   See pipe_draw_info.
+* ``PIPE_CAP_MULTI_DRAW_INDIRECT``: Whether the driver supports
+  pipe_draw_info::indirect_stride and ::indirect_count
+* ``PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS``: Whether the driver supports
+  taking the number of indirect draws from a separate parameter
+  buffer, see pipe_draw_info::indirect_params.
 * ``PIPE_CAP_TGSI_FS_FINE_DERIVATIVE``: Whether the fragment shader supports
   the FINE versions of DDX/DDY.
 * ``PIPE_CAP_VENDOR_ID``: The vendor ID of the underlying hardware. If it's
@@ -239,8 +248,7 @@ The integer capabilities:
   will need to lower TGSI_SEMANTIC_VERTEXID to TGSI_SEMANTIC_VERTEXID_NOBASE
   and TGSI_SEMANTIC_BASEVERTEX, so drivers setting this must handle both these
   semantics. Only relevant if geometry shaders are supported.
-  (Currently not possible to query availability of these two semantics outside
-  this, at least BASEVERTEX should be exposed separately too).
+  (BASEVERTEX could be exposed separately too via ``PIPE_CAP_DRAW_PARAMETERS``).
 * ``PIPE_CAP_POLYGON_OFFSET_CLAMP``: If true, the driver implements support
   for ``pipe_rasterizer_state::offset_clamp``.
 * ``PIPE_CAP_MULTISAMPLE_Z_RESOLVE``: Whether the driver supports blitting
@@ -283,6 +291,34 @@ The integer capabilities:
   a compressed block is copied to/from a plain pixel of the same size.
 * ``PIPE_CAP_CLEAR_TEXTURE``: Whether `clear_texture` will be
   available in contexts.
+* ``PIPE_CAP_DRAW_PARAMETERS``: Whether ``TGSI_SEMANTIC_BASEVERTEX``,
+  ``TGSI_SEMANTIC_BASEINSTANCE``, and ``TGSI_SEMANTIC_DRAWID`` are
+  supported in vertex shaders.
+* ``PIPE_CAP_TGSI_PACK_HALF_FLOAT``: Whether the ``UP2H`` and ``PK2H``
+  TGSI opcodes are supported.
+* ``PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL``: If state trackers should use
+  a system value for the POSITION fragment shader input.
+* ``PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL``: If state trackers should use
+  a system value for the FACE fragment shader input.
+  Also, the FACE system value is integer, not float.
+* ``PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT``: Describes the required
+  alignment for pipe_shader_buffer::buffer_offset, in bytes. Maximum
+  value allowed is 256 (for GL conformance). 0 is only allowed if
+  shader buffers are not supported.
+* ``PIPE_CAP_INVALIDATE_BUFFER``: Whether the use of ``invalidate_resource``
+  for buffers is supported.
+* ``PIPE_CAP_GENERATE_MIPMAP``: Indicates whether pipe_context::generate_mipmap
+  is supported.
+* ``PIPE_CAP_STRING_MARKER``: Whether pipe->emit_string_marker() is supported.
+* ``PIPE_CAP_SURFACE_REINTERPRET_BLOCKS``: Indicates whether
+  pipe_context::create_surface supports reinterpreting a texture as a surface
+  of a format with different block width/height (but same block size in bits).
+  For example, a compressed texture image can be interpreted as a
+  non-compressed surface whose texels are the same number of bits as the
+  compressed blocks, and vice versa. The width and height of the surface is
+  adjusted appropriately.
+* ``PIPE_CAP_QUERY_BUFFER_OBJECT``: Driver supports
+  context::get_query_result_resource callback.
 
 
 .. _pipe_capf:
@@ -375,6 +411,13 @@ to be 0.
   of iterations that loops are allowed to have to be unrolled. It is only
   a hint to state trackers. Whether any loops will be unrolled is not
   guaranteed.
+* ``PIPE_SHADER_CAP_MAX_SHADER_BUFFERS``: Maximum number of memory buffers
+  (also used to implement atomic counters). Having this be non-0 also
+  implies support for the ``LOAD``, ``STORE``, and ``ATOM*`` TGSI
+  opcodes.
+* ``PIPE_SHADER_CAP_SUPPORTED_IRS``: Supported representations of the
+  program.  It should be a mask of ``pipe_shader_ir`` bits.
+* ``PIPE_SHADER_CAP_MAX_SHADER_IMAGES``: Maximum number of image units.
 
 
 .. _pipe_compute_cap:

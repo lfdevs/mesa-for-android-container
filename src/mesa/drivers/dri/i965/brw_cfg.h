@@ -314,6 +314,9 @@ struct cfg_t {
 #define foreach_block_safe(__block, __cfg)                     \
    foreach_list_typed_safe (bblock_t, __block, link, &(__cfg)->block_list)
 
+#define foreach_block_reverse_safe(__block, __cfg)             \
+   foreach_list_typed_reverse_safe (bblock_t, __block, link, &(__cfg)->block_list)
+
 #define foreach_inst_in_block(__type, __inst, __block)         \
    foreach_in_list(__type, __inst, &(__block)->instructions)
 

@@ -79,14 +79,18 @@ calc_position(struct vl_mc *r, struct ureg_program *shader, struct ureg_src bloc
 }
 
 static struct ureg_dst
-calc_line(struct ureg_program *shader)
+calc_line(struct pipe_screen *screen, struct ureg_program *shader)
 {
    struct ureg_dst tmp;
    struct ureg_src pos;
 
    tmp = ureg_DECL_temporary(shader);
 
-   pos = ureg_DECL_fs_input(shader, TGSI_SEMANTIC_POSITION, VS_O_VPOS, TGSI_INTERPOLATE_LINEAR);
+   if (screen->get_param(screen, PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL))
+      pos = ureg_DECL_system_value(shader, TGSI_SEMANTIC_POSITION, 0);
+   else
+      pos = ureg_DECL_fs_input(shader, TGSI_SEMANTIC_POSITION, VS_O_VPOS,
+                               TGSI_INTERPOLATE_LINEAR);
 
    /*
     * tmp.y = fraction(pos.y / 2) >= 0.5 ? 1 : 0
@@ -177,7 +181,7 @@ create_ref_frag_shader(struct vl_mc *r)
 
    fragment = ureg_DECL_output(shader, TGSI_SEMANTIC_COLOR, 0);
 
-   field = calc_line(shader);
+   field = calc_line(r->pipe->screen, shader);
 
    /*
     * ref = field.z ? tc[1] : tc[0]
@@ -324,7 +328,7 @@ create_ycbcr_frag_shader(struct vl_mc *r, float scale, bool invert,
 
    fragment = ureg_DECL_output(shader, TGSI_SEMANTIC_COLOR, 0);
 
-   tmp = calc_line(shader);
+   tmp = calc_line(r->pipe->screen, shader);
 
    /*
     * if (field == tc.w)

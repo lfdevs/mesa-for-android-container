@@ -24,14 +24,14 @@
 
 #define DBG_CHANNEL DBG_CRYPTOSESSION
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_GetCertificateSize( struct NineCryptoSession9 *This,
                                        UINT *pCertificateSize )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_GetCertificate( struct NineCryptoSession9 *This,
                                    UINT CertifacteSize,
                                    BYTE *ppCertificate )
@@ -39,7 +39,7 @@ NineCryptoSession9_GetCertificate( struct NineCryptoSession9 *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_NegotiateKeyExchange( struct NineCryptoSession9 *This,
                                          UINT DataSize,
                                          void *pData )
@@ -47,7 +47,7 @@ NineCryptoSession9_NegotiateKeyExchange( struct NineCryptoSession9 *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_EncryptionBlt( struct NineCryptoSession9 *This,
                                   IDirect3DSurface9 *pSrcSurface,
                                   IDirect3DSurface9 *pDstSurface,
@@ -57,7 +57,7 @@ NineCryptoSession9_EncryptionBlt( struct NineCryptoSession9 *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_DecryptionBlt( struct NineCryptoSession9 *This,
                                   IDirect3DSurface9 *pSrcSurface,
                                   IDirect3DSurface9 *pDstSurface,
@@ -69,7 +69,7 @@ NineCryptoSession9_DecryptionBlt( struct NineCryptoSession9 *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_GetSurfacePitch( struct NineCryptoSession9 *This,
                                     IDirect3DSurface9 *pSrcSurface,
                                     UINT *pSurfacePitch )
@@ -77,7 +77,7 @@ NineCryptoSession9_GetSurfacePitch( struct NineCryptoSession9 *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_StartSessionKeyRefresh( struct NineCryptoSession9 *This,
                                            void *pRandomNumber,
                                            UINT RandomNumberSize )
@@ -85,13 +85,13 @@ NineCryptoSession9_StartSessionKeyRefresh( struct NineCryptoSession9 *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_FinishSessionKeyRefresh( struct NineCryptoSession9 *This )
 {
     STUB(D3DERR_INVALIDCALL);
 }
 
-HRESULT WINAPI
+HRESULT NINE_WINAPI
 NineCryptoSession9_GetEncryptionBltKey( struct NineCryptoSession9 *This,
                                         void *pReadbackKey,
                                         UINT KeySize )
