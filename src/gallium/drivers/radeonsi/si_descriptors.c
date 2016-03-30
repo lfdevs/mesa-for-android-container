@@ -303,6 +303,7 @@ static void si_bind_sampler_states(struct pipe_context *ctx, unsigned shader,
 		 */
 		if (samplers->views.views[i] &&
 		    samplers->views.views[i]->texture &&
+		    samplers->views.views[i]->texture->target != PIPE_BUFFER &&
 		    ((struct r600_texture*)samplers->views.views[i]->texture)->fmask.size)
 			continue;
 

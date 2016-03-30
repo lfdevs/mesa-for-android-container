@@ -2209,6 +2209,7 @@ img_filter_2d_ewa(const struct sp_sampler_view *sp_sview,
                   const float t[TGSI_QUAD_SIZE],
                   const float p[TGSI_QUAD_SIZE],
                   const uint faces[TGSI_QUAD_SIZE],
+                  const int8_t *offset,
                   unsigned level,
                   const float dudx, const float dvdx,
                   const float dudy, const float dvdy,
@@ -2268,6 +2269,8 @@ img_filter_2d_ewa(const struct sp_sampler_view *sp_sview,
    /* F *= formScale; */ /* no need to scale F as we don't use it below here */
 
    args.level = level;
+   args.offset = offset;
+
    for (j = 0; j < TGSI_QUAD_SIZE; j++) {
       /* Heckbert MS thesis, p. 59; scan over the bounding box of the ellipse
        * and incrementally update the value of Ax^2+Bxy*Cy^2; when this
@@ -2431,6 +2434,8 @@ mip_filter_linear_aniso(const struct sp_sampler_view *sp_sview,
    const float dvdy = (t[QUAD_TOP_LEFT]     - t[QUAD_BOTTOM_LEFT]) * t_to_v;
    struct img_filter_args args;
 
+   args.offset = filt_args->offset;
+
    if (filt_args->control == TGSI_SAMPLER_LOD_BIAS ||
        filt_args->control == TGSI_SAMPLER_LOD_NONE ||
        /* XXX FIXME */
@@ -2503,8 +2508,8 @@ mip_filter_linear_aniso(const struct sp_sampler_view *sp_sview,
        * seem to be worth the extra running time.
        */
       img_filter_2d_ewa(sp_sview, sp_samp, min_filter, mag_filter,
-                        s, t, p, filt_args->faces, level0,
-                        dudx, dvdx, dudy, dvdy, rgba);
+                        s, t, p, filt_args->faces, filt_args->offset,
+                        level0, dudx, dvdx, dudy, dvdy, rgba);
    }
 
    if (DEBUG_TEX) {

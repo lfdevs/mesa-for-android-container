@@ -338,8 +338,6 @@ brw_emit_mi_flush(struct brw_context *brw)
       }
       brw_emit_pipe_control_flush(brw, flags);
    }
-
-   brw_render_cache_set_clear(brw);
 }
 
 int

@@ -633,8 +633,6 @@ nv50_stream_output_validate(struct nv50_context *nv50)
    BEGIN_NV04(push, NV50_3D(STRMOUT_BUFFERS_CTRL), 1);
    PUSH_DATA (push, ctrl);
 
-   nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_SO);
-
    for (i = 0; i < nv50->num_so_targets; ++i) {
       struct nv50_so_target *targ = nv50_so_target(nv50->so_target[i]);
       struct nv04_resource *buf = nv04_resource(targ->pipe.buffer);

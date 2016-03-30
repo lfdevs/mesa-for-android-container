@@ -2441,8 +2441,10 @@ fs_visitor::opt_sampler_eot()
     * we have enough space, but it will make sure the dead code eliminator kills
     * the instruction that this will replace.
     */
-   if (tex_inst->header_size != 0)
+   if (tex_inst->header_size != 0) {
+      invalidate_live_intervals();
       return true;
+   }
 
    fs_reg send_header = ibld.vgrf(BRW_REGISTER_TYPE_F,
                                   load_payload->sources + 1);
@@ -2473,6 +2475,7 @@ fs_visitor::opt_sampler_eot()
    tex_inst->insert_before(cfg->blocks[cfg->num_blocks - 1], new_load_payload);
    tex_inst->src[0] = send_header;
 
+   invalidate_live_intervals();
    return true;
 }
 
@@ -5187,12 +5190,18 @@ fs_visitor::optimize()
 void
 fs_visitor::fixup_3src_null_dest()
 {
+   bool progress = false;
+
    foreach_block_and_inst_safe (block, fs_inst, inst, cfg) {
       if (inst->is_3src() && inst->dst.is_null()) {
          inst->dst = fs_reg(VGRF, alloc.allocate(dispatch_width / 8),
                             inst->dst.type);
+         progress = true;
       }
    }
+
+   if (progress)
+      invalidate_live_intervals();
 }
 
 void
@@ -5228,7 +5237,7 @@ fs_visitor::allocate_registers()
        * SIMD8.  There's probably actually some intermediate point where
        * SIMD16 with a couple of spills is still better.
        */
-      if (dispatch_width == 16) {
+      if (dispatch_width == 16 && min_dispatch_width <= 8) {
          fail("Failure to register allocate.  Reduce number of "
               "live scalar values to avoid this.");
       } else {
@@ -5469,6 +5478,13 @@ fs_visitor::run_cs()
 
    if (shader_time_index >= 0)
       emit_shader_time_begin();
+
+   if (devinfo->is_haswell && prog_data->total_shared > 0) {
+      /* Move SLM index from g0.0[27:24] to sr0.1[11:8] */
+      const fs_builder abld = bld.exec_all().group(1, 0);
+      abld.MOV(retype(suboffset(brw_sr0_reg(), 1), BRW_REGISTER_TYPE_UW),
+               suboffset(retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UW), 1));
+   }
 
    emit_nir_code();
 

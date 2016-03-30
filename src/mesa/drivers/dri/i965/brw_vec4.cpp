@@ -1033,6 +1033,7 @@ vec4_visitor::opt_register_coalesce()
 
          if (is_nop_mov) {
             inst->remove(block);
+            progress = true;
             continue;
          }
       }

@@ -116,6 +116,12 @@ struct lp_rast_plane {
 
    /* one-pixel sized trivial reject offsets for each plane */
    uint32_t eo;
+   /*
+    * We rely on this struct being 64bit aligned (ideally it would be 128bit
+    * but that's quite the waste) and therefore on 32bit we need padding
+    * since otherwise (even with the 64bit number in there) it wouldn't be.
+    */
+   uint32_t pad;
 };
 
 /**

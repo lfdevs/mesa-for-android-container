@@ -67,6 +67,7 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
    tmp = bld.getScratch();
 
    for (l = 0; l < 4; ++l) {
+      Value *src[3], *val;
       // mov coordinates from lane l to all lanes
       bld.mkOp(OP_QUADON, TYPE_NONE, NULL);
       for (c = 0; c < dim; ++c) {
@@ -92,10 +93,25 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
          add->lanes = 1; /* abused for .ndv */
       }
 
+      // normalize cube coordinates if necessary
+      if (i->tex.target.isCube()) {
+         for (c = 0; c < 3; ++c)
+            src[c] = bld.mkOp1v(OP_ABS, TYPE_F32, bld.getSSA(), crd[c]);
+         val = bld.getScratch();
+         bld.mkOp2(OP_MAX, TYPE_F32, val, src[0], src[1]);
+         bld.mkOp2(OP_MAX, TYPE_F32, val, src[2], val);
+         bld.mkOp1(OP_RCP, TYPE_F32, val, val);
+         for (c = 0; c < 3; ++c)
+            src[c] = bld.mkOp2v(OP_MUL, TYPE_F32, bld.getSSA(), crd[c], val);
+      } else {
+         for (c = 0; c < dim; ++c)
+            src[c] = crd[c];
+      }
+
       // texture
       bld.insert(tex = cloneForward(func, i));
       for (c = 0; c < dim; ++c)
-         tex->setSrc(c + array, crd[c]);
+         tex->setSrc(c + array, src[c]);
       bld.mkOp(OP_QUADPOP, TYPE_NONE, NULL);
 
       // save results

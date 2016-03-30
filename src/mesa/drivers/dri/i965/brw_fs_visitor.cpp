@@ -1021,6 +1021,18 @@ fs_visitor::init()
       unreachable("unhandled shader stage");
    }
 
+   if (stage == MESA_SHADER_COMPUTE) {
+      const brw_cs_prog_data *cs_prog_data =
+         (const brw_cs_prog_data *) prog_data;
+      unsigned size = cs_prog_data->local_size[0] *
+                      cs_prog_data->local_size[1] *
+                      cs_prog_data->local_size[2];
+      size = DIV_ROUND_UP(size, devinfo->max_cs_threads);
+      min_dispatch_width = size > 16 ? 32 : (size > 8 ? 16 : 8);
+   } else {
+      min_dispatch_width = 8;
+   }
+
    this->prog_data = this->stage_prog_data;
 
    this->failed = false;

@@ -94,6 +94,8 @@ lp_setup_alloc_triangle(struct lp_scene *scene,
    unsigned plane_sz = nr_planes * sizeof(struct lp_rast_plane);
    struct lp_rast_triangle *tri;
 
+   STATIC_ASSERT(sizeof(struct lp_rast_plane) % 8 == 0);
+
    *tri_size = (sizeof(struct lp_rast_triangle) +
                 3 * input_array_sz +
                 plane_sz);

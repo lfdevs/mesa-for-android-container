@@ -96,6 +96,7 @@ else
   endif
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
 	confflags_GALLIUM += --enable-vdpau
+	confflags_GALLIUM += --enable-va
 endif
 
 confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
@@ -112,7 +113,6 @@ confflags += \
 	--enable-shared-glapi \
 	--enable-texture-float \
 	--disable-xvmc \
-	--disable-va \
 	--disable-omx \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_DRI3) \
@@ -179,6 +179,15 @@ override_dh_install:
 	install -m755 -d debian/mesa-vdpau-drivers/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/
 	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/libvdpau*.so* \
 	   debian/mesa-vdpau-drivers/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/
+
+	# Add symlinks to va driver
+	install -m755 -d debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
+	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/gallium_drv_video.so \
+	   debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
+	for i in nouveau_drv_video.so r600_drv_video.so radeonsi_drv_video.so; do \
+	    ln -s gallium_drv_video.so \
+	    debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/$${i}; \
+	done
   endif
 
 	dh_install -s --fail-missing

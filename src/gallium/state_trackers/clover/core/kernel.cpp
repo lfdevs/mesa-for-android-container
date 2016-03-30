@@ -55,7 +55,7 @@ kernel::launch(command_queue &q,
    const auto reduced_grid_size =
       map(divides(), grid_size, block_size);
    void *st = exec.bind(&q, grid_offset);
-   struct pipe_grid_info info;
+   struct pipe_grid_info info = {};
 
    // The handles are created during exec_context::bind(), so we need make
    // sure to call exec_context::bind() before retrieving them.

@@ -615,6 +615,24 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
    const int lyr = arg - (i->tex.target.isMS() ? 2 : 1);
    const int chipset = prog->getTarget()->getChipset();
 
+   /* Only normalize in the non-explicit derivatives case. For explicit
+    * derivatives, this is handled in handleManualTXD.
+    */
+   if (i->tex.target.isCube() && i->dPdx[0].get() == NULL) {
+      Value *src[3], *val;
+      int c;
+      for (c = 0; c < 3; ++c)
+         src[c] = bld.mkOp1v(OP_ABS, TYPE_F32, bld.getSSA(), i->getSrc(c));
+      val = bld.getScratch();
+      bld.mkOp2(OP_MAX, TYPE_F32, val, src[0], src[1]);
+      bld.mkOp2(OP_MAX, TYPE_F32, val, src[2], val);
+      bld.mkOp1(OP_RCP, TYPE_F32, val, val);
+      for (c = 0; c < 3; ++c) {
+         i->setSrc(c, bld.mkOp2v(OP_MUL, TYPE_F32, bld.getSSA(),
+                                 i->getSrc(c), val));
+      }
+   }
+
    // Arguments to the TEX instruction are a little insane. Even though the
    // encoding is identical between SM20 and SM30, the arguments mean
    // different things between Fermi and Kepler+. A lot of arguments are
@@ -728,9 +746,13 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
       }
 
       Value *arrayIndex = i->tex.target.isArray() ? i->getSrc(lyr) : NULL;
-      for (int s = dim; s >= 1; --s)
-         i->setSrc(s, i->getSrc(s - 1));
-      i->setSrc(0, arrayIndex);
+      if (arrayIndex) {
+         for (int s = dim; s >= 1; --s)
+            i->setSrc(s, i->getSrc(s - 1));
+         i->setSrc(0, arrayIndex);
+      } else {
+         i->moveSources(0, 1);
+      }
 
       if (arrayIndex) {
          int sat = (i->op == OP_TXF) ? 1 : 0;
@@ -852,7 +874,17 @@ NVC0LoweringPass::handleManualTXD(TexInstruction *i)
    Value *zero = bld.loadImm(bld.getSSA(), 0);
    int l, c;
    const int dim = i->tex.target.getDim() + i->tex.target.isCube();
-   const int array = i->tex.target.isArray();
+
+   // This function is invoked after handleTEX lowering, so we have to expect
+   // the arguments in the order that the hw wants them. For Fermi, array and
+   // indirect are both in the leading arg, while for Kepler, array and
+   // indirect are separate (and both precede the coordinates). Maxwell is
+   // handled in a separate function.
+   unsigned array;
+   if (targ->getChipset() < NVISA_GK104_CHIPSET)
+      array = i->tex.target.isArray() || i->tex.rIndirectSrc >= 0;
+   else
+      array = i->tex.target.isArray() + (i->tex.rIndirectSrc >= 0);
 
    i->op = OP_TEX; // no need to clone dPdx/dPdy later
 
@@ -861,6 +893,7 @@ NVC0LoweringPass::handleManualTXD(TexInstruction *i)
 
    bld.mkOp(OP_QUADON, TYPE_NONE, NULL);
    for (l = 0; l < 4; ++l) {
+      Value *src[3], *val;
       // mov coordinates from lane l to all lanes
       for (c = 0; c < dim; ++c)
          bld.mkQuadop(0x00, crd[c], l, i->getSrc(c + array), zero);
@@ -870,10 +903,24 @@ NVC0LoweringPass::handleManualTXD(TexInstruction *i)
       // add dPdy from lane l to lanes dy
       for (c = 0; c < dim; ++c)
          bld.mkQuadop(qOps[l][1], crd[c], l, i->dPdy[c].get(), crd[c]);
+      // normalize cube coordinates
+      if (i->tex.target.isCube()) {
+         for (c = 0; c < 3; ++c)
+            src[c] = bld.mkOp1v(OP_ABS, TYPE_F32, bld.getSSA(), crd[c]);
+         val = bld.getScratch();
+         bld.mkOp2(OP_MAX, TYPE_F32, val, src[0], src[1]);
+         bld.mkOp2(OP_MAX, TYPE_F32, val, src[2], val);
+         bld.mkOp1(OP_RCP, TYPE_F32, val, val);
+         for (c = 0; c < 3; ++c)
+            src[c] = bld.mkOp2v(OP_MUL, TYPE_F32, bld.getSSA(), crd[c], val);
+      } else {
+         for (c = 0; c < dim; ++c)
+            src[c] = crd[c];
+      }
       // texture
       bld.insert(tex = cloneForward(func, i));
       for (c = 0; c < dim; ++c)
-         tex->setSrc(c + array, crd[c]);
+         tex->setSrc(c + array, src[c]);
       // save results
       for (c = 0; i->defExists(c); ++c) {
          Instruction *mov;

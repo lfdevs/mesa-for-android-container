@@ -1203,8 +1203,8 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    x0 = (float)info->src.box.x - x_range * (float)info->dst.box.x;
    y0 = (float)info->src.box.y - y_range * (float)info->dst.box.y;
 
-   x1 = x0 + 16384.0f * x_range;
-   y1 = y0 + 16384.0f * y_range;
+   x1 = x0 + 32768.0f * x_range;
+   y1 = y0 + 32768.0f * y_range;
 
    x0 *= (float)(1 << nv50_miptree(src)->ms_x);
    x1 *= (float)(1 << nv50_miptree(src)->ms_x);
@@ -1302,6 +1302,17 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    }
    nvc0->state.num_vtxelts = 2;
 
+   if (nvc0->state.prim_restart) {
+      IMMED_NVC0(push, NVC0_3D(PRIM_RESTART_ENABLE), 0);
+      nvc0->state.prim_restart = 0;
+   }
+
+   if (nvc0->state.index_bias) {
+      IMMED_NVC0(push, NVC0_3D(VB_ELEMENT_BASE), 0);
+      IMMED_NVC0(push, NVC0_3D(VERTEX_ID_BASE), 0);
+      nvc0->state.index_bias = 0;
+   }
+
    for (i = 0; i < info->dst.box.depth; ++i, z += dz) {
       if (info->dst.box.z + i) {
          BEGIN_NVC0(push, NVC0_3D(LAYER), 1);
@@ -1314,14 +1325,14 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
       *(vbuf++) = fui(y0);
       *(vbuf++) = fui(z);
 
-      *(vbuf++) = fui(16384 << nv50_miptree(dst)->ms_x);
+      *(vbuf++) = fui(32768 << nv50_miptree(dst)->ms_x);
       *(vbuf++) = fui(0.0f);
       *(vbuf++) = fui(x1);
       *(vbuf++) = fui(y0);
       *(vbuf++) = fui(z);
 
       *(vbuf++) = fui(0.0f);
-      *(vbuf++) = fui(16384 << nv50_miptree(dst)->ms_y);
+      *(vbuf++) = fui(32768 << nv50_miptree(dst)->ms_y);
       *(vbuf++) = fui(x0);
       *(vbuf++) = fui(y1);
       *(vbuf++) = fui(z);

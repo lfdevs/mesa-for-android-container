@@ -402,6 +402,7 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          }
       } else if (imm_offset == 1 && indirect_offset.file == BAD_FILE) {
          dst.type = BRW_REGISTER_TYPE_F;
+         unsigned swiz = BRW_SWIZZLE_WZYX;
 
          /* This is a read of gl_TessLevelOuter[], which lives in the
           * high 4 DWords of the Patch URB header, in reverse order.
@@ -414,6 +415,8 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
             dst.writemask = WRITEMASK_XYZ;
             break;
          case GL_ISOLINES:
+            /* Isolines are not reversed; swizzle .zw -> .xy */
+            swiz = BRW_SWIZZLE_ZWZW;
             dst.writemask = WRITEMASK_XY;
             return;
          default:
@@ -422,7 +425,7 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 
          dst_reg tmp(this, glsl_type::vec4_type);
          emit_output_urb_read(tmp, 1, src_reg());
-         emit(MOV(dst, swizzle(src_reg(tmp), BRW_SWIZZLE_WZYX)));
+         emit(MOV(dst, swizzle(src_reg(tmp), swiz)));
       } else {
          emit_output_urb_read(dst, imm_offset, indirect_offset);
       }
@@ -475,8 +478,15 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
           * Patch URB Header at DWords 4-7.  However, it's reversed, so
           * instead of .xyzw we have .wzyx.
           */
-         swiz = BRW_SWIZZLE_WZYX;
-         mask = writemask_for_backwards_vector(mask);
+         if (key->tes_primitive_mode == GL_ISOLINES) {
+            /* Isolines .xy should be stored in .zw, in order. */
+            swiz = BRW_SWIZZLE4(0, 0, 0, 1);
+            mask <<= 2;
+         } else {
+            /* Other domains are reversed; store .wzyx instead of .xyzw. */
+            swiz = BRW_SWIZZLE_WZYX;
+            mask = writemask_for_backwards_vector(mask);
+         }
       }
 
       emit_urb_write(swizzle(value, swiz), mask,

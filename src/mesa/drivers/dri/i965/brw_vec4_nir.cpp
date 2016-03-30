@@ -685,9 +685,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_load_instance_id:
    case nir_intrinsic_load_base_instance:
    case nir_intrinsic_load_draw_id:
-   case nir_intrinsic_load_invocation_id:
-   case nir_intrinsic_load_tess_level_inner:
-   case nir_intrinsic_load_tess_level_outer: {
+   case nir_intrinsic_load_invocation_id: {
       gl_system_value sv = nir_system_value_from_intrinsic(instr->intrinsic);
       src_reg val = src_reg(nir_system_values[sv]);
       assert(val.file != BAD_FILE);

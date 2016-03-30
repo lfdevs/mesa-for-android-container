@@ -59,6 +59,8 @@
 #define OMX_VID_DEC_AVC_NAME "OMX.mesa.video_decoder.avc"
 #define OMX_VID_DEC_AVC_ROLE "video_decoder.avc"
 
+#define OMX_VID_DEC_TIMESTAMP_INVALID ((OMX_TICKS) -1)
+
 struct vl_vlc;
 
 DERIVEDCLASS(vid_dec_PrivateType, omx_base_filter_PrivateType)
@@ -69,7 +71,7 @@ DERIVEDCLASS(vid_dec_PrivateType, omx_base_filter_PrivateType)
    struct pipe_video_codec *codec; \
    void (*Decode)(vid_dec_PrivateType *priv, struct vl_vlc *vlc, unsigned min_bits_left); \
    void (*EndFrame)(vid_dec_PrivateType *priv); \
-   struct pipe_video_buffer *(*Flush)(vid_dec_PrivateType *priv); \
+   struct pipe_video_buffer *(*Flush)(vid_dec_PrivateType *priv, OMX_TICKS *timestamp); \
    struct pipe_video_buffer *target, *shadow; \
    union { \
       struct { \
@@ -100,6 +102,9 @@ DERIVEDCLASS(vid_dec_PrivateType, omx_base_filter_PrivateType)
    OMX_BUFFERHEADERTYPE *in_buffers[2]; \
    const void *inputs[2]; \
    unsigned sizes[2]; \
+   OMX_TICKS timestamps[2]; \
+   OMX_TICKS timestamp; \
+   bool first_buf_in_frame; \
    bool frame_finished; \
    bool frame_started; \
    unsigned bytes_left; \

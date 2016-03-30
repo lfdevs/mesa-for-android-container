@@ -170,6 +170,8 @@ vmw_svga_winsys_surface_unmap(struct svga_winsys_context *swc,
       *rebind = vsrf->rebind;
       vsrf->rebind = FALSE;
       vmw_svga_winsys_buffer_unmap(&vsrf->screen->base, vsrf->buf);
+   } else {
+      *rebind = FALSE;
    }
    pipe_mutex_unlock(vsrf->mutex);
 }

@@ -28,6 +28,7 @@
  */
 
 #include "brw_vec4_tes.h"
+#include "brw_cfg.h"
 
 namespace brw {
 
@@ -53,39 +54,10 @@ vec4_tes_visitor::make_reg_for_system_value(int location, const glsl_type *type)
 void
 vec4_tes_visitor::nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr)
 {
-   const struct brw_tes_prog_data *tes_prog_data =
-      (const struct brw_tes_prog_data *) prog_data;
-
    switch (instr->intrinsic) {
-   case nir_intrinsic_load_tess_level_outer: {
-      dst_reg dst(this, glsl_type::vec4_type);
-      nir_system_values[SYSTEM_VALUE_TESS_LEVEL_OUTER] = dst;
-
-      dst_reg temp(this, glsl_type::vec4_type);
-      vec4_instruction *read =
-         emit(VEC4_OPCODE_URB_READ, temp, input_read_header);
-      read->offset = 1;
-      read->urb_write_flags = BRW_URB_WRITE_PER_SLOT_OFFSET;
-      emit(MOV(dst, swizzle(src_reg(temp), BRW_SWIZZLE_WZYX)));
+   case nir_intrinsic_load_tess_level_outer:
+   case nir_intrinsic_load_tess_level_inner:
       break;
-   }
-   case nir_intrinsic_load_tess_level_inner: {
-      dst_reg dst(this, glsl_type::vec2_type);
-      nir_system_values[SYSTEM_VALUE_TESS_LEVEL_INNER] = dst;
-
-      /* Set up the message header to reference the proper parts of the URB */
-      dst_reg temp(this, glsl_type::vec4_type);
-      vec4_instruction *read =
-         emit(VEC4_OPCODE_URB_READ, temp, input_read_header);
-      read->urb_write_flags = BRW_URB_WRITE_PER_SLOT_OFFSET;
-      if (tes_prog_data->domain == BRW_TESS_DOMAIN_QUAD) {
-         emit(MOV(dst, swizzle(src_reg(temp), BRW_SWIZZLE_WZYX)));
-      } else {
-         read->offset = 1;
-         emit(MOV(dst, src_reg(temp)));
-      }
-      break;
-   }
    default:
       vec4_visitor::nir_setup_system_value_intrinsic(instr);
    }
@@ -104,6 +76,25 @@ vec4_tes_visitor::setup_payload()
    reg += 2;
 
    reg = setup_uniforms(reg);
+
+   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
+      for (int i = 0; i < 3; i++) {
+         if (inst->src[i].file != ATTR)
+            continue;
+
+         struct brw_reg grf =
+            brw_vec4_grf(reg + inst->src[i].nr / 2, 4 * (inst->src[i].nr % 2));
+         grf = stride(grf, 0, 4, 1);
+         grf.swizzle = inst->src[i].swizzle;
+         grf.type = inst->src[i].type;
+         grf.abs = inst->src[i].abs;
+         grf.negate = inst->src[i].negate;
+
+         inst->src[i] = grf;
+      }
+   }
+
+   reg += 8 * prog_data->urb_read_length;
 
    this->first_non_payload_grf = reg;
 }
@@ -148,11 +139,35 @@ vec4_tes_visitor::emit_urb_write_opcode(bool complete)
 void
 vec4_tes_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 {
+   const struct brw_tes_prog_data *tes_prog_data =
+      (const struct brw_tes_prog_data *) prog_data;
+
    switch (instr->intrinsic) {
    case nir_intrinsic_load_tess_coord:
       /* gl_TessCoord is part of the payload in g1 channels 0-2 and 4-6. */
       emit(MOV(get_nir_dest(instr->dest, BRW_REGISTER_TYPE_F),
                src_reg(brw_vec8_grf(1, 0))));
+      break;
+   case nir_intrinsic_load_tess_level_outer:
+      if (tes_prog_data->domain == BRW_TESS_DOMAIN_ISOLINE) {
+         emit(MOV(get_nir_dest(instr->dest, BRW_REGISTER_TYPE_F),
+                  swizzle(src_reg(ATTR, 1, glsl_type::vec4_type),
+                          BRW_SWIZZLE_ZWZW)));
+      } else {
+         emit(MOV(get_nir_dest(instr->dest, BRW_REGISTER_TYPE_F),
+                  swizzle(src_reg(ATTR, 1, glsl_type::vec4_type),
+                          BRW_SWIZZLE_WZYX)));
+      }
+      break;
+   case nir_intrinsic_load_tess_level_inner:
+      if (tes_prog_data->domain == BRW_TESS_DOMAIN_QUAD) {
+         emit(MOV(get_nir_dest(instr->dest, BRW_REGISTER_TYPE_F),
+                  swizzle(src_reg(ATTR, 0, glsl_type::vec4_type),
+                          BRW_SWIZZLE_WZYX)));
+      } else {
+         emit(MOV(get_nir_dest(instr->dest, BRW_REGISTER_TYPE_F),
+                  src_reg(ATTR, 1, glsl_type::float_type)));
+      }
       break;
    case nir_intrinsic_load_primitive_id:
       emit(TES_OPCODE_GET_PRIMITIVE_ID,
@@ -169,6 +184,19 @@ vec4_tes_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          header = src_reg(this, glsl_type::uvec4_type);
          emit(TES_OPCODE_ADD_INDIRECT_URB_OFFSET, dst_reg(header),
               input_read_header, indirect_offset);
+      } else {
+         /* Arbitrarily only push up to 24 vec4 slots worth of data,
+          * which is 12 registers (since each holds 2 vec4 slots).
+          */
+         const unsigned max_push_slots = 24;
+         if (imm_offset < max_push_slots) {
+            emit(MOV(get_nir_dest(instr->dest, BRW_REGISTER_TYPE_D),
+                     src_reg(ATTR, imm_offset, glsl_type::ivec4_type)));
+            prog_data->urb_read_length =
+               MAX2(prog_data->urb_read_length,
+                    DIV_ROUND_UP(imm_offset + 1, 2));
+            break;
+         }
       }
 
       dst_reg temp(this, glsl_type::ivec4_type);

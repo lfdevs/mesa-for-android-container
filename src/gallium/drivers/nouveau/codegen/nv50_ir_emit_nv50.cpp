@@ -1634,7 +1634,9 @@ CodeEmitterNV50::emitTEX(const TexInstruction *i)
    code[1] |= (i->tex.mask & 0xc) << 12;
 
    if (i->tex.liveOnly)
-      code[1] |= 4;
+      code[1] |= 1 << 2;
+   if (i->tex.derivAll)
+      code[1] |= 1 << 3;
 
    defId(i->def(0), 2);
 

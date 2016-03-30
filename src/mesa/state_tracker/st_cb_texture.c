@@ -2886,10 +2886,13 @@ st_finalize_texture(struct gl_context *ctx,
          /* Need to import images in main memory or held in other textures.
           */
          if (stImage && stObj->pt != stImage->pt) {
+            GLuint depth = stObj->depth0;
+            if (stObj->base.Target == GL_TEXTURE_3D)
+               depth = u_minify(depth, level);
             if (level == 0 ||
                 (stImage->base.Width == u_minify(stObj->width0, level) &&
                  stImage->base.Height == u_minify(stObj->height0, level) &&
-                 stImage->base.Depth == u_minify(stObj->depth0, level))) {
+                 stImage->base.Depth == depth)) {
                /* src image fits expected dest mipmap level size */
                copy_image_data_to_texture(st, stObj, level, stImage);
             }

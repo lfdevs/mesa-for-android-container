@@ -140,9 +140,9 @@ copy_image_with_memcpy(struct brw_context *brw,
    _mesa_get_format_block_size(src_mt->format, &src_bw, &src_bh);
 
    assert(src_width % src_bw == 0);
-   assert(src_height % src_bw == 0);
+   assert(src_height % src_bh == 0);
    assert(src_x % src_bw == 0);
-   assert(src_y % src_bw == 0);
+   assert(src_y % src_bh == 0);
 
    /* If we are on the same miptree, same level, and same slice, then
     * intel_miptree_map won't let us map it twice.  We have to do things a
@@ -153,7 +153,7 @@ copy_image_with_memcpy(struct brw_context *brw,
 
    if (same_slice) {
       assert(dst_x % src_bw == 0);
-      assert(dst_y % src_bw == 0);
+      assert(dst_y % src_bh == 0);
 
       map_x1 = MIN2(src_x, dst_x);
       map_y1 = MIN2(src_y, dst_y);

@@ -533,8 +533,14 @@ static unsigned r600_texture_get_htile_size(struct r600_common_screen *rscreen,
 	    rscreen->info.drm_major == 2 && rscreen->info.drm_minor < 38)
 		return 0;
 
-	/* Overalign HTILE on Stoney to fix piglit/depthstencil-render-miplevels 585. */
-	if (rscreen->family == CHIP_STONEY)
+	/* Overalign HTILE on P2 configs to work around GPU hangs in
+	 * piglit/depthstencil-render-miplevels 585.
+	 *
+	 * This has been confirmed to help Kabini & Stoney, where the hangs
+	 * are always reproducible. I think I have seen the test hang
+	 * on Carrizo too, though it was very rare there.
+	 */
+	if (rscreen->chip_class >= CIK && num_pipes < 4)
 		num_pipes = 4;
 
 	switch (num_pipes) {

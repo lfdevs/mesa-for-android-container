@@ -140,7 +140,7 @@ static OMX_ERRORTYPE vid_dec_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
 
    r = omx_base_filter_Constructor(comp, name);
    if (r)
-	return r;
+      return r;
 
    priv->profile = PIPE_VIDEO_PROFILE_UNKNOWN;
 
@@ -268,7 +268,7 @@ static OMX_ERRORTYPE vid_dec_SetParameter(OMX_HANDLETYPE handle, OMX_INDEXTYPE i
       r = checkHeader(param, sizeof(OMX_PARAM_COMPONENTROLETYPE));
       if (r)
          return r;
- 
+
       if (!strcmp((char *)role->cRole, OMX_VID_DEC_MPEG2_ROLE)) {
          priv->profile = PIPE_VIDEO_PROFILE_MPEG2_MAIN;
       } else if (!strcmp((char *)role->cRole, OMX_VID_DEC_AVC_ROLE)) {
@@ -321,7 +321,7 @@ static OMX_ERRORTYPE vid_dec_GetParameter(OMX_HANDLETYPE handle, OMX_INDEXTYPE i
          strcpy((char *)role->cRole, OMX_VID_DEC_MPEG2_ROLE);
       else if (priv->profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH)
          strcpy((char *)role->cRole, OMX_VID_DEC_AVC_ROLE);
- 
+
       break;
    }
 
@@ -419,6 +419,7 @@ static OMX_ERRORTYPE vid_dec_DecodeBuffer(omx_base_PortType *port, OMX_BUFFERHEA
    priv->in_buffers[i] = buf;
    priv->sizes[i] = buf->nFilledLen;
    priv->inputs[i] = buf->pBuffer;
+   priv->timestamps[i] = buf->nTimeStamp;
 
    while (priv->num_in_buffers > (!!(buf->nFlags & OMX_BUFFERFLAG_EOS) ? 0 : 1)) {
       bool eos = !!(priv->in_buffers[0]->nFlags & OMX_BUFFERFLAG_EOS);
@@ -469,12 +470,13 @@ static OMX_ERRORTYPE vid_dec_DecodeBuffer(omx_base_PortType *port, OMX_BUFFERHEA
          priv->in_buffers[0] = priv->in_buffers[1];
          priv->sizes[0] = priv->sizes[1] - delta;
          priv->inputs[0] = priv->inputs[1] + delta;
+         priv->timestamps[0] = priv->timestamps[1];
       }
 
       if (r)
          return r;
    }
- 
+
    return OMX_ErrorNone;
 }
 
@@ -513,7 +515,7 @@ static void vid_dec_FillOutput(vid_dec_PrivateType *priv, struct pipe_video_buff
 
    box.width = def->nFrameWidth / 2;
    box.height = def->nFrameHeight / 2;
- 
+
    src = priv->pipe->transfer_map(priv->pipe, views[1]->texture, 0,
                                   PIPE_TRANSFER_READ, &box, &transfer);
    util_copy_rect(dst, views[1]->texture->format, def->nStride, 0, 0,
@@ -526,9 +528,13 @@ static void vid_dec_FrameDecoded(OMX_COMPONENTTYPE *comp, OMX_BUFFERHEADERTYPE* 
 {
    vid_dec_PrivateType *priv = comp->pComponentPrivate;
    bool eos = !!(input->nFlags & OMX_BUFFERFLAG_EOS);
+   OMX_TICKS timestamp;
 
-   if (!input->pInputPortPrivate)
-      input->pInputPortPrivate = priv->Flush(priv);
+   if (!input->pInputPortPrivate) {
+      input->pInputPortPrivate = priv->Flush(priv, &timestamp);
+      if (timestamp != OMX_VID_DEC_TIMESTAMP_INVALID)
+         input->nTimeStamp = timestamp;
+   }
 
    if (input->pInputPortPrivate) {
       if (output->pInputPortPrivate) {
@@ -539,6 +545,7 @@ static void vid_dec_FrameDecoded(OMX_COMPONENTTYPE *comp, OMX_BUFFERHEADERTYPE* 
          vid_dec_FillOutput(priv, input->pInputPortPrivate, output);
       }
       output->nFilledLen = output->nAllocLen;
+      output->nTimeStamp = input->nTimeStamp;
    }
 
    if (eos && input->pInputPortPrivate)

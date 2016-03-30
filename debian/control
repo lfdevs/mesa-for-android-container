@@ -18,6 +18,7 @@ Build-Depends:
  libxfixes-dev,
  libxdamage-dev,
  libxext-dev,
+ libva-dev (>= 1.6.0) [linux-any kfreebsd-any],
  libvdpau-dev (>= 1.1.1) [linux-any kfreebsd-any],
  autoconf,
  automake,
@@ -419,6 +420,28 @@ Description: Mesa Off-screen rendering extension -- development files
  that use the off-screen rendering extension of Mesa.
  .
  For more information on OSmesa see the libosmesa6 package.
+
+Package: mesa-va-drivers
+Section: libs
+Architecture: linux-any kfreebsd-any
+Depends:
+ libva1,
+ ${shlibs:Depends},
+ ${misc:Depends},
+Enhances:
+ libva1,
+Provides:
+ va-driver,
+Breaks: vdpau-va-drivers (<< 0.7.4-5)
+Replaces: vdpau-va-drivers (<< 0.7.4-5)
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Description: Mesa VA-API video acceleration drivers
+ These libraries provide the Video Acceleration API (VA-API) for Unix.
+ They provide accelerated video playback (incl. H.264) and video
+ post-processing for the supported graphics cards.
+ .
+ This package enables support for VA-API for some gallium drivers.
 
 Package: mesa-vdpau-drivers
 Section: libs

@@ -598,9 +598,13 @@ bool expr_handler::fold_assoc(alu_node *n) {
 
 	unsigned op = n->bc.op;
 	bool allow_neg = false, cur_neg = false;
+	bool distribute_neg = false;
 
 	switch(op) {
 	case ALU_OP2_ADD:
+		distribute_neg = true;
+		allow_neg = true;
+		break;
 	case ALU_OP2_MUL:
 	case ALU_OP2_MUL_IEEE:
 		allow_neg = true;
@@ -632,7 +636,7 @@ bool expr_handler::fold_assoc(alu_node *n) {
 		if (v1->is_const()) {
 			literal arg = v1->get_const_value();
 			apply_alu_src_mod(a->bc, 1, arg);
-			if (cur_neg)
+			if (cur_neg && distribute_neg)
 				arg.f = -arg.f;
 
 			if (a == n)
@@ -660,7 +664,7 @@ bool expr_handler::fold_assoc(alu_node *n) {
 		if (v0->is_const()) {
 			literal arg = v0->get_const_value();
 			apply_alu_src_mod(a->bc, 0, arg);
-			if (cur_neg)
+			if (cur_neg && distribute_neg)
 				arg.f = -arg.f;
 
 			if (last_arg == 0) {

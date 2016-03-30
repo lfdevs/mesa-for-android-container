@@ -44,7 +44,6 @@
 #include "egllog.h"
 
 
-#define MIN2(A, B)  (((A) < (B)) ? (A) : (B))
 
 
 /**

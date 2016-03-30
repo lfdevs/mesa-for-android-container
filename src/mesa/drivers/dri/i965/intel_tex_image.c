@@ -50,7 +50,7 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
       width <<= 1;
       if (height != 1)
          height <<= 1;
-      if (depth != 1)
+      if (intelObj->base.Target == GL_TEXTURE_3D)
          depth <<= 1;
    }
 

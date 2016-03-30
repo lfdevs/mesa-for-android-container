@@ -307,6 +307,12 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
    if (err != EGL_SUCCESS)
       return _eglError(err, func);
 
+   /* if EGL_LARGEST_PBUFFER in use, clamp width and height */
+   if (surf->LargestPbuffer) {
+      surf->Width = MIN2(surf->Width, _EGL_MAX_PBUFFER_WIDTH);
+      surf->Height = MIN2(surf->Height, _EGL_MAX_PBUFFER_HEIGHT);
+   }
+
    return EGL_TRUE;
 }
 

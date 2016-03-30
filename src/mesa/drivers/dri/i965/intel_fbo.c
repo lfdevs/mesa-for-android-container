@@ -1065,7 +1065,28 @@ brw_render_cache_set_check_flush(struct brw_context *brw, drm_intel_bo *bo)
    if (!_mesa_set_search(brw->render_cache, bo))
       return;
 
-   brw_emit_mi_flush(brw);
+   if (brw->gen >= 6) {
+      if (brw->gen == 6) {
+         /* [Dev-SNB{W/A}]: Before a PIPE_CONTROL with Write Cache
+          * Flush Enable = 1, a PIPE_CONTROL with any non-zero
+          * post-sync-op is required.
+          */
+         brw_emit_post_sync_nonzero_flush(brw);
+      }
+
+      brw_emit_pipe_control_flush(brw,
+                                  PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                  PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                                  PIPE_CONTROL_CS_STALL);
+
+      brw_emit_pipe_control_flush(brw,
+                                  PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
+                                  PIPE_CONTROL_CONST_CACHE_INVALIDATE);
+   } else {
+      brw_emit_mi_flush(brw);
+   }
+
+   brw_render_cache_set_clear(brw);
 }
 
 /**

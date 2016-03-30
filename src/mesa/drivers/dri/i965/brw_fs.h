@@ -407,6 +407,7 @@ public:
    bool spilled_any_registers;
 
    const unsigned dispatch_width; /**< 8 or 16 */
+   unsigned min_dispatch_width;
 
    int shader_time_index;
 

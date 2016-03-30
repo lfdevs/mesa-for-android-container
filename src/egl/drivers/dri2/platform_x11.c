@@ -1006,6 +1006,9 @@ dri2_create_image_khr_pixmap(_EGLDisplay *disp, _EGLContext *ctx,
    geometry_cookie = xcb_get_geometry (dri2_dpy->conn, drawable);
    buffers_reply = xcb_dri2_get_buffers_reply (dri2_dpy->conn,
 					       buffers_cookie, NULL);
+   if (buffers_reply == NULL)
+     return NULL;
+
    buffers = xcb_dri2_get_buffers_buffers (buffers_reply);
    if (buffers == NULL) {
       return NULL;

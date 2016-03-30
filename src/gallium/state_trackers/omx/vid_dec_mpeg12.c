@@ -61,7 +61,7 @@ static uint8_t default_non_intra_matrix[64] = {
 
 static void vid_dec_mpeg12_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, unsigned min_bits_left);
 static void vid_dec_mpeg12_EndFrame(vid_dec_PrivateType *priv);
-static struct pipe_video_buffer *vid_dec_mpeg12_Flush(vid_dec_PrivateType *priv);
+static struct pipe_video_buffer *vid_dec_mpeg12_Flush(vid_dec_PrivateType *priv, OMX_TICKS *timestamp);
 
 void vid_dec_mpeg12_Init(vid_dec_PrivateType *priv)
 {
@@ -131,10 +131,12 @@ static void vid_dec_mpeg12_EndFrame(vid_dec_PrivateType *priv)
    priv->in_buffers[0]->pInputPortPrivate = done;
 }
 
-static struct pipe_video_buffer *vid_dec_mpeg12_Flush(vid_dec_PrivateType *priv)
+static struct pipe_video_buffer *vid_dec_mpeg12_Flush(vid_dec_PrivateType *priv, OMX_TICKS *timestamp)
 {
    struct pipe_video_buffer *result = priv->picture.mpeg12.ref[1];
    priv->picture.mpeg12.ref[1] = NULL;
+   if (timestamp)
+      *timestamp = OMX_VID_DEC_TIMESTAMP_INVALID;
    return result;
 }
 

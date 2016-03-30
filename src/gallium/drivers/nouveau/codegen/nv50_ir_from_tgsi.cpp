@@ -1989,7 +1989,6 @@ Converter::loadProjTexCoords(Value *dst[4], Value *src[4], unsigned int mask)
 void
 Converter::handleTEX(Value *dst[4], int R, int S, int L, int C, int Dx, int Dy)
 {
-   Value *val;
    Value *arg[4], *src[8];
    Value *lod = NULL, *shd = NULL;
    unsigned int s, c, d;
@@ -2030,17 +2029,6 @@ Converter::handleTEX(Value *dst[4], int R, int S, int L, int C, int Dx, int Dy)
       loadProjTexCoords(src, arg, (1 << n) - 1);
       if (shd)
          shd = src[n - 1];
-   }
-
-   if (tgt.isCube()) {
-      for (c = 0; c < 3; ++c)
-         src[c] = mkOp1v(OP_ABS, TYPE_F32, getSSA(), arg[c]);
-      val = getScratch();
-      mkOp2(OP_MAX, TYPE_F32, val, src[0], src[1]);
-      mkOp2(OP_MAX, TYPE_F32, val, src[2], val);
-      mkOp1(OP_RCP, TYPE_F32, val, val);
-      for (c = 0; c < 3; ++c)
-         src[c] = mkOp2v(OP_MUL, TYPE_F32, getSSA(), arg[c], val);
    }
 
    for (c = 0, d = 0; c < 4; ++c) {

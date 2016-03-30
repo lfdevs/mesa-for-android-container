@@ -52,6 +52,7 @@
 #include <unistd.h>
 
 #define VMW_MAX_DEFAULT_TEXTURE_SIZE   (128 * 1024 * 1024)
+#define VMW_FENCE_TIMEOUT_SECONDS 60
 
 struct vmw_region
 {
@@ -721,7 +722,7 @@ vmw_ioctl_fence_finish(struct vmw_winsys_screen *vws,
    memset(&arg, 0, sizeof(arg));
 
    arg.handle = handle;
-   arg.timeout_us = 10*1000000;
+   arg.timeout_us = VMW_FENCE_TIMEOUT_SECONDS*1000000;
    arg.lazy = 0;
    arg.flags = vflags;
 
