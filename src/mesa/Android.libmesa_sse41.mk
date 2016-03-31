@@ -1,4 +1,6 @@
 # Copyright 2012 Intel Corporation
+# Copyright (C) 2010-2011 Chia-I Wu <olvaffe@gmail.com>
+# Copyright (C) 2010-2011 LunarG Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -18,12 +20,25 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+ifeq ($(ARCH_X86_HAVE_SSE4_1),true)
+
 LOCAL_PATH := $(call my-dir)
 
-include $(LOCAL_PATH)/Android.mesa_gen_matypes.mk
-include $(LOCAL_PATH)/Android.libmesa_glsl_utils.mk
-include $(LOCAL_PATH)/Android.libmesa_dricore.mk
-include $(LOCAL_PATH)/Android.libmesa_st_mesa.mk
-include $(LOCAL_PATH)/Android.libmesa_sse41.mk
+include $(LOCAL_PATH)/Makefile.sources
 
-include $(LOCAL_PATH)/program/Android.mk
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := libmesa_sse41
+
+LOCAL_SRC_FILES += \
+	$(X86_SSE41_FILES)
+
+LOCAL_C_INCLUDES := \
+	$(MESA_TOP)/src/mapi \
+	$(MESA_TOP)/src/gallium/include \
+	$(MESA_TOP)/src/gallium/auxiliary
+
+include $(MESA_COMMON_MK)
+include $(BUILD_STATIC_LIBRARY)
+
+endif

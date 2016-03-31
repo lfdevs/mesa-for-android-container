@@ -372,7 +372,8 @@ NV50LegalizeSSA::propagateWriteToOutput(Instruction *st)
       return;
 
    for (int s = 0; di->srcExists(s); ++s)
-      if (di->src(s).getFile() == FILE_IMMEDIATE)
+      if (di->src(s).getFile() == FILE_IMMEDIATE ||
+          di->src(s).getFile() == FILE_MEMORY_LOCAL)
          return;
 
    if (prog->getType() == Program::TYPE_GEOMETRY) {
@@ -724,23 +725,6 @@ NV50LoweringPreSSA::handleTEX(TexInstruction *i)
    const int dref = arg;
    const int lod = i->tex.target.isShadow() ? (arg + 1) : arg;
 
-   /* Only normalize in the non-explicit derivatives case.
-    */
-   if (i->tex.target.isCube() && i->op != OP_TXD) {
-      Value *src[3], *val;
-      int c;
-      for (c = 0; c < 3; ++c)
-         src[c] = bld.mkOp1v(OP_ABS, TYPE_F32, bld.getSSA(), i->getSrc(c));
-      val = bld.getScratch();
-      bld.mkOp2(OP_MAX, TYPE_F32, val, src[0], src[1]);
-      bld.mkOp2(OP_MAX, TYPE_F32, val, src[2], val);
-      bld.mkOp1(OP_RCP, TYPE_F32, val, val);
-      for (c = 0; c < 3; ++c) {
-         i->setSrc(c, bld.mkOp2v(OP_MUL, TYPE_F32, bld.getSSA(),
-                                 i->getSrc(c), val));
-      }
-   }
-
    // handle MS, which means looking up the MS params for this texture, and
    // adjusting the input coordinates to point at the right sample.
    if (i->tex.target.isMS()) {
@@ -958,7 +942,6 @@ NV50LoweringPreSSA::handleTXD(TexInstruction *i)
 
    bld.mkOp(OP_QUADON, TYPE_NONE, NULL);
    for (l = 0; l < 4; ++l) {
-      Value *src[3], *val;
       // mov coordinates from lane l to all lanes
       for (c = 0; c < dim; ++c)
          bld.mkQuadop(0x00, crd[c], l, i->getSrc(c), zero);
@@ -968,24 +951,10 @@ NV50LoweringPreSSA::handleTXD(TexInstruction *i)
       // add dPdy from lane l to lanes dy
       for (c = 0; c < dim; ++c)
          bld.mkQuadop(qOps[l][1], crd[c], l, i->dPdy[c].get(), crd[c]);
-      // normalize cube coordinates if necessary
-      if (i->tex.target.isCube()) {
-         for (c = 0; c < 3; ++c)
-            src[c] = bld.mkOp1v(OP_ABS, TYPE_F32, bld.getSSA(), crd[c]);
-         val = bld.getScratch();
-         bld.mkOp2(OP_MAX, TYPE_F32, val, src[0], src[1]);
-         bld.mkOp2(OP_MAX, TYPE_F32, val, src[2], val);
-         bld.mkOp1(OP_RCP, TYPE_F32, val, val);
-         for (c = 0; c < 3; ++c)
-            src[c] = bld.mkOp2v(OP_MUL, TYPE_F32, bld.getSSA(), crd[c], val);
-      } else {
-         for (c = 0; c < dim; ++c)
-            src[c] = crd[c];
-      }
       // texture
       bld.insert(tex = cloneForward(func, i));
       for (c = 0; c < dim; ++c)
-         tex->setSrc(c, src[c]);
+         tex->setSrc(c, crd[c]);
       // save results
       for (c = 0; i->defExists(c); ++c) {
          Instruction *mov;

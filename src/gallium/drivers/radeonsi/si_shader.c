@@ -39,6 +39,7 @@
 #include "radeon/radeon_llvm_emit.h"
 #include "util/u_memory.h"
 #include "util/u_pstipple.h"
+#include "util/u_string.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
 #include "tgsi/tgsi_dump.h"
@@ -4426,7 +4427,7 @@ static void si_shader_dump_disassembly(const struct radeon_shader_binary *binary
 
 			line = binary->disasm_string;
 			while (*line) {
-				p = strchrnul(line, '\n');
+				p = util_strchrnul(line, '\n');
 				count = p - line;
 
 				if (count) {

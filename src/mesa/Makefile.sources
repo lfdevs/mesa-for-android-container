@@ -586,6 +586,10 @@ X86_64_FILES =		\
 	x86-64/x86-64.h	\
 	x86-64/xform4.S
 
+X86_SSE41_FILES = \
+	main/streaming-load-memcpy.c \
+	main/sse_minmax.c
+
 SPARC_FILES =			\
 	sparc/sparc.h		\
 	sparc/sparc_clip.S	\

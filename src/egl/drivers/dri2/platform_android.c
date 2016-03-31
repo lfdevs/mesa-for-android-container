@@ -537,6 +537,8 @@ droid_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *dpy)
    EGLint config_attrs[] = {
      EGL_NATIVE_VISUAL_ID,   0,
      EGL_NATIVE_VISUAL_TYPE, 0,
+     EGL_FRAMEBUFFER_TARGET_ANDROID, EGL_TRUE,
+     EGL_RECORDABLE_ANDROID, EGL_TRUE,
      EGL_NONE
    };
    int count, i, j;
@@ -714,7 +716,9 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *dpy)
       goto cleanup_screen;
    }
 
+   dpy->Extensions.ANDROID_framebuffer_target = EGL_TRUE;
    dpy->Extensions.ANDROID_image_native_buffer = EGL_TRUE;
+   dpy->Extensions.ANDROID_recordable = EGL_TRUE;
    dpy->Extensions.KHR_image_base = EGL_TRUE;
 
    /* Fill vtbl last to prevent accidentally calling virtual function during

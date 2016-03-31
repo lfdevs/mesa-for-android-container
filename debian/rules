@@ -154,6 +154,8 @@ override_dh_auto_install:
 			$${file} > $${file%%.in}; \
 	done
 
+override_dh_auto_test:
+
 allpkg = $(shell dh_listpackages -s)
 
 override_dh_installchangelogs:

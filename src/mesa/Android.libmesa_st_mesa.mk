@@ -47,6 +47,8 @@ endif # x86
 endif # MESA_ENABLE_ASM
 
 ifeq ($(ARCH_X86_HAVE_SSE4_1),true)
+LOCAL_WHOLE_STATIC_LIBRARIES := \
+	libmesa_sse41
 LOCAL_CFLAGS := \
        -DUSE_SSE41
 endif
@@ -58,7 +60,7 @@ LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/gallium/auxiliary \
 	$(MESA_TOP)/src/gallium/include
 
-LOCAL_WHOLE_STATIC_LIBRARIES := \
+LOCAL_WHOLE_STATIC_LIBRARIES += \
 	libmesa_program
 
 include $(LOCAL_PATH)/Android.gen.mk
