@@ -280,6 +280,7 @@ vlVaDestroyImage(VADriverContextP ctx, VAImageID image)
 {
    vlVaDriver *drv;
    VAImage  *vaimage;
+   VAStatus status;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -294,8 +295,9 @@ vlVaDestroyImage(VADriverContextP ctx, VAImageID image)
 
    handle_table_remove(VL_VA_DRIVER(ctx)->htab, image);
    pipe_mutex_unlock(drv->mutex);
+   status = vlVaDestroyBuffer(ctx, vaimage->buf);
    FREE(vaimage);
-   return vlVaDestroyBuffer(ctx, vaimage->buf);
+   return status;
 }
 
 VAStatus

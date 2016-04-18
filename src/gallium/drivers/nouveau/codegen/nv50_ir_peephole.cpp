@@ -2825,7 +2825,7 @@ FlatteningPass::visit(BasicBlock *bb)
              !isSurfaceOp(insn->op) && // not confirmed
              insn->op != OP_LINTERP && // probably just nve4
              insn->op != OP_PINTERP && // probably just nve4
-             ((insn->op != OP_LOAD && insn->op != OP_STORE) ||
+             ((insn->op != OP_LOAD && insn->op != OP_STORE && insn->op != OP_ATOM) ||
               (typeSizeof(insn->dType) <= 4 && !insn->src(0).isIndirect(0))) &&
              !insn->isNop()) {
             insn->join = 1;

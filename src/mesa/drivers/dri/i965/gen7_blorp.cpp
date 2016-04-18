@@ -55,11 +55,8 @@ gen7_blorp_emit_urb_config(struct brw_context *brw)
                                  0 /* gs_size */,
                                  urb_size / 2 /* fs_size */);
 
-   /* The minimum valid number of VS entries is 32. See 3DSTATE_URB_VS, Dword
-    * 1.15:0 "VS Number of URB Entries".
-    */
    gen7_emit_urb_state(brw,
-                       32 /* num_vs_entries */,
+                       brw->urb.min_vs_entries /* num_vs_entries */,
                        2 /* vs_size */,
                        2 /* vs_start */,
                        0 /* num_hs_entries */,

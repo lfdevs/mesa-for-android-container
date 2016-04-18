@@ -56,48 +56,16 @@ static const uint32_t ytile_width = 128;
 static const uint32_t ytile_height = 32;
 static const uint32_t ytile_span = 16;
 
-#ifdef __SSSE3__
-static const uint8_t rgba8_permutation[16] =
-   { 2,1,0,3, 6,5,4,7, 10,9,8,11, 14,13,12,15 };
-
-/* NOTE: dst must be 16-byte aligned. src may be unaligned. */
-#define rgba8_copy_16_aligned_dst(dst, src)                            \
-   _mm_store_si128((__m128i *)(dst),                                   \
-                   _mm_shuffle_epi8(_mm_loadu_si128((__m128i *)(src)), \
-                                    *(__m128i *) rgba8_permutation))
-
-/* NOTE: src must be 16-byte aligned. dst may be unaligned. */
-#define rgba8_copy_16_aligned_src(dst, src)                            \
-   _mm_storeu_si128((__m128i *)(dst),                                  \
-                    _mm_shuffle_epi8(_mm_load_si128((__m128i *)(src)), \
-                                     *(__m128i *) rgba8_permutation))
-#endif
-
 /**
- * Copy RGBA to BGRA - swap R and B, with the destination 16-byte aligned.
+ * Copy RGBA to BGRA - swap R and B.
  */
 static inline void *
-rgba8_copy_aligned_dst(void *dst, const void *src, size_t bytes)
+rgba8_copy(void *dst, const void *src, size_t bytes)
 {
    uint8_t *d = dst;
    uint8_t const *s = src;
 
-#ifdef __SSSE3__
-   if (bytes == 16) {
-      assert(!(((uintptr_t)dst) & 0xf));
-      rgba8_copy_16_aligned_dst(d+ 0, s+ 0);
-      return dst;
-   }
-
-   if (bytes == 64) {
-      assert(!(((uintptr_t)dst) & 0xf));
-      rgba8_copy_16_aligned_dst(d+ 0, s+ 0);
-      rgba8_copy_16_aligned_dst(d+16, s+16);
-      rgba8_copy_16_aligned_dst(d+32, s+32);
-      rgba8_copy_16_aligned_dst(d+48, s+48);
-      return dst;
-   }
-#endif
+   assert(bytes % 4 == 0);
 
    while (bytes >= 4) {
       d[0] = s[2];
@@ -111,6 +79,38 @@ rgba8_copy_aligned_dst(void *dst, const void *src, size_t bytes)
    return dst;
 }
 
+#ifdef __SSSE3__
+static const uint8_t rgba8_permutation[16] =
+   { 2,1,0,3, 6,5,4,7, 10,9,8,11, 14,13,12,15 };
+#endif
+
+/**
+ * Copy RGBA to BGRA - swap R and B, with the destination 16-byte aligned.
+ */
+static inline void *
+rgba8_copy_aligned_dst(void *dst, const void *src, size_t bytes)
+{
+   uint8_t *d = dst;
+   uint8_t const *s = src;
+
+   assert(bytes == 0 || !(((uintptr_t)dst) & 0xf));
+
+#ifdef __SSSE3__
+   while (bytes >= 16) {
+      _mm_store_si128((__m128i *)d,
+                      _mm_shuffle_epi8(_mm_loadu_si128((__m128i *)s),
+                                       *(__m128i *) rgba8_permutation));
+      s += 16;
+      d += 16;
+      bytes -= 16;
+   }
+#endif
+
+   rgba8_copy(d, s, bytes);
+
+   return dst;
+}
+
 /**
  * Copy RGBA to BGRA - swap R and B, with the source 16-byte aligned.
  */
@@ -120,32 +120,21 @@ rgba8_copy_aligned_src(void *dst, const void *src, size_t bytes)
    uint8_t *d = dst;
    uint8_t const *s = src;
 
-#ifdef __SSSE3__
-   if (bytes == 16) {
-      assert(!(((uintptr_t)src) & 0xf));
-      rgba8_copy_16_aligned_src(d+ 0, s+ 0);
-      return dst;
-   }
+   assert(bytes == 0 || !(((uintptr_t)src) & 0xf));
 
-   if (bytes == 64) {
-      assert(!(((uintptr_t)src) & 0xf));
-      rgba8_copy_16_aligned_src(d+ 0, s+ 0);
-      rgba8_copy_16_aligned_src(d+16, s+16);
-      rgba8_copy_16_aligned_src(d+32, s+32);
-      rgba8_copy_16_aligned_src(d+48, s+48);
-      return dst;
+#ifdef __SSSE3__
+   while (bytes >= 16) {
+      _mm_storeu_si128((__m128i *)d,
+                       _mm_shuffle_epi8(_mm_load_si128((__m128i *)s),
+                                        *(__m128i *) rgba8_permutation));
+      s += 16;
+      d += 16;
+      bytes -= 16;
    }
 #endif
 
-   while (bytes >= 4) {
-      d[0] = s[2];
-      d[1] = s[1];
-      d[2] = s[0];
-      d[3] = s[3];
-      d += 4;
-      s += 4;
-      bytes -= 4;
-   }
+   rgba8_copy(d, s, bytes);
+
    return dst;
 }
 
@@ -172,6 +161,12 @@ typedef void (*tile_copy_fn)(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
  * Copy texture data from linear to X tile layout.
  *
  * \copydoc tile_copy_fn
+ *
+ * The mem_copy parameters allow the user to specify an alternative mem_copy
+ * function that, for instance, may do RGBA -> BGRA swizzling.  The first
+ * function must handle any memory alignment while the second function must
+ * only handle 16-byte alignment in whichever side (source or destination) is
+ * tiled.
  */
 static inline void
 linear_to_xtiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
@@ -179,7 +174,8 @@ linear_to_xtiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
                  char *dst, const char *src,
                  int32_t src_pitch,
                  uint32_t swizzle_bit,
-                 mem_copy_fn mem_copy)
+                 mem_copy_fn mem_copy,
+                 mem_copy_fn mem_copy_align16)
 {
    /* The copy destination offset for each range copied is the sum of
     * an X offset 'x0' or 'xo' and a Y offset 'yo.'
@@ -200,10 +196,10 @@ linear_to_xtiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
       mem_copy(dst + ((x0 + yo) ^ swizzle), src + x0, x1 - x0);
 
       for (xo = x1; xo < x2; xo += xtile_span) {
-         mem_copy(dst + ((xo + yo) ^ swizzle), src + xo, xtile_span);
+         mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + xo, xtile_span);
       }
 
-      mem_copy(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
+      mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
 
       src += src_pitch;
    }
@@ -220,7 +216,8 @@ linear_to_ytiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
                  char *dst, const char *src,
                  int32_t src_pitch,
                  uint32_t swizzle_bit,
-                 mem_copy_fn mem_copy)
+                 mem_copy_fn mem_copy,
+                 mem_copy_fn mem_copy_align16)
 {
    /* Y tiles consist of columns that are 'ytile_span' wide (and the same height
     * as the tile).  Thus the destination offset for (x,y) is the sum of:
@@ -259,12 +256,12 @@ linear_to_ytiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
        * at each step so we don't need to calculate it explicitly.
        */
       for (x = x1; x < x2; x += ytile_span) {
-         mem_copy(dst + ((xo + yo) ^ swizzle), src + x, ytile_span);
+         mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x, ytile_span);
          xo += bytes_per_column;
          swizzle ^= swizzle_bit;
       }
 
-      mem_copy(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
+      mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
 
       src += src_pitch;
    }
@@ -281,7 +278,8 @@ xtiled_to_linear(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
                  char *dst, const char *src,
                  int32_t dst_pitch,
                  uint32_t swizzle_bit,
-                 mem_copy_fn mem_copy)
+                 mem_copy_fn mem_copy,
+                 mem_copy_fn mem_copy_align16)
 {
    /* The copy destination offset for each range copied is the sum of
     * an X offset 'x0' or 'xo' and a Y offset 'yo.'
@@ -302,10 +300,10 @@ xtiled_to_linear(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
       mem_copy(dst + x0, src + ((x0 + yo) ^ swizzle), x1 - x0);
 
       for (xo = x1; xo < x2; xo += xtile_span) {
-         mem_copy(dst + xo, src + ((xo + yo) ^ swizzle), xtile_span);
+         mem_copy_align16(dst + xo, src + ((xo + yo) ^ swizzle), xtile_span);
       }
 
-      mem_copy(dst + x2, src + ((xo + yo) ^ swizzle), x3 - x2);
+      mem_copy_align16(dst + x2, src + ((xo + yo) ^ swizzle), x3 - x2);
 
       dst += dst_pitch;
    }
@@ -322,7 +320,8 @@ ytiled_to_linear(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
                  char *dst, const char *src,
                  int32_t dst_pitch,
                  uint32_t swizzle_bit,
-                 mem_copy_fn mem_copy)
+                 mem_copy_fn mem_copy,
+                 mem_copy_fn mem_copy_align16)
 {
    /* Y tiles consist of columns that are 'ytile_span' wide (and the same height
     * as the tile).  Thus the destination offset for (x,y) is the sum of:
@@ -361,12 +360,12 @@ ytiled_to_linear(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
        * at each step so we don't need to calculate it explicitly.
        */
       for (x = x1; x < x2; x += ytile_span) {
-         mem_copy(dst + x, src + ((xo + yo) ^ swizzle), ytile_span);
+         mem_copy_align16(dst + x, src + ((xo + yo) ^ swizzle), ytile_span);
          xo += bytes_per_column;
          swizzle ^= swizzle_bit;
       }
 
-      mem_copy(dst + x2, src + ((xo + yo) ^ swizzle), x3 - x2);
+      mem_copy_align16(dst + x2, src + ((xo + yo) ^ swizzle), x3 - x2);
 
       dst += dst_pitch;
    }
@@ -393,26 +392,27 @@ linear_to_xtiled_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
    if (x0 == 0 && x3 == xtile_width && y0 == 0 && y1 == xtile_height) {
       if (mem_copy == memcpy)
          return linear_to_xtiled(0, 0, xtile_width, xtile_width, 0, xtile_height,
-                                 dst, src, src_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy_aligned_dst)
+                                 dst, src, src_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
          return linear_to_xtiled(0, 0, xtile_width, xtile_width, 0, xtile_height,
                                  dst, src, src_pitch, swizzle_bit,
-                                 rgba8_copy_aligned_dst);
+                                 rgba8_copy, rgba8_copy_aligned_dst);
       else
          unreachable("not reached");
    } else {
       if (mem_copy == memcpy)
          return linear_to_xtiled(x0, x1, x2, x3, y0, y1,
-                                 dst, src, src_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy_aligned_dst)
+                                 dst, src, src_pitch, swizzle_bit,
+                                 memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
          return linear_to_xtiled(x0, x1, x2, x3, y0, y1,
                                  dst, src, src_pitch, swizzle_bit,
-                                 rgba8_copy_aligned_dst);
+                                 rgba8_copy, rgba8_copy_aligned_dst);
       else
          unreachable("not reached");
    }
    linear_to_xtiled(x0, x1, x2, x3, y0, y1,
-                    dst, src, src_pitch, swizzle_bit, mem_copy);
+                    dst, src, src_pitch, swizzle_bit, mem_copy, mem_copy);
 }
 
 /**
@@ -435,26 +435,26 @@ linear_to_ytiled_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
    if (x0 == 0 && x3 == ytile_width && y0 == 0 && y1 == ytile_height) {
       if (mem_copy == memcpy)
          return linear_to_ytiled(0, 0, ytile_width, ytile_width, 0, ytile_height,
-                                 dst, src, src_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy_aligned_dst)
+                                 dst, src, src_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
          return linear_to_ytiled(0, 0, ytile_width, ytile_width, 0, ytile_height,
                                  dst, src, src_pitch, swizzle_bit,
-                                 rgba8_copy_aligned_dst);
+                                 rgba8_copy, rgba8_copy_aligned_dst);
       else
          unreachable("not reached");
    } else {
       if (mem_copy == memcpy)
          return linear_to_ytiled(x0, x1, x2, x3, y0, y1,
-                                 dst, src, src_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy_aligned_dst)
+                                 dst, src, src_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
          return linear_to_ytiled(x0, x1, x2, x3, y0, y1,
                                  dst, src, src_pitch, swizzle_bit,
-                                 rgba8_copy_aligned_dst);
+                                 rgba8_copy, rgba8_copy_aligned_dst);
       else
          unreachable("not reached");
    }
    linear_to_ytiled(x0, x1, x2, x3, y0, y1,
-                    dst, src, src_pitch, swizzle_bit, mem_copy);
+                    dst, src, src_pitch, swizzle_bit, mem_copy, mem_copy);
 }
 
 /**
@@ -477,26 +477,26 @@ xtiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
    if (x0 == 0 && x3 == xtile_width && y0 == 0 && y1 == xtile_height) {
       if (mem_copy == memcpy)
          return xtiled_to_linear(0, 0, xtile_width, xtile_width, 0, xtile_height,
-                                 dst, src, dst_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy_aligned_src)
+                                 dst, src, dst_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
          return xtiled_to_linear(0, 0, xtile_width, xtile_width, 0, xtile_height,
                                  dst, src, dst_pitch, swizzle_bit,
-                                 rgba8_copy_aligned_src);
+                                 rgba8_copy, rgba8_copy_aligned_src);
       else
          unreachable("not reached");
    } else {
       if (mem_copy == memcpy)
          return xtiled_to_linear(x0, x1, x2, x3, y0, y1,
-                                 dst, src, dst_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy_aligned_src)
+                                 dst, src, dst_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
          return xtiled_to_linear(x0, x1, x2, x3, y0, y1,
                                  dst, src, dst_pitch, swizzle_bit,
-                                 rgba8_copy_aligned_src);
+                                 rgba8_copy, rgba8_copy_aligned_src);
       else
          unreachable("not reached");
    }
    xtiled_to_linear(x0, x1, x2, x3, y0, y1,
-                    dst, src, dst_pitch, swizzle_bit, mem_copy);
+                    dst, src, dst_pitch, swizzle_bit, mem_copy, mem_copy);
 }
 
 /**
@@ -519,26 +519,26 @@ ytiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
    if (x0 == 0 && x3 == ytile_width && y0 == 0 && y1 == ytile_height) {
       if (mem_copy == memcpy)
          return ytiled_to_linear(0, 0, ytile_width, ytile_width, 0, ytile_height,
-                                 dst, src, dst_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy_aligned_src)
+                                 dst, src, dst_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
          return ytiled_to_linear(0, 0, ytile_width, ytile_width, 0, ytile_height,
                                  dst, src, dst_pitch, swizzle_bit,
-                                 rgba8_copy_aligned_src);
+                                 rgba8_copy, rgba8_copy_aligned_src);
       else
          unreachable("not reached");
    } else {
       if (mem_copy == memcpy)
          return ytiled_to_linear(x0, x1, x2, x3, y0, y1,
-                                 dst, src, dst_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy_aligned_src)
+                                 dst, src, dst_pitch, swizzle_bit, memcpy, memcpy);
+      else if (mem_copy == rgba8_copy)
          return ytiled_to_linear(x0, x1, x2, x3, y0, y1,
                                  dst, src, dst_pitch, swizzle_bit,
-                                 rgba8_copy_aligned_src);
+                                 rgba8_copy, rgba8_copy_aligned_src);
       else
          unreachable("not reached");
    }
    ytiled_to_linear(x0, x1, x2, x3, y0, y1,
-                    dst, src, dst_pitch, swizzle_bit, mem_copy);
+                    dst, src, dst_pitch, swizzle_bit, mem_copy, mem_copy);
 }
 
 /**
@@ -762,8 +762,7 @@ bool intel_get_memcpy(mesa_format tiledFormat, GLenum format,
       if (format == GL_BGRA) {
          *mem_copy = memcpy;
       } else if (format == GL_RGBA) {
-         *mem_copy = direction == INTEL_UPLOAD ? rgba8_copy_aligned_dst
-                                               : rgba8_copy_aligned_src;
+         *mem_copy = rgba8_copy;
       }
    } else if ((tiledFormat == MESA_FORMAT_R8G8B8A8_UNORM) ||
               (tiledFormat == MESA_FORMAT_R8G8B8X8_UNORM)) {
@@ -772,8 +771,7 @@ bool intel_get_memcpy(mesa_format tiledFormat, GLenum format,
          /* Copying from RGBA to BGRA is the same as BGRA to RGBA so we can
           * use the same function.
           */
-         *mem_copy = direction == INTEL_UPLOAD ? rgba8_copy_aligned_dst
-                                               : rgba8_copy_aligned_src;
+         *mem_copy = rgba8_copy;
       } else if (format == GL_RGBA) {
          *mem_copy = memcpy;
       }

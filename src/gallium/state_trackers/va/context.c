@@ -283,6 +283,10 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
    drv = VL_VA_DRIVER(ctx);
    pipe_mutex_lock(drv->mutex);
    context = handle_table_get(drv->htab, context_id);
+   if (!context) {
+      pipe_mutex_unlock(drv->mutex);
+      return VA_STATUS_ERROR_INVALID_CONTEXT;
+   }
 
    if (context->decoder) {
       if (u_reduce_video_profile(context->decoder->profile) ==

@@ -40,6 +40,7 @@
 #include "main/glformats.h"
 #include "main/macros.h"
 #include "main/renderbuffer.h"
+#include "main/state.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
@@ -729,6 +730,7 @@ st_ReadBuffer(struct gl_context *ctx, GLenum buffer)
        fb->Attachment[fb->_ColorReadBufferIndex].Type == GL_NONE) {
       /* add the buffer */
       st_manager_add_color_renderbuffer(st, fb, fb->_ColorReadBufferIndex);
+      _mesa_update_state(ctx);
       st_validate_state(st, ST_PIPELINE_RENDER);
    }
 }

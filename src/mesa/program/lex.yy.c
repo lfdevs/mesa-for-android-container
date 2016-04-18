@@ -978,8 +978,8 @@ static yyconst flex_int16_t yy_chk[1276] =
 #define yymore() yymore_used_but_not_detected
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
-#line 1 "../../../src/mesa/program/program_lexer.l"
-#line 2 "../../../src/mesa/program/program_lexer.l"
+#line 1 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
+#line 2 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 /*
  * Copyright © 2009 Intel Corporation
  *
@@ -1420,7 +1420,7 @@ YY_DECL
 		}
 
 	{
-#line 171 "../../../src/mesa/program/program_lexer.l"
+#line 171 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 
 
 #line 1427 "program/lex.yy.c"
@@ -1482,17 +1482,17 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 173 "../../../src/mesa/program/program_lexer.l"
+#line 173 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return ARBvp_10; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 174 "../../../src/mesa/program/program_lexer.l"
+#line 174 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return ARBfp_10; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 175 "../../../src/mesa/program/program_lexer.l"
+#line 175 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->integer = at_address;
    return_token_or_IDENTIFIER(require_ARB_vp, ADDRESS);
@@ -1500,632 +1500,632 @@ YY_RULE_SETUP
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 179 "../../../src/mesa/program/program_lexer.l"
+#line 179 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return ALIAS; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 180 "../../../src/mesa/program/program_lexer.l"
+#line 180 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return ATTRIB; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 181 "../../../src/mesa/program/program_lexer.l"
+#line 181 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return END; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 182 "../../../src/mesa/program/program_lexer.l"
+#line 182 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return OPTION; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 183 "../../../src/mesa/program/program_lexer.l"
+#line 183 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return OUTPUT; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 184 "../../../src/mesa/program/program_lexer.l"
+#line 184 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return PARAM; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 185 "../../../src/mesa/program/program_lexer.l"
+#line 185 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { yylval->integer = at_temp; return TEMP; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 187 "../../../src/mesa/program/program_lexer.l"
+#line 187 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, ABS, 3); }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 188 "../../../src/mesa/program/program_lexer.l"
+#line 188 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, ADD, 3); }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 189 "../../../src/mesa/program/program_lexer.l"
+#line 189 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_vp, ARL, ARL, 3); }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 191 "../../../src/mesa/program/program_lexer.l"
+#line 191 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, TRI_OP, CMP, 3); }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 192 "../../../src/mesa/program/program_lexer.l"
+#line 192 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, SCALAR_OP, COS, 3); }
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 194 "../../../src/mesa/program/program_lexer.l"
+#line 194 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_NV_fp,  VECTOR_OP, DDX, 3); }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 195 "../../../src/mesa/program/program_lexer.l"
+#line 195 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_NV_fp,  VECTOR_OP, DDY, 3); }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 196 "../../../src/mesa/program/program_lexer.l"
+#line 196 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, DP3, 3); }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 197 "../../../src/mesa/program/program_lexer.l"
+#line 197 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, DP4, 3); }
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 198 "../../../src/mesa/program/program_lexer.l"
+#line 198 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, DPH, 3); }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 199 "../../../src/mesa/program/program_lexer.l"
+#line 199 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, DST, 3); }
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 201 "../../../src/mesa/program/program_lexer.l"
+#line 201 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, SCALAR_OP, EX2, 3); }
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 202 "../../../src/mesa/program/program_lexer.l"
+#line 202 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_vp, SCALAR_OP, EXP, 3); }
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 204 "../../../src/mesa/program/program_lexer.l"
+#line 204 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, FLR, 3); }
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 205 "../../../src/mesa/program/program_lexer.l"
+#line 205 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, FRC, 3); }
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 207 "../../../src/mesa/program/program_lexer.l"
+#line 207 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, KIL, KIL, 3); }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 209 "../../../src/mesa/program/program_lexer.l"
+#line 209 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, LIT, 3); }
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 210 "../../../src/mesa/program/program_lexer.l"
+#line 210 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, SCALAR_OP, LG2, 3); }
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 211 "../../../src/mesa/program/program_lexer.l"
+#line 211 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_vp, SCALAR_OP, LOG, 3); }
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 212 "../../../src/mesa/program/program_lexer.l"
+#line 212 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, TRI_OP, LRP, 3); }
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 214 "../../../src/mesa/program/program_lexer.l"
+#line 214 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, TRI_OP, MAD, 3); }
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 215 "../../../src/mesa/program/program_lexer.l"
+#line 215 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, MAX, 3); }
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 216 "../../../src/mesa/program/program_lexer.l"
+#line 216 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, MIN, 3); }
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 217 "../../../src/mesa/program/program_lexer.l"
+#line 217 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, MOV, 3); }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 218 "../../../src/mesa/program/program_lexer.l"
+#line 218 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, MUL, 3); }
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 220 "../../../src/mesa/program/program_lexer.l"
+#line 220 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BINSC_OP, POW, 3); }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 222 "../../../src/mesa/program/program_lexer.l"
+#line 222 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, SCALAR_OP, RCP, 3); }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 223 "../../../src/mesa/program/program_lexer.l"
+#line 223 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, SCALAR_OP, RSQ, 3); }
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 225 "../../../src/mesa/program/program_lexer.l"
+#line 225 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, SCALAR_OP, SCS, 3); }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 226 "../../../src/mesa/program/program_lexer.l"
+#line 226 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SEQ, 3); }
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 227 "../../../src/mesa/program/program_lexer.l"
+#line 227 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, SGE, 3); }
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 228 "../../../src/mesa/program/program_lexer.l"
+#line 228 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SGT, 3); }
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 229 "../../../src/mesa/program/program_lexer.l"
+#line 229 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, SCALAR_OP, SIN, 3); }
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 230 "../../../src/mesa/program/program_lexer.l"
+#line 230 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SLE, 3); }
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 231 "../../../src/mesa/program/program_lexer.l"
+#line 231 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, SLT, 3); }
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 232 "../../../src/mesa/program/program_lexer.l"
+#line 232 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SNE, 3); }
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 233 "../../../src/mesa/program/program_lexer.l"
+#line 233 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, SUB, 3); }
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 234 "../../../src/mesa/program/program_lexer.l"
+#line 234 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, SWZ, SWZ, 3); }
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 236 "../../../src/mesa/program/program_lexer.l"
+#line 236 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, SAMPLE_OP, TEX, 3); }
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 237 "../../../src/mesa/program/program_lexer.l"
+#line 237 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, SAMPLE_OP, TXB, 3); }
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 238 "../../../src/mesa/program/program_lexer.l"
+#line 238 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_NV_fp,  TXD_OP, TXD, 3); }
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 239 "../../../src/mesa/program/program_lexer.l"
+#line 239 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(require_ARB_fp, SAMPLE_OP, TXP, 3); }
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 241 "../../../src/mesa/program/program_lexer.l"
+#line 241 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_opcode(             1, BIN_OP, XPD, 3); }
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 243 "../../../src/mesa/program/program_lexer.l"
+#line 243 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_vp, VERTEX); }
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 244 "../../../src/mesa/program/program_lexer.l"
+#line 244 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, FRAGMENT); }
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 245 "../../../src/mesa/program/program_lexer.l"
+#line 245 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return PROGRAM; }
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 246 "../../../src/mesa/program/program_lexer.l"
+#line 246 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return STATE; }
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 247 "../../../src/mesa/program/program_lexer.l"
+#line 247 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return RESULT; }
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 249 "../../../src/mesa/program/program_lexer.l"
+#line 249 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return AMBIENT; }
 	YY_BREAK
 case 60:
 YY_RULE_SETUP
-#line 250 "../../../src/mesa/program/program_lexer.l"
+#line 250 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return ATTENUATION; }
 	YY_BREAK
 case 61:
 YY_RULE_SETUP
-#line 251 "../../../src/mesa/program/program_lexer.l"
+#line 251 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return BACK; }
 	YY_BREAK
 case 62:
 YY_RULE_SETUP
-#line 252 "../../../src/mesa/program/program_lexer.l"
+#line 252 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, CLIP); }
 	YY_BREAK
 case 63:
 YY_RULE_SETUP
-#line 253 "../../../src/mesa/program/program_lexer.l"
+#line 253 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return COLOR; }
 	YY_BREAK
 case 64:
 YY_RULE_SETUP
-#line 254 "../../../src/mesa/program/program_lexer.l"
+#line 254 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_fp, DEPTH); }
 	YY_BREAK
 case 65:
 YY_RULE_SETUP
-#line 255 "../../../src/mesa/program/program_lexer.l"
+#line 255 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return DIFFUSE; }
 	YY_BREAK
 case 66:
 YY_RULE_SETUP
-#line 256 "../../../src/mesa/program/program_lexer.l"
+#line 256 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return DIRECTION; }
 	YY_BREAK
 case 67:
 YY_RULE_SETUP
-#line 257 "../../../src/mesa/program/program_lexer.l"
+#line 257 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return EMISSION; }
 	YY_BREAK
 case 68:
 YY_RULE_SETUP
-#line 258 "../../../src/mesa/program/program_lexer.l"
+#line 258 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return ENV; }
 	YY_BREAK
 case 69:
 YY_RULE_SETUP
-#line 259 "../../../src/mesa/program/program_lexer.l"
+#line 259 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return EYE; }
 	YY_BREAK
 case 70:
 YY_RULE_SETUP
-#line 260 "../../../src/mesa/program/program_lexer.l"
+#line 260 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return FOGCOORD; }
 	YY_BREAK
 case 71:
 YY_RULE_SETUP
-#line 261 "../../../src/mesa/program/program_lexer.l"
+#line 261 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return FOG; }
 	YY_BREAK
 case 72:
 YY_RULE_SETUP
-#line 262 "../../../src/mesa/program/program_lexer.l"
+#line 262 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return FRONT; }
 	YY_BREAK
 case 73:
 YY_RULE_SETUP
-#line 263 "../../../src/mesa/program/program_lexer.l"
+#line 263 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return HALF; }
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
-#line 264 "../../../src/mesa/program/program_lexer.l"
+#line 264 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return INVERSE; }
 	YY_BREAK
 case 75:
 YY_RULE_SETUP
-#line 265 "../../../src/mesa/program/program_lexer.l"
+#line 265 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return INVTRANS; }
 	YY_BREAK
 case 76:
 YY_RULE_SETUP
-#line 266 "../../../src/mesa/program/program_lexer.l"
+#line 266 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return LIGHT; }
 	YY_BREAK
 case 77:
 YY_RULE_SETUP
-#line 267 "../../../src/mesa/program/program_lexer.l"
+#line 267 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return LIGHTMODEL; }
 	YY_BREAK
 case 78:
 YY_RULE_SETUP
-#line 268 "../../../src/mesa/program/program_lexer.l"
+#line 268 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return LIGHTPROD; }
 	YY_BREAK
 case 79:
 YY_RULE_SETUP
-#line 269 "../../../src/mesa/program/program_lexer.l"
+#line 269 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return LOCAL; }
 	YY_BREAK
 case 80:
 YY_RULE_SETUP
-#line 270 "../../../src/mesa/program/program_lexer.l"
+#line 270 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return MATERIAL; }
 	YY_BREAK
 case 81:
 YY_RULE_SETUP
-#line 271 "../../../src/mesa/program/program_lexer.l"
+#line 271 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return MAT_PROGRAM; }
 	YY_BREAK
 case 82:
 YY_RULE_SETUP
-#line 272 "../../../src/mesa/program/program_lexer.l"
+#line 272 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return MATRIX; }
 	YY_BREAK
 case 83:
 YY_RULE_SETUP
-#line 273 "../../../src/mesa/program/program_lexer.l"
+#line 273 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, MATRIXINDEX); }
 	YY_BREAK
 case 84:
 YY_RULE_SETUP
-#line 274 "../../../src/mesa/program/program_lexer.l"
+#line 274 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return MODELVIEW; }
 	YY_BREAK
 case 85:
 YY_RULE_SETUP
-#line 275 "../../../src/mesa/program/program_lexer.l"
+#line 275 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return MVP; }
 	YY_BREAK
 case 86:
 YY_RULE_SETUP
-#line 276 "../../../src/mesa/program/program_lexer.l"
+#line 276 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, NORMAL); }
 	YY_BREAK
 case 87:
 YY_RULE_SETUP
-#line 277 "../../../src/mesa/program/program_lexer.l"
+#line 277 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return OBJECT; }
 	YY_BREAK
 case 88:
 YY_RULE_SETUP
-#line 278 "../../../src/mesa/program/program_lexer.l"
+#line 278 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return PALETTE; }
 	YY_BREAK
 case 89:
 YY_RULE_SETUP
-#line 279 "../../../src/mesa/program/program_lexer.l"
+#line 279 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return PARAMS; }
 	YY_BREAK
 case 90:
 YY_RULE_SETUP
-#line 280 "../../../src/mesa/program/program_lexer.l"
+#line 280 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return PLANE; }
 	YY_BREAK
 case 91:
 YY_RULE_SETUP
-#line 281 "../../../src/mesa/program/program_lexer.l"
+#line 281 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, POINT_TOK); }
 	YY_BREAK
 case 92:
 YY_RULE_SETUP
-#line 282 "../../../src/mesa/program/program_lexer.l"
+#line 282 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, POINTSIZE); }
 	YY_BREAK
 case 93:
 YY_RULE_SETUP
-#line 283 "../../../src/mesa/program/program_lexer.l"
+#line 283 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return POSITION; }
 	YY_BREAK
 case 94:
 YY_RULE_SETUP
-#line 284 "../../../src/mesa/program/program_lexer.l"
+#line 284 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return PRIMARY; }
 	YY_BREAK
 case 95:
 YY_RULE_SETUP
-#line 285 "../../../src/mesa/program/program_lexer.l"
+#line 285 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return PROJECTION; }
 	YY_BREAK
 case 96:
 YY_RULE_SETUP
-#line 286 "../../../src/mesa/program/program_lexer.l"
+#line 286 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_fp, RANGE); }
 	YY_BREAK
 case 97:
 YY_RULE_SETUP
-#line 287 "../../../src/mesa/program/program_lexer.l"
+#line 287 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return ROW; }
 	YY_BREAK
 case 98:
 YY_RULE_SETUP
-#line 288 "../../../src/mesa/program/program_lexer.l"
+#line 288 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return SCENECOLOR; }
 	YY_BREAK
 case 99:
 YY_RULE_SETUP
-#line 289 "../../../src/mesa/program/program_lexer.l"
+#line 289 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return SECONDARY; }
 	YY_BREAK
 case 100:
 YY_RULE_SETUP
-#line 290 "../../../src/mesa/program/program_lexer.l"
+#line 290 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return SHININESS; }
 	YY_BREAK
 case 101:
 YY_RULE_SETUP
-#line 291 "../../../src/mesa/program/program_lexer.l"
+#line 291 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, SIZE_TOK); }
 	YY_BREAK
 case 102:
 YY_RULE_SETUP
-#line 292 "../../../src/mesa/program/program_lexer.l"
+#line 292 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return SPECULAR; }
 	YY_BREAK
 case 103:
 YY_RULE_SETUP
-#line 293 "../../../src/mesa/program/program_lexer.l"
+#line 293 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return SPOT; }
 	YY_BREAK
 case 104:
 YY_RULE_SETUP
-#line 294 "../../../src/mesa/program/program_lexer.l"
+#line 294 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return TEXCOORD; }
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
-#line 295 "../../../src/mesa/program/program_lexer.l"
+#line 295 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_fp, TEXENV); }
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
-#line 296 "../../../src/mesa/program/program_lexer.l"
+#line 296 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, TEXGEN); }
 	YY_BREAK
 case 107:
 YY_RULE_SETUP
-#line 297 "../../../src/mesa/program/program_lexer.l"
+#line 297 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, TEXGEN_Q); }
 	YY_BREAK
 case 108:
 YY_RULE_SETUP
-#line 298 "../../../src/mesa/program/program_lexer.l"
+#line 298 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, TEXGEN_S); }
 	YY_BREAK
 case 109:
 YY_RULE_SETUP
-#line 299 "../../../src/mesa/program/program_lexer.l"
+#line 299 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, TEXGEN_T); }
 	YY_BREAK
 case 110:
 YY_RULE_SETUP
-#line 300 "../../../src/mesa/program/program_lexer.l"
+#line 300 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return TEXTURE; }
 	YY_BREAK
 case 111:
 YY_RULE_SETUP
-#line 301 "../../../src/mesa/program/program_lexer.l"
+#line 301 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return TRANSPOSE; }
 	YY_BREAK
 case 112:
 YY_RULE_SETUP
-#line 302 "../../../src/mesa/program/program_lexer.l"
+#line 302 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, VTXATTRIB); }
 	YY_BREAK
 case 113:
 YY_RULE_SETUP
-#line 303 "../../../src/mesa/program/program_lexer.l"
+#line 303 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, WEIGHT); }
 	YY_BREAK
 case 114:
 YY_RULE_SETUP
-#line 305 "../../../src/mesa/program/program_lexer.l"
+#line 305 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEXTURE_UNIT); }
 	YY_BREAK
 case 115:
 YY_RULE_SETUP
-#line 306 "../../../src/mesa/program/program_lexer.l"
+#line 306 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEX_1D); }
 	YY_BREAK
 case 116:
 YY_RULE_SETUP
-#line 307 "../../../src/mesa/program/program_lexer.l"
+#line 307 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEX_2D); }
 	YY_BREAK
 case 117:
 YY_RULE_SETUP
-#line 308 "../../../src/mesa/program/program_lexer.l"
+#line 308 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEX_3D); }
 	YY_BREAK
 case 118:
 YY_RULE_SETUP
-#line 309 "../../../src/mesa/program/program_lexer.l"
+#line 309 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEX_CUBE); }
 	YY_BREAK
 case 119:
 YY_RULE_SETUP
-#line 310 "../../../src/mesa/program/program_lexer.l"
+#line 310 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_rect, TEX_RECT); }
 	YY_BREAK
 case 120:
 YY_RULE_SETUP
-#line 311 "../../../src/mesa/program/program_lexer.l"
+#line 311 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow, TEX_SHADOW1D); }
 	YY_BREAK
 case 121:
 YY_RULE_SETUP
-#line 312 "../../../src/mesa/program/program_lexer.l"
+#line 312 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow, TEX_SHADOW2D); }
 	YY_BREAK
 case 122:
 YY_RULE_SETUP
-#line 313 "../../../src/mesa/program/program_lexer.l"
+#line 313 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow && require_rect, TEX_SHADOWRECT); }
 	YY_BREAK
 case 123:
 YY_RULE_SETUP
-#line 314 "../../../src/mesa/program/program_lexer.l"
+#line 314 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_texarray, TEX_ARRAY1D); }
 	YY_BREAK
 case 124:
 YY_RULE_SETUP
-#line 315 "../../../src/mesa/program/program_lexer.l"
+#line 315 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_texarray, TEX_ARRAY2D); }
 	YY_BREAK
 case 125:
 YY_RULE_SETUP
-#line 316 "../../../src/mesa/program/program_lexer.l"
+#line 316 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow && require_texarray, TEX_ARRAYSHADOW1D); }
 	YY_BREAK
 case 126:
 YY_RULE_SETUP
-#line 317 "../../../src/mesa/program/program_lexer.l"
+#line 317 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow && require_texarray, TEX_ARRAYSHADOW2D); }
 	YY_BREAK
 case 127:
 YY_RULE_SETUP
-#line 319 "../../../src/mesa/program/program_lexer.l"
+#line 319 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return handle_ident(yyextra, yytext, yylval); }
 	YY_BREAK
 case 128:
 YY_RULE_SETUP
-#line 321 "../../../src/mesa/program/program_lexer.l"
+#line 321 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return DOT_DOT; }
 	YY_BREAK
 case 129:
 YY_RULE_SETUP
-#line 323 "../../../src/mesa/program/program_lexer.l"
+#line 323 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->integer = strtol(yytext, NULL, 10);
    return INTEGER;
@@ -2133,7 +2133,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 130:
 YY_RULE_SETUP
-#line 327 "../../../src/mesa/program/program_lexer.l"
+#line 327 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->real = _mesa_strtof(yytext, NULL);
    return REAL;
@@ -2146,7 +2146,7 @@ YY_LINENO_REWIND_TO(yy_cp - 1);
 yyg->yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 331 "../../../src/mesa/program/program_lexer.l"
+#line 331 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->real = _mesa_strtof(yytext, NULL);
    return REAL;
@@ -2154,7 +2154,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 132:
 YY_RULE_SETUP
-#line 335 "../../../src/mesa/program/program_lexer.l"
+#line 335 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->real = _mesa_strtof(yytext, NULL);
    return REAL;
@@ -2162,7 +2162,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 133:
 YY_RULE_SETUP
-#line 339 "../../../src/mesa/program/program_lexer.l"
+#line 339 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->real = _mesa_strtof(yytext, NULL);
    return REAL;
@@ -2170,7 +2170,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 134:
 YY_RULE_SETUP
-#line 344 "../../../src/mesa/program/program_lexer.l"
+#line 344 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_NOOP;
    yylval->swiz_mask.mask = WRITEMASK_XYZW;
@@ -2179,7 +2179,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 135:
 YY_RULE_SETUP
-#line 350 "../../../src/mesa/program/program_lexer.l"
+#line 350 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_XY
@@ -2189,7 +2189,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 136:
 YY_RULE_SETUP
-#line 356 "../../../src/mesa/program/program_lexer.l"
+#line 356 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_XZW;
@@ -2198,7 +2198,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 137:
 YY_RULE_SETUP
-#line 361 "../../../src/mesa/program/program_lexer.l"
+#line 361 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_YZW;
@@ -2207,7 +2207,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 138:
 YY_RULE_SETUP
-#line 367 "../../../src/mesa/program/program_lexer.l"
+#line 367 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_X
@@ -2217,7 +2217,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 139:
 YY_RULE_SETUP
-#line 373 "../../../src/mesa/program/program_lexer.l"
+#line 373 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_Y
@@ -2227,7 +2227,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 140:
 YY_RULE_SETUP
-#line 379 "../../../src/mesa/program/program_lexer.l"
+#line 379 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_ZW;
@@ -2236,7 +2236,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 141:
 YY_RULE_SETUP
-#line 385 "../../../src/mesa/program/program_lexer.l"
+#line 385 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    const unsigned s = swiz_from_char(yytext[1]);
    yylval->swiz_mask.swizzle = MAKE_SWIZZLE4(s, s, s, s);
@@ -2246,7 +2246,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 142:
 YY_RULE_SETUP
-#line 392 "../../../src/mesa/program/program_lexer.l"
+#line 392 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = MAKE_SWIZZLE4(swiz_from_char(yytext[1]),
 					    swiz_from_char(yytext[2]),
@@ -2258,7 +2258,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 143:
 YY_RULE_SETUP
-#line 401 "../../../src/mesa/program/program_lexer.l"
+#line 401 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_NOOP;
    yylval->swiz_mask.mask = WRITEMASK_XYZW;
@@ -2267,7 +2267,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 144:
 YY_RULE_SETUP
-#line 407 "../../../src/mesa/program/program_lexer.l"
+#line 407 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_XY
@@ -2277,7 +2277,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 145:
 YY_RULE_SETUP
-#line 413 "../../../src/mesa/program/program_lexer.l"
+#line 413 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_XZW;
@@ -2286,7 +2286,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 146:
 YY_RULE_SETUP
-#line 418 "../../../src/mesa/program/program_lexer.l"
+#line 418 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_YZW;
@@ -2295,7 +2295,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 147:
 YY_RULE_SETUP
-#line 424 "../../../src/mesa/program/program_lexer.l"
+#line 424 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_X
@@ -2305,7 +2305,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 148:
 YY_RULE_SETUP
-#line 430 "../../../src/mesa/program/program_lexer.l"
+#line 430 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_Y
@@ -2315,7 +2315,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 149:
 YY_RULE_SETUP
-#line 436 "../../../src/mesa/program/program_lexer.l"
+#line 436 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_ZW;
@@ -2324,7 +2324,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 150:
 YY_RULE_SETUP
-#line 442 "../../../src/mesa/program/program_lexer.l"
+#line 442 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    const unsigned s = swiz_from_char(yytext[1]);
    yylval->swiz_mask.swizzle = MAKE_SWIZZLE4(s, s, s, s);
@@ -2334,7 +2334,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 151:
 YY_RULE_SETUP
-#line 450 "../../../src/mesa/program/program_lexer.l"
+#line 450 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    if (require_ARB_vp) {
       return TEXGEN_R;
@@ -2348,7 +2348,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 152:
 YY_RULE_SETUP
-#line 461 "../../../src/mesa/program/program_lexer.l"
+#line 461 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = MAKE_SWIZZLE4(swiz_from_char(yytext[1]),
 					    swiz_from_char(yytext[2]),
@@ -2360,13 +2360,13 @@ YY_RULE_SETUP
 	YY_BREAK
 case 153:
 YY_RULE_SETUP
-#line 470 "../../../src/mesa/program/program_lexer.l"
+#line 470 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return DOT; }
 	YY_BREAK
 case 154:
 /* rule 154 can match eol */
 YY_RULE_SETUP
-#line 472 "../../../src/mesa/program/program_lexer.l"
+#line 472 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 {
    yylloc->first_line++;
    yylloc->first_column = 1;
@@ -2377,7 +2377,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 155:
 YY_RULE_SETUP
-#line 479 "../../../src/mesa/program/program_lexer.l"
+#line 479 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 /* eat whitespace */ ;
 	YY_BREAK
 case 156:
@@ -2385,17 +2385,17 @@ case 156:
 yyg->yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 480 "../../../src/mesa/program/program_lexer.l"
+#line 480 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 /* eat comments */ ;
 	YY_BREAK
 case 157:
 YY_RULE_SETUP
-#line 481 "../../../src/mesa/program/program_lexer.l"
+#line 481 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 { return yytext[0]; }
 	YY_BREAK
 case 158:
 YY_RULE_SETUP
-#line 482 "../../../src/mesa/program/program_lexer.l"
+#line 482 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 ECHO;
 	YY_BREAK
 #line 2402 "program/lex.yy.c"
@@ -3591,7 +3591,7 @@ void _mesa_program_lexer_free (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 482 "../../../src/mesa/program/program_lexer.l"
+#line 482 "/home/emil/development/mesa/src/mesa/program/program_lexer.l"
 
 
 

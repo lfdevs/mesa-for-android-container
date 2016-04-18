@@ -178,11 +178,17 @@ typedef struct _RGNDATA {
 #undef WINAPI
 #endif /* WINAPI*/
 
-#if defined(__x86_64__) || defined(_M_X64)
-#define WINAPI __attribute__((ms_abi))
-#else /* x86_64 */
-#define WINAPI __attribute__((__stdcall__))
-#endif /* x86_64 */
+#ifdef __GNUC__
+  #if (defined(__x86_64__) && !defined(__ILP32__)) || defined(_M_X64)
+    #define WINAPI __attribute__((ms_abi))
+  #elif defined(__i386) || defined(_M_IX86)
+    #define WINAPI __attribute__((__stdcall__))
+  #else /* neither amd64 nor i386 */
+    #define WINAPI
+  #endif
+#else /* __GNUC__ */
+  #define WINAPI
+#endif
 
 /* Implementation caps */
 #define D3DPRESENT_BACK_BUFFERS_MAX    3

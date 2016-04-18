@@ -158,7 +158,7 @@ extern int _mesa_program_debug;
 
 union YYSTYPE
 {
-#line 126 "../../../src/mesa/program/program_parse.y" /* yacc.c:1909  */
+#line 126 "/home/emil/development/mesa/src/mesa/program/program_parse.y" /* yacc.c:1909  */
 
    struct asm_instruction *inst;
    struct asm_symbol *sym;

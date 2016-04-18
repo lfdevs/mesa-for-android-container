@@ -3284,7 +3284,7 @@ static void *si_create_vertex_elements(struct pipe_context *ctx,
 	struct si_vertex_element *v = CALLOC_STRUCT(si_vertex_element);
 	int i;
 
-	assert(count < SI_MAX_ATTRIBS);
+	assert(count <= SI_MAX_ATTRIBS);
 	if (!v)
 		return NULL;
 
