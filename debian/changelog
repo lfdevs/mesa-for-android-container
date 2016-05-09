@@ -1,3 +1,11 @@
+mesa (11.2.1-2) unstable; urgency=medium
+
+  * gallivm-disable-avx512-features.diff: LLVM 3.8 enables AVX512 on all
+    Skylake CPU's when it's a server-CPU feature. Disable it from the
+    llvmpipe driver so that it doesn't crash on non-server Skylake.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 09 May 2016 15:17:24 +0300
+
 mesa (11.2.1-1) experimental; urgency=medium
 
   * New upstream release.
@@ -47,6 +55,12 @@ mesa (11.2.0~rc3-1) experimental; urgency=medium
   * control: Add dh-autoreconf to build-depends.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Wed, 09 Mar 2016 01:01:55 +0200
+
+mesa (11.1.3-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Mon, 18 Apr 2016 19:04:40 +0200
 
 mesa (11.1.2-1) unstable; urgency=medium
 
