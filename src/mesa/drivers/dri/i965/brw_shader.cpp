@@ -710,7 +710,8 @@ backend_instruction::is_tex() const
            opcode == SHADER_OPCODE_TXS ||
            opcode == SHADER_OPCODE_LOD ||
            opcode == SHADER_OPCODE_TG4 ||
-           opcode == SHADER_OPCODE_TG4_OFFSET);
+           opcode == SHADER_OPCODE_TG4_OFFSET ||
+           opcode == SHADER_OPCODE_SAMPLEINFO);
 }
 
 bool

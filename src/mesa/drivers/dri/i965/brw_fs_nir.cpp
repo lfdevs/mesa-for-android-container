@@ -3060,12 +3060,18 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
    case nir_texop_txs: op = ir_txs; break;
    case nir_texop_texture_samples: {
       fs_reg dst = retype(get_nir_dest(instr->dest), BRW_REGISTER_TYPE_D);
-      fs_inst *inst = bld.emit(SHADER_OPCODE_SAMPLEINFO, dst,
+
+      fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_D, 4);
+      fs_inst *inst = bld.emit(SHADER_OPCODE_SAMPLEINFO, tmp,
                                bld.vgrf(BRW_REGISTER_TYPE_D, 1),
                                texture_reg, texture_reg);
       inst->mlen = 1;
       inst->header_size = 1;
       inst->base_mrf = -1;
+      inst->regs_written = 4 * (dispatch_width / 8);
+
+      /* Pick off the one component we care about */
+      bld.MOV(dst, tmp);
       return;
    }
    case nir_texop_samples_identical: op = ir_samples_identical; break;

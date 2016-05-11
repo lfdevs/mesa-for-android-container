@@ -358,6 +358,10 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 				       0, 0, resource, level, box);
 
 			data = r600_buffer_map_sync_with_rings(rctx, staging, PIPE_TRANSFER_READ);
+			if (!data) {
+				pipe_resource_reference((struct pipe_resource **)&staging, NULL);
+				return NULL;
+			}
 			data += box->x % R600_MAP_BUFFER_ALIGNMENT;
 
 			return r600_buffer_get_transfer(ctx, resource, level, usage, box,

@@ -116,7 +116,7 @@ void r600_set_streamout_targets(struct pipe_context *ctx,
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
 	unsigned i;
-        unsigned append_bitmask = 0;
+        unsigned enabled_mask = 0, append_bitmask = 0;
 
 	/* Stop streamout. */
 	if (rctx->streamout.num_targets && rctx->streamout.begin_emitted) {
@@ -126,18 +126,19 @@ void r600_set_streamout_targets(struct pipe_context *ctx,
 	/* Set the new targets. */
 	for (i = 0; i < num_targets; i++) {
 		pipe_so_target_reference((struct pipe_stream_output_target**)&rctx->streamout.targets[i], targets[i]);
+		if (!targets[i])
+			continue;
+
 		r600_context_add_resource_size(ctx, targets[i]->buffer);
+		enabled_mask |= 1 << i;
 		if (offsets[i] == ((unsigned)-1))
-			append_bitmask |=  1 << i;
+			append_bitmask |= 1 << i;
 	}
 	for (; i < rctx->streamout.num_targets; i++) {
 		pipe_so_target_reference((struct pipe_stream_output_target**)&rctx->streamout.targets[i], NULL);
 	}
 
-	rctx->streamout.enabled_mask = (num_targets >= 1 && targets[0] ? 1 : 0) |
-				       (num_targets >= 2 && targets[1] ? 2 : 0) |
-				       (num_targets >= 3 && targets[2] ? 4 : 0) |
-				       (num_targets >= 4 && targets[3] ? 8 : 0);
+	rctx->streamout.enabled_mask = enabled_mask;
 
 	rctx->streamout.num_targets = num_targets;
 	rctx->streamout.append_bitmask = append_bitmask;

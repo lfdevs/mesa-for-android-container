@@ -482,7 +482,7 @@ void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuf
 
 	u_upload_alloc(sctx->b.uploader, 0, size, 256, const_offset,
 		       (struct pipe_resource**)rbuffer, &tmp);
-	if (rbuffer)
+	if (*rbuffer)
 		util_memcpy_cpu_to_le32(tmp, ptr, size);
 }
 

@@ -62,12 +62,7 @@ get_static_proc( const char * n )
    GLuint i;
    for (i = 0; static_functions[i].Name_offset >= 0; i++) {
       const char *testName = gl_string_table + static_functions[i].Name_offset;
-#ifdef MANGLE
-      /* skip the prefix on the name */
-      if (strcmp(testName, n + 1) == 0)
-#else
       if (strcmp(testName, n) == 0)
-#endif
       {
 	 return &static_functions[i];
       }
@@ -516,14 +511,13 @@ _glapi_get_proc_address(const char *funcName)
 
    init_glapi_relocs_once();
 
-#ifdef MANGLE
-   /* skip the prefix on the name */
-   if (funcName[1] != 'g' || funcName[2] != 'l')
-      return NULL;
-#else
-   if (funcName[0] != 'g' || funcName[1] != 'l')
-      return NULL;
+#ifdef USE_MGL_NAMESPACE
+   if (funcName && funcName[0] == 'm')
+      funcName++;
 #endif
+
+  if (!funcName || funcName[0] != 'g' || funcName[1] != 'l')
+      return NULL;
 
    /* search extension functions first */
    func = get_extension_proc_address(funcName);

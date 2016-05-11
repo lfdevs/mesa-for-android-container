@@ -704,6 +704,10 @@ st_DrawAtlasBitmaps(struct gl_context *ctx,
    st_validate_state(st, ST_PIPELINE_RENDER);
 
    sv = st_create_texture_sampler_view(pipe, stObj->pt);
+   if (!sv) {
+      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glCallLists(bitmap text)");
+      return;
+   }
 
    setup_render_state(ctx, sv, color, true);
 
@@ -792,6 +796,8 @@ st_DrawAtlasBitmaps(struct gl_context *ctx,
    restore_render_state(ctx);
 
    pipe_resource_reference(&vb.buffer, NULL);
+
+   pipe_sampler_view_reference(&sv, NULL);
 
    /* We uploaded modified constants, need to invalidate them. */
    st->dirty.mesa |= _NEW_PROGRAM_CONSTANTS;

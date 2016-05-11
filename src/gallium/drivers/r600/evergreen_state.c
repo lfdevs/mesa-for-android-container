@@ -213,13 +213,14 @@ static uint32_t r600_translate_dbformat(enum pipe_format format)
 
 static bool r600_is_sampler_format_supported(struct pipe_screen *screen, enum pipe_format format)
 {
-	return r600_translate_texformat(screen, format, NULL, NULL, NULL) != ~0U;
+	return r600_translate_texformat(screen, format, NULL, NULL, NULL,
+                                   FALSE) != ~0U;
 }
 
 static bool r600_is_colorbuffer_format_supported(enum chip_class chip, enum pipe_format format)
 {
-	return r600_translate_colorformat(chip, format) != ~0U &&
-		r600_translate_colorswap(format) != ~0U;
+	return r600_translate_colorformat(chip, format, FALSE) != ~0U &&
+		r600_translate_colorswap(format, FALSE) != ~0U;
 }
 
 static bool r600_is_zs_format_supported(enum pipe_format format)
@@ -668,6 +669,7 @@ evergreen_create_sampler_view_custom(struct pipe_context *ctx,
 	unsigned base_level, first_level, last_level;
 	unsigned dim, last_layer;
 	uint64_t va;
+	bool do_endian_swap = FALSE;
 
 	if (!view)
 		return NULL;
@@ -713,16 +715,19 @@ evergreen_create_sampler_view_custom(struct pipe_context *ctx,
 		}
 	}
 
+	if (R600_BIG_ENDIAN)
+		do_endian_swap = !(tmp->is_depth && !tmp->is_flushing_texture);
+
 	format = r600_translate_texformat(ctx->screen, pipe_format,
 					  swizzle,
-					  &word4, &yuv_format);
+					  &word4, &yuv_format, do_endian_swap);
 	assert(format != ~0);
 	if (format == ~0) {
 		FREE(view);
 		return NULL;
 	}
 
-	endian = r600_colorformat_endian_swap(format);
+	endian = r600_colorformat_endian_swap(format, do_endian_swap);
 
 	base_level = 0;
 	first_level = state->u.tex.first_level;
@@ -980,9 +985,9 @@ void evergreen_init_color_surface_rat(struct r600_context *rctx,
 {
 	struct pipe_resource *pipe_buffer = surf->base.texture;
 	unsigned format = r600_translate_colorformat(rctx->b.chip_class,
-						     surf->base.format);
-	unsigned endian = r600_colorformat_endian_swap(format);
-	unsigned swap = r600_translate_colorswap(surf->base.format);
+						     surf->base.format, FALSE);
+	unsigned endian = r600_colorformat_endian_swap(format, FALSE);
+	unsigned swap = r600_translate_colorswap(surf->base.format, FALSE);
 	unsigned block_size =
 		align(util_format_get_blocksize(pipe_buffer->format), 4);
 	unsigned pitch_alignment =
@@ -1035,7 +1040,7 @@ void evergreen_init_color_surface(struct r600_context *rctx,
 	unsigned non_disp_tiling, macro_aspect, tile_split, bankh, bankw, fmask_bankh, nbanks;
 	const struct util_format_description *desc;
 	int i;
-	bool blend_clamp = 0, blend_bypass = 0;
+	bool blend_clamp = 0, blend_bypass = 0, do_endian_swap = FALSE;
 
 	offset = rtex->surface.level[level].offset;
 	if (rtex->surface.level[level].mode == RADEON_SURF_MODE_LINEAR) {
@@ -1133,13 +1138,17 @@ void evergreen_init_color_surface(struct r600_context *rctx,
 			ntype = V_028C70_NUMBER_UINT;
 	}
 
-	format = r600_translate_colorformat(rctx->b.chip_class, surf->base.format);
+	if (R600_BIG_ENDIAN)
+		do_endian_swap = !(rtex->is_depth && !rtex->is_flushing_texture);
+
+	format = r600_translate_colorformat(rctx->b.chip_class, surf->base.format,
+			                              do_endian_swap);
 	assert(format != ~0);
 
-	swap = r600_translate_colorswap(surf->base.format);
+	swap = r600_translate_colorswap(surf->base.format, do_endian_swap);
 	assert(swap != ~0);
 
-	endian = r600_colorformat_endian_swap(format);
+	endian = r600_colorformat_endian_swap(format, do_endian_swap);
 
 	/* blend clamp should be set for all NORM/SRGB types */
 	if (ntype == V_028C70_NUMBER_UNORM || ntype == V_028C70_NUMBER_SNORM ||

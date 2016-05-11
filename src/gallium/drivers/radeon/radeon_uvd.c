@@ -57,6 +57,7 @@
 
 #define FB_BUFFER_OFFSET 0x1000
 #define FB_BUFFER_SIZE 2048
+#define FB_BUFFER_SIZE_TONGA (2048 * 64)
 #define IT_SCALING_TABLE_SIZE 992
 
 /* UVD decoder representation */
@@ -78,6 +79,7 @@ struct ruvd_decoder {
 	struct rvid_buffer		msg_fb_it_buffers[NUM_BUFFERS];
 	struct ruvd_msg			*msg;
 	uint32_t			*fb;
+	unsigned			fb_size;
 	uint8_t				*it;
 
 	struct rvid_buffer		bs_buffers[NUM_BUFFERS];
@@ -148,7 +150,7 @@ static void map_msg_fb_it_buf(struct ruvd_decoder *dec)
 	dec->msg = (struct ruvd_msg *)ptr;
 	dec->fb = (uint32_t *)(ptr + FB_BUFFER_OFFSET);
 	if (have_it(dec))
-		dec->it = (uint8_t *)(ptr + FB_BUFFER_OFFSET + FB_BUFFER_SIZE);
+		dec->it = (uint8_t *)(ptr + FB_BUFFER_OFFSET + dec->fb_size);
 }
 
 /* unmap and send a message command to the VCPU */
@@ -958,7 +960,7 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 
 	dec->msg->body.decode.dpb_size = dec->dpb.res->buf->size;
 	dec->msg->body.decode.bsd_size = bs_size;
-	dec->msg->body.decode.db_pitch = dec->base.width;
+	dec->msg->body.decode.db_pitch = align(dec->base.width, 16);
 
 	dt = dec->set_dtb(dec->msg, (struct vl_video_buffer *)target);
 	if (((struct r600_common_screen*)dec->screen)->family >= CHIP_STONEY)
@@ -994,7 +996,7 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 	dec->msg->body.decode.extension_support = 0x1;
 
 	/* set at least the feedback buffer size */
-	dec->fb[0] = FB_BUFFER_SIZE;
+	dec->fb[0] = dec->fb_size;
 
 	send_msg_buf(dec);
 
@@ -1012,7 +1014,7 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 		 FB_BUFFER_OFFSET, RADEON_USAGE_WRITE, RADEON_DOMAIN_GTT);
 	if (have_it(dec))
 		send_cmd(dec, RUVD_CMD_ITSCALING_TABLE_BUFFER, msg_fb_it_buf->res->buf,
-			 FB_BUFFER_OFFSET + FB_BUFFER_SIZE, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
+			 FB_BUFFER_OFFSET + dec->fb_size, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
 	set_reg(dec, RUVD_ENGINE_CNTL, 1);
 
 	flush(dec);
@@ -1092,9 +1094,11 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 		goto error;
 	}
 
+	dec->fb_size = (info.family == CHIP_TONGA) ? FB_BUFFER_SIZE_TONGA :
+			FB_BUFFER_SIZE;
 	bs_buf_size = width * height * 512 / (16 * 16);
 	for (i = 0; i < NUM_BUFFERS; ++i) {
-		unsigned msg_fb_it_size = FB_BUFFER_OFFSET + FB_BUFFER_SIZE;
+		unsigned msg_fb_it_size = FB_BUFFER_OFFSET + dec->fb_size;
 		STATIC_ASSERT(sizeof(struct ruvd_msg) <= FB_BUFFER_OFFSET);
 		if (have_it(dec))
 			msg_fb_it_size += IT_SCALING_TABLE_SIZE;

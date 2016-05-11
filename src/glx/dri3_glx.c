@@ -127,13 +127,9 @@ static __DRIcontext *
 glx_dri3_get_dri_context(struct loader_dri3_drawable *draw)
 {
    struct glx_context *gc = __glXGetCurrentContext();
+   struct dri3_context *dri3Ctx = (struct dri3_context *) gc;
 
-   if (gc) {
-      struct dri3_context *dri3Ctx = (struct dri3_context *) gc;
-      return dri3Ctx->driContext;
-   }
-
-   return NULL;
+   return (gc != &dummyContext) ? dri3Ctx->driContext : NULL;
 }
 
 static void

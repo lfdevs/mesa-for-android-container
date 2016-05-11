@@ -25,6 +25,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 
+#include <nvif/class.h>
+
 #include "nouveau_screen.h"
 #include "nouveau_context.h"
 #include "nouveau_vp3_video.h"
@@ -351,6 +353,16 @@ nouveau_vp3_load_firmware(struct nouveau_vp3_decoder *dec,
    return 0;
 }
 
+static const struct nouveau_mclass
+nouveau_decoder_msvld[] = {
+   { G98_MSVLD, -1 },
+   { IGT21A_MSVLD, -1 },
+   { GT212_MSVLD, -1 },
+   { GF100_MSVLD, -1 },
+   { GK104_MSVLD, -1 },
+   {}
+};
+
 static int
 firmware_present(struct pipe_screen *pscreen, enum pipe_video_profile profile)
 {
@@ -368,13 +380,7 @@ firmware_present(struct pipe_screen *pscreen, enum pipe_video_profile profile)
       struct nvc0_fifo nvc0_args = {};
       struct nve0_fifo nve0_args = {.engine = NVE0_FIFO_ENGINE_BSP};
       void *data = NULL;
-      int size, oclass;
-      if (chipset < 0xc0)
-         oclass = 0x85b1;
-      else if (chipset < 0xe0)
-         oclass = 0x90b1;
-      else
-         oclass = 0x95b1;
+      int size;
 
       if (chipset < 0xc0) {
          data = &nv04_data;
@@ -393,7 +399,10 @@ firmware_present(struct pipe_screen *pscreen, enum pipe_video_profile profile)
                          data, size, &channel);
 
       if (channel) {
-         nouveau_object_new(channel, 0, oclass, NULL, 0, &bsp);
+         ret = nouveau_object_mclass(channel, nouveau_decoder_msvld);
+         if (ret >= 0)
+            nouveau_object_new(channel, 0, nouveau_decoder_msvld[ret].oclass,
+                               NULL, 0, &bsp);
          if (bsp)
             screen->firmware_info.profiles_present |= 1;
          nouveau_object_del(&bsp);

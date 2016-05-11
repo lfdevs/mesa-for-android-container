@@ -140,8 +140,8 @@ vc4_load_lt_image(void *dst, uint32_t dst_stride,
 {
         uint32_t utile_w = vc4_utile_width(cpp);
         uint32_t utile_h = vc4_utile_height(cpp);
-        uint32_t xstart = box->x / utile_w;
-        uint32_t ystart = box->y / utile_h;
+        uint32_t xstart = box->x;
+        uint32_t ystart = box->y;
 
         for (uint32_t y = 0; y < box->height; y += utile_h) {
                 for (int x = 0; x < box->width; x += utile_w) {
@@ -161,8 +161,8 @@ vc4_store_lt_image(void *dst, uint32_t dst_stride,
 {
         uint32_t utile_w = vc4_utile_width(cpp);
         uint32_t utile_h = vc4_utile_height(cpp);
-        uint32_t xstart = box->x / utile_w;
-        uint32_t ystart = box->y / utile_h;
+        uint32_t xstart = box->x;
+        uint32_t ystart = box->y;
 
         for (uint32_t y = 0; y < box->height; y += utile_h) {
                 for (int x = 0; x < box->width; x += utile_w) {

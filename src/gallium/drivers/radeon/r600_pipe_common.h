@@ -576,7 +576,7 @@ struct pipe_surface *r600_create_surface_custom(struct pipe_context *pipe,
 						struct pipe_resource *texture,
 						const struct pipe_surface *templ,
 						unsigned width, unsigned height);
-unsigned r600_translate_colorswap(enum pipe_format format);
+unsigned r600_translate_colorswap(enum pipe_format format, bool do_endian_swap);
 void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 				   struct pipe_framebuffer_state *fb,
 				   struct r600_atom *fb_state,

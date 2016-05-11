@@ -78,7 +78,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
       return 15;
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-      return (class_3d >= NVE4_3D_CLASS) ? 13 : 12;
+      return 12;
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
       return 2048;
    case PIPE_CAP_MIN_TEXEL_OFFSET:

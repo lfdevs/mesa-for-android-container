@@ -2137,6 +2137,7 @@ vc4_update_compiled_fs(struct vc4_context *vc4, uint8_t prim_mode)
                             VC4_DIRTY_FRAMEBUFFER |
                             VC4_DIRTY_ZSA |
                             VC4_DIRTY_RASTERIZER |
+                            VC4_DIRTY_SAMPLE_MASK |
                             VC4_DIRTY_FRAGTEX |
                             VC4_DIRTY_TEXSTATE |
                             VC4_DIRTY_UNCOMPILED_FS))) {

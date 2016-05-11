@@ -370,7 +370,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_hw_query *hq = nvc0_hw_query(q);
    struct nv04_resource *buf = nv04_resource(resource);
-   unsigned stride;
+   unsigned qoffset = 0, stride;
 
    assert(!hq->funcs || !hq->funcs->get_query_result);
 
@@ -426,17 +426,27 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    case PIPE_QUERY_PIPELINE_STATISTICS:
       stride = 12;
       break;
+   case PIPE_QUERY_TIME_ELAPSED:
+   case PIPE_QUERY_TIMESTAMP:
+      qoffset = 8;
+      /* fallthrough */
    default:
       assert(index == 0);
       stride = 1;
       break;
    }
 
-   if (hq->is64bit) {
-      nouveau_pushbuf_data(push, hq->bo, hq->offset + 16 * index,
+   if (hq->is64bit || qoffset) {
+      nouveau_pushbuf_data(push, hq->bo, hq->offset + qoffset + 16 * index,
                            8 | NVC0_IB_ENTRY_1_NO_PREFETCH);
-      nouveau_pushbuf_data(push, hq->bo, hq->offset + 16 * (index + stride),
-                           8 | NVC0_IB_ENTRY_1_NO_PREFETCH);
+      if (q->type == PIPE_QUERY_TIMESTAMP) {
+         PUSH_DATA(push, 0);
+         PUSH_DATA(push, 0);
+      } else {
+         nouveau_pushbuf_data(push, hq->bo, hq->offset + qoffset +
+                              16 * (index + stride),
+                              8 | NVC0_IB_ENTRY_1_NO_PREFETCH);
+      }
    } else {
       nouveau_pushbuf_data(push, hq->bo, hq->offset + 4,
                            4 | NVC0_IB_ENTRY_1_NO_PREFETCH);

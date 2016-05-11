@@ -246,6 +246,12 @@ lp_build_coord_repeat_npot_linear_int(struct lp_build_sample_context *bld,
    mask = lp_build_compare(int_coord_bld->gallivm, int_coord_bld->type,
                            PIPE_FUNC_LESS, *coord0_i, int_coord_bld->zero);
    *coord0_i = lp_build_select(int_coord_bld, mask, length_minus_one, *coord0_i);
+   /*
+    * We should never get values too large - except if coord was nan or inf,
+    * in which case things go terribly wrong...
+    * Alternatively, could use fract_safe above...
+    */
+   *coord0_i = lp_build_min(int_coord_bld, *coord0_i, length_minus_one);
 }
 
 
@@ -490,6 +496,10 @@ lp_build_sample_wrap_linear_float(struct lp_build_sample_context *bld,
          *coord1 = lp_build_add(coord_bld, coord, half);
          coord = lp_build_sub(coord_bld, coord, half);
          *weight = lp_build_fract(coord_bld, coord);
+         /*
+          * It is important for this comparison to be unordered
+          * (or need fract_safe above).
+          */
          mask = lp_build_compare(coord_bld->gallivm, coord_bld->type,
                                  PIPE_FUNC_LESS, coord, coord_bld->zero);
          *coord0 = lp_build_select(coord_bld, mask, length_minus_one, coord);
@@ -514,7 +524,8 @@ lp_build_sample_wrap_linear_float(struct lp_build_sample_context *bld,
          coord = lp_build_sub(coord_bld, coord, half);
       }
       /* clamp to [0, length - 1] */
-      coord = lp_build_min(coord_bld, coord, length_minus_one);
+      coord = lp_build_min_ext(coord_bld, coord, length_minus_one,
+                               GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
       coord = lp_build_max(coord_bld, coord, coord_bld->zero);
       *coord1 = lp_build_add(coord_bld, coord, coord_bld->one);
       /* convert to int, compute lerp weight */

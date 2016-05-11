@@ -2229,7 +2229,8 @@ unsigned r600_get_swizzle_combined(const unsigned char *swizzle_format,
 uint32_t r600_translate_texformat(struct pipe_screen *screen,
 				  enum pipe_format format,
 				  const unsigned char *swizzle_view,
-				  uint32_t *word4_p, uint32_t *yuv_format_p)
+				  uint32_t *word4_p, uint32_t *yuv_format_p,
+				  bool do_endian_swap)
 {
 	struct r600_screen *rscreen = (struct r600_screen *)screen;
 	uint32_t result = 0, word4 = 0, yuv_format = 0;
@@ -2239,6 +2240,9 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 	bool is_srgb_valid = FALSE;
 	const unsigned char swizzle_xxxx[4] = {0, 0, 0, 0};
 	const unsigned char swizzle_yyyy[4] = {1, 1, 1, 1};
+	const unsigned char swizzle_xxxy[4] = {0, 0, 0, 1};
+	const unsigned char swizzle_zyx1[4] = {2, 1, 0, 5};
+	const unsigned char swizzle_zyxw[4] = {2, 1, 0, 3};
 
 	int i;
 	const uint32_t sign_bit[4] = {
@@ -2247,11 +2251,41 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		S_038010_FORMAT_COMP_Z(V_038010_SQ_FORMAT_COMP_SIGNED),
 		S_038010_FORMAT_COMP_W(V_038010_SQ_FORMAT_COMP_SIGNED)
 	};
+
+	/* Need to replace the specified texture formats in case of big-endian.
+	 * These formats are formats that have channels with number of bits
+	 * not divisible by 8.
+	 * Mesa conversion functions don't swap bits for those formats, and because
+	 * we transmit this over a serial bus to the GPU (PCIe), the
+	 * bit-endianess is important!!!
+	 * In case we have an "opposite" format, just use that for the swizzling
+	 * information. If we don't have such an "opposite" format, we need
+	 * to use a fixed swizzle info instead (see below)
+	 */
+	if (format == PIPE_FORMAT_R4A4_UNORM && do_endian_swap)
+		format = PIPE_FORMAT_A4R4_UNORM;
+
 	desc = util_format_description(format);
 
 	/* Depth and stencil swizzling is handled separately. */
 	if (desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS) {
-		word4 |= r600_get_swizzle_combined(desc->swizzle, swizzle_view, FALSE);
+		/* Need to check for specific texture formats that don't have
+		 * an "opposite" format we can use. For those formats, we directly
+		 * specify the swizzling, which is the LE swizzling as defined in
+		 * u_format.csv
+		 */
+		if (do_endian_swap) {
+			if (format == PIPE_FORMAT_L4A4_UNORM)
+				word4 |= r600_get_swizzle_combined(swizzle_xxxy, swizzle_view, FALSE);
+			else if (format == PIPE_FORMAT_B4G4R4A4_UNORM)
+				word4 |= r600_get_swizzle_combined(swizzle_zyxw, swizzle_view, FALSE);
+			else if (format == PIPE_FORMAT_B4G4R4X4_UNORM || format == PIPE_FORMAT_B5G6R5_UNORM)
+				word4 |= r600_get_swizzle_combined(swizzle_zyx1, swizzle_view, FALSE);
+			else
+				word4 |= r600_get_swizzle_combined(desc->swizzle, swizzle_view, FALSE);
+		} else {
+			word4 |= r600_get_swizzle_combined(desc->swizzle, swizzle_view, FALSE);
+		}
 	}
 
 	/* Colorspace (return non-RGB formats directly). */
@@ -2602,7 +2636,8 @@ out_unknown:
 	return ~0;
 }
 
-uint32_t r600_translate_colorformat(enum chip_class chip, enum pipe_format format)
+uint32_t r600_translate_colorformat(enum chip_class chip, enum pipe_format format,
+						bool do_endian_swap)
 {
 	const struct util_format_description *desc = util_format_description(format);
 	int channel = util_format_get_first_non_void_channel(format);
@@ -2660,7 +2695,7 @@ uint32_t r600_translate_colorformat(enum chip_class chip, enum pipe_format forma
 					return V_0280A0_COLOR_32_32;
 			}
 		} else if (HAS_SIZE(8,24,0,0)) {
-			return V_0280A0_COLOR_24_8;
+			return (do_endian_swap ? V_0280A0_COLOR_8_24 : V_0280A0_COLOR_24_8);
 		} else if (HAS_SIZE(24,8,0,0)) {
 			return V_0280A0_COLOR_8_24;
 		}
@@ -2702,7 +2737,7 @@ uint32_t r600_translate_colorformat(enum chip_class chip, enum pipe_format forma
 	return ~0U;
 }
 
-uint32_t r600_colorformat_endian_swap(uint32_t colorformat)
+uint32_t r600_colorformat_endian_swap(uint32_t colorformat, bool do_endian_swap)
 {
 	if (R600_BIG_ENDIAN) {
 		switch(colorformat) {
@@ -2712,17 +2747,24 @@ uint32_t r600_colorformat_endian_swap(uint32_t colorformat)
 			return ENDIAN_NONE;
 
 		/* 16-bit buffers. */
+		case V_0280A0_COLOR_8_8:
+			/*
+			 * No need to do endian swaps on array formats,
+			 * as mesa<-->pipe formats conversion take into account
+			 * the endianess
+			 */
+			return ENDIAN_NONE;
+
 		case V_0280A0_COLOR_5_6_5:
 		case V_0280A0_COLOR_1_5_5_5:
 		case V_0280A0_COLOR_4_4_4_4:
 		case V_0280A0_COLOR_16:
-		case V_0280A0_COLOR_8_8:
-			return ENDIAN_8IN16;
+			return (do_endian_swap ? ENDIAN_8IN16 : ENDIAN_NONE);
 
 		/* 32-bit buffers. */
 		case V_0280A0_COLOR_8_8_8_8:
 			/*
-			 * No need to do endian swaps on four 8-bits components,
+			 * No need to do endian swaps on array formats,
 			 * as mesa<-->pipe formats conversion take into account
 			 * the endianess
 			 */
@@ -2732,9 +2774,11 @@ uint32_t r600_colorformat_endian_swap(uint32_t colorformat)
 		case V_0280A0_COLOR_8_24:
 		case V_0280A0_COLOR_24_8:
 		case V_0280A0_COLOR_32_FLOAT:
+			return (do_endian_swap ? ENDIAN_8IN32 : ENDIAN_NONE);
+
 		case V_0280A0_COLOR_16_16_FLOAT:
 		case V_0280A0_COLOR_16_16:
-			return ENDIAN_8IN32;
+			return ENDIAN_8IN16;
 
 		/* 64-bit buffers. */
 		case V_0280A0_COLOR_16_16_16_16:
@@ -2781,7 +2825,8 @@ static void r600_invalidate_buffer(struct pipe_context *ctx, struct pipe_resourc
 	}
 	/* Streamout buffers. */
 	for (i = 0; i < rctx->b.streamout.num_targets; i++) {
-		if (rctx->b.streamout.targets[i]->b.buffer == &rbuffer->b.b) {
+		if (rctx->b.streamout.targets[i] &&
+		    rctx->b.streamout.targets[i]->b.buffer == &rbuffer->b.b) {
 			if (rctx->b.streamout.begin_emitted) {
 				r600_emit_streamout_end(&rctx->b);
 			}

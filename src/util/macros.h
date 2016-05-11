@@ -210,6 +210,12 @@ do {                       \
 #define MUST_CHECK
 #endif
 
+#if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
+#define ATTRIBUTE_NOINLINE __attribute__((noinline))
+#else
+#define ATTRIBUTE_NOINLINE
+#endif
+
 /** Compute ceiling of integer quotient of A divided by B. */
 #define DIV_ROUND_UP( A, B )  ( (A) % (B) == 0 ? (A)/(B) : (A)/(B)+1 )
 

@@ -579,7 +579,7 @@ CodeEmitterGK110::emitIMUL(const Instruction *i)
    assert(!i->src(0).mod.neg() && !i->src(1).mod.neg());
    assert(!i->src(0).mod.abs() && !i->src(1).mod.abs());
 
-   if (isLIMM(i->src(1), TYPE_S32)) {
+   if (i->src(1).getFile() == FILE_IMMEDIATE) {
       emitForm_L(i, 0x280, 2, Modifier(0));
 
       if (i->subOp == NV50_IR_SUBOP_MUL_HIGH)
@@ -750,6 +750,32 @@ CodeEmitterGK110::emitNOT(const Instruction *i)
 void
 CodeEmitterGK110::emitLogicOp(const Instruction *i, uint8_t subOp)
 {
+   if (i->def(0).getFile() == FILE_PREDICATE) {
+      code[0] = 0x00000002 | (subOp << 27);
+      code[1] = 0x84800000;
+
+      emitPredicate(i);
+
+      defId(i->def(0), 5);
+      srcId(i->src(0), 14);
+      if (i->src(0).mod == Modifier(NV50_IR_MOD_NOT)) code[0] |= 1 << 17;
+      srcId(i->src(1), 32);
+      if (i->src(1).mod == Modifier(NV50_IR_MOD_NOT)) code[1] |= 1 << 3;
+
+      if (i->defExists(1)) {
+         defId(i->def(1), 2);
+      } else {
+         code[0] |= 7 << 2;
+      }
+      // (a OP b) OP c
+      if (i->predSrc != 2 && i->srcExists(2)) {
+         code[1] |= subOp << 16;
+         srcId(i->src(2), 42);
+         if (i->src(2).mod == Modifier(NV50_IR_MOD_NOT)) code[1] |= 1 << 13;
+      } else {
+         code[1] |= 7 << 10;
+      }
+   } else
    if (isLIMM(i->src(1), TYPE_S32)) {
       emitForm_L(i, 0x200, 0, i->src(1).mod);
       code[1] |= subOp << 24;
@@ -1738,6 +1764,9 @@ uses64bitAddress(const Instruction *ldst)
 void
 CodeEmitterGK110::emitATOM(const Instruction *i)
 {
+   const bool hasDst = i->defExists(0);
+   const bool exch = i->subOp == NV50_IR_SUBOP_ATOM_EXCH;
+
    code[0] = 0x00000002;
    if (i->subOp == NV50_IR_SUBOP_ATOM_CAS)
       code[1] = 0x77800000;
@@ -1766,15 +1795,21 @@ CodeEmitterGK110::emitATOM(const Instruction *i)
    /* TODO: cas: flip bits if $r255 is used */
    srcId(i->src(1), 23);
 
-   if (i->defExists(0))
+   if (hasDst) {
       defId(i->def(0), 2);
-   else
+   } else
+   if (!exch) {
       code[0] |= 255 << 2;
+   }
 
-   const int32_t offset = SDATA(i->src(0)).offset;
-   assert(offset < 0x80000 && offset >= -0x80000);
-   code[0] |= (offset & 1) << 31;
-   code[1] |= (offset & 0xffffe) >> 1;
+   if (hasDst || !exch) {
+      const int32_t offset = SDATA(i->src(0)).offset;
+      assert(offset < 0x80000 && offset >= -0x80000);
+      code[0] |= (offset & 1) << 31;
+      code[1] |= (offset & 0xffffe) >> 1;
+   } else {
+      srcAddr32(i->src(0), 31);
+   }
 
    if (i->getIndirect(0, 0)) {
       srcId(i->getIndirect(0, 0), 10);

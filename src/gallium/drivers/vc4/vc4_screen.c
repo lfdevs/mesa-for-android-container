@@ -380,6 +380,9 @@ vc4_screen_is_format_supported(struct pipe_screen *pscreen,
 {
         unsigned retval = 0;
 
+        if (sample_count > 1 && sample_count != VC4_MAX_SAMPLES)
+                return FALSE;
+
         if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
             !util_format_is_supported(format, usage)) {
                 return FALSE;
@@ -439,14 +442,12 @@ vc4_screen_is_format_supported(struct pipe_screen *pscreen,
         }
 
         if ((usage & PIPE_BIND_RENDER_TARGET) &&
-            (sample_count == 0 || sample_count == VC4_MAX_SAMPLES) &&
             vc4_rt_format_supported(format)) {
                 retval |= PIPE_BIND_RENDER_TARGET;
         }
 
         if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
-            (sample_count == 0 || sample_count == VC4_MAX_SAMPLES) &&
-            (vc4_tex_format_supported(format))) {
+            vc4_tex_format_supported(format)) {
                 retval |= PIPE_BIND_SAMPLER_VIEW;
         }
 

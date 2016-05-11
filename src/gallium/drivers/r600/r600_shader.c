@@ -7787,6 +7787,15 @@ static int tgsi_cmp(struct r600_shader_ctx *ctx)
 	int i, r, j;
 	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
 	int temp_regs[3];
+	unsigned op;
+
+	if (ctx->src[0].abs && ctx->src[0].neg) {
+		op = ALU_OP3_CNDE;
+		ctx->src[0].abs = 0;
+		ctx->src[0].neg = 0;
+	} else {
+		op = ALU_OP3_CNDGE;
+	}
 
 	for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
 		temp_regs[j] = 0;
@@ -7799,7 +7808,7 @@ static int tgsi_cmp(struct r600_shader_ctx *ctx)
 			continue;
 
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-		alu.op = ALU_OP3_CNDGE;
+		alu.op = op;
 		r = tgsi_make_src_for_op3(ctx, temp_regs[0], i, &alu.src[0], &ctx->src[0]);
 		if (r)
 			return r;

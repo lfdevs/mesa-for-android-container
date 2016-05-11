@@ -4658,6 +4658,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
                                 &prog->Comp.SharedSize);
 
       lower_vector_derefs(prog->_LinkedShaders[i]);
+      do_vec_index_to_swizzle(prog->_LinkedShaders[i]->ir);
    }
 
 done:

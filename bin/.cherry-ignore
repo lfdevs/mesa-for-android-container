@@ -1,0 +1,5 @@
+# Remove duplicate commit due to vulkan branch merge
+9e64a2a8e4821dd637daac54ba83895a490d4790 mesa: Fix generation of git_sha1.h.tmp for gitlinks
+
+# The functions/extension in question landed after the branchpoint.
+be5010c4b8635d0292404ac58ed0436ba6637579 glapi: fix parameter type for GetSamplerParameterIuivEXT() in es_EXT.xml

@@ -520,7 +520,7 @@ dri2GetCurrentContext()
    struct glx_context *gc = __glXGetCurrentContext();
    struct dri2_context *dri2Ctx = (struct dri2_context *)gc;
 
-   return dri2Ctx ? dri2Ctx->driContext : NULL;
+   return (gc != &dummyContext) ? dri2Ctx->driContext : NULL;
 }
 
 /**

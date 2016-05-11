@@ -268,7 +268,7 @@ xlib_displaytarget_destroy(struct sw_winsys *ws,
             xlib_dt->tempImage->data = NULL;
       }
       else {
-         FREE(xlib_dt->data);
+         align_free(xlib_dt->data);
          if (xlib_dt->tempImage && xlib_dt->tempImage->data == xlib_dt->data) {
             xlib_dt->tempImage->data = NULL;
          }

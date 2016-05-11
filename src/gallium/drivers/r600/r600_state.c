@@ -143,13 +143,14 @@ static uint32_t r600_translate_dbformat(enum pipe_format format)
 
 static bool r600_is_sampler_format_supported(struct pipe_screen *screen, enum pipe_format format)
 {
-	return r600_translate_texformat(screen, format, NULL, NULL, NULL) != ~0U;
+	return r600_translate_texformat(screen, format, NULL, NULL, NULL,
+                                   FALSE) != ~0U;
 }
 
 static bool r600_is_colorbuffer_format_supported(enum chip_class chip, enum pipe_format format)
 {
-	return r600_translate_colorformat(chip, format) != ~0U &&
-	       r600_translate_colorswap(format) != ~0U;
+	return r600_translate_colorformat(chip, format, FALSE) != ~0U &&
+	       r600_translate_colorswap(format, FALSE) != ~0U;
 }
 
 static bool r600_is_zs_format_supported(enum pipe_format format)
@@ -641,6 +642,7 @@ r600_create_sampler_view_custom(struct pipe_context *ctx,
 	uint32_t word4 = 0, yuv_format = 0, pitch = 0;
 	unsigned char swizzle[4], array_mode = 0;
 	unsigned width, height, depth, offset_level, last_level;
+	bool do_endian_swap = FALSE;
 
 	if (!view)
 		return NULL;
@@ -661,9 +663,12 @@ r600_create_sampler_view_custom(struct pipe_context *ctx,
 	swizzle[2] = state->swizzle_b;
 	swizzle[3] = state->swizzle_a;
 
+	if (R600_BIG_ENDIAN)
+		do_endian_swap = !(tmp->is_depth && !tmp->is_flushing_texture);
+
 	format = r600_translate_texformat(ctx->screen, state->format,
 					  swizzle,
-					  &word4, &yuv_format);
+					  &word4, &yuv_format, do_endian_swap);
 	assert(format != ~0);
 	if (format == ~0) {
 		FREE(view);
@@ -678,7 +683,7 @@ r600_create_sampler_view_custom(struct pipe_context *ctx,
 		tmp = tmp->flushed_depth_texture;
 	}
 
-	endian = r600_colorformat_endian_swap(format);
+	endian = r600_colorformat_endian_swap(format, do_endian_swap);
 
 	offset_level = state->u.tex.first_level;
 	last_level = state->u.tex.last_level - offset_level;
@@ -861,7 +866,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 	unsigned offset;
 	const struct util_format_description *desc;
 	int i;
-	bool blend_bypass = 0, blend_clamp = 1;
+	bool blend_bypass = 0, blend_clamp = 1, do_endian_swap = FALSE;
 
 	if (rtex->is_depth && !rtex->is_flushing_texture && !r600_can_read_depth(rtex)) {
 		r600_init_flushed_depth_texture(&rctx->b.b, surf->base.texture, NULL);
@@ -924,13 +929,17 @@ static void r600_init_color_surface(struct r600_context *rctx,
 			ntype = V_0280A0_NUMBER_UINT;
 	}
 
-	format = r600_translate_colorformat(rctx->b.chip_class, surf->base.format);
+	if (R600_BIG_ENDIAN)
+		do_endian_swap = !(rtex->is_depth && !rtex->is_flushing_texture);
+
+	format = r600_translate_colorformat(rctx->b.chip_class, surf->base.format,
+			                              do_endian_swap);
 	assert(format != ~0);
 
-	swap = r600_translate_colorswap(surf->base.format);
+	swap = r600_translate_colorswap(surf->base.format, do_endian_swap);
 	assert(swap != ~0);
 
-	endian = r600_colorformat_endian_swap(format);
+	endian = r600_colorformat_endian_swap(format, do_endian_swap);
 
 	/* set blend bypass according to docs if SINT/UINT or
 	   8/24 COLOR variants */

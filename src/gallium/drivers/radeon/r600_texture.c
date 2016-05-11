@@ -1258,7 +1258,7 @@ static void r600_surface_destroy(struct pipe_context *pipe,
 	FREE(surface);
 }
 
-unsigned r600_translate_colorswap(enum pipe_format format)
+unsigned r600_translate_colorswap(enum pipe_format format, bool do_endian_swap)
 {
 	const struct util_format_description *desc = util_format_description(format);
 
@@ -1285,7 +1285,8 @@ unsigned r600_translate_colorswap(enum pipe_format format)
 		else if ((HAS_SWIZZLE(0,Y) && HAS_SWIZZLE(1,X)) ||
 			 (HAS_SWIZZLE(0,Y) && HAS_SWIZZLE(1,NONE)) ||
 		         (HAS_SWIZZLE(0,NONE) && HAS_SWIZZLE(1,X)))
-			return V_0280A0_SWAP_STD_REV; /* YX__ */
+			/* YX__ */
+			return (do_endian_swap ? V_0280A0_SWAP_STD : V_0280A0_SWAP_STD_REV);
 		else if (HAS_SWIZZLE(0,X) && HAS_SWIZZLE(3,Y))
 			return V_0280A0_SWAP_ALT; /* X__Y */
 		else if (HAS_SWIZZLE(0,Y) && HAS_SWIZZLE(3,X))
@@ -1293,20 +1294,25 @@ unsigned r600_translate_colorswap(enum pipe_format format)
 		break;
 	case 3:
 		if (HAS_SWIZZLE(0,X))
-			return V_0280A0_SWAP_STD; /* XYZ */
+			return (do_endian_swap ? V_0280A0_SWAP_STD_REV : V_0280A0_SWAP_STD);
 		else if (HAS_SWIZZLE(0,Z))
 			return V_0280A0_SWAP_STD_REV; /* ZYX */
 		break;
 	case 4:
 		/* check the middle channels, the 1st and 4th channel can be NONE */
-		if (HAS_SWIZZLE(1,Y) && HAS_SWIZZLE(2,Z))
+		if (HAS_SWIZZLE(1,Y) && HAS_SWIZZLE(2,Z)) {
 			return V_0280A0_SWAP_STD; /* XYZW */
-		else if (HAS_SWIZZLE(1,Z) && HAS_SWIZZLE(2,Y))
+		} else if (HAS_SWIZZLE(1,Z) && HAS_SWIZZLE(2,Y)) {
 			return V_0280A0_SWAP_STD_REV; /* WZYX */
-		else if (HAS_SWIZZLE(1,Y) && HAS_SWIZZLE(2,X))
+		} else if (HAS_SWIZZLE(1,Y) && HAS_SWIZZLE(2,X)) {
 			return V_0280A0_SWAP_ALT; /* ZYXW */
-		else if (HAS_SWIZZLE(1,Z) && HAS_SWIZZLE(2,W))
-			return V_0280A0_SWAP_ALT_REV; /* YZWX */
+		} else if (HAS_SWIZZLE(1,Z) && HAS_SWIZZLE(2,W)) {
+			/* YZWX */
+			if (desc->is_array)
+				return V_0280A0_SWAP_ALT_REV;
+			else
+				return (do_endian_swap ? V_0280A0_SWAP_ALT : V_0280A0_SWAP_ALT_REV);
+		}
 		break;
 	}
 	return ~0U;
@@ -1357,7 +1363,7 @@ static void vi_get_fast_clear_parameters(enum pipe_format surface_format,
 	    surface_format == PIPE_FORMAT_B5G6R5_SRGB) {
 		extra_channel = -1;
 	} else if (desc->layout == UTIL_FORMAT_LAYOUT_PLAIN) {
-		if(r600_translate_colorswap(surface_format) <= 1)
+		if(r600_translate_colorswap(surface_format, FALSE) <= 1)
 			extra_channel = desc->nr_channels - 1;
 		else
 			extra_channel = 0;

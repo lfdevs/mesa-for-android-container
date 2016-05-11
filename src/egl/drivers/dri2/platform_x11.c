@@ -542,6 +542,55 @@ dri2_x11_flush_front_buffer(__DRIdrawable * driDrawable, void *loaderPrivate)
 #endif
 }
 
+static int
+dri2_x11_do_authenticate(struct dri2_egl_display *dri2_dpy, uint32_t id)
+{
+   xcb_dri2_authenticate_reply_t *authenticate;
+   xcb_dri2_authenticate_cookie_t authenticate_cookie;
+   xcb_screen_iterator_t s;
+   xcb_screen_t *screen;
+   int ret = 0;
+
+   s = xcb_setup_roots_iterator(xcb_get_setup(dri2_dpy->conn));
+
+   screen = get_xcb_screen(s, dri2_dpy->screen);
+   if (!screen) {
+      _eglLog(_EGL_WARNING, "DRI2: failed to get xcb screen");
+      return -1;
+   }
+
+   authenticate_cookie =
+      xcb_dri2_authenticate_unchecked(dri2_dpy->conn, screen->root, id);
+   authenticate =
+      xcb_dri2_authenticate_reply(dri2_dpy->conn, authenticate_cookie, NULL);
+
+   if (authenticate == NULL || !authenticate->authenticated)
+      ret = -1;
+
+   free(authenticate);
+
+   return ret;
+}
+
+static EGLBoolean
+dri2_x11_local_authenticate(struct dri2_egl_display *dri2_dpy)
+{
+#ifdef HAVE_LIBDRM
+   drm_magic_t magic;
+
+   if (drmGetMagic(dri2_dpy->fd, &magic)) {
+      _eglLog(_EGL_WARNING, "DRI2: failed to get drm magic");
+      return EGL_FALSE;
+   }
+
+   if (dri2_x11_do_authenticate(dri2_dpy, magic) < 0) {
+      _eglLog(_EGL_WARNING, "DRI2: failed to authenticate");
+      return EGL_FALSE;
+   }
+#endif
+   return EGL_TRUE;
+}
+
 static EGLBoolean
 dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
 {
@@ -630,6 +679,13 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
       return EGL_FALSE;
    }
 
+   if (!dri2_x11_local_authenticate(dri2_dpy)) {
+      close(dri2_dpy->fd);
+      free(dri2_dpy->device_name);
+      free(connect);
+      return EGL_FALSE;
+   }
+
    driver_name = xcb_dri2_connect_driver_name (connect);
 
    /* If Mesa knows about the appropriate driver for this fd, then trust it.
@@ -660,51 +716,8 @@ static int
 dri2_x11_authenticate(_EGLDisplay *disp, uint32_t id)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   xcb_dri2_authenticate_reply_t *authenticate;
-   xcb_dri2_authenticate_cookie_t authenticate_cookie;
-   xcb_screen_iterator_t s;
-   xcb_screen_t *screen;
-   int ret = 0;
 
-   s = xcb_setup_roots_iterator(xcb_get_setup(dri2_dpy->conn));
-
-   screen = get_xcb_screen(s, dri2_dpy->screen);
-   if (!screen) {
-      _eglLog(_EGL_WARNING, "DRI2: failed to get xcb screen");
-      return -1;
-   }
-
-   authenticate_cookie =
-      xcb_dri2_authenticate_unchecked(dri2_dpy->conn, screen->root, id);
-   authenticate =
-      xcb_dri2_authenticate_reply(dri2_dpy->conn, authenticate_cookie, NULL);
-
-   if (authenticate == NULL || !authenticate->authenticated)
-      ret = -1;
-
-   free(authenticate);
-   
-   return ret;
-}
-
-static EGLBoolean
-dri2_x11_local_authenticate(_EGLDisplay *disp)
-{
-#ifdef HAVE_LIBDRM
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   drm_magic_t magic;
-
-   if (drmGetMagic(dri2_dpy->fd, &magic)) {
-      _eglLog(_EGL_WARNING, "DRI2: failed to get drm magic");
-      return EGL_FALSE;
-   }
-   
-   if (dri2_x11_authenticate(disp, magic) < 0) {
-      _eglLog(_EGL_WARNING, "DRI2: failed to authenticate");
-      return EGL_FALSE;
-   }
-#endif
-   return EGL_TRUE;
+   return dri2_x11_do_authenticate(dri2_dpy, id);
 }
 
 static EGLBoolean
@@ -1389,9 +1402,6 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
 
    if (!dri2_x11_connect(dri2_dpy))
       goto cleanup_conn;
-
-   if (!dri2_x11_local_authenticate(disp))
-      goto cleanup_fd;
 
    if (!dri2_load_driver(disp))
       goto cleanup_fd;

@@ -54,6 +54,7 @@ LOCAL_CFLAGS += \
 	-DHAVE___BUILTIN_CLZLL \
 	-DHAVE___BUILTIN_UNREACHABLE \
 	-DHAVE_PTHREAD=1 \
+	-DHAVE_DLOPEN \
 	-fvisibility=hidden \
 	-Wno-sign-compare
 
@@ -65,7 +66,6 @@ ifeq ($(strip $(MESA_ENABLE_ASM)),true)
 ifeq ($(TARGET_ARCH),x86)
 LOCAL_CFLAGS += \
 	-DUSE_X86_ASM \
-	-DHAVE_DLOPEN \
 
 endif
 endif

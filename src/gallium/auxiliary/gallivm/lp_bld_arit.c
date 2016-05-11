@@ -2130,8 +2130,8 @@ lp_build_fract(struct lp_build_context *bld,
 
 
 /**
- * Prevent returning a fractional part of 1.0 for very small negative values of
- * 'a' by clamping against 0.99999(9).
+ * Prevent returning 1.0 for very small negative values of 'a' by clamping
+ * against 0.99999(9). (Will also return that value for NaNs.)
  */
 static inline LLVMValueRef
 clamp_fract(struct lp_build_context *bld, LLVMValueRef fract)
@@ -2141,13 +2141,14 @@ clamp_fract(struct lp_build_context *bld, LLVMValueRef fract)
    /* this is the largest number smaller than 1.0 representable as float */
    max = lp_build_const_vec(bld->gallivm, bld->type,
                             1.0 - 1.0/(1LL << (lp_mantissa(bld->type) + 1)));
-   return lp_build_min(bld, fract, max);
+   return lp_build_min_ext(bld, fract, max,
+                           GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
 }
 
 
 /**
  * Same as lp_build_fract, but guarantees that the result is always smaller
- * than one.
+ * than one. Will also return the smaller-than-one value for infs, NaNs.
  */
 LLVMValueRef
 lp_build_fract_safe(struct lp_build_context *bld,

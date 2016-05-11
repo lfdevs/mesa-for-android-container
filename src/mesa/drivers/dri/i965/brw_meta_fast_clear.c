@@ -651,6 +651,7 @@ brw_meta_fast_clear(struct brw_context *brw, struct gl_framebuffer *fb,
       GLubyte *color_mask = ctx->Color.ColorMask[buf];
       for (int i = 0; i < 4; i++) {
          if (_mesa_format_has_color_component(irb->mt->format, i) &&
+             !(i == 3 && irb->Base.Base._BaseFormat == GL_RGB) &&
              !color_mask[i]) {
             perf_debug("Falling back to plain clear on %dx%d buffer because of color mask\n",
                        irb->mt->logical_width0, irb->mt->logical_height0);

@@ -1521,7 +1521,7 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
 {
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;
    struct pipe_context *pipe = ctx->base.pipe;
-   struct pipe_framebuffer_state fb_state;
+   struct pipe_framebuffer_state fb_state = {0};
    enum pipe_texture_target src_target = src->texture->target;
    unsigned src_samples = src->texture->nr_samples;
    unsigned dst_samples = dst->texture->nr_samples;

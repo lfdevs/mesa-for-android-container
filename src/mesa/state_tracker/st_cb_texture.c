@@ -2136,7 +2136,8 @@ st_GetTexSubImage(struct gl_context * ctx,
       goto fallback;
    }
 
-   if (!stImage->pt || !src) {
+   /* Handle non-finalized textures. */
+   if (!stImage->pt || stImage->pt != stObj->pt || !src) {
       goto fallback;
    }
 
