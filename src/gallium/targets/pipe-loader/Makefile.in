@@ -140,11 +140,18 @@ target_triplet = @target@
 @HAVE_GALLIUM_RADEONSI_TRUE@am__append_14 = pipe_radeonsi.la
 @HAVE_GALLIUM_FREEDRENO_TRUE@am__append_15 = pipe_msm.la
 @HAVE_GALLIUM_SVGA_TRUE@am__append_16 = pipe_vmwgfx.la
-@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_17 = -DGALLIUM_SOFTPIPE
-@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_18 = pipe_swrast.la
-@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_19 = -DGALLIUM_LLVMPIPE
-@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_20 = \
-@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la
+@HAVE_GALLIUM_SWRAST_TRUE@am__append_17 = pipe_swrast.la
+@HAVE_GALLIUM_SOFTPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_18 = -DGALLIUM_SOFTPIPE
+@HAVE_GALLIUM_SOFTPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_19 = \
+@HAVE_GALLIUM_SOFTPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la
+
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_20 = -DGALLIUM_LLVMPIPE
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_21 = \
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@	$(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la
+
+@HAVE_GALLIUM_SWRAST_TRUE@@HAVE_GALLIUM_SWR_TRUE@am__append_22 = -DGALLIUM_SWR
+@HAVE_GALLIUM_SWRAST_TRUE@@HAVE_GALLIUM_SWR_TRUE@am__append_23 = \
+@HAVE_GALLIUM_SWRAST_TRUE@@HAVE_GALLIUM_SWR_TRUE@	$(top_builddir)/src/gallium/drivers/swr/libmesaswr.la
 
 subdir = src/gallium/targets/pipe-loader
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -292,17 +299,15 @@ am__DEPENDENCIES_6 =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__DEPENDENCIES_5)
-@HAVE_GALLIUM_SOFTPIPE_TRUE@pipe_swrast_la_DEPENDENCIES =  \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__DEPENDENCIES_4) \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__append_20) \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__DEPENDENCIES_6)
+@HAVE_GALLIUM_SWRAST_TRUE@pipe_swrast_la_DEPENDENCIES =  \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__DEPENDENCIES_4) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_19) $(am__append_21) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_23) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__DEPENDENCIES_6)
 am__pipe_swrast_la_SOURCES_DIST = pipe_swrast.c
-@HAVE_GALLIUM_SOFTPIPE_TRUE@am_pipe_swrast_la_OBJECTS =  \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	pipe_swrast.lo
+@HAVE_GALLIUM_SWRAST_TRUE@am_pipe_swrast_la_OBJECTS = pipe_swrast.lo
 pipe_swrast_la_OBJECTS = $(am_pipe_swrast_la_OBJECTS)
-@HAVE_GALLIUM_SOFTPIPE_TRUE@am_pipe_swrast_la_rpath = -rpath \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(pipedir)
+@HAVE_GALLIUM_SWRAST_TRUE@am_pipe_swrast_la_rpath = -rpath $(pipedir)
 @HAVE_GALLIUM_SVGA_TRUE@pipe_vmwgfx_la_DEPENDENCIES =  \
 @HAVE_GALLIUM_SVGA_TRUE@	$(am__DEPENDENCIES_4) \
 @HAVE_GALLIUM_SVGA_TRUE@	$(top_builddir)/src/gallium/winsys/svga/drm/libsvgadrm.la \
@@ -481,6 +486,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -579,6 +586,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -599,6 +608,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -615,6 +627,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -770,11 +783,11 @@ AM_CPPFLAGS = $(GALLIUM_CFLAGS) -I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/winsys \
 	$(GALLIUM_PIPE_LOADER_DEFINES) $(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) -DGALLIUM_RBUG -DGALLIUM_TRACE \
-	$(am__append_17) $(am__append_19)
+	$(am__append_18) $(am__append_20) $(am__append_22)
 pipedir = $(libdir)/gallium-pipe
 pipe_LTLIBRARIES = $(am__append_9) $(am__append_10) $(am__append_11) \
 	$(am__append_12) $(am__append_13) $(am__append_14) \
-	$(am__append_15) $(am__append_16) $(am__append_18)
+	$(am__append_15) $(am__append_16) $(am__append_17)
 PIPE_LIBS = $(am__append_3) $(am__append_4) $(am__append_5) \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
@@ -859,12 +872,12 @@ AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 @HAVE_GALLIUM_SVGA_TRUE@	$(top_builddir)/src/gallium/drivers/svga/libsvga.la \
 @HAVE_GALLIUM_SVGA_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_GALLIUM_SOFTPIPE_TRUE@pipe_swrast_la_SOURCES = pipe_swrast.c
-@HAVE_GALLIUM_SOFTPIPE_TRUE@nodist_EXTRA_pipe_swrast_la_SOURCES = dummy.cpp
-@HAVE_GALLIUM_SOFTPIPE_TRUE@pipe_swrast_la_LIBADD = $(PIPE_LIBS) \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__append_20) \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
+@HAVE_GALLIUM_SWRAST_TRUE@pipe_swrast_la_SOURCES = pipe_swrast.c
+@HAVE_GALLIUM_SWRAST_TRUE@nodist_EXTRA_pipe_swrast_la_SOURCES = dummy.cpp
+@HAVE_GALLIUM_SWRAST_TRUE@pipe_swrast_la_LIBADD = $(PIPE_LIBS) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_19) $(am__append_21) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_23) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
 EXTRA_DIST = pipe.sym
 all: all-am
 

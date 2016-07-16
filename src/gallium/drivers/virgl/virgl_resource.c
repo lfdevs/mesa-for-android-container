@@ -64,7 +64,8 @@ static struct pipe_resource *virgl_resource_create(struct pipe_screen *screen,
 
 static struct pipe_resource *virgl_resource_from_handle(struct pipe_screen *screen,
                                                         const struct pipe_resource *templ,
-                                                        struct winsys_handle *whandle)
+                                                        struct winsys_handle *whandle,
+                                                        unsigned usage)
 {
     struct virgl_screen *vs = virgl_screen(screen);
     if (templ->target == PIPE_BUFFER)

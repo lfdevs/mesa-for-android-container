@@ -95,4 +95,18 @@ typedef void *LLVMMCJITMemoryManagerRef;
 #define LLVMInsertBasicBlock ILLEGAL_LLVM_FUNCTION
 #define LLVMCreateBuilder ILLEGAL_LLVM_FUNCTION
 
+
+/*
+ * Before LLVM 3.4 LLVMSetAlignment only supported GlobalValue, not
+ * LoadInst/StoreInst as we need.
+ */
+#if HAVE_LLVM < 0x0304
+#  ifdef __cplusplus
+      extern "C"
+#  endif
+   void LLVMSetAlignmentBackport(LLVMValueRef V, unsigned Bytes);
+#  define LLVMSetAlignment LLVMSetAlignmentBackport
+#endif
+
+
 #endif /* LP_BLD_H */

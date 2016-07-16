@@ -98,13 +98,22 @@ public:
    unsigned get_num_outputs() const;
    bool store(struct gl_context *ctx, struct gl_shader_program *prog,
               struct gl_transform_feedback_info *info, unsigned buffer,
-              const unsigned max_outputs) const;
+              unsigned buffer_index, const unsigned max_outputs,
+              bool *explicit_stride, bool has_xfb_qualifiers) const;
    const tfeedback_candidate *find_candidate(gl_shader_program *prog,
                                              hash_table *tfeedback_candidates);
 
    bool is_next_buffer_separator() const
    {
       return this->next_buffer_separator;
+   }
+
+   bool is_varying_written() const
+   {
+      if (this->next_buffer_separator || this->skip_components)
+         return false;
+
+      return this->matched_candidate->toplevel_var->data.assigned;
    }
 
    bool is_varying() const
@@ -120,6 +129,16 @@ public:
    unsigned get_stream_id() const
    {
       return this->stream_id;
+   }
+
+   unsigned get_buffer() const
+   {
+      return this->buffer;
+   }
+
+   unsigned get_offset() const
+   {
+      return this->offset;
    }
 
    /**
@@ -191,6 +210,7 @@ private:
    enum {
       none,
       clip_distance,
+      cull_distance,
       tess_level_outer,
       tess_level_inner,
    } lowered_builtin_array_variable;
@@ -200,6 +220,16 @@ private:
     * variable.  -1 if a location hasn't been assigned yet.
     */
    int location;
+
+   /**
+    * Used to store the buffer assigned by xfb_buffer.
+    */
+   unsigned buffer;
+
+   /**
+    * Used to store the offset assigned by xfb_offset.
+    */
+   unsigned offset;
 
    /**
     * If non-zero, then this variable may be packed along with other variables
@@ -268,6 +298,11 @@ parse_tfeedback_decls(struct gl_context *ctx, struct gl_shader_program *prog,
                       const void *mem_ctx, unsigned num_names,
                       char **varying_names, tfeedback_decl *decls);
 
+bool
+process_xfb_layout_qualifiers(void *mem_ctx, const gl_shader *sh,
+                              unsigned *num_tfeedback_decls,
+                              char ***varying_names);
+
 void
 remove_unused_shader_inputs_and_outputs(bool is_separate_shader_object,
                                         gl_shader *sh,
@@ -276,7 +311,8 @@ remove_unused_shader_inputs_and_outputs(bool is_separate_shader_object,
 bool
 store_tfeedback_info(struct gl_context *ctx, struct gl_shader_program *prog,
                      unsigned num_tfeedback_decls,
-                     tfeedback_decl *tfeedback_decls);
+                     tfeedback_decl *tfeedback_decls,
+                     bool has_xfb_qualifiers);
 
 bool
 assign_varying_locations(struct gl_context *ctx,

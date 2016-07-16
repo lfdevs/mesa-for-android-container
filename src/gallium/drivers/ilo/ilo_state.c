@@ -1060,7 +1060,7 @@ ilo_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
    bool changed = false;
    unsigned i;
 
-   assert(start + count <= Elements(dst->cso));
+   assert(start + count <= ARRAY_SIZE(dst->cso));
 
    if (samplers) {
       for (i = 0; i < count; i++) {
@@ -1544,8 +1544,8 @@ ilo_set_constant_buffer(struct pipe_context *pipe,
    const unsigned count = 1;
    unsigned i;
 
-   assert(shader < Elements(vec->cbuf));
-   assert(index + count <= Elements(vec->cbuf[shader].cso));
+   assert(shader < ARRAY_SIZE(vec->cbuf));
+   assert(index + count <= ARRAY_SIZE(vec->cbuf[shader].cso));
 
    if (buf) {
       for (i = 0; i < count; i++) {
@@ -1809,7 +1809,7 @@ ilo_set_sampler_views(struct pipe_context *pipe, unsigned shader,
    struct ilo_view_state *dst = &vec->view[shader];
    unsigned i;
 
-   assert(start + count <= Elements(dst->states));
+   assert(start + count <= ARRAY_SIZE(dst->states));
 
    if (views) {
       for (i = 0; i < count; i++)
@@ -1858,7 +1858,7 @@ ilo_set_shader_images(struct pipe_context *pipe, unsigned shader,
    struct ilo_resource_state *dst = &vec->resource;
    unsigned i;
 
-   assert(start + count <= Elements(dst->states));
+   assert(start + count <= ARRAY_SIZE(dst->states));
 
    if (surfaces) {
       for (i = 0; i < count; i++)
@@ -2220,7 +2220,7 @@ ilo_set_compute_resources(struct pipe_context *pipe,
    struct ilo_resource_state *dst = &vec->cs_resource;
    unsigned i;
 
-   assert(start + count <= Elements(dst->states));
+   assert(start + count <= ARRAY_SIZE(dst->states));
 
    if (surfaces) {
       for (i = 0; i < count; i++)
@@ -2407,7 +2407,7 @@ ilo_state_vector_cleanup(struct ilo_state_vector *vec)
 {
    unsigned i, sh;
 
-   for (i = 0; i < Elements(vec->vb.states); i++) {
+   for (i = 0; i < ARRAY_SIZE(vec->vb.states); i++) {
       if (vec->vb.enabled_mask & (1 << i))
          pipe_resource_reference(&vec->vb.states[i].buffer, NULL);
    }
@@ -2424,7 +2424,7 @@ ilo_state_vector_cleanup(struct ilo_state_vector *vec)
          pipe_sampler_view_reference(&view, NULL);
       }
 
-      for (i = 0; i < Elements(vec->cbuf[sh].cso); i++) {
+      for (i = 0; i < ARRAY_SIZE(vec->cbuf[sh].cso); i++) {
          struct ilo_cbuf_cso *cbuf = &vec->cbuf[sh].cso[i];
          pipe_resource_reference(&cbuf->resource, NULL);
       }
@@ -2513,7 +2513,7 @@ ilo_state_vector_resource_renamed(struct ilo_state_vector *vec,
       }
 
       if (res->target == PIPE_BUFFER) {
-         for (i = 0; i < Elements(vec->cbuf[sh].cso); i++) {
+         for (i = 0; i < ARRAY_SIZE(vec->cbuf[sh].cso); i++) {
             struct ilo_cbuf_cso *cbuf = &vec->cbuf[sh].cso[i];
 
             if (cbuf->resource == res) {

@@ -35,7 +35,8 @@ struct u_suballocator;
 
 struct u_suballocator *
 u_suballocator_create(struct pipe_context *pipe, unsigned size,
-                      unsigned alignment, unsigned bind, unsigned usage,
+                      unsigned alignment, unsigned bind,
+                      enum pipe_resource_usage usage,
 		      boolean zero_buffer_memory);
 
 void

@@ -36,7 +36,7 @@ if env['gcc'] and env['machine'] != 'x86_64':
     sources += ['#src/gallium/state_trackers/wgl/opengl32.mingw.def']
 else:
     sources += ['#src/gallium/state_trackers/wgl/opengl32.def']
-    
+
 drivers += [trace, rbug]
 
 env['no_import_lib'] = 1
@@ -50,7 +50,7 @@ if env['gles']:
 opengl32 = env.SharedLibrary(
     target ='opengl32',
     source = sources,
-    LIBS = wgl + ws_gdi + glapi + compiler + mesa + drivers + gallium + glsl + env['LIBS'],
+    LIBS = wgl + ws_gdi + glapi + compiler + mesa + drivers + gallium + glsl + nir + env['LIBS'],
 )
 
 env.Alias('opengl32', opengl32)

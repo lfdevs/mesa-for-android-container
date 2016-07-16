@@ -320,7 +320,7 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1; /* may be a sw fallback, depending on restart index */
 
    case PIPE_CAP_GENERATE_MIPMAP:
-      return sws->have_vgpu10;
+      return sws->have_generate_mipmap_cmd;
 
    /* Unsupported features */
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
@@ -360,6 +360,11 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_STRING_MARKER:
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
    case PIPE_CAP_QUERY_MEMORY_INFO:
+   case PIPE_CAP_PCI_GROUP:
+   case PIPE_CAP_PCI_BUS:
+   case PIPE_CAP_PCI_DEVICE:
+   case PIPE_CAP_PCI_FUNCTION:
+   case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
       return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 64;
@@ -400,6 +405,9 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
+   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+   case PIPE_CAP_CULL_DISTANCE:
+   case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
       return 0;
    }
 
@@ -425,6 +433,9 @@ vgpu9_get_shader_param(struct pipe_screen *screen, unsigned shader,
       {
       case PIPE_SHADER_CAP_MAX_INSTRUCTIONS:
       case PIPE_SHADER_CAP_MAX_ALU_INSTRUCTIONS:
+         return get_uint_cap(sws,
+                             SVGA3D_DEVCAP_MAX_FRAGMENT_SHADER_INSTRUCTIONS,
+                             512);
       case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
       case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
          return 512;
@@ -827,6 +838,22 @@ svga_get_driver_query_info(struct pipe_screen *screen,
             PIPE_DRIVER_QUERY_TYPE_UINT64),
       QUERY("num-bytes-uploaded", SVGA_QUERY_NUM_BYTES_UPLOADED,
             PIPE_DRIVER_QUERY_TYPE_BYTES),
+      QUERY("command-buffer-size", SVGA_QUERY_COMMAND_BUFFER_SIZE,
+            PIPE_DRIVER_QUERY_TYPE_BYTES),
+      QUERY("flush-time", SVGA_QUERY_FLUSH_TIME,
+            PIPE_DRIVER_QUERY_TYPE_MICROSECONDS),
+      QUERY("surface-write-flushes", SVGA_QUERY_SURFACE_WRITE_FLUSHES,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
+      QUERY("num-readbacks", SVGA_QUERY_NUM_READBACKS,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
+      QUERY("num-resource-updates", SVGA_QUERY_NUM_RESOURCE_UPDATES,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
+      QUERY("num-buffer-uploads", SVGA_QUERY_NUM_BUFFER_UPLOADS,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
+      QUERY("num-const-buf-updates", SVGA_QUERY_NUM_CONST_BUF_UPDATES,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
+      QUERY("num-const-updates", SVGA_QUERY_NUM_CONST_UPDATES,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
 
       /* running total counters */
       QUERY("memory-used", SVGA_QUERY_MEMORY_USED,
@@ -845,9 +872,9 @@ svga_get_driver_query_info(struct pipe_screen *screen,
 #undef QUERY
 
    if (!info)
-      return Elements(queries);
+      return ARRAY_SIZE(queries);
 
-   if (index >= Elements(queries))
+   if (index >= ARRAY_SIZE(queries))
       return 0;
 
    *info = queries[index];
@@ -979,8 +1006,10 @@ svga_screen_create(struct svga_winsys_screen *sws)
       svgascreen->max_color_buffers = SVGA3D_DX_MAX_RENDER_TARGETS;
 
       /* Multisample samples per pixel */
-      svgascreen->ms_samples =
-         get_uint_cap(sws, SVGA3D_DEVCAP_MULTISAMPLE_MASKABLESAMPLES, 0);
+      if (debug_get_bool_option("SVGA_MSAA", TRUE)) {
+         svgascreen->ms_samples =
+            get_uint_cap(sws, SVGA3D_DEVCAP_MULTISAMPLE_MASKABLESAMPLES, 0);
+      }
 
       /* Maximum number of constant buffers */
       svgascreen->max_const_buffers =
@@ -1040,6 +1069,7 @@ svga_screen_create(struct svga_winsys_screen *sws)
                    svgascreen->haveLineStipple, svgascreen->haveLineSmooth,
                    svgascreen->maxLineWidth);
       debug_printf("svga: maxPointSize %g\n", svgascreen->maxPointSize);
+      debug_printf("svga: msaa samples mask: 0x%x\n", svgascreen->ms_samples);
    }
 
    pipe_mutex_init(svgascreen->tex_mutex);

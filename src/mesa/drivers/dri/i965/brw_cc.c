@@ -76,7 +76,8 @@ const struct brw_tracked_state brw_cc_vp = {
    .dirty = {
       .mesa = _NEW_TRANSFORM |
               _NEW_VIEWPORT,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP,
    },
    .emit = brw_upload_cc_vp
 };
@@ -247,6 +248,7 @@ const struct brw_tracked_state brw_cc_unit = {
               _NEW_DEPTH |
               _NEW_STENCIL,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_CC_VP |
              BRW_NEW_STATS_WM,
    },
@@ -269,7 +271,8 @@ static void upload_blend_constant_color(struct brw_context *brw)
 const struct brw_tracked_state brw_blend_constant_color = {
    .dirty = {
       .mesa = _NEW_COLOR,
-      .brw = BRW_NEW_CONTEXT,
+      .brw = BRW_NEW_CONTEXT |
+             BRW_NEW_BLORP,
    },
    .emit = upload_blend_constant_color
 };

@@ -353,7 +353,7 @@ lp_build_float_to_srgb_packed(struct gallivm_state *gallivm,
 
    dst = lp_build_zero(gallivm, int32_type);
    for (chan = 0; chan < dst_fmt->nr_channels; chan++) {
-      if (dst_fmt->swizzle[chan] <= UTIL_FORMAT_SWIZZLE_W) {
+      if (dst_fmt->swizzle[chan] <= PIPE_SWIZZLE_W) {
          unsigned ls;
          LLVMValueRef shifted, shift_val;
          ls = dst_fmt->channel[dst_fmt->swizzle[chan]].shift;

@@ -111,7 +111,7 @@ tgsi_default_declaration( void )
    declaration.Local = 0;
    declaration.Array = 0;
    declaration.Atomic = 0;
-   declaration.Shared = 0;
+   declaration.MemType = TGSI_MEMORY_TYPE_GLOBAL;
    declaration.Padding = 0;
 
    return declaration;
@@ -127,6 +127,8 @@ tgsi_build_declaration(
    unsigned invariant,
    unsigned local,
    unsigned array,
+   unsigned atomic,
+   unsigned mem_type,
    struct tgsi_header *header )
 {
    struct tgsi_declaration declaration;
@@ -143,6 +145,8 @@ tgsi_build_declaration(
    declaration.Invariant = invariant;
    declaration.Local = local;
    declaration.Array = array;
+   declaration.Atomic = atomic;
+   declaration.MemType = mem_type;
    header_bodysize_grow( header );
 
    return declaration;
@@ -401,6 +405,8 @@ tgsi_build_full_declaration(
       full_decl->Declaration.Invariant,
       full_decl->Declaration.Local,
       full_decl->Declaration.Array,
+      full_decl->Declaration.Atomic,
+      full_decl->Declaration.MemType,
       header );
 
    if (maxsize <= size)
@@ -775,6 +781,8 @@ tgsi_default_instruction_memory( void )
    struct tgsi_instruction_memory instruction_memory;
 
    instruction_memory.Qualifier = 0;
+   instruction_memory.Texture = 0;
+   instruction_memory.Format = 0;
    instruction_memory.Padding = 0;
 
    return instruction_memory;
@@ -783,6 +791,8 @@ tgsi_default_instruction_memory( void )
 static struct tgsi_instruction_memory
 tgsi_build_instruction_memory(
    unsigned qualifier,
+   unsigned texture,
+   unsigned format,
    struct tgsi_token *prev_token,
    struct tgsi_instruction *instruction,
    struct tgsi_header *header )
@@ -790,6 +800,8 @@ tgsi_build_instruction_memory(
    struct tgsi_instruction_memory instruction_memory;
 
    instruction_memory.Qualifier = qualifier;
+   instruction_memory.Texture = texture;
+   instruction_memory.Format = format;
    instruction_memory.Padding = 0;
    instruction->Memory = 1;
 
@@ -1167,6 +1179,8 @@ tgsi_build_full_instruction(
 
       *instruction_memory = tgsi_build_instruction_memory(
          full_inst->Memory.Qualifier,
+         full_inst->Memory.Texture,
+         full_inst->Memory.Format,
          prev_token,
          instruction,
          header );
@@ -1424,4 +1438,19 @@ tgsi_build_full_property(
    }
 
    return size;
+}
+
+struct tgsi_full_src_register
+tgsi_full_src_register_from_dst(const struct tgsi_full_dst_register *dst)
+{
+   struct tgsi_full_src_register src;
+   src.Register = tgsi_default_src_register();
+   src.Register.File = dst->Register.File;
+   src.Register.Indirect = dst->Register.Indirect;
+   src.Register.Dimension = dst->Register.Dimension;
+   src.Register.Index = dst->Register.Index;
+   src.Indirect = dst->Indirect;
+   src.Dimension = dst->Dimension;
+   src.DimIndirect = dst->DimIndirect;
+   return src;
 }

@@ -378,6 +378,9 @@ xmesa_check_buffer_size(XMesaBuffer b);
 extern void
 xmesa_destroy_buffers_on_display(Display *dpy);
 
+extern void
+xmesa_close_display(Display *dpy);
+
 static inline GLuint
 xmesa_buffer_width(XMesaBuffer b)
 {

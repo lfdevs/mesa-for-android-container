@@ -63,9 +63,6 @@
 #define SI_CONTEXT_CS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 10)
 #define SI_CONTEXT_VGT_FLUSH		(R600_CONTEXT_PRIVATE_FLAG << 11)
 #define SI_CONTEXT_VGT_STREAMOUT_SYNC	(R600_CONTEXT_PRIVATE_FLAG << 12)
-/* Compute only. */
-#define SI_CONTEXT_FLUSH_WITH_INV_L2	(R600_CONTEXT_PRIVATE_FLAG << 13) /* TODO: merge with TC? */
-#define SI_CONTEXT_FLAG_COMPUTE		(R600_CONTEXT_PRIVATE_FLAG << 14)
 
 #define SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER (SI_CONTEXT_FLUSH_AND_INV_CB | \
 					      SI_CONTEXT_FLUSH_AND_INV_CB_META | \
@@ -76,11 +73,11 @@
 #define SI_IS_TRACE_POINT(x)		(((x) & 0xcafe0000) == 0xcafe0000)
 #define SI_GET_TRACE_POINT_ID(x)	((x) & 0xffff)
 
-#define SI_MAX_VIEWPORTS	16
 #define SI_MAX_BORDER_COLORS	4096
 
 struct si_compute;
 struct hash_table;
+struct u_suballocator;
 
 struct si_screen {
 	struct r600_common_screen	b;
@@ -120,8 +117,6 @@ struct si_blend_color {
 struct si_sampler_view {
 	struct pipe_sampler_view	base;
 	struct list_head		list;
-	struct r600_resource		*resource;
-	struct r600_resource		*dcc_buffer;
         /* [0..7] = image descriptor
          * [4..7] = buffer descriptor */
 	uint32_t			state[8];
@@ -135,11 +130,20 @@ struct si_sampler_state {
 
 struct si_cs_shader_state {
 	struct si_compute		*program;
+	struct si_compute		*emitted_program;
+	unsigned			offset;
+	bool				initialized;
 };
 
 struct si_textures_info {
 	struct si_sampler_views		views;
 	uint32_t			depth_texture_mask; /* which textures are depth */
+	uint32_t			compressed_colortex_mask;
+};
+
+struct si_images_info {
+	struct si_descriptors		desc;
+	struct pipe_image_view		views[SI_NUM_IMAGES];
 	uint32_t			compressed_colortex_mask;
 };
 
@@ -169,18 +173,6 @@ struct si_sample_mask {
 	uint16_t		sample_mask;
 };
 
-struct si_scissors {
-	struct r600_atom		atom;
-	unsigned			dirty_mask;
-	struct pipe_scissor_state	states[SI_MAX_VIEWPORTS];
-};
-
-struct si_viewports {
-	struct r600_atom		atom;
-	unsigned			dirty_mask;
-	struct pipe_viewport_state	states[SI_MAX_VIEWPORTS];
-};
-
 /* A shader state consists of the shader selector, which is a constant state
  * object shared by multiple contexts and shouldn't be modified, and
  * the current shader variant selected for this context.
@@ -197,8 +189,14 @@ struct si_context {
 	void				*custom_blend_resolve;
 	void				*custom_blend_decompress;
 	void				*custom_blend_fastclear;
-	void				*pstipple_sampler_state;
+	void				*custom_blend_dcc_decompress;
 	struct si_screen		*screen;
+
+	struct radeon_winsys_cs		*ce_ib;
+	struct radeon_winsys_cs		*ce_preamble_ib;
+	bool				ce_need_synchronization;
+	struct u_suballocator		*ce_suballocator;
+
 	struct pipe_fence_handle	*last_gfx_fence;
 	struct si_shader_ctx_state	fixed_func_tcs_shader;
 	LLVMTargetMachineRef		tm;
@@ -223,8 +221,6 @@ struct si_context {
 	struct r600_atom		clip_regs;
 	struct si_clip_state		clip_state;
 	struct si_shader_data		shader_userdata;
-	struct si_scissors		scissors;
-	struct si_viewports		viewports;
 	struct si_stencil_ref		stencil_ref;
 	struct r600_atom		spi_map;
 
@@ -249,15 +245,18 @@ struct si_context {
 
 	/* shader descriptors */
 	struct si_descriptors		vertex_buffers;
+	struct si_buffer_resources	rw_buffers;
 	struct si_buffer_resources	const_buffers[SI_NUM_SHADERS];
-	struct si_buffer_resources	rw_buffers[SI_NUM_SHADERS];
+	struct si_buffer_resources	shader_buffers[SI_NUM_SHADERS];
 	struct si_textures_info		samplers[SI_NUM_SHADERS];
+	struct si_images_info		images[SI_NUM_SHADERS];
 
 	/* other shader resources */
 	struct pipe_constant_buffer	null_const_buf; /* used for set_constant_buffer(NULL) on CIK */
 	struct pipe_resource		*esgs_ring;
 	struct pipe_resource		*gsvs_ring;
 	struct pipe_resource		*tf_ring;
+	struct pipe_resource		*tess_offchip_ring;
 	union pipe_color_union		*border_color_table; /* in CPU memory, any endian */
 	struct r600_resource		*border_color_buffer;
 	union pipe_color_union		*border_color_map; /* in VRAM (slow access), little endian */
@@ -283,6 +282,7 @@ struct si_context {
 	bool			db_stencil_clear;
 	bool			db_stencil_disable_expclear;
 	unsigned		ps_db_shader_control;
+	bool			occlusion_queries_disabled;
 
 	/* Emitted draw state. */
 	int			last_base_vertex;
@@ -296,6 +296,7 @@ struct si_context {
 	int			last_ls_hs_config;
 	int			last_rast_prim;
 	unsigned		last_sc_line_stipple;
+	int			last_vtx_reuse_depth;
 	int			current_rast_prim; /* primitive type after TES, GS */
 	unsigned		last_gsvs_itemsize;
 
@@ -304,6 +305,8 @@ struct si_context {
 	boolean                 emit_scratch_reloc;
 	unsigned		scratch_waves;
 	unsigned		spi_tmpring_size;
+
+	struct r600_resource	*compute_scratch_buffer;
 
 	/* Emitted derived tessellation state. */
 	struct si_shader	*last_ls; /* local shader (VS) */
@@ -324,20 +327,12 @@ struct si_context {
 };
 
 /* cik_sdma.c */
-void cik_sdma_copy(struct pipe_context *ctx,
-		   struct pipe_resource *dst,
-		   unsigned dst_level,
-		   unsigned dstx, unsigned dsty, unsigned dstz,
-		   struct pipe_resource *src,
-		   unsigned src_level,
-		   const struct pipe_box *src_box);
+void cik_init_sdma_functions(struct si_context *sctx);
 
 /* si_blit.c */
 void si_init_blit_functions(struct si_context *sctx);
-void si_flush_depth_textures(struct si_context *sctx,
-			     struct si_textures_info *textures);
-void si_decompress_color_textures(struct si_context *sctx,
-				  struct si_textures_info *textures);
+void si_decompress_graphics_textures(struct si_context *sctx);
+void si_decompress_compute_textures(struct si_context *sctx);
 void si_resource_copy_region(struct pipe_context *ctx,
 			     struct pipe_resource *dst,
 			     unsigned dst_level,
@@ -349,8 +344,7 @@ void si_resource_copy_region(struct pipe_context *ctx,
 /* si_cp_dma.c */
 void si_copy_buffer(struct si_context *sctx,
 		    struct pipe_resource *dst, struct pipe_resource *src,
-		    uint64_t dst_offset, uint64_t src_offset, unsigned size,
-		    bool is_framebuffer);
+		    uint64_t dst_offset, uint64_t src_offset, unsigned size);
 void si_init_cp_dma_functions(struct si_context *sctx);
 
 /* si_debug.c */
@@ -359,13 +353,7 @@ void si_check_vm_faults(struct si_context *sctx);
 bool si_replace_shader(unsigned num, struct radeon_shader_binary *binary);
 
 /* si_dma.c */
-void si_dma_copy(struct pipe_context *ctx,
-		 struct pipe_resource *dst,
-		 unsigned dst_level,
-		 unsigned dstx, unsigned dsty, unsigned dstz,
-		 struct pipe_resource *src,
-		 unsigned src_level,
-		 const struct pipe_box *src_box);
+void si_init_dma_functions(struct si_context *sctx);
 
 /* si_hw_context.c */
 void si_context_gfx_flush(void *context, unsigned flags,
@@ -417,6 +405,15 @@ si_set_atom_dirty(struct si_context *sctx,
 		sctx->dirty_atoms |= bit;
 	else
 		sctx->dirty_atoms &= ~bit;
+}
+
+static inline bool
+si_is_atom_dirty(struct si_context *sctx,
+		  struct r600_atom *atom)
+{
+	unsigned bit = 1 << (atom->id - 1);
+
+	return sctx->dirty_atoms & bit;
 }
 
 static inline void

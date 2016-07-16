@@ -24,10 +24,8 @@ for progname in progs:
         target = progname,
         source = progname + '.c',
     )
-    
-    env.Alias(progname, env.InstallProgram(prog))
-
-    # http://www.scons.org/wiki/UnitTests
-    test_alias = env.Alias('unit', [prog], prog[0].abspath)
-    AlwaysBuild(test_alias)
-
+    if progname not in [
+        'u_cache_test', # too long
+        'translate_test', # unreliable
+    ]:
+       env.UnitTest(progname, prog)

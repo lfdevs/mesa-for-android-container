@@ -27,54 +27,54 @@
 #include "r600_cs.h"
 
 /* 2xMSAA
- * There are two locations (-4, 4), (4, -4). */
+ * There are two locations (4, 4), (-4, -4). */
 const uint32_t eg_sample_locs_2x[4] = {
-	FILL_SREG(-4, 4, 4, -4, -4, 4, 4, -4),
-	FILL_SREG(-4, 4, 4, -4, -4, 4, 4, -4),
-	FILL_SREG(-4, 4, 4, -4, -4, 4, 4, -4),
-	FILL_SREG(-4, 4, 4, -4, -4, 4, 4, -4),
+	FILL_SREG(4, 4, -4, -4, 4, 4, -4, -4),
+	FILL_SREG(4, 4, -4, -4, 4, 4, -4, -4),
+	FILL_SREG(4, 4, -4, -4, 4, 4, -4, -4),
+	FILL_SREG(4, 4, -4, -4, 4, 4, -4, -4),
 };
 const unsigned eg_max_dist_2x = 4;
 /* 4xMSAA
- * There are 4 locations: (-2, -2), (2, 2), (-6, 6), (6, -6). */
+ * There are 4 locations: (-2, 6), (6, -2), (-6, 2), (2, 6). */
 const uint32_t eg_sample_locs_4x[4] = {
-	FILL_SREG(-2, -2, 2, 2, -6, 6, 6, -6),
-	FILL_SREG(-2, -2, 2, 2, -6, 6, 6, -6),
-	FILL_SREG(-2, -2, 2, 2, -6, 6, 6, -6),
-	FILL_SREG(-2, -2, 2, 2, -6, 6, 6, -6),
+	FILL_SREG(-2, -6, 6, -2, -6, 2, 2, 6),
+	FILL_SREG(-2, -6, 6, -2, -6, 2, 2, 6),
+	FILL_SREG(-2, -6, 6, -2, -6, 2, 2, 6),
+	FILL_SREG(-2, -6, 6, -2, -6, 2, 2, 6),
 };
 const unsigned eg_max_dist_4x = 6;
 
 /* Cayman 8xMSAA */
 static const uint32_t cm_sample_locs_8x[] = {
-	FILL_SREG(-2, -5, 3, -4, -1, 5, -6, -2),
-	FILL_SREG(-2, -5, 3, -4, -1, 5, -6, -2),
-	FILL_SREG(-2, -5, 3, -4, -1, 5, -6, -2),
-	FILL_SREG(-2, -5, 3, -4, -1, 5, -6, -2),
-	FILL_SREG( 6,  0, 0,  0, -5, 3,  4,  4),
-	FILL_SREG( 6,  0, 0,  0, -5, 3,  4,  4),
-	FILL_SREG( 6,  0, 0,  0, -5, 3,  4,  4),
-	FILL_SREG( 6,  0, 0,  0, -5, 3,  4,  4),
+	FILL_SREG( 1, -3, -1,  3, 5,  1, -3, -5),
+	FILL_SREG( 1, -3, -1,  3, 5,  1, -3, -5),
+	FILL_SREG( 1, -3, -1,  3, 5,  1, -3, -5),
+	FILL_SREG( 1, -3, -1,  3, 5,  1, -3, -5),
+	FILL_SREG(-5,  5, -7, -1, 3,  7,  7, -7),
+	FILL_SREG(-5,  5, -7, -1, 3,  7,  7, -7),
+	FILL_SREG(-5,  5, -7, -1, 3,  7,  7, -7),
+	FILL_SREG(-5,  5, -7, -1, 3,  7,  7, -7),
 };
 static const unsigned cm_max_dist_8x = 8;
 /* Cayman 16xMSAA */
 static const uint32_t cm_sample_locs_16x[] = {
-	FILL_SREG(-7, -3, 7, 3, 1, -5, -5, 5),
-	FILL_SREG(-7, -3, 7, 3, 1, -5, -5, 5),
-	FILL_SREG(-7, -3, 7, 3, 1, -5, -5, 5),
-	FILL_SREG(-7, -3, 7, 3, 1, -5, -5, 5),
-	FILL_SREG(-3, -7, 3, 7, 5, -1, -1, 1),
-	FILL_SREG(-3, -7, 3, 7, 5, -1, -1, 1),
-	FILL_SREG(-3, -7, 3, 7, 5, -1, -1, 1),
-	FILL_SREG(-3, -7, 3, 7, 5, -1, -1, 1),
-	FILL_SREG(-8, -6, 4, 2, 2, -8, -2, 6),
-	FILL_SREG(-8, -6, 4, 2, 2, -8, -2, 6),
-	FILL_SREG(-8, -6, 4, 2, 2, -8, -2, 6),
-	FILL_SREG(-8, -6, 4, 2, 2, -8, -2, 6),
-	FILL_SREG(-4, -2, 0, 4, 6, -4, -6, 0),
-	FILL_SREG(-4, -2, 0, 4, 6, -4, -6, 0),
-	FILL_SREG(-4, -2, 0, 4, 6, -4, -6, 0),
-	FILL_SREG(-4, -2, 0, 4, 6, -4, -6, 0),
+	FILL_SREG( 1,  1, -1, -3, -3,  2,  4, -1),
+	FILL_SREG( 1,  1, -1, -3, -3,  2,  4, -1),
+	FILL_SREG( 1,  1, -1, -3, -3,  2,  4, -1),
+	FILL_SREG( 1,  1, -1, -3, -3,  2,  4, -1),
+	FILL_SREG(-5, -2,  2,  5,  5,  3,  3, -5),
+	FILL_SREG(-5, -2,  2,  5,  5,  3,  3, -5),
+	FILL_SREG(-5, -2,  2,  5,  5,  3,  3, -5),
+	FILL_SREG(-5, -2,  2,  5,  5,  3,  3, -5),
+	FILL_SREG(-2,  6,  0, -7, -4, -6, -6,  4),
+	FILL_SREG(-2,  6,  0, -7, -4, -6, -6,  4),
+	FILL_SREG(-2,  6,  0, -7, -4, -6, -6,  4),
+	FILL_SREG(-2,  6,  0, -7, -4, -6, -6,  4),
+	FILL_SREG(-8,  0,  7, -4,  6,  7, -7, -8),
+	FILL_SREG(-8,  0,  7, -4,  6,  7, -7, -8),
+	FILL_SREG(-8,  0,  7, -4,  6,  7, -7, -8),
+	FILL_SREG(-8,  0,  7, -4,  6,  7, -7, -8),
 };
 static const unsigned cm_max_dist_16x = 8;
 

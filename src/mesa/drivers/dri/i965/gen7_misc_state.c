@@ -145,6 +145,7 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else {
+      assert(depth_mt);
       struct intel_miptree_aux_buffer *hiz_buf = depth_mt->hiz_buf;
 
       BEGIN_BATCH(3);
@@ -205,7 +206,8 @@ const struct brw_tracked_state gen7_depthbuffer = {
       .mesa = _NEW_BUFFERS |
               _NEW_DEPTH |
               _NEW_STENCIL,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP,
    },
    .emit = brw_emit_depthbuffer,
 };

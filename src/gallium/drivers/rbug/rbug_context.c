@@ -87,7 +87,7 @@ rbug_draw_block_locked(struct rbug_context *rb_pipe, int flag)
             if (rb_pipe->draw_rule.surf == rb_pipe->curr.cbufs[k])
                block = TRUE;
       if (rb_pipe->draw_rule.texture) {
-         for (sh = 0; sh < Elements(rb_pipe->curr.num_views); sh++) {
+         for (sh = 0; sh < ARRAY_SIZE(rb_pipe->curr.num_views); sh++) {
             for (k = 0; k < rb_pipe->curr.num_views[sh]; k++) {
                if (rb_pipe->draw_rule.texture == rb_pipe->curr.texs[sh][k]) {
                   block = TRUE;
@@ -178,17 +178,20 @@ rbug_begin_query(struct pipe_context *_pipe,
    return ret;
 }
 
-static void
+static bool
 rbug_end_query(struct pipe_context *_pipe,
                struct pipe_query *query)
 {
    struct rbug_context *rb_pipe = rbug_context(_pipe);
    struct pipe_context *pipe = rb_pipe->pipe;
+   bool ret;
 
    pipe_mutex_lock(rb_pipe->call_mutex);
-   pipe->end_query(pipe,
-                   query);
+   ret = pipe->end_query(pipe,
+                         query);
    pipe_mutex_unlock(rb_pipe->call_mutex);
+
+   return ret;
 }
 
 static boolean
@@ -209,6 +212,17 @@ rbug_get_query_result(struct pipe_context *_pipe,
    pipe_mutex_unlock(rb_pipe->call_mutex);
 
    return ret;
+}
+
+static void
+rbug_set_active_query_state(struct pipe_context *_pipe, boolean enable)
+{
+   struct rbug_context *rb_pipe = rbug_context(_pipe);
+   struct pipe_context *pipe = rb_pipe->pipe;
+
+   pipe_mutex_lock(rb_pipe->call_mutex);
+   pipe->set_active_query_state(pipe, enable);
+   pipe_mutex_unlock(rb_pipe->call_mutex);
 }
 
 static void *
@@ -1184,6 +1198,7 @@ rbug_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    rb_pipe->base.begin_query = rbug_begin_query;
    rb_pipe->base.end_query = rbug_end_query;
    rb_pipe->base.get_query_result = rbug_get_query_result;
+   rb_pipe->base.set_active_query_state = rbug_set_active_query_state;
    rb_pipe->base.create_blend_state = rbug_create_blend_state;
    rb_pipe->base.bind_blend_state = rbug_bind_blend_state;
    rb_pipe->base.delete_blend_state = rbug_delete_blend_state;

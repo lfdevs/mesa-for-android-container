@@ -132,11 +132,22 @@ static void compile_clip_prog( struct brw_context *brw,
 
 /* Calculate interpolants for triangle and line rasterization.
  */
-static void
+void
 brw_upload_clip_prog(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    struct brw_clip_prog_key key;
+
+   if (!brw_state_dirty(brw,
+                        _NEW_BUFFERS |
+                        _NEW_LIGHT |
+                        _NEW_POLYGON |
+                        _NEW_TRANSFORM,
+                        BRW_NEW_BLORP |
+                        BRW_NEW_INTERPOLATION_MAP |
+                        BRW_NEW_REDUCED_PRIMITIVE |
+                        BRW_NEW_VUE_MAP_GEOM_OUT))
+      return;
 
    memset(&key, 0, sizeof(key));
 
@@ -252,17 +263,3 @@ brw_upload_clip_prog(struct brw_context *brw)
       compile_clip_prog( brw, &key );
    }
 }
-
-
-const struct brw_tracked_state brw_clip_prog = {
-   .dirty = {
-      .mesa  = _NEW_BUFFERS |
-               _NEW_LIGHT |
-               _NEW_POLYGON |
-               _NEW_TRANSFORM,
-      .brw   = BRW_NEW_INTERPOLATION_MAP |
-               BRW_NEW_REDUCED_PRIMITIVE |
-               BRW_NEW_VUE_MAP_GEOM_OUT,
-   },
-   .emit = brw_upload_clip_prog
-};

@@ -43,7 +43,6 @@ TAGFILES		= tnl_dd.tag=../tnl_dd \
 			 vbo.tag=../vbo \
                          glapi.tag=../glapi \
                          math.tag=../math \
-                         shader.tag=../shader \
                          swrast.tag=../swrast \
                          swrast_setup.tag=../swrast_setup \
                          tnl.tag=../tnl

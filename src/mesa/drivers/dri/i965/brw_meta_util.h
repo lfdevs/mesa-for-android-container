@@ -26,6 +26,7 @@
 
 #include <stdbool.h>
 #include "main/mtypes.h"
+#include "intel_mipmap_tree.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,6 +41,39 @@ brw_meta_mirror_clip_and_scissor(const struct gl_context *ctx,
                                  GLfloat *dstX0, GLfloat *dstY0,
                                  GLfloat *dstX1, GLfloat *dstY1,
                                  bool *mirror_x, bool *mirror_y);
+
+void
+brw_get_fast_clear_rect(const struct brw_context *brw,
+                        const struct gl_framebuffer *fb,
+                        const struct intel_mipmap_tree* mt,
+                        unsigned *x0, unsigned *y0,
+                        unsigned *x1, unsigned *y1);
+
+void
+brw_get_resolve_rect(const struct brw_context *brw,
+                     const struct intel_mipmap_tree *mt,
+                     unsigned *x0, unsigned *y0,
+                     unsigned *x1, unsigned *y1);
+
+void
+brw_meta_get_buffer_rect(const struct gl_framebuffer *fb, 
+                         unsigned *x0, unsigned *y0,
+                         unsigned *x1, unsigned *y1);
+
+bool
+brw_meta_set_fast_clear_color(struct brw_context *brw,
+                              struct intel_mipmap_tree *mt,
+                              const union gl_color_union *color);
+
+bool
+brw_is_color_fast_clear_compatible(struct brw_context *brw,
+                                   const struct intel_mipmap_tree *mt,
+                                   const union gl_color_union *color);
+
+struct gl_renderbuffer *brw_get_rb_for_slice(struct brw_context *brw,
+                                             struct intel_mipmap_tree *mt,
+                                             unsigned level, unsigned layer,
+                                             bool flat);
 
 #ifdef __cplusplus
 }

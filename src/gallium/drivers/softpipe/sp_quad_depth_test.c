@@ -782,7 +782,7 @@ depth_test_quads_fallback(struct quad_stage *qs,
 {
    unsigned i, pass = 0;
    const struct tgsi_shader_info *fsInfo = &qs->softpipe->fs_variant->info;
-   boolean interp_depth = !fsInfo->writes_z;
+   boolean interp_depth = !fsInfo->writes_z || qs->softpipe->early_depth;
    boolean shader_stencil_ref = fsInfo->writes_stencil;
    struct depth_data data;
    unsigned vp_idx = quads[0]->input.viewport_index;
@@ -902,7 +902,7 @@ choose_depth_test(struct quad_stage *qs,
 {
    const struct tgsi_shader_info *fsInfo = &qs->softpipe->fs_variant->info;
 
-   boolean interp_depth = !fsInfo->writes_z;
+   boolean interp_depth = !fsInfo->writes_z || qs->softpipe->early_depth;
 
    boolean alpha = qs->softpipe->depth_stencil->alpha.enabled;
 

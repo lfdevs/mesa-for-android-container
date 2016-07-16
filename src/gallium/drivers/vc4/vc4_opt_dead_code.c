@@ -83,26 +83,14 @@ qir_opt_dead_code(struct vc4_compile *c)
         bool progress = false;
         bool *used = calloc(c->num_temps, sizeof(bool));
         bool sf_used = false;
-        /* Whether we're eliminating texture setup currently. */
-        bool dce_tex = false;
 
-        struct list_head *node, *t;
-        for (node = c->instructions.prev, t = node->prev;
-             &c->instructions != node;
-             node = t, t = t->prev) {
-                struct qinst *inst = (struct qinst *)node;
-
+        list_for_each_entry_safe_rev(struct qinst, inst, &c->instructions,
+                                     link) {
                 if (inst->dst.file == QFILE_TEMP &&
                     !used[inst->dst.index] &&
                     !inst->sf &&
-                    (!qir_has_side_effects(c, inst) ||
-                     inst->op == QOP_TEX_RESULT) &&
+                    !qir_has_side_effects(c, inst) &&
                     !has_nonremovable_reads(c, inst)) {
-                        if (inst->op == QOP_TEX_RESULT) {
-                                dce_tex = true;
-                                c->num_texture_samples--;
-                        }
-
                         for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
                                 if (inst->src[i].file != QFILE_VPM)
                                         continue;
@@ -134,19 +122,6 @@ qir_opt_dead_code(struct vc4_compile *c)
                                 progress = true;
                         }
                         sf_used = false;
-                }
-
-                if (inst->op == QOP_TEX_RESULT)
-                        dce_tex = false;
-
-                if (dce_tex && (inst->op == QOP_TEX_S ||
-                                inst->op == QOP_TEX_T ||
-                                inst->op == QOP_TEX_R ||
-                                inst->op == QOP_TEX_B ||
-                                inst->op == QOP_TEX_DIRECT)) {
-                        dce(c, inst);
-                        progress = true;
-                        continue;
                 }
 
                 for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {

@@ -48,6 +48,7 @@ struct svga_winsys_screen;
 struct svga_winsys_buffer;
 struct pipe_screen;
 struct pipe_context;
+struct pipe_debug_callback;
 struct pipe_fence_handle;
 struct pipe_resource;
 struct svga_region;
@@ -107,6 +108,12 @@ struct svga_winsys_context
    (*reserve)(struct svga_winsys_context *swc, 
 	      uint32_t nr_bytes, uint32_t nr_relocs );
    
+   /**
+    * Returns current size of command buffer, in bytes.
+    */
+   unsigned
+   (*get_command_buffer_size)(struct svga_winsys_context *swc);
+
    /**
     * Emit a relocation for a host surface.
     * 
@@ -280,6 +287,9 @@ struct svga_winsys_context
                       struct svga_winsys_surface *surface,
                       struct svga_winsys_gb_shader *shader,
                       unsigned flags);
+
+   /** To report perf/conformance/etc issues to the state tracker */
+   struct pipe_debug_callback *debug_callback;
 };
 
 
@@ -534,6 +544,9 @@ struct svga_winsys_screen
 
    /** To rebind resources at the beginnning of a new command buffer */
    boolean need_to_rebind_resources;
+
+   boolean have_generate_mipmap_cmd;
+   boolean have_set_predication_cmd;
 };
 
 

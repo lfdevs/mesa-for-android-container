@@ -17,6 +17,7 @@ env.Prepend(LIBS = [
     gallium,
     trace,
     glsl,
+    nir,
     mesautil,
     softpipe
 ])

@@ -40,6 +40,7 @@
 #include <unistd.h>
 #include <sched.h>
 #endif
+#include <inttypes.h>
 
 #include "pipe/p_compiler.h"
 #include "pipe/p_defines.h"
@@ -172,7 +173,7 @@ fenced_manager_dump_locked(struct fenced_manager *fenced_mgr)
    while(curr != &fenced_mgr->unfenced) {
       fenced_buf = LIST_ENTRY(struct fenced_buffer, curr, head);
       assert(!fenced_buf->fence);
-      debug_printf("%10p %7u %8u %7s\n",
+      debug_printf("%10p %"PRIu64" %8u %7s\n",
                    (void *) fenced_buf,
                    fenced_buf->base.size,
                    p_atomic_read(&fenced_buf->base.reference.count),
@@ -188,7 +189,7 @@ fenced_manager_dump_locked(struct fenced_manager *fenced_mgr)
       fenced_buf = LIST_ENTRY(struct fenced_buffer, curr, head);
       assert(fenced_buf->buffer);
       signaled = ops->fence_signalled(ops, fenced_buf->fence, 0);
-      debug_printf("%10p %7u %8u %7s %10p %s\n",
+      debug_printf("%10p %"PRIu64" %8u %7s %10p %s\n",
                    (void *) fenced_buf,
                    fenced_buf->base.size,
                    p_atomic_read(&fenced_buf->base.reference.count),

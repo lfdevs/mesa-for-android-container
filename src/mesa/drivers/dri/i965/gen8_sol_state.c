@@ -35,7 +35,7 @@
 #include "intel_buffer_objects.h"
 #include "main/transformfeedback.h"
 
-static void
+void
 gen8_upload_3dstate_so_buffers(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
@@ -74,8 +74,6 @@ gen8_upload_3dstate_so_buffers(struct brw_context *brw)
          intel_bufferobj_buffer(brw, bufferobj, start, end - start);
       assert(end <= bo->size);
 
-      perf_debug("Missing MOCS setup for 3DSTATE_SO_BUFFER.");
-
       BEGIN_BATCH(8);
       OUT_BATCH(_3DSTATE_SO_BUFFER << 16 | (8 - 2));
       OUT_BATCH(GEN8_SO_BUFFER_ENABLE | (i << SO_BUFFER_INDEX_SHIFT) |
@@ -95,90 +93,3 @@ gen8_upload_3dstate_so_buffers(struct brw_context *brw)
    }
    brw_obj->zero_offsets = false;
 }
-
-static void
-gen8_upload_3dstate_streamout(struct brw_context *brw, bool active,
-                              struct brw_vue_map *vue_map)
-{
-   struct gl_context *ctx = &brw->ctx;
-
-   /* BRW_NEW_TRANSFORM_FEEDBACK */
-   struct gl_transform_feedback_object *xfb_obj =
-      ctx->TransformFeedback.CurrentObject;
-   const struct gl_transform_feedback_info *linked_xfb_info =
-      &xfb_obj->shader_program->LinkedTransformFeedback;
-   uint32_t dw1 = 0, dw2 = 0, dw3 = 0, dw4 = 0;
-
-   if (active) {
-      int urb_entry_read_offset = 0;
-      int urb_entry_read_length = (vue_map->num_slots + 1) / 2 -
-         urb_entry_read_offset;
-
-      dw1 |= SO_FUNCTION_ENABLE;
-      dw1 |= SO_STATISTICS_ENABLE;
-
-      /* _NEW_LIGHT */
-      if (ctx->Light.ProvokingVertex != GL_FIRST_VERTEX_CONVENTION)
-         dw1 |= SO_REORDER_TRAILING;
-
-      /* We always read the whole vertex.  This could be reduced at some
-       * point by reading less and offsetting the register index in the
-       * SO_DECLs.
-       */
-      dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_0_VERTEX_READ_OFFSET);
-      dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_0_VERTEX_READ_LENGTH);
-
-      dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_1_VERTEX_READ_OFFSET);
-      dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_1_VERTEX_READ_LENGTH);
-
-      dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_2_VERTEX_READ_OFFSET);
-      dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_2_VERTEX_READ_LENGTH);
-
-      dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_3_VERTEX_READ_OFFSET);
-      dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_3_VERTEX_READ_LENGTH);
-
-      /* Set buffer pitches; 0 means unbound. */
-      if (xfb_obj->Buffers[0])
-         dw3 |= linked_xfb_info->BufferStride[0] * 4;
-      if (xfb_obj->Buffers[1])
-         dw3 |= (linked_xfb_info->BufferStride[1] * 4) << 16;
-      if (xfb_obj->Buffers[2])
-         dw4 |= linked_xfb_info->BufferStride[2] * 4;
-      if (xfb_obj->Buffers[3])
-         dw4 |= (linked_xfb_info->BufferStride[3] * 4) << 16;
-   }
-
-   BEGIN_BATCH(5);
-   OUT_BATCH(_3DSTATE_STREAMOUT << 16 | (5 - 2));
-   OUT_BATCH(dw1);
-   OUT_BATCH(dw2);
-   OUT_BATCH(dw3);
-   OUT_BATCH(dw4);
-   ADVANCE_BATCH();
-}
-
-static void
-upload_sol_state(struct brw_context *brw)
-{
-   struct gl_context *ctx = &brw->ctx;
-   /* BRW_NEW_TRANSFORM_FEEDBACK */
-   bool active = _mesa_is_xfb_active_and_unpaused(ctx);
-
-   if (active) {
-      gen8_upload_3dstate_so_buffers(brw);
-      /* BRW_NEW_VUE_MAP_GEOM_OUT */
-      gen7_upload_3dstate_so_decl_list(brw, &brw->vue_map_geom_out);
-   }
-
-   gen8_upload_3dstate_streamout(brw, active, &brw->vue_map_geom_out);
-}
-
-const struct brw_tracked_state gen8_sol_state = {
-   .dirty = {
-      .mesa  = _NEW_LIGHT,
-      .brw   = BRW_NEW_BATCH |
-               BRW_NEW_TRANSFORM_FEEDBACK |
-               BRW_NEW_VUE_MAP_GEOM_OUT,
-   },
-   .emit = upload_sol_state,
-};

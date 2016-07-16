@@ -29,35 +29,35 @@
 #include "nvc0/nve4_p2mf.xml.h"
 #include "nvc0/nvc0_macros.h"
 
-/* NOTE: must keep NVC0_NEW_...PROG in consecutive bits in this order */
-#define NVC0_NEW_BLEND        (1 << 0)
-#define NVC0_NEW_RASTERIZER   (1 << 1)
-#define NVC0_NEW_ZSA          (1 << 2)
-#define NVC0_NEW_VERTPROG     (1 << 3)
-#define NVC0_NEW_TCTLPROG     (1 << 4)
-#define NVC0_NEW_TEVLPROG     (1 << 5)
-#define NVC0_NEW_GMTYPROG     (1 << 6)
-#define NVC0_NEW_FRAGPROG     (1 << 7)
-#define NVC0_NEW_BLEND_COLOUR (1 << 8)
-#define NVC0_NEW_STENCIL_REF  (1 << 9)
-#define NVC0_NEW_CLIP         (1 << 10)
-#define NVC0_NEW_SAMPLE_MASK  (1 << 11)
-#define NVC0_NEW_FRAMEBUFFER  (1 << 12)
-#define NVC0_NEW_STIPPLE      (1 << 13)
-#define NVC0_NEW_SCISSOR      (1 << 14)
-#define NVC0_NEW_VIEWPORT     (1 << 15)
-#define NVC0_NEW_ARRAYS       (1 << 16)
-#define NVC0_NEW_VERTEX       (1 << 17)
-#define NVC0_NEW_CONSTBUF     (1 << 18)
-#define NVC0_NEW_TEXTURES     (1 << 19)
-#define NVC0_NEW_SAMPLERS     (1 << 20)
-#define NVC0_NEW_TFB_TARGETS  (1 << 21)
-#define NVC0_NEW_IDXBUF       (1 << 22)
-#define NVC0_NEW_SURFACES     (1 << 23)
-#define NVC0_NEW_MIN_SAMPLES  (1 << 24)
-#define NVC0_NEW_TESSFACTOR   (1 << 25)
-#define NVC0_NEW_BUFFERS      (1 << 26)
-#define NVC0_NEW_DRIVERCONST  (1 << 27)
+/* NOTE: must keep NVC0_NEW_3D_...PROG in consecutive bits in this order */
+#define NVC0_NEW_3D_BLEND        (1 << 0)
+#define NVC0_NEW_3D_RASTERIZER   (1 << 1)
+#define NVC0_NEW_3D_ZSA          (1 << 2)
+#define NVC0_NEW_3D_VERTPROG     (1 << 3)
+#define NVC0_NEW_3D_TCTLPROG     (1 << 4)
+#define NVC0_NEW_3D_TEVLPROG     (1 << 5)
+#define NVC0_NEW_3D_GMTYPROG     (1 << 6)
+#define NVC0_NEW_3D_FRAGPROG     (1 << 7)
+#define NVC0_NEW_3D_BLEND_COLOUR (1 << 8)
+#define NVC0_NEW_3D_STENCIL_REF  (1 << 9)
+#define NVC0_NEW_3D_CLIP         (1 << 10)
+#define NVC0_NEW_3D_SAMPLE_MASK  (1 << 11)
+#define NVC0_NEW_3D_FRAMEBUFFER  (1 << 12)
+#define NVC0_NEW_3D_STIPPLE      (1 << 13)
+#define NVC0_NEW_3D_SCISSOR      (1 << 14)
+#define NVC0_NEW_3D_VIEWPORT     (1 << 15)
+#define NVC0_NEW_3D_ARRAYS       (1 << 16)
+#define NVC0_NEW_3D_VERTEX       (1 << 17)
+#define NVC0_NEW_3D_CONSTBUF     (1 << 18)
+#define NVC0_NEW_3D_TEXTURES     (1 << 19)
+#define NVC0_NEW_3D_SAMPLERS     (1 << 20)
+#define NVC0_NEW_3D_TFB_TARGETS  (1 << 21)
+#define NVC0_NEW_3D_IDXBUF       (1 << 22)
+#define NVC0_NEW_3D_SURFACES     (1 << 23)
+#define NVC0_NEW_3D_MIN_SAMPLES  (1 << 24)
+#define NVC0_NEW_3D_TESSFACTOR   (1 << 25)
+#define NVC0_NEW_3D_BUFFERS      (1 << 26)
+#define NVC0_NEW_3D_DRIVERCONST  (1 << 27)
 
 #define NVC0_NEW_CP_PROGRAM   (1 << 0)
 #define NVC0_NEW_CP_SURFACES  (1 << 1)
@@ -69,18 +69,18 @@
 #define NVC0_NEW_CP_BUFFERS   (1 << 7)
 
 /* 3d bufctx (during draw_vbo, blit_3d) */
-#define NVC0_BIND_FB            0
-#define NVC0_BIND_VTX           1
-#define NVC0_BIND_VTX_TMP       2
-#define NVC0_BIND_IDX           3
-#define NVC0_BIND_TEX(s, i)  (  4 + 32 * (s) + (i))
-#define NVC0_BIND_CB(s, i)   (164 + 16 * (s) + (i))
-#define NVC0_BIND_TFB         244
-#define NVC0_BIND_SUF         245
-#define NVC0_BIND_BUF         246
-#define NVC0_BIND_SCREEN      247
-#define NVC0_BIND_TLS         249
-#define NVC0_BIND_3D_COUNT    250
+#define NVC0_BIND_3D_FB            0
+#define NVC0_BIND_3D_VTX           1
+#define NVC0_BIND_3D_VTX_TMP       2
+#define NVC0_BIND_3D_IDX           3
+#define NVC0_BIND_3D_TEX(s, i)  (  4 + 32 * (s) + (i))
+#define NVC0_BIND_3D_CB(s, i)   (164 + 16 * (s) + (i))
+#define NVC0_BIND_3D_TFB         244
+#define NVC0_BIND_3D_SUF         245
+#define NVC0_BIND_3D_BUF         246
+#define NVC0_BIND_3D_SCREEN      247
+#define NVC0_BIND_3D_TLS         249
+#define NVC0_BIND_3D_COUNT       250
 
 /* compute bufctx (during launch_grid) */
 #define NVC0_BIND_CP_CB(i)     (  0 + (i))
@@ -98,6 +98,46 @@
 #define NVC0_BIND_M2MF          0
 #define NVC0_BIND_FENCE         1
 
+/* 6 user uniform buffers, at 64K each */
+#define NVC0_CB_USR_INFO(s)         (s << 16)
+#define NVC0_CB_USR_SIZE            (6 << 16)
+/* 6 driver constbuts, at 2K each */
+#define NVC0_CB_AUX_INFO(s)         NVC0_CB_USR_SIZE + (s << 11)
+#define NVC0_CB_AUX_SIZE            (6 << 11)
+/* XXX: Figure out what this UNK data is. */
+#define NVC0_CB_AUX_UNK_INFO        0x000
+#define NVC0_CB_AUX_UNK_SIZE        (8 * 4)
+/* 32 textures handles, at 1 32-bits integer each */
+#define NVC0_CB_AUX_TEX_INFO(i)     0x020 + (i) * 4
+#define NVC0_CB_AUX_TEX_SIZE        (32 * 4)
+/* 8 sets of 32-bits coordinate offsets */
+#define NVC0_CB_AUX_MS_INFO         0x0a0 /* CP */
+#define NVC0_CB_AUX_MS_SIZE         (8 * 2 * 4)
+/* block/grid size, at 3 32-bits integers each and gridid */
+#define NVC0_CB_AUX_GRID_INFO       0x0e0 /* CP */
+#define NVC0_CB_AUX_GRID_SIZE       (7 * 4)
+/* 8 user clip planes, at 4 32-bits floats each */
+#define NVC0_CB_AUX_UCP_INFO        0x100
+#define NVC0_CB_AUX_UCP_SIZE        (PIPE_MAX_CLIP_PLANES * 4 * 4)
+/* 13 ubos, at 4 32-bits integer each */
+#define NVC0_CB_AUX_UBO_INFO(i)     0x100 + (i) * 4 * 4 /* CP */
+#define NVC0_CB_AUX_UBO_SIZE        ((NVC0_MAX_PIPE_CONSTBUFS - 1) * 4 * 4)
+/* 8 sets of 32-bits integer pairs sample offsets */
+#define NVC0_CB_AUX_SAMPLE_INFO     0x180 /* FP */
+#define NVC0_CB_AUX_SAMPLE_SIZE     (8 * 4 * 2)
+/* draw parameters (index bais, base instance, drawid) */
+#define NVC0_CB_AUX_DRAW_INFO       0x180 /* VP */
+/* 32 user buffers, at 4 32-bits integers each */
+#define NVC0_CB_AUX_BUF_INFO(i)     0x200 + (i) * 4 * 4
+#define NVC0_CB_AUX_BUF_SIZE        (NVC0_MAX_BUFFERS * 4 * 4)
+/* 8 surfaces, at 16 32-bits integers each */
+#define NVC0_CB_AUX_SU_INFO(i)      0x400 + (i) * 16 * 4
+#define NVC0_CB_AUX_SU_SIZE         (NVC0_MAX_IMAGES * 16 * 4)
+/* 1 64-bits address and 1 32-bits sequence */
+#define NVC0_CB_AUX_MP_INFO         0x600
+#define NVC0_CB_AUX_MP_SIZE         3 * 4
+/* 4 32-bits floats for the vertex runout, put at the end */
+#define NVC0_CB_AUX_RUNOUT_INFO     NVC0_CB_USR_SIZE + NVC0_CB_AUX_SIZE
 
 struct nvc0_blitctx;
 
@@ -118,7 +158,7 @@ struct nvc0_context {
                           const struct nv50_m2mf_rect *src,
                           uint32_t nblocksx, uint32_t nblocksy);
 
-   uint32_t dirty;
+   uint32_t dirty_3d; /* dirty flags for 3d state */
    uint32_t dirty_cp; /* dirty flags for compute state */
 
    struct nvc0_graph_state state;
@@ -160,7 +200,7 @@ struct nvc0_context {
    uint32_t textures_coherent[6];
    struct nv50_tsc_entry *samplers[6][PIPE_MAX_SAMPLERS];
    unsigned num_samplers[6];
-   uint16_t samplers_dirty[6];
+   uint32_t samplers_dirty[6];
    bool seamless_cube_map;
 
    uint32_t tex_handles[6][PIPE_MAX_SAMPLERS]; /* for nve4 */
@@ -202,6 +242,10 @@ struct nvc0_context {
    struct pipe_shader_buffer buffers[6][NVC0_MAX_BUFFERS];
    uint32_t buffers_dirty[6];
    uint32_t buffers_valid[6];
+
+   struct pipe_image_view images[6][NVC0_MAX_IMAGES];
+   uint16_t images_dirty[6];
+   uint16_t images_valid[6];
 
    struct util_dynarray global_residents;
 };
@@ -254,6 +298,7 @@ void nvc0_tctlprog_validate(struct nvc0_context *);
 void nvc0_tevlprog_validate(struct nvc0_context *);
 void nvc0_gmtyprog_validate(struct nvc0_context *);
 void nvc0_fragprog_validate(struct nvc0_context *);
+void nvc0_compprog_validate(struct nvc0_context *);
 
 void nvc0_tfb_validate(struct nvc0_context *);
 
@@ -261,9 +306,15 @@ void nvc0_tfb_validate(struct nvc0_context *);
 extern void nvc0_init_state_functions(struct nvc0_context *);
 
 /* nvc0_state_validate.c */
-void nvc0_validate_global_residents(struct nvc0_context *,
-                                    struct nouveau_bufctx *, int bin);
-bool nvc0_state_validate(struct nvc0_context *, uint32_t state_mask);
+struct nvc0_state_validate {
+   void (*func)(struct nvc0_context *);
+   uint32_t states;
+};
+
+bool nvc0_state_validate(struct nvc0_context *, uint32_t,
+                         struct nvc0_state_validate *, int, uint32_t *,
+                         struct nouveau_bufctx *);
+bool nvc0_state_validate_3d(struct nvc0_context *, uint32_t);
 
 /* nvc0_surface.c */
 extern void nvc0_clear(struct pipe_context *, unsigned buffers,
@@ -275,12 +326,16 @@ extern void nvc0_init_surface_functions(struct nvc0_context *);
 bool nvc0_validate_tic(struct nvc0_context *nvc0, int s);
 bool nvc0_validate_tsc(struct nvc0_context *nvc0, int s);
 bool nve4_validate_tsc(struct nvc0_context *nvc0, int s);
+void nvc0_validate_suf(struct nvc0_context *nvc0, int s);
 void nvc0_validate_textures(struct nvc0_context *);
 void nvc0_validate_samplers(struct nvc0_context *);
 void nve4_set_tex_handles(struct nvc0_context *);
 void nvc0_validate_surfaces(struct nvc0_context *);
-void nve4_set_surface_info(struct nouveau_pushbuf *, struct pipe_surface *,
-                           struct nvc0_screen *);
+void nve4_set_surface_info(struct nouveau_pushbuf *, struct pipe_image_view *,
+                           struct nvc0_context *);
+void nvc0_mark_image_range_valid(const struct pipe_image_view *);
+void nvc0_update_tic(struct nvc0_context *, struct nv50_tic_entry *,
+                     struct nv04_resource *);
 
 struct pipe_sampler_view *
 nvc0_create_texture_view(struct pipe_context *,
@@ -342,5 +397,6 @@ void nve4_launch_grid(struct pipe_context *, const struct pipe_grid_info *);
 
 /* nvc0_compute.c */
 void nvc0_launch_grid(struct pipe_context *, const struct pipe_grid_info *);
+void nvc0_compute_validate_globals(struct nvc0_context *);
 
 #endif

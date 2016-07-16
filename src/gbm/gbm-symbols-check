@@ -9,6 +9,8 @@ gbm_device_destroy
 gbm_create_device
 gbm_bo_create
 gbm_bo_import
+gbm_bo_map
+gbm_bo_unmap
 gbm_bo_get_width
 gbm_bo_get_height
 gbm_bo_get_stride

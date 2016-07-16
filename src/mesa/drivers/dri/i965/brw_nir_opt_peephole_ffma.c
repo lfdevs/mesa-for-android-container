@@ -44,7 +44,7 @@ are_all_uses_fadd(nir_ssa_def *def)
    if (!list_empty(&def->if_uses))
       return false;
 
-   nir_foreach_use(def, use_src) {
+   nir_foreach_use(use_src, def) {
       nir_instr *use_instr = use_src->parent_instr;
 
       if (use_instr->type != nir_instr_type_alu)
@@ -84,6 +84,17 @@ get_mul_for_src(nir_alu_src *src, int num_components,
       return NULL;
 
    nir_alu_instr *alu = nir_instr_as_alu(instr);
+
+   /* We want to bail if any of the other ALU operations involved is labled
+    * exact.  One reason for this is that, while the value that is changing is
+    * actually the result of the add and not the multiply, the intention of
+    * the user when they specify an exact multiply is that they want *that*
+    * value and what they don't care about is the add.  Another reason is that
+    * SPIR-V explicitly requires this behaviour.
+    */
+   if (alu->exact)
+      return NULL;
+
    switch (alu->op) {
    case nir_op_imov:
    case nir_op_fmov:
@@ -156,11 +167,11 @@ any_alu_src_is_a_constant(nir_alu_src srcs[])
 }
 
 static bool
-brw_nir_opt_peephole_ffma_block(nir_block *block, void *void_state)
+brw_nir_opt_peephole_ffma_block(nir_block *block, void *mem_ctx)
 {
-   struct peephole_ffma_state *state = void_state;
+   bool progress = false;
 
-   nir_foreach_instr_safe(block, instr) {
+   nir_foreach_instr_safe(instr, block) {
       if (instr->type != nir_instr_type_alu)
          continue;
 
@@ -168,7 +179,9 @@ brw_nir_opt_peephole_ffma_block(nir_block *block, void *void_state)
       if (add->op != nir_op_fadd)
          continue;
 
-      /* TODO: Maybe bail if this expression is considered "precise"? */
+      assert(add->dest.dest.is_ssa);
+      if (add->exact)
+         continue;
 
       assert(add->src[0].src.is_ssa && add->src[1].src.is_ssa);
 
@@ -201,6 +214,8 @@ brw_nir_opt_peephole_ffma_block(nir_block *block, void *void_state)
       if (mul == NULL)
          continue;
 
+      unsigned bit_size = add->dest.dest.ssa.bit_size;
+
       nir_ssa_def *mul_src[2];
       mul_src[0] = mul->src[0].src.ssa;
       mul_src[1] = mul->src[1].src.ssa;
@@ -216,11 +231,10 @@ brw_nir_opt_peephole_ffma_block(nir_block *block, void *void_state)
 
       if (abs) {
          for (unsigned i = 0; i < 2; i++) {
-            nir_alu_instr *abs = nir_alu_instr_create(state->mem_ctx,
-                                                      nir_op_fabs);
+            nir_alu_instr *abs = nir_alu_instr_create(mem_ctx, nir_op_fabs);
             abs->src[0].src = nir_src_for_ssa(mul_src[i]);
             nir_ssa_dest_init(&abs->instr, &abs->dest.dest,
-                              mul_src[i]->num_components, NULL);
+                              mul_src[i]->num_components, bit_size, NULL);
             abs->dest.write_mask = (1 << mul_src[i]->num_components) - 1;
             nir_instr_insert_before(&add->instr, &abs->instr);
             mul_src[i] = &abs->dest.dest.ssa;
@@ -228,17 +242,16 @@ brw_nir_opt_peephole_ffma_block(nir_block *block, void *void_state)
       }
 
       if (negate) {
-         nir_alu_instr *neg = nir_alu_instr_create(state->mem_ctx,
-                                                   nir_op_fneg);
+         nir_alu_instr *neg = nir_alu_instr_create(mem_ctx, nir_op_fneg);
          neg->src[0].src = nir_src_for_ssa(mul_src[0]);
          nir_ssa_dest_init(&neg->instr, &neg->dest.dest,
-                           mul_src[0]->num_components, NULL);
+                           mul_src[0]->num_components, bit_size, NULL);
          neg->dest.write_mask = (1 << mul_src[0]->num_components) - 1;
          nir_instr_insert_before(&add->instr, &neg->instr);
          mul_src[0] = &neg->dest.dest.ssa;
       }
 
-      nir_alu_instr *ffma = nir_alu_instr_create(state->mem_ctx, nir_op_ffma);
+      nir_alu_instr *ffma = nir_alu_instr_create(mem_ctx, nir_op_ffma);
       ffma->dest.saturate = add->dest.saturate;
       ffma->dest.write_mask = add->dest.write_mask;
 
@@ -253,6 +266,7 @@ brw_nir_opt_peephole_ffma_block(nir_block *block, void *void_state)
 
       nir_ssa_dest_init(&ffma->instr, &ffma->dest.dest,
                         add->dest.dest.ssa.num_components,
+                        bit_size,
                         add->dest.dest.ssa.name);
       nir_ssa_def_rewrite_uses(&add->dest.dest.ssa,
                                nir_src_for_ssa(&ffma->dest.dest.ssa));
@@ -261,28 +275,27 @@ brw_nir_opt_peephole_ffma_block(nir_block *block, void *void_state)
       assert(list_empty(&add->dest.dest.ssa.uses));
       nir_instr_remove(&add->instr);
 
-      state->progress = true;
+      progress = true;
    }
 
-   return true;
+   return progress;
 }
 
 static bool
 brw_nir_opt_peephole_ffma_impl(nir_function_impl *impl)
 {
-   struct peephole_ffma_state state;
+   bool progress = false;
+   void *mem_ctx = ralloc_parent(impl);
 
-   state.mem_ctx = ralloc_parent(impl);
-   state.impl = impl;
-   state.progress = false;
+   nir_foreach_block(block, impl) {
+      progress |= brw_nir_opt_peephole_ffma_block(block, mem_ctx);
+   }
 
-   nir_foreach_block(impl, brw_nir_opt_peephole_ffma_block, &state);
-
-   if (state.progress)
+   if (progress)
       nir_metadata_preserve(impl, nir_metadata_block_index |
                                   nir_metadata_dominance);
 
-   return state.progress;
+   return progress;
 }
 
 bool
@@ -290,7 +303,7 @@ brw_nir_opt_peephole_ffma(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(shader, function) {
+   nir_foreach_function(function, shader) {
       if (function->impl)
          progress |= brw_nir_opt_peephole_ffma_impl(function->impl);
    }

@@ -36,6 +36,8 @@
 
 #include "vl/vl_csc.h"
 
+#include "state_tracker/drm_driver.h"
+
 #include "vdpau_private.h"
 
 /**
@@ -74,12 +76,13 @@ vlVdpOutputSurfaceCreate(VdpDevice device,
    memset(&res_tmpl, 0, sizeof(res_tmpl));
 
    res_tmpl.target = PIPE_TEXTURE_2D;
-   res_tmpl.format = FormatRGBAToPipe(rgba_format);
+   res_tmpl.format = VdpFormatRGBAToPipe(rgba_format);
    res_tmpl.width0 = width;
    res_tmpl.height0 = height;
    res_tmpl.depth0 = 1;
    res_tmpl.array_size = 1;
-   res_tmpl.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
+   res_tmpl.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET |
+                   PIPE_BIND_LINEAR | PIPE_BIND_SHARED;
    res_tmpl.usage = PIPE_USAGE_DEFAULT;
 
    pipe_mutex_lock(dev->mutex);
@@ -762,4 +765,41 @@ struct pipe_resource *vlVdpOutputSurfaceGallium(VdpOutputSurface surface)
    pipe_mutex_unlock(vlsurface->device->mutex);
 
    return vlsurface->surface->texture;
+}
+
+VdpStatus vlVdpOutputSurfaceDMABuf(VdpVideoSurface surface,
+                                   struct VdpSurfaceDMABufDesc *result)
+{
+   vlVdpOutputSurface *vlsurface;
+   struct pipe_screen *pscreen;
+   struct winsys_handle whandle;
+
+   memset(result, 0, sizeof(*result));
+   result->handle = -1;
+
+   vlsurface = vlGetDataHTAB(surface);
+   if (!vlsurface || !vlsurface->surface)
+      return VDP_STATUS_INVALID_HANDLE;
+
+   pipe_mutex_lock(vlsurface->device->mutex);
+   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
+   vlsurface->device->context->flush(vlsurface->device->context, NULL, 0);
+   pipe_mutex_unlock(vlsurface->device->mutex);
+
+   memset(&whandle, 0, sizeof(struct winsys_handle));
+   whandle.type = DRM_API_HANDLE_TYPE_FD;
+
+   pscreen = vlsurface->surface->texture->screen;
+   if (!pscreen->resource_get_handle(pscreen, vlsurface->surface->texture, &whandle,
+				     PIPE_HANDLE_USAGE_READ_WRITE))
+      return VDP_STATUS_NO_IMPLEMENTATION;
+
+   result->handle = whandle.handle;
+   result->width = vlsurface->surface->width;
+   result->height = vlsurface->surface->height;
+   result->offset = whandle.offset;
+   result->stride = whandle.stride;
+   result->format = PipeToFormatRGBA(vlsurface->surface->format);
+
+   return VDP_STATUS_OK;
 }

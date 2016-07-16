@@ -5,6 +5,8 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+PKG_VERSION = $(shell dpkg-parsechangelog | awk '/^Version:/ {print $$2}')
+
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
@@ -32,6 +34,7 @@ include debian/not-installed
 
 DRI_DRIVERS =
 GALLIUM_DRIVERS =
+VULKAN_DRIVERS =
 EGL_DISPLAYS = x11
 
 confflags_DRI3 = --disable-dri3
@@ -71,13 +74,14 @@ else
   # Build intel drivers on archs where libdrm-intel is installed
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32))
 	DRI_DRIVERS += i915 i965
+	VULKAN_DRIVERS += intel
   endif
 
   ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
     DRI_DRIVERS += r200 radeon
     GALLIUM_DRIVERS += r600 r300
   endif
-  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 armhf))
+  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 arm64 armhf))
 	# opencl needs gallium-pipe-loader which needs udev,
 	# so no opencl on kfreebsd.
 	# opencl needs LLVM and Clang, so only build it on the subset
@@ -86,7 +90,7 @@ else
   endif
 
   # LLVM is required for r300g, radeonsi and llvmpipe:
-  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf ppc64el))
+  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el))
 	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += --enable-gallium-llvm
 	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-3.8
@@ -108,6 +112,7 @@ confflags += \
 	--with-dri-drivers="$(DRI_DRIVERS)" \
 	--with-dri-driverdir=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
 	--with-dri-searchpath='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
+	--with-vulkan-drivers="$(VULKAN_DRIVERS)" \
 	--enable-osmesa \
 	--enable-glx-tls \
 	--enable-shared-glapi \
@@ -123,21 +128,15 @@ confflags += \
 
 override_dh_clean:
 	rm -rf .pc
-	rm -f config.cache config.log config.status
-	rm -f */config.cache */config.log */config.status
-	rm -f conftest* */conftest*
-	rm -rf autom4te.cache */autom4te.cache
 	rm -rf build
 	rm -rf configure bin/config.guess bin/config.sub config.h.in
 	rm -rf $$(find -name Makefile.in)
-	rm -rf aclocal.m4 bin/missing bin/depcomp install-sh bin/ltmain.sh
-	rm -f bin/ar-lib bin/compile bin/ylwrap bin/install-sh
+	rm -rf bin/install-sh bin/ltmain.sh
 	for file in debian/*.in; do rm -f $${file%%.in}; done
-	rm -f src/glsl/builtins/tools/texture_builtins.pyc
+	rm -f src/compiler/nir/*.pyc
 	rm -f src/mapi/glapi/gen/*.pyc
 	rm -f src/mesa/main/*.pyc
 	rm -f src/gallium/auxiliary/util/*.pyc
-	rm -f m4/libtool.m4 m4/ltoptions.m4 m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4
 
 	dh_clean
 
@@ -145,6 +144,8 @@ override_dh_auto_configure:
 	dh_auto_configure -- \
 		--disable-silent-rules \
 		$(confflags)
+
+	echo "#define MESA_GIT_SHA1 \"$(PKG_VERSION)\"" > build/src/git_sha1.h.tmp
 
 override_dh_auto_install:
 	dh_auto_install
@@ -182,14 +183,10 @@ override_dh_install:
 	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/libvdpau*.so* \
 	   debian/mesa-vdpau-drivers/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/
 
-	# Add symlinks to va driver
+	# Copy the hardlinked va drivers correctly.
 	install -m755 -d debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/gallium_drv_video.so \
+	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_drv_video.so \
 	   debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-	for i in nouveau_drv_video.so r600_drv_video.so radeonsi_drv_video.so; do \
-	    ln -s gallium_drv_video.so \
-	    debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/$${i}; \
-	done
   endif
 
 	dh_install -s --fail-missing

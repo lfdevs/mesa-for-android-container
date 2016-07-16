@@ -66,3 +66,17 @@ if HAVE_MESA_LLVM
 gallium_drv_video_la_LIBADD += $(LLVM_LIBS)
 gallium_drv_video_la_LDFLAGS += $(LLVM_LDFLAGS)
 endif
+
+# hardlink each megadriver instance, but don't actually have
+# gallium_drv_video.so in the set of final installed files.
+install-data-hook:
+	for i in $(TARGET_DRIVERS); do                                  \
+		ln -f $(DESTDIR)$(vadir)/gallium_drv_video.so                \
+		      $(DESTDIR)$(vadir)/$${i}_drv_video.so;                 \
+	done;                                                           \
+	$(RM) $(DESTDIR)$(vadir)/gallium_drv_video.*
+
+uninstall-hook:
+	for i in $(TARGET_DRIVERS); do                                  \
+		$(RM) $(DESTDIR)$(vadir)/$${i}_drv_video.so;                 \
+	done;

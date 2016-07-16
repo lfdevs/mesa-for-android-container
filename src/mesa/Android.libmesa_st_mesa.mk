@@ -63,6 +63,8 @@ LOCAL_C_INCLUDES := \
 LOCAL_WHOLE_STATIC_LIBRARIES += \
 	libmesa_program
 
+LOCAL_STATIC_LIBRARIES += libmesa_nir
+
 include $(LOCAL_PATH)/Android.gen.mk
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)

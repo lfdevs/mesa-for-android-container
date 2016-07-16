@@ -434,7 +434,8 @@ llvmpipe_resource_data(struct pipe_resource *resource)
 static struct pipe_resource *
 llvmpipe_resource_from_handle(struct pipe_screen *screen,
                               const struct pipe_resource *template,
-                              struct winsys_handle *whandle)
+                              struct winsys_handle *whandle,
+                              unsigned usage)
 {
    struct sw_winsys *winsys = llvmpipe_screen(screen)->winsys;
    struct llvmpipe_resource *lpr;
@@ -485,7 +486,8 @@ no_lpr:
 static boolean
 llvmpipe_resource_get_handle(struct pipe_screen *screen,
                             struct pipe_resource *pt,
-                            struct winsys_handle *whandle)
+                            struct winsys_handle *whandle,
+                             unsigned usage)
 {
    struct sw_winsys *winsys = llvmpipe_screen(screen)->winsys;
    struct llvmpipe_resource *lpr = llvmpipe_resource(pt);
@@ -544,7 +546,7 @@ llvmpipe_transfer_map( struct pipe_context *pipe,
    if ((usage & PIPE_TRANSFER_WRITE) &&
        (resource->bind & PIPE_BIND_CONSTANT_BUFFER)) {
       unsigned i;
-      for (i = 0; i < Elements(llvmpipe->constants[PIPE_SHADER_FRAGMENT]); ++i) {
+      for (i = 0; i < ARRAY_SIZE(llvmpipe->constants[PIPE_SHADER_FRAGMENT]); ++i) {
          if (resource == llvmpipe->constants[PIPE_SHADER_FRAGMENT][i].buffer) {
             /* constants may have changed */
             llvmpipe->dirty |= LP_NEW_CONSTANTS;

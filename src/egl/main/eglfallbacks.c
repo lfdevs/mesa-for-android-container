@@ -59,29 +59,29 @@ _eglInitDriverFallbacks(_EGLDriver *drv)
    drv->API.ChooseConfig = _eglChooseConfig;
    drv->API.GetConfigAttrib = _eglGetConfigAttrib;
 
-   drv->API.CreateContext = (CreateContext_t) _eglReturnFalse;
-   drv->API.DestroyContext = (DestroyContext_t) _eglReturnFalse;
-   drv->API.MakeCurrent = (MakeCurrent_t) _eglReturnFalse;
+   drv->API.CreateContext = (void*) _eglReturnFalse;
+   drv->API.DestroyContext = (void*) _eglReturnFalse;
+   drv->API.MakeCurrent = (void*) _eglReturnFalse;
    drv->API.QueryContext = _eglQueryContext;
 
-   drv->API.CreateWindowSurface = (CreateWindowSurface_t) _eglReturnFalse;
-   drv->API.CreatePixmapSurface = (CreatePixmapSurface_t) _eglReturnFalse;
-   drv->API.CreatePbufferSurface = (CreatePbufferSurface_t) _eglReturnFalse;
+   drv->API.CreateWindowSurface = (void*) _eglReturnFalse;
+   drv->API.CreatePixmapSurface = (void*) _eglReturnFalse;
+   drv->API.CreatePbufferSurface = (void*) _eglReturnFalse;
    drv->API.CreatePbufferFromClientBuffer =
-      (CreatePbufferFromClientBuffer_t) _eglReturnFalse;
-   drv->API.DestroySurface = (DestroySurface_t) _eglReturnFalse;
+      (void*) _eglReturnFalse;
+   drv->API.DestroySurface = (void*) _eglReturnFalse;
    drv->API.QuerySurface = _eglQuerySurface;
    drv->API.SurfaceAttrib = _eglSurfaceAttrib;
 
-   drv->API.BindTexImage = (BindTexImage_t) _eglReturnFalse;
-   drv->API.ReleaseTexImage = (ReleaseTexImage_t) _eglReturnFalse;
-   drv->API.CopyBuffers = (CopyBuffers_t) _eglReturnFalse;
-   drv->API.SwapBuffers = (SwapBuffers_t) _eglReturnFalse;
+   drv->API.BindTexImage = (void*) _eglReturnFalse;
+   drv->API.ReleaseTexImage = (void*) _eglReturnFalse;
+   drv->API.CopyBuffers = (void*) _eglReturnFalse;
+   drv->API.SwapBuffers = (void*) _eglReturnFalse;
    drv->API.SwapInterval = _eglSwapInterval;
 
-   drv->API.WaitClient = (WaitClient_t) _eglReturnFalse;
-   drv->API.WaitNative = (WaitNative_t) _eglReturnFalse;
-   drv->API.GetProcAddress = (GetProcAddress_t) _eglReturnFalse;
+   drv->API.WaitClient = (void*) _eglReturnFalse;
+   drv->API.WaitNative = (void*) _eglReturnFalse;
+   drv->API.GetProcAddress = (void*) _eglReturnFalse;
 
    drv->API.CreateImageKHR = NULL;
    drv->API.DestroyImageKHR = NULL;

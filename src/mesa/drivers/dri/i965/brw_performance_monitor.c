@@ -574,10 +574,9 @@ monitor_needs_statistics_registers(struct brw_context *brw,
 static void
 snapshot_statistics_registers(struct brw_context *brw,
                               struct brw_perf_monitor_object *monitor,
-                              uint32_t offset_in_bytes)
+                              uint32_t offset)
 {
    struct gl_context *ctx = &brw->ctx;
-   const int offset = offset_in_bytes / sizeof(uint64_t);
    const int group = PIPELINE_STATS_COUNTERS;
    const int num_counters = ctx->PerfMonitor.Groups[group].NumCounters;
 
@@ -590,7 +589,7 @@ snapshot_statistics_registers(struct brw_context *brw,
 
          brw_store_register_mem64(brw, monitor->pipeline_stats_bo,
                                   brw->perfmon.statistics_registers[i],
-                                  offset + i);
+                                  offset + i * sizeof(uint64_t));
       }
    }
 }

@@ -30,6 +30,7 @@ struct push_context {
 
    uint32_t prim;
    uint32_t restart_index;
+   uint32_t start_instance;
    uint32_t instance_id;
 };
 
@@ -85,7 +86,8 @@ emit_vertices_i08(struct push_context *ctx, unsigned start, unsigned count)
 
       BEGIN_NI04(ctx->push, NV50_3D(VERTEX_DATA), size);
 
-      ctx->translate->run_elts8(ctx->translate, elts, nr, 0, ctx->instance_id,
+      ctx->translate->run_elts8(ctx->translate, elts, nr,
+                                ctx->start_instance, ctx->instance_id,
                                 ctx->push->cur);
 
       ctx->push->cur += size;
@@ -123,7 +125,8 @@ emit_vertices_i16(struct push_context *ctx, unsigned start, unsigned count)
 
       BEGIN_NI04(ctx->push, NV50_3D(VERTEX_DATA), size);
 
-      ctx->translate->run_elts16(ctx->translate, elts, nr, 0, ctx->instance_id,
+      ctx->translate->run_elts16(ctx->translate, elts, nr,
+                                 ctx->start_instance, ctx->instance_id,
                                  ctx->push->cur);
 
       ctx->push->cur += size;
@@ -161,7 +164,8 @@ emit_vertices_i32(struct push_context *ctx, unsigned start, unsigned count)
 
       BEGIN_NI04(ctx->push, NV50_3D(VERTEX_DATA), size);
 
-      ctx->translate->run_elts(ctx->translate, elts, nr, 0, ctx->instance_id,
+      ctx->translate->run_elts(ctx->translate, elts, nr,
+                               ctx->start_instance, ctx->instance_id,
                                ctx->push->cur);
 
       ctx->push->cur += size;
@@ -194,7 +198,8 @@ emit_vertices_seq(struct push_context *ctx, unsigned start, unsigned count)
 
       BEGIN_NI04(ctx->push, NV50_3D(VERTEX_DATA), size);
 
-      ctx->translate->run(ctx->translate, start, push, 0, ctx->instance_id,
+      ctx->translate->run(ctx->translate, start, push,
+                          ctx->start_instance, ctx->instance_id,
                           ctx->push->cur);
       ctx->push->cur += size;
       count -= push;
@@ -247,6 +252,7 @@ nv50_push_vbo(struct nv50_context *nv50, const struct pipe_draw_info *info)
    ctx.need_vertex_id = nv50->screen->base.class_3d >= NV84_3D_CLASS &&
       nv50->vertprog->vp.need_vertex_id && (nv50->vertex->num_elements < 32);
    ctx.index_bias = info->index_bias;
+   ctx.instance_id = 0;
 
    /* For indexed draws, gl_VertexID must be emitted for every vertex. */
    ctx.packet_vertex_limit =
@@ -301,7 +307,7 @@ nv50_push_vbo(struct nv50_context *nv50, const struct pipe_draw_info *info)
       ctx.restart_index = 0;
    }
 
-   ctx.instance_id = info->start_instance;
+   ctx.start_instance = info->start_instance;
    ctx.prim = nv50_prim_gl(info->mode);
 
    if (info->primitive_restart) {

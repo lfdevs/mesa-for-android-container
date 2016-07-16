@@ -1,0 +1,1273 @@
+/*
+ * Copyright 2015 Intel Corporation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
+
+/**
+ * @file
+ * @brief Intel Surface Layout
+ *
+ * Header Layout
+ * -------------
+ * The header is ordered as:
+ *    - forward declarations
+ *    - macros that may be overridden at compile-time for specific gens
+ *    - enums and constants
+ *    - structs and unions
+ *    - functions
+ */
+
+#pragma once
+
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "c99_compat.h"
+#include "util/macros.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct brw_device_info;
+struct brw_image_param;
+
+#ifndef ISL_DEV_GEN
+/**
+ * @brief Get the hardware generation of isl_device.
+ *
+ * You can define this as a compile-time constant in the CFLAGS. For example,
+ * `gcc -DISL_DEV_GEN(dev)=9 ...`.
+ */
+#define ISL_DEV_GEN(__dev) ((__dev)->info->gen)
+#define ISL_DEV_GEN_SANITIZE(__dev)
+#else
+#define ISL_DEV_GEN_SANITIZE(__dev) \
+   (assert(ISL_DEV_GEN(__dev) == (__dev)->info->gen))
+#endif
+
+#ifndef ISL_DEV_IS_HASWELL
+/**
+ * @brief Get the hardware generation of isl_device.
+ *
+ * You can define this as a compile-time constant in the CFLAGS. For example,
+ * `gcc -DISL_DEV_GEN(dev)=9 ...`.
+ */
+#define ISL_DEV_IS_HASWELL(__dev) ((__dev)->info->is_haswell)
+#endif
+
+#ifndef ISL_DEV_USE_SEPARATE_STENCIL
+/**
+ * You can define this as a compile-time constant in the CFLAGS. For example,
+ * `gcc -DISL_DEV_USE_SEPARATE_STENCIL(dev)=1 ...`.
+ */
+#define ISL_DEV_USE_SEPARATE_STENCIL(__dev) ((__dev)->use_separate_stencil)
+#define ISL_DEV_USE_SEPARATE_STENCIL_SANITIZE(__dev)
+#else
+#define ISL_DEV_USE_SEPARATE_STENCIL_SANITIZE(__dev) \
+   (assert(ISL_DEV_USE_SEPARATE_STENCIL(__dev) == (__dev)->use_separate_stencil))
+#endif
+
+/**
+ * Hardware enumeration SURFACE_FORMAT.
+ *
+ * For the official list, see Broadwell PRM: Volume 2b: Command Reference:
+ * Enumerations: SURFACE_FORMAT.
+ */
+enum isl_format {
+   ISL_FORMAT_R32G32B32A32_FLOAT =                               0,
+   ISL_FORMAT_R32G32B32A32_SINT =                                1,
+   ISL_FORMAT_R32G32B32A32_UINT =                                2,
+   ISL_FORMAT_R32G32B32A32_UNORM =                               3,
+   ISL_FORMAT_R32G32B32A32_SNORM =                               4,
+   ISL_FORMAT_R64G64_FLOAT =                                     5,
+   ISL_FORMAT_R32G32B32X32_FLOAT =                               6,
+   ISL_FORMAT_R32G32B32A32_SSCALED =                             7,
+   ISL_FORMAT_R32G32B32A32_USCALED =                             8,
+   ISL_FORMAT_R32G32B32A32_SFIXED =                             32,
+   ISL_FORMAT_R64G64_PASSTHRU =                                 33,
+   ISL_FORMAT_R32G32B32_FLOAT =                                 64,
+   ISL_FORMAT_R32G32B32_SINT =                                  65,
+   ISL_FORMAT_R32G32B32_UINT =                                  66,
+   ISL_FORMAT_R32G32B32_UNORM =                                 67,
+   ISL_FORMAT_R32G32B32_SNORM =                                 68,
+   ISL_FORMAT_R32G32B32_SSCALED =                               69,
+   ISL_FORMAT_R32G32B32_USCALED =                               70,
+   ISL_FORMAT_R32G32B32_SFIXED =                                80,
+   ISL_FORMAT_R16G16B16A16_UNORM =                             128,
+   ISL_FORMAT_R16G16B16A16_SNORM =                             129,
+   ISL_FORMAT_R16G16B16A16_SINT =                              130,
+   ISL_FORMAT_R16G16B16A16_UINT =                              131,
+   ISL_FORMAT_R16G16B16A16_FLOAT =                             132,
+   ISL_FORMAT_R32G32_FLOAT =                                   133,
+   ISL_FORMAT_R32G32_SINT =                                    134,
+   ISL_FORMAT_R32G32_UINT =                                    135,
+   ISL_FORMAT_R32_FLOAT_X8X24_TYPELESS =                       136,
+   ISL_FORMAT_X32_TYPELESS_G8X24_UINT =                        137,
+   ISL_FORMAT_L32A32_FLOAT =                                   138,
+   ISL_FORMAT_R32G32_UNORM =                                   139,
+   ISL_FORMAT_R32G32_SNORM =                                   140,
+   ISL_FORMAT_R64_FLOAT =                                      141,
+   ISL_FORMAT_R16G16B16X16_UNORM =                             142,
+   ISL_FORMAT_R16G16B16X16_FLOAT =                             143,
+   ISL_FORMAT_A32X32_FLOAT =                                   144,
+   ISL_FORMAT_L32X32_FLOAT =                                   145,
+   ISL_FORMAT_I32X32_FLOAT =                                   146,
+   ISL_FORMAT_R16G16B16A16_SSCALED =                           147,
+   ISL_FORMAT_R16G16B16A16_USCALED =                           148,
+   ISL_FORMAT_R32G32_SSCALED =                                 149,
+   ISL_FORMAT_R32G32_USCALED =                                 150,
+   ISL_FORMAT_R32G32_FLOAT_LD =                                151,
+   ISL_FORMAT_R32G32_SFIXED =                                  160,
+   ISL_FORMAT_R64_PASSTHRU =                                   161,
+   ISL_FORMAT_B8G8R8A8_UNORM =                                 192,
+   ISL_FORMAT_B8G8R8A8_UNORM_SRGB =                            193,
+   ISL_FORMAT_R10G10B10A2_UNORM =                              194,
+   ISL_FORMAT_R10G10B10A2_UNORM_SRGB =                         195,
+   ISL_FORMAT_R10G10B10A2_UINT =                               196,
+   ISL_FORMAT_R10G10B10_SNORM_A2_UNORM =                       197,
+   ISL_FORMAT_R8G8B8A8_UNORM =                                 199,
+   ISL_FORMAT_R8G8B8A8_UNORM_SRGB =                            200,
+   ISL_FORMAT_R8G8B8A8_SNORM =                                 201,
+   ISL_FORMAT_R8G8B8A8_SINT =                                  202,
+   ISL_FORMAT_R8G8B8A8_UINT =                                  203,
+   ISL_FORMAT_R16G16_UNORM =                                   204,
+   ISL_FORMAT_R16G16_SNORM =                                   205,
+   ISL_FORMAT_R16G16_SINT =                                    206,
+   ISL_FORMAT_R16G16_UINT =                                    207,
+   ISL_FORMAT_R16G16_FLOAT =                                   208,
+   ISL_FORMAT_B10G10R10A2_UNORM =                              209,
+   ISL_FORMAT_B10G10R10A2_UNORM_SRGB =                         210,
+   ISL_FORMAT_R11G11B10_FLOAT =                                211,
+   ISL_FORMAT_R32_SINT =                                       214,
+   ISL_FORMAT_R32_UINT =                                       215,
+   ISL_FORMAT_R32_FLOAT =                                      216,
+   ISL_FORMAT_R24_UNORM_X8_TYPELESS =                          217,
+   ISL_FORMAT_X24_TYPELESS_G8_UINT =                           218,
+   ISL_FORMAT_L32_UNORM =                                      221,
+   ISL_FORMAT_A32_UNORM =                                      222,
+   ISL_FORMAT_L16A16_UNORM =                                   223,
+   ISL_FORMAT_I24X8_UNORM =                                    224,
+   ISL_FORMAT_L24X8_UNORM =                                    225,
+   ISL_FORMAT_A24X8_UNORM =                                    226,
+   ISL_FORMAT_I32_FLOAT =                                      227,
+   ISL_FORMAT_L32_FLOAT =                                      228,
+   ISL_FORMAT_A32_FLOAT =                                      229,
+   ISL_FORMAT_X8B8_UNORM_G8R8_SNORM =                          230,
+   ISL_FORMAT_A8X8_UNORM_G8R8_SNORM =                          231,
+   ISL_FORMAT_B8X8_UNORM_G8R8_SNORM =                          232,
+   ISL_FORMAT_B8G8R8X8_UNORM =                                 233,
+   ISL_FORMAT_B8G8R8X8_UNORM_SRGB =                            234,
+   ISL_FORMAT_R8G8B8X8_UNORM =                                 235,
+   ISL_FORMAT_R8G8B8X8_UNORM_SRGB =                            236,
+   ISL_FORMAT_R9G9B9E5_SHAREDEXP =                             237,
+   ISL_FORMAT_B10G10R10X2_UNORM =                              238,
+   ISL_FORMAT_L16A16_FLOAT =                                   240,
+   ISL_FORMAT_R32_UNORM =                                      241,
+   ISL_FORMAT_R32_SNORM =                                      242,
+   ISL_FORMAT_R10G10B10X2_USCALED =                            243,
+   ISL_FORMAT_R8G8B8A8_SSCALED =                               244,
+   ISL_FORMAT_R8G8B8A8_USCALED =                               245,
+   ISL_FORMAT_R16G16_SSCALED =                                 246,
+   ISL_FORMAT_R16G16_USCALED =                                 247,
+   ISL_FORMAT_R32_SSCALED =                                    248,
+   ISL_FORMAT_R32_USCALED =                                    249,
+   ISL_FORMAT_B5G6R5_UNORM =                                   256,
+   ISL_FORMAT_B5G6R5_UNORM_SRGB =                              257,
+   ISL_FORMAT_B5G5R5A1_UNORM =                                 258,
+   ISL_FORMAT_B5G5R5A1_UNORM_SRGB =                            259,
+   ISL_FORMAT_B4G4R4A4_UNORM =                                 260,
+   ISL_FORMAT_B4G4R4A4_UNORM_SRGB =                            261,
+   ISL_FORMAT_R8G8_UNORM =                                     262,
+   ISL_FORMAT_R8G8_SNORM =                                     263,
+   ISL_FORMAT_R8G8_SINT =                                      264,
+   ISL_FORMAT_R8G8_UINT =                                      265,
+   ISL_FORMAT_R16_UNORM =                                      266,
+   ISL_FORMAT_R16_SNORM =                                      267,
+   ISL_FORMAT_R16_SINT =                                       268,
+   ISL_FORMAT_R16_UINT =                                       269,
+   ISL_FORMAT_R16_FLOAT =                                      270,
+   ISL_FORMAT_A8P8_UNORM_PALETTE0 =                            271,
+   ISL_FORMAT_A8P8_UNORM_PALETTE1 =                            272,
+   ISL_FORMAT_I16_UNORM =                                      273,
+   ISL_FORMAT_L16_UNORM =                                      274,
+   ISL_FORMAT_A16_UNORM =                                      275,
+   ISL_FORMAT_L8A8_UNORM =                                     276,
+   ISL_FORMAT_I16_FLOAT =                                      277,
+   ISL_FORMAT_L16_FLOAT =                                      278,
+   ISL_FORMAT_A16_FLOAT =                                      279,
+   ISL_FORMAT_L8A8_UNORM_SRGB =                                280,
+   ISL_FORMAT_R5G5_SNORM_B6_UNORM =                            281,
+   ISL_FORMAT_B5G5R5X1_UNORM =                                 282,
+   ISL_FORMAT_B5G5R5X1_UNORM_SRGB =                            283,
+   ISL_FORMAT_R8G8_SSCALED =                                   284,
+   ISL_FORMAT_R8G8_USCALED =                                   285,
+   ISL_FORMAT_R16_SSCALED =                                    286,
+   ISL_FORMAT_R16_USCALED =                                    287,
+   ISL_FORMAT_P8A8_UNORM_PALETTE0 =                            290,
+   ISL_FORMAT_P8A8_UNORM_PALETTE1 =                            291,
+   ISL_FORMAT_A1B5G5R5_UNORM =                                 292,
+   ISL_FORMAT_A4B4G4R4_UNORM =                                 293,
+   ISL_FORMAT_L8A8_UINT =                                      294,
+   ISL_FORMAT_L8A8_SINT =                                      295,
+   ISL_FORMAT_R8_UNORM =                                       320,
+   ISL_FORMAT_R8_SNORM =                                       321,
+   ISL_FORMAT_R8_SINT =                                        322,
+   ISL_FORMAT_R8_UINT =                                        323,
+   ISL_FORMAT_A8_UNORM =                                       324,
+   ISL_FORMAT_I8_UNORM =                                       325,
+   ISL_FORMAT_L8_UNORM =                                       326,
+   ISL_FORMAT_P4A4_UNORM_PALETTE0 =                            327,
+   ISL_FORMAT_A4P4_UNORM_PALETTE0 =                            328,
+   ISL_FORMAT_R8_SSCALED =                                     329,
+   ISL_FORMAT_R8_USCALED =                                     330,
+   ISL_FORMAT_P8_UNORM_PALETTE0 =                              331,
+   ISL_FORMAT_L8_UNORM_SRGB =                                  332,
+   ISL_FORMAT_P8_UNORM_PALETTE1 =                              333,
+   ISL_FORMAT_P4A4_UNORM_PALETTE1 =                            334,
+   ISL_FORMAT_A4P4_UNORM_PALETTE1 =                            335,
+   ISL_FORMAT_Y8_UNORM =                                       336,
+   ISL_FORMAT_L8_UINT =                                        338,
+   ISL_FORMAT_L8_SINT =                                        339,
+   ISL_FORMAT_I8_UINT =                                        340,
+   ISL_FORMAT_I8_SINT =                                        341,
+   ISL_FORMAT_DXT1_RGB_SRGB =                                  384,
+   ISL_FORMAT_R1_UNORM =                                       385,
+   ISL_FORMAT_YCRCB_NORMAL =                                   386,
+   ISL_FORMAT_YCRCB_SWAPUVY =                                  387,
+   ISL_FORMAT_P2_UNORM_PALETTE0 =                              388,
+   ISL_FORMAT_P2_UNORM_PALETTE1 =                              389,
+   ISL_FORMAT_BC1_UNORM =                                      390,
+   ISL_FORMAT_BC2_UNORM =                                      391,
+   ISL_FORMAT_BC3_UNORM =                                      392,
+   ISL_FORMAT_BC4_UNORM =                                      393,
+   ISL_FORMAT_BC5_UNORM =                                      394,
+   ISL_FORMAT_BC1_UNORM_SRGB =                                 395,
+   ISL_FORMAT_BC2_UNORM_SRGB =                                 396,
+   ISL_FORMAT_BC3_UNORM_SRGB =                                 397,
+   ISL_FORMAT_MONO8 =                                          398,
+   ISL_FORMAT_YCRCB_SWAPUV =                                   399,
+   ISL_FORMAT_YCRCB_SWAPY =                                    400,
+   ISL_FORMAT_DXT1_RGB =                                       401,
+   ISL_FORMAT_FXT1 =                                           402,
+   ISL_FORMAT_R8G8B8_UNORM =                                   403,
+   ISL_FORMAT_R8G8B8_SNORM =                                   404,
+   ISL_FORMAT_R8G8B8_SSCALED =                                 405,
+   ISL_FORMAT_R8G8B8_USCALED =                                 406,
+   ISL_FORMAT_R64G64B64A64_FLOAT =                             407,
+   ISL_FORMAT_R64G64B64_FLOAT =                                408,
+   ISL_FORMAT_BC4_SNORM =                                      409,
+   ISL_FORMAT_BC5_SNORM =                                      410,
+   ISL_FORMAT_R16G16B16_FLOAT =                                411,
+   ISL_FORMAT_R16G16B16_UNORM =                                412,
+   ISL_FORMAT_R16G16B16_SNORM =                                413,
+   ISL_FORMAT_R16G16B16_SSCALED =                              414,
+   ISL_FORMAT_R16G16B16_USCALED =                              415,
+   ISL_FORMAT_BC6H_SF16 =                                      417,
+   ISL_FORMAT_BC7_UNORM =                                      418,
+   ISL_FORMAT_BC7_UNORM_SRGB =                                 419,
+   ISL_FORMAT_BC6H_UF16 =                                      420,
+   ISL_FORMAT_PLANAR_420_8 =                                   421,
+   ISL_FORMAT_R8G8B8_UNORM_SRGB =                              424,
+   ISL_FORMAT_ETC1_RGB8 =                                      425,
+   ISL_FORMAT_ETC2_RGB8 =                                      426,
+   ISL_FORMAT_EAC_R11 =                                        427,
+   ISL_FORMAT_EAC_RG11 =                                       428,
+   ISL_FORMAT_EAC_SIGNED_R11 =                                 429,
+   ISL_FORMAT_EAC_SIGNED_RG11 =                                430,
+   ISL_FORMAT_ETC2_SRGB8 =                                     431,
+   ISL_FORMAT_R16G16B16_UINT =                                 432,
+   ISL_FORMAT_R16G16B16_SINT =                                 433,
+   ISL_FORMAT_R32_SFIXED =                                     434,
+   ISL_FORMAT_R10G10B10A2_SNORM =                              435,
+   ISL_FORMAT_R10G10B10A2_USCALED =                            436,
+   ISL_FORMAT_R10G10B10A2_SSCALED =                            437,
+   ISL_FORMAT_R10G10B10A2_SINT =                               438,
+   ISL_FORMAT_B10G10R10A2_SNORM =                              439,
+   ISL_FORMAT_B10G10R10A2_USCALED =                            440,
+   ISL_FORMAT_B10G10R10A2_SSCALED =                            441,
+   ISL_FORMAT_B10G10R10A2_UINT =                               442,
+   ISL_FORMAT_B10G10R10A2_SINT =                               443,
+   ISL_FORMAT_R64G64B64A64_PASSTHRU =                          444,
+   ISL_FORMAT_R64G64B64_PASSTHRU =                             445,
+   ISL_FORMAT_ETC2_RGB8_PTA =                                  448,
+   ISL_FORMAT_ETC2_SRGB8_PTA =                                 449,
+   ISL_FORMAT_ETC2_EAC_RGBA8 =                                 450,
+   ISL_FORMAT_ETC2_EAC_SRGB8_A8 =                              451,
+   ISL_FORMAT_R8G8B8_UINT =                                    456,
+   ISL_FORMAT_R8G8B8_SINT =                                    457,
+   ISL_FORMAT_RAW =                                            511,
+   ISL_FORMAT_ASTC_LDR_2D_4X4_U8SRGB =                         512,
+   ISL_FORMAT_ASTC_LDR_2D_5X4_U8SRGB =                         520,
+   ISL_FORMAT_ASTC_LDR_2D_5X5_U8SRGB =                         521,
+   ISL_FORMAT_ASTC_LDR_2D_6X5_U8SRGB =                         529,
+   ISL_FORMAT_ASTC_LDR_2D_6X6_U8SRGB =                         530,
+   ISL_FORMAT_ASTC_LDR_2D_8X5_U8SRGB =                         545,
+   ISL_FORMAT_ASTC_LDR_2D_8X6_U8SRGB =                         546,
+   ISL_FORMAT_ASTC_LDR_2D_8X8_U8SRGB =                         548,
+   ISL_FORMAT_ASTC_LDR_2D_10X5_U8SRGB =                        561,
+   ISL_FORMAT_ASTC_LDR_2D_10X6_U8SRGB =                        562,
+   ISL_FORMAT_ASTC_LDR_2D_10X8_U8SRGB =                        564,
+   ISL_FORMAT_ASTC_LDR_2D_10X10_U8SRGB =                       566,
+   ISL_FORMAT_ASTC_LDR_2D_12X10_U8SRGB =                       574,
+   ISL_FORMAT_ASTC_LDR_2D_12X12_U8SRGB =                       575,
+   ISL_FORMAT_ASTC_LDR_2D_4X4_FLT16 =                          576,
+   ISL_FORMAT_ASTC_LDR_2D_5X4_FLT16 =                          584,
+   ISL_FORMAT_ASTC_LDR_2D_5X5_FLT16 =                          585,
+   ISL_FORMAT_ASTC_LDR_2D_6X5_FLT16 =                          593,
+   ISL_FORMAT_ASTC_LDR_2D_6X6_FLT16 =                          594,
+   ISL_FORMAT_ASTC_LDR_2D_8X5_FLT16 =                          609,
+   ISL_FORMAT_ASTC_LDR_2D_8X6_FLT16 =                          610,
+   ISL_FORMAT_ASTC_LDR_2D_8X8_FLT16 =                          612,
+   ISL_FORMAT_ASTC_LDR_2D_10X5_FLT16 =                         625,
+   ISL_FORMAT_ASTC_LDR_2D_10X6_FLT16 =                         626,
+   ISL_FORMAT_ASTC_LDR_2D_10X8_FLT16 =                         628,
+   ISL_FORMAT_ASTC_LDR_2D_10X10_FLT16 =                        630,
+   ISL_FORMAT_ASTC_LDR_2D_12X10_FLT16 =                        638,
+   ISL_FORMAT_ASTC_LDR_2D_12X12_FLT16 =                        639,
+
+   /* Hardware doesn't understand this out-of-band value */
+   ISL_FORMAT_UNSUPPORTED =                             UINT16_MAX,
+};
+
+/**
+ * Numerical base type for channels of isl_format.
+ */
+enum isl_base_type {
+   ISL_VOID,
+   ISL_RAW,
+   ISL_UNORM,
+   ISL_SNORM,
+   ISL_UFLOAT,
+   ISL_SFLOAT,
+   ISL_UFIXED,
+   ISL_SFIXED,
+   ISL_UINT,
+   ISL_SINT,
+   ISL_USCALED,
+   ISL_SSCALED,
+};
+
+/**
+ * Colorspace of isl_format.
+ */
+enum isl_colorspace {
+   ISL_COLORSPACE_NONE = 0,
+   ISL_COLORSPACE_LINEAR,
+   ISL_COLORSPACE_SRGB,
+   ISL_COLORSPACE_YUV,
+};
+
+/**
+ * Texture compression mode of isl_format.
+ */
+enum isl_txc {
+   ISL_TXC_NONE = 0,
+   ISL_TXC_DXT1,
+   ISL_TXC_DXT3,
+   ISL_TXC_DXT5,
+   ISL_TXC_FXT1,
+   ISL_TXC_RGTC1,
+   ISL_TXC_RGTC2,
+   ISL_TXC_BPTC,
+   ISL_TXC_ETC1,
+   ISL_TXC_ETC2,
+   ISL_TXC_ASTC,
+};
+
+/**
+ * @brief Hardware tile mode
+ *
+ * WARNING: These values differ from the hardware enum values, which are
+ * unstable across hardware generations.
+ *
+ * Note that legacy Y tiling is ISL_TILING_Y0 instead of ISL_TILING_Y, to
+ * clearly distinguish it from Yf and Ys.
+ */
+enum isl_tiling {
+   ISL_TILING_LINEAR = 0,
+   ISL_TILING_W,
+   ISL_TILING_X,
+   ISL_TILING_Y0, /**< Legacy Y tiling */
+   ISL_TILING_Yf, /**< Standard 4K tiling. The 'f' means "four". */
+   ISL_TILING_Ys, /**< Standard 64K tiling. The 's' means "sixty-four". */
+};
+
+/**
+ * @defgroup Tiling Flags
+ * @{
+ */
+typedef uint32_t isl_tiling_flags_t;
+#define ISL_TILING_LINEAR_BIT             (1u << ISL_TILING_LINEAR)
+#define ISL_TILING_W_BIT                  (1u << ISL_TILING_W)
+#define ISL_TILING_X_BIT                  (1u << ISL_TILING_X)
+#define ISL_TILING_Y0_BIT                 (1u << ISL_TILING_Y0)
+#define ISL_TILING_Yf_BIT                 (1u << ISL_TILING_Yf)
+#define ISL_TILING_Ys_BIT                 (1u << ISL_TILING_Ys)
+#define ISL_TILING_ANY_MASK               (~0u)
+#define ISL_TILING_NON_LINEAR_MASK        (~ISL_TILING_LINEAR_BIT)
+
+/** Any Y tiling, including legacy Y tiling. */
+#define ISL_TILING_ANY_Y_MASK             (ISL_TILING_Y0_BIT | \
+                                           ISL_TILING_Yf_BIT | \
+                                           ISL_TILING_Ys_BIT)
+
+/** The Skylake BSpec refers to Yf and Ys as "standard tiling formats". */
+#define ISL_TILING_STD_Y_MASK             (ISL_TILING_Yf_BIT | \
+                                           ISL_TILING_Ys_BIT)
+/** @} */
+
+/**
+ * @brief Logical dimension of surface.
+ *
+ * Note: There is no dimension for cube map surfaces. ISL interprets cube maps
+ * as 2D array surfaces.
+ */
+enum isl_surf_dim {
+   ISL_SURF_DIM_1D,
+   ISL_SURF_DIM_2D,
+   ISL_SURF_DIM_3D,
+};
+
+/**
+ * @brief Physical layout of the surface's dimensions.
+ */
+enum isl_dim_layout {
+   /**
+    * For details, see the G35 PRM >> Volume 1: Graphics Core >> Section
+    * 6.17.3: 2D Surfaces.
+    *
+    * On many gens, 1D surfaces share the same layout as 2D surfaces.  From
+    * the G35 PRM >> Volume 1: Graphics Core >> Section 6.17.2: 1D Surfaces:
+    *
+    *    One-dimensional surfaces are identical to 2D surfaces with height of
+    *    one.
+    *
+    * @invariant isl_surf::phys_level0_sa::depth == 1
+    */
+   ISL_DIM_LAYOUT_GEN4_2D,
+
+   /**
+    * For details, see the G35 PRM >> Volume 1: Graphics Core >> Section
+    * 6.17.5: 3D Surfaces.
+    *
+    * @invariant isl_surf::phys_level0_sa::array_len == 1
+    */
+   ISL_DIM_LAYOUT_GEN4_3D,
+
+   /**
+    * For details, see the Skylake BSpec >> Memory Views >> Common Surface
+    * Formats >> Surface Layout and Tiling >> » 1D Surfaces.
+    */
+   ISL_DIM_LAYOUT_GEN9_1D,
+};
+
+/* TODO(chadv): Explain */
+enum isl_array_pitch_span {
+   ISL_ARRAY_PITCH_SPAN_FULL,
+   ISL_ARRAY_PITCH_SPAN_COMPACT,
+};
+
+/**
+ * @defgroup Surface Usage
+ * @{
+ */
+typedef uint64_t isl_surf_usage_flags_t;
+#define ISL_SURF_USAGE_RENDER_TARGET_BIT       (1u << 0)
+#define ISL_SURF_USAGE_DEPTH_BIT               (1u << 1)
+#define ISL_SURF_USAGE_STENCIL_BIT             (1u << 2)
+#define ISL_SURF_USAGE_TEXTURE_BIT             (1u << 3)
+#define ISL_SURF_USAGE_CUBE_BIT                (1u << 4)
+#define ISL_SURF_USAGE_DISABLE_AUX_BIT         (1u << 5)
+#define ISL_SURF_USAGE_DISPLAY_BIT             (1u << 6)
+#define ISL_SURF_USAGE_DISPLAY_ROTATE_90_BIT   (1u << 7)
+#define ISL_SURF_USAGE_DISPLAY_ROTATE_180_BIT  (1u << 8)
+#define ISL_SURF_USAGE_DISPLAY_ROTATE_270_BIT  (1u << 9)
+#define ISL_SURF_USAGE_DISPLAY_FLIP_X_BIT      (1u << 10)
+#define ISL_SURF_USAGE_DISPLAY_FLIP_Y_BIT      (1u << 11)
+#define ISL_SURF_USAGE_STORAGE_BIT             (1u << 12)
+/** @} */
+
+/**
+ * @brief A channel select (also known as texture swizzle) value
+ */
+enum isl_channel_select {
+   ISL_CHANNEL_SELECT_ZERO = 0,
+   ISL_CHANNEL_SELECT_ONE = 1,
+   ISL_CHANNEL_SELECT_RED = 4,
+   ISL_CHANNEL_SELECT_GREEN = 5,
+   ISL_CHANNEL_SELECT_BLUE = 6,
+   ISL_CHANNEL_SELECT_ALPHA = 7,
+};
+
+/**
+ * Identical to VkSampleCountFlagBits.
+ */
+enum isl_sample_count {
+   ISL_SAMPLE_COUNT_1_BIT     = 1u,
+   ISL_SAMPLE_COUNT_2_BIT     = 2u,
+   ISL_SAMPLE_COUNT_4_BIT     = 4u,
+   ISL_SAMPLE_COUNT_8_BIT     = 8u,
+   ISL_SAMPLE_COUNT_16_BIT    = 16u,
+};
+typedef uint32_t isl_sample_count_mask_t;
+
+/**
+ * @brief Multisample Format
+ */
+enum isl_msaa_layout {
+   /**
+    * @brief Suface is single-sampled.
+    */
+   ISL_MSAA_LAYOUT_NONE,
+
+   /**
+    * @brief [SNB+] Interleaved Multisample Format
+    *
+    * In this format, multiple samples are interleaved into each cacheline.
+    * In other words, the sample index is swizzled into the low 6 bits of the
+    * surface's virtual address space.
+    *
+    * For example, suppose the surface is legacy Y tiled, is 4x multisampled,
+    * and its pixel format is 32bpp. Then the first cacheline is arranged
+    * thus:
+    *
+    *    (0,0,0) (0,1,0)   (0,0,1) (1,0,1)
+    *    (1,0,0) (1,1,0)   (0,1,1) (1,1,1)
+    *
+    *    (0,0,2) (1,0,2)   (0,0,3) (1,0,3)
+    *    (0,1,2) (1,1,2)   (0,1,3) (1,1,3)
+    *
+    * The hardware docs refer to this format with multiple terms.  In
+    * Sandybridge, this is the only multisample format; so no term is used.
+    * The Ivybridge docs refer to surfaces in this format as IMS (Interleaved
+    * Multisample Surface). Later hardware docs additionally refer to this
+    * format as MSFMT_DEPTH_STENCIL (because the format is deprecated for
+    * color surfaces).
+    *
+    * See the Sandybridge PRM, Volume 4, Part 1, Section 2.7 "Multisampled
+    * Surface Behavior".
+    *
+    * See the Ivybridge PRM, Volume 1, Part 1, Section 6.18.4.1 "Interleaved
+    * Multisampled Surfaces".
+    */
+   ISL_MSAA_LAYOUT_INTERLEAVED,
+
+   /**
+    * @brief [IVB+] Array Multisample Format
+    *
+    * In this format, the surface's physical layout resembles that of a
+    * 2D array surface.
+    *
+    * Suppose the multisample surface's logical extent is (w, h) and its
+    * sample count is N. Then surface's physical extent is the same as
+    * a singlesample 2D surface whose logical extent is (w, h) and array
+    * length is N.  Array slice `i` contains the pixel values for sample
+    * index `i`.
+    *
+    * The Ivybridge docs refer to surfaces in this format as UMS
+    * (Uncompressed Multsample Layout) and CMS (Compressed Multisample
+    * Surface). The Broadwell docs additionally refer to this format as
+    * MSFMT_MSS (MSS=Multisample Surface Storage).
+    *
+    * See the Broadwell PRM, Volume 5 "Memory Views", Section "Uncompressed
+    * Multisample Surfaces".
+    *
+    * See the Broadwell PRM, Volume 5 "Memory Views", Section "Compressed
+    * Multisample Surfaces".
+    */
+   ISL_MSAA_LAYOUT_ARRAY,
+};
+
+
+struct isl_device {
+   const struct brw_device_info *info;
+   bool use_separate_stencil;
+   bool has_bit6_swizzling;
+};
+
+struct isl_extent2d {
+   union { uint32_t w, width; };
+   union { uint32_t h, height; };
+};
+
+struct isl_extent3d {
+   union { uint32_t w, width; };
+   union { uint32_t h, height; };
+   union { uint32_t d, depth; };
+};
+
+struct isl_extent4d {
+   union { uint32_t w, width; };
+   union { uint32_t h, height; };
+   union { uint32_t d, depth; };
+   union { uint32_t a, array_len; };
+};
+
+struct isl_channel_layout {
+   enum isl_base_type type;
+   uint8_t bits; /**< Size in bits */
+};
+
+/**
+ * Each format has 3D block extent (width, height, depth). The block extent of
+ * compressed formats is that of the format's compression block. For example,
+ * the block extent of ISL_FORMAT_ETC2_RGB8 is (w=4, h=4, d=1).  The block
+ * extent of uncompressed pixel formats, such as ISL_FORMAT_R8G8B8A8_UNORM, is
+ * is (w=1, h=1, d=1).
+ */
+struct isl_format_layout {
+   enum isl_format format;
+   const char *name;
+
+   uint8_t bs; /**< Block size, in bytes, rounded towards 0 */
+   uint8_t bw; /**< Block width, in pixels */
+   uint8_t bh; /**< Block height, in pixels */
+   uint8_t bd; /**< Block depth, in pixels */
+
+   struct {
+      struct isl_channel_layout r; /**< Red channel */
+      struct isl_channel_layout g; /**< Green channel */
+      struct isl_channel_layout b; /**< Blue channel */
+      struct isl_channel_layout a; /**< Alpha channel */
+      struct isl_channel_layout l; /**< Luminance channel */
+      struct isl_channel_layout i; /**< Intensity channel */
+      struct isl_channel_layout p; /**< Palette channel */
+   } channels;
+
+   enum isl_colorspace colorspace;
+   enum isl_txc txc;
+};
+
+struct isl_tile_info {
+   enum isl_tiling tiling;
+   uint32_t width; /**< in bytes */
+   uint32_t height; /**< in rows of memory */
+   uint32_t size; /**< in bytes */
+};
+
+/**
+ * @brief Input to surface initialization
+ *
+ * @invariant width >= 1
+ * @invariant height >= 1
+ * @invariant depth >= 1
+ * @invariant levels >= 1
+ * @invariant samples >= 1
+ * @invariant array_len >= 1
+ *
+ * @invariant if 1D then height == 1 and depth == 1 and samples == 1
+ * @invariant if 2D then depth == 1
+ * @invariant if 3D then array_len == 1 and samples == 1
+ */
+struct isl_surf_init_info {
+   enum isl_surf_dim dim;
+   enum isl_format format;
+
+   uint32_t width;
+   uint32_t height;
+   uint32_t depth;
+   uint32_t levels;
+   uint32_t array_len;
+   uint32_t samples;
+
+   /** Lower bound for isl_surf::alignment, in bytes. */
+   uint32_t min_alignment;
+
+   /** Lower bound for isl_surf::pitch, in bytes. */
+   uint32_t min_pitch;
+
+   isl_surf_usage_flags_t usage;
+
+   /** Flags that alter how ISL selects isl_surf::tiling.  */
+   isl_tiling_flags_t tiling_flags;
+};
+
+struct isl_surf {
+   enum isl_surf_dim dim;
+   enum isl_dim_layout dim_layout;
+   enum isl_msaa_layout msaa_layout;
+   enum isl_tiling tiling;
+   enum isl_format format;
+
+   /**
+    * Alignment of the upper-left sample of each subimage, in units of surface
+    * elements.
+    */
+   struct isl_extent3d image_alignment_el;
+
+   /**
+    * Logical extent of the surface's base level, in units of pixels.  This is
+    * identical to the extent defined in isl_surf_init_info.
+    */
+   struct isl_extent4d logical_level0_px;
+
+   /**
+    * Physical extent of the surface's base level, in units of physical
+    * surface samples and aligned to the format's compression block.
+    *
+    * Consider isl_dim_layout as an operator that transforms a logical surface
+    * layout to a physical surface layout. Then
+    *
+    *    logical_layout := (isl_surf::dim, isl_surf::logical_level0_px)
+    *    isl_surf::phys_level0_sa := isl_surf::dim_layout * logical_layout
+    */
+   struct isl_extent4d phys_level0_sa;
+
+   uint32_t levels;
+   uint32_t samples;
+
+   /** Total size of the surface, in bytes. */
+   uint32_t size;
+
+   /** Required alignment for the surface's base address. */
+   uint32_t alignment;
+
+   /**
+    * Pitch between vertically adjacent surface elements, in bytes.
+    */
+   uint32_t row_pitch;
+
+   /**
+    * Pitch between physical array slices, in rows of surface elements.
+    */
+   uint32_t array_pitch_el_rows;
+
+   enum isl_array_pitch_span array_pitch_span;
+
+   /** Copy of isl_surf_init_info::usage. */
+   isl_surf_usage_flags_t usage;
+};
+
+struct isl_view {
+   /**
+    * Indicates the usage of the particular view
+    *
+    * Normally, this is one bit.  However, for a cube map texture, it
+    * should be ISL_SURF_USAGE_TEXTURE_BIT | ISL_SURF_USAGE_CUBE_BIT.
+    */
+   isl_surf_usage_flags_t usage;
+
+   /**
+    * The format to use in the view
+    *
+    * This may differ from the format of the actual isl_surf but must have
+    * the same block size.
+    */
+   enum isl_format format;
+
+   uint32_t base_level;
+   uint32_t levels;
+
+   /**
+    * Base array layer
+    *
+    * For cube maps, both base_array_layer and array_len should be
+    * specified in terms of 2-D layers and must be a multiple of 6.
+    */
+   uint32_t base_array_layer;
+   uint32_t array_len;
+
+   enum isl_channel_select channel_select[4];
+};
+
+union isl_color_value {
+   float f32[4];
+   uint32_t u32[4];
+   int32_t i32[4];
+};
+
+struct isl_surf_fill_state_info {
+   const struct isl_surf *surf;
+   const struct isl_view *view;
+
+   /**
+    * The address of the surface in GPU memory.
+    */
+   uint64_t address;
+
+   /**
+    * The Memory Object Control state for the filled surface state.
+    *
+    * The exact format of this value depends on hardware generation.
+    */
+   uint32_t mocs;
+
+   /**
+    * The clear color for this surface
+    *
+    * Valid values depend on hardware generation.
+    */
+   union isl_color_value clear_color;
+};
+
+struct isl_buffer_fill_state_info {
+   /**
+    * The address of the surface in GPU memory.
+    */
+   uint64_t address;
+
+   /**
+    * The size of the buffer
+    */
+   uint64_t size;
+
+   /**
+    * The Memory Object Control state for the filled surface state.
+    *
+    * The exact format of this value depends on hardware generation.
+    */
+   uint32_t mocs;
+
+   /**
+    * The format to use in the surface state
+    *
+    * This may differ from the format of the actual isl_surf but have the
+    * same block size.
+    */
+   enum isl_format format;
+
+   uint32_t stride;
+};
+
+extern const struct isl_format_layout isl_format_layouts[];
+
+void
+isl_device_init(struct isl_device *dev,
+                const struct brw_device_info *info,
+                bool has_bit6_swizzling);
+
+isl_sample_count_mask_t ATTRIBUTE_CONST
+isl_device_get_sample_counts(struct isl_device *dev);
+
+static inline const struct isl_format_layout * ATTRIBUTE_CONST
+isl_format_get_layout(enum isl_format fmt)
+{
+   return &isl_format_layouts[fmt];
+}
+
+static inline const char * ATTRIBUTE_CONST
+isl_format_get_name(enum isl_format fmt)
+{
+   return isl_format_layouts[fmt].name;
+}
+
+bool isl_format_supports_rendering(const struct brw_device_info *devinfo,
+                                   enum isl_format format);
+bool isl_format_supports_alpha_blending(const struct brw_device_info *devinfo,
+                                        enum isl_format format);
+bool isl_format_supports_sampling(const struct brw_device_info *devinfo,
+                                  enum isl_format format);
+bool isl_format_supports_filtering(const struct brw_device_info *devinfo,
+                                   enum isl_format format);
+bool isl_format_supports_vertex_fetch(const struct brw_device_info *devinfo,
+                                      enum isl_format format);
+bool isl_format_supports_lossless_compression(const struct brw_device_info *devinfo,
+                                              enum isl_format format);
+
+bool isl_format_has_unorm_channel(enum isl_format fmt) ATTRIBUTE_CONST;
+bool isl_format_has_snorm_channel(enum isl_format fmt) ATTRIBUTE_CONST;
+bool isl_format_has_ufloat_channel(enum isl_format fmt) ATTRIBUTE_CONST;
+bool isl_format_has_sfloat_channel(enum isl_format fmt) ATTRIBUTE_CONST;
+bool isl_format_has_uint_channel(enum isl_format fmt) ATTRIBUTE_CONST;
+bool isl_format_has_sint_channel(enum isl_format fmt) ATTRIBUTE_CONST;
+
+static inline bool
+isl_format_has_normalized_channel(enum isl_format fmt)
+{
+   return isl_format_has_unorm_channel(fmt) ||
+          isl_format_has_snorm_channel(fmt);
+}
+
+static inline bool
+isl_format_has_float_channel(enum isl_format fmt)
+{
+   return isl_format_has_ufloat_channel(fmt) ||
+          isl_format_has_sfloat_channel(fmt);
+}
+
+static inline bool
+isl_format_has_int_channel(enum isl_format fmt)
+{
+   return isl_format_has_uint_channel(fmt) ||
+          isl_format_has_sint_channel(fmt);
+}
+
+unsigned isl_format_get_num_channels(enum isl_format fmt);
+
+static inline bool
+isl_format_is_compressed(enum isl_format fmt)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(fmt);
+
+   return fmtl->txc != ISL_TXC_NONE;
+}
+
+static inline bool
+isl_format_has_bc_compression(enum isl_format fmt)
+{
+   switch (isl_format_get_layout(fmt)->txc) {
+   case ISL_TXC_DXT1:
+   case ISL_TXC_DXT3:
+   case ISL_TXC_DXT5:
+      return true;
+   case ISL_TXC_NONE:
+   case ISL_TXC_FXT1:
+   case ISL_TXC_RGTC1:
+   case ISL_TXC_RGTC2:
+   case ISL_TXC_BPTC:
+   case ISL_TXC_ETC1:
+   case ISL_TXC_ETC2:
+   case ISL_TXC_ASTC:
+      return false;
+   }
+
+   unreachable("bad texture compression mode");
+   return false;
+}
+
+static inline bool
+isl_format_is_yuv(enum isl_format fmt)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(fmt);
+
+   return fmtl->colorspace == ISL_COLORSPACE_YUV;
+}
+
+static inline bool
+isl_format_block_is_1x1x1(enum isl_format fmt)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(fmt);
+
+   return fmtl->bw == 1 && fmtl->bh == 1 && fmtl->bd == 1;
+}
+
+static inline bool
+isl_format_is_rgb(enum isl_format fmt)
+{
+   return isl_format_layouts[fmt].channels.r.bits > 0 &&
+          isl_format_layouts[fmt].channels.g.bits > 0 &&
+          isl_format_layouts[fmt].channels.b.bits > 0 &&
+          isl_format_layouts[fmt].channels.a.bits == 0;
+}
+
+enum isl_format isl_format_rgb_to_rgba(enum isl_format rgb) ATTRIBUTE_CONST;
+enum isl_format isl_format_rgb_to_rgbx(enum isl_format rgb) ATTRIBUTE_CONST;
+
+bool isl_is_storage_image_format(enum isl_format fmt);
+
+enum isl_format
+isl_lower_storage_image_format(const struct brw_device_info *devinfo,
+                               enum isl_format fmt);
+
+/* Returns true if this hardware supports typed load/store on a format with
+ * the same size as the given format.
+ */
+bool
+isl_has_matching_typed_storage_image_format(const struct brw_device_info *devinfo,
+                                            enum isl_format fmt);
+
+static inline bool
+isl_tiling_is_any_y(enum isl_tiling tiling)
+{
+   return (1u << tiling) & ISL_TILING_ANY_MASK;
+}
+
+static inline bool
+isl_tiling_is_std_y(enum isl_tiling tiling)
+{
+   return (1u << tiling) & ISL_TILING_STD_Y_MASK;
+}
+
+bool
+isl_tiling_get_info(const struct isl_device *dev,
+                    enum isl_tiling tiling,
+                    uint32_t format_block_size,
+                    struct isl_tile_info *info);
+
+void
+isl_tiling_get_extent(const struct isl_device *dev,
+                      enum isl_tiling tiling,
+                      uint32_t format_block_size,
+                      struct isl_extent2d *e);
+bool
+isl_surf_choose_tiling(const struct isl_device *dev,
+                       const struct isl_surf_init_info *restrict info,
+                       enum isl_tiling *tiling);
+
+static inline bool
+isl_surf_usage_is_display(isl_surf_usage_flags_t usage)
+{
+   return usage & ISL_SURF_USAGE_DISPLAY_BIT;
+}
+
+static inline bool
+isl_surf_usage_is_depth(isl_surf_usage_flags_t usage)
+{
+   return usage & ISL_SURF_USAGE_DEPTH_BIT;
+}
+
+static inline bool
+isl_surf_usage_is_stencil(isl_surf_usage_flags_t usage)
+{
+   return usage & ISL_SURF_USAGE_STENCIL_BIT;
+}
+
+static inline bool
+isl_surf_usage_is_depth_and_stencil(isl_surf_usage_flags_t usage)
+{
+   return (usage & ISL_SURF_USAGE_DEPTH_BIT) &&
+          (usage & ISL_SURF_USAGE_STENCIL_BIT);
+}
+
+static inline bool
+isl_surf_usage_is_depth_or_stencil(isl_surf_usage_flags_t usage)
+{
+   return usage & (ISL_SURF_USAGE_DEPTH_BIT | ISL_SURF_USAGE_STENCIL_BIT);
+}
+
+static inline bool
+isl_surf_info_is_z16(const struct isl_surf_init_info *info)
+{
+   return (info->usage & ISL_SURF_USAGE_DEPTH_BIT) &&
+          (info->format == ISL_FORMAT_R16_UNORM);
+}
+
+static inline bool
+isl_surf_info_is_z32_float(const struct isl_surf_init_info *info)
+{
+   return (info->usage & ISL_SURF_USAGE_DEPTH_BIT) &&
+          (info->format == ISL_FORMAT_R32_FLOAT);
+}
+
+static inline struct isl_extent2d
+isl_extent2d(uint32_t width, uint32_t height)
+{
+   struct isl_extent2d e = { { 0 } };
+
+   e.width = width;
+   e.height = height;
+
+   return e;
+}
+
+static inline struct isl_extent3d
+isl_extent3d(uint32_t width, uint32_t height, uint32_t depth)
+{
+   struct isl_extent3d e = { { 0 } };
+
+   e.width = width;
+   e.height = height;
+   e.depth = depth;
+
+   return e;
+}
+
+static inline struct isl_extent4d
+isl_extent4d(uint32_t width, uint32_t height, uint32_t depth,
+             uint32_t array_len)
+{
+   struct isl_extent4d e = { { 0 } };
+
+   e.width = width;
+   e.height = height;
+   e.depth = depth;
+   e.array_len = array_len;
+
+   return e;
+}
+
+#define isl_surf_init(dev, surf, ...) \
+   isl_surf_init_s((dev), (surf), \
+                   &(struct isl_surf_init_info) {  __VA_ARGS__ });
+
+bool
+isl_surf_init_s(const struct isl_device *dev,
+                struct isl_surf *surf,
+                const struct isl_surf_init_info *restrict info);
+
+void
+isl_surf_get_tile_info(const struct isl_device *dev,
+                       const struct isl_surf *surf,
+                       struct isl_tile_info *tile_info);
+
+#define isl_surf_fill_state(dev, state, ...) \
+   isl_surf_fill_state_s((dev), (state), \
+                         &(struct isl_surf_fill_state_info) {  __VA_ARGS__ });
+
+void
+isl_surf_fill_state_s(const struct isl_device *dev, void *state,
+                      const struct isl_surf_fill_state_info *restrict info);
+
+#define isl_buffer_fill_state(dev, state, ...) \
+   isl_buffer_fill_state_s((dev), (state), \
+                           &(struct isl_buffer_fill_state_info) {  __VA_ARGS__ });
+
+void
+isl_buffer_fill_state_s(const struct isl_device *dev, void *state,
+                        const struct isl_buffer_fill_state_info *restrict info);
+
+void
+isl_surf_fill_image_param(const struct isl_device *dev,
+                          struct brw_image_param *param,
+                          const struct isl_surf *surf,
+                          const struct isl_view *view);
+
+void
+isl_buffer_fill_image_param(const struct isl_device *dev,
+                            struct brw_image_param *param,
+                            enum isl_format format,
+                            uint64_t size);
+
+/**
+ * Alignment of the upper-left sample of each subimage, in units of surface
+ * elements.
+ */
+static inline struct isl_extent3d
+isl_surf_get_image_alignment_el(const struct isl_surf *surf)
+{
+   return surf->image_alignment_el;
+}
+
+/**
+ * Alignment of the upper-left sample of each subimage, in units of surface
+ * samples.
+ */
+static inline struct isl_extent3d
+isl_surf_get_image_alignment_sa(const struct isl_surf *surf)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(surf->format);
+
+   return isl_extent3d(fmtl->bw * surf->image_alignment_el.w,
+                       fmtl->bh * surf->image_alignment_el.h,
+                       fmtl->bd * surf->image_alignment_el.d);
+}
+
+/**
+ * Pitch between vertically adjacent surface elements, in bytes.
+ */
+static inline uint32_t
+isl_surf_get_row_pitch(const struct isl_surf *surf)
+{
+   return surf->row_pitch;
+}
+
+/**
+ * Pitch between vertically adjacent surface elements, in units of surface elements.
+ */
+static inline uint32_t
+isl_surf_get_row_pitch_el(const struct isl_surf *surf)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(surf->format);
+
+   assert(surf->row_pitch % fmtl->bs == 0);
+   return surf->row_pitch / fmtl->bs;
+}
+
+/**
+ * Pitch between physical array slices, in rows of surface elements.
+ */
+static inline uint32_t
+isl_surf_get_array_pitch_el_rows(const struct isl_surf *surf)
+{
+   return surf->array_pitch_el_rows;
+}
+
+/**
+ * Pitch between physical array slices, in units of surface elements.
+ */
+static inline uint32_t
+isl_surf_get_array_pitch_el(const struct isl_surf *surf)
+{
+   return isl_surf_get_array_pitch_el_rows(surf) *
+          isl_surf_get_row_pitch_el(surf);
+}
+
+/**
+ * Pitch between physical array slices, in rows of surface samples.
+ */
+static inline uint32_t
+isl_surf_get_array_pitch_sa_rows(const struct isl_surf *surf)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(surf->format);
+   return fmtl->bh * isl_surf_get_array_pitch_el_rows(surf);
+}
+
+/**
+ * Pitch between physical array slices, in bytes.
+ */
+static inline uint32_t
+isl_surf_get_array_pitch(const struct isl_surf *surf)
+{
+   return isl_surf_get_array_pitch_sa_rows(surf) * surf->row_pitch;
+}
+
+/**
+ * Calculate the offset, in units of surface elements, to a subimage in the
+ * surface.
+ *
+ * @invariant level < surface levels
+ * @invariant logical_array_layer < logical array length of surface
+ * @invariant logical_z_offset_px < logical depth of surface at level
+ */
+void
+isl_surf_get_image_offset_el(const struct isl_surf *surf,
+                             uint32_t level,
+                             uint32_t logical_array_layer,
+                             uint32_t logical_z_offset_px,
+                             uint32_t *x_offset_el,
+                             uint32_t *y_offset_el);
+
+/**
+ * @brief Calculate the intratile offsets to a surface.
+ *
+ * In @a base_address_offset return the offset from the base of the surface to
+ * the base address of the first tile of the subimage. In @a x_offset_B and
+ * @a y_offset_rows, return the offset, in units of bytes and rows, from the
+ * tile's base to the subimage's first surface element. The x and y offsets
+ * are intratile offsets; that is, they do not exceed the boundary of the
+ * surface's tiling format.
+ */
+void
+isl_tiling_get_intratile_offset_el(const struct isl_device *dev,
+                                   enum isl_tiling tiling,
+                                   uint8_t bs,
+                                   uint32_t row_pitch,
+                                   uint32_t total_x_offset_B,
+                                   uint32_t total_y_offset_rows,
+                                   uint32_t *base_address_offset,
+                                   uint32_t *x_offset_B,
+                                   uint32_t *y_offset_rows);
+
+/**
+ * @brief Get value of 3DSTATE_DEPTH_BUFFER.SurfaceFormat
+ *
+ * @pre surf->usage has ISL_SURF_USAGE_DEPTH_BIT
+ * @pre surf->format must be a valid format for depth surfaces
+ */
+uint32_t
+isl_surf_get_depth_format(const struct isl_device *dev,
+                          const struct isl_surf *surf);
+
+#ifdef __cplusplus
+}
+#endif

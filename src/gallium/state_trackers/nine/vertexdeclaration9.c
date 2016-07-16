@@ -226,6 +226,8 @@ NineVertexDeclaration9_ctor( struct NineVertexDeclaration9 *This,
 void
 NineVertexDeclaration9_dtor( struct NineVertexDeclaration9 *This )
 {
+    DBG("This=%p\n", This);
+
     FREE(This->decls);
     FREE(This->elems);
     FREE(This->usage_map);

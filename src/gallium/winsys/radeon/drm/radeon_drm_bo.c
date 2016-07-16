@@ -40,6 +40,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 static inline struct radeon_bo *radeon_bo(struct pb_buffer *bo)
 {
@@ -143,7 +144,7 @@ static uint64_t radeon_bomgr_find_va(struct radeon_drm_winsys *rws,
     /* All VM address space holes will implicitly start aligned to the
      * size alignment, so we don't need to sanitize the alignment here
      */
-    size = align(size, rws->size_align);
+    size = align(size, rws->info.gart_page_size);
 
     pipe_mutex_lock(rws->bo_va_mutex);
     /* first look for a hole */
@@ -201,7 +202,7 @@ static void radeon_bomgr_free_va(struct radeon_drm_winsys *rws,
 {
     struct radeon_bo_va_hole *hole;
 
-    size = align(size, rws->size_align);
+    size = align(size, rws->info.gart_page_size);
 
     pipe_mutex_lock(rws->bo_va_mutex);
     if ((va + size) == rws->va_offset) {
@@ -297,8 +298,8 @@ void radeon_bo_destroy(struct pb_buffer *_buf)
 				    sizeof(va)) != 0 &&
 		va.operation == RADEON_VA_RESULT_ERROR) {
                 fprintf(stderr, "radeon: Failed to deallocate virtual address for buffer:\n");
-                fprintf(stderr, "radeon:    size      : %d bytes\n", bo->base.size);
-                fprintf(stderr, "radeon:    va        : 0x%016llx\n", (unsigned long long)bo->va);
+                fprintf(stderr, "radeon:    size      : %"PRIu64" bytes\n", bo->base.size);
+                fprintf(stderr, "radeon:    va        : 0x%"PRIx64"\n", bo->va);
             }
 	}
 
@@ -312,9 +313,9 @@ void radeon_bo_destroy(struct pb_buffer *_buf)
     pipe_mutex_destroy(bo->map_mutex);
 
     if (bo->initial_domain & RADEON_DOMAIN_VRAM)
-        rws->allocated_vram -= align(bo->base.size, rws->size_align);
+        rws->allocated_vram -= align(bo->base.size, rws->info.gart_page_size);
     else if (bo->initial_domain & RADEON_DOMAIN_GTT)
-        rws->allocated_gtt -= align(bo->base.size, rws->size_align);
+        rws->allocated_gtt -= align(bo->base.size, rws->info.gart_page_size);
     FREE(bo);
 }
 
@@ -529,10 +530,10 @@ static struct radeon_bo *radeon_create_bo(struct radeon_drm_winsys *rws,
     if (drmCommandWriteRead(rws->fd, DRM_RADEON_GEM_CREATE,
                             &args, sizeof(args))) {
         fprintf(stderr, "radeon: Failed to allocate a buffer:\n");
-        fprintf(stderr, "radeon:    size      : %d bytes\n", size);
-        fprintf(stderr, "radeon:    alignment : %d bytes\n", alignment);
-        fprintf(stderr, "radeon:    domains   : %d\n", args.initial_domain);
-        fprintf(stderr, "radeon:    flags     : %d\n", args.flags);
+        fprintf(stderr, "radeon:    size      : %u bytes\n", size);
+        fprintf(stderr, "radeon:    alignment : %u bytes\n", alignment);
+        fprintf(stderr, "radeon:    domains   : %u\n", args.initial_domain);
+        fprintf(stderr, "radeon:    flags     : %u\n", args.flags);
         return NULL;
     }
 
@@ -590,9 +591,9 @@ static struct radeon_bo *radeon_create_bo(struct radeon_drm_winsys *rws,
     }
 
     if (initial_domains & RADEON_DOMAIN_VRAM)
-        rws->allocated_vram += align(size, rws->size_align);
+        rws->allocated_vram += align(size, rws->info.gart_page_size);
     else if (initial_domains & RADEON_DOMAIN_GTT)
-        rws->allocated_gtt += align(size, rws->size_align);
+        rws->allocated_gtt += align(size, rws->info.gart_page_size);
 
     return bo;
 }
@@ -636,14 +637,8 @@ static unsigned eg_tile_split_rev(unsigned eg_tile_split)
     }
 }
 
-static void radeon_bo_get_tiling(struct pb_buffer *_buf,
-                                 enum radeon_bo_layout *microtiled,
-                                 enum radeon_bo_layout *macrotiled,
-                                 unsigned *bankw, unsigned *bankh,
-                                 unsigned *tile_split,
-                                 unsigned *stencil_tile_split,
-                                 unsigned *mtilea,
-                                 bool *scanout)
+static void radeon_bo_get_metadata(struct pb_buffer *_buf,
+				   struct radeon_bo_metadata *md)
 {
     struct radeon_bo *bo = radeon_bo(_buf);
     struct drm_radeon_gem_set_tiling args;
@@ -657,81 +652,59 @@ static void radeon_bo_get_tiling(struct pb_buffer *_buf,
                         &args,
                         sizeof(args));
 
-    *microtiled = RADEON_LAYOUT_LINEAR;
-    *macrotiled = RADEON_LAYOUT_LINEAR;
+    md->microtile = RADEON_LAYOUT_LINEAR;
+    md->macrotile = RADEON_LAYOUT_LINEAR;
     if (args.tiling_flags & RADEON_TILING_MICRO)
-        *microtiled = RADEON_LAYOUT_TILED;
+        md->microtile = RADEON_LAYOUT_TILED;
     else if (args.tiling_flags & RADEON_TILING_MICRO_SQUARE)
-        *microtiled = RADEON_LAYOUT_SQUARETILED;
+        md->microtile = RADEON_LAYOUT_SQUARETILED;
 
     if (args.tiling_flags & RADEON_TILING_MACRO)
-        *macrotiled = RADEON_LAYOUT_TILED;
-    if (bankw && tile_split && stencil_tile_split && mtilea && tile_split) {
-        *bankw = (args.tiling_flags >> RADEON_TILING_EG_BANKW_SHIFT) & RADEON_TILING_EG_BANKW_MASK;
-        *bankh = (args.tiling_flags >> RADEON_TILING_EG_BANKH_SHIFT) & RADEON_TILING_EG_BANKH_MASK;
-        *tile_split = (args.tiling_flags >> RADEON_TILING_EG_TILE_SPLIT_SHIFT) & RADEON_TILING_EG_TILE_SPLIT_MASK;
-        *stencil_tile_split = (args.tiling_flags >> RADEON_TILING_EG_STENCIL_TILE_SPLIT_SHIFT) & RADEON_TILING_EG_STENCIL_TILE_SPLIT_MASK;
-        *mtilea = (args.tiling_flags >> RADEON_TILING_EG_MACRO_TILE_ASPECT_SHIFT) & RADEON_TILING_EG_MACRO_TILE_ASPECT_MASK;
-        *tile_split = eg_tile_split(*tile_split);
-    }
-    if (scanout)
-        *scanout = bo->rws->gen >= DRV_SI && !(args.tiling_flags & RADEON_TILING_R600_NO_SCANOUT);
+        md->macrotile = RADEON_LAYOUT_TILED;
+
+    md->bankw = (args.tiling_flags >> RADEON_TILING_EG_BANKW_SHIFT) & RADEON_TILING_EG_BANKW_MASK;
+    md->bankh = (args.tiling_flags >> RADEON_TILING_EG_BANKH_SHIFT) & RADEON_TILING_EG_BANKH_MASK;
+    md->tile_split = (args.tiling_flags >> RADEON_TILING_EG_TILE_SPLIT_SHIFT) & RADEON_TILING_EG_TILE_SPLIT_MASK;
+    md->mtilea = (args.tiling_flags >> RADEON_TILING_EG_MACRO_TILE_ASPECT_SHIFT) & RADEON_TILING_EG_MACRO_TILE_ASPECT_MASK;
+    md->tile_split = eg_tile_split(md->tile_split);
+    md->scanout = bo->rws->gen >= DRV_SI && !(args.tiling_flags & RADEON_TILING_R600_NO_SCANOUT);
 }
 
-static void radeon_bo_set_tiling(struct pb_buffer *_buf,
-                                 struct radeon_winsys_cs *rcs,
-                                 enum radeon_bo_layout microtiled,
-                                 enum radeon_bo_layout macrotiled,
-                                 unsigned pipe_config,
-                                 unsigned bankw, unsigned bankh,
-                                 unsigned tile_split,
-                                 unsigned stencil_tile_split,
-                                 unsigned mtilea, unsigned num_banks,
-                                 uint32_t pitch,
-                                 bool scanout)
+static void radeon_bo_set_metadata(struct pb_buffer *_buf,
+                                   struct radeon_bo_metadata *md)
 {
     struct radeon_bo *bo = radeon_bo(_buf);
-    struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
     struct drm_radeon_gem_set_tiling args;
 
     memset(&args, 0, sizeof(args));
 
-    /* Tiling determines how DRM treats the buffer data.
-     * We must flush CS when changing it if the buffer is referenced. */
-    if (cs && radeon_bo_is_referenced_by_cs(cs, bo)) {
-        cs->flush_cs(cs->flush_data, 0, NULL);
-    }
-
     os_wait_until_zero(&bo->num_active_ioctls, PIPE_TIMEOUT_INFINITE);
 
-    if (microtiled == RADEON_LAYOUT_TILED)
+    if (md->microtile == RADEON_LAYOUT_TILED)
         args.tiling_flags |= RADEON_TILING_MICRO;
-    else if (microtiled == RADEON_LAYOUT_SQUARETILED)
+    else if (md->microtile == RADEON_LAYOUT_SQUARETILED)
         args.tiling_flags |= RADEON_TILING_MICRO_SQUARE;
 
-    if (macrotiled == RADEON_LAYOUT_TILED)
+    if (md->macrotile == RADEON_LAYOUT_TILED)
         args.tiling_flags |= RADEON_TILING_MACRO;
 
-    args.tiling_flags |= (bankw & RADEON_TILING_EG_BANKW_MASK) <<
+    args.tiling_flags |= (md->bankw & RADEON_TILING_EG_BANKW_MASK) <<
         RADEON_TILING_EG_BANKW_SHIFT;
-    args.tiling_flags |= (bankh & RADEON_TILING_EG_BANKH_MASK) <<
+    args.tiling_flags |= (md->bankh & RADEON_TILING_EG_BANKH_MASK) <<
         RADEON_TILING_EG_BANKH_SHIFT;
-    if (tile_split) {
-	args.tiling_flags |= (eg_tile_split_rev(tile_split) &
+    if (md->tile_split) {
+	args.tiling_flags |= (eg_tile_split_rev(md->tile_split) &
 			      RADEON_TILING_EG_TILE_SPLIT_MASK) <<
 	    RADEON_TILING_EG_TILE_SPLIT_SHIFT;
     }
-    args.tiling_flags |= (stencil_tile_split &
-			  RADEON_TILING_EG_STENCIL_TILE_SPLIT_MASK) <<
-        RADEON_TILING_EG_STENCIL_TILE_SPLIT_SHIFT;
-    args.tiling_flags |= (mtilea & RADEON_TILING_EG_MACRO_TILE_ASPECT_MASK) <<
+    args.tiling_flags |= (md->mtilea & RADEON_TILING_EG_MACRO_TILE_ASPECT_MASK) <<
         RADEON_TILING_EG_MACRO_TILE_ASPECT_SHIFT;
 
-    if (bo->rws->gen >= DRV_SI && !scanout)
+    if (bo->rws->gen >= DRV_SI && !md->scanout)
         args.tiling_flags |= RADEON_TILING_R600_NO_SCANOUT;
 
     args.handle = bo->handle;
-    args.pitch = pitch;
+    args.pitch = md->stride;
 
     drmCommandWriteRead(bo->rws->fd,
                         DRM_RADEON_GEM_SET_TILING,
@@ -741,9 +714,8 @@ static void radeon_bo_set_tiling(struct pb_buffer *_buf,
 
 static struct pb_buffer *
 radeon_winsys_bo_create(struct radeon_winsys *rws,
-                        unsigned size,
+                        uint64_t size,
                         unsigned alignment,
-                        boolean use_reusable_pool,
                         enum radeon_bo_domain domain,
                         enum radeon_bo_flag flags)
 {
@@ -751,11 +723,16 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
     struct radeon_bo *bo;
     unsigned usage = 0;
 
+    /* Only 32-bit sizes are supported. */
+    if (size > UINT_MAX)
+        return NULL;
+
     /* Align size to page size. This is the minimum alignment for normal
      * BOs. Aligning this here helps the cached bufmgr. Especially small BOs,
      * like constant/uniform buffers, can benefit from better and more reuse.
      */
-    size = align(size, ws->size_align);
+    size = align(size, ws->info.gart_page_size);
+    alignment = align(alignment, ws->info.gart_page_size);
 
     /* Only set one usage bit each for domains and flags, or the cache manager
      * might consider different sets of domains / flags compatible
@@ -767,11 +744,9 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
     assert(flags < sizeof(usage) * 8 - 3);
     usage |= 1 << (flags + 3);
 
-    if (use_reusable_pool) {
-        bo = radeon_bo(pb_cache_reclaim_buffer(&ws->bo_cache, size, alignment, usage));
-        if (bo)
-            return &bo->base;
-    }
+    bo = radeon_bo(pb_cache_reclaim_buffer(&ws->bo_cache, size, alignment, usage));
+    if (bo)
+        return &bo->base;
 
     bo = radeon_create_bo(ws, size, alignment, usage, domain, flags);
     if (!bo) {
@@ -782,7 +757,7 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
             return NULL;
     }
 
-    bo->use_reusable_pool = use_reusable_pool;
+    bo->use_reusable_pool = true;
 
     pipe_mutex_lock(ws->bo_handles_mutex);
     util_hash_table_set(ws->bo_handles, (void*)(uintptr_t)bo->handle, bo);
@@ -792,7 +767,7 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
 }
 
 static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
-                                                   void *pointer, unsigned size)
+                                                   void *pointer, uint64_t size)
 {
     struct radeon_drm_winsys *ws = radeon_drm_winsys(rws);
     struct drm_radeon_gem_userptr args;
@@ -805,7 +780,7 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
 
     memset(&args, 0, sizeof(args));
     args.addr = (uintptr_t)pointer;
-    args.size = align(size, sysconf(_SC_PAGE_SIZE));
+    args.size = align(size, ws->info.gart_page_size);
     args.flags = RADEON_GEM_USERPTR_ANONONLY |
         RADEON_GEM_USERPTR_VALIDATE |
         RADEON_GEM_USERPTR_REGISTER;
@@ -821,7 +796,6 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
     pipe_reference_init(&bo->base.reference, 1);
     bo->handle = args.handle;
     bo->base.alignment = 0;
-    bo->base.usage = PB_USAGE_GPU_WRITE | PB_USAGE_GPU_READ;
     bo->base.size = size;
     bo->base.vtbl = &radeon_bo_vtbl;
     bo->rws = ws;
@@ -868,20 +842,27 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
         pipe_mutex_unlock(ws->bo_handles_mutex);
     }
 
-    ws->allocated_gtt += align(bo->base.size, ws->size_align);
+    ws->allocated_gtt += align(bo->base.size, ws->info.gart_page_size);
 
     return (struct pb_buffer*)bo;
 }
 
 static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
                                                       struct winsys_handle *whandle,
-                                                      unsigned *stride)
+                                                      unsigned *stride,
+                                                      unsigned *offset)
 {
     struct radeon_drm_winsys *ws = radeon_drm_winsys(rws);
     struct radeon_bo *bo;
     int r;
     unsigned handle;
     uint64_t size = 0;
+
+    if (!offset && whandle->offset != 0) {
+        fprintf(stderr, "attempt to import unsupported winsys offset %u\n",
+                whandle->offset);
+        return NULL;
+    }
 
     /* We must maintain a list of pairs <handle, bo>, so that we always return
      * the same BO for one particular handle. If we didn't do that and created
@@ -948,7 +929,6 @@ static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
     /* Initialize it. */
     pipe_reference_init(&bo->base.reference, 1);
     bo->base.alignment = 0;
-    bo->base.usage = PB_USAGE_GPU_WRITE | PB_USAGE_GPU_READ;
     bo->base.size = (unsigned) size;
     bo->base.vtbl = &radeon_bo_vtbl;
     bo->rws = ws;
@@ -965,6 +945,8 @@ done:
 
     if (stride)
         *stride = whandle->stride;
+    if (offset)
+        *offset = whandle->offset;
 
     if (ws->info.has_virtual_memory && !bo->va) {
         struct drm_radeon_gem_va va;
@@ -1003,9 +985,9 @@ done:
     bo->initial_domain = radeon_bo_get_initial_domain((void*)bo);
 
     if (bo->initial_domain & RADEON_DOMAIN_VRAM)
-        ws->allocated_vram += align(bo->base.size, ws->size_align);
+        ws->allocated_vram += align(bo->base.size, ws->info.gart_page_size);
     else if (bo->initial_domain & RADEON_DOMAIN_GTT)
-        ws->allocated_gtt += align(bo->base.size, ws->size_align);
+        ws->allocated_gtt += align(bo->base.size, ws->info.gart_page_size);
 
     return (struct pb_buffer*)bo;
 
@@ -1015,7 +997,8 @@ fail:
 }
 
 static boolean radeon_winsys_bo_get_handle(struct pb_buffer *buffer,
-                                           unsigned stride,
+                                           unsigned stride, unsigned offset,
+                                           unsigned slice_size,
                                            struct winsys_handle *whandle)
 {
     struct drm_gem_flink flink;
@@ -1049,6 +1032,9 @@ static boolean radeon_winsys_bo_get_handle(struct pb_buffer *buffer,
     }
 
     whandle->stride = stride;
+    whandle->offset = offset;
+    whandle->offset += slice_size * whandle->layer;
+
     return TRUE;
 }
 
@@ -1064,8 +1050,8 @@ static uint64_t radeon_winsys_bo_va(struct pb_buffer *buf)
 
 void radeon_drm_bo_init_functions(struct radeon_drm_winsys *ws)
 {
-    ws->base.buffer_set_tiling = radeon_bo_set_tiling;
-    ws->base.buffer_get_tiling = radeon_bo_get_tiling;
+    ws->base.buffer_set_metadata = radeon_bo_set_metadata;
+    ws->base.buffer_get_metadata = radeon_bo_get_metadata;
     ws->base.buffer_map = radeon_bo_map;
     ws->base.buffer_unmap = radeon_bo_unmap;
     ws->base.buffer_wait = radeon_bo_wait;

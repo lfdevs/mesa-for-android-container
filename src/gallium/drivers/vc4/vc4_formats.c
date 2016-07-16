@@ -61,10 +61,10 @@ struct vc4_format {
 };
 
 #define SWIZ(x,y,z,w) {          \
-        UTIL_FORMAT_SWIZZLE_##x, \
-        UTIL_FORMAT_SWIZZLE_##y, \
-        UTIL_FORMAT_SWIZZLE_##z, \
-        UTIL_FORMAT_SWIZZLE_##w  \
+        PIPE_SWIZZLE_##x, \
+        PIPE_SWIZZLE_##y, \
+        PIPE_SWIZZLE_##z, \
+        PIPE_SWIZZLE_##w  \
 }
 
 #define FORMAT(pipe, rt, tex, swiz)                                     \

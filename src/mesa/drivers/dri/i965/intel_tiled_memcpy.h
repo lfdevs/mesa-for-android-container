@@ -55,20 +55,7 @@ tiled_to_linear(uint32_t xt1, uint32_t xt2,
                 uint32_t tiling,
                 mem_copy_fn mem_copy);
 
-/* Tells intel_get_memcpy() whether the memcpy() is
- *
- *  - an upload to the GPU with an aligned destination and a potentially
- *    unaligned source; or
- *  - a download from the GPU with an aligned source and a potentially
- *    unaligned destination.
- */
-enum intel_memcpy_direction {
-   INTEL_UPLOAD,
-   INTEL_DOWNLOAD
-};
-
 bool intel_get_memcpy(mesa_format tiledFormat, GLenum format,
-                      GLenum type, mem_copy_fn *mem_copy, uint32_t *cpp,
-                      enum intel_memcpy_direction direction);
+                      GLenum type, mem_copy_fn *mem_copy, uint32_t *cpp);
 
 #endif /* INTEL_TILED_MEMCPY */

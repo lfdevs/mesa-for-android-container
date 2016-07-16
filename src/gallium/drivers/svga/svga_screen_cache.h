@@ -140,7 +140,7 @@ svga_screen_cache_init(struct svga_screen *svgascreen);
 
 struct svga_winsys_surface *
 svga_screen_surface_create(struct svga_screen *svgascreen,
-                           unsigned bind_flags, unsigned usage,
+                           unsigned bind_flags, enum pipe_resource_usage usage,
                            struct svga_host_surface_cache_key *key);
 
 void

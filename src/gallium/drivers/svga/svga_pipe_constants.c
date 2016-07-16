@@ -64,7 +64,7 @@ static void svga_set_constant_buffer(struct pipe_context *pipe,
    }
 
    assert(shader < PIPE_SHADER_TYPES);
-   assert(index < Elements(svga->curr.constbufs[shader]));
+   assert(index < ARRAY_SIZE(svga->curr.constbufs[shader]));
    assert(index < svgascreen->max_const_buffers);
    (void) svgascreen;
 

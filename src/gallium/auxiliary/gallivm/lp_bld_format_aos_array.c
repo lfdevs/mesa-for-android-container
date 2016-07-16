@@ -74,7 +74,7 @@ lp_build_fetch_rgba_aos_array(struct gallivm_state *gallivm,
    ptr = LLVMBuildGEP(builder, base_ptr, &offset, 1, "");
    ptr = LLVMBuildPointerCast(builder, ptr, LLVMPointerType(src_vec_type, 0), "");
    res = LLVMBuildLoad(builder, ptr, "");
-   lp_set_load_alignment(res, src_type.width / 8);
+   LLVMSetAlignment(res, src_type.width / 8);
 
    /* Truncate doubles to float */
    if (src_type.floating && src_type.width == 64) {

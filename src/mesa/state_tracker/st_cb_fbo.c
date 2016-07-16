@@ -644,6 +644,7 @@ st_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
                                depth,
 			       PIPE_BIND_DEPTH_STENCIL)) {
       fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
+      st_fbo_invalid("Invalid depth attachment");
       return;
    }
    if (!st_validate_attachment(ctx,
@@ -651,6 +652,7 @@ st_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
                                stencil,
 			       PIPE_BIND_DEPTH_STENCIL)) {
       fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
+      st_fbo_invalid("Invalid stencil attachment");
       return;
    }
    for (i = 0; i < ctx->Const.MaxColorAttachments; i++) {
@@ -663,6 +665,7 @@ st_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 				  att,
 				  PIPE_BIND_RENDER_TARGET)) {
 	 fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
+	 st_fbo_invalid("Invalid color attachment");
 	 return;
       }
 

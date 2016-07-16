@@ -54,6 +54,12 @@ extern void
 _mesa_active_program(struct gl_context *ctx, struct gl_shader_program *shProg,
 		     const char *caller);
 
+extern void
+_mesa_compile_shader(struct gl_context *ctx, struct gl_shader *sh);
+
+extern void
+_mesa_link_program(struct gl_context *ctx, struct gl_shader_program *sh_prog);
+
 extern unsigned
 _mesa_count_active_attribs(struct gl_shader_program *shProg);
 

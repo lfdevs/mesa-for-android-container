@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include "brw_device_info.h"
 #include "main/mtypes.h"
+#include "main/macros.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,13 +86,19 @@ struct brw_compiler {
        * appear in *classes.
        */
       int aligned_pairs_class;
-   } fs_reg_sets[2];
+   } fs_reg_sets[3];
 
    void (*shader_debug_log)(void *, const char *str, ...) PRINTFLIKE(2, 3);
    void (*shader_perf_log)(void *, const char *str, ...) PRINTFLIKE(2, 3);
 
    bool scalar_stage[MESA_SHADER_STAGES];
    struct gl_shader_compiler_options glsl_compiler_options[MESA_SHADER_STAGES];
+
+   /**
+    * Apply workarounds for SIN and COS output range problems.
+    * This can negatively impact performance.
+    */
+   bool precise_trig;
 };
 
 
@@ -153,6 +160,13 @@ struct brw_sampler_prog_key_data {
     * For Sandybridge, which shader w/a we need for gather quirks.
     */
    enum gen6_gather_sampler_wa gen6_gather_wa[MAX_SAMPLERS];
+
+   /**
+    * Texture units that have a YUV image bound.
+    */
+   uint32_t y_u_v_image_mask;
+   uint32_t y_uv_image_mask;
+   uint32_t yx_xuxv_image_mask;
 };
 
 
@@ -236,14 +250,11 @@ struct brw_wm_prog_key {
    uint8_t iz_lookup;
    bool stats_wm:1;
    bool flat_shade:1;
-   bool persample_shading:1;
-   bool persample_2x:1;
    unsigned nr_color_regions:5;
    bool replicate_alpha:1;
-   bool render_to_fbo:1;
    bool clamp_fragment_color:1;
-   bool compute_pos_offset:1;
-   bool compute_sample_id:1;
+   bool persample_interp:1;
+   bool multisample_fbo:1;
    unsigned line_aa:2;
    bool high_quality_derivatives:1;
    bool force_dual_color_blend:1;
@@ -324,6 +335,7 @@ struct brw_stage_prog_data {
       uint32_t abo_start;
       uint32_t image_start;
       uint32_t shader_time_start;
+      uint32_t plane_start[3];
       /** @} */
    } binding_table;
 
@@ -363,9 +375,11 @@ struct brw_wm_prog_data {
 
    GLuint num_varying_inputs;
 
-   GLuint dispatch_grf_start_reg_16;
-   GLuint reg_blocks;
-   GLuint reg_blocks_16;
+   uint8_t reg_blocks_0;
+   uint8_t reg_blocks_2;
+
+   uint8_t dispatch_grf_start_reg_2;
+   uint32_t prog_offset_2;
 
    struct {
       /** @{
@@ -379,22 +393,30 @@ struct brw_wm_prog_data {
    bool computed_stencil;
 
    bool early_fragment_tests;
-   bool no_8;
+   bool dispatch_8;
+   bool dispatch_16;
    bool dual_src_blend;
+   bool persample_dispatch;
    bool uses_pos_offset;
    bool uses_omask;
    bool uses_kill;
    bool uses_src_depth;
    bool uses_src_w;
    bool uses_sample_mask;
+   bool has_side_effects;
    bool pulls_bary;
-   uint32_t prog_offset_16;
 
    /**
     * Mask of which interpolation modes are required by the fragment shader.
     * Used in hardware setup on gen6+.
     */
    uint32_t barycentric_interp_modes;
+
+   /**
+    * Mask of which FS inputs are marked flat by the shader source.  This is
+    * needed for setting up 3DSTATE_SF/SBE.
+    */
+   uint32_t flat_inputs;
 
    /**
     * Map from gl_varying_slot to the position within the FS setup data
@@ -404,15 +426,28 @@ struct brw_wm_prog_data {
    int urb_setup[VARYING_SLOT_MAX];
 };
 
+struct brw_push_const_block {
+   unsigned dwords;     /* Dword count, not reg aligned */
+   unsigned regs;
+   unsigned size;       /* Bytes, register aligned */
+};
+
 struct brw_cs_prog_data {
    struct brw_stage_prog_data base;
 
    GLuint dispatch_grf_start_reg_16;
    unsigned local_size[3];
    unsigned simd_size;
+   unsigned threads;
    bool uses_barrier;
    bool uses_num_work_groups;
-   unsigned local_invocation_id_regs;
+   int thread_local_id_index;
+
+   struct {
+      struct brw_push_const_block cross_thread;
+      struct brw_push_const_block per_thread;
+      struct brw_push_const_block total;
+   } push;
 
    struct {
       /** @{
@@ -581,6 +616,8 @@ struct brw_vue_prog_data {
    GLuint urb_read_length;
    GLuint total_grf;
 
+   uint32_t cull_distance_mask;
+
    /* Used for calculating urb partitions.  In the VS, this is the size of the
     * URB entry used for both input and output to the thread.  In the GS, this
     * is the size of the URB entry used for output.
@@ -596,6 +633,7 @@ struct brw_vs_prog_data {
    GLbitfield64 inputs_read;
 
    unsigned nr_attributes;
+   unsigned nr_attribute_slots;
 
    bool uses_vertexid;
    bool uses_instanceid;
@@ -774,6 +812,7 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
                struct gl_program *prog,
                int shader_time_index8,
                int shader_time_index16,
+               bool allow_spilling,
                bool use_rep_send,
                unsigned *final_assembly_size,
                char **error_str);
@@ -793,12 +832,37 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
                unsigned *final_assembly_size,
                char **error_str);
 
-/**
- * Fill out local id payload for compute shader according to cs_prog_data.
- */
-void
-brw_cs_fill_local_id_payload(const struct brw_cs_prog_data *cs_prog_data,
-                             void *buffer, uint32_t threads, uint32_t stride);
+static inline uint32_t
+encode_slm_size(unsigned gen, uint32_t bytes)
+{
+   uint32_t slm_size = 0;
+
+   /* Shared Local Memory is specified as powers of two, and encoded in
+    * INTERFACE_DESCRIPTOR_DATA with the following representations:
+    *
+    * Size   | 0 kB | 1 kB | 2 kB | 4 kB | 8 kB | 16 kB | 32 kB | 64 kB |
+    * -------------------------------------------------------------------
+    * Gen7-8 |    0 | none | none |    1 |    2 |     4 |     8 |    16 |
+    * -------------------------------------------------------------------
+    * Gen9+  |    0 |    1 |    2 |    3 |    4 |     5 |     6 |     7 |
+    */
+   assert(bytes <= 64 * 1024);
+
+   if (bytes > 0) {
+      /* Shared Local Memory Size is specified as powers of two. */
+      slm_size = util_next_power_of_two(bytes);
+
+      if (gen >= 9) {
+         /* Use a minimum of 1kB; turn an exponent of 10 (1024 kB) into 1. */
+         slm_size = ffs(MAX2(slm_size, 1024)) - 10;
+      } else {
+         /* Use a minimum of 4kB; convert to the pre-Gen9 representation. */
+         slm_size = MAX2(slm_size, 4096) / 4096;
+      }
+   }
+
+   return slm_size;
+}
 
 #ifdef __cplusplus
 } /* extern "C" */

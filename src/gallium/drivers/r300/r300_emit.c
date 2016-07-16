@@ -1434,8 +1434,7 @@ unsigned r300_get_num_cs_end_dwords(struct r300_context *r300)
     dwords += r300->hyperz_state.size + 2; /* emit_hyperz_end + zcache flush */
     if (r300->screen->caps.is_r500)
         dwords += 2; /* emit_index_bias */
-    if (r300->screen->info.drm_minor >= 6)
-        dwords += 3; /* MSPOS */
+    dwords += 3; /* MSPOS */
 
     return dwords;
 }

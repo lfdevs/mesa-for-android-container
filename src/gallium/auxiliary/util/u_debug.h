@@ -39,6 +39,11 @@
 #define U_DEBUG_H_
 
 
+#if defined(PIPE_OS_HAIKU)
+/* Haiku provides debug_printf in libroot with OS.h */
+#include <OS.h>
+#endif
+
 #include "os/os_misc.h"
 
 #include "pipe/p_format.h"
@@ -94,9 +99,6 @@ debug_printf(const char *format, ...)
    (void) format; /* silence warning */
 #endif
 }
-#else /* is Haiku */
-/* Haiku provides debug_printf in libroot with OS.h */
-#include <OS.h>
 #endif
 
 
@@ -471,7 +473,7 @@ void
 debug_print_bind_flags(const char *msg, unsigned usage);
 
 void
-debug_print_usage_enum(const char *msg, unsigned usage);
+debug_print_usage_enum(const char *msg, enum pipe_resource_usage usage);
 
 
 #ifdef	__cplusplus

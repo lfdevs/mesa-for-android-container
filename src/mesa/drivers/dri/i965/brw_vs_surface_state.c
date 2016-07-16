@@ -127,6 +127,7 @@ const struct brw_tracked_state brw_vs_pull_constants = {
    .dirty = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_VERTEX_PROGRAM |
              BRW_NEW_VS_PROG_DATA,
    },
@@ -153,6 +154,7 @@ const struct brw_tracked_state brw_vs_ubo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_UNIFORM_BUFFER |
              BRW_NEW_VS_PROG_DATA,
    },
@@ -179,6 +181,7 @@ const struct brw_tracked_state brw_vs_abo_surfaces = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_ATOMIC_BUFFER |
              BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_VS_PROG_DATA,
    },
    .emit = brw_upload_vs_abo_surfaces,
@@ -203,6 +206,7 @@ const struct brw_tracked_state brw_vs_image_surfaces = {
    .dirty = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_IMAGE_UNITS |
              BRW_NEW_VERTEX_PROGRAM |
              BRW_NEW_VS_PROG_DATA,

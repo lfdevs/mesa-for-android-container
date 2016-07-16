@@ -47,4 +47,7 @@ void
 svga_delete_stream_output(struct svga_context *svga,
                           struct svga_stream_output *streamout);
 
+enum pipe_error
+svga_rebind_stream_output_targets(struct svga_context *svga);
+
 #endif /* SVGA_STREAMOUT_H */

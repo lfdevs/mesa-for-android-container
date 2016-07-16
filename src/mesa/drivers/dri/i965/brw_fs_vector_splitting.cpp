@@ -372,6 +372,18 @@ brw_do_vector_splitting(exec_list *instructions)
 
          ralloc_free(name);
 
+         if (entry->var->constant_initializer) {
+            ir_constant_data data = {0};
+            assert(entry->var->data.has_initializer);
+            if (entry->var->type->is_double()) {
+               data.d[0] = entry->var->constant_initializer->value.d[i];
+            } else {
+               data.u[0] = entry->var->constant_initializer->value.u[i];
+            }
+            entry->components[i]->data.has_initializer = true;
+            entry->components[i]->constant_initializer = new(entry->components[i]) ir_constant(type, &data);
+         }
+
 	 entry->var->insert_before(entry->components[i]);
       }
 

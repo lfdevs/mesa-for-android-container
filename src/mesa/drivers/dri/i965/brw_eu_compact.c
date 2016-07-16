@@ -968,7 +968,7 @@ brw_try_compact_instruction(const struct brw_device_info *devinfo,
 
    assert(brw_inst_cmpt_control(devinfo, src) == 0);
 
-   if (is_3src(brw_inst_opcode(devinfo, src))) {
+   if (is_3src(devinfo, brw_inst_opcode(devinfo, src))) {
       if (devinfo->gen >= 8) {
          memset(&temp, 0, sizeof(temp));
          if (brw_try_compact_3src_instruction(devinfo, &temp, src)) {
@@ -1202,7 +1202,8 @@ brw_uncompact_instruction(const struct brw_device_info *devinfo, brw_inst *dst,
 {
    memset(dst, 0, sizeof(*dst));
 
-   if (devinfo->gen >= 8 && is_3src(brw_compact_inst_3src_opcode(devinfo, src))) {
+   if (devinfo->gen >= 8 &&
+       is_3src(devinfo, brw_compact_inst_3src_opcode(devinfo, src))) {
       brw_uncompact_3src_instruction(devinfo, dst, src);
       return;
    }

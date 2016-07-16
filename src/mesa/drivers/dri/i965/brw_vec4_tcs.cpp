@@ -29,6 +29,7 @@
 
 #include "brw_nir.h"
 #include "brw_vec4_tcs.h"
+#include "brw_fs.h"
 
 namespace brw {
 
@@ -48,62 +49,12 @@ vec4_tcs_visitor::vec4_tcs_visitor(const struct brw_compiler *compiler,
 
 
 void
-vec4_tcs_visitor::emit_nir_code()
-{
-   if (key->program_string_id != 0) {
-      /* We have a real application-supplied TCS, emit real code. */
-      vec4_visitor::emit_nir_code();
-   } else {
-      /* There is no TCS; automatically generate a passthrough shader
-       * that writes the API-specified default tessellation levels and
-       * copies VS outputs to TES inputs.
-       */
-      uniforms = 2;
-      uniform_size[0] = 1;
-      uniform_size[1] = 1;
-
-      uint64_t varyings = key->outputs_written;
-
-      src_reg vertex_offset(this, glsl_type::uint_type);
-      emit(MUL(dst_reg(vertex_offset), invocation_id,
-               brw_imm_ud(prog_data->vue_map.num_per_vertex_slots)));
-
-      while (varyings != 0) {
-         const int varying = ffsll(varyings) - 1;
-
-         unsigned in_offset = input_vue_map->varying_to_slot[varying];
-         unsigned out_offset = prog_data->vue_map.varying_to_slot[varying];
-         assert(out_offset >= 2);
-
-         dst_reg val(this, glsl_type::vec4_type);
-         emit_input_urb_read(val, invocation_id, in_offset, src_reg());
-         emit_urb_write(src_reg(val), WRITEMASK_XYZW, out_offset,
-                        vertex_offset);
-
-         varyings &= ~BITFIELD64_BIT(varying);
-      }
-
-      /* Only write the tessellation factors from invocation 0.
-       * There's no point in making other threads do redundant work.
-       */
-      emit(CMP(dst_null_d(), invocation_id, brw_imm_ud(0),
-               BRW_CONDITIONAL_EQ));
-      emit(IF(BRW_PREDICATE_NORMAL));
-      emit_urb_write(src_reg(UNIFORM, 0, glsl_type::vec4_type),
-                     WRITEMASK_XYZW, 0, src_reg());
-      emit_urb_write(src_reg(UNIFORM, 1, glsl_type::vec4_type),
-                     WRITEMASK_XYZW, 1, src_reg());
-      emit(BRW_OPCODE_ENDIF);
-   }
-}
-
-void
 vec4_tcs_visitor::nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr)
 {
 }
 
 dst_reg *
-vec4_tcs_visitor::make_reg_for_system_value(int location, const glsl_type *type)
+vec4_tcs_visitor::make_reg_for_system_value(int location)
 {
    return NULL;
 }
@@ -184,7 +135,9 @@ vec4_tcs_visitor::emit_thread_end()
        * we don't have stride in the vec4 world, nor UV immediates in
        * align16, so we need an opcode to get invocation_id<0,4,0>.
        */
-      emit(TCS_OPCODE_SRC0_010_IS_ZERO, dst_null_d(), invocation_id);
+      set_condmod(BRW_CONDITIONAL_Z,
+                  emit(TCS_OPCODE_SRC0_010_IS_ZERO, dst_null_d(),
+                       invocation_id));
       emit(IF(BRW_PREDICATE_NORMAL));
       for (unsigned i = 0; i < key->input_vertices; i += 2) {
          /* If we have an odd number of input vertices, the last will be
@@ -286,53 +239,6 @@ vec4_tcs_visitor::emit_urb_write(const src_reg &value,
    inst->base_mrf = -1;
 }
 
-static unsigned
-tesslevel_outer_components(GLenum tes_primitive_mode)
-{
-   switch (tes_primitive_mode) {
-   case GL_QUADS:
-      return 4;
-   case GL_TRIANGLES:
-      return 3;
-   case GL_ISOLINES:
-      return 2;
-   default:
-      unreachable("Bogus tessellation domain");
-   }
-   return 0;
-}
-
-static unsigned
-tesslevel_inner_components(GLenum tes_primitive_mode)
-{
-   switch (tes_primitive_mode) {
-   case GL_QUADS:
-      return 2;
-   case GL_TRIANGLES:
-      return 1;
-   case GL_ISOLINES:
-      return 0;
-   default:
-      unreachable("Bogus tessellation domain");
-   }
-   return 0;
-}
-
-/**
- * Given a normal .xyzw writemask, convert it to a writemask for a vector
- * that's stored backwards, i.e. .wzyx.
- */
-static unsigned
-writemask_for_backwards_vector(unsigned mask)
-{
-   unsigned new_mask = 0;
-
-   for (int i = 0; i < 4; i++)
-      new_mask |= ((mask >> i) & 1) << (3 - i);
-
-   return new_mask;
-}
-
 void
 vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 {
@@ -355,7 +261,7 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 
       nir_const_value *vertex_const = nir_src_as_const_value(instr->src[0]);
       src_reg vertex_index =
-         vertex_const ? src_reg(brw_imm_ud(vertex_const->u[0]))
+         vertex_const ? src_reg(brw_imm_ud(vertex_const->u32[0]))
                       : get_nir_src(instr->src[0], BRW_REGISTER_TYPE_UD, 1);
 
       dst_reg dst = get_nir_dest(instr->dest, BRW_REGISTER_TYPE_D);
@@ -370,7 +276,7 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_load_output:
    case nir_intrinsic_load_per_vertex_output: {
       src_reg indirect_offset = get_indirect_offset(instr);
-      unsigned imm_offset = instr->const_index[0];;
+      unsigned imm_offset = instr->const_index[0];
 
       dst_reg dst = get_nir_dest(instr->dest, BRW_REGISTER_TYPE_D);
       dst.writemask = brw_writemask_for_size(instr->num_components);
@@ -440,52 +346,59 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       src_reg indirect_offset = get_indirect_offset(instr);
       unsigned imm_offset = instr->const_index[0];
 
-      if (imm_offset == 0 && indirect_offset.file == BAD_FILE) {
-         value.type = BRW_REGISTER_TYPE_F;
+      /* The passthrough shader writes the whole patch header as two vec4s;
+       * skip all the gl_TessLevelInner/Outer swizzling.
+       */
+      if (indirect_offset.file == BAD_FILE && !is_passthrough_shader) {
+         if (imm_offset == 0) {
+            value.type = BRW_REGISTER_TYPE_F;
 
-         mask &= (1 << tesslevel_inner_components(key->tes_primitive_mode)) - 1;
+            mask &=
+               (1 << tesslevel_inner_components(key->tes_primitive_mode)) - 1;
 
-         /* This is a write to gl_TessLevelInner[], which lives in the
-          * Patch URB header.  The layout depends on the domain.
-          */
-         switch (key->tes_primitive_mode) {
-         case GL_QUADS:
-            /* gl_TessLevelInner[].xy lives at DWords 3-2 (reversed).
-             * We use an XXYX swizzle to reverse put .xy in the .wz
-             * channels, and use a .zw writemask.
+            /* This is a write to gl_TessLevelInner[], which lives in the
+             * Patch URB header.  The layout depends on the domain.
              */
-            swiz = BRW_SWIZZLE4(0, 0, 1, 0);
-            mask = writemask_for_backwards_vector(mask);
-            break;
-         case GL_TRIANGLES:
-            /* gl_TessLevelInner[].x lives at DWord 4, so we set the
-             * writemask to X and bump the URB offset by 1.
+            switch (key->tes_primitive_mode) {
+            case GL_QUADS:
+               /* gl_TessLevelInner[].xy lives at DWords 3-2 (reversed).
+                * We use an XXYX swizzle to reverse put .xy in the .wz
+                * channels, and use a .zw writemask.
+                */
+               swiz = BRW_SWIZZLE4(0, 0, 1, 0);
+               mask = writemask_for_backwards_vector(mask);
+               break;
+            case GL_TRIANGLES:
+               /* gl_TessLevelInner[].x lives at DWord 4, so we set the
+                * writemask to X and bump the URB offset by 1.
+                */
+               imm_offset = 1;
+               break;
+            case GL_ISOLINES:
+               /* Skip; gl_TessLevelInner[] doesn't exist for isolines. */
+               return;
+            default:
+               unreachable("Bogus tessellation domain");
+            }
+         } else if (imm_offset == 1) {
+            value.type = BRW_REGISTER_TYPE_F;
+
+            mask &=
+               (1 << tesslevel_outer_components(key->tes_primitive_mode)) - 1;
+
+            /* This is a write to gl_TessLevelOuter[] which lives in the
+             * Patch URB Header at DWords 4-7.  However, it's reversed, so
+             * instead of .xyzw we have .wzyx.
              */
-            imm_offset = 1;
-            break;
-         case GL_ISOLINES:
-            /* Skip; gl_TessLevelInner[] doesn't exist for isolines. */
-            return;
-         default:
-            unreachable("Bogus tessellation domain");
-         }
-      } else if (imm_offset == 1 && indirect_offset.file == BAD_FILE) {
-         value.type = BRW_REGISTER_TYPE_F;
-
-         mask &= (1 << tesslevel_outer_components(key->tes_primitive_mode)) - 1;
-
-         /* This is a write to gl_TessLevelOuter[] which lives in the
-          * Patch URB Header at DWords 4-7.  However, it's reversed, so
-          * instead of .xyzw we have .wzyx.
-          */
-         if (key->tes_primitive_mode == GL_ISOLINES) {
-            /* Isolines .xy should be stored in .zw, in order. */
-            swiz = BRW_SWIZZLE4(0, 0, 0, 1);
-            mask <<= 2;
-         } else {
-            /* Other domains are reversed; store .wzyx instead of .xyzw. */
-            swiz = BRW_SWIZZLE_WZYX;
-            mask = writemask_for_backwards_vector(mask);
+            if (key->tes_primitive_mode == GL_ISOLINES) {
+               /* Isolines .xy should be stored in .zw, in order. */
+               swiz = BRW_SWIZZLE4(0, 0, 0, 1);
+               mask <<= 2;
+            } else {
+               /* Other domains are reversed; store .wzyx instead of .xyzw. */
+               swiz = BRW_SWIZZLE_WZYX;
+               mask = writemask_for_backwards_vector(mask);
+            }
          }
       }
 
@@ -523,17 +436,27 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_CTRL];
 
    nir_shader *nir = nir_shader_clone(mem_ctx, src_shader);
-   nir = brw_nir_apply_sampler_key(nir, devinfo, &key->tex, is_scalar);
    nir->info.outputs_written = key->outputs_written;
    nir->info.patch_outputs_written = key->patch_outputs_written;
-   nir = brw_nir_lower_io(nir, compiler->devinfo, is_scalar, false, NULL);
-   nir = brw_postprocess_nir(nir, compiler->devinfo, is_scalar);
 
-   prog_data->instances = DIV_ROUND_UP(nir->info.tcs.vertices_out, 2);
+   struct brw_vue_map input_vue_map;
+   brw_compute_vue_map(devinfo, &input_vue_map,
+                       nir->info.inputs_read & ~VARYING_BIT_PRIMITIVE_ID,
+                       true);
 
    brw_compute_tess_vue_map(&vue_prog_data->vue_map,
                             nir->info.outputs_written,
                             nir->info.patch_outputs_written);
+
+   nir = brw_nir_apply_sampler_key(nir, devinfo, &key->tex, is_scalar);
+   brw_nir_lower_vue_inputs(nir, is_scalar, &input_vue_map);
+   brw_nir_lower_tcs_outputs(nir, &vue_prog_data->vue_map);
+   nir = brw_postprocess_nir(nir, compiler->devinfo, is_scalar);
+
+   if (is_scalar)
+      prog_data->instances = DIV_ROUND_UP(nir->info.tcs.vertices_out, 8);
+   else
+      prog_data->instances = DIV_ROUND_UP(nir->info.tcs.vertices_out, 2);
 
    /* Compute URB entry size.  The maximum allowed URB entry size is 32k.
     * That divides up as follows:
@@ -561,11 +484,6 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    /* URB entry sizes are stored as a multiple of 64 bytes. */
    vue_prog_data->urb_entry_size = ALIGN(output_size_bytes, 64) / 64;
 
-   struct brw_vue_map input_vue_map;
-   brw_compute_vue_map(devinfo, &input_vue_map,
-                       nir->info.inputs_read & ~VARYING_BIT_PRIMITIVE_ID,
-                       true);
-
    /* HS does not use the usual payload pushing from URB to GRFs,
     * because we don't have enough registers for a full-size payload, and
     * the hardware is broken on Haswell anyway.
@@ -579,20 +497,50 @@ brw_compile_tcs(const struct brw_compiler *compiler,
       brw_print_vue_map(stderr, &vue_prog_data->vue_map);
    }
 
-   vec4_tcs_visitor v(compiler, log_data, key, prog_data,
-                      nir, mem_ctx, shader_time_index, &input_vue_map);
-   if (!v.run()) {
-      if (error_str)
-         *error_str = ralloc_strdup(mem_ctx, v.fail_msg);
-      return NULL;
+   if (is_scalar) {
+      fs_visitor v(compiler, log_data, mem_ctx, (void *) key,
+                   &prog_data->base.base, NULL, nir, 8,
+                   shader_time_index, &input_vue_map);
+      if (!v.run_tcs_single_patch()) {
+         if (error_str)
+            *error_str = ralloc_strdup(mem_ctx, v.fail_msg);
+         return NULL;
+      }
+
+      prog_data->base.base.dispatch_grf_start_reg = v.payload.num_regs;
+      prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
+
+      fs_generator g(compiler, log_data, mem_ctx, (void *) key,
+                     &prog_data->base.base, v.promoted_constants, false,
+                     MESA_SHADER_TESS_CTRL);
+      if (unlikely(INTEL_DEBUG & DEBUG_TCS)) {
+         g.enable_debug(ralloc_asprintf(mem_ctx,
+                                        "%s tessellation control shader %s",
+                                        nir->info.label ? nir->info.label
+                                                        : "unnamed",
+                                        nir->info.name));
+      }
+
+      g.generate_code(v.cfg, 8);
+
+      return g.get_assembly(final_assembly_size);
+   } else {
+      vec4_tcs_visitor v(compiler, log_data, key, prog_data,
+                         nir, mem_ctx, shader_time_index, &input_vue_map);
+      if (!v.run()) {
+         if (error_str)
+            *error_str = ralloc_strdup(mem_ctx, v.fail_msg);
+         return NULL;
+      }
+
+      if (unlikely(INTEL_DEBUG & DEBUG_TCS))
+         v.dump_instructions();
+
+
+      return brw_vec4_generate_assembly(compiler, log_data, mem_ctx, nir,
+                                        &prog_data->base, v.cfg,
+                                        final_assembly_size);
    }
-
-   if (unlikely(INTEL_DEBUG & DEBUG_TCS))
-      v.dump_instructions();
-
-   return brw_vec4_generate_assembly(compiler, log_data, mem_ctx, nir,
-                                     &prog_data->base, v.cfg,
-                                     final_assembly_size);
 }
 
 

@@ -37,12 +37,20 @@
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
 
-static const GLuint double_types[5] = {
+static const GLuint double_types_float[5] = {
    0,
    BRW_SURFACEFORMAT_R64_FLOAT,
    BRW_SURFACEFORMAT_R64G64_FLOAT,
    BRW_SURFACEFORMAT_R64G64B64_FLOAT,
    BRW_SURFACEFORMAT_R64G64B64A64_FLOAT
+};
+
+static const GLuint double_types_passthru[5] = {
+   0,
+   BRW_SURFACEFORMAT_R64_PASSTHRU,
+   BRW_SURFACEFORMAT_R64G64_PASSTHRU,
+   BRW_SURFACEFORMAT_R64G64B64_PASSTHRU,
+   BRW_SURFACEFORMAT_R64G64B64A64_PASSTHRU
 };
 
 static const GLuint float_types[5] = {
@@ -57,7 +65,7 @@ static const GLuint half_float_types[5] = {
    0,
    BRW_SURFACEFORMAT_R16_FLOAT,
    BRW_SURFACEFORMAT_R16G16_FLOAT,
-   BRW_SURFACEFORMAT_R16G16B16A16_FLOAT,
+   BRW_SURFACEFORMAT_R16G16B16_FLOAT,
    BRW_SURFACEFORMAT_R16G16B16A16_FLOAT
 };
 
@@ -121,7 +129,7 @@ static const GLuint ushort_types_direct[5] = {
    0,
    BRW_SURFACEFORMAT_R16_UINT,
    BRW_SURFACEFORMAT_R16G16_UINT,
-   BRW_SURFACEFORMAT_R16G16B16A16_UINT,
+   BRW_SURFACEFORMAT_R16G16B16_UINT,
    BRW_SURFACEFORMAT_R16G16B16A16_UINT
 };
 
@@ -145,7 +153,7 @@ static const GLuint short_types_direct[5] = {
    0,
    BRW_SURFACEFORMAT_R16_SINT,
    BRW_SURFACEFORMAT_R16G16_SINT,
-   BRW_SURFACEFORMAT_R16G16B16A16_SINT,
+   BRW_SURFACEFORMAT_R16G16B16_SINT,
    BRW_SURFACEFORMAT_R16G16B16A16_SINT
 };
 
@@ -169,7 +177,7 @@ static const GLuint ubyte_types_direct[5] = {
    0,
    BRW_SURFACEFORMAT_R8_UINT,
    BRW_SURFACEFORMAT_R8G8_UINT,
-   BRW_SURFACEFORMAT_R8G8B8A8_UINT,
+   BRW_SURFACEFORMAT_R8G8B8_UINT,
    BRW_SURFACEFORMAT_R8G8B8A8_UINT
 };
 
@@ -193,7 +201,7 @@ static const GLuint byte_types_direct[5] = {
    0,
    BRW_SURFACEFORMAT_R8_SINT,
    BRW_SURFACEFORMAT_R8G8_SINT,
-   BRW_SURFACEFORMAT_R8G8B8A8_SINT,
+   BRW_SURFACEFORMAT_R8G8B8_SINT,
    BRW_SURFACEFORMAT_R8G8B8A8_SINT
 };
 
@@ -213,6 +221,22 @@ static const GLuint byte_types_scale[5] = {
    BRW_SURFACEFORMAT_R8G8B8A8_SSCALED
 };
 
+static GLuint
+double_types(struct brw_context *brw,
+             int size,
+             GLboolean doubles)
+{
+   /* From the BDW PRM, Volume 2d, page 588 (VERTEX_ELEMENT_STATE):
+    * "When SourceElementFormat is set to one of the *64*_PASSTHRU formats,
+    * 64-bit components are stored in the URB without any conversion."
+    * Also included on BDW PRM, Volume 7, page 470, table "Source Element
+    * Formats Supported in VF Unit"
+    * Previous PRMs don't include those references.
+    */
+   return (brw->gen >= 8 && doubles
+           ? double_types_passthru[size]
+           : double_types_float[size]);
+}
 
 /**
  * Given vertex array type/size/format/normalized info, return
@@ -224,6 +248,8 @@ brw_get_vertex_surface_type(struct brw_context *brw,
                             const struct gl_client_array *glarray)
 {
    int size = glarray->Size;
+   const bool is_ivybridge_or_older =
+      brw->gen <= 7 && !brw->is_baytrail && !brw->is_haswell;
 
    if (unlikely(INTEL_DEBUG & DEBUG_VERTS))
       fprintf(stderr, "type %s size %d normalized %d\n",
@@ -234,20 +260,40 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       assert(glarray->Format == GL_RGBA); /* sanity check */
       switch (glarray->Type) {
       case GL_INT: return int_types_direct[size];
-      case GL_SHORT: return short_types_direct[size];
-      case GL_BYTE: return byte_types_direct[size];
+      case GL_SHORT:
+         if (is_ivybridge_or_older && size == 3)
+            return short_types_direct[4];
+         else
+            return short_types_direct[size];
+      case GL_BYTE:
+         if (is_ivybridge_or_older && size == 3)
+            return byte_types_direct[4];
+         else
+            return byte_types_direct[size];
       case GL_UNSIGNED_INT: return uint_types_direct[size];
-      case GL_UNSIGNED_SHORT: return ushort_types_direct[size];
-      case GL_UNSIGNED_BYTE: return ubyte_types_direct[size];
+      case GL_UNSIGNED_SHORT:
+         if (is_ivybridge_or_older && size == 3)
+            return ushort_types_direct[4];
+         else
+            return ushort_types_direct[size];
+      case GL_UNSIGNED_BYTE:
+         if (is_ivybridge_or_older && size == 3)
+            return ubyte_types_direct[4];
+         else
+            return ubyte_types_direct[size];
       default: unreachable("not reached");
       }
    } else if (glarray->Type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
       return BRW_SURFACEFORMAT_R11G11B10_FLOAT;
    } else if (glarray->Normalized) {
       switch (glarray->Type) {
-      case GL_DOUBLE: return double_types[size];
+      case GL_DOUBLE: return double_types(brw, size, glarray->Doubles);
       case GL_FLOAT: return float_types[size];
-      case GL_HALF_FLOAT: return half_float_types[size];
+      case GL_HALF_FLOAT:
+         if (brw->gen < 6 && size == 3)
+            return half_float_types[4];
+         else
+            return half_float_types[size];
       case GL_INT: return int_types_norm[size];
       case GL_SHORT: return short_types_norm[size];
       case GL_BYTE: return byte_types_norm[size];
@@ -319,9 +365,13 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       }
       assert(glarray->Format == GL_RGBA); /* sanity check */
       switch (glarray->Type) {
-      case GL_DOUBLE: return double_types[size];
+      case GL_DOUBLE: return double_types(brw, size, glarray->Doubles);
       case GL_FLOAT: return float_types[size];
-      case GL_HALF_FLOAT: return half_float_types[size];
+      case GL_HALF_FLOAT:
+         if (brw->gen < 6 && size == 3)
+            return half_float_types[4];
+         else
+            return half_float_types[size];
       case GL_INT: return int_types_scale[size];
       case GL_SHORT: return short_types_scale[size];
       case GL_BYTE: return byte_types_scale[size];
@@ -361,6 +411,7 @@ copy_array_to_vbo_array(struct brw_context *brw,
 			&buffer->bo, &buffer->offset);
 
       buffer->stride = 0;
+      buffer->size = element->glarray->_ElementSize;
       return;
    }
 
@@ -380,6 +431,7 @@ copy_array_to_vbo_array(struct brw_context *brw,
       }
    }
    buffer->stride = dst_stride;
+   buffer->size = size;
 }
 
 void
@@ -429,6 +481,11 @@ brw_prepare_vertices(struct brw_context *brw)
    if (brw->vb.nr_buffers)
       return;
 
+   /* The range of data in a given buffer represented as [min, max) */
+   struct intel_buffer_object *enabled_buffer[VERT_ATTRIB_MAX];
+   uint32_t buffer_range_start[VERT_ATTRIB_MAX];
+   uint32_t buffer_range_end[VERT_ATTRIB_MAX];
+
    for (i = j = 0; i < brw->vb.nr_enabled; i++) {
       struct brw_vertex_element *input = brw->vb.enabled[i];
       const struct gl_client_array *glarray = input->glarray;
@@ -436,12 +493,32 @@ brw_prepare_vertices(struct brw_context *brw)
       if (_mesa_is_bufferobj(glarray->BufferObj)) {
 	 struct intel_buffer_object *intel_buffer =
 	    intel_buffer_object(glarray->BufferObj);
-	 unsigned k;
+
+         const uint32_t offset = (uintptr_t)glarray->Ptr;
+
+         /* Start with the worst case */
+         uint32_t start = 0;
+         uint32_t range = intel_buffer->Base.Size;
+         if (glarray->InstanceDivisor) {
+            if (brw->num_instances) {
+               start = offset + glarray->StrideB * brw->baseinstance;
+               range = (glarray->StrideB * ((brw->num_instances - 1) /
+                                            glarray->InstanceDivisor) +
+                        glarray->_ElementSize);
+            }
+         } else {
+            if (brw->vb.index_bounds_valid) {
+               start = offset + min_index * glarray->StrideB;
+               range = (glarray->StrideB * (max_index - min_index) +
+                        glarray->_ElementSize);
+            }
+         }
 
 	 /* If we have a VB set to be uploaded for this buffer object
 	  * already, reuse that VB state so that we emit fewer
 	  * relocations.
 	  */
+	 unsigned k;
 	 for (k = 0; k < i; k++) {
 	    const struct gl_client_array *other = brw->vb.enabled[k]->glarray;
 	    if (glarray->BufferObj == other->BufferObj &&
@@ -451,6 +528,11 @@ brw_prepare_vertices(struct brw_context *brw)
 	    {
 	       input->buffer = brw->vb.enabled[k]->buffer;
 	       input->offset = glarray->Ptr - other->Ptr;
+
+               buffer_range_start[input->buffer] =
+                  MIN2(buffer_range_start[input->buffer], start);
+               buffer_range_end[input->buffer] =
+                  MAX2(buffer_range_end[input->buffer], start + range);
 	       break;
 	    }
 	 }
@@ -458,29 +540,14 @@ brw_prepare_vertices(struct brw_context *brw)
 	    struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
 
 	    /* Named buffer object: Just reference its contents directly. */
-	    buffer->offset = (uintptr_t)glarray->Ptr;
+	    buffer->offset = offset;
 	    buffer->stride = glarray->StrideB;
 	    buffer->step_rate = glarray->InstanceDivisor;
+            buffer->size = glarray->BufferObj->Size - offset;
 
-            uint32_t offset, size;
-            if (glarray->InstanceDivisor) {
-               offset = buffer->offset;
-               size = (buffer->stride * ((brw->num_instances /
-                                          glarray->InstanceDivisor) - 1) +
-                       glarray->_ElementSize);
-            } else {
-               if (min_index == -1) {
-                  offset = 0;
-                  size = intel_buffer->Base.Size;
-               } else {
-                  offset = buffer->offset + min_index * buffer->stride;
-                  size = (buffer->stride * (max_index - min_index) +
-                          glarray->_ElementSize);
-               }
-            }
-            buffer->bo = intel_bufferobj_buffer(brw, intel_buffer,
-                                                offset, size);
-            drm_intel_bo_reference(buffer->bo);
+            enabled_buffer[j] = intel_buffer;
+            buffer_range_start[j] = start;
+            buffer_range_end[j] = start + range;
 
 	    input->buffer = j++;
 	    input->offset = 0;
@@ -495,7 +562,7 @@ brw_prepare_vertices(struct brw_context *brw)
 	  * probably a service to the poor programmer to do so rather than
 	  * trying to just not render.
 	  */
-	 assert(input->offset < brw->vb.buffers[input->buffer].bo->size);
+	 assert(input->offset < intel_buffer->Base.Size);
       } else {
 	 /* Queue the buffer object up to be uploaded in the next pass,
 	  * when we've decided if we're doing interleaved or not.
@@ -530,6 +597,22 @@ brw_prepare_vertices(struct brw_context *brw)
       }
    }
 
+   /* Now that we've set up all of the buffers, we walk through and reference
+    * each of them.  We do this late so that we get the right size in each
+    * buffer and don't reference too little data.
+    */
+   for (i = 0; i < j; i++) {
+      struct brw_vertex_buffer *buffer = &brw->vb.buffers[i];
+      if (buffer->bo)
+         continue;
+
+      const uint32_t start = buffer_range_start[i];
+      const uint32_t range = buffer_range_end[i] - buffer_range_start[i];
+
+      buffer->bo = intel_bufferobj_buffer(brw, enabled_buffer[i], start, range);
+      drm_intel_bo_reference(buffer->bo);
+   }
+
    /* If we need to upload all the arrays, then we can trim those arrays to
     * only the used elements [min_index, max_index] so long as we adjust all
     * the values used in the 3DPRIMITIVE i.e. by setting the vertex bias.
@@ -551,6 +634,7 @@ brw_prepare_vertices(struct brw_context *brw)
 	 copy_array_to_vbo_array(brw, upload[0], min_index, max_index,
 				 buffer, interleaved);
 	 buffer->offset -= delta * interleaved;
+         buffer->size += delta * interleaved;
 
 	 for (i = 0; i < nr_uploads; i++) {
 	    /* Then, just point upload[i] at upload[0]'s buffer. */
@@ -580,6 +664,7 @@ brw_prepare_vertices(struct brw_context *brw)
                                  buffer, upload[i]->glarray->_ElementSize);
       }
       buffer->offset -= delta * buffer->stride;
+      buffer->size += delta * buffer->stride;
       buffer->step_rate = upload[i]->glarray->InstanceDivisor;
       upload[i]->buffer = j++;
       upload[i]->offset = 0;
@@ -721,7 +806,15 @@ brw_emit_vertices(struct brw_context *brw)
       OUT_BATCH((_3DSTATE_VERTEX_BUFFERS << 16) | (4 * nr_buffers - 1));
       for (i = 0; i < brw->vb.nr_buffers; i++) {
 	 struct brw_vertex_buffer *buffer = &brw->vb.buffers[i];
-         EMIT_VERTEX_BUFFER_STATE(brw, i, buffer->bo, buffer->bo->size - 1,
+         /* Prior to Haswell and Bay Trail we have to use 4-component formats
+          * to fake 3-component ones.  In particular, we do this for
+          * half-float and 8 and 16-bit integer formats.  This means that the
+          * vertex element may poke over the end of the buffer by 2 bytes.
+          */
+         unsigned padding =
+            (brw->gen <= 7 && !brw->is_baytrail && !brw->is_haswell) * 2;
+         EMIT_VERTEX_BUFFER_STATE(brw, i, buffer->bo,
+                                  buffer->offset + buffer->size + padding - 1,
                                   buffer->offset, buffer->stride,
                                   buffer->step_rate);
 
@@ -904,6 +997,7 @@ const struct brw_tracked_state brw_vertices = {
    .dirty = {
       .mesa = _NEW_POLYGON,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_VERTICES |
              BRW_NEW_VS_PROG_DATA,
    },
@@ -925,7 +1019,8 @@ brw_upload_indices(struct brw_context *brw)
       return;
 
    ib_type_size = _mesa_sizeof_type(index_buffer->type);
-   ib_size = ib_type_size * index_buffer->count;
+   ib_size = index_buffer->count ? ib_type_size * index_buffer->count :
+                                   index_buffer->obj->Size;
    bufferobj = index_buffer->obj;
 
    /* Turn into a proper VBO:
@@ -935,6 +1030,7 @@ brw_upload_indices(struct brw_context *brw)
        */
       intel_upload_data(brw, index_buffer->ptr, ib_size, ib_type_size,
 			&brw->ib.bo, &offset);
+      brw->ib.size = brw->ib.bo->size;
    } else {
       offset = (GLuint) (unsigned long) index_buffer->ptr;
 
@@ -954,6 +1050,7 @@ brw_upload_indices(struct brw_context *brw)
 
          intel_upload_data(brw, map, ib_size, ib_type_size,
                            &brw->ib.bo, &offset);
+         brw->ib.size = brw->ib.bo->size;
 
          ctx->Driver.UnmapBuffer(ctx, bufferobj, MAP_INTERNAL);
       } else {
@@ -963,6 +1060,7 @@ brw_upload_indices(struct brw_context *brw)
          if (bo != brw->ib.bo) {
             drm_intel_bo_unreference(brw->ib.bo);
             brw->ib.bo = bo;
+            brw->ib.size = bufferobj->Size;
             drm_intel_bo_reference(bo);
          }
       }
@@ -986,7 +1084,8 @@ brw_upload_indices(struct brw_context *brw)
 const struct brw_tracked_state brw_indices = {
    .dirty = {
       .mesa = 0,
-      .brw = BRW_NEW_INDICES,
+      .brw = BRW_NEW_BLORP |
+             BRW_NEW_INDICES,
    },
    .emit = brw_upload_indices,
 };
@@ -1016,7 +1115,7 @@ brw_emit_index_buffer(struct brw_context *brw)
              0);
    OUT_RELOC(brw->ib.bo,
              I915_GEM_DOMAIN_VERTEX, 0,
-	     brw->ib.bo->size - 1);
+	     brw->ib.size - 1);
    ADVANCE_BATCH();
 }
 
@@ -1024,6 +1123,7 @@ const struct brw_tracked_state brw_index_buffer = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_INDEX_BUFFER,
    },
    .emit = brw_emit_index_buffer,

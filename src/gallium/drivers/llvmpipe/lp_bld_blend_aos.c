@@ -255,13 +255,13 @@ lp_build_blend_factor(struct lp_build_blend_aos_context *bld,
    LLVMValueRef rgb_factor_, alpha_factor_;
    enum lp_build_blend_swizzle rgb_swizzle;
 
-   if (alpha_swizzle == UTIL_FORMAT_SWIZZLE_X && num_channels == 1) {
+   if (alpha_swizzle == PIPE_SWIZZLE_X && num_channels == 1) {
       return lp_build_blend_factor_unswizzled(bld, alpha_factor, TRUE);
    }
 
    rgb_factor_ = lp_build_blend_factor_unswizzled(bld, rgb_factor, FALSE);
 
-   if (alpha_swizzle != UTIL_FORMAT_SWIZZLE_NONE) {
+   if (alpha_swizzle != PIPE_SWIZZLE_NONE) {
       rgb_swizzle   = lp_build_blend_factor_swizzle(rgb_factor);
       alpha_factor_ = lp_build_blend_factor_unswizzled(bld, alpha_factor, TRUE);
       return lp_build_blend_swizzle(bld, rgb_factor_, alpha_factor_, rgb_swizzle, alpha_swizzle, num_channels);
@@ -312,7 +312,7 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
    struct lp_build_blend_aos_context bld;
    LLVMValueRef src_factor, dst_factor;
    LLVMValueRef result;
-   unsigned alpha_swizzle = UTIL_FORMAT_SWIZZLE_NONE;
+   unsigned alpha_swizzle = PIPE_SWIZZLE_NONE;
    unsigned i;
 
    desc = util_format_description(cbuf_format);
@@ -370,7 +370,7 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
                               rgb_alpha_same,
                               false);
 
-      if(state->rgb_func != state->alpha_func && nr_channels > 1 && alpha_swizzle != UTIL_FORMAT_SWIZZLE_NONE) {
+      if(state->rgb_func != state->alpha_func && nr_channels > 1 && alpha_swizzle != PIPE_SWIZZLE_NONE) {
          LLVMValueRef alpha;
 
          alpha = lp_build_blend(&bld.base,

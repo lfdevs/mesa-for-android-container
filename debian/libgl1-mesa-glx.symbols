@@ -1,5 +1,7 @@
+
 libGL.so.1 libgl1-mesa-glx | libgl1
  glAccum@Base 0
+ glActiveShaderProgram@Base 12.0.1
  glActiveTexture@Base 0
  glActiveTextureARB@Base 0
  glAlphaFunc@Base 0
@@ -33,6 +35,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glBindImageTexture@Base 0
  glBindImageTextures@Base 0
  glBindProgramARB@Base 0
+ glBindProgramPipeline@Base 12.0.1
  glBindRenderbuffer@Base 0
  glBindRenderbufferEXT@Base 0
  glBindSampler@Base 0
@@ -178,6 +181,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glCreateProgramObjectARB@Base 0
  glCreateShader@Base 0
  glCreateShaderObjectARB@Base 0
+ glCreateShaderProgramv@Base 12.0.1
  glCullFace@Base 0
  glDebugMessageCallback@Base 0
  glDebugMessageCallbackARB@Base 0
@@ -192,6 +196,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glDeleteLists@Base 0
  glDeleteObjectARB@Base 0
  glDeleteProgram@Base 0
+ glDeleteProgramPipelines@Base 12.0.1
  glDeleteProgramsARB@Base 0
  glDeleteQueries@Base 0
  glDeleteQueriesARB@Base 0
@@ -300,6 +305,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glFogiv@Base 0
  glFogx@Base 0
  glFogxv@Base 0
+ glFramebufferParameteri@Base 12.0.1
  glFramebufferRenderbuffer@Base 0
  glFramebufferRenderbufferEXT@Base 0
  glFramebufferTexture1D@Base 0
@@ -320,6 +326,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glGenFramebuffers@Base 0
  glGenFramebuffersEXT@Base 0
  glGenLists@Base 0
+ glGenProgramPipelines@Base 12.0.1
  glGenProgramsARB@Base 0
  glGenQueries@Base 0
  glGenQueriesARB@Base 0
@@ -379,6 +386,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glGetFragDataLocationEXT@Base 0
  glGetFramebufferAttachmentParameteriv@Base 0
  glGetFramebufferAttachmentParameterivEXT@Base 0
+ glGetFramebufferParameteriv@Base 12.0.1
  glGetGraphicsResetStatusARB@Base 0
  glGetHandleARB@Base 0
  glGetHistogram@Base 0
@@ -417,8 +425,15 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glGetProgramEnvParameterdvARB@Base 0
  glGetProgramEnvParameterfvARB@Base 0
  glGetProgramInfoLog@Base 0
+ glGetProgramInterfaceiv@Base 12.0.1
  glGetProgramLocalParameterdvARB@Base 0
  glGetProgramLocalParameterfvARB@Base 0
+ glGetProgramPipelineInfoLog@Base 12.0.1
+ glGetProgramPipelineiv@Base 12.0.1
+ glGetProgramResourceIndex@Base 12.0.1
+ glGetProgramResourceLocation@Base 12.0.1
+ glGetProgramResourceName@Base 12.0.1
+ glGetProgramResourceiv@Base 12.0.1
  glGetProgramStringARB@Base 0
  glGetProgramiv@Base 0
  glGetProgramivARB@Base 0
@@ -534,6 +549,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glIsList@Base 0
  glIsProgram@Base 0
  glIsProgramARB@Base 0
+ glIsProgramPipeline@Base 12.0.1
  glIsQuery@Base 0
  glIsQueryARB@Base 0
  glIsRenderbuffer@Base 0
@@ -593,6 +609,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glMaterialxv@Base 0
  glMatrixMode@Base 0
  glMemoryBarrier@Base 0
+ glMemoryBarrierByRegion@Base 12.0.1
  glMinSampleShading@Base 0
  glMinSampleShadingARB@Base 0
  glMinmax@Base 0
@@ -752,6 +769,39 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glProgramLocalParameter4fvARB@Base 0
  glProgramParameteri@Base 0
  glProgramStringARB@Base 0
+ glProgramUniform1f@Base 12.0.1
+ glProgramUniform1fv@Base 12.0.1
+ glProgramUniform1i@Base 12.0.1
+ glProgramUniform1iv@Base 12.0.1
+ glProgramUniform1ui@Base 12.0.1
+ glProgramUniform1uiv@Base 12.0.1
+ glProgramUniform2f@Base 12.0.1
+ glProgramUniform2fv@Base 12.0.1
+ glProgramUniform2i@Base 12.0.1
+ glProgramUniform2iv@Base 12.0.1
+ glProgramUniform2ui@Base 12.0.1
+ glProgramUniform2uiv@Base 12.0.1
+ glProgramUniform3f@Base 12.0.1
+ glProgramUniform3fv@Base 12.0.1
+ glProgramUniform3i@Base 12.0.1
+ glProgramUniform3iv@Base 12.0.1
+ glProgramUniform3ui@Base 12.0.1
+ glProgramUniform3uiv@Base 12.0.1
+ glProgramUniform4f@Base 12.0.1
+ glProgramUniform4fv@Base 12.0.1
+ glProgramUniform4i@Base 12.0.1
+ glProgramUniform4iv@Base 12.0.1
+ glProgramUniform4ui@Base 12.0.1
+ glProgramUniform4uiv@Base 12.0.1
+ glProgramUniformMatrix2fv@Base 12.0.1
+ glProgramUniformMatrix2x3fv@Base 12.0.1
+ glProgramUniformMatrix2x4fv@Base 12.0.1
+ glProgramUniformMatrix3fv@Base 12.0.1
+ glProgramUniformMatrix3x2fv@Base 12.0.1
+ glProgramUniformMatrix3x4fv@Base 12.0.1
+ glProgramUniformMatrix4fv@Base 12.0.1
+ glProgramUniformMatrix4x2fv@Base 12.0.1
+ glProgramUniformMatrix4x3fv@Base 12.0.1
  glProvokingVertex@Base 0
  glProvokingVertexEXT@Base 0
  glPushAttrib@Base 0
@@ -1028,8 +1078,10 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glUnmapBufferARB@Base 0
  glUseProgram@Base 0
  glUseProgramObjectARB@Base 0
+ glUseProgramStages@Base 12.0.1
  glValidateProgram@Base 0
  glValidateProgramARB@Base 0
+ glValidateProgramPipeline@Base 12.0.1
  glVertex2d@Base 0
  glVertex2dv@Base 0
  glVertex2f@Base 0

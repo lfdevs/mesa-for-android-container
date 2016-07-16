@@ -187,7 +187,7 @@ static void r300_dummy_vertex_shader(
 
     /* Make a simple vertex shader which outputs (0, 0, 0, 1),
      * effectively rendering nothing. */
-    ureg = ureg_create(TGSI_PROCESSOR_VERTEX);
+    ureg = ureg_create(PIPE_SHADER_VERTEX);
     dst = ureg_DECL_output(ureg, TGSI_SEMANTIC_POSITION, 0);
     imm = ureg_imm4f(ureg, 0, 0, 0, 1);
 

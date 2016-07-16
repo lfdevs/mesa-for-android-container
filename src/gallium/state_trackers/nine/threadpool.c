@@ -77,7 +77,7 @@ threadpool_worker(void *data)
 }
 
 struct threadpool *
-_mesa_threadpool_create(void)
+_mesa_threadpool_create(struct NineSwapChain9 *swapchain)
 {
     struct threadpool *pool = calloc(1, sizeof(*pool));
 
@@ -87,13 +87,16 @@ _mesa_threadpool_create(void)
     pthread_mutex_init(&pool->m, NULL);
     pthread_cond_init(&pool->new_work, NULL);
 
-    pthread_create(&pool->thread, NULL, threadpool_worker, pool);
-
+    pool->wthread = NineSwapChain9_CreateThread(swapchain, threadpool_worker, pool);
+    if (!pool->wthread) {
+        /* using pthread as fallback */
+        pthread_create(&pool->pthread, NULL, threadpool_worker, pool);
+    }
     return pool;
 }
 
 void
-_mesa_threadpool_destroy(struct threadpool *pool)
+_mesa_threadpool_destroy(struct NineSwapChain9 *swapchain, struct threadpool *pool)
 {
     if (!pool)
         return;
@@ -103,7 +106,11 @@ _mesa_threadpool_destroy(struct threadpool *pool)
     pthread_cond_broadcast(&pool->new_work);
     pthread_mutex_unlock(&pool->m);
 
-    pthread_join(pool->thread, NULL);
+    if (pool->wthread) {
+        NineSwapChain9_WaitForThread(swapchain, pool->wthread);
+    } else {
+        pthread_join(pool->pthread, NULL);
+    }
 
     pthread_cond_destroy(&pool->new_work);
     pthread_mutex_destroy(&pool->m);

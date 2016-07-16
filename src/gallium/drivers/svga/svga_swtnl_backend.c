@@ -181,7 +181,7 @@ svga_vbuf_render_unmap_vertices( struct vbuf_render *render,
 
 static void
 svga_vbuf_render_set_primitive( struct vbuf_render *render,
-                                unsigned prim )
+                                enum pipe_prim_type prim )
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    svga_render->prim = prim;

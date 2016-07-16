@@ -80,6 +80,7 @@ nvc0_shader_output_address(unsigned sn, unsigned si)
    case TGSI_SEMANTIC_CLIPDIST:      return 0x2c0 + si * 0x10;
    case TGSI_SEMANTIC_CLIPVERTEX:    return 0x270;
    case TGSI_SEMANTIC_TEXCOORD:      return 0x300 + si * 0x10;
+   /* case TGSI_SEMANTIC_VIEWPORT_MASK: return 0x3a0; */
    case TGSI_SEMANTIC_EDGEFLAG:      return ~0;
    default:
       assert(!"invalid TGSI output semantic");
@@ -251,8 +252,9 @@ nvc0_vtgp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info *info)
       }
    }
 
-   vp->vp.clip_enable =
-      (1 << (info->io.clipDistances + info->io.cullDistances)) - 1;
+   vp->vp.clip_enable = (1 << info->io.clipDistances) - 1;
+   vp->vp.cull_enable =
+      ((1 << info->io.cullDistances) - 1) << info->io.clipDistances;
    for (i = 0; i < info->io.cullDistances; ++i)
       vp->vp.clip_mode |= 1 << ((info->io.clipDistances + i) * 4);
 
@@ -293,11 +295,21 @@ nvc0_tp_get_tess_mode(struct nvc0_program *tp, struct nv50_ir_prog_info *info)
       return;
    }
 
-   if (info->prop.tp.winding > 0)
-      tp->tp.tess_mode |= NVC0_3D_TESS_MODE_CW;
+   /* It seems like lines want the "CW" bit to indicate they're connected, and
+    * spit out errors in dmesg when the "CONNECTED" bit is set.
+    */
+   if (info->prop.tp.outputPrim != PIPE_PRIM_POINTS) {
+      if (info->prop.tp.domain == PIPE_PRIM_LINES)
+         tp->tp.tess_mode |= NVC0_3D_TESS_MODE_CW;
+      else
+         tp->tp.tess_mode |= NVC0_3D_TESS_MODE_CONNECTED;
+   }
 
-   if (info->prop.tp.outputPrim != PIPE_PRIM_POINTS)
-      tp->tp.tess_mode |= NVC0_3D_TESS_MODE_CONNECTED;
+   /* Winding only matters for triangles/quads, not lines. */
+   if (info->prop.tp.domain != PIPE_PRIM_LINES &&
+       info->prop.tp.outputPrim != PIPE_PRIM_POINTS &&
+       info->prop.tp.winding > 0)
+      tp->tp.tess_mode |= NVC0_3D_TESS_MODE_CW;
 
    switch (info->prop.tp.partitioning) {
    case PIPE_TESS_SPACING_EQUAL:
@@ -381,7 +393,7 @@ nvc0_gp_gen_header(struct nvc0_program *gp, struct nv50_ir_prog_info *info)
       break;
    }
 
-   gp->hdr[4] = MIN2(info->prop.gp.maxVertices, 1024);
+   gp->hdr[4] = CLAMP(info->prop.gp.maxVertices, 1, 1024);
 
    return nvc0_vtgp_gen_header(gp, info);
 }
@@ -456,7 +468,15 @@ nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
          fp->hdr[18] |= 0xf << info->out[i].slot[0];
    }
 
+   /* There are no "regular" attachments, but the shader still needs to be
+    * executed. It seems like it wants to think that it has some color
+    * outputs in order to actually run.
+    */
+   if (info->prop.fp.numColourResults == 0 && !info->prop.fp.writesDepth)
+      fp->hdr[18] |= 0xf;
+
    fp->fp.early_z = info->prop.fp.earlyFragTests;
+   fp->fp.sample_mask_in = info->prop.fp.usesSampleMaskIn;
 
    return 0;
 }
@@ -535,29 +555,27 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
 
    info->io.genUserClip = prog->vp.num_ucps;
    info->io.auxCBSlot = 15;
-   info->io.ucpBase = 256;
-   info->io.drawInfoBase = 256 + 128;
+   info->io.ucpBase = NVC0_CB_AUX_UCP_INFO;
+   info->io.drawInfoBase = NVC0_CB_AUX_DRAW_INFO;
 
    if (prog->type == PIPE_SHADER_COMPUTE) {
       if (chipset >= NVISA_GK104_CHIPSET) {
-         info->io.resInfoCBSlot = 0;
-         info->io.texBindBase = NVE4_CP_INPUT_TEX(0);
-         info->io.suInfoBase = NVE4_CP_INPUT_SUF(0);
-         info->prop.cp.gridInfoBase = NVE4_CP_INPUT_GRID_INFO(0);
-      } else {
-         info->io.resInfoCBSlot = 15;
-         info->io.suInfoBase = 512;
+         info->io.auxCBSlot = 7;
+         info->io.texBindBase = NVC0_CB_AUX_TEX_INFO(0);
+         info->prop.cp.gridInfoBase = NVC0_CB_AUX_GRID_INFO;
+         info->io.uboInfoBase = NVC0_CB_AUX_UBO_INFO(0);
       }
       info->io.msInfoCBSlot = 0;
-      info->io.msInfoBase = NVE4_CP_INPUT_MS_OFFSETS;
+      info->io.msInfoBase = NVC0_CB_AUX_MS_INFO;
+      info->io.bufInfoBase = NVC0_CB_AUX_BUF_INFO(0);
+      info->io.suInfoBase = NVC0_CB_AUX_SU_INFO(0);
    } else {
       if (chipset >= NVISA_GK104_CHIPSET) {
-         info->io.texBindBase = 0x20;
-         info->io.suInfoBase = 0; /* TODO */
+         info->io.texBindBase = NVC0_CB_AUX_TEX_INFO(0);
       }
-      info->io.resInfoCBSlot = 15;
-      info->io.sampleInfoBase = 256 + 128;
-      info->io.suInfoBase = 512;
+      info->io.sampleInfoBase = NVC0_CB_AUX_SAMPLE_INFO;
+      info->io.bufInfoBase = NVC0_CB_AUX_BUF_INFO(0);
+      info->io.suInfoBase = NVC0_CB_AUX_SU_INFO(0);
       info->io.msInfoCBSlot = 15;
       info->io.msInfoBase = 0; /* TODO */
    }
@@ -584,7 +602,7 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
    prog->immd_data = info->immd.buf;
    prog->immd_size = info->immd.bufSize;
    prog->relocs = info->bin.relocData;
-   prog->interps = info->bin.interpData;
+   prog->fixups = info->bin.fixupData;
    prog->num_gprs = MAX2(4, (info->bin.maxGPR + 1));
    prog->num_barriers = info->numBarriers;
 
@@ -731,10 +749,10 @@ nvc0_program_upload_code(struct nvc0_context *nvc0, struct nvc0_program *prog)
 
    if (prog->relocs)
       nv50_ir_relocate_code(prog->relocs, prog->code, code_pos, lib_pos, 0);
-   if (prog->interps) {
-      nv50_ir_change_interp(prog->interps, prog->code,
-                            prog->fp.force_persample_interp,
-                            prog->fp.flatshade);
+   if (prog->fixups) {
+      nv50_ir_apply_fixups(prog->fixups, prog->code,
+                           prog->fp.force_persample_interp,
+                           prog->fp.flatshade);
       for (int i = 0; i < 2; i++) {
          unsigned mask = prog->fp.color_interp[i] >> 4;
          unsigned interp = prog->fp.color_interp[i] & 3;
@@ -808,7 +826,7 @@ nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
    FREE(prog->code); /* may be 0 for hardcoded shaders */
    FREE(prog->immd_data);
    FREE(prog->relocs);
-   FREE(prog->interps);
+   FREE(prog->fixups);
    if (prog->type == PIPE_SHADER_COMPUTE && prog->cp.syms)
       FREE(prog->cp.syms);
    if (prog->tfb) {
@@ -843,7 +861,7 @@ nvc0_program_init_tcp_empty(struct nvc0_context *nvc0)
 {
    struct ureg_program *ureg;
 
-   ureg = ureg_create(TGSI_PROCESSOR_TESS_CTRL);
+   ureg = ureg_create(PIPE_SHADER_TESS_CTRL);
    if (!ureg)
       return;
 

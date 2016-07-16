@@ -36,6 +36,7 @@ struct nv50_graph_state {
    uint32_t semantic_color;
    uint32_t semantic_psize;
    int32_t index_bias;
+   uint32_t clip_mode;
    bool uniform_buffer_bound[3];
    bool prim_restart;
    bool point_sprite;

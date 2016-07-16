@@ -41,9 +41,10 @@ static inline uint32_t DRAW4(enum pc_di_primtype prim_type,
 		enum pc_di_src_sel source_select, enum a4xx_index_size index_size,
 		enum pc_di_vis_cull_mode vis_cull_mode)
 {
-	return (prim_type         << 0) |
-			(source_select     << 6) |
-			(index_size        << 10);
+	return CP_DRAW_INDX_OFFSET_0_PRIM_TYPE(prim_type) |
+			CP_DRAW_INDX_OFFSET_0_SOURCE_SELECT(source_select) |
+			CP_DRAW_INDX_OFFSET_0_INDEX_SIZE(index_size) |
+			CP_DRAW_INDX_OFFSET_0_VIS_CULL(vis_cull_mode);
 }
 
 static inline void

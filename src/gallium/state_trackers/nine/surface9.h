@@ -48,7 +48,10 @@ struct NineSurface9
     D3DSURFACE_DESC desc;
 
     uint8_t *data; /* system memory backing */
+    uint8_t *data_conversion; /* for conversions */
+    enum pipe_format format_conversion;
     unsigned stride; /* for system memory backing */
+    unsigned stride_conversion;
 };
 static inline struct NineSurface9 *
 NineSurface9( void *data )

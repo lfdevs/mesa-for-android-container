@@ -64,7 +64,3 @@ CXX_SOURCES = \
 	sb/sb_shader.h \
 	sb/sb_ssa_builder.cpp \
 	sb/sb_valtable.cpp
-
-LLVM_C_SOURCES = \
-	r600_llvm.c \
-	r600_llvm.h

@@ -147,26 +147,6 @@ get_attr_override(const struct brw_vue_map *vue_map, int urb_entry_read_offset,
 }
 
 
-static bool
-is_drawing_points(const struct brw_context *brw)
-{
-   /* Determine if the primitives *reaching the SF* are points */
-   /* _NEW_POLYGON */
-   if (brw->ctx.Polygon.FrontMode == GL_POINT ||
-       brw->ctx.Polygon.BackMode == GL_POINT) {
-      return true;
-   }
-
-   if (brw->geometry_program) {
-      /* BRW_NEW_GEOMETRY_PROGRAM */
-      return brw->geometry_program->OutputType == GL_POINTS;
-   } else {
-      /* BRW_NEW_PRIMITIVE */
-      return brw->primitive == _3DPRIM_POINTLIST;
-   }
-}
-
-
 /**
  * Create the mapping from the FS inputs we produce to the previous pipeline
  * stage (GS or VS) outputs they source from.
@@ -175,14 +155,12 @@ void
 calculate_attr_overrides(const struct brw_context *brw,
                          uint16_t *attr_overrides,
                          uint32_t *point_sprite_enables,
-                         uint32_t *flat_enables,
                          uint32_t *urb_entry_read_length,
                          uint32_t *urb_entry_read_offset)
 {
    uint32_t max_source_attr = 0;
 
    *point_sprite_enables = 0;
-   *flat_enables = 0;
 
    *urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
 
@@ -200,9 +178,6 @@ calculate_attr_overrides(const struct brw_context *brw,
 
    *urb_entry_read_offset = fs_needs_vue_header ? 0 : 1;
 
-   /* _NEW_LIGHT */
-   bool shade_model_flat = brw->ctx.Light.ShadeModel == GL_FLAT;
-
    /* From the Ivybridge PRM, Vol 2 Part 1, 3DSTATE_SBE,
     * description of dw10 Point Sprite Texture Coordinate Enable:
     *
@@ -216,8 +191,10 @@ calculate_attr_overrides(const struct brw_context *brw,
     * This is not required on Haswell, as the hardware ignores this state
     * when drawing non-points -- although we do still need to be careful to
     * correctly set the attr overrides.
+    *
+    * _NEW_POLYGON
+    * BRW_NEW_PRIMITIVE | BRW_NEW_GEOMETRY_PROGRAM | BRW_NEW_TES_PROG_DATA
     */
-   /* BRW_NEW_PRIMITIVE | BRW_NEW_GEOMETRY_PROGRAM */
    bool drawing_points = is_drawing_points(brw);
 
    /* Initialize all the attr_overrides to 0.  In the loop below we'll modify
@@ -226,10 +203,6 @@ calculate_attr_overrides(const struct brw_context *brw,
    memset(attr_overrides, 0, 16*sizeof(*attr_overrides));
 
    for (int attr = 0; attr < VARYING_SLOT_MAX; attr++) {
-      /* BRW_NEW_FRAGMENT_PROGRAM */
-      enum glsl_interp_qualifier interp_qualifier =
-         brw->fragment_program->InterpQualifier[attr];
-      bool is_gl_Color = attr == VARYING_SLOT_COL0 || attr == VARYING_SLOT_COL1;
       /* BRW_NEW_FS_PROG_DATA */
       int input_index = brw->wm.prog_data->urb_setup[attr];
 
@@ -251,12 +224,6 @@ calculate_attr_overrides(const struct brw_context *brw,
          if (point_sprite)
             *point_sprite_enables |= (1 << input_index);
       }
-
-      /* flat shading */
-      if (interp_qualifier == INTERP_QUALIFIER_FLAT ||
-          (shade_model_flat && is_gl_Color &&
-           interp_qualifier == INTERP_QUALIFIER_NONE))
-         *flat_enables |= (1 << input_index);
 
       /* BRW_NEW_VUE_MAP_GEOM_OUT | _NEW_LIGHT | _NEW_PROGRAM */
       uint16_t attr_override = point_sprite ? 0 :
@@ -303,7 +270,6 @@ upload_sf_state(struct brw_context *brw)
    uint32_t num_outputs = brw->wm.prog_data->num_varying_inputs;
    uint32_t dw1, dw2, dw3, dw4;
    uint32_t point_sprite_enables;
-   uint32_t flat_enables;
    int i;
    /* _NEW_BUFFER */
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
@@ -369,8 +335,9 @@ upload_sf_state(struct brw_context *brw)
        unreachable("not reached");
    }
 
-   /* _NEW_SCISSOR */
-   if (ctx->Scissor.EnableFlags)
+   /* _NEW_SCISSOR _NEW_POLYGON BRW_NEW_GEOMETRY_PROGRAM BRW_NEW_PRIMITIVE */
+   if (ctx->Scissor.EnableFlags ||
+       is_drawing_points(brw) || is_drawing_lines(brw))
       dw3 |= GEN6_SF_SCISSOR_ENABLE;
 
    /* _NEW_POLYGON */
@@ -445,8 +412,7 @@ upload_sf_state(struct brw_context *brw)
    uint32_t urb_entry_read_length;
    uint32_t urb_entry_read_offset;
    calculate_attr_overrides(brw, attr_overrides, &point_sprite_enables,
-                            &flat_enables, &urb_entry_read_length,
-                            &urb_entry_read_offset);
+                            &urb_entry_read_length, &urb_entry_read_offset);
    dw1 |= (urb_entry_read_length << GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT |
            urb_entry_read_offset << GEN6_SF_URB_ENTRY_READ_OFFSET_SHIFT);
 
@@ -463,7 +429,7 @@ upload_sf_state(struct brw_context *brw)
       OUT_BATCH(attr_overrides[i * 2] | attr_overrides[i * 2 + 1] << 16);
    }
    OUT_BATCH(point_sprite_enables); /* dw16 */
-   OUT_BATCH(flat_enables);
+   OUT_BATCH(brw->wm.prog_data->flat_inputs);
    OUT_BATCH(0); /* wrapshortest enables 0-7 */
    OUT_BATCH(0); /* wrapshortest enables 8-15 */
    ADVANCE_BATCH();
@@ -479,11 +445,13 @@ const struct brw_tracked_state gen6_sf_state = {
                _NEW_POLYGON |
                _NEW_PROGRAM |
                _NEW_SCISSOR,
-      .brw   = BRW_NEW_CONTEXT |
+      .brw   = BRW_NEW_BLORP |
+               BRW_NEW_CONTEXT |
                BRW_NEW_FRAGMENT_PROGRAM |
                BRW_NEW_FS_PROG_DATA |
                BRW_NEW_GEOMETRY_PROGRAM |
                BRW_NEW_PRIMITIVE |
+               BRW_NEW_TES_PROG_DATA |
                BRW_NEW_VUE_MAP_GEOM_OUT,
    },
    .emit = upload_sf_state,

@@ -483,9 +483,9 @@ NineBaseTexture9_CreatePipeResource( struct NineBaseTexture9 *This,
     return D3D_OK;
 }
 
-#define SWIZZLE_TO_REPLACE(s) (s == UTIL_FORMAT_SWIZZLE_0 || \
-                               s == UTIL_FORMAT_SWIZZLE_1 || \
-                               s == UTIL_FORMAT_SWIZZLE_NONE)
+#define SWIZZLE_TO_REPLACE(s) (s == PIPE_SWIZZLE_0 || \
+                               s == PIPE_SWIZZLE_1 || \
+                               s == PIPE_SWIZZLE_NONE)
 
 HRESULT
 NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
@@ -511,10 +511,10 @@ NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
 
     pipe_sampler_view_reference(&This->view[sRGB], NULL);
 
-    swizzle[0] = PIPE_SWIZZLE_RED;
-    swizzle[1] = PIPE_SWIZZLE_GREEN;
-    swizzle[2] = PIPE_SWIZZLE_BLUE;
-    swizzle[3] = PIPE_SWIZZLE_ALPHA;
+    swizzle[0] = PIPE_SWIZZLE_X;
+    swizzle[1] = PIPE_SWIZZLE_Y;
+    swizzle[2] = PIPE_SWIZZLE_Z;
+    swizzle[3] = PIPE_SWIZZLE_W;
     desc = util_format_description(resource->format);
     if (desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
         /* msdn doc is incomplete here and wrong.
@@ -528,19 +528,19 @@ NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
          * all channel */
         if (This->format == D3DFMT_DF16 ||
             This->format == D3DFMT_DF24) {
-            swizzle[1] = PIPE_SWIZZLE_ZERO;
-            swizzle[2] = PIPE_SWIZZLE_ZERO;
-            swizzle[3] = PIPE_SWIZZLE_ONE;
+            swizzle[1] = PIPE_SWIZZLE_0;
+            swizzle[2] = PIPE_SWIZZLE_0;
+            swizzle[3] = PIPE_SWIZZLE_1;
         } else {
-            swizzle[1] = PIPE_SWIZZLE_RED;
-            swizzle[2] = PIPE_SWIZZLE_RED;
-            swizzle[3] = PIPE_SWIZZLE_RED;
+            swizzle[1] = PIPE_SWIZZLE_X;
+            swizzle[2] = PIPE_SWIZZLE_X;
+            swizzle[3] = PIPE_SWIZZLE_X;
         }
     } else if (resource->format == PIPE_FORMAT_RGTC2_UNORM) {
-        swizzle[0] = PIPE_SWIZZLE_GREEN;
-        swizzle[1] = PIPE_SWIZZLE_RED;
-        swizzle[2] = PIPE_SWIZZLE_ONE;
-        swizzle[3] = PIPE_SWIZZLE_ONE;
+        swizzle[0] = PIPE_SWIZZLE_Y;
+        swizzle[1] = PIPE_SWIZZLE_X;
+        swizzle[2] = PIPE_SWIZZLE_1;
+        swizzle[3] = PIPE_SWIZZLE_1;
     } else if (resource->format != PIPE_FORMAT_A8_UNORM &&
                resource->format != PIPE_FORMAT_RGTC1_UNORM) {
         /* exceptions:
@@ -550,7 +550,7 @@ NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
          * should have 1.0 for non-defined values */
         for (i = 0; i < 4; i++) {
             if (SWIZZLE_TO_REPLACE(desc->swizzle[i]))
-                swizzle[i] = PIPE_SWIZZLE_ONE;
+                swizzle[i] = PIPE_SWIZZLE_1;
         }
     }
 

@@ -311,6 +311,8 @@ svga_buffer_upload_gb_command(struct svga_context *svga,
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    sbuf->dma.flags.discard = FALSE;
 
+   svga->hud.num_resource_updates++;
+
    return PIPE_OK;
 }
 
@@ -385,6 +387,8 @@ svga_buffer_upload_command(struct svga_context *svga,
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    sbuf->dma.flags.discard = FALSE;
 
+   svga->hud.num_buffer_uploads++;
+
    return PIPE_OK;
 }
 
@@ -433,6 +437,7 @@ svga_buffer_upload_flush(struct svga_context *svga,
          assert(box->x + box->w <= sbuf->b.b.width0);
 
          svga->hud.num_bytes_uploaded += box->w;
+         svga->hud.num_buffer_uploads++;
       }
    }
    else {
@@ -460,6 +465,7 @@ svga_buffer_upload_flush(struct svga_context *svga,
          assert(box->x + box->w <= sbuf->b.b.width0);
 
          svga->hud.num_bytes_uploaded += box->w;
+         svga->hud.num_buffer_uploads++;
       }
    }
 

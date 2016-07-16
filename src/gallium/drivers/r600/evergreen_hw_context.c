@@ -60,7 +60,7 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 	}
 	ncopy = (size / EG_DMA_COPY_MAX_SIZE) + !!(size % EG_DMA_COPY_MAX_SIZE);
 
-	r600_need_dma_space(&rctx->b, ncopy * 5);
+	r600_need_dma_space(&rctx->b, ncopy * 5, rdst, rsrc);
 	for (i = 0; i < ncopy; i++) {
 		csize = size < EG_DMA_COPY_MAX_SIZE ? size : EG_DMA_COPY_MAX_SIZE;
 		/* emit reloc before writing cs so that cs is always in consistent state */
@@ -68,15 +68,16 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 				      RADEON_PRIO_SDMA_BUFFER);
 		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rdst, RADEON_USAGE_WRITE,
 				      RADEON_PRIO_SDMA_BUFFER);
-		cs->buf[cs->cdw++] = DMA_PACKET(DMA_PACKET_COPY, sub_cmd, csize);
-		cs->buf[cs->cdw++] = dst_offset & 0xffffffff;
-		cs->buf[cs->cdw++] = src_offset & 0xffffffff;
-		cs->buf[cs->cdw++] = (dst_offset >> 32UL) & 0xff;
-		cs->buf[cs->cdw++] = (src_offset >> 32UL) & 0xff;
+		radeon_emit(cs, DMA_PACKET(DMA_PACKET_COPY, sub_cmd, csize));
+		radeon_emit(cs, dst_offset & 0xffffffff);
+		radeon_emit(cs, src_offset & 0xffffffff);
+		radeon_emit(cs, (dst_offset >> 32UL) & 0xff);
+		radeon_emit(cs, (src_offset >> 32UL) & 0xff);
 		dst_offset += csize << shift;
 		src_offset += csize << shift;
 		size -= csize;
 	}
+	r600_dma_emit_wait_idle(&rctx->b);
 }
 
 /* The max number of bytes to copy per packet. */

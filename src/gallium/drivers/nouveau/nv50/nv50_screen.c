@@ -67,9 +67,18 @@ nv50_screen_is_format_supported(struct pipe_screen *pscreen,
       break;
    }
 
+   if (bindings & PIPE_BIND_LINEAR)
+      if (util_format_is_depth_or_stencil(format) ||
+          (target != PIPE_TEXTURE_1D &&
+           target != PIPE_TEXTURE_2D &&
+           target != PIPE_TEXTURE_RECT) ||
+          sample_count > 1)
+         return false;
+
    /* transfers & shared are always supported */
    bindings &= ~(PIPE_BIND_TRANSFER_READ |
                  PIPE_BIND_TRANSFER_WRITE |
+                 PIPE_BIND_LINEAR |
                  PIPE_BIND_SHARED);
 
    return (( nv50_format_table[format].usage |
@@ -184,6 +193,9 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_COMPUTE:
    case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+   case PIPE_CAP_INVALIDATE_BUFFER:
+   case PIPE_CAP_STRING_MARKER:
+   case PIPE_CAP_CULL_DISTANCE:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return 1; /* class_3d >= NVA0_3D_CLASS; */
@@ -225,13 +237,18 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
    case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
    case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
-   case PIPE_CAP_INVALIDATE_BUFFER:
    case PIPE_CAP_GENERATE_MIPMAP:
-   case PIPE_CAP_STRING_MARKER:
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
    case PIPE_CAP_QUERY_MEMORY_INFO:
+   case PIPE_CAP_PCI_GROUP:
+   case PIPE_CAP_PCI_BUS:
+   case PIPE_CAP_PCI_DEVICE:
+   case PIPE_CAP_PCI_FUNCTION:
+   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+   case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+   case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -301,7 +318,7 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       return 1;
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
-      return 0;
+      return 1;
    case PIPE_SHADER_CAP_SUBROUTINES:
       return 0; /* please inline, or provide function declarations */
    case PIPE_SHADER_CAP_INTEGERS:
@@ -310,6 +327,10 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       /* The chip could handle more sampler views than samplers */
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
       return MIN2(16, PIPE_MAX_SAMPLERS);
+   case PIPE_SHADER_CAP_PREFERRED_IR:
+      return PIPE_SHADER_IR_TGSI;
+   case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
+      return 32;
    case PIPE_SHADER_CAP_DOUBLES:
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
@@ -319,8 +340,6 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
    case PIPE_SHADER_CAP_SUPPORTED_IRS:
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
       return 0;
-   case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
-      return 32;
    default:
       NOUVEAU_ERR("unknown PIPE_SHADER_CAP %d\n", param);
       return 0;
@@ -355,6 +374,7 @@ nv50_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 
 static int
 nv50_screen_get_compute_param(struct pipe_screen *pscreen,
+                              enum pipe_shader_ir ir_type,
                               enum pipe_compute_cap param, void *data)
 {
    struct nv50_screen *screen = nv50_screen(pscreen);

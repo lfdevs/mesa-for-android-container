@@ -43,7 +43,7 @@ struct u_suballocator {
    unsigned size;          /* Size of the whole buffer, in bytes. */
    unsigned alignment;     /* Alignment of each sub-allocation. */
    unsigned bind;          /* Bitmask of PIPE_BIND_* flags. */
-   unsigned usage;         /* One of PIPE_USAGE_* flags. */
+   enum pipe_resource_usage usage;
    boolean zero_buffer_memory; /* If the buffer contents should be zeroed. */
 
    struct pipe_resource *buffer;   /* The buffer we suballocate from. */
@@ -59,7 +59,8 @@ struct u_suballocator {
  */
 struct u_suballocator *
 u_suballocator_create(struct pipe_context *pipe, unsigned size,
-                      unsigned alignment, unsigned bind, unsigned usage,
+                      unsigned alignment, unsigned bind,
+                      enum pipe_resource_usage usage,
 		      boolean zero_buffer_memory)
 {
    struct u_suballocator *allocator = CALLOC_STRUCT(u_suballocator);

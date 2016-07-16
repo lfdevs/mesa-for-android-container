@@ -86,9 +86,9 @@ define_depth_stencil_state_object(struct svga_context *svga,
    ds->id = util_bitmask_add(svga->ds_object_id_bm);
 
    /* spot check that these comparision tokens are the same */
-   assert(SVGA3D_COMPARISON_NEVER == SVGA3D_CMP_NEVER);
-   assert(SVGA3D_COMPARISON_LESS == SVGA3D_CMP_LESS);
-   assert(SVGA3D_COMPARISON_NOT_EQUAL == SVGA3D_CMP_NOTEQUAL);
+   STATIC_ASSERT(SVGA3D_COMPARISON_NEVER == SVGA3D_CMP_NEVER);
+   STATIC_ASSERT(SVGA3D_COMPARISON_LESS == SVGA3D_CMP_LESS);
+   STATIC_ASSERT(SVGA3D_COMPARISON_NOT_EQUAL == SVGA3D_CMP_NOTEQUAL);
 
    /* Loop in case command buffer is full and we need to flush and retry */
    for (try = 0; try < 2; try++) {
@@ -132,7 +132,10 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
 				const struct pipe_depth_stencil_alpha_state *templ)
 {
    struct svga_context *svga = svga_context(pipe);
-   struct svga_depth_stencil_state *ds = CALLOC_STRUCT( svga_depth_stencil_state );
+   struct svga_depth_stencil_state *ds = CALLOC_STRUCT(svga_depth_stencil_state);
+
+   if (!ds)
+      return NULL;
 
    /* Don't try to figure out CW/CCW correspondence with
     * stencil[0]/[1] at this point.  Presumably this can change as
@@ -144,7 +147,7 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
       ds->stencil[0].fail  = svga_translate_stencil_op(templ->stencil[0].fail_op);
       ds->stencil[0].zfail = svga_translate_stencil_op(templ->stencil[0].zfail_op);
       ds->stencil[0].pass  = svga_translate_stencil_op(templ->stencil[0].zpass_op);
-      
+
       /* SVGA3D has one ref/mask/writemask triple shared between front &
        * back face stencil.  We really need two:
        */
@@ -157,7 +160,6 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
       ds->stencil[0].zfail = SVGA3D_STENCILOP_KEEP;
       ds->stencil[0].pass = SVGA3D_STENCILOP_KEEP;
    }
-
 
    ds->stencil[1].enabled = templ->stencil[1].enabled;
    if (templ->stencil[1].enabled) {
@@ -202,13 +204,14 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
       define_depth_stencil_state_object(svga, ds);
    }
 
-   svga->hud.num_state_objects++;
+   svga->hud.num_depthstencil_objects++;
 
    return ds;
 }
 
-static void svga_bind_depth_stencil_state(struct pipe_context *pipe,
-                                          void *depth_stencil)
+
+static void
+svga_bind_depth_stencil_state(struct pipe_context *pipe, void *depth_stencil)
 {
    struct svga_context *svga = svga_context(pipe);
 
@@ -221,8 +224,9 @@ static void svga_bind_depth_stencil_state(struct pipe_context *pipe,
    svga->dirty |= SVGA_NEW_DEPTH_STENCIL_ALPHA;
 }
 
-static void svga_delete_depth_stencil_state(struct pipe_context *pipe,
-                                            void *depth_stencil)
+
+static void
+svga_delete_depth_stencil_state(struct pipe_context *pipe, void *depth_stencil)
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_depth_stencil_state *ds =
@@ -250,12 +254,13 @@ static void svga_delete_depth_stencil_state(struct pipe_context *pipe,
    }
 
    FREE(depth_stencil);
-   svga->hud.num_state_objects--;
+   svga->hud.num_depthstencil_objects--;
 }
 
 
-static void svga_set_stencil_ref( struct pipe_context *pipe,
-                                  const struct pipe_stencil_ref *stencil_ref )
+static void
+svga_set_stencil_ref(struct pipe_context *pipe,
+                     const struct pipe_stencil_ref *stencil_ref)
 {
    struct svga_context *svga = svga_context(pipe);
 
@@ -269,6 +274,7 @@ static void svga_set_stencil_ref( struct pipe_context *pipe,
    svga->dirty |= SVGA_NEW_STENCIL_REF;
 }
 
+
 static void
 svga_set_sample_mask(struct pipe_context *pipe,
                      unsigned sample_mask)
@@ -281,7 +287,8 @@ svga_set_sample_mask(struct pipe_context *pipe,
 }
 
 
-void svga_init_depth_stencil_functions( struct svga_context *svga )
+void
+svga_init_depth_stencil_functions(struct svga_context *svga)
 {
    svga->pipe.create_depth_stencil_alpha_state = svga_create_depth_stencil_state;
    svga->pipe.bind_depth_stencil_alpha_state = svga_bind_depth_stencil_state;
@@ -290,7 +297,3 @@ void svga_init_depth_stencil_functions( struct svga_context *svga )
    svga->pipe.set_stencil_ref = svga_set_stencil_ref;
    svga->pipe.set_sample_mask = svga_set_sample_mask;
 }
-
-
-
-

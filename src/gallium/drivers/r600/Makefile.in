@@ -100,13 +100,7 @@ target_triplet = @target@
 @NEED_RADEON_LLVM_TRUE@	$(LLVM_CFLAGS) \
 @NEED_RADEON_LLVM_TRUE@	-I$(top_srcdir)/src/gallium/drivers/radeon/
 
-@NEED_RADEON_LLVM_TRUE@am__append_4 = \
-@NEED_RADEON_LLVM_TRUE@	$(LLVM_C_SOURCES)
-
-@USE_R600_LLVM_COMPILER_TRUE@am__append_5 = \
-@USE_R600_LLVM_COMPILER_TRUE@	-DR600_USE_LLVM
-
-@HAVE_GALLIUM_COMPUTE_TRUE@am__append_6 = \
+@HAVE_GALLIUM_COMPUTE_TRUE@am__append_4 = \
 @HAVE_GALLIUM_COMPUTE_TRUE@	-DHAVE_OPENCL
 
 subdir = src/gallium/drivers/r600
@@ -129,26 +123,6 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libr600_la_LIBADD =
-am__libr600_la_SOURCES_DIST = compute_memory_pool.c \
-	compute_memory_pool.h eg_asm.c eg_sq.h evergreen_compute.c \
-	evergreen_compute.h evergreen_compute_internal.h evergreend.h \
-	evergreen_hw_context.c evergreen_state.c r600_asm.c r600_asm.h \
-	r600_blit.c r600d.h r600_formats.h r600_hw_context.c \
-	r600_isa.c r600_isa.h r600_opcodes.h r600_pipe.c r600_pipe.h \
-	r600_public.h r600_shader.c r600_shader.h r600_sq.h \
-	r600_state.c r600_state_common.c r600_uvd.c r700_asm.c \
-	r700_sq.h sb/sb_bc_builder.cpp sb/sb_bc_decoder.cpp \
-	sb/sb_bc_dump.cpp sb/sb_bc_finalize.cpp sb/sb_bc.h \
-	sb/sb_bc_parser.cpp sb/sb_context.cpp sb/sb_core.cpp \
-	sb/sb_dce_cleanup.cpp sb/sb_def_use.cpp sb/sb_dump.cpp \
-	sb/sb_expr.cpp sb/sb_expr.h sb/sb_gcm.cpp sb/sb_gvn.cpp \
-	sb/sb_if_conversion.cpp sb/sb_ir.cpp sb/sb_ir.h \
-	sb/sb_liveness.cpp sb/sb_pass.cpp sb/sb_pass.h \
-	sb/sb_peephole.cpp sb/sb_psi_ops.cpp sb/sb_public.h \
-	sb/sb_ra_checker.cpp sb/sb_ra_coalesce.cpp sb/sb_ra_init.cpp \
-	sb/sb_sched.cpp sb/sb_sched.h sb/sb_shader.cpp sb/sb_shader.h \
-	sb/sb_ssa_builder.cpp sb/sb_valtable.cpp r600_llvm.c \
-	r600_llvm.h
 am__objects_1 = compute_memory_pool.lo eg_asm.lo evergreen_compute.lo \
 	evergreen_hw_context.lo evergreen_state.lo r600_asm.lo \
 	r600_blit.lo r600_hw_context.lo r600_isa.lo r600_pipe.lo \
@@ -164,10 +138,7 @@ am__objects_2 = sb/sb_bc_builder.lo sb/sb_bc_decoder.lo \
 	sb/sb_psi_ops.lo sb/sb_ra_checker.lo sb/sb_ra_coalesce.lo \
 	sb/sb_ra_init.lo sb/sb_sched.lo sb/sb_shader.lo \
 	sb/sb_ssa_builder.lo sb/sb_valtable.lo
-am__objects_3 = r600_llvm.lo
-@NEED_RADEON_LLVM_TRUE@am__objects_4 = $(am__objects_3)
-am_libr600_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	$(am__objects_4)
+am_libr600_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libr600_la_OBJECTS = $(am_libr600_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -226,7 +197,7 @@ am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(libr600_la_SOURCES)
-DIST_SOURCES = $(am__libr600_la_SOURCES_DIST)
+DIST_SOURCES = $(libr600_la_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -323,6 +294,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -421,6 +394,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -441,6 +416,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -457,6 +435,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -609,10 +588,6 @@ CXX_SOURCES = \
 	sb/sb_ssa_builder.cpp \
 	sb/sb_valtable.cpp
 
-LLVM_C_SOURCES = \
-	r600_llvm.c \
-	r600_llvm.h
-
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
@@ -679,13 +654,16 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(RADEON_CFLAGS) $(am__append_3) \
-	$(am__append_5) $(am__append_6)
+	$(am__append_4)
 AM_CXXFLAGS = \
 	$(GALLIUM_DRIVER_CXXFLAGS) \
 	$(RADEON_CFLAGS)
 
 noinst_LTLIBRARIES = libr600.la
-libr600_la_SOURCES = $(C_SOURCES) $(CXX_SOURCES) $(am__append_4)
+libr600_la_SOURCES = \
+	$(C_SOURCES) \
+	$(CXX_SOURCES)
+
 EXTRA_DIST = \
 	sb/notes.markdown \
 	sb/sb_bc_fmt_def.inc
@@ -789,7 +767,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_hw_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_isa.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_llvm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_pipe.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_state.Plo@am__quote@

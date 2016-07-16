@@ -58,7 +58,7 @@ static const char *cmd_names[LP_RAST_OP_MAX] =
 
 static const char *cmd_name(unsigned cmd)
 {
-   assert(Elements(cmd_names) > cmd);
+   assert(ARRAY_SIZE(cmd_names) > cmd);
    return cmd_names[cmd];
 }
 

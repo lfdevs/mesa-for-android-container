@@ -3,4 +3,7 @@
 # Common list:
 NOT_INSTALLED := \
 	usr/include/GL/wglext.h \
+	usr/include/vulkan/vk_platform.h \
+	usr/include/vulkan/vulkan.h \
+	usr/include/vulkan/vulkan_intel.h \
 	usr/lib/*/libglapi.so

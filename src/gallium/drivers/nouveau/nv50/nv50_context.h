@@ -26,43 +26,43 @@
 #include "nv50/nv50_3d.xml.h"
 #include "nv50/nv50_2d.xml.h"
 
-#define NV50_NEW_BLEND        (1 << 0)
-#define NV50_NEW_RASTERIZER   (1 << 1)
-#define NV50_NEW_ZSA          (1 << 2)
-#define NV50_NEW_VERTPROG     (1 << 3)
-#define NV50_NEW_GMTYPROG     (1 << 6)
-#define NV50_NEW_FRAGPROG     (1 << 7)
-#define NV50_NEW_BLEND_COLOUR (1 << 8)
-#define NV50_NEW_STENCIL_REF  (1 << 9)
-#define NV50_NEW_CLIP         (1 << 10)
-#define NV50_NEW_SAMPLE_MASK  (1 << 11)
-#define NV50_NEW_FRAMEBUFFER  (1 << 12)
-#define NV50_NEW_STIPPLE      (1 << 13)
-#define NV50_NEW_SCISSOR      (1 << 14)
-#define NV50_NEW_VIEWPORT     (1 << 15)
-#define NV50_NEW_ARRAYS       (1 << 16)
-#define NV50_NEW_VERTEX       (1 << 17)
-#define NV50_NEW_CONSTBUF     (1 << 18)
-#define NV50_NEW_TEXTURES     (1 << 19)
-#define NV50_NEW_SAMPLERS     (1 << 20)
-#define NV50_NEW_STRMOUT      (1 << 21)
-#define NV50_NEW_MIN_SAMPLES  (1 << 22)
-#define NV50_NEW_CONTEXT      (1 << 31)
+#define NV50_NEW_3D_BLEND        (1 << 0)
+#define NV50_NEW_3D_RASTERIZER   (1 << 1)
+#define NV50_NEW_3D_ZSA          (1 << 2)
+#define NV50_NEW_3D_VERTPROG     (1 << 3)
+#define NV50_NEW_3D_GMTYPROG     (1 << 6)
+#define NV50_NEW_3D_FRAGPROG     (1 << 7)
+#define NV50_NEW_3D_BLEND_COLOUR (1 << 8)
+#define NV50_NEW_3D_STENCIL_REF  (1 << 9)
+#define NV50_NEW_3D_CLIP         (1 << 10)
+#define NV50_NEW_3D_SAMPLE_MASK  (1 << 11)
+#define NV50_NEW_3D_FRAMEBUFFER  (1 << 12)
+#define NV50_NEW_3D_STIPPLE      (1 << 13)
+#define NV50_NEW_3D_SCISSOR      (1 << 14)
+#define NV50_NEW_3D_VIEWPORT     (1 << 15)
+#define NV50_NEW_3D_ARRAYS       (1 << 16)
+#define NV50_NEW_3D_VERTEX       (1 << 17)
+#define NV50_NEW_3D_CONSTBUF     (1 << 18)
+#define NV50_NEW_3D_TEXTURES     (1 << 19)
+#define NV50_NEW_3D_SAMPLERS     (1 << 20)
+#define NV50_NEW_3D_STRMOUT      (1 << 21)
+#define NV50_NEW_3D_MIN_SAMPLES  (1 << 22)
+#define NV50_NEW_3D_CONTEXT      (1 << 31)
 
 #define NV50_NEW_CP_PROGRAM   (1 << 0)
 #define NV50_NEW_CP_GLOBALS   (1 << 1)
 
 /* 3d bufctx (during draw_vbo, blit_3d) */
-#define NV50_BIND_FB          0
-#define NV50_BIND_VERTEX      1
-#define NV50_BIND_VERTEX_TMP  2
-#define NV50_BIND_INDEX       3
-#define NV50_BIND_TEXTURES    4
-#define NV50_BIND_CB(s, i)   (5 + 16 * (s) + (i))
-#define NV50_BIND_SO         53
-#define NV50_BIND_SCREEN     54
-#define NV50_BIND_TLS        55
-#define NV50_BIND_3D_COUNT   56
+#define NV50_BIND_3D_FB          0
+#define NV50_BIND_3D_VERTEX      1
+#define NV50_BIND_3D_VERTEX_TMP  2
+#define NV50_BIND_3D_INDEX       3
+#define NV50_BIND_3D_TEXTURES    4
+#define NV50_BIND_3D_CB(s, i)   (5 + 16 * (s) + (i))
+#define NV50_BIND_3D_SO         53
+#define NV50_BIND_3D_SCREEN     54
+#define NV50_BIND_3D_TLS        55
+#define NV50_BIND_3D_COUNT      56
 
 /* compute bufctx (during launch_grid) */
 #define NV50_BIND_CP_GLOBAL   0
@@ -115,7 +115,7 @@ struct nv50_context {
    struct nouveau_bufctx *bufctx;
    struct nouveau_bufctx *bufctx_cp;
 
-   uint32_t dirty;
+   uint32_t dirty_3d; /* dirty flags for 3d state */
    uint32_t dirty_cp; /* dirty flags for compute state */
    bool cb_dirty;
 
@@ -221,6 +221,7 @@ extern struct draw_stage *nv50_draw_render_stage(struct nv50_context *);
 void nv50_vertprog_validate(struct nv50_context *);
 void nv50_gmtyprog_validate(struct nv50_context *);
 void nv50_fragprog_validate(struct nv50_context *);
+void nv50_compprog_validate(struct nv50_context *);
 void nv50_fp_linkage_validate(struct nv50_context *);
 void nv50_gp_linkage_validate(struct nv50_context *);
 void nv50_constbufs_validate(struct nv50_context *);
@@ -231,7 +232,15 @@ void nv50_stream_output_validate(struct nv50_context *);
 extern void nv50_init_state_functions(struct nv50_context *);
 
 /* nv50_state_validate.c */
-bool nv50_state_validate(struct nv50_context *, uint32_t state_mask);
+struct nv50_state_validate {
+   void (*func)(struct nv50_context *);
+   uint32_t states;
+};
+
+bool nv50_state_validate(struct nv50_context *, uint32_t,
+                         struct nv50_state_validate *, int, uint32_t *,
+                         struct nouveau_bufctx *);
+bool nv50_state_validate_3d(struct nv50_context *, uint32_t);
 
 /* nv50_surface.c */
 extern void nv50_clear(struct pipe_context *, unsigned buffers,

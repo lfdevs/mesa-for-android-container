@@ -112,7 +112,7 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
     * gallium could not do anything else except 16 no matter what...
     */
   if (!aligned) {
-      lp_set_load_alignment(res, 1);
+      LLVMSetAlignment(res, 1);
    }
 
    assert(src_width <= dst_width);

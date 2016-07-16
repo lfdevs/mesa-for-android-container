@@ -1690,7 +1690,7 @@ int r600_bytecode_build(struct r600_bytecode *bc)
 	if (!bc->nstack) // If not 0, Stack_size already provided by llvm
 		bc->nstack = bc->stack.max_entries;
 
-	if ((bc->type == TGSI_PROCESSOR_VERTEX || bc->type == TGSI_PROCESSOR_TESS_EVAL || bc->type == TGSI_PROCESSOR_TESS_CTRL) && !bc->nstack) {
+	if ((bc->type == PIPE_SHADER_VERTEX || bc->type == PIPE_SHADER_TESS_EVAL || bc->type == PIPE_SHADER_TESS_CTRL) && !bc->nstack) {
 		bc->nstack = 1;
 	}
 

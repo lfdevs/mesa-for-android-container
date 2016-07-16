@@ -186,8 +186,8 @@ emit_mem2gmem_surf(struct fd_context *ctx, uint32_t base,
 			A2XX_RB_COLOR_INFO_BASE(base) |
 			A2XX_RB_COLOR_INFO_FORMAT(fd2_pipe2color(psurf->format)));
 
-	swiz = fd2_tex_swiz(psurf->format, PIPE_SWIZZLE_RED, PIPE_SWIZZLE_GREEN,
-			PIPE_SWIZZLE_BLUE, PIPE_SWIZZLE_ALPHA);
+	swiz = fd2_tex_swiz(psurf->format, PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y,
+			PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W);
 
 	/* emit fb as a texture: */
 	OUT_PKT3(ring, CP_SET_CONSTANT, 7);

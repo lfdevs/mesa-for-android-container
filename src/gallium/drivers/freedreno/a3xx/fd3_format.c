@@ -391,12 +391,12 @@ tex_swiz(unsigned swiz)
 {
 	switch (swiz) {
 	default:
-	case PIPE_SWIZZLE_RED:   return A3XX_TEX_X;
-	case PIPE_SWIZZLE_GREEN: return A3XX_TEX_Y;
-	case PIPE_SWIZZLE_BLUE:  return A3XX_TEX_Z;
-	case PIPE_SWIZZLE_ALPHA: return A3XX_TEX_W;
-	case PIPE_SWIZZLE_ZERO:  return A3XX_TEX_ZERO;
-	case PIPE_SWIZZLE_ONE:   return A3XX_TEX_ONE;
+	case PIPE_SWIZZLE_X: return A3XX_TEX_X;
+	case PIPE_SWIZZLE_Y: return A3XX_TEX_Y;
+	case PIPE_SWIZZLE_Z: return A3XX_TEX_Z;
+	case PIPE_SWIZZLE_W: return A3XX_TEX_W;
+	case PIPE_SWIZZLE_0: return A3XX_TEX_ZERO;
+	case PIPE_SWIZZLE_1: return A3XX_TEX_ONE;
 	}
 }
 

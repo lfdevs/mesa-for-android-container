@@ -313,6 +313,11 @@ intel_winsys_import_handle(struct intel_winsys *winsys,
    drm_intel_bo *bo;
    int err;
 
+   if (handle->offset != 0) {
+      debug_error("attempt to import unsupported winsys offset");
+      return NULL;
+   }
+
    switch (handle->type) {
    case DRM_API_HANDLE_TYPE_SHARED:
       {

@@ -366,8 +366,8 @@ svga_translate_vertex_format_vgpu10(enum pipe_format format,
                                     SVGA3dSurfaceFormat *svga_format,
                                     unsigned *vf_flags)
 {
-   assert(format < Elements(format_conversion_table));
-   if (format >= Elements(format_conversion_table)) {
+   assert(format < ARRAY_SIZE(format_conversion_table));
+   if (format >= ARRAY_SIZE(format_conversion_table)) {
       format = PIPE_FORMAT_NONE;
    }
    *svga_format = format_conversion_table[format].vertex_format;
@@ -1838,13 +1838,13 @@ check_format_tables(void)
    if (first_call) {
       unsigned i;
 
-      STATIC_ASSERT(Elements(format_cap_table) == SVGA3D_FORMAT_MAX);
-      for (i = 0; i < Elements(format_cap_table); i++) {
+      STATIC_ASSERT(ARRAY_SIZE(format_cap_table) == SVGA3D_FORMAT_MAX);
+      for (i = 0; i < ARRAY_SIZE(format_cap_table); i++) {
          assert(format_cap_table[i].format == i);
       }
 
-      STATIC_ASSERT(Elements(format_conversion_table) == PIPE_FORMAT_COUNT);
-      for (i = 0; i < Elements(format_conversion_table); i++) {
+      STATIC_ASSERT(ARRAY_SIZE(format_conversion_table) == PIPE_FORMAT_COUNT);
+      for (i = 0; i < ARRAY_SIZE(format_conversion_table); i++) {
          assert(format_conversion_table[i].pformat == i);
       }
 
@@ -1873,7 +1873,7 @@ svga_get_format_cap(struct svga_screen *ss,
    (void) check_format_tables;
 #endif
 
-   assert(format < Elements(format_cap_table));
+   assert(format < ARRAY_SIZE(format_cap_table));
    entry = &format_cap_table[format];
    assert(entry->format == format);
 
@@ -1912,7 +1912,7 @@ svga_format_size(SVGA3dSurfaceFormat format,
                  unsigned *block_height,
                  unsigned *bytes_per_block)
 {
-   assert(format < Elements(format_cap_table));
+   assert(format < ARRAY_SIZE(format_cap_table));
    *block_width = format_cap_table[format].block_width;
    *block_height = format_cap_table[format].block_height;
    *bytes_per_block = format_cap_table[format].block_bytes;
@@ -1928,7 +1928,7 @@ svga_format_size(SVGA3dSurfaceFormat format,
 const char *
 svga_format_name(SVGA3dSurfaceFormat format)
 {
-   assert(format < Elements(format_cap_table));
+   assert(format < ARRAY_SIZE(format_cap_table));
    return format_cap_table[format].name;
 }
 
@@ -1970,7 +1970,7 @@ svga_format_is_integer(SVGA3dSurfaceFormat format)
 boolean
 svga_format_support_gen_mips(enum pipe_format format)
 {
-   assert(format < Elements(format_conversion_table));
+   assert(format < ARRAY_SIZE(format_conversion_table));
    return ((format_conversion_table[format].flags & TF_GEN_MIPS) > 0);
 }
 

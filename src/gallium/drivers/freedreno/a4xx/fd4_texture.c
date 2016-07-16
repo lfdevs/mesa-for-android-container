@@ -209,6 +209,13 @@ tex_type(unsigned target)
 	}
 }
 
+static bool
+use_astc_srgb_workaround(struct pipe_context *pctx, enum pipe_format format)
+{
+	return (fd_screen(pctx->screen)->gpu_id == 420) &&
+		(util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_ASTC);
+}
+
 static struct pipe_sampler_view *
 fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		const struct pipe_sampler_view *cso)
@@ -233,8 +240,11 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		fd4_tex_swiz(cso->format, cso->swizzle_r, cso->swizzle_g,
 				cso->swizzle_b, cso->swizzle_a);
 
-	if (util_format_is_srgb(cso->format))
+	if (util_format_is_srgb(cso->format)) {
+		if (use_astc_srgb_workaround(pctx, cso->format))
+			so->astc_srgb = true;
 		so->texconst0 |= A4XX_TEX_CONST_0_SRGB;
+	}
 
 	if (cso->target == PIPE_BUFFER) {
 		unsigned elements = cso->u.buf.last_element -
@@ -296,11 +306,39 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	return &so->base;
 }
 
+static void
+fd4_set_sampler_views(struct pipe_context *pctx, unsigned shader,
+		unsigned start, unsigned nr,
+		struct pipe_sampler_view **views)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd4_context *fd4_ctx = fd4_context(ctx);
+	uint16_t astc_srgb = 0;
+	unsigned i;
+
+	for (i = 0; i < nr; i++) {
+		if (views[i]) {
+			struct fd4_pipe_sampler_view *view =
+					fd4_pipe_sampler_view(views[i]);
+			if (view->astc_srgb)
+				astc_srgb |= (1 << i);
+		}
+	}
+
+	fd_set_sampler_views(pctx, shader, start, nr, views);
+
+	if (shader == PIPE_SHADER_FRAGMENT) {
+		fd4_ctx->fastc_srgb = astc_srgb;
+	} else if (shader == PIPE_SHADER_VERTEX) {
+		fd4_ctx->vastc_srgb = astc_srgb;
+	}
+}
+
 void
 fd4_texture_init(struct pipe_context *pctx)
 {
 	pctx->create_sampler_state = fd4_sampler_state_create;
 	pctx->bind_sampler_states = fd4_sampler_states_bind;
 	pctx->create_sampler_view = fd4_sampler_view_create;
-	pctx->set_sampler_views = fd_set_sampler_views;
+	pctx->set_sampler_views = fd4_set_sampler_views;
 }

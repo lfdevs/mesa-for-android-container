@@ -37,7 +37,6 @@ public:
    struct gl_context *ctx;
    struct brw_wm_prog_data *prog_data;
    struct gl_shader_program *shader_prog;
-   struct brw_fragment_program *fp;
    fs_visitor *v;
 };
 
@@ -60,13 +59,10 @@ void cmod_propagation_test::SetUp()
    devinfo = (struct brw_device_info *)calloc(1, sizeof(*devinfo));
    compiler->devinfo = devinfo;
 
-   fp = ralloc(NULL, struct brw_fragment_program);
    prog_data = ralloc(NULL, struct brw_wm_prog_data);
    nir_shader *shader = nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL);
 
    v = new cmod_propagation_fs_visitor(compiler, prog_data, shader);
-
-   _mesa_init_gl_program(&fp->program.Base, GL_FRAGMENT_SHADER, 0);
 
    devinfo->gen = 4;
 }

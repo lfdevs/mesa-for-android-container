@@ -147,8 +147,6 @@ struct table {
 static struct imm *
 find_imm(struct table *table, float val)
 {
-   assert(signbit(val) == 0);
-
    for (int i = 0; i < table->len; i++) {
       if (table->imm[i].val == val) {
          return &table->imm[i];
@@ -220,7 +218,8 @@ fs_visitor::opt_combine_constants()
              inst->src[i].type != BRW_REGISTER_TYPE_F)
             continue;
 
-         float val = fabsf(inst->src[i].f);
+         float val = !inst->can_do_source_mods(devinfo) ? inst->src[i].f :
+                     fabs(inst->src[i].f);
          struct imm *imm = find_imm(&table, val);
 
          if (imm) {
@@ -301,7 +300,7 @@ fs_visitor::opt_combine_constants()
          reg->stride = 0;
          reg->negate = signbit(reg->f) != signbit(table.imm[i].val);
          assert((isnan(reg->f) && isnan(table.imm[i].val)) ||
-                fabsf(reg->f) == table.imm[i].val);
+                fabsf(reg->f) == fabs(table.imm[i].val));
       }
    }
 

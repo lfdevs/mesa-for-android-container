@@ -152,7 +152,7 @@ xa_tracker_create(int drm_fd)
     struct xa_tracker *xa = calloc(1, sizeof(struct xa_tracker));
     enum xa_surface_type stype;
     unsigned int num_formats;
-    int fd = -1;
+    int fd;
 
     if (!xa)
 	return NULL;
@@ -212,9 +212,9 @@ xa_tracker_create(int drm_fd)
  out_no_screen:
     if (xa->dev)
 	pipe_loader_release(&xa->dev, 1);
-    fd = -1;
+    else
+	close(fd);
  out_no_fd:
-    close(fd);
     free(xa);
     return NULL;
 }
@@ -362,7 +362,8 @@ surface_create(struct xa_tracker *xa,
 	template->bind |= PIPE_BIND_SCANOUT;
 
     if (whandle)
-	srf->tex = xa->screen->resource_from_handle(xa->screen, template, whandle);
+	srf->tex = xa->screen->resource_from_handle(xa->screen, template, whandle,
+                                                    PIPE_HANDLE_USAGE_READ_WRITE);
     else
 	srf->tex = xa->screen->resource_create(xa->screen, template);
     if (!srf->tex)
@@ -548,7 +549,8 @@ xa_surface_handle(struct xa_surface *srf,
 
     memset(&whandle, 0, sizeof(whandle));
     whandle.type = handle_type(type);
-    res = screen->resource_get_handle(screen, srf->tex, &whandle);
+    res = screen->resource_get_handle(screen, srf->tex, &whandle,
+                                      PIPE_HANDLE_USAGE_READ_WRITE);
     if (!res)
 	return -XA_ERR_INVAL;
 

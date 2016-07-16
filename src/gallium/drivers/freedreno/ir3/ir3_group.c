@@ -63,14 +63,13 @@ static void arr_insert_mov_in(void *arr, int idx, struct ir3_instruction *instr)
 
 	debug_assert(instr->regs_count == 1);
 
-	in = ir3_instr_create(instr->block, -1, OPC_META_INPUT);
+	in = ir3_instr_create(instr->block, OPC_META_INPUT);
 	in->inout.block = instr->block;
 	ir3_reg_create(in, instr->regs[0]->num, 0);
 
 	/* create src reg for meta:in and fixup to now be a mov: */
 	ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = in;
-	instr->category = 1;
-	instr->opc = 0;
+	instr->opc = OPC_MOV;
 	instr->cat1.src_type = TYPE_F32;
 	instr->cat1.dst_type = TYPE_F32;
 
@@ -91,6 +90,24 @@ instr_insert_mov(void *arr, int idx, struct ir3_instruction *instr)
 }
 static struct group_ops instr_ops = { instr_get, instr_insert_mov };
 
+/* verify that cur != instr, but cur is also not in instr's neighbor-list: */
+static bool
+in_neighbor_list(struct ir3_instruction *instr, struct ir3_instruction *cur, int pos)
+{
+	int idx = 0;
+
+	if (!instr)
+		return false;
+
+	if (instr == cur)
+		return true;
+
+	for (instr = ir3_neighbor_first(instr); instr; instr = instr->cp.right)
+		if ((idx++ != pos) && (instr == cur))
+			return true;
+
+	return false;
+}
 
 static void
 group_n(struct group_ops *ops, void *arr, unsigned n)
@@ -117,12 +134,12 @@ restart:
 				conflicts(instr->cp.right, right);
 
 			/* RA can't yet deal very well w/ group'd phi's: */
-			if (is_meta(instr) && (instr->opc == OPC_META_PHI))
+			if (instr->opc == OPC_META_PHI)
 				conflict = true;
 
 			/* we also can't have an instr twice in the group: */
 			for (j = i + 1; (j < n) && !conflict; j++)
-				if (ops->get(arr, j) == instr)
+				if (in_neighbor_list(ops->get(arr, j), instr, i))
 					conflict = true;
 
 			if (conflict) {
@@ -168,7 +185,7 @@ instr_find_neighbors(struct ir3_instruction *instr)
 	if (ir3_instr_check_mark(instr))
 		return;
 
-	if (is_meta(instr) && (instr->opc == OPC_META_FI))
+	if (instr->opc == OPC_META_FI)
 		group_n(&instr_ops, instr, instr->regs_count - 1);
 
 	foreach_ssa_src(src, instr)

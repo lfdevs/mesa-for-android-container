@@ -98,6 +98,76 @@ enum tgsi_sampler_control
    TGSI_SAMPLER_GATHER,
 };
 
+struct tgsi_image_params {
+   unsigned unit;
+   unsigned tgsi_tex_instr;
+   enum pipe_format format;
+   unsigned execmask;
+};
+
+struct tgsi_image {
+   /* image interfaces */
+   void (*load)(const struct tgsi_image *image,
+                const struct tgsi_image_params *params,
+                const int s[TGSI_QUAD_SIZE],
+                const int t[TGSI_QUAD_SIZE],
+                const int r[TGSI_QUAD_SIZE],
+                const int sample[TGSI_QUAD_SIZE],
+                float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
+
+   void (*store)(const struct tgsi_image *image,
+                 const struct tgsi_image_params *params,
+                 const int s[TGSI_QUAD_SIZE],
+                 const int t[TGSI_QUAD_SIZE],
+                 const int r[TGSI_QUAD_SIZE],
+                 const int sample[TGSI_QUAD_SIZE],
+                 float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
+
+   void (*op)(const struct tgsi_image *image,
+              const struct tgsi_image_params *params,
+              unsigned opcode,
+              const int s[TGSI_QUAD_SIZE],
+              const int t[TGSI_QUAD_SIZE],
+              const int r[TGSI_QUAD_SIZE],
+              const int sample[TGSI_QUAD_SIZE],
+              float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
+              float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
+
+   void (*get_dims)(const struct tgsi_image *image,
+                    const struct tgsi_image_params *params,
+                    int dims[4]);
+};
+
+struct tgsi_buffer_params {
+   unsigned unit;
+   unsigned execmask;
+   unsigned writemask;
+};
+
+struct tgsi_buffer {
+   /* buffer interfaces */
+   void (*load)(const struct tgsi_buffer *buffer,
+                const struct tgsi_buffer_params *params,
+                const int s[TGSI_QUAD_SIZE],
+                float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
+
+   void (*store)(const struct tgsi_buffer *buffer,
+                 const struct tgsi_buffer_params *params,
+                 const int s[TGSI_QUAD_SIZE],
+                 float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
+
+   void (*op)(const struct tgsi_buffer *buffer,
+              const struct tgsi_buffer_params *params,
+              unsigned opcode,
+              const int s[TGSI_QUAD_SIZE],
+              float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
+              float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
+
+   void (*get_dims)(const struct tgsi_buffer *buffer,
+                    const struct tgsi_buffer_params *params,
+                    int *dim);
+};
+
 /**
  * Information for sampling textures, which must be implemented
  * by code outside the TGSI executor.
@@ -196,21 +266,18 @@ struct tgsi_sampler
 #define TGSI_EXEC_TEMP_HALF_I       (TGSI_EXEC_NUM_TEMPS + 3)
 #define TGSI_EXEC_TEMP_HALF_C       0
 
-/* execution mask, each value is either 0 or ~0 */
-#define TGSI_EXEC_MASK_I            (TGSI_EXEC_NUM_TEMPS + 3)
-#define TGSI_EXEC_MASK_C            1
-
 /* 4 register buffer for various purposes */
 #define TGSI_EXEC_TEMP_R0           (TGSI_EXEC_NUM_TEMPS + 4)
 #define TGSI_EXEC_NUM_TEMP_R        4
 
 #define TGSI_EXEC_TEMP_ADDR         (TGSI_EXEC_NUM_TEMPS + 8)
+#define TGSI_EXEC_NUM_ADDRS         3
 
 /* predicate register */
-#define TGSI_EXEC_TEMP_P0           (TGSI_EXEC_NUM_TEMPS + 9)
+#define TGSI_EXEC_TEMP_P0           (TGSI_EXEC_NUM_TEMPS + 11)
 #define TGSI_EXEC_NUM_PREDS         1
 
-#define TGSI_EXEC_NUM_TEMP_EXTRAS   10
+#define TGSI_EXEC_NUM_TEMP_EXTRAS   12
 
 
 
@@ -289,20 +356,22 @@ struct tgsi_exec_machine
 
    /* System values */
    unsigned                      SysSemanticToIndex[TGSI_SEMANTIC_COUNT];
-   union tgsi_exec_channel       SystemValue[TGSI_MAX_MISC_INPUTS];
+   struct tgsi_exec_vector       SystemValue[TGSI_MAX_MISC_INPUTS];
 
    struct tgsi_exec_vector       *Addrs;
    struct tgsi_exec_vector       *Predicates;
 
    struct tgsi_sampler           *Sampler;
 
+   struct tgsi_image             *Image;
+   struct tgsi_buffer            *Buffer;
    unsigned                      ImmLimit;
 
    const void *Consts[PIPE_MAX_CONSTANT_BUFFERS];
    unsigned ConstsSize[PIPE_MAX_CONSTANT_BUFFERS];
 
    const struct tgsi_token       *Tokens;   /**< Declarations, instructions */
-   unsigned                      Processor; /**< TGSI_PROCESSOR_x */
+   enum pipe_shader_type         ShaderType; /**< PIPE_SHADER_x */
 
    /* GEOMETRY processor only. */
    unsigned                      *Primitives;
@@ -315,6 +384,13 @@ struct tgsi_exec_machine
    struct tgsi_exec_vector       QuadPos;
    float                         Face;    /**< +1 if front facing, -1 if back facing */
    bool                          flatshade_color;
+
+   /* Compute Only */
+   void                          *LocalMem;
+   unsigned                      LocalMemSize;
+
+   /* See GLSL 4.50 specification for definition of helper invocations */
+   uint NonHelperMask;  /**< non-helpers */
    /* Conditional execution masks */
    uint CondMask;  /**< For IF/ELSE/ENDIF */
    uint LoopMask;  /**< For BGNLOOP/ENDLOOP */
@@ -369,10 +445,12 @@ struct tgsi_exec_machine
       SamplerViews[PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    boolean UsedGeometryShader;
+
+   int pc;
 };
 
 struct tgsi_exec_machine *
-tgsi_exec_machine_create( void );
+tgsi_exec_machine_create(enum pipe_shader_type shader_type);
 
 void
 tgsi_exec_machine_destroy(struct tgsi_exec_machine *mach);
@@ -382,11 +460,13 @@ void
 tgsi_exec_machine_bind_shader(
    struct tgsi_exec_machine *mach,
    const struct tgsi_token *tokens,
-   struct tgsi_sampler *sampler);
+   struct tgsi_sampler *sampler,
+   struct tgsi_image *image,
+   struct tgsi_buffer *buffer);
 
 uint
 tgsi_exec_machine_run(
-   struct tgsi_exec_machine *mach );
+   struct tgsi_exec_machine *mach, int start_pc );
 
 
 void
@@ -395,27 +475,6 @@ tgsi_exec_machine_free_data(struct tgsi_exec_machine *mach);
 
 boolean
 tgsi_check_soa_dependencies(const struct tgsi_full_instruction *inst);
-
-
-static inline void
-tgsi_set_kill_mask(struct tgsi_exec_machine *mach, unsigned mask)
-{
-   mach->Temps[TGSI_EXEC_TEMP_KILMASK_I].xyzw[TGSI_EXEC_TEMP_KILMASK_C].u[0] =
-      mask;
-}
-
-
-/** Set execution mask values prior to executing the shader */
-static inline void
-tgsi_set_exec_mask(struct tgsi_exec_machine *mach,
-                   boolean ch0, boolean ch1, boolean ch2, boolean ch3)
-{
-   int *mask = mach->Temps[TGSI_EXEC_MASK_I].xyzw[TGSI_EXEC_MASK_C].i;
-   mask[0] = ch0 ? ~0 : 0;
-   mask[1] = ch1 ? ~0 : 0;
-   mask[2] = ch2 ? ~0 : 0;
-   mask[3] = ch3 ? ~0 : 0;
-}
 
 
 extern void
@@ -475,9 +534,12 @@ tgsi_exec_get_shader_param(enum pipe_shader_cap param)
       return 1;
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
-   case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
-   case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
       return 0;
+   case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+      return PIPE_MAX_SHADER_BUFFERS;
+   case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+      return PIPE_MAX_SHADER_IMAGES;
+
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;
    }

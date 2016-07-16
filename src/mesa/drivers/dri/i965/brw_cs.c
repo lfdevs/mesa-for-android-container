@@ -91,7 +91,10 @@ brw_codegen_cs_prog(struct brw_context *brw,
     * prog_data associated with the compiled program, and which will be freed
     * by the state cache.
     */
-   int param_count = cp->program.Base.nir->num_uniforms;
+   int param_count = cp->program.Base.nir->num_uniforms / 4;
+
+   /* The backend also sometimes add a param for the thread local id. */
+   prog_data.thread_local_id_index = param_count++;
 
    /* The backend also sometimes adds params for texture size. */
    param_count += 2 * ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits;
@@ -145,10 +148,29 @@ brw_codegen_cs_prog(struct brw_context *brw,
       }
    }
 
-   if (prog_data.base.total_scratch) {
-      brw_get_scratch_bo(brw, &brw->cs.base.scratch_bo,
-                         prog_data.base.total_scratch * brw->max_cs_threads);
-   }
+   const unsigned subslices = MAX2(brw->intelScreen->subslice_total, 1);
+
+   /* WaCSScratchSize:hsw
+    *
+    * Haswell's scratch space address calculation appears to be sparse
+    * rather than tightly packed.  The Thread ID has bits indicating
+    * which subslice, EU within a subslice, and thread within an EU
+    * it is.  There's a maximum of two slices and two subslices, so these
+    * can be stored with a single bit.  Even though there are only 10 EUs
+    * per subslice, this is stored in 4 bits, so there's an effective
+    * maximum value of 16 EUs.  Similarly, although there are only 7
+    * threads per EU, this is stored in a 3 bit number, giving an effective
+    * maximum value of 8 threads per EU.
+    *
+    * This means that we need to use 16 * 8 instead of 10 * 7 for the
+    * number of threads per subslice.
+    */
+   const unsigned scratch_ids_per_subslice =
+      brw->is_haswell ? 16 * 8 : brw->max_cs_threads;
+
+   brw_alloc_stage_scratch(brw, &brw->cs.base,
+                           prog_data.base.total_scratch,
+                           scratch_ids_per_subslice * subslices);
 
    if (unlikely(INTEL_DEBUG & DEBUG_CS))
       fprintf(stderr, "\n");

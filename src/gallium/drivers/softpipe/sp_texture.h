@@ -116,5 +116,7 @@ softpipe_init_screen_texture_funcs(struct pipe_screen *screen);
 extern void
 softpipe_init_texture_funcs(struct pipe_context *pipe);
 
-
+unsigned
+softpipe_get_tex_image_offset(const struct softpipe_resource *spr,
+                              unsigned level, unsigned layer);
 #endif /* SP_TEXTURE */

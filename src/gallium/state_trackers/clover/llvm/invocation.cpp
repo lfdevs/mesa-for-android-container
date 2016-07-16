@@ -206,6 +206,9 @@ namespace {
       // http://www.llvm.org/bugs/show_bug.cgi?id=19735
       c.getDiagnosticOpts().ShowCarets = false;
       c.getInvocation().setLangDefaults(c.getLangOpts(), clang::IK_OpenCL,
+#if HAVE_LLVM >= 0x0309
+                                        llvm::Triple(triple),
+#endif
                                         clang::LangStandard::lang_opencl11);
       c.createDiagnostics(
                           new clang::TextDiagnosticPrinter(
@@ -322,6 +325,15 @@ namespace {
       // list of kernel functions to the internalizer.  The internalizer will
       // treat the functions in the list as "main" functions and internalize
       // all of the other functions.
+#if HAVE_LLVM >= 0x0309
+      auto preserve_kernels = [=](const llvm::GlobalValue &GV) {
+         for (const auto &kernel : kernels) {
+            if (GV.getName() == kernel->getName())
+               return true;
+         }
+         return false;
+      };
+#else
       std::vector<const char*> export_list;
       for (std::vector<llvm::Function *>::const_iterator I = kernels.begin(),
                                                          E = kernels.end();
@@ -329,12 +341,17 @@ namespace {
          llvm::Function *kernel = *I;
          export_list.push_back(kernel->getName().data());
       }
+#endif
 #if HAVE_LLVM < 0x0306
       PM.add(new llvm::DataLayoutPass(mod));
 #elif HAVE_LLVM < 0x0307
       PM.add(new llvm::DataLayoutPass());
 #endif
+#if HAVE_LLVM >= 0x0309
+      PM.add(llvm::createInternalizePass(preserve_kernels));
+#else
       PM.add(llvm::createInternalizePass(export_list));
+#endif
 
       llvm::PassManagerBuilder PMB;
       PMB.OptLevel = optimization_level;
@@ -876,8 +893,9 @@ clover::compile_program_llvm(const std::string &source,
    module m;
    // Build the clover::module
    switch (ir) {
+      case PIPE_SHADER_IR_NIR:
       case PIPE_SHADER_IR_TGSI:
-         //XXX: Handle TGSI
+         //XXX: Handle TGSI, NIR
          assert(0);
          m = module();
          break;

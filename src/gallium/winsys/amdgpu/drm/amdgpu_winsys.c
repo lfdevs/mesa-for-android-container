@@ -93,13 +93,26 @@ static unsigned cik_get_num_tile_pipes(struct amdgpu_gpu_info *info)
 }
 
 /* Helper function to do the ioctls needed for setup and init. */
-static boolean do_winsys_init(struct amdgpu_winsys *ws)
+static boolean do_winsys_init(struct amdgpu_winsys *ws, int fd)
 {
    struct amdgpu_buffer_size_alignments alignment_info = {};
    struct amdgpu_heap_info vram, gtt;
    struct drm_amdgpu_info_hw_ip dma = {}, uvd = {}, vce = {};
-   uint32_t vce_version = 0, vce_feature = 0;
+   uint32_t vce_version = 0, vce_feature = 0, uvd_version = 0, uvd_feature = 0;
    int r, i, j;
+   drmDevicePtr devinfo;
+
+   /* Get PCI info. */
+   r = drmGetDevice(fd, &devinfo);
+   if (r) {
+      fprintf(stderr, "amdgpu: drmGetDevice failed.\n");
+      goto fail;
+   }
+   ws->info.pci_domain = devinfo->businfo.pci->domain;
+   ws->info.pci_bus = devinfo->businfo.pci->bus;
+   ws->info.pci_dev = devinfo->businfo.pci->dev;
+   ws->info.pci_func = devinfo->businfo.pci->func;
+   drmFreeDevice(&devinfo);
 
    /* Query hardware and driver information. */
    r = amdgpu_query_gpu_info(ws->dev, &ws->amdinfo);
@@ -135,6 +148,13 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
    r = amdgpu_query_hw_ip_info(ws->dev, AMDGPU_HW_IP_UVD, 0, &uvd);
    if (r) {
       fprintf(stderr, "amdgpu: amdgpu_query_hw_ip_info(uvd) failed.\n");
+      goto fail;
+   }
+
+   r = amdgpu_query_firmware_version(ws->dev, AMDGPU_INFO_FW_UVD, 0, 0,
+				     &uvd_version, &uvd_feature);
+   if (r) {
+      fprintf(stderr, "amdgpu: amdgpu_query_firmware_version(uvd) failed.\n");
       goto fail;
    }
 
@@ -224,6 +244,14 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
       ws->family = FAMILY_VI;
       ws->rev_id = VI_FIJI_P_A0;
       break;
+   case CHIP_POLARIS10:
+      ws->family = FAMILY_VI;
+      ws->rev_id = VI_POLARIS10_P_A0;
+      break;
+   case CHIP_POLARIS11:
+      ws->family = FAMILY_VI;
+      ws->rev_id = VI_POLARIS11_M_A0;
+      break;
    default:
       fprintf(stderr, "amdgpu: Unknown family.\n");
       goto fail;
@@ -235,6 +263,10 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
       goto fail;
    }
 
+   /* Set which chips have dedicated VRAM. */
+   ws->info.has_dedicated_vram =
+      !(ws->amdinfo.ids_flags & AMDGPU_IDS_FLAGS_FUSION);
+
    /* Set hardware information. */
    ws->info.gart_size = gtt.heap_size;
    ws->info.vram_size = vram.heap_size;
@@ -243,6 +275,8 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
    ws->info.max_se = ws->amdinfo.num_shader_engines;
    ws->info.max_sh_per_se = ws->amdinfo.num_shader_arrays_per_engine;
    ws->info.has_uvd = uvd.available_rings != 0;
+   ws->info.uvd_fw_version =
+         uvd.available_rings ? uvd_version : 0;
    ws->info.vce_fw_version =
          vce.available_rings ? vce_version : 0;
    ws->info.has_userptr = TRUE;
@@ -262,14 +296,12 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
 
    memcpy(ws->info.si_tile_mode_array, ws->amdinfo.gb_tile_mode,
           sizeof(ws->amdinfo.gb_tile_mode));
-   ws->info.si_tile_mode_array_valid = TRUE;
    ws->info.enabled_rb_mask = ws->amdinfo.enabled_rb_pipes_mask;
 
    memcpy(ws->info.cik_macrotile_mode_array, ws->amdinfo.gb_macro_tile_mode,
           sizeof(ws->amdinfo.gb_macro_tile_mode));
-   ws->info.cik_macrotile_mode_array_valid = TRUE;
 
-   ws->gart_page_size = alignment_info.size_remote;
+   ws->info.gart_page_size = alignment_info.size_remote;
 
    return TRUE;
 
@@ -285,6 +317,14 @@ static void amdgpu_winsys_destroy(struct radeon_winsys *rws)
 {
    struct amdgpu_winsys *ws = (struct amdgpu_winsys*)rws;
 
+   if (ws->thread) {
+      ws->kill_thread = 1;
+      pipe_semaphore_signal(&ws->cs_queued);
+      pipe_thread_wait(ws->thread);
+   }
+   pipe_semaphore_destroy(&ws->cs_queue_has_space);
+   pipe_semaphore_destroy(&ws->cs_queued);
+   pipe_mutex_destroy(ws->cs_queue_lock);
    pipe_mutex_destroy(ws->bo_fence_lock);
    pb_cache_deinit(&ws->bo_cache);
    pipe_mutex_destroy(ws->global_bo_list_lock);
@@ -369,6 +409,54 @@ static int compare_dev(void *key1, void *key2)
    return key1 != key2;
 }
 
+void amdgpu_ws_queue_cs(struct amdgpu_winsys *ws, struct amdgpu_cs *cs)
+{
+   pipe_semaphore_wait(&ws->cs_queue_has_space);
+
+   pipe_mutex_lock(ws->cs_queue_lock);
+   assert(ws->num_enqueued_cs < ARRAY_SIZE(ws->cs_queue));
+   ws->cs_queue[ws->num_enqueued_cs++] = cs;
+   pipe_mutex_unlock(ws->cs_queue_lock);
+   pipe_semaphore_signal(&ws->cs_queued);
+}
+
+static PIPE_THREAD_ROUTINE(amdgpu_cs_thread_func, param)
+{
+   struct amdgpu_winsys *ws = (struct amdgpu_winsys *)param;
+   struct amdgpu_cs *cs;
+   unsigned i;
+
+   while (1) {
+      pipe_semaphore_wait(&ws->cs_queued);
+      if (ws->kill_thread)
+         break;
+
+      pipe_mutex_lock(ws->cs_queue_lock);
+      cs = ws->cs_queue[0];
+      for (i = 1; i < ws->num_enqueued_cs; i++)
+         ws->cs_queue[i - 1] = ws->cs_queue[i];
+      ws->cs_queue[--ws->num_enqueued_cs] = NULL;
+      pipe_mutex_unlock(ws->cs_queue_lock);
+
+      pipe_semaphore_signal(&ws->cs_queue_has_space);
+
+      if (cs) {
+         amdgpu_cs_submit_ib(cs);
+         pipe_semaphore_signal(&cs->flush_completed);
+      }
+   }
+   pipe_mutex_lock(ws->cs_queue_lock);
+   for (i = 0; i < ws->num_enqueued_cs; i++) {
+      pipe_semaphore_signal(&ws->cs_queue[i]->flush_completed);
+      ws->cs_queue[i] = NULL;
+   }
+   pipe_mutex_unlock(ws->cs_queue_lock);
+   return 0;
+}
+
+DEBUG_GET_ONCE_BOOL_OPTION(thread, "RADEON_THREAD", TRUE)
+static PIPE_THREAD_ROUTINE(amdgpu_cs_thread_func, param);
+
 static bool amdgpu_winsys_unref(struct radeon_winsys *rws)
 {
    struct amdgpu_winsys *ws = (struct amdgpu_winsys*)rws;
@@ -437,7 +525,7 @@ amdgpu_winsys_create(int fd, radeon_screen_create_t screen_create)
    ws->info.drm_major = drm_major;
    ws->info.drm_minor = drm_minor;
 
-   if (!do_winsys_init(ws))
+   if (!do_winsys_init(ws, fd))
       goto fail;
 
    /* Create managers. */
@@ -462,7 +550,14 @@ amdgpu_winsys_create(int fd, radeon_screen_create_t screen_create)
 
    LIST_INITHEAD(&ws->global_bo_list);
    pipe_mutex_init(ws->global_bo_list_lock);
+   pipe_mutex_init(ws->cs_queue_lock);
    pipe_mutex_init(ws->bo_fence_lock);
+
+   pipe_semaphore_init(&ws->cs_queue_has_space, ARRAY_SIZE(ws->cs_queue));
+   pipe_semaphore_init(&ws->cs_queued, 0);
+
+   if (sysconf(_SC_NPROCESSORS_ONLN) > 1 && debug_get_option_thread())
+      ws->thread = pipe_thread_create(amdgpu_cs_thread_func, ws);
 
    /* Create the screen at the end. The winsys must be initialized
     * completely.

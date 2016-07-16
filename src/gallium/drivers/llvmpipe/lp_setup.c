@@ -69,7 +69,7 @@ lp_setup_get_empty_scene(struct lp_setup_context *setup)
    assert(setup->scene == NULL);
 
    setup->scene_idx++;
-   setup->scene_idx %= Elements(setup->scenes);
+   setup->scene_idx %= ARRAY_SIZE(setup->scenes);
 
    setup->scene = setup->scenes[setup->scene_idx];
 
@@ -123,7 +123,7 @@ void lp_setup_reset( struct lp_setup_context *setup )
    LP_DBG(DEBUG_SETUP, "%s\n", __FUNCTION__);
 
    /* Reset derived state */
-   for (i = 0; i < Elements(setup->constants); ++i) {
+   for (i = 0; i < ARRAY_SIZE(setup->constants); ++i) {
       setup->constants[i].stored_size = 0;
       setup->constants[i].stored_data = NULL;
    }
@@ -650,12 +650,12 @@ lp_setup_set_fs_constants(struct lp_setup_context *setup,
 
    LP_DBG(DEBUG_SETUP, "%s %p\n", __FUNCTION__, (void *) buffers);
 
-   assert(num <= Elements(setup->constants));
+   assert(num <= ARRAY_SIZE(setup->constants));
 
    for (i = 0; i < num; ++i) {
       util_copy_constant_buffer(&setup->constants[i].current, &buffers[i]);
    }
-   for (; i < Elements(setup->constants); i++) {
+   for (; i < ARRAY_SIZE(setup->constants); i++) {
       util_copy_constant_buffer(&setup->constants[i].current, NULL);
    }
    setup->dirty |= LP_SETUP_NEW_CONSTANTS;
@@ -990,7 +990,7 @@ lp_setup_is_resource_referenced( const struct lp_setup_context *setup,
    }
 
    /* check textures referenced by the scene */
-   for (i = 0; i < Elements(setup->scenes); i++) {
+   for (i = 0; i < ARRAY_SIZE(setup->scenes); i++) {
       if (lp_scene_is_resource_referenced(setup->scenes[i], texture)) {
          return LP_REFERENCED_FOR_READ;
       }
@@ -1081,7 +1081,7 @@ try_update_scene_state( struct lp_setup_context *setup )
    }
 
    if (setup->dirty & LP_SETUP_NEW_CONSTANTS) {
-      for (i = 0; i < Elements(setup->constants); ++i) {
+      for (i = 0; i < ARRAY_SIZE(setup->constants); ++i) {
          struct pipe_resource *buffer = setup->constants[i].current.buffer;
          const unsigned current_size = MIN2(setup->constants[i].current.buffer_size,
                                             LP_MAX_TGSI_CONST_BUFFER_SIZE);
@@ -1166,7 +1166,7 @@ try_update_scene_state( struct lp_setup_context *setup )
          /* The scene now references the textures in the rasterization
           * state record.  Note that now.
           */
-         for (i = 0; i < Elements(setup->fs.current_tex); i++) {
+         for (i = 0; i < ARRAY_SIZE(setup->fs.current_tex); i++) {
             if (setup->fs.current_tex[i]) {
                if (!lp_scene_add_resource_reference(scene,
                                                     setup->fs.current_tex[i],
@@ -1283,16 +1283,16 @@ lp_setup_destroy( struct lp_setup_context *setup )
 
    util_unreference_framebuffer_state(&setup->fb);
 
-   for (i = 0; i < Elements(setup->fs.current_tex); i++) {
+   for (i = 0; i < ARRAY_SIZE(setup->fs.current_tex); i++) {
       pipe_resource_reference(&setup->fs.current_tex[i], NULL);
    }
 
-   for (i = 0; i < Elements(setup->constants); i++) {
+   for (i = 0; i < ARRAY_SIZE(setup->constants); i++) {
       pipe_resource_reference(&setup->constants[i].current.buffer, NULL);
    }
 
    /* free the scenes in the 'empty' queue */
-   for (i = 0; i < Elements(setup->scenes); i++) {
+   for (i = 0; i < ARRAY_SIZE(setup->scenes); i++) {
       struct lp_scene *scene = setup->scenes[i];
 
       if (scene->fence)

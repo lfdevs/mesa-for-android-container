@@ -163,7 +163,7 @@ aa_transform_decl(struct tgsi_transform_context *ctx,
       uint i;
       for (i = decl->Range.First;
            i <= decl->Range.Last; i++) {
-         aactx->samplersUsed |= 1 << i;
+         aactx->samplersUsed |= 1u << i;
       }
    }
    else if (decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
@@ -208,9 +208,11 @@ aa_transform_prolog(struct tgsi_transform_context *ctx)
    struct aa_transform_context *aactx = (struct aa_transform_context *) ctx;
    uint i;
 
+   STATIC_ASSERT(sizeof(aactx->samplersUsed) * 8 >= PIPE_MAX_SAMPLERS);
+
    /* find free sampler */
    aactx->freeSampler = free_bit(aactx->samplersUsed);
-   if (aactx->freeSampler >= PIPE_MAX_SAMPLERS)
+   if (aactx->freeSampler < 0 || aactx->freeSampler >= PIPE_MAX_SAMPLERS)
       aactx->freeSampler = PIPE_MAX_SAMPLERS - 1;
 
    /* find two free temp regs */
@@ -264,11 +266,11 @@ aa_transform_epilog(struct tgsi_transform_context *ctx)
    if (aactx->colorOutput != -1) {
       /* insert texture sampling code for antialiasing. */
 
-      /* TEX texTemp, input_coord, sampler */
-      tgsi_transform_tex_2d_inst(ctx,
-                                 TGSI_FILE_TEMPORARY, aactx->texTemp,
-                                 TGSI_FILE_INPUT, aactx->maxInput + 1,
-                                 aactx->freeSampler);
+      /* TEX texTemp, input_coord, sampler, 2D */
+      tgsi_transform_tex_inst(ctx,
+                              TGSI_FILE_TEMPORARY, aactx->texTemp,
+                              TGSI_FILE_INPUT, aactx->maxInput + 1,
+                              TGSI_TEXTURE_2D, aactx->freeSampler);
 
       /* MOV rgb */
       tgsi_transform_op1_inst(ctx, TGSI_OPCODE_MOV,

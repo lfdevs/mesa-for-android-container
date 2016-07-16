@@ -93,6 +93,30 @@ nv50_memory_barrier(struct pipe_context *pipe, unsigned flags)
    }
 }
 
+static void
+nv50_emit_string_marker(struct pipe_context *pipe, const char *str, int len)
+{
+   struct nouveau_pushbuf *push = nv50_context(pipe)->base.pushbuf;
+   int string_words = len / 4;
+   int data_words;
+
+   if (len <= 0)
+      return;
+   string_words = MIN2(string_words, NV04_PFIFO_MAX_PACKET_LEN);
+   if (string_words == NV04_PFIFO_MAX_PACKET_LEN)
+      data_words = string_words;
+   else
+      data_words = string_words + !!(len & 3);
+   BEGIN_NI04(push, SUBC_3D(NV04_GRAPH_NOP), data_words);
+   if (string_words)
+      PUSH_DATAp(push, str, string_words);
+   if (string_words != data_words) {
+      int data = 0;
+      memcpy(&data, &str[string_words * 4], len & 3);
+      PUSH_DATA (push, data);
+   }
+}
+
 void
 nv50_default_kick_notify(struct nouveau_pushbuf *push)
 {
@@ -176,8 +200,8 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
       for (i = 0; i < nv50->framebuffer.nr_cbufs; ++i) {
          if (nv50->framebuffer.cbufs[i] &&
              nv50->framebuffer.cbufs[i]->texture == res) {
-            nv50->dirty |= NV50_NEW_FRAMEBUFFER;
-            nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_FB);
+            nv50->dirty_3d |= NV50_NEW_3D_FRAMEBUFFER;
+            nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_FB);
             if (!--ref)
                return ref;
          }
@@ -186,8 +210,8 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
    if (bind & PIPE_BIND_DEPTH_STENCIL) {
       if (nv50->framebuffer.zsbuf &&
           nv50->framebuffer.zsbuf->texture == res) {
-         nv50->dirty |= NV50_NEW_FRAMEBUFFER;
-         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_FB);
+         nv50->dirty_3d |= NV50_NEW_3D_FRAMEBUFFER;
+         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_FB);
          if (!--ref)
             return ref;
       }
@@ -202,8 +226,8 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
       assert(nv50->num_vtxbufs <= PIPE_MAX_ATTRIBS);
       for (i = 0; i < nv50->num_vtxbufs; ++i) {
          if (nv50->vtxbuf[i].buffer == res) {
-            nv50->dirty |= NV50_NEW_ARRAYS;
-            nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_VERTEX);
+            nv50->dirty_3d |= NV50_NEW_3D_ARRAYS;
+            nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_VERTEX);
             if (!--ref)
                return ref;
          }
@@ -211,8 +235,8 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
 
       if (nv50->idxbuf.buffer == res) {
          /* Just rebind to the bufctx as there is no separate dirty bit */
-         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_INDEX);
-         BCTX_REFN(nv50->bufctx_3d, INDEX, nv04_resource(res), RD);
+         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_INDEX);
+         BCTX_REFN(nv50->bufctx_3d, 3D_INDEX, nv04_resource(res), RD);
          if (!--ref)
             return ref;
       }
@@ -222,8 +246,8 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
       for (i = 0; i < nv50->num_textures[s]; ++i) {
          if (nv50->textures[s][i] &&
              nv50->textures[s][i]->texture == res) {
-            nv50->dirty |= NV50_NEW_TEXTURES;
-            nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_TEXTURES);
+            nv50->dirty_3d |= NV50_NEW_3D_TEXTURES;
+            nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_TEXTURES);
             if (!--ref)
                return ref;
          }
@@ -236,9 +260,9 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
             continue;
          if (!nv50->constbuf[s][i].user &&
              nv50->constbuf[s][i].u.buf == res) {
-            nv50->dirty |= NV50_NEW_CONSTBUF;
+            nv50->dirty_3d |= NV50_NEW_3D_CONSTBUF;
             nv50->constbuf_dirty[s] |= 1 << i;
-            nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_CB(s, i));
+            nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_CB(s, i));
             if (!--ref)
                return ref;
          }
@@ -309,6 +333,7 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    pipe->texture_barrier = nv50_texture_barrier;
    pipe->memory_barrier = nv50_memory_barrier;
    pipe->get_sample_position = nv50_context_get_sample_position;
+   pipe->emit_string_marker = nv50_emit_string_marker;
 
    if (!screen->cur_ctx) {
       /* Restore the last context's state here, normally handled during
@@ -345,10 +370,10 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
    flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_RD;
 
-   BCTX_REFN_bo(nv50->bufctx_3d, SCREEN, flags, screen->code);
-   BCTX_REFN_bo(nv50->bufctx_3d, SCREEN, flags, screen->uniforms);
-   BCTX_REFN_bo(nv50->bufctx_3d, SCREEN, flags, screen->txc);
-   BCTX_REFN_bo(nv50->bufctx_3d, SCREEN, flags, screen->stack_bo);
+   BCTX_REFN_bo(nv50->bufctx_3d, 3D_SCREEN, flags, screen->code);
+   BCTX_REFN_bo(nv50->bufctx_3d, 3D_SCREEN, flags, screen->uniforms);
+   BCTX_REFN_bo(nv50->bufctx_3d, 3D_SCREEN, flags, screen->txc);
+   BCTX_REFN_bo(nv50->bufctx_3d, 3D_SCREEN, flags, screen->stack_bo);
    if (screen->compute) {
       BCTX_REFN_bo(nv50->bufctx_cp, CP_SCREEN, flags, screen->code);
       BCTX_REFN_bo(nv50->bufctx_cp, CP_SCREEN, flags, screen->txc);
@@ -357,7 +382,7 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
    flags = NOUVEAU_BO_GART | NOUVEAU_BO_WR;
 
-   BCTX_REFN_bo(nv50->bufctx_3d, SCREEN, flags, screen->fence.bo);
+   BCTX_REFN_bo(nv50->bufctx_3d, 3D_SCREEN, flags, screen->fence.bo);
    BCTX_REFN_bo(nv50->bufctx, FENCE, flags, screen->fence.bo);
    if (screen->compute)
       BCTX_REFN_bo(nv50->bufctx_cp, CP_SCREEN, flags, screen->fence.bo);

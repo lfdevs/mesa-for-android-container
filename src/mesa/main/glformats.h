@@ -28,6 +28,7 @@
 #define GLFORMATS_H
 
 
+#include <stdbool.h>
 #include <GL/gl.h>
 
 
@@ -101,6 +102,9 @@ _mesa_is_depth_or_stencil_format(GLenum format);
 extern GLboolean
 _mesa_is_compressed_format(const struct gl_context *ctx, GLenum format);
 
+extern GLboolean
+_mesa_is_srgb_format(GLenum format);
+
 extern GLenum
 _mesa_base_format_to_integer_format(GLenum format);
 
@@ -140,6 +144,12 @@ _mesa_base_tex_format(const struct gl_context *ctx, GLint internalFormat );
 
 extern uint32_t
 _mesa_format_from_format_and_type(GLenum format, GLenum type);
+
+extern bool
+_mesa_is_es3_color_renderable(GLenum internal_format);
+
+extern bool
+_mesa_is_es3_texture_filterable(GLenum internal_format);
 
 #ifdef __cplusplus
 }

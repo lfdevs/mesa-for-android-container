@@ -28,19 +28,16 @@
 
 #include "radeon/r600_pipe_common.h"
 #include "radeon/r600_cs.h"
-
-#include "r600_llvm.h"
 #include "r600_public.h"
 
 #include "util/u_suballoc.h"
 #include "util/list.h"
 #include "util/u_transfer.h"
+#include "util/u_memory.h"
 
 #include "tgsi/tgsi_scan.h"
 
 #define R600_NUM_ATOMS 52
-
-#define R600_MAX_VIEWPORTS 16
 
 /* read caches */
 #define R600_CONTEXT_INV_VERTEX_CACHE		(R600_CONTEXT_PRIVATE_FLAG << 0)
@@ -58,9 +55,8 @@
 #define R600_CONTEXT_WAIT_CP_DMA_IDLE		(R600_CONTEXT_PRIVATE_FLAG << 10)
 
 /* the number of CS dwords for flushing and drawing */
-#define R600_MAX_FLUSH_CS_DWORDS	16
+#define R600_MAX_FLUSH_CS_DWORDS	18
 #define R600_MAX_DRAW_CS_DWORDS		58
-#define R600_TRACE_CS_DWORDS		7
 
 #define R600_MAX_USER_CONST_BUFFERS 13
 #define R600_MAX_DRIVER_CONST_BUFFERS 3
@@ -97,12 +93,6 @@
 #define R600_NUM_HW_STAGES 4
 #define EG_NUM_HW_STAGES 6
 
-#ifdef PIPE_ARCH_BIG_ENDIAN
-#define R600_BIG_ENDIAN 1
-#else
-#define R600_BIG_ENDIAN 0
-#endif
-
 struct r600_context;
 struct r600_bytecode;
 union  r600_shader_key;
@@ -123,7 +113,7 @@ struct r600_db_state {
 
 struct r600_db_misc_state {
 	struct r600_atom		atom;
-	bool				occlusion_query_enabled;
+	bool				occlusion_queries_disabled;
 	bool				flush_depthstencil_through_cb;
 	bool				flush_depth_inplace;
 	bool				flush_stencil_inplace;
@@ -224,12 +214,6 @@ struct r600_stencil_ref_state {
 	struct pipe_stencil_ref pipe_state;
 };
 
-struct r600_viewport_state {
-	struct r600_atom atom;
-	struct pipe_viewport_state state[R600_MAX_VIEWPORTS];
-	uint32_t dirty_mask;
-};
-
 struct r600_shader_stages_state {
 	struct r600_atom atom;
 	unsigned geom_enable;
@@ -244,7 +228,6 @@ struct r600_gs_rings_state {
 
 /* This must start from 16. */
 /* features */
-#define DBG_LLVM		(1 << 29)
 #define DBG_NO_CP_DMA		(1 << 30)
 /* shader backend */
 #define DBG_NO_SB		(1 << 21)
@@ -416,14 +399,6 @@ struct r600_cso_state
 	struct r600_command_buffer *cb;
 };
 
-struct r600_scissor_state
-{
-	struct r600_atom		atom;
-	struct pipe_scissor_state	scissor[R600_MAX_VIEWPORTS];
-	uint32_t			dirty_mask;
-	bool				enable; /* r6xx only */
-};
-
 struct r600_fetch_shader {
 	struct r600_resource		*buffer;
 	unsigned			offset;
@@ -442,7 +417,6 @@ struct r600_context {
 
 	/* Hardware info. */
 	boolean				has_vertex_cache;
-	boolean				keep_tiling_flags;
 	unsigned			default_gprs[EG_NUM_HW_STAGES];
 	unsigned                        current_gprs[EG_NUM_HW_STAGES];
 	unsigned			r6xx_num_clause_temp_gprs;
@@ -485,12 +459,10 @@ struct r600_context {
 	struct r600_poly_offset_state	poly_offset_state;
 	struct r600_cso_state		rasterizer_state;
 	struct r600_sample_mask		sample_mask;
-	struct r600_scissor_state	scissor;
 	struct r600_seamless_cube_map	seamless_cube_map;
 	struct r600_config_state	config_state;
 	struct r600_stencil_ref_state	stencil_ref;
 	struct r600_vgt_state		vgt_state;
-	struct r600_viewport_state	viewport;
 	/* Shaders and shader resources. */
 	struct r600_cso_state		vertex_fetch_shader;
 	struct r600_shader_state        hw_shader_stages[EG_NUM_HW_STAGES];
@@ -572,15 +544,10 @@ static inline void r600_mark_atom_dirty(struct r600_context *rctx,
 	r600_set_atom_dirty(rctx, atom, true);
 }
 
-void r600_trace_emit(struct r600_context *rctx);
-
 static inline void r600_emit_atom(struct r600_context *rctx, struct r600_atom *atom)
 {
 	atom->emit(&rctx->b, atom);
 	r600_set_atom_dirty(rctx, atom, false);
-	if (rctx->screen->b.trace_bo) {
-		r600_trace_emit(rctx);
-	}
 }
 
 static inline void r600_set_cso_state(struct r600_context *rctx,
@@ -740,7 +707,6 @@ void r600_emit_blend_color(struct r600_context *rctx, struct r600_atom *atom);
 void r600_emit_vgt_state(struct r600_context *rctx, struct r600_atom *atom);
 void r600_emit_clip_misc_state(struct r600_context *rctx, struct r600_atom *atom);
 void r600_emit_stencil_ref(struct r600_context *rctx, struct r600_atom *atom);
-void r600_emit_viewport_state(struct r600_context *rctx, struct r600_atom *atom);
 void r600_emit_shader(struct r600_context *rctx, struct r600_atom *a);
 void r600_add_atom(struct r600_context *rctx, struct r600_atom *atom, unsigned id);
 void r600_init_atom(struct r600_context *rctx, struct r600_atom *atom, unsigned id,
@@ -756,7 +722,6 @@ void r600_set_sample_locations_constant_buffer(struct r600_context *rctx);
 uint32_t r600_translate_stencil_op(int s_op);
 uint32_t r600_translate_fill(uint32_t func);
 unsigned r600_tex_wrap(unsigned wrap);
-unsigned r600_tex_filter(unsigned filter);
 unsigned r600_tex_mipfilter(unsigned filter);
 unsigned r600_tex_compare(unsigned compare);
 bool sampler_state_needs_border_color(const struct pipe_sampler_state *state);
@@ -797,9 +762,9 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 #define R600_LOOP_CONST_OFFSET                 0X0003E200
 #define EG_LOOP_CONST_OFFSET               0x0003A200
 
-#define PKT_TYPE_S(x)                   (((x) & 0x3) << 30)
-#define PKT_COUNT_S(x)                  (((x) & 0x3FFF) << 16)
-#define PKT3_IT_OPCODE_S(x)             (((x) & 0xFF) << 8)
+#define PKT_TYPE_S(x)                   (((unsigned)(x) & 0x3) << 30)
+#define PKT_COUNT_S(x)                  (((unsigned)(x) & 0x3FFF) << 16)
+#define PKT3_IT_OPCODE_S(x)             (((unsigned)(x) & 0xFF) << 8)
 #define PKT3_PREDICATE(x)               (((x) >> 0) & 0x1)
 #define PKT3(op, count, predicate) (PKT_TYPE_S(3) | PKT_COUNT_S(count) | PKT3_IT_OPCODE_S(op) | PKT3_PREDICATE(predicate))
 
@@ -916,8 +881,8 @@ static inline void radeon_set_ctl_const_seq(struct radeon_winsys_cs *cs, unsigne
 {
 	assert(reg >= R600_CTL_CONST_OFFSET);
 	assert(cs->cdw+2+num <= cs->max_dw);
-	cs->buf[cs->cdw++] = PKT3(PKT3_SET_CTL_CONST, num, 0);
-	cs->buf[cs->cdw++] = (reg - R600_CTL_CONST_OFFSET) >> 2;
+	radeon_emit(cs, PKT3(PKT3_SET_CTL_CONST, num, 0));
+	radeon_emit(cs, (reg - R600_CTL_CONST_OFFSET) >> 2);
 }
 
 static inline void radeon_compute_set_context_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)

@@ -75,7 +75,7 @@ llvmpipe_bind_sampler_states(struct pipe_context *pipe,
    unsigned i;
 
    assert(shader < PIPE_SHADER_TYPES);
-   assert(start + num <= Elements(llvmpipe->samplers[shader]));
+   assert(start + num <= ARRAY_SIZE(llvmpipe->samplers[shader]));
 
    draw_flush(llvmpipe->draw);
 
@@ -117,7 +117,7 @@ llvmpipe_set_sampler_views(struct pipe_context *pipe,
    assert(num <= PIPE_MAX_SHADER_SAMPLER_VIEWS);
 
    assert(shader < PIPE_SHADER_TYPES);
-   assert(start + num <= Elements(llvmpipe->sampler_views[shader]));
+   assert(start + num <= ARRAY_SIZE(llvmpipe->sampler_views[shader]));
 
    draw_flush(llvmpipe->draw);
 

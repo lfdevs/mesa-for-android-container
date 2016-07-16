@@ -100,7 +100,7 @@ struct nv50_ir_prog_info
       uint8_t sourceRep;  /* NV50_PROGRAM_IR */
       const void *source;
       void *relocData;
-      void *interpData;
+      void *fixupData;
       struct nv50_ir_prog_symbol *syms;
       uint16_t numSyms;
    } bin;
@@ -146,12 +146,14 @@ struct nv50_ir_prog_info
          bool earlyFragTests;
          bool separateFragData;
          bool usesDiscard;
-         bool sampleInterp;      /* perform sample interp on all fp inputs */
+         bool persampleInvocation;
+         bool usesSampleMaskIn;
       } fp;
       struct {
          uint32_t inputOffset; /* base address for user args */
          uint32_t sharedOffset; /* reserved space in s[] */
          uint32_t gridInfoBase;  /* base address for NTID,NCTAID */
+         uint32_t numThreads; /* max number of threads */
       } cp;
    } prop;
 
@@ -161,7 +163,7 @@ struct nv50_ir_prog_info
       uint8_t clipDistances;     /* number of clip distance outputs */
       uint8_t cullDistances;     /* number of cull distance outputs */
       int8_t genUserClip;        /* request user clip planes for ClipVertex */
-      uint8_t auxCBSlot;         /* constant buffer index of UCP/draw data */
+      uint8_t auxCBSlot;         /* driver constant buffer slot */
       uint16_t ucpBase;          /* base address for UCPs */
       uint16_t drawInfoBase;     /* base address for draw parameters */
       uint8_t pointSize;         /* output index for PointSize */
@@ -176,12 +178,13 @@ struct nv50_ir_prog_info
       uint8_t globalAccess;      /* 1 for read, 2 for wr, 3 for rw */
       bool fp64;                 /* program uses fp64 math */
       bool nv50styleSurfaces;    /* generate gX[] access for raw buffers */
-      uint8_t resInfoCBSlot;     /* cX[] used for tex handles, surface info */
       uint16_t texBindBase;      /* base address for tex handles (nve4) */
       uint16_t suInfoBase;       /* base address for surface info (nve4) */
+      uint16_t bufInfoBase;      /* base address for buffer info */
       uint16_t sampleInfoBase;   /* base address for sample positions */
       uint8_t msInfoCBSlot;      /* cX[] used for multisample info */
       uint16_t msInfoBase;       /* base address for multisample info */
+      uint16_t uboInfoBase;      /* base address for compute UBOs (gk104+) */
    } io;
 
    /* driver callback to assign input/output locations */
@@ -202,8 +205,8 @@ extern void nv50_ir_relocate_code(void *relocData, uint32_t *code,
                                   uint32_t dataPos);
 
 extern void
-nv50_ir_change_interp(void *interpData, uint32_t *code,
-                      bool force_per_sample, bool flatshade);
+nv50_ir_apply_fixups(void *fixupData, uint32_t *code,
+                     bool force_per_sample, bool flatshade);
 
 /* obtain code that will be shared among programs */
 extern void nv50_ir_get_target_library(uint32_t chipset,

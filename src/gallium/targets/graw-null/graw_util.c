@@ -19,7 +19,7 @@ graw_parse_geometry_shader(struct pipe_context *pipe,
    struct tgsi_token tokens[1024];
    struct pipe_shader_state state;
 
-   if (!tgsi_text_translate(text, tokens, Elements(tokens)))
+   if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens)))
       return NULL;
 
    memset(&state, 0, sizeof state);
@@ -34,7 +34,7 @@ graw_parse_vertex_shader(struct pipe_context *pipe,
    struct tgsi_token tokens[1024];
    struct pipe_shader_state state;
 
-   if (!tgsi_text_translate(text, tokens, Elements(tokens)))
+   if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens)))
       return NULL;
 
    memset(&state, 0, sizeof state);
@@ -49,7 +49,7 @@ graw_parse_fragment_shader(struct pipe_context *pipe,
    struct tgsi_token tokens[1024];
    struct pipe_shader_state state;
 
-   if (!tgsi_text_translate(text, tokens, Elements(tokens)))
+   if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens)))
       return NULL;
 
    memset(&state, 0, sizeof state);

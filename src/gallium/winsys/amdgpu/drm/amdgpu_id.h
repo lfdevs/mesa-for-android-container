@@ -138,6 +138,10 @@ enum {
 
 	VI_FIJI_P_A0      = 60,
 
+	VI_POLARIS10_P_A0 = 80,
+
+	VI_POLARIS11_M_A0 = 90,
+
 	VI_UNKNOWN        = 0xFF
 };
 
@@ -147,7 +151,11 @@ enum {
 #define ASICREV_IS_TONGA_P(eChipRev)	\
 	((eChipRev >= VI_TONGA_P_A0) && (eChipRev < VI_FIJI_P_A0))
 #define ASICREV_IS_FIJI_P(eChipRev)	\
-	(eChipRev >= VI_FIJI_P_A0)
+	((eChipRev >= VI_FIJI_P_A0)  && (eChipRev < VI_POLARIS10_P_A0))
+#define ASICREV_IS_POLARIS10_P(eChipRev)\
+	((eChipRev >= VI_POLARIS10_P_A0) && (eChipRev < VI_POLARIS11_M_A0))
+#define ASICREV_IS_POLARIS11_M(eChipRev)   \
+	(eChipRev >= VI_POLARIS11_M_A0)
 
 /* CZ specific rev IDs */
 enum {

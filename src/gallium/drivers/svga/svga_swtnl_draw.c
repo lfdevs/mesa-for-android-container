@@ -90,7 +90,7 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
    }
 
    /* Map constant buffers */
-   for (i = 0; i < Elements(svga->curr.constbufs[PIPE_SHADER_VERTEX]); ++i) {
+   for (i = 0; i < ARRAY_SIZE(svga->curr.constbufs[PIPE_SHADER_VERTEX]); ++i) {
       if (svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer == NULL) {
          continue;
       }
@@ -128,7 +128,7 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
       draw_set_indexes(draw, NULL, 0, 0);
    }
 
-   for (i = 0; i < Elements(svga->curr.constbufs[PIPE_SHADER_VERTEX]); ++i) {
+   for (i = 0; i < ARRAY_SIZE(svga->curr.constbufs[PIPE_SHADER_VERTEX]); ++i) {
       if (svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer) {
          pipe_buffer_unmap(&svga->pipe, cb_transfer[i]);
       }

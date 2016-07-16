@@ -28,6 +28,8 @@
 #include "nvc0/nvc0_context.h"
 #include "nvc0/nvc0_query_hw.h"
 
+#include "nvc0/nvc0_compute.xml.h"
+
 static inline void
 nvc0_program_update_context_state(struct nvc0_context *nvc0,
                                   struct nvc0_program *prog, int stage)
@@ -37,11 +39,11 @@ nvc0_program_update_context_state(struct nvc0_context *nvc0,
    if (prog && prog->need_tls) {
       const uint32_t flags = NV_VRAM_DOMAIN(&nvc0->screen->base) | NOUVEAU_BO_RDWR;
       if (!nvc0->state.tls_required)
-         BCTX_REFN_bo(nvc0->bufctx_3d, TLS, flags, nvc0->screen->tls);
+         BCTX_REFN_bo(nvc0->bufctx_3d, 3D_TLS, flags, nvc0->screen->tls);
       nvc0->state.tls_required |= 1 << stage;
    } else {
       if (nvc0->state.tls_required == (1 << stage))
-         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TLS);
+         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_TLS);
       nvc0->state.tls_required &= ~(1 << stage);
    }
 
@@ -152,7 +154,7 @@ nvc0_fragprog_validate(struct nvc0_context *nvc0)
                                      NVC0_3D_SHADE_MODEL_SMOOTH);
    }
 
-   if (fp->mem && !(nvc0->dirty & NVC0_NEW_FRAGPROG)) {
+   if (fp->mem && !(nvc0->dirty_3d & NVC0_NEW_3D_FRAGPROG)) {
       return;
    }
 
@@ -257,6 +259,19 @@ nvc0_gmtyprog_validate(struct nvc0_context *nvc0)
 }
 
 void
+nvc0_compprog_validate(struct nvc0_context *nvc0)
+{
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nvc0_program *cp = nvc0->compprog;
+
+   if (cp && !nvc0_program_validate(nvc0, cp))
+      return;
+
+   BEGIN_NVC0(push, NVC0_CP(FLUSH), 1);
+   PUSH_DATA (push, NVC0_COMPUTE_FLUSH_CODE);
+}
+
+void
 nvc0_tfb_validate(struct nvc0_context *nvc0)
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
@@ -292,7 +307,7 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
    }
    nvc0->state.tfb = tfb;
 
-   if (!(nvc0->dirty & NVC0_NEW_TFB_TARGETS))
+   if (!(nvc0->dirty_3d & NVC0_NEW_3D_TFB_TARGETS))
       return;
 
    for (b = 0; b < nvc0->num_tfbbufs; ++b) {
@@ -309,7 +324,7 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
 
       buf = nv04_resource(targ->pipe.buffer);
 
-      BCTX_REFN(nvc0->bufctx_3d, TFB, buf, WR);
+      BCTX_REFN(nvc0->bufctx_3d, 3D_TFB, buf, WR);
 
       if (!(nvc0->tfbbuf_dirty & (1 << b)))
          continue;

@@ -58,12 +58,6 @@
  *    then we should prefer to not flatten the if/else..
  */
 
-struct lower_state {
-	nir_builder b;
-	void *mem_ctx;
-	bool progress;
-};
-
 static bool
 valid_dest(nir_block *block, nir_dest *dest)
 {
@@ -80,7 +74,7 @@ valid_dest(nir_block *block, nir_dest *dest)
 	/* The only uses of this definition must be phi's in the
 	 * successor or in the current block
 	 */
-	nir_foreach_use(&dest->ssa, use) {
+	nir_foreach_use(use, &dest->ssa) {
 		nir_instr *dest_instr = use->parent_instr;
 		if (dest_instr->block == block)
 			continue;
@@ -96,7 +90,7 @@ valid_dest(nir_block *block, nir_dest *dest)
 static bool
 block_check_for_allowed_instrs(nir_block *block)
 {
-	nir_foreach_instr(block, instr) {
+	nir_foreach_instr(instr, block) {
 		switch (instr->type) {
 		case nir_instr_type_intrinsic: {
 			nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
@@ -165,7 +159,7 @@ static void
 flatten_block(nir_builder *bld, nir_block *if_block, nir_block *prev_block,
 		nir_ssa_def *condition, bool invert)
 {
-	nir_foreach_instr_safe(if_block, instr) {
+	nir_foreach_instr_safe(instr, if_block) {
 		if (instr->type == nir_instr_type_intrinsic) {
 			nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 			if ((intr->intrinsic == nir_intrinsic_discard) ||
@@ -213,23 +207,21 @@ flatten_block(nir_builder *bld, nir_block *if_block, nir_block *prev_block,
 }
 
 static bool
-lower_if_else_block(nir_block *block, void *void_state)
+lower_if_else_block(nir_block *block, nir_builder *b, void *mem_ctx)
 {
-	struct lower_state *state = void_state;
-
 	/* If the block is empty, then it certainly doesn't have any phi nodes,
 	 * so we can skip it.  This also ensures that we do an early skip on the
 	 * end block of the function which isn't actually attached to the CFG.
 	 */
 	if (exec_list_is_empty(&block->instr_list))
-		return true;
+		return false;
 
 	if (nir_cf_node_is_first(&block->cf_node))
-		return true;
+		return false;
 
 	nir_cf_node *prev_node = nir_cf_node_prev(&block->cf_node);
 	if (prev_node->type != nir_cf_node_if)
-		return true;
+		return false;
 
 	nir_if *if_stmt = nir_cf_node_as_if(prev_node);
 	nir_cf_node *then_node = nir_if_first_then_node(if_stmt);
@@ -238,7 +230,7 @@ lower_if_else_block(nir_block *block, void *void_state)
 	/* We can only have one block in each side ... */
 	if (nir_if_last_then_node(if_stmt) != then_node ||
 			nir_if_last_else_node(if_stmt) != else_node)
-		return true;
+		return false;
 
 	nir_block *then_block = nir_cf_node_as_block(then_node);
 	nir_block *else_block = nir_cf_node_as_block(else_node);
@@ -246,11 +238,11 @@ lower_if_else_block(nir_block *block, void *void_state)
 	/* ... and those blocks must only contain "allowed" instructions. */
 	if (!block_check_for_allowed_instrs(then_block) ||
 			!block_check_for_allowed_instrs(else_block))
-		return true;
+		return false;
 
 	/* condition should be ssa too, which simplifies flatten_block: */
 	if (!if_stmt->condition.is_ssa)
-		return true;
+		return false;
 
 	/* At this point, we know that the previous CFG node is an if-then
 	 * statement containing only moves to phi nodes in this block.  We can
@@ -265,32 +257,32 @@ lower_if_else_block(nir_block *block, void *void_state)
 	 * block before.  There are a few things that need handling specially
 	 * like discard/discard_if.
 	 */
-	flatten_block(&state->b, then_block, prev_block,
+	flatten_block(b, then_block, prev_block,
 			if_stmt->condition.ssa, false);
-	flatten_block(&state->b, else_block, prev_block,
+	flatten_block(b, else_block, prev_block,
 			if_stmt->condition.ssa, true);
 
-	nir_foreach_instr_safe(block, instr) {
+	nir_foreach_instr_safe(instr, block) {
 		if (instr->type != nir_instr_type_phi)
 			break;
 
 		nir_phi_instr *phi = nir_instr_as_phi(instr);
-		nir_alu_instr *sel = nir_alu_instr_create(state->mem_ctx, nir_op_bcsel);
-		nir_src_copy(&sel->src[0].src, &if_stmt->condition, state->mem_ctx);
+		nir_alu_instr *sel = nir_alu_instr_create(mem_ctx, nir_op_bcsel);
+		nir_src_copy(&sel->src[0].src, &if_stmt->condition, mem_ctx);
 		/* Splat the condition to all channels */
 		memset(sel->src[0].swizzle, 0, sizeof sel->src[0].swizzle);
 
 		assert(exec_list_length(&phi->srcs) == 2);
-		nir_foreach_phi_src(phi, src) {
+		nir_foreach_phi_src(src, phi) {
 			assert(src->pred == then_block || src->pred == else_block);
 			assert(src->src.is_ssa);
 
 			unsigned idx = src->pred == then_block ? 1 : 2;
-			nir_src_copy(&sel->src[idx].src, &src->src, state->mem_ctx);
+			nir_src_copy(&sel->src[idx].src, &src->src, mem_ctx);
 		}
 
 		nir_ssa_dest_init(&sel->instr, &sel->dest.dest,
-				phi->dest.ssa.num_components, phi->dest.ssa.name);
+				phi->dest.ssa.num_components, 32, phi->dest.ssa.name);
 		sel->dest.write_mask = (1 << phi->dest.ssa.num_components) - 1;
 
 		nir_ssa_def_rewrite_uses(&phi->dest.ssa,
@@ -301,26 +293,25 @@ lower_if_else_block(nir_block *block, void *void_state)
 	}
 
 	nir_cf_node_remove(&if_stmt->cf_node);
-	state->progress = true;
-
 	return true;
 }
 
 static bool
 lower_if_else_impl(nir_function_impl *impl)
 {
-	struct lower_state state;
+	void *mem_ctx = ralloc_parent(impl);
+	nir_builder b;
+	nir_builder_init(&b, impl);
 
-	state.mem_ctx = ralloc_parent(impl);
-	state.progress = false;
-	nir_builder_init(&state.b, impl);
+	bool progress = false;
+	nir_foreach_block_safe(block, impl) {
+		progress |= lower_if_else_block(block, &b, mem_ctx);
+	}
 
-	nir_foreach_block(impl, lower_if_else_block, &state);
-
-	if (state.progress)
+	if (progress)
 		nir_metadata_preserve(impl, nir_metadata_none);
 
-	return state.progress;
+	return progress;
 }
 
 bool
@@ -328,7 +319,7 @@ ir3_nir_lower_if_else(nir_shader *shader)
 {
 	bool progress = false;
 
-	nir_foreach_function(shader, function) {
+	nir_foreach_function(function, shader) {
 		if (function->impl)
 			progress |= lower_if_else_impl(function->impl);
 	}

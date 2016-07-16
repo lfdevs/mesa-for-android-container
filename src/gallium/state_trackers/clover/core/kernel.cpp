@@ -89,6 +89,8 @@ kernel::launch(command_queue &q,
                              exec.sviews.size(), NULL);
    q.pipe->bind_sampler_states(q.pipe, PIPE_SHADER_COMPUTE, 0,
                                exec.samplers.size(), NULL);
+
+   q.pipe->memory_barrier(q.pipe, PIPE_BARRIER_GLOBAL_BUFFER);
    exec.unbind();
 }
 
@@ -177,7 +179,7 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
          break;
       }
       case module::argument::grid_offset: {
-         for (cl_uint x : pad_vector(*q, grid_offset, 1)) {
+         for (cl_uint x : pad_vector(*q, grid_offset, 0)) {
             auto arg = argument::create(marg);
 
             arg->set(sizeof(x), &x);
@@ -223,6 +225,7 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
       if (st)
          _q->pipe->delete_compute_state(_q->pipe, st);
 
+      cs.ir_type = q->device().ir_format();
       cs.prog = &(msec.data[0]);
       cs.req_local_mem = mem_local;
       cs.req_input_mem = input.size();

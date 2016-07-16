@@ -52,16 +52,24 @@
 #define SVGA_QUERY_MAP_BUFFER_TIME         (PIPE_QUERY_DRIVER_SPECIFIC + 4)
 #define SVGA_QUERY_NUM_RESOURCES_MAPPED    (PIPE_QUERY_DRIVER_SPECIFIC + 5)
 #define SVGA_QUERY_NUM_BYTES_UPLOADED      (PIPE_QUERY_DRIVER_SPECIFIC + 6)
+#define SVGA_QUERY_COMMAND_BUFFER_SIZE     (PIPE_QUERY_DRIVER_SPECIFIC + 7)
+#define SVGA_QUERY_FLUSH_TIME              (PIPE_QUERY_DRIVER_SPECIFIC + 8)
+#define SVGA_QUERY_SURFACE_WRITE_FLUSHES   (PIPE_QUERY_DRIVER_SPECIFIC + 9)
+#define SVGA_QUERY_NUM_READBACKS           (PIPE_QUERY_DRIVER_SPECIFIC + 10)
+#define SVGA_QUERY_NUM_RESOURCE_UPDATES    (PIPE_QUERY_DRIVER_SPECIFIC + 11)
+#define SVGA_QUERY_NUM_BUFFER_UPLOADS      (PIPE_QUERY_DRIVER_SPECIFIC + 12)
+#define SVGA_QUERY_NUM_CONST_BUF_UPDATES   (PIPE_QUERY_DRIVER_SPECIFIC + 13)
+#define SVGA_QUERY_NUM_CONST_UPDATES       (PIPE_QUERY_DRIVER_SPECIFIC + 14)
 
 /* running total counters */
-#define SVGA_QUERY_MEMORY_USED             (PIPE_QUERY_DRIVER_SPECIFIC + 7)
-#define SVGA_QUERY_NUM_SHADERS             (PIPE_QUERY_DRIVER_SPECIFIC + 8)
-#define SVGA_QUERY_NUM_RESOURCES           (PIPE_QUERY_DRIVER_SPECIFIC + 9)
-#define SVGA_QUERY_NUM_STATE_OBJECTS       (PIPE_QUERY_DRIVER_SPECIFIC + 10)
-#define SVGA_QUERY_NUM_SURFACE_VIEWS       (PIPE_QUERY_DRIVER_SPECIFIC + 11)
-#define SVGA_QUERY_NUM_GENERATE_MIPMAP     (PIPE_QUERY_DRIVER_SPECIFIC + 12)
+#define SVGA_QUERY_MEMORY_USED             (PIPE_QUERY_DRIVER_SPECIFIC + 15)
+#define SVGA_QUERY_NUM_SHADERS             (PIPE_QUERY_DRIVER_SPECIFIC + 16)
+#define SVGA_QUERY_NUM_RESOURCES           (PIPE_QUERY_DRIVER_SPECIFIC + 17)
+#define SVGA_QUERY_NUM_STATE_OBJECTS       (PIPE_QUERY_DRIVER_SPECIFIC + 18)
+#define SVGA_QUERY_NUM_SURFACE_VIEWS       (PIPE_QUERY_DRIVER_SPECIFIC + 19)
+#define SVGA_QUERY_NUM_GENERATE_MIPMAP     (PIPE_QUERY_DRIVER_SPECIFIC + 20)
 /*SVGA_QUERY_MAX has to be last because it is size of an array*/
-#define SVGA_QUERY_MAX                     (PIPE_QUERY_DRIVER_SPECIFIC + 13)
+#define SVGA_QUERY_MAX                     (PIPE_QUERY_DRIVER_SPECIFIC + 21)
 
 /**
  * Maximum supported number of constant buffers per shader
@@ -283,6 +291,8 @@ struct svga_state
    struct {
       unsigned flag_1d;
       unsigned flag_srgb;
+      unsigned flag_rect;  /* sampler views with rectangular texture target */
+      unsigned flag_buf;   /* sampler views with texture buffer target */
    } tex_flags;
 
    unsigned sample_mask;
@@ -496,17 +506,33 @@ struct svga_context
 
    /** performance / info queries for HUD */
    struct {
-      uint64_t num_draw_calls;       /**< SVGA_QUERY_DRAW_CALLS */
-      uint64_t num_fallbacks;        /**< SVGA_QUERY_NUM_FALLBACKS */
-      uint64_t num_flushes;          /**< SVGA_QUERY_NUM_FLUSHES */
-      uint64_t num_validations;      /**< SVGA_QUERY_NUM_VALIDATIONS */
-      uint64_t map_buffer_time;      /**< SVGA_QUERY_MAP_BUFFER_TIME */
-      uint64_t num_resources_mapped; /**< SVGA_QUERY_NUM_RESOURCES_MAPPED */
-      uint64_t num_shaders;          /**< SVGA_QUERY_NUM_SHADERS */
-      uint64_t num_state_objects;    /**< SVGA_QUERY_NUM_STATE_OBJECTS */
-      uint64_t num_surface_views;    /**< SVGA_QUERY_NUM_SURFACE_VIEWS */
-      uint64_t num_bytes_uploaded;   /**< SVGA_QUERY_NUM_BYTES_UPLOADED */
-      uint64_t num_generate_mipmap;  /**< SVGA_QUERY_NUM_GENERATE_MIPMAP */
+      uint64_t num_draw_calls;          /**< SVGA_QUERY_DRAW_CALLS */
+      uint64_t num_fallbacks;           /**< SVGA_QUERY_NUM_FALLBACKS */
+      uint64_t num_flushes;             /**< SVGA_QUERY_NUM_FLUSHES */
+      uint64_t num_validations;         /**< SVGA_QUERY_NUM_VALIDATIONS */
+      uint64_t map_buffer_time;         /**< SVGA_QUERY_MAP_BUFFER_TIME */
+      uint64_t num_resources_mapped;    /**< SVGA_QUERY_NUM_RESOURCES_MAPPED */
+      uint64_t command_buffer_size;     /**< SVGA_QUERY_COMMAND_BUFFER_SIZE */
+      uint64_t flush_time;              /**< SVGA_QUERY_FLUSH_TIME */
+      uint64_t surface_write_flushes;   /**< SVGA_QUERY_SURFACE_WRITE_FLUSHES */
+      uint64_t num_readbacks;           /**< SVGA_QUERY_NUM_READBACKS */
+      uint64_t num_resource_updates;    /**< SVGA_QUERY_NUM_RESOURCE_UPDATES */
+      uint64_t num_buffer_uploads;      /**< SVGA_QUERY_NUM_BUFFER_UPLOADS */
+      uint64_t num_const_buf_updates;   /**< SVGA_QUERY_NUM_CONST_BUF_UPDATES */
+      uint64_t num_const_updates;       /**< SVGA_QUERY_NUM_CONST_UPDATES */
+      uint64_t num_shaders;             /**< SVGA_QUERY_NUM_SHADERS */
+
+      /** The following are summed for SVGA_QUERY_NUM_STATE_OBJECTS */
+      uint64_t num_blend_objects;
+      uint64_t num_depthstencil_objects;
+      uint64_t num_rasterizer_objects;
+      uint64_t num_sampler_objects;
+      uint64_t num_samplerview_objects;
+      uint64_t num_vertexelement_objects;
+
+      uint64_t num_surface_views;       /**< SVGA_QUERY_NUM_SURFACE_VIEWS */
+      uint64_t num_bytes_uploaded;      /**< SVGA_QUERY_NUM_BYTES_UPLOADED */
+      uint64_t num_generate_mipmap;     /**< SVGA_QUERY_NUM_GENERATE_MIPMAP */
    } hud;
 
    /** The currently bound stream output targets */
@@ -562,6 +588,7 @@ struct svga_context
 #define SVGA_NEW_GS                  0x10000000
 #define SVGA_NEW_GS_CONST_BUFFER     0x20000000
 #define SVGA_NEW_GS_VARIANT          0x40000000
+#define SVGA_NEW_TEXTURE_CONSTS      0x80000000
 
 
 

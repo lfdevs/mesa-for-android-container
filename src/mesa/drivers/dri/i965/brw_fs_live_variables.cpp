@@ -123,19 +123,8 @@ fs_live_variables::setup_def_use()
                reg.reg_offset++;
             }
 	 }
-         if (inst->reads_flag()) {
-            /* The vertical combination predicates read f0.0 and f0.1. */
-            if (inst->predicate == BRW_PREDICATE_ALIGN1_ANYV ||
-                inst->predicate == BRW_PREDICATE_ALIGN1_ALLV) {
-               assert(inst->flag_subreg == 0);
-               if (!BITSET_TEST(bd->flag_def, 1)) {
-                  BITSET_SET(bd->flag_use, 1);
-               }
-            }
-            if (!BITSET_TEST(bd->flag_def, inst->flag_subreg)) {
-               BITSET_SET(bd->flag_use, inst->flag_subreg);
-            }
-         }
+
+         bd->flag_use[0] |= inst->flags_read(v->devinfo) & ~bd->flag_def[0];
 
          /* Set def[] for this instruction */
          if (inst->dst.file == VGRF) {
@@ -145,11 +134,9 @@ fs_live_variables::setup_def_use()
                reg.reg_offset++;
             }
 	 }
-         if (inst->writes_flag()) {
-            if (!BITSET_TEST(bd->flag_use, inst->flag_subreg)) {
-               BITSET_SET(bd->flag_def, inst->flag_subreg);
-            }
-         }
+
+         if (!inst->predicate && inst->exec_size >= 8)
+            bd->flag_def[0] |= inst->flags_written() & ~bd->flag_use[0];
 
 	 ip++;
       }

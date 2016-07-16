@@ -534,7 +534,7 @@ swrast_put_image2(__DRIdrawable *driDrawable,
       return;
 
    bo = gbm_dri_bo(dri2_surf->current->bo);
-   if (gbm_dri_bo_map(bo) == NULL)
+   if (gbm_dri_bo_map_dumb(bo) == NULL)
       return;
 
    internal_stride = bo->base.base.stride;
@@ -544,7 +544,7 @@ swrast_put_image2(__DRIdrawable *driDrawable,
              data + i * stride, stride);
    }
 
-   gbm_dri_bo_unmap(bo);
+   gbm_dri_bo_unmap_dumb(bo);
 }
 
 static void
@@ -564,7 +564,7 @@ swrast_get_image(__DRIdrawable *driDrawable,
       return;
 
    bo = gbm_dri_bo(dri2_surf->current->bo);
-   if (gbm_dri_bo_map(bo) == NULL)
+   if (gbm_dri_bo_map_dumb(bo) == NULL)
       return;
 
    internal_stride = bo->base.base.stride;
@@ -575,7 +575,7 @@ swrast_get_image(__DRIdrawable *driDrawable,
              bo->map + (x + i) * internal_stride + y, stride);
    }
 
-   gbm_dri_bo_unmap(bo);
+   gbm_dri_bo_unmap_dumb(bo);
 }
 
 static struct dri2_egl_display_vtbl dri2_drm_display_vtbl = {

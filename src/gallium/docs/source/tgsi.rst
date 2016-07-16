@@ -2095,7 +2095,7 @@ after lookup.
 .. opcode:: SAMPLE
 
   Using provided address, sample data from the specified texture using the
-  filtering mode identified by the gven sampler. The source data may come from
+  filtering mode identified by the given sampler. The source data may come from
   any resource type other than buffers.
 
   Syntax: ``SAMPLE dst, address, sampler_view, sampler``
@@ -2287,6 +2287,9 @@ Resource Access Opcodes
                buffers and 1D textures.  address.z is ignored for 1D
                texture arrays and 2D textures.  address.w is always
                ignored.
+
+               A swizzle suffix may be added to the resource argument
+               this will cause the resource data to be swizzled accordingly.
 
 .. opcode:: STORE - Write data to a shader resource
 
@@ -2710,7 +2713,7 @@ TGSI_SEMANTIC_COLOR
 """""""""""""""""""
 
 For vertex shader outputs or fragment shader inputs/outputs, this
-label indicates that the resister contains an R,G,B,A color.
+label indicates that the register contains an R,G,B,A color.
 
 Several shader inputs/outputs may contain colors so the semantic index
 is used to distinguish them.  For example, color[0] may be the diffuse
@@ -2873,18 +2876,32 @@ annotated with those semantics.
 TGSI_SEMANTIC_CLIPDIST
 """"""""""""""""""""""
 
+Note this covers clipping and culling distances.
+
 When components of vertex elements are identified this way, these
 values are each assumed to be a float32 signed distance to a plane.
+
+For clip distances:
 Primitive setup only invokes rasterization on pixels for which
-the interpolated plane distances are >= 0. Multiple clip planes
-can be implemented simultaneously, by annotating multiple
-components of one or more vertex elements with the above specified
-semantic. The limits on both clip and cull distances are bound
+the interpolated plane distances are >= 0.
+
+For cull distances:
+Primitives will be completely discarded if the plane distance
+for all of the vertices in the primitive are < 0.
+If a vertex has a cull distance of NaN, that vertex counts as "out"
+(as if its < 0);
+
+Multiple clip/cull planes can be implemented simultaneously, by
+annotating multiple components of one or more vertex elements with
+the above specified semantic.
+The limits on both clip and cull distances are bound
 by the PIPE_MAX_CLIP_OR_CULL_DISTANCE_COUNT define which defines
 the maximum number of components that can be used to hold the
 distances and by the PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT
 which specifies the maximum number of registers which can be
 annotated with those semantics.
+The properties NUM_CLIPDIST_ENABLED and NUM_CULLDIST_ENABLED
+are used to divide up the 2 x vec4 space between clipping and culling.
 
 TGSI_SEMANTIC_SAMPLEID
 """"""""""""""""""""""
@@ -3206,6 +3223,26 @@ NUM_CULLDIST_ENABLED
 
 How many cull distance scalar outputs are enabled.
 
+FS_EARLY_DEPTH_STENCIL
+""""""""""""""""""""""
+
+Whether depth test, stencil test, and occlusion query should run before
+the fragment shader (regardless of fragment shader side effects). Corresponds
+to GLSL early_fragment_tests.
+
+NEXT_SHADER
+"""""""""""
+
+Which shader stage will MOST LIKELY follow after this shader when the shader
+is bound. This is only a hint to the driver and doesn't have to be precise.
+Only set for VS and TES.
+
+TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH / HEIGHT / DEPTH
+"""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Threads per block in each dimension, if known at compile time. If the block size
+is known all three should be at least 1. If it is unknown they should all be set
+to 0 or not set.
 
 Texture Sampling and Texture Formats
 ------------------------------------

@@ -53,6 +53,8 @@ struct nine_shader_info
 
     boolean position_t; /* out, true if VP writes pre-transformed position */
     boolean point_size; /* out, true if VP writes point size */
+    float point_size_min;
+    float point_size_max;
 
     uint32_t sampler_ps1xtypes; /* 2 bits per sampler */
     uint16_t sampler_mask; /* out, which samplers are being used */
@@ -103,11 +105,11 @@ struct nine_shader_variant
 {
     struct nine_shader_variant *next;
     void *cso;
-    uint32_t key;
+    uint64_t key;
 };
 
 static inline void *
-nine_shader_variant_get(struct nine_shader_variant *list, uint32_t key)
+nine_shader_variant_get(struct nine_shader_variant *list, uint64_t key)
 {
     while (list->key != key && list->next)
         list = list->next;
@@ -118,7 +120,7 @@ nine_shader_variant_get(struct nine_shader_variant *list, uint32_t key)
 
 static inline boolean
 nine_shader_variant_add(struct nine_shader_variant *list,
-                        uint32_t key, void *cso)
+                          uint64_t key, void *cso)
 {
     while (list->next) {
         assert(list->key != key);
@@ -138,50 +140,6 @@ nine_shader_variants_free(struct nine_shader_variant *list)
 {
     while (list->next) {
         struct nine_shader_variant *ptr = list->next;
-        list->next = ptr->next;
-        FREE(ptr);
-    }
-}
-
-struct nine_shader_variant64
-{
-    struct nine_shader_variant64 *next;
-    void *cso;
-    uint64_t key;
-};
-
-static inline void *
-nine_shader_variant_get64(struct nine_shader_variant64 *list, uint64_t key)
-{
-    while (list->key != key && list->next)
-        list = list->next;
-    if (list->key == key)
-        return list->cso;
-    return NULL;
-}
-
-static inline boolean
-nine_shader_variant_add64(struct nine_shader_variant64 *list,
-                          uint64_t key, void *cso)
-{
-    while (list->next) {
-        assert(list->key != key);
-        list = list->next;
-    }
-    list->next = MALLOC_STRUCT(nine_shader_variant64);
-    if (!list->next)
-        return FALSE;
-    list->next->next = NULL;
-    list->next->key = key;
-    list->next->cso = cso;
-    return TRUE;
-}
-
-static inline void
-nine_shader_variants_free64(struct nine_shader_variant64 *list)
-{
-    while (list->next) {
-        struct nine_shader_variant64 *ptr = list->next;
         list->next = ptr->next;
         FREE(ptr);
     }

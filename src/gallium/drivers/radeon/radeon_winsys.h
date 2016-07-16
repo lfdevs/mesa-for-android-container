@@ -26,24 +26,10 @@
 
 /* The public winsys interface header for the radeon driver. */
 
-/* R300 features in DRM.
- *
- * 2.6.0:
- * - Hyper-Z
- * - GB_Z_PEQ_CONFIG on rv350->r4xx
- * - R500 FG_ALPHA_VALUE
- *
- * 2.8.0:
- * - R500 US_FORMAT regs
- * - R500 ARGB2101010 colorbuffer
- * - CMask and AA regs
- * - R16F/RG16F
- */
-
 #include "pipebuffer/pb_buffer.h"
 
 #define RADEON_FLUSH_ASYNC		(1 << 0)
-#define RADEON_FLUSH_KEEP_TILING_FLAGS	(1 << 1) /* needs DRM 2.12.0 */
+#define RADEON_FLUSH_KEEP_TILING_FLAGS	(1 << 1)
 #define RADEON_FLUSH_END_OF_FRAME       (1 << 2)
 
 /* Tiling flags. */
@@ -138,6 +124,8 @@ enum radeon_family {
     CHIP_CARRIZO,
     CHIP_FIJI,
     CHIP_STONEY,
+    CHIP_POLARIS10,
+    CHIP_POLARIS11,
     CHIP_LAST,
 };
 
@@ -241,20 +229,28 @@ struct radeon_winsys_cs {
     unsigned                    cdw;  /* Number of used dwords. */
     unsigned                    max_dw; /* Maximum number of dwords. */
     uint32_t                    *buf; /* The command buffer. */
-    enum ring_type              ring_type;
 };
 
 struct radeon_info {
+    /* PCI info: domain:bus:dev:func */
+    uint32_t                    pci_domain;
+    uint32_t                    pci_bus;
+    uint32_t                    pci_dev;
+    uint32_t                    pci_func;
+
     /* Device info. */
     uint32_t                    pci_id;
     enum radeon_family          family;
     enum chip_class             chip_class;
+    uint32_t                    gart_page_size;
     uint64_t                    gart_size;
     uint64_t                    vram_size;
+    bool                        has_dedicated_vram;
     boolean                     has_virtual_memory;
     bool                        gfx_ib_pad_with_type2;
     boolean                     has_sdma;
     boolean                     has_uvd;
+    uint32_t                    uvd_fw_version;
     uint32_t                    vce_fw_version;
     uint32_t                    vce_harvest_config;
     uint32_t                    clock_crystal_freq;
@@ -284,10 +280,32 @@ struct radeon_info {
     uint32_t                    enabled_rb_mask; /* GCN harvest config */
 
     /* Tile modes. */
-    boolean                     si_tile_mode_array_valid;
     uint32_t                    si_tile_mode_array[32];
-    boolean                     cik_macrotile_mode_array_valid;
     uint32_t                    cik_macrotile_mode_array[16];
+};
+
+/* Tiling info for display code, DRI sharing, and other data. */
+struct radeon_bo_metadata {
+    /* Tiling flags describing the texture layout for display code
+     * and DRI sharing.
+     */
+    enum radeon_bo_layout   microtile;
+    enum radeon_bo_layout   macrotile;
+    unsigned                pipe_config;
+    unsigned                bankw;
+    unsigned                bankh;
+    unsigned                tile_split;
+    unsigned                mtilea;
+    unsigned                num_banks;
+    unsigned                stride;
+    bool                    scanout;
+
+    /* Additional metadata associated with the buffer, in bytes.
+     * The maximum size is 64 * 4. This is opaque for the winsys & kernel.
+     * Supported by amdgpu only.
+     */
+    uint32_t                size_metadata;
+    uint32_t                metadata[64];
 };
 
 enum radeon_feature_id {
@@ -307,7 +325,6 @@ enum radeon_feature_id {
 #define     RADEON_SURF_TYPE_2D_ARRAY               5
 #define RADEON_SURF_MODE_MASK                   0xFF
 #define RADEON_SURF_MODE_SHIFT                  8
-#define     RADEON_SURF_MODE_LINEAR                 0
 #define     RADEON_SURF_MODE_LINEAR_ALIGNED         1
 #define     RADEON_SURF_MODE_1D                     2
 #define     RADEON_SURF_MODE_2D                     3
@@ -318,6 +335,7 @@ enum radeon_feature_id {
 #define RADEON_SURF_HAS_SBUFFER_MIPTREE         (1 << 19)
 #define RADEON_SURF_HAS_TILE_MODE_INDEX         (1 << 20)
 #define RADEON_SURF_FMASK                       (1 << 21)
+#define RADEON_SURF_DISABLE_DCC                 (1 << 22)
 
 #define RADEON_SURF_GET(v, field)   (((v) >> RADEON_SURF_ ## field ## _SHIFT) & RADEON_SURF_ ## field ## _MASK)
 #define RADEON_SURF_SET(v, field)   (((v) & RADEON_SURF_ ## field ## _MASK) << RADEON_SURF_ ## field ## _SHIFT)
@@ -370,6 +388,7 @@ struct radeon_surf {
     uint32_t                    stencil_tiling_index[RADEON_SURF_MAX_LEVEL];
     uint32_t                    pipe_config;
     uint32_t                    num_banks;
+    uint32_t                    macro_tile_index;
 
     uint64_t                    dcc_size;
     uint64_t                    dcc_alignment;
@@ -430,9 +449,8 @@ struct radeon_winsys {
      * \return          The created buffer object.
      */
     struct pb_buffer *(*buffer_create)(struct radeon_winsys *ws,
-                                       unsigned size,
+                                       uint64_t size,
                                        unsigned alignment,
-                                       boolean use_reusable_pool,
                                        enum radeon_bo_domain domain,
                                        enum radeon_bo_flag flags);
 
@@ -468,45 +486,24 @@ struct radeon_winsys {
                         enum radeon_bo_usage usage);
 
     /**
-     * Return tiling flags describing a memory layout of a buffer object.
+     * Return buffer metadata.
+     * (tiling info for display code, DRI sharing, and other data)
      *
      * \param buf       A winsys buffer object to get the flags from.
-     * \param macrotile A pointer to the return value of the microtile flag.
-     * \param microtile A pointer to the return value of the macrotile flag.
-     *
-     * \note microtile and macrotile are not bitmasks!
+     * \param md        Metadata
      */
-    void (*buffer_get_tiling)(struct pb_buffer *buf,
-                              enum radeon_bo_layout *microtile,
-                              enum radeon_bo_layout *macrotile,
-                              unsigned *bankw, unsigned *bankh,
-                              unsigned *tile_split,
-                              unsigned *stencil_tile_split,
-                              unsigned *mtilea,
-                              bool *scanout);
+    void (*buffer_get_metadata)(struct pb_buffer *buf,
+                                struct radeon_bo_metadata *md);
 
     /**
-     * Set tiling flags describing a memory layout of a buffer object.
+     * Set buffer metadata.
+     * (tiling info for display code, DRI sharing, and other data)
      *
      * \param buf       A winsys buffer object to set the flags for.
-     * \param cs        A command stream to flush if the buffer is referenced by it.
-     * \param macrotile A macrotile flag.
-     * \param microtile A microtile flag.
-     * \param stride    A stride of the buffer in bytes, for texturing.
-     *
-     * \note microtile and macrotile are not bitmasks!
+     * \param md        Metadata
      */
-    void (*buffer_set_tiling)(struct pb_buffer *buf,
-                              struct radeon_winsys_cs *rcs,
-                              enum radeon_bo_layout microtile,
-                              enum radeon_bo_layout macrotile,
-                              unsigned pipe_config,
-                              unsigned bankw, unsigned bankh,
-                              unsigned tile_split,
-                              unsigned stencil_tile_split,
-                              unsigned mtilea, unsigned num_banks,
-                              unsigned stride,
-                              bool scanout);
+    void (*buffer_set_metadata)(struct pb_buffer *buf,
+                                struct radeon_bo_metadata *md);
 
     /**
      * Get a winsys buffer from a winsys handle. The internal structure
@@ -519,7 +516,7 @@ struct radeon_winsys {
      */
     struct pb_buffer *(*buffer_from_handle)(struct radeon_winsys *ws,
                                             struct winsys_handle *whandle,
-                                            unsigned *stride);
+                                            unsigned *stride, unsigned *offset);
 
     /**
      * Get a winsys buffer from a user pointer. The resulting buffer can't
@@ -530,7 +527,7 @@ struct radeon_winsys {
      * \param Size      Size in bytes for the new buffer.
      */
     struct pb_buffer *(*buffer_from_ptr)(struct radeon_winsys *ws,
-                                         void *pointer, unsigned size);
+                                         void *pointer, uint64_t size);
 
     /**
      * Whether the buffer was created from a user pointer.
@@ -550,7 +547,8 @@ struct radeon_winsys {
      * \return          TRUE on success.
      */
     boolean (*buffer_get_handle)(struct pb_buffer *buf,
-                                 unsigned stride,
+                                 unsigned stride, unsigned offset,
+                                 unsigned slice_size,
                                  struct winsys_handle *whandle);
 
     /**
@@ -596,15 +594,43 @@ struct radeon_winsys {
      * \param ring_type The ring type (GFX, DMA, UVD)
      * \param flush     Flush callback function associated with the command stream.
      * \param user      User pointer that will be passed to the flush callback.
-     * \param trace_buf Trace buffer when tracing is enabled
      */
     struct radeon_winsys_cs *(*cs_create)(struct radeon_winsys_ctx *ctx,
                                           enum ring_type ring_type,
                                           void (*flush)(void *ctx, unsigned flags,
 							struct pipe_fence_handle **fence),
-                                          void *flush_ctx,
-                                          struct pb_buffer *trace_buf);
+                                          void *flush_ctx);
 
+    /**
+     * Add a constant engine IB to a graphics CS. This makes the graphics CS
+     * from "cs_create" a group of two IBs that share a buffer list and are
+     * flushed together.
+     *
+     * The returned constant CS is only a stream for writing packets to the new
+     * IB. Calling other winsys functions with it is not allowed, not even
+     * "cs_destroy".
+     *
+     * In order to add buffers and check memory usage, use the graphics CS.
+     * In order to flush it, use the graphics CS, which will flush both IBs.
+     * Destroying the graphics CS will destroy both of them.
+     *
+     * \param cs  The graphics CS from "cs_create" that will hold the buffer
+     *            list and will be used for flushing.
+     */
+    struct radeon_winsys_cs *(*cs_add_const_ib)(struct radeon_winsys_cs *cs);
+
+     /**
+     * Add a constant engine preamble IB to a graphics CS. This add an extra IB
+     * in similar manner to cs_add_const_ib. This should always be called after
+     * cs_add_const_ib.
+     *
+     * The returned IB is a constant engine IB that only gets flushed if the
+     * context changed.
+     *
+     * \param cs  The graphics CS from "cs_create" that will hold the buffer
+     *            list and will be used for flushing.
+     */
+    struct radeon_winsys_cs *(*cs_add_const_preamble_ib)(struct radeon_winsys_cs *cs);
     /**
      * Destroy a command stream.
      *
@@ -659,6 +685,8 @@ struct radeon_winsys {
      */
     boolean (*cs_memory_below_limit)(struct radeon_winsys_cs *cs, uint64_t vram, uint64_t gtt);
 
+    uint64_t (*cs_query_memory_usage)(struct radeon_winsys_cs *cs);
+
     /**
      * Return the buffer list.
      *
@@ -676,12 +704,10 @@ struct radeon_winsys {
      * \param flags,      RADEON_FLUSH_ASYNC or 0.
      * \param fence       Pointer to a fence. If non-NULL, a fence is inserted
      *                    after the CS and is returned through this parameter.
-     * \param cs_trace_id A unique identifier of the cs, used for tracing.
      */
     void (*cs_flush)(struct radeon_winsys_cs *cs,
                      unsigned flags,
-                     struct pipe_fence_handle **fence,
-                     uint32_t cs_trace_id);
+                     struct pipe_fence_handle **fence);
 
     /**
      * Return TRUE if a buffer is referenced by a command stream.
@@ -751,6 +777,10 @@ struct radeon_winsys {
                            unsigned num_registers, uint32_t *out);
 };
 
+static inline bool radeon_emitted(struct radeon_winsys_cs *cs, unsigned num_dw)
+{
+    return cs && cs->cdw > num_dw;
+}
 
 static inline void radeon_emit(struct radeon_winsys_cs *cs, uint32_t value)
 {

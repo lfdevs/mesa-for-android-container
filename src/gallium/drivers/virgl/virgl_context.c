@@ -39,7 +39,6 @@
 #include "indices/u_primconvert.h"
 
 #include "pipebuffer/pb_buffer.h"
-#include "state_tracker/graw.h"
 
 #include "virgl_encode.h"
 #include "virgl_context.h"

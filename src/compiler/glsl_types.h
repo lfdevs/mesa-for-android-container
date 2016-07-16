@@ -327,6 +327,12 @@ struct glsl_type {
    unsigned uniform_locations() const;
 
    /**
+    * Used to count the number of varyings contained in the type ignoring
+    * innermost array elements.
+    */
+   unsigned varying_count() const;
+
+   /**
     * Calculate the number of attribute slots required to hold this type
     *
     * This implements the language rules of GLSL 1.50 for counting the number
@@ -338,7 +344,7 @@ struct glsl_type {
     * For vertex shader attributes - doubles only take one slot.
     * For inter-shader varyings - dvec3/dvec4 take two slots.
     */
-   unsigned count_attribute_slots(bool vertex_input_slots) const;
+   unsigned count_attribute_slots(bool is_vertex_input) const;
 
    /**
     * Alignment in bytes of the start of this type in a std140 uniform
@@ -734,8 +740,10 @@ struct glsl_type {
     * Compare a record type against another record type.
     *
     * This is useful for matching record types declared across shader stages.
+    * The option to not match locations is to deal with places where the
+    * same struct is defined in a block which has a location set on it.
     */
-   bool record_compare(const glsl_type *b) const;
+   bool record_compare(const glsl_type *b, bool match_locations = true) const;
 
 private:
 
@@ -838,6 +846,26 @@ struct glsl_struct_field {
    int location;
 
    /**
+    * For interface blocks, members may have an explicit byte offset
+    * specified; -1 otherwise. Also used for xfb_offset layout qualifier.
+    *
+    * Unless used for xfb_offset this field is ignored for structs.
+    */
+   int offset;
+
+   /**
+    * For interface blocks, members may define a transform feedback buffer;
+    * -1 otherwise.
+    */
+   int xfb_buffer;
+
+   /**
+    * For interface blocks, members may define a transform feedback stride;
+    * -1 otherwise.
+    */
+   int xfb_stride;
+
+   /**
     * For interface blocks, the interpolation mode (as in
     * ir_variable::interpolation).  0 otherwise.
     */
@@ -881,6 +909,14 @@ struct glsl_struct_field {
    unsigned image_volatile:1;
    unsigned image_restrict:1;
 
+   /**
+    * Any of the xfb_* qualifiers trigger the shader to be in transform
+    * feedback mode so we need to keep track of whether the buffer was
+    * explicitly set or if its just been assigned the default global value.
+    */
+   unsigned explicit_xfb_buffer:1;
+
+   unsigned implicit_sized_array:1;
 #ifdef __cplusplus
    glsl_struct_field(const struct glsl_type *_type, const char *_name)
       : type(_type), name(_name), location(-1), interpolation(0), centroid(0),

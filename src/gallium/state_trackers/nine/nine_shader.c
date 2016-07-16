@@ -411,12 +411,12 @@ sm1_dump_instruction(struct sm1_instruction *insn, unsigned indent)
         DUMP("_co");
     DUMP(" ");
 
-    for (i = 0; i < insn->ndst && i < Elements(insn->dst); ++i) {
+    for (i = 0; i < insn->ndst && i < ARRAY_SIZE(insn->dst); ++i) {
         sm1_dump_dst_param(&insn->dst[i]);
         DUMP(" ");
     }
 
-    for (i = 0; i < insn->nsrc && i < Elements(insn->src); ++i) {
+    for (i = 0; i < insn->nsrc && i < ARRAY_SIZE(insn->src); ++i) {
         sm1_dump_src_param(&insn->src[i]);
         DUMP(" ");
     }
@@ -452,7 +452,7 @@ struct shader_translator
         BYTE major;
         BYTE minor;
     } version;
-    unsigned processor; /* TGSI_PROCESSOR_VERTEX/FRAMGENT */
+    unsigned processor; /* PIPE_SHADER_VERTEX/FRAMGENT */
     unsigned num_constf_allowed;
     unsigned num_consti_allowed;
     unsigned num_constb_allowed;
@@ -490,7 +490,7 @@ struct shader_translator
         struct ureg_src vT[8]; /* PS texcoord in */
         struct ureg_dst rL[NINE_MAX_LOOP_DEPTH]; /* loop ctr */
     } regs;
-    unsigned num_temp; /* Elements(regs.r) */
+    unsigned num_temp; /* ARRAY_SIZE(regs.r) */
     unsigned num_scratch;
     unsigned loop_depth;
     unsigned loop_depth_max;
@@ -517,8 +517,8 @@ struct shader_translator
     int16_t op_info_map[D3DSIO_BREAKP + 1];
 };
 
-#define IS_VS (tx->processor == TGSI_PROCESSOR_VERTEX)
-#define IS_PS (tx->processor == TGSI_PROCESSOR_FRAGMENT)
+#define IS_VS (tx->processor == PIPE_SHADER_VERTEX)
+#define IS_PS (tx->processor == PIPE_SHADER_FRAGMENT)
 
 #define FAILURE_VOID(cond) if ((cond)) {tx->failure=1;return;}
 
@@ -622,7 +622,7 @@ tx_set_lconstb(struct shader_translator *tx, INT index, BOOL b)
 static inline struct ureg_dst
 tx_scratch(struct shader_translator *tx)
 {
-    if (tx->num_scratch >= Elements(tx->regs.t)) {
+    if (tx->num_scratch >= ARRAY_SIZE(tx->regs.t)) {
         tx->failure = TRUE;
         return tx->regs.t[0];
     }
@@ -735,7 +735,7 @@ static inline void
 tx_texcoord_alloc(struct shader_translator *tx, INT idx)
 {
     assert(IS_PS);
-    assert(idx >= 0 && idx < Elements(tx->regs.vT));
+    assert(idx >= 0 && idx < ARRAY_SIZE(tx->regs.vT));
     if (ureg_src_is_undef(tx->regs.vT[idx]))
        tx->regs.vT[idx] = ureg_DECL_fs_input(tx->ureg, tx->texcoord_sn, idx,
                                              TGSI_INTERPOLATE_PERSPECTIVE);
@@ -895,7 +895,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
                     0, 1);
             } else {
                 assert(!param->rel); /* TODO */
-                assert(param->idx < Elements(tx->regs.v));
+                assert(param->idx < ARRAY_SIZE(tx->regs.v));
                 src = tx->regs.v[param->idx];
             }
         }
@@ -1149,8 +1149,7 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
             break;
         case 2:
             if (ureg_dst_is_undef(tx->regs.oPts))
-                tx->regs.oPts =
-                    ureg_saturate(ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_PSIZE, 0));
+                tx->regs.oPts = ureg_DECL_temporary(tx->ureg);
             dst = tx->regs.oPts;
             break;
         default:
@@ -1165,7 +1164,7 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
             dst = ureg_DECL_output(tx->ureg, tx->texcoord_sn, param->idx);
         } else {
             assert(!param->rel); /* TODO */
-            assert(param->idx < Elements(tx->regs.o));
+            assert(param->idx < ARRAY_SIZE(tx->regs.o));
             dst = tx->regs.o[param->idx];
         }
         break;
@@ -1262,7 +1261,7 @@ tx_dst_param_as_src(struct shader_translator *tx, const struct sm1_dst_param *pa
             src = ureg_src_register(TGSI_FILE_INPUT, param->idx);
         } else {
             assert(!param->rel);
-            assert(param->idx < Elements(tx->regs.v));
+            assert(param->idx < ARRAY_SIZE(tx->regs.v));
             src = tx->regs.v[param->idx];
         }
         break;
@@ -1437,7 +1436,7 @@ d3dsio_to_string( unsigned opcode )
         "BREAKP"
     };
 
-    if (opcode < Elements(names)) return names[opcode];
+    if (opcode < ARRAY_SIZE(names)) return names[opcode];
 
     switch (opcode) {
     case D3DSIO_PHASE: return "PHASE";
@@ -2030,7 +2029,7 @@ DECL_SPECIAL(DCL)
         if (is_input) {
             /* linkage outside of shader with vertex declaration */
             ureg_DECL_vs_input(ureg, sem.reg.idx);
-            assert(sem.reg.idx < Elements(tx->info->input_map));
+            assert(sem.reg.idx < ARRAY_SIZE(tx->info->input_map));
             tx->info->input_map[sem.reg.idx] = sm1_to_nine_declusage(&sem);
             tx->info->num_inputs = sem.reg.idx + 1;
             /* NOTE: preserving order in case of indirect access */
@@ -2040,20 +2039,31 @@ DECL_SPECIAL(DCL)
             assert(sem.reg.mask != 0);
             if (sem.usage == D3DDECLUSAGE_POSITIONT)
                 tx->info->position_t = TRUE;
-            assert(sem.reg.idx < Elements(tx->regs.o));
+            assert(sem.reg.idx < ARRAY_SIZE(tx->regs.o));
+            assert(ureg_dst_is_undef(tx->regs.o[sem.reg.idx]) && "Nine doesn't support yet packing");
             tx->regs.o[sem.reg.idx] = ureg_DECL_output_masked(
                 ureg, tgsi.Name, tgsi.Index, sem.reg.mask, 0, 1);
 
-            if (tgsi.Name == TGSI_SEMANTIC_PSIZE)
+            if (tgsi.Name == TGSI_SEMANTIC_PSIZE) {
+                tx->regs.o[sem.reg.idx] = ureg_DECL_temporary(ureg);
                 tx->regs.oPts = tx->regs.o[sem.reg.idx];
+            }
         }
     } else {
         if (is_input && tx->version.major >= 3) {
             unsigned interp_location = 0;
             /* SM3 only, SM2 input semantic determined by file */
-            assert(sem.reg.idx < Elements(tx->regs.v));
+            assert(sem.reg.idx < ARRAY_SIZE(tx->regs.v));
+            assert(ureg_src_is_undef(tx->regs.v[sem.reg.idx]) && "Nine doesn't support yet packing");
+            /* PositionT and tessfactor forbidden */
+            if (sem.usage == D3DDECLUSAGE_POSITIONT || sem.usage == D3DDECLUSAGE_TESSFACTOR)
+                return D3DERR_INVALIDCALL;
 
             if (tgsi.Name == TGSI_SEMANTIC_POSITION) {
+                /* Position0 is forbidden (likely because vPos already does that) */
+                if (sem.usage == D3DDECLUSAGE_POSITION)
+                    return D3DERR_INVALIDCALL;
+                /* Following code is for depth */
                 tx->regs.v[sem.reg.idx] = nine_get_position_input(tx);
                 return D3D_OK;
             }
@@ -2624,7 +2634,7 @@ DECL_SPECIAL(TEXLD)
         tx_src_param(tx, &tx->insn.src[1])
     };
     assert(tx->insn.src[1].idx >= 0 &&
-           tx->insn.src[1].idx < Elements(tx->sampler_targets));
+           tx->insn.src[1].idx < ARRAY_SIZE(tx->sampler_targets));
     target = tx->sampler_targets[tx->insn.src[1].idx];
 
     switch (tx->insn.flags) {
@@ -2688,7 +2698,7 @@ DECL_SPECIAL(TEXLDD)
         tx_src_param(tx, &tx->insn.src[3])
     };
     assert(tx->insn.src[1].idx >= 0 &&
-           tx->insn.src[1].idx < Elements(tx->sampler_targets));
+           tx->insn.src[1].idx < ARRAY_SIZE(tx->sampler_targets));
     target = tx->sampler_targets[tx->insn.src[1].idx];
 
     ureg_TXD(tx->ureg, dst, target, src[0], src[2], src[3], src[1]);
@@ -2704,7 +2714,7 @@ DECL_SPECIAL(TEXLDL)
        tx_src_param(tx, &tx->insn.src[1])
     };
     assert(tx->insn.src[1].idx >= 0 &&
-           tx->insn.src[1].idx < Elements(tx->sampler_targets));
+           tx->insn.src[1].idx < ARRAY_SIZE(tx->sampler_targets));
     target = tx->sampler_targets[tx->insn.src[1].idx];
 
     ureg_TXL(tx->ureg, dst, target, src[0], src[1]);
@@ -2854,19 +2864,19 @@ create_op_info_map(struct shader_translator *tx)
     const unsigned version = (tx->version.major << 8) | tx->version.minor;
     unsigned i;
 
-    for (i = 0; i < Elements(tx->op_info_map); ++i)
+    for (i = 0; i < ARRAY_SIZE(tx->op_info_map); ++i)
         tx->op_info_map[i] = -1;
 
-    if (tx->processor == TGSI_PROCESSOR_VERTEX) {
-        for (i = 0; i < Elements(inst_table); ++i) {
-            assert(inst_table[i].sio < Elements(tx->op_info_map));
+    if (tx->processor == PIPE_SHADER_VERTEX) {
+        for (i = 0; i < ARRAY_SIZE(inst_table); ++i) {
+            assert(inst_table[i].sio < ARRAY_SIZE(tx->op_info_map));
             if (inst_table[i].vert_version.min <= version &&
                 inst_table[i].vert_version.max >= version)
                 tx->op_info_map[inst_table[i].sio] = i;
         }
     } else {
-        for (i = 0; i < Elements(inst_table); ++i) {
-            assert(inst_table[i].sio < Elements(tx->op_info_map));
+        for (i = 0; i < ARRAY_SIZE(inst_table); ++i) {
+            assert(inst_table[i].sio < ARRAY_SIZE(tx->op_info_map));
             if (inst_table[i].frag_version.min <= version &&
                 inst_table[i].frag_version.max >= version)
                 tx->op_info_map[inst_table[i].sio] = i;
@@ -2881,9 +2891,9 @@ NineTranslateInstruction_Generic(struct shader_translator *tx)
     struct ureg_src src[4];
     unsigned i;
 
-    for (i = 0; i < tx->insn.ndst && i < Elements(dst); ++i)
+    for (i = 0; i < tx->insn.ndst && i < ARRAY_SIZE(dst); ++i)
         dst[i] = tx_dst_param(tx, &tx->insn.dst[i]);
-    for (i = 0; i < tx->insn.nsrc && i < Elements(src); ++i)
+    for (i = 0; i < tx->insn.nsrc && i < ARRAY_SIZE(src); ++i)
         src[i] = tx_src_param(tx, &tx->insn.src[i]);
 
     ureg_insn(tx->ureg, tx->insn.info->opcode,
@@ -2928,8 +2938,8 @@ sm1_read_version(struct shader_translator *tx)
     tx->version.minor = D3DSHADER_VERSION_MINOR(tok);
 
     switch (tok >> 16) {
-    case NINED3D_SM1_VS: tx->processor = TGSI_PROCESSOR_VERTEX; break;
-    case NINED3D_SM1_PS: tx->processor = TGSI_PROCESSOR_FRAGMENT; break;
+    case NINED3D_SM1_VS: tx->processor = PIPE_SHADER_VERTEX; break;
+    case NINED3D_SM1_PS: tx->processor = PIPE_SHADER_FRAGMENT; break;
     default:
        DBG("Invalid shader type: %x\n", tok);
        tx->processor = ~0;
@@ -2997,7 +3007,7 @@ sm1_parse_get_param(struct shader_translator *tx, DWORD *reg, DWORD *rel)
 static void
 sm1_parse_dst_param(struct sm1_dst_param *dst, DWORD tok)
 {
-    uint8_t shift;
+    int8_t shift;
     dst->file =
         (tok & D3DSP_REGTYPE_MASK)  >> D3DSP_REGTYPE_SHIFT |
         (tok & D3DSP_REGTYPE_MASK2) >> D3DSP_REGTYPE_SHIFT2;
@@ -3007,7 +3017,7 @@ sm1_parse_dst_param(struct sm1_dst_param *dst, DWORD tok)
     dst->mask = (tok & NINED3DSP_WRITEMASK_MASK) >> NINED3DSP_WRITEMASK_SHIFT;
     dst->mod = (tok & D3DSP_DSTMOD_MASK) >> D3DSP_DSTMOD_SHIFT;
     shift = (tok & D3DSP_DSTSHIFT_MASK) >> D3DSP_DSTSHIFT_SHIFT;
-    dst->shift = (shift & 0x8) ? -(shift & 0x7) : shift & 0x7;
+    dst->shift = (shift & 0x7) - (shift & 0x8);
 }
 
 static void
@@ -3111,6 +3121,7 @@ static void
 sm1_parse_instruction(struct shader_translator *tx)
 {
     struct sm1_instruction *insn = &tx->insn;
+    HRESULT hr;
     DWORD tok;
     struct sm1_op_info *info = NULL;
     unsigned i;
@@ -3125,10 +3136,10 @@ sm1_parse_instruction(struct shader_translator *tx)
     insn->coissue = !!(tok & D3DSI_COISSUE);
     insn->predicated = !!(tok & NINED3DSHADER_INST_PREDICATED);
 
-    if (insn->opcode < Elements(tx->op_info_map)) {
+    if (insn->opcode < ARRAY_SIZE(tx->op_info_map)) {
         int k = tx->op_info_map[insn->opcode];
         if (k >= 0) {
-            assert(k < Elements(inst_table));
+            assert(k < ARRAY_SIZE(inst_table));
             info = &inst_table[k];
         }
     } else {
@@ -3175,11 +3186,13 @@ sm1_parse_instruction(struct shader_translator *tx)
     sm1_instruction_check(insn);
 
     if (info->handler)
-        info->handler(tx);
+        hr = info->handler(tx);
     else
-       NineTranslateInstruction_Generic(tx);
+        hr = NineTranslateInstruction_Generic(tx);
     tx_apply_dst0_modifiers(tx);
 
+    if (hr != D3D_OK)
+        tx->failure = TRUE;
     tx->num_scratch = 0; /* reset */
 
     TOKEN_JUMP(tx);
@@ -3195,7 +3208,7 @@ tx_ctor(struct shader_translator *tx, struct nine_shader_info *info)
     tx->byte_code = info->byte_code;
     tx->parse = info->byte_code;
 
-    for (i = 0; i < Elements(info->input_map); ++i)
+    for (i = 0; i < ARRAY_SIZE(info->input_map); ++i)
         info->input_map[i] = NINE_DECLUSAGE_NONE;
     info->num_inputs = 0;
 
@@ -3214,7 +3227,7 @@ tx_ctor(struct shader_translator *tx, struct nine_shader_info *info)
 
     info->bumpenvmat_needed = 0;
 
-    for (i = 0; i < Elements(tx->regs.rL); ++i) {
+    for (i = 0; i < ARRAY_SIZE(tx->regs.rL); ++i) {
         tx->regs.rL[i] = ureg_dst_undef();
     }
     tx->regs.address = ureg_dst_undef();
@@ -3223,18 +3236,18 @@ tx_ctor(struct shader_translator *tx, struct nine_shader_info *info)
     tx->regs.oDepth = ureg_dst_undef();
     tx->regs.vPos = ureg_src_undef();
     tx->regs.vFace = ureg_src_undef();
-    for (i = 0; i < Elements(tx->regs.o); ++i)
+    for (i = 0; i < ARRAY_SIZE(tx->regs.o); ++i)
         tx->regs.o[i] = ureg_dst_undef();
-    for (i = 0; i < Elements(tx->regs.oCol); ++i)
+    for (i = 0; i < ARRAY_SIZE(tx->regs.oCol); ++i)
         tx->regs.oCol[i] = ureg_dst_undef();
-    for (i = 0; i < Elements(tx->regs.vC); ++i)
+    for (i = 0; i < ARRAY_SIZE(tx->regs.vC); ++i)
         tx->regs.vC[i] = ureg_src_undef();
-    for (i = 0; i < Elements(tx->regs.vT); ++i)
+    for (i = 0; i < ARRAY_SIZE(tx->regs.vT); ++i)
         tx->regs.vT[i] = ureg_src_undef();
 
-    for (i = 0; i < Elements(tx->lconsti); ++i)
+    for (i = 0; i < ARRAY_SIZE(tx->lconsti); ++i)
         tx->lconsti[i].idx = -1;
-    for (i = 0; i < Elements(tx->lconstb); ++i)
+    for (i = 0; i < ARRAY_SIZE(tx->lconstb); ++i)
         tx->lconstb[i].idx = -1;
 
     sm1_read_version(tx);
@@ -3252,17 +3265,6 @@ tx_dtor(struct shader_translator *tx)
     FREE(tx->lconstf);
     FREE(tx->regs.r);
     FREE(tx);
-}
-
-static inline unsigned
-tgsi_processor_from_type(unsigned shader_type)
-{
-    switch (shader_type) {
-    case PIPE_SHADER_VERTEX: return TGSI_PROCESSOR_VERTEX;
-    case PIPE_SHADER_FRAGMENT: return TGSI_PROCESSOR_FRAGMENT;
-    default:
-        return ~0;
-    }
 }
 
 static void
@@ -3326,7 +3328,7 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
 {
     struct shader_translator *tx;
     HRESULT hr = D3D_OK;
-    const unsigned processor = tgsi_processor_from_type(info->type);
+    const unsigned processor = info->type;
     unsigned s, slot_max;
     unsigned max_const_f;
 
@@ -3348,7 +3350,7 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
         DBG("Shader type mismatch: %u / %u !\n", tx->processor, processor);
         goto out;
     }
-    DUMP("%s%u.%u\n", processor == TGSI_PROCESSOR_VERTEX ? "VS" : "PS",
+    DUMP("%s%u.%u\n", processor == PIPE_SHADER_VERTEX ? "VS" : "PS",
          tx->version.major, tx->version.minor);
 
     tx->ureg = ureg_create(processor);
@@ -3425,10 +3427,14 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     if (info->position_t)
         ureg_property(tx->ureg, TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION, TRUE);
 
-    ureg_END(tx->ureg);
-
-    if (IS_VS && !ureg_dst_is_undef(tx->regs.oPts))
+    if (IS_VS && !ureg_dst_is_undef(tx->regs.oPts)) {
+        struct ureg_dst oPts = ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_PSIZE, 0);
+        ureg_MAX(tx->ureg, tx->regs.oPts, ureg_src(tx->regs.oPts), ureg_imm1f(tx->ureg, info->point_size_min));
+        ureg_MIN(tx->ureg, oPts, ureg_src(tx->regs.oPts), ureg_imm1f(tx->ureg, info->point_size_max));
         info->point_size = TRUE;
+    }
+
+    ureg_END(tx->ureg);
 
     /* record local constants */
     if (tx->num_lconstf && tx->indirect_const_access) {

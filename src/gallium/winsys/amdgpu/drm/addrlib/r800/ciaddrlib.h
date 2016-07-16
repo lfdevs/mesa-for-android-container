@@ -60,6 +60,8 @@ struct CIChipSettings
         UINT_32 isIceland         : 1;
         UINT_32 isTonga           : 1;
         UINT_32 isFiji            : 1;
+        UINT_32 isPolaris10       : 1;
+        UINT_32 isPolaris11       : 1;
         // VI fusion (Carrizo)
         UINT_32 isCarrizo         : 1;
     };

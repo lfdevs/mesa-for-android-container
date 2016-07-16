@@ -95,7 +95,7 @@ create_jit_dvbuffer_type(struct gallivm_state *gallivm,
    elem_types[DRAW_JIT_DVBUFFER_SIZE] = int32_type;
 
    dvbuffer_type = LLVMStructTypeInContext(gallivm->context, elem_types,
-                                           Elements(elem_types), 0);
+                                           ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
    LP_CHECK_MEMBER_OFFSET(struct draw_vertex_buffer, map,
@@ -132,7 +132,7 @@ create_jit_texture_type(struct gallivm_state *gallivm, const char *struct_name)
       LLVMArrayType(int32_type, PIPE_MAX_TEXTURE_LEVELS);
 
    texture_type = LLVMStructTypeInContext(gallivm->context, elem_types,
-                                          Elements(elem_types), 0);
+                                          ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
    LP_CHECK_MEMBER_OFFSET(struct draw_jit_texture, width,
@@ -186,7 +186,7 @@ create_jit_sampler_type(struct gallivm_state *gallivm, const char *struct_name)
       LLVMArrayType(LLVMFloatTypeInContext(gallivm->context), 4);
 
    sampler_type = LLVMStructTypeInContext(gallivm->context, elem_types,
-                                          Elements(elem_types), 0);
+                                          ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
    LP_CHECK_MEMBER_OFFSET(struct draw_jit_sampler, min_lod,
@@ -234,7 +234,7 @@ create_jit_context_type(struct gallivm_state *gallivm,
    elem_types[5] = LLVMArrayType(sampler_type,
                                  PIPE_MAX_SAMPLERS); /* samplers */
    context_type = LLVMStructTypeInContext(gallivm->context, elem_types,
-                                          Elements(elem_types), 0);
+                                          ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
    LP_CHECK_MEMBER_OFFSET(struct draw_jit_context, vs_constants,
@@ -293,7 +293,7 @@ create_gs_jit_context_type(struct gallivm_state *gallivm,
                                                   vector_length), 0);
 
    context_type = LLVMStructTypeInContext(gallivm->context, elem_types,
-                                          Elements(elem_types), 0);
+                                          ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
    LP_CHECK_MEMBER_OFFSET(struct draw_gs_jit_context, constants,
@@ -357,7 +357,7 @@ create_jit_vertex_buffer_type(struct gallivm_state *gallivm,
    elem_types[3] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
 
    vb_type = LLVMStructTypeInContext(gallivm->context, elem_types,
-                                     Elements(elem_types), 0);
+                                     ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
    LP_CHECK_MEMBER_OFFSET(struct pipe_vertex_buffer, stride,
@@ -389,7 +389,7 @@ create_jit_vertex_header(struct gallivm_state *gallivm, int data_elems)
    elem_types[DRAW_JIT_VERTEX_DATA]  = LLVMArrayType(elem_types[1], data_elems);
 
    vertex_header = LLVMStructTypeInContext(gallivm->context, elem_types,
-                                           Elements(elem_types), 0);
+                                           ARRAY_SIZE(elem_types), 0);
 
    /* these are bit-fields and we can't take address of them
       LP_CHECK_MEMBER_OFFSET(struct vertex_header, clipmask,
@@ -817,7 +817,7 @@ store_aos(struct gallivm_state *gallivm,
 #endif
 
    /* Unaligned store due to the vertex header */
-   lp_set_store_alignment(LLVMBuildStore(builder, value, data_ptr), sizeof(float));
+   LLVMSetAlignment(LLVMBuildStore(builder, value, data_ptr), sizeof(float));
 }
 
 /**
@@ -1069,7 +1069,7 @@ store_clip(struct gallivm_state *gallivm,
       clip_ptr = LLVMBuildPointerCast(builder, clip_ptr, clip_ptr_type, "");
 
       /* Unaligned store */
-      lp_set_store_alignment(LLVMBuildStore(builder, aos[j], clip_ptr), sizeof(float));
+      LLVMSetAlignment(LLVMBuildStore(builder, aos[j], clip_ptr), sizeof(float));
    }
 }
 
@@ -1164,8 +1164,8 @@ generate_clipmask(struct draw_llvm *llvm,
    unsigned ucp_enable = key->ucp_enable;
    unsigned cd[2];
 
-   cd[0] = llvm->draw->vs.clipdistance_output[0];
-   cd[1] = llvm->draw->vs.clipdistance_output[1];
+   cd[0] = llvm->draw->vs.ccdistance_output[0];
+   cd[1] = llvm->draw->vs.ccdistance_output[1];
 
    if (cd[0] != pos || cd[1] != pos)
       have_cd = true;
@@ -1535,7 +1535,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant,
    LLVMTypeRef int32_type = LLVMInt32TypeInContext(context);
    LLVMTypeRef arg_types[11];
    unsigned num_arg_types =
-      elts ? Elements(arg_types) : Elements(arg_types) - 1;
+      elts ? ARRAY_SIZE(arg_types) : ARRAY_SIZE(arg_types) - 1;
    LLVMTypeRef func_type;
    LLVMValueRef context_ptr;
    LLVMBasicBlockRef block;
@@ -1973,11 +1973,11 @@ draw_llvm_set_mapped_texture(struct draw_context *draw,
           shader_stage == PIPE_SHADER_GEOMETRY);
 
    if (shader_stage == PIPE_SHADER_VERTEX) {
-      assert(sview_idx < Elements(draw->llvm->jit_context.textures));
+      assert(sview_idx < ARRAY_SIZE(draw->llvm->jit_context.textures));
 
       jit_tex = &draw->llvm->jit_context.textures[sview_idx];
    } else if (shader_stage == PIPE_SHADER_GEOMETRY) {
-      assert(sview_idx < Elements(draw->llvm->gs_jit_context.textures));
+      assert(sview_idx < ARRAY_SIZE(draw->llvm->gs_jit_context.textures));
 
       jit_tex = &draw->llvm->gs_jit_context.textures[sview_idx];
    } else {
@@ -2148,7 +2148,7 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
       LLVMVectorType(int32_type, vector_length), 0);   /* prim_id_ptr */
    arg_types[6] = int32_type;
 
-   func_type = LLVMFunctionType(int32_type, arg_types, Elements(arg_types), 0);
+   func_type = LLVMFunctionType(int32_type, arg_types, ARRAY_SIZE(arg_types), 0);
 
    variant_func = LLVMAddFunction(gallivm->module, func_name, func_type);
 
@@ -2156,7 +2156,7 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
 
    LLVMSetFunctionCallConv(variant_func, LLVMCCallConv);
 
-   for (i = 0; i < Elements(arg_types); ++i)
+   for (i = 0; i < ARRAY_SIZE(arg_types); ++i)
       if (LLVMGetTypeKind(arg_types[i]) == LLVMPointerTypeKind)
          LLVMAddAttribute(LLVMGetParam(variant_func, i),
                           LLVMNoAliasAttribute);

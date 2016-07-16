@@ -128,7 +128,7 @@ ilo_begin_query(struct pipe_context *pipe, struct pipe_query *query)
    return true;
 }
 
-static void
+static bool
 ilo_end_query(struct pipe_context *pipe, struct pipe_query *query)
 {
    struct ilo_query *q = ilo_query(query);
@@ -136,7 +136,7 @@ ilo_end_query(struct pipe_context *pipe, struct pipe_query *query)
    if (!q->active) {
       /* require ilo_begin_query() first */
       if (q->in_pairs)
-         return;
+         return false;
 
       ilo_begin_query(pipe, query);
    }
@@ -144,6 +144,8 @@ ilo_end_query(struct pipe_context *pipe, struct pipe_query *query)
    q->active = false;
 
    ilo_query_table[q->type].end(ilo_context(pipe), q);
+
+   return true;
 }
 
 /**
@@ -222,6 +224,11 @@ ilo_get_query_result(struct pipe_context *pipe, struct pipe_query *query,
    return true;
 }
 
+static void
+ilo_set_active_query_state(struct pipe_context *pipe, boolean enable)
+{
+}
+
 /**
  * Initialize query-related functions.
  */
@@ -233,4 +240,5 @@ ilo_init_query_functions(struct ilo_context *ilo)
    ilo->base.begin_query = ilo_begin_query;
    ilo->base.end_query = ilo_end_query;
    ilo->base.get_query_result = ilo_get_query_result;
+   ilo->base.set_active_query_state = ilo_set_active_query_state;
 }

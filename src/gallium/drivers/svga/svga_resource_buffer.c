@@ -69,7 +69,7 @@ static void *
 svga_buffer_transfer_map(struct pipe_context *pipe,
                          struct pipe_resource *resource,
                          unsigned level,
-                         unsigned usage,
+                         enum pipe_resource_usage usage,
                          const struct pipe_box *box,
                          struct pipe_transfer **ptransfer)
 {
@@ -108,6 +108,8 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
             ret = SVGA3D_vgpu10_ReadbackSubResource(svga->swc, sbuf->handle, 0);
             assert(ret == PIPE_OK);
          }
+
+         svga->hud.num_readbacks++;
 
          svga_context_finish(svga);
 

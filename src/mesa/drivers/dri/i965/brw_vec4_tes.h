@@ -47,8 +47,7 @@ public:
                    int shader_time_index);
 
 protected:
-   virtual dst_reg *make_reg_for_system_value(int location,
-                                              const glsl_type *type);
+   virtual dst_reg *make_reg_for_system_value(int location);
    virtual void nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr);
    virtual void nir_emit_intrinsic(nir_intrinsic_instr *instr);
 

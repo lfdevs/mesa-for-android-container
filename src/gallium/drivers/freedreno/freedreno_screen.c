@@ -54,6 +54,8 @@
 #include "a3xx/fd3_screen.h"
 #include "a4xx/fd4_screen.h"
 
+#include "ir3/ir3_nir.h"
+
 /* XXX this should go away */
 #include "state_tracker/drm_driver.h"
 
@@ -71,6 +73,8 @@ static const struct debug_named_value debug_options[] = {
 		{"glsl120",   FD_DBG_GLSL120,"Temporary flag to force GLSL 1.20 (rather than 1.30) on a3xx+"},
 		{"shaderdb",  FD_DBG_SHADERDB, "Enable shaderdb output"},
 		{"flush",     FD_DBG_FLUSH,  "Force flush after every draw"},
+		{"deqp",      FD_DBG_DEQP,   "Enable dEQP hacks"},
+		{"nir",       FD_DBG_NIR,    "Prefer NIR as native IR"},
 		DEBUG_NAMED_VALUE_END
 };
 
@@ -166,6 +170,10 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
 	case PIPE_CAP_COMPUTE:
 	case PIPE_CAP_QUERY_MEMORY_INFO:
+	case PIPE_CAP_PCI_GROUP:
+	case PIPE_CAP_PCI_BUS:
+	case PIPE_CAP_PCI_DEVICE:
+	case PIPE_CAP_PCI_FUNCTION:
 		return 0;
 
 	case PIPE_CAP_SM3:
@@ -217,8 +225,6 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
 	case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
-	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
-	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
 	case PIPE_CAP_USER_INDEX_BUFFERS:
 	case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
@@ -240,8 +246,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
 	case PIPE_CAP_DEPTH_BOUNDS_TEST:
 	case PIPE_CAP_TGSI_TXQS:
+	/* TODO if we need this, do it in nir/ir3 backend to avoid breaking precompile: */
 	case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
-	case PIPE_CAP_SHAREABLE_SHADERS:
 	case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
 	case PIPE_CAP_CLEAR_TEXTURE:
 	case PIPE_CAP_DRAW_PARAMETERS:
@@ -252,10 +258,22 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_INVALIDATE_BUFFER:
 	case PIPE_CAP_GENERATE_MIPMAP:
 	case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
+	case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+	case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+	case PIPE_CAP_CULL_DISTANCE:
+	case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
 		return 0;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
 		return 1;
+
+	case PIPE_CAP_SHAREABLE_SHADERS:
+	/* manage the variants for these ourself, to avoid breaking precompile: */
+	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
+	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
+		if (is_ir3(screen))
+			return 1;
+		return 0;
 
 	/* Stream output. */
 	case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
@@ -343,6 +361,16 @@ fd_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 	switch (param) {
 	case PIPE_CAPF_MAX_LINE_WIDTH:
 	case PIPE_CAPF_MAX_LINE_WIDTH_AA:
+		/* NOTE: actual value is 127.0f, but this is working around a deqp
+		 * bug.. dEQP-GLES3.functional.rasterization.primitives.lines_wide
+		 * uses too small of a render target size, and gets confused when
+		 * the lines start going offscreen.
+		 *
+		 * See: https://code.google.com/p/android/issues/detail?id=206513
+		 */
+		if (fd_mesa_debug & FD_DBG_DEQP)
+			return 48.0f;
+		return 127.0f;
 	case PIPE_CAPF_MAX_POINT_WIDTH:
 	case PIPE_CAPF_MAX_POINT_WIDTH_AA:
 		return 4092.0f;
@@ -423,7 +451,7 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
 	case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
 	case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
-        case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+	case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
 		return 0;
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
 		return 1;
@@ -435,6 +463,8 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
 		return 16;
 	case PIPE_SHADER_CAP_PREFERRED_IR:
+		if ((fd_mesa_debug & FD_DBG_NIR) && is_ir3(screen))
+			return PIPE_SHADER_IR_NIR;
 		return PIPE_SHADER_IR_TGSI;
 	case PIPE_SHADER_CAP_SUPPORTED_IRS:
 		return 0;
@@ -446,6 +476,18 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	}
 	debug_printf("unknown shader param %d\n", param);
 	return 0;
+}
+
+static const void *
+fd_get_compiler_options(struct pipe_screen *pscreen,
+		enum pipe_shader_ir ir, unsigned shader)
+{
+	struct fd_screen *screen = fd_screen(pscreen);
+
+	if (is_ir3(screen))
+		return ir3_get_compiler_options();
+
+	return NULL;
 }
 
 boolean
@@ -606,6 +648,7 @@ fd_screen_create(struct fd_device *dev)
 	pscreen->get_param = fd_screen_get_param;
 	pscreen->get_paramf = fd_screen_get_paramf;
 	pscreen->get_shader_param = fd_screen_get_shader_param;
+	pscreen->get_compiler_options = fd_get_compiler_options;
 
 	fd_resource_screen_init(pscreen);
 	fd_query_screen_init(pscreen);

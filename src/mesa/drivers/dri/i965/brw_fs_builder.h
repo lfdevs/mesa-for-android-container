@@ -72,7 +72,7 @@ namespace brw {
       fs_builder(backend_shader *shader, bblock_t *block, fs_inst *inst) :
          shader(shader), block(block), cursor(inst),
          _dispatch_width(inst->exec_size),
-         _group(inst->force_sechalf ? 8 : 0),
+         _group(inst->group),
          force_writemask_all(inst->force_writemask_all)
       {
          annotation.str = inst->annotation;
@@ -168,6 +168,15 @@ namespace brw {
       }
 
       /**
+       * Get the channel group in use.
+       */
+      unsigned
+      group() const
+      {
+         return _group;
+      }
+
+      /**
        * Allocate a virtual register of natural vector size (one for this IR)
        * and SIMD width.  \p n gives the amount of space to allocate in
        * dispatch_width units (which is just enough space for one logical
@@ -193,8 +202,13 @@ namespace brw {
       dst_reg
       null_reg_f() const
       {
-         return dst_reg(retype(brw_null_vec(dispatch_width()),
-                               BRW_REGISTER_TYPE_F));
+         return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_F));
+      }
+
+      dst_reg
+      null_reg_df() const
+      {
+         return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_DF));
       }
 
       /**
@@ -203,8 +217,7 @@ namespace brw {
       dst_reg
       null_reg_d() const
       {
-         return dst_reg(retype(brw_null_vec(dispatch_width()),
-                               BRW_REGISTER_TYPE_D));
+         return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
       }
 
       /**
@@ -213,8 +226,7 @@ namespace brw {
       dst_reg
       null_reg_ud() const
       {
-         return dst_reg(retype(brw_null_vec(dispatch_width()),
-                               BRW_REGISTER_TYPE_UD));
+         return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_UD));
       }
 
       /**
@@ -224,8 +236,10 @@ namespace brw {
       src_reg
       sample_mask_reg() const
       {
+         assert(shader->stage != MESA_SHADER_FRAGMENT ||
+                group() + dispatch_width() <= 16);
          if (shader->stage != MESA_SHADER_FRAGMENT) {
-            return brw_imm_d(0xffff);
+            return brw_imm_d(0xffffffff);
          } else if (((brw_wm_prog_data *)shader->stage_prog_data)->uses_kill) {
             return brw_flag_reg(0, 1);
          } else {
@@ -274,9 +288,8 @@ namespace brw {
          case SHADER_OPCODE_LOG2:
          case SHADER_OPCODE_SIN:
          case SHADER_OPCODE_COS:
-            return fix_math_instruction(
-               emit(instruction(opcode, dispatch_width(), dst,
-                                fix_math_operand(src0))));
+            return emit(instruction(opcode, dispatch_width(), dst,
+                                    fix_math_operand(src0)));
 
          default:
             return emit(instruction(opcode, dispatch_width(), dst, src0));
@@ -294,10 +307,9 @@ namespace brw {
          case SHADER_OPCODE_POW:
          case SHADER_OPCODE_INT_QUOTIENT:
          case SHADER_OPCODE_INT_REMAINDER:
-            return fix_math_instruction(
-               emit(instruction(opcode, dispatch_width(), dst,
-                                fix_math_operand(src0),
-                                fix_math_operand(src1))));
+            return emit(instruction(opcode, dispatch_width(), dst,
+                                    fix_math_operand(src0),
+                                    fix_math_operand(src1)));
 
          default:
             return emit(instruction(opcode, dispatch_width(), dst, src0, src1));
@@ -348,9 +360,8 @@ namespace brw {
          assert(inst->exec_size <= 32);
          assert(inst->exec_size == dispatch_width() ||
                 force_writemask_all);
-         assert(_group == 0 || _group == 8);
 
-         inst->force_sechalf = (_group == 8);
+         inst->group = _group;
          inst->force_writemask_all = force_writemask_all;
          inst->annotation = annotation.str;
          inst->ir = annotation.ir;
@@ -557,8 +568,12 @@ namespace brw {
       {
          instruction *inst = emit(SHADER_OPCODE_LOAD_PAYLOAD, dst, src, sources);
          inst->header_size = header_size;
-         inst->regs_written = header_size +
-                              (sources - header_size) * (dispatch_width() / 8);
+         inst->regs_written = header_size;
+         for (unsigned i = header_size; i < sources; i++) {
+            inst->regs_written +=
+               DIV_ROUND_UP(dispatch_width() * type_sz(src[i].type) *
+                            dst.stride, REG_SIZE);
+         }
 
          return inst;
       }
@@ -627,41 +642,6 @@ namespace brw {
          } else {
             return src;
          }
-      }
-
-      /**
-       * Workaround other weirdness of the math instruction.
-       */
-      instruction *
-      fix_math_instruction(instruction *inst) const
-      {
-         if (shader->devinfo->gen < 6) {
-            inst->base_mrf = 2;
-            inst->mlen = inst->sources * dispatch_width() / 8;
-
-            if (inst->sources > 1) {
-               /* From the Ironlake PRM, Volume 4, Part 1, Section 6.1.13
-                * "Message Payload":
-                *
-                * "Operand0[7].  For the INT DIV functions, this operand is the
-                *  denominator."
-                *  ...
-                * "Operand1[7].  For the INT DIV functions, this operand is the
-                *  numerator."
-                */
-               const bool is_int_div = inst->opcode != SHADER_OPCODE_POW;
-               const fs_reg src0 = is_int_div ? inst->src[1] : inst->src[0];
-               const fs_reg src1 = is_int_div ? inst->src[0] : inst->src[1];
-
-               inst->resize_sources(1);
-               inst->src[0] = src0;
-
-               at(block, inst).MOV(fs_reg(MRF, inst->base_mrf + 1, src1.type),
-                                   src1);
-            }
-         }
-
-         return inst;
       }
 
       bblock_t *block;

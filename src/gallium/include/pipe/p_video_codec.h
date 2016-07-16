@@ -28,11 +28,11 @@
 #ifndef PIPE_VIDEO_CONTEXT_H
 #define PIPE_VIDEO_CONTEXT_H
 
+#include "pipe/p_video_state.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "pipe/p_video_state.h"
 
 struct pipe_screen;
 struct pipe_surface;

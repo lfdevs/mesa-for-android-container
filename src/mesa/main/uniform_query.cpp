@@ -815,8 +815,6 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
       }
    }
 
-   uni->initialized = true;
-
    _mesa_propagate_uniforms_to_driver_storage(uni, offset, count);
 
    /* If the uniform is a sampler, do the extra magic necessary to propagate
@@ -995,7 +993,7 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
    elements = components * vectors;
 
    if (!transpose) {
-      memcpy(&uni->storage[elements * offset], values,
+      memcpy(&uni->storage[size_mul * elements * offset], values,
 	     sizeof(uni->storage[0]) * elements * count * size_mul);
    } else if (basicType == GLSL_TYPE_FLOAT) {
       /* Copy and transpose the matrix.
@@ -1029,8 +1027,6 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
 	 src += elements;
       }
    }
-
-   uni->initialized = true;
 
    _mesa_propagate_uniforms_to_driver_storage(uni, offset, count);
 }

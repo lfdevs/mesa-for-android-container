@@ -90,6 +90,7 @@ struct backend_reg : private brw_reg
    using brw_reg::width;
    using brw_reg::hstride;
 
+   using brw_reg::df;
    using brw_reg::f;
    using brw_reg::d;
    using brw_reg::ud;
@@ -101,7 +102,7 @@ struct bblock_t;
 
 #ifdef __cplusplus
 struct backend_instruction : public exec_node {
-   bool is_3src() const;
+   bool is_3src(const struct brw_device_info *devinfo) const;
    bool is_tex() const;
    bool is_math() const;
    bool is_control_flow() const;
@@ -208,6 +209,7 @@ public:
    bool debug_enabled;
    const char *stage_name;
    const char *stage_abbrev;
+   bool is_passthrough_shader;
 
    brw::simple_allocator alloc;
 
@@ -217,7 +219,6 @@ public:
    virtual void dump_instructions(const char *name);
 
    void calculate_cfg();
-   void invalidate_cfg();
 
    virtual void invalidate_live_intervals() = 0;
 };
@@ -236,7 +237,8 @@ struct backend_shader;
 enum brw_reg_type brw_type_for_base_type(const struct glsl_type *type);
 enum brw_conditional_mod brw_conditional_for_comparison(unsigned int op);
 uint32_t brw_math_function(enum opcode op);
-const char *brw_instruction_name(enum opcode op);
+const char *brw_instruction_name(const struct brw_device_info *devinfo,
+                                 enum opcode op);
 bool brw_saturate_immediate(enum brw_reg_type type, struct brw_reg *reg);
 bool brw_negate_immediate(enum brw_reg_type type, struct brw_reg *reg);
 bool brw_abs_immediate(enum brw_reg_type type, struct brw_reg *reg);
@@ -291,7 +293,13 @@ struct gl_shader *brw_new_shader(struct gl_context *ctx, GLuint name, GLuint typ
 
 int type_size_scalar(const struct glsl_type *type);
 int type_size_vec4(const struct glsl_type *type);
+int type_size_dvec4(const struct glsl_type *type);
 int type_size_vec4_times_4(const struct glsl_type *type);
+int type_size_vs_input(const struct glsl_type *type);
+
+unsigned tesslevel_outer_components(GLenum tes_primitive_mode);
+unsigned tesslevel_inner_components(GLenum tes_primitive_mode);
+unsigned writemask_for_backwards_vector(unsigned mask);
 
 #ifdef __cplusplus
 }

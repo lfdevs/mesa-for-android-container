@@ -80,7 +80,7 @@ toy_compiler_lower_math(struct toy_compiler *tc, struct toy_inst *inst)
    int i;
 
    /* see commit 250770b74d33bb8625c780a74a89477af033d13a */
-   for (i = 0; i < Elements(inst->src); i++) {
+   for (i = 0; i < ARRAY_SIZE(inst->src); i++) {
       if (tsrc_is_null(inst->src[i]))
          break;
 
@@ -179,7 +179,7 @@ validate_imm(struct toy_compiler *tc, struct toy_inst *inst)
    bool move_inst = false;
    int i;
 
-   for (i = 0; i < Elements(inst->src); i++) {
+   for (i = 0; i < ARRAY_SIZE(inst->src); i++) {
       struct toy_dst tmp;
 
       if (tsrc_is_null(inst->src[i]))
@@ -201,7 +201,7 @@ validate_imm(struct toy_compiler *tc, struct toy_inst *inst)
       }
 
       /* this is the last operand */
-      if (i + 1 == Elements(inst->src) || tsrc_is_null(inst->src[i + 1]))
+      if (i + 1 == ARRAY_SIZE(inst->src) || tsrc_is_null(inst->src[i + 1]))
          break;
 
       /* need to use a temp if this imm is not the last operand */
@@ -600,7 +600,7 @@ toy_compiler_legalize_for_asm(struct toy_compiler *tc)
 
       /* MRF to GRF */
       if (ilo_dev_gen(tc->dev) >= ILO_GEN(7)) {
-         for (i = 0; i < Elements(inst->src); i++) {
+         for (i = 0; i < ARRAY_SIZE(inst->src); i++) {
             if (inst->src[i].file != TOY_FILE_MRF)
                continue;
             else if (tsrc_is_null(inst->src[i]))

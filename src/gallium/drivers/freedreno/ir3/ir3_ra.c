@@ -31,6 +31,8 @@
 #include "util/ralloc.h"
 #include "util/bitset.h"
 
+#include "freedreno_util.h"
+
 #include "ir3.h"
 #include "ir3_compiler.h"
 
@@ -96,7 +98,7 @@ static const unsigned half_class_sizes[] = {
 #define total_class_count (class_count + half_class_count)
 
 /* Below a0.x are normal regs.  RA doesn't need to assign a0.x/p0.x. */
-#define NUM_REGS             (4 * (REG_A0 - 1))
+#define NUM_REGS             (4 * 48)
 /* Number of virtual regs in a given class: */
 #define CLASS_REGS(i)        (NUM_REGS - (class_sizes[i] - 1))
 #define HALF_CLASS_REGS(i)   (NUM_REGS - (half_class_sizes[i] - 1))
@@ -342,7 +344,7 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 		return id->defn;
 	}
 
-	if (is_meta(instr) && (instr->opc == OPC_META_FI)) {
+	if (instr->opc == OPC_META_FI) {
 		/* What about the case where collect is subset of array, we
 		 * need to find the distance between where actual array starts
 		 * and fanin..  that probably doesn't happen currently.
@@ -436,7 +438,7 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 		}
 	}
 
-	if (is_meta(d) && (d->opc == OPC_META_PHI)) {
+	if (d->opc == OPC_META_PHI) {
 		/* we have already inserted parallel-copies into
 		 * the phi, so we don't need to chase definers
 		 */
@@ -456,7 +458,7 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 		d = dd;
 	}
 
-	if (is_meta(d) && (d->opc == OPC_META_FO)) {
+	if (d->opc == OPC_META_FO) {
 		struct ir3_instruction *dd;
 		int dsz, doff;
 
@@ -467,7 +469,8 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 
 		*sz = MAX2(*sz, dsz);
 
-		/* Fanout's are grouped, so *off should already valid */
+		debug_assert(instr->opc == OPC_META_FO);
+		*off = MAX2(*off, instr->fo.off);
 
 		d = dd;
 	}
@@ -810,6 +813,22 @@ ra_compute_livein_liveout(struct ir3_ra_ctx *ctx)
 }
 
 static void
+print_bitset(const char *name, BITSET_WORD *bs, unsigned cnt)
+{
+	bool first = true;
+	debug_printf("  %s:", name);
+	for (unsigned i = 0; i < cnt; i++) {
+		if (BITSET_TEST(bs, i)) {
+			if (!first)
+				debug_printf(",");
+			debug_printf(" %04u", i);
+			first = false;
+		}
+	}
+	debug_printf("\n");
+}
+
+static void
 ra_add_interference(struct ir3_ra_ctx *ctx)
 {
 	struct ir3 *ir = ctx->ir;
@@ -831,12 +850,24 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 	/* update per-block livein/liveout: */
 	while (ra_compute_livein_liveout(ctx)) {}
 
+	if (fd_mesa_debug & FD_DBG_OPTMSGS) {
+		debug_printf("AFTER LIVEIN/OUT:\n");
+		ir3_print(ir);
+		list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+			struct ir3_ra_block_data *bd = block->data;
+			debug_printf("block%u:\n", block_id(block));
+			print_bitset("def", bd->def, ctx->alloc_count);
+			print_bitset("use", bd->use, ctx->alloc_count);
+			print_bitset("l/i", bd->livein, ctx->alloc_count);
+			print_bitset("l/o", bd->liveout, ctx->alloc_count);
+		}
+	}
+
 	/* extend start/end ranges based on livein/liveout info from cfg: */
-	unsigned bitset_words = BITSET_WORDS(ctx->alloc_count);
 	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
 		struct ir3_ra_block_data *bd = block->data;
 
-		for (unsigned i = 0; i < bitset_words; i++) {
+		for (unsigned i = 0; i < ctx->alloc_count; i++) {
 			if (BITSET_TEST(bd->livein, i)) {
 				ctx->def[i] = MIN2(ctx->def[i], block->start_ip);
 				ctx->use[i] = MAX2(ctx->use[i], block->start_ip);
@@ -869,7 +900,7 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 /* some instructions need fix-up if dst register is half precision: */
 static void fixup_half_instr_dst(struct ir3_instruction *instr)
 {
-	switch (instr->category) {
+	switch (opc_cat(instr->opc)) {
 	case 1: /* move instructions */
 		instr->cat1.dst_type = half_type(instr->cat1.dst_type);
 		break;
@@ -910,9 +941,11 @@ static void fixup_half_instr_dst(struct ir3_instruction *instr)
 /* some instructions need fix-up if src register is half precision: */
 static void fixup_half_instr_src(struct ir3_instruction *instr)
 {
-	switch (instr->category) {
-	case 1: /* move instructions */
+	switch (instr->opc) {
+	case OPC_MOV:
 		instr->cat1.src_type = half_type(instr->cat1.src_type);
+		break;
+	default:
 		break;
 	}
 }

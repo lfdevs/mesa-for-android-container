@@ -2203,7 +2203,7 @@ voidptr_to_x86_func(void *v)
       void *v;
       x86_func f;
    } u;
-   assert(sizeof(u.v) == sizeof(u.f));
+   STATIC_ASSERT(sizeof(u.v) == sizeof(u.f));
    u.v = v;
    return u.f;
 }

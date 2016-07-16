@@ -63,8 +63,9 @@ static boolean noop_begin_query(struct pipe_context *ctx, struct pipe_query *que
    return true;
 }
 
-static void noop_end_query(struct pipe_context *ctx, struct pipe_query *query)
+static bool noop_end_query(struct pipe_context *ctx, struct pipe_query *query)
 {
+   return true;
 }
 
 static boolean noop_get_query_result(struct pipe_context *ctx,
@@ -76,6 +77,11 @@ static boolean noop_get_query_result(struct pipe_context *ctx,
 
 	*result = 0;
 	return TRUE;
+}
+
+static void
+noop_set_active_query_state(struct pipe_context *pipe, boolean enable)
+{
 }
 
 
@@ -114,14 +120,15 @@ static struct pipe_resource *noop_resource_create(struct pipe_screen *screen,
 
 static struct pipe_resource *noop_resource_from_handle(struct pipe_screen *screen,
 							const struct pipe_resource *templ,
-							struct winsys_handle *handle)
+							struct winsys_handle *handle,
+                                                       unsigned usage)
 {
 	struct noop_pipe_screen *noop_screen = (struct noop_pipe_screen*)screen;
 	struct pipe_screen *oscreen = noop_screen->oscreen;
 	struct pipe_resource *result;
 	struct pipe_resource *noop_resource;
 
-	result = oscreen->resource_from_handle(oscreen, templ, handle);
+	result = oscreen->resource_from_handle(oscreen, templ, handle, usage);
 	noop_resource = noop_resource_create(screen, result);
 	pipe_resource_reference(&result, NULL);
 	return noop_resource;
@@ -129,7 +136,8 @@ static struct pipe_resource *noop_resource_from_handle(struct pipe_screen *scree
 
 static boolean noop_resource_get_handle(struct pipe_screen *screen,
 					struct pipe_resource *resource,
-					struct winsys_handle *handle)
+					struct winsys_handle *handle,
+                                        unsigned usage)
 {
 	return FALSE;
 }
@@ -282,6 +290,7 @@ static struct pipe_context *noop_create_context(struct pipe_screen *screen,
 	ctx->begin_query = noop_begin_query;
 	ctx->end_query = noop_end_query;
 	ctx->get_query_result = noop_get_query_result;
+	ctx->set_active_query_state = noop_set_active_query_state;
 	ctx->transfer_map = noop_transfer_map;
 	ctx->transfer_flush_region = noop_transfer_flush_region;
 	ctx->transfer_unmap = noop_transfer_unmap;

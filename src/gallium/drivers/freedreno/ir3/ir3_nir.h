@@ -35,8 +35,10 @@
 #include "ir3_shader.h"
 
 bool ir3_nir_lower_if_else(nir_shader *shader);
+bool ir3_nir_apply_trig_workarounds(nir_shader *shader);
 
 struct nir_shader * ir3_tgsi_to_nir(const struct tgsi_token *tokens);
+const nir_shader_compiler_options * ir3_get_compiler_options(void);
 bool ir3_key_lowers_nir(const struct ir3_shader_key *key);
 struct nir_shader * ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
 		const struct ir3_shader_key *key);

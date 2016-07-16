@@ -230,7 +230,7 @@ nv50_upload_user_buffers(struct nv50_context *nv50,
       addrs[b] = nouveau_scratch_data(&nv50->base, vb->user_buffer, base, size,
                                       &bo);
       if (addrs[b])
-         BCTX_REFN_bo(nv50->bufctx_3d, VERTEX_TMP, NOUVEAU_BO_GART |
+         BCTX_REFN_bo(nv50->bufctx_3d, 3D_VERTEX_TMP, NOUVEAU_BO_GART |
                       NOUVEAU_BO_RD, bo);
    }
    nv50->base.vbo_dirty = true;
@@ -269,7 +269,7 @@ nv50_update_user_vbufs(struct nv50_context *nv50)
          address[b] = nouveau_scratch_data(&nv50->base, vb->user_buffer,
                                            base, size, &bo);
          if (address[b])
-            BCTX_REFN_bo(nv50->bufctx_3d, VERTEX_TMP, bo_flags, bo);
+            BCTX_REFN_bo(nv50->bufctx_3d, 3D_VERTEX_TMP, bo_flags, bo);
       }
 
       BEGIN_NV04(push, NV50_3D(VERTEX_ARRAY_LIMIT_HIGH(i)), 2);
@@ -286,7 +286,7 @@ static inline void
 nv50_release_user_vbufs(struct nv50_context *nv50)
 {
    if (nv50->vbo_user) {
-      nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_VERTEX_TMP);
+      nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_VERTEX_TMP);
       nouveau_scratch_done(&nv50->base);
    }
 }
@@ -394,7 +394,7 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
          struct nv04_resource *buf = nv04_resource(vb->buffer);
          if (!(refd & (1 << b))) {
             refd |= 1 << b;
-            BCTX_REFN(nv50->bufctx_3d, VERTEX, buf, RD);
+            BCTX_REFN(nv50->bufctx_3d, 3D_VERTEX, buf, RD);
          }
          address = buf->address + vb->buffer_offset + ve->pipe.src_offset;
          limit = buf->address + buf->base.width0 - 1;
@@ -779,9 +779,9 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    nv50->vbo_push_hint = /* the 64 is heuristic */
       !(info->indexed && ((nv50->vb_elt_limit + 64) < info->count));
 
-   if (nv50->vbo_user && !(nv50->dirty & (NV50_NEW_ARRAYS | NV50_NEW_VERTEX))) {
+   if (nv50->vbo_user && !(nv50->dirty_3d & (NV50_NEW_3D_ARRAYS | NV50_NEW_3D_VERTEX))) {
       if (!!nv50->vbo_fifo != nv50->vbo_push_hint)
-         nv50->dirty |= NV50_NEW_ARRAYS;
+         nv50->dirty_3d |= NV50_NEW_3D_ARRAYS;
       else
       if (!nv50->vbo_fifo)
          nv50_update_user_vbufs(nv50);
@@ -790,7 +790,7 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (unlikely(nv50->num_so_targets && !nv50->gmtyprog))
       nv50->state.prim_size = nv50_pipe_prim_to_prim_size[info->mode];
 
-   nv50_state_validate(nv50, ~0);
+   nv50_state_validate_3d(nv50, ~0);
 
    push->kick_notify = nv50_draw_vbo_kick_notify;
 

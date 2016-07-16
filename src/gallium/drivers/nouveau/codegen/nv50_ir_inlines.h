@@ -48,7 +48,7 @@ static inline bool isTextureOp(operation op)
 
 static inline bool isSurfaceOp(operation op)
 {
-   return (op >= OP_SULDB && op <= OP_SULEA);
+   return (op >= OP_SULDB && op <= OP_SULEA) || (op == OP_SUQ);
 }
 
 static inline unsigned int typeSizeof(DataType ty)
@@ -281,14 +281,14 @@ Value *TexInstruction::getIndirectS() const
 
 CmpInstruction *Instruction::asCmp()
 {
-   if (op >= OP_SET_AND && op <= OP_SLCT)
+   if (op >= OP_SET_AND && op <= OP_SLCT && op != OP_SELP)
       return static_cast<CmpInstruction *>(this);
    return NULL;
 }
 
 const CmpInstruction *Instruction::asCmp() const
 {
-   if (op >= OP_SET_AND && op <= OP_SLCT)
+   if (op >= OP_SET_AND && op <= OP_SLCT && op != OP_SELP)
       return static_cast<const CmpInstruction *>(this);
    return NULL;
 }
@@ -309,14 +309,14 @@ const FlowInstruction *Instruction::asFlow() const
 
 TexInstruction *Instruction::asTex()
 {
-   if (op >= OP_TEX && op <= OP_SULEA)
+   if ((op >= OP_TEX && op <= OP_SULEA) || op == OP_SUQ)
       return static_cast<TexInstruction *>(this);
    return NULL;
 }
 
 const TexInstruction *Instruction::asTex() const
 {
-   if (op >= OP_TEX && op <= OP_SULEA)
+   if ((op >= OP_TEX && op <= OP_SULEA) || op == OP_SUQ)
       return static_cast<const TexInstruction *>(this);
    return NULL;
 }

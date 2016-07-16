@@ -127,6 +127,9 @@ target_triplet = @target@
 @HAVE_MESA_LLVM_TRUE@am__append_4 = -DGALLIUM_LLVMPIPE
 @HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LDFLAGS)
 @HAVE_MESA_LLVM_TRUE@am__append_6 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
+@HAVE_GALLIUM_SWR_TRUE@am__append_7 = -DGALLIUM_SWR
+@HAVE_GALLIUM_SWR_TRUE@am__append_8 = $(LLVM_LDFLAGS)
+@HAVE_GALLIUM_SWR_TRUE@am__append_9 = $(top_builddir)/src/gallium/drivers/swr/libmesaswr.la $(LLVM_LIBS)
 subdir = src/gallium/targets/osmesa
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -177,6 +180,8 @@ LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_2 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la \
 @HAVE_MESA_LLVM_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_GALLIUM_SWR_TRUE@am__DEPENDENCIES_3 = $(top_builddir)/src/gallium/drivers/swr/libmesaswr.la \
+@HAVE_GALLIUM_SWR_TRUE@	$(am__DEPENDENCIES_1)
 lib@OSMESA_LIB@_la_DEPENDENCIES =  \
 	$(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
@@ -186,7 +191,7 @@ lib@OSMESA_LIB@_la_DEPENDENCIES =  \
 	$(top_builddir)/src/gallium/state_trackers/osmesa/libosmesa.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la $(SHARED_GLAPI_LIB) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_2)
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3)
 am_lib@OSMESA_LIB@_la_OBJECTS = target.lo
 lib@OSMESA_LIB@_la_OBJECTS = $(am_lib@OSMESA_LIB@_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -332,6 +337,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -430,6 +437,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -450,6 +459,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -466,6 +478,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -625,13 +638,13 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys \
 	-I$(top_srcdir)/src/gallium/auxiliary -DGALLIUM_SOFTPIPE \
-	-DGALLIUM_TRACE $(am__append_4)
+	-DGALLIUM_TRACE $(am__append_4) $(am__append_7)
 lib_LTLIBRARIES = lib@OSMESA_LIB@.la
 nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy.cpp
 lib@OSMESA_LIB@_la_SOURCES = target.c
 lib@OSMESA_LIB@_la_LDFLAGS = -no-undefined -version-number \
 	@OSMESA_VERSION@ $(GC_SECTIONS) $(LD_NO_UNDEFINED) \
-	$(am__append_3) $(am__append_5)
+	$(am__append_3) $(am__append_5) $(am__append_8)
 @HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 lib@OSMESA_LIB@_la_LIBADD =  \
 	$(top_builddir)/src/mesa/libmesagallium.la \
@@ -641,7 +654,8 @@ lib@OSMESA_LIB@_la_LIBADD =  \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
 	$(top_builddir)/src/gallium/state_trackers/osmesa/libosmesa.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la $(SHARED_GLAPI_LIB) \
-	$(OSMESA_LIB_DEPS) $(CLOCK_LIB) $(am__append_6)
+	$(OSMESA_LIB_DEPS) $(CLOCK_LIB) $(am__append_6) \
+	$(am__append_9)
 EXTRA_lib@OSMESA_LIB@_la_DEPENDENCIES = osmesa.sym
 EXTRA_DIST = \
 	osmesa.sym \
@@ -985,9 +999,9 @@ uninstall-am: uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		link_dir=$(top_builddir)/$(LIB_DIR)/egl;	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	fi;							\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(MKDIR_P) $$link_dir;					\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list=$(dri_LTLIBRARIES:%.la=.libs/%.so);		\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(egl_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*);	\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list="$(dri_LTLIBRARIES:%.la=.libs/%.so)";		\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+="$(egl_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)";	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+="$(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)";	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $$file_list; do 				\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		if test -h .libs/$$f; then			\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			cp -d $$f $$link_dir;			\

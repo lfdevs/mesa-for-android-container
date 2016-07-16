@@ -55,6 +55,13 @@ enum radeon_llvm_shader_type {
 	RADEON_LLVM_SHADER_CS = 3,
 };
 
+enum radeon_llvm_calling_convention {
+	RADEON_LLVM_AMDGPU_VS = 87,
+	RADEON_LLVM_AMDGPU_GS = 88,
+	RADEON_LLVM_AMDGPU_PS = 89,
+	RADEON_LLVM_AMDGPU_CS = 90,
+};
+
 void radeon_llvm_add_attribute(LLVMValueRef F, const char *name, int value)
 {
 	char str[16];
@@ -71,27 +78,35 @@ void radeon_llvm_add_attribute(LLVMValueRef F, const char *name, int value)
 void radeon_llvm_shader_type(LLVMValueRef F, unsigned type)
 {
 	enum radeon_llvm_shader_type llvm_type;
+	enum radeon_llvm_calling_convention calling_conv;
 
 	switch (type) {
-	case TGSI_PROCESSOR_VERTEX:
-	case TGSI_PROCESSOR_TESS_CTRL:
-	case TGSI_PROCESSOR_TESS_EVAL:
+	case PIPE_SHADER_VERTEX:
+	case PIPE_SHADER_TESS_CTRL:
+	case PIPE_SHADER_TESS_EVAL:
 		llvm_type = RADEON_LLVM_SHADER_VS;
+		calling_conv = RADEON_LLVM_AMDGPU_VS;
 		break;
-	case TGSI_PROCESSOR_GEOMETRY:
+	case PIPE_SHADER_GEOMETRY:
 		llvm_type = RADEON_LLVM_SHADER_GS;
+		calling_conv = RADEON_LLVM_AMDGPU_GS;
 		break;
-	case TGSI_PROCESSOR_FRAGMENT:
+	case PIPE_SHADER_FRAGMENT:
 		llvm_type = RADEON_LLVM_SHADER_PS;
+		calling_conv = RADEON_LLVM_AMDGPU_PS;
 		break;
-	case TGSI_PROCESSOR_COMPUTE:
+	case PIPE_SHADER_COMPUTE:
 		llvm_type = RADEON_LLVM_SHADER_CS;
+		calling_conv = RADEON_LLVM_AMDGPU_CS;
 		break;
 	default:
-		assert(0);
+		unreachable("Unhandle shader type");
 	}
 
-	radeon_llvm_add_attribute(F, "ShaderType", llvm_type);
+	if (HAVE_LLVM >= 0x309)
+		LLVMSetFunctionCallConv(F, calling_conv);
+	else
+		radeon_llvm_add_attribute(F, "ShaderType", llvm_type);
 }
 
 static void init_r600_target()

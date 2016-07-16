@@ -45,7 +45,7 @@ struct svga_vbuf_render {
 
    SVGA3dElementLayoutId layout_id; /**< current element layout id */
 
-   unsigned prim;
+   enum pipe_prim_type prim;
 
    struct pipe_resource *vbuf;
    struct pipe_resource *ibuf;

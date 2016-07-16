@@ -126,6 +126,7 @@ private:
    void emitF2I();
    void emitI2F();
    void emitI2I();
+   void emitSEL();
    void emitSHFL();
 
    void emitDADD();
@@ -177,6 +178,7 @@ private:
    void emitAL2P();
    void emitIPA();
    void emitATOM();
+   void emitATOMS();
    void emitCCTL();
 
    void emitPIXLD();
@@ -194,7 +196,10 @@ private:
    void emitKIL();
    void emitOUT();
 
+   void emitBAR();
    void emitMEMBAR();
+
+   void emitVOTE();
 };
 
 /*******************************************************************************
@@ -415,7 +420,7 @@ CodeEmitterGM107::emitSAT(int pos)
 void
 CodeEmitterGM107::emitCC(int pos)
 {
-   emitField(pos, 1, insn->defExists(1));
+   emitField(pos, 1, insn->flagsDef >= 0);
 }
 
 void
@@ -673,8 +678,7 @@ CodeEmitterGM107::emitRAM()
 void
 CodeEmitterGM107::emitMOV()
 {
-   if ( insn->src(0).getFile() != FILE_IMMEDIATE ||
-       (insn->sType != TYPE_F32 && !longIMMD(insn->src(0)))) {
+   if (insn->src(0).getFile() != FILE_IMMEDIATE) {
       switch (insn->src(0).getFile()) {
       case FILE_GPR:
          if (insn->def(0).getFile() == FILE_PREDICATE) {
@@ -887,6 +891,47 @@ CodeEmitterGM107::emitI2I()
    emitField(0x0a, 2, util_logbase2(typeSizeof(insn->sType)));
    emitField(0x08, 2, util_logbase2(typeSizeof(insn->dType)));
    emitGPR  (0x00, insn->def(0));
+}
+
+static void
+selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+{
+   int loc = entry->loc;
+   if (data.force_persample_interp)
+      code[loc + 1] |= 1 << 10;
+   else
+      code[loc + 1] &= ~(1 << 10);
+}
+
+void
+CodeEmitterGM107::emitSEL()
+{
+   switch (insn->src(1).getFile()) {
+   case FILE_GPR:
+      emitInsn(0x5ca00000);
+      emitGPR (0x14, insn->src(1));
+      break;
+   case FILE_MEMORY_CONST:
+      emitInsn(0x4ca00000);
+      emitCBUF(0x22, -1, 0x14, 16, 2, insn->src(1));
+      break;
+   case FILE_IMMEDIATE:
+      emitInsn(0x38a00000);
+      emitIMMD(0x14, 19, insn->src(1));
+      break;
+   default:
+      assert(!"bad src1 file");
+      break;
+   }
+
+   emitINV (0x2a, insn->src(2));
+   emitPRED(0x27, insn->src(2));
+   emitGPR (0x08, insn->src(0));
+   emitGPR (0x00, insn->def(0));
+
+   if (insn->subOp == 1) {
+      addInterp(0, 0, selpFlip);
+   }
 }
 
 void
@@ -1189,6 +1234,9 @@ CodeEmitterGM107::emitFADD()
       emitABS(0x2e, insn->src(0));
       emitNEG(0x2d, insn->src(1));
       emitFMZ(0x2c, 1);
+
+      if (insn->op == OP_SUB)
+         code[1] ^= 0x00002000;
    } else {
       emitInsn(0x08000000);
       emitABS(0x39, insn->src(1));
@@ -1198,10 +1246,10 @@ CodeEmitterGM107::emitFADD()
       emitNEG(0x35, insn->src(1));
       emitCC  (0x34);
       emitIMMD(0x14, 32, insn->src(1));
-   }
 
-   if (insn->op == OP_SUB)
-      code[1] ^= 0x00002000;
+      if (insn->op == OP_SUB)
+         code[1] ^= 0x00080000;
+   }
 
    emitGPR(0x08, insn->src(0));
    emitGPR(0x00, insn->def(0));
@@ -1561,7 +1609,7 @@ CodeEmitterGM107::emitLOP()
       break;
    }
 
-   if (!longIMMD(insn->src(1))) {
+   if (insn->src(1).getFile() != FILE_IMMEDIATE) {
       switch (insn->src(1).getFile()) {
       case FILE_GPR:
          emitInsn(0x5c400000);
@@ -1580,6 +1628,7 @@ CodeEmitterGM107::emitLOP()
          break;
       }
       emitPRED (0x30);
+      emitCC   (0x2f);
       emitX    (0x2b);
       emitField(0x29, 2, lop);
       emitINV  (0x28, insn->src(1));
@@ -1590,6 +1639,7 @@ CodeEmitterGM107::emitLOP()
       emitINV  (0x38, insn->src(1));
       emitINV  (0x37, insn->src(0));
       emitField(0x35, 2, lop);
+      emitCC   (0x34);
       emitIMMD (0x14, 32, insn->src(1));
    }
 
@@ -1673,7 +1723,7 @@ CodeEmitterGM107::emitIADD()
 void
 CodeEmitterGM107::emitIMUL()
 {
-   if (!longIMMD(insn->src(1))) {
+   if (insn->src(1).getFile() != FILE_IMMEDIATE) {
       switch (insn->src(1).getFile()) {
       case FILE_GPR:
          emitInsn(0x5c380000);
@@ -2257,18 +2307,17 @@ CodeEmitterGM107::emitAL2P()
 }
 
 static void
-interpApply(const InterpEntry *entry, uint32_t *code,
-      bool force_persample_interp, bool flatshade)
+interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int ipa = entry->ipa;
    int reg = entry->reg;
    int loc = entry->loc;
 
-   if (flatshade &&
+   if (data.flatshade &&
        (ipa & NV50_IR_INTERP_MODE_MASK) == NV50_IR_INTERP_SC) {
       ipa = NV50_IR_INTERP_FLAT;
       reg = 0xff;
-   } else if (force_persample_interp &&
+   } else if (data.force_persample_interp &&
               (ipa & NV50_IR_INTERP_SAMPLE_MASK) == NV50_IR_INTERP_DEFAULT &&
               (ipa & NV50_IR_INTERP_MODE_MASK) != NV50_IR_INTERP_FLAT) {
       ipa |= NV50_IR_INTERP_CENTROID;
@@ -2367,6 +2416,45 @@ CodeEmitterGM107::emitATOM()
    emitField(0x30, 1, insn->src(0).getIndirect(0)->getSize() == 8);
    emitGPR  (0x14, insn->src(1));
    emitADDR (0x08, 0x1c, 20, 0, insn->src(0));
+   emitGPR  (0x00, insn->def(0));
+}
+
+void
+CodeEmitterGM107::emitATOMS()
+{
+   unsigned dType, subOp;
+
+   if (insn->subOp == NV50_IR_SUBOP_ATOM_CAS) {
+      switch (insn->dType) {
+      case TYPE_U32: dType = 0; break;
+      case TYPE_U64: dType = 1; break;
+      default: assert(!"unexpected dType"); dType = 0; break;
+      }
+      subOp = 4;
+
+      emitInsn (0xee000000);
+      emitField(0x34, 1, dType);
+   } else {
+      switch (insn->dType) {
+      case TYPE_U32: dType = 0; break;
+      case TYPE_S32: dType = 1; break;
+      case TYPE_U64: dType = 2; break;
+      case TYPE_S64: dType = 3; break;
+      default: assert(!"unexpected dType"); dType = 0; break;
+      }
+
+      if (insn->subOp == NV50_IR_SUBOP_ATOM_EXCH)
+         subOp = 8;
+      else
+         subOp = insn->subOp;
+
+      emitInsn (0xec000000);
+      emitField(0x1c, 3, dType);
+   }
+
+   emitField(0x34, 4, subOp);
+   emitGPR  (0x14, insn->src(1));
+   emitADDR (0x08, 0x12, 22, 0, insn->src(0));
    emitGPR  (0x00, insn->def(0));
 }
 
@@ -2647,10 +2735,82 @@ CodeEmitterGM107::emitOUT()
 }
 
 void
+CodeEmitterGM107::emitBAR()
+{
+   uint8_t subop;
+
+   emitInsn (0xf0a80000);
+
+   switch (insn->subOp) {
+   case NV50_IR_SUBOP_BAR_RED_POPC: subop = 0x02; break;
+   case NV50_IR_SUBOP_BAR_RED_AND:  subop = 0x0a; break;
+   case NV50_IR_SUBOP_BAR_RED_OR:   subop = 0x12; break;
+   case NV50_IR_SUBOP_BAR_ARRIVE:   subop = 0x81; break;
+   default:
+      subop = 0x80;
+      assert(insn->subOp == NV50_IR_SUBOP_BAR_SYNC);
+      break;
+   }
+
+   emitField(0x20, 8, subop);
+
+   // barrier id
+   if (insn->src(0).getFile() == FILE_GPR) {
+      emitGPR(0x08, insn->src(0));
+   } else {
+      ImmediateValue *imm = insn->getSrc(0)->asImm();
+      assert(imm);
+      emitField(0x08, 8, imm->reg.data.u32);
+      emitField(0x2b, 1, 1);
+   }
+
+   // thread count
+   if (insn->src(1).getFile() == FILE_GPR) {
+      emitGPR(0x14, insn->src(1));
+   } else {
+      ImmediateValue *imm = insn->getSrc(0)->asImm();
+      assert(imm);
+      emitField(0x14, 12, imm->reg.data.u32);
+      emitField(0x2c, 1, 1);
+   }
+
+   if (insn->srcExists(2) && (insn->predSrc != 2)) {
+      emitPRED (0x27, insn->src(2));
+      emitField(0x2a, 1, insn->src(2).mod == Modifier(NV50_IR_MOD_NOT));
+   } else {
+      emitField(0x27, 3, 7);
+   }
+}
+
+void
 CodeEmitterGM107::emitMEMBAR()
 {
    emitInsn (0xef980000);
    emitField(0x08, 2, insn->subOp >> 2);
+}
+
+void
+CodeEmitterGM107::emitVOTE()
+{
+   int subOp;
+
+   assert(insn->src(0).getFile() == FILE_PREDICATE &&
+          insn->def(1).getFile() == FILE_PREDICATE);
+
+   switch (insn->subOp) {
+   case NV50_IR_SUBOP_VOTE_ANY: subOp = 1; break;
+   default:
+      assert(insn->subOp == NV50_IR_SUBOP_VOTE_ALL);
+      subOp = 0;
+      break;
+   }
+
+   emitInsn (0x50d80000);
+   emitField(0x30, 2, subOp);
+   emitGPR  (0x00, insn->def(0));
+   emitPRED (0x2d, insn->def(1));
+   emitField(0x2a, 1, insn->src(0).mod == Modifier(NV50_IR_MOD_NOT));
+   emitPRED (0x27, insn->src(0));
 }
 
 /*******************************************************************************
@@ -2848,6 +3008,9 @@ CodeEmitterGM107::emitInstruction(Instruction *i)
             emitISETP();
       }
       break;
+   case OP_SELP:
+      emitSEL();
+      break;
    case OP_PRESIN:
    case OP_PREEX2:
       emitRRO();
@@ -2886,13 +3049,16 @@ CodeEmitterGM107::emitInstruction(Instruction *i)
       case FILE_MEMORY_SHARED: emitSTS(); break;
       case FILE_MEMORY_GLOBAL: emitST(); break;
       default:
-         assert(!"invalid load");
+         assert(!"invalid store");
          emitNOP();
          break;
       }
       break;
    case OP_ATOM:
-      emitATOM();
+      if (insn->src(0).getFile() == FILE_MEMORY_SHARED)
+         emitATOMS();
+      else
+         emitATOM();
       break;
    case OP_CCTL:
       emitCCTL();
@@ -2952,8 +3118,14 @@ CodeEmitterGM107::emitInstruction(Instruction *i)
    case OP_RESTART:
       emitOUT();
       break;
+   case OP_BAR:
+      emitBAR();
+      break;
    case OP_MEMBAR:
       emitMEMBAR();
+      break;
+   case OP_VOTE:
+      emitVOTE();
       break;
    default:
       assert(!"invalid opcode");

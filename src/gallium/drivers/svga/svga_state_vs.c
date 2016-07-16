@@ -54,7 +54,7 @@ get_dummy_vertex_shader(void)
    struct ureg_dst dst;
    unsigned num_tokens;
 
-   ureg = ureg_create(TGSI_PROCESSOR_VERTEX);
+   ureg = ureg_create(PIPE_SHADER_VERTEX);
    if (!ureg)
       return NULL;
 
@@ -273,7 +273,7 @@ compile_passthrough_vs(struct svga_context *svga,
 
    num_inputs = fs->base.info.num_inputs;
 
-   ureg = ureg_create(TGSI_PROCESSOR_VERTEX);
+   ureg = ureg_create(PIPE_SHADER_VERTEX);
    if (!ureg)
       return PIPE_ERROR_OUT_OF_MEMORY;
 

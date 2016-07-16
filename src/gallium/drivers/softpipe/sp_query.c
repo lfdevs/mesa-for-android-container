@@ -134,7 +134,7 @@ softpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-static void
+static bool
 softpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct softpipe_context *softpipe = softpipe_context( pipe );
@@ -201,6 +201,7 @@ softpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
       break;
    }
    softpipe->dirty |= SP_NEW_QUERY;
+   return true;
 }
 
 
@@ -283,6 +284,12 @@ softpipe_check_render_cond(struct softpipe_context *sp)
 }
 
 
+static void
+softpipe_set_active_query_state(struct pipe_context *pipe, boolean enable)
+{
+}
+
+
 void softpipe_init_query_funcs(struct softpipe_context *softpipe )
 {
    softpipe->pipe.create_query = softpipe_create_query;
@@ -290,6 +297,7 @@ void softpipe_init_query_funcs(struct softpipe_context *softpipe )
    softpipe->pipe.begin_query = softpipe_begin_query;
    softpipe->pipe.end_query = softpipe_end_query;
    softpipe->pipe.get_query_result = softpipe_get_query_result;
+   softpipe->pipe.set_active_query_state = softpipe_set_active_query_state;
 }
 
 

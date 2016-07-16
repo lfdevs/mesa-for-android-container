@@ -587,9 +587,6 @@ st_context_teximage(struct st_context_iface *stctxi,
    }
 
    pipe_resource_reference(&stImage->pt, tex);
-   stObj->width0 = width;
-   stObj->height0 = height;
-   stObj->depth0 = depth;
    stObj->surface_format = pipe_format;
 
    _mesa_dirty_texobj(ctx, texObj);
@@ -906,7 +903,6 @@ st_manager_add_color_renderbuffer(struct st_context *st,
       break;
    default:
       return FALSE;
-      break;
    }
 
    if (!st_framebuffer_add_renderbuffer(stfb, idx))

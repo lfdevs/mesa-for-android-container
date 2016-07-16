@@ -3,6 +3,7 @@ VERSION 4.1
 
 EXPORTS
 	OSMesaCreateContext
+	OSMesaCreateContextAttribs
 	OSMesaCreateContextExt
 	OSMesaDestroyContext
 	OSMesaMakeCurrent

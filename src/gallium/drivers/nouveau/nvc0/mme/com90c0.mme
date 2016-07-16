@@ -1,4 +1,4 @@
-/* NVC0_COMPUTE_MACRO_LAUNCH_GRID_INDIRECT
+/* NVC0_CP_MACRO_LAUNCH_GRID_INDIRECT
  *
  * arg     = num_groups_x
  * parm[0] = num_groups_y

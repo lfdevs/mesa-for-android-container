@@ -104,64 +104,6 @@ br13_for_cpp(int cpp)
    }
 }
 
-static uint32_t
-get_tr_horizontal_align(uint32_t tr_mode, uint32_t cpp, bool is_src) {
-   /* Alignment tables for YF/YS tiled surfaces. */
-   const uint32_t align_2d_yf[] = {64, 64, 32, 32, 16};
-   const uint32_t bpp = cpp * 8;
-   const uint32_t shift = is_src ? 17 : 10;
-   uint32_t align;
-   int i = 0;
-
-   if (tr_mode == INTEL_MIPTREE_TRMODE_NONE)
-      return 0;
-
-   /* Compute array index. */
-   assert (bpp >= 8 && bpp <= 128 && _mesa_is_pow_two(bpp));
-   i = ffs(bpp / 8) - 1;
-
-   align = tr_mode == INTEL_MIPTREE_TRMODE_YF ?
-           align_2d_yf[i] :
-           4 * align_2d_yf[i];
-
-   assert(_mesa_is_pow_two(align));
-
-   /* XY_FAST_COPY_BLT doesn't support horizontal alignment of 16. */
-   if (align == 16)
-      align = 32;
-
-   return (ffs(align) - 6) << shift;
-}
-
-static uint32_t
-get_tr_vertical_align(uint32_t tr_mode, uint32_t cpp, bool is_src) {
-   /* Vertical alignment tables for YF/YS tiled surfaces. */
-   const unsigned align_2d_yf[] = {64, 32, 32, 16, 16};
-   const uint32_t bpp = cpp * 8;
-   const uint32_t shift = is_src ? 15 : 8;
-   uint32_t align;
-   int i = 0;
-
-   if (tr_mode == INTEL_MIPTREE_TRMODE_NONE)
-      return 0;
-
-   /* Compute array index. */
-   assert (bpp >= 8 && bpp <= 128 && _mesa_is_pow_two(bpp));
-   i = ffs(bpp / 8) - 1;
-
-   align = tr_mode == INTEL_MIPTREE_TRMODE_YF ?
-           align_2d_yf[i] :
-           4 * align_2d_yf[i];
-
-   assert(_mesa_is_pow_two(align));
-
-   /* XY_FAST_COPY_BLT doesn't support vertical alignments of 16 and 32. */
-   if (align == 16 || align == 32)
-      align = 64;
-
-   return (ffs(align) - 7) << shift;
-}
-
 /**
  * Emits the packet for switching the blitter from X to Y tiled or back.
  *
@@ -398,7 +340,8 @@ can_fast_copy_blit(struct brw_context *brw,
                    int16_t dst_x, int16_t dst_y,
                    uintptr_t dst_offset, uint32_t dst_pitch,
                    uint32_t dst_tiling, uint32_t dst_tr_mode,
-                   int16_t w, int16_t h, uint32_t cpp)
+                   int16_t w, int16_t h, uint32_t cpp,
+                   GLenum logic_op)
 {
    const bool dst_tiling_none = dst_tiling == I915_TILING_NONE;
    const bool src_tiling_none = src_tiling == I915_TILING_NONE;
@@ -412,6 +355,9 @@ can_fast_copy_blit(struct brw_context *brw,
     */
    if (src_tr_mode == INTEL_MIPTREE_TRMODE_NONE &&
        dst_tr_mode == INTEL_MIPTREE_TRMODE_NONE)
+      return false;
+
+   if (logic_op != GL_COPY)
       return false;
 
    /* The start pixel for Fast Copy blit should be on an OWord boundary. */
@@ -457,13 +403,6 @@ xy_blit_cmd(uint32_t src_tiling, uint32_t src_tr_mode,
 
       if (src_tiling != I915_TILING_NONE)
          SET_TILING_XY_FAST_COPY_BLT(src_tiling, src_tr_mode, XY_FAST_SRC);
-
-      CMD |= get_tr_horizontal_align(src_tr_mode, cpp, true /* is_src */);
-      CMD |= get_tr_vertical_align(src_tr_mode, cpp, true /* is_src */);
-
-      CMD |= get_tr_horizontal_align(dst_tr_mode, cpp, false /* is_src */);
-      CMD |= get_tr_vertical_align(dst_tr_mode, cpp, false /* is_src */);
-
    } else {
       assert(cpp <= 4);
       switch (cpp) {
@@ -563,13 +502,15 @@ intelEmitCopyBlit(struct brw_context *brw,
                                            dst_x, dst_y,
                                            dst_offset, dst_pitch,
                                            dst_tiling, dst_tr_mode,
-                                           w, h, cpp);
+                                           w, h, cpp, logic_op);
    if (!use_fast_copy_blit &&
        (src_tr_mode != INTEL_MIPTREE_TRMODE_NONE ||
         dst_tr_mode != INTEL_MIPTREE_TRMODE_NONE))
       return false;
 
    if (use_fast_copy_blit) {
+      assert(logic_op == GL_COPY);
+
       /* When two sequential fast copy blits have different source surfaces,
        * but their destinations refer to the same destination surfaces and
        * therefore destinations overlap it is imperative that a flush be

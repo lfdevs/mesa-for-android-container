@@ -368,7 +368,7 @@ static inline float getclipdist(const struct clip_stage *clipper,
       int _idx = plane_idx - 6;
       int cdi = _idx >= 4;
       int vidx = cdi ? _idx - 4 : _idx;
-      dp = vert->data[draw_current_shader_clipdistance_output(clipper->stage.draw, cdi)][vidx];
+      dp = vert->data[draw_current_shader_ccdistance_output(clipper->stage.draw, cdi)][vidx];
    } else {
       /*
        * legacy user clip planes or gl_ClipVertex

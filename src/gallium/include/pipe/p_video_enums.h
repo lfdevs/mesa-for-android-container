@@ -28,6 +28,10 @@
 #ifndef PIPE_VIDEO_ENUMS_H
 #define PIPE_VIDEO_ENUMS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum pipe_video_format
 {
    PIPE_VIDEO_FORMAT_UNKNOWN = 0,
@@ -86,5 +90,9 @@ enum pipe_video_entrypoint
    PIPE_VIDEO_ENTRYPOINT_MC,
    PIPE_VIDEO_ENTRYPOINT_ENCODE
 };
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif /* PIPE_VIDEO_ENUMS_H */

@@ -48,6 +48,8 @@
 
 #if defined(_MSC_VER)
 
+#include <intrin.h>
+
 /* Avoid 'expression is always true' warning */
 #pragma warning(disable: 4296)
 
@@ -174,8 +176,6 @@ typedef unsigned char boolean;
 
 #elif defined(_MSC_VER)
 
-void _ReadWriteBarrier(void);
-#pragma intrinsic(_ReadWriteBarrier)
 #define PIPE_READ_WRITE_BARRIER() _ReadWriteBarrier()
 
 #else

@@ -42,6 +42,9 @@
 #include "gallivm/lp_bld_type.h"
 #include "gallivm/lp_bld_swizzle.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct pipe_resource;
 struct pipe_sampler_view;
@@ -107,7 +110,17 @@ struct lp_sampler_params
    LLVMValueRef *texel;
 };
 
-
+struct lp_sampler_size_query_params
+{
+   struct lp_type int_type;
+   unsigned texture_unit;
+   unsigned target;
+   LLVMValueRef context_ptr;
+   boolean is_sviewinfo;
+   enum lp_sampler_lod_property lod_property;
+   LLVMValueRef explicit_lod;
+   LLVMValueRef *sizes_out;
+};
 /**
  * Texture static state.
  *
@@ -603,14 +616,7 @@ void
 lp_build_size_query_soa(struct gallivm_state *gallivm,
                         const struct lp_static_texture_state *static_state,
                         struct lp_sampler_dynamic_state *dynamic_state,
-                        struct lp_type int_type,
-                        unsigned texture_unit,
-                        unsigned target,
-                        LLVMValueRef context_ptr,
-                        boolean is_sviewinfo,
-                        enum lp_sampler_lod_property lod_property,
-                        LLVMValueRef explicit_lod,
-                        LLVMValueRef *sizes_out);
+                        const struct lp_sampler_size_query_params *params);
 
 void
 lp_build_sample_nop(struct gallivm_state *gallivm, 
@@ -625,5 +631,8 @@ lp_build_minify(struct lp_build_context *bld,
                 LLVMValueRef level,
                 boolean lod_scalar);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LP_BLD_SAMPLE_H */

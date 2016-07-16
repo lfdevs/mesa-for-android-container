@@ -34,12 +34,13 @@
 struct ir3_ra_reg_set;
 
 struct ir3_compiler {
+	struct fd_device *dev;
 	uint32_t gpu_id;
 	struct ir3_ra_reg_set *set;
 	uint32_t shader_count;
 };
 
-struct ir3_compiler * ir3_compiler_create(uint32_t gpu_id);
+struct ir3_compiler * ir3_compiler_create(struct fd_device *dev, uint32_t gpu_id);
 void ir3_compiler_destroy(struct ir3_compiler *compiler);
 
 int ir3_compile_shader_nir(struct ir3_compiler *compiler,

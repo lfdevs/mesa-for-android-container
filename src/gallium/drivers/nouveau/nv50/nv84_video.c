@@ -705,8 +705,8 @@ nv84_video_buffer_create(struct pipe_context *pipe,
 
       for (j = 0; j < nr_components; ++j, ++component) {
          sv_templ.swizzle_r = sv_templ.swizzle_g = sv_templ.swizzle_b =
-            PIPE_SWIZZLE_RED + j;
-         sv_templ.swizzle_a = PIPE_SWIZZLE_ONE;
+            PIPE_SWIZZLE_X + j;
+         sv_templ.swizzle_a = PIPE_SWIZZLE_1;
 
          buffer->sampler_view_components[component] =
             pipe->create_sampler_view(pipe, res, &sv_templ);

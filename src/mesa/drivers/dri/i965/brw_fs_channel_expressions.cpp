@@ -85,6 +85,7 @@ channel_expressions_predicate(ir_instruction *ir)
       case ir_unop_interpolate_at_centroid:
       case ir_binop_interpolate_at_offset:
       case ir_binop_interpolate_at_sample:
+      case ir_unop_pack_double_2x32:
          return false;
       default:
          break;
@@ -177,6 +178,8 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
       case ir_unop_interpolate_at_centroid:
       case ir_binop_interpolate_at_offset:
       case ir_binop_interpolate_at_sample:
+      /* We scalarize these in NIR, so no need to do it here */
+      case ir_unop_pack_double_2x32:
          return visit_continue;
 
       default:
@@ -235,6 +238,13 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_i2b:
    case ir_unop_b2i:
    case ir_unop_u2f:
+   case ir_unop_d2f:
+   case ir_unop_f2d:
+   case ir_unop_d2i:
+   case ir_unop_i2d:
+   case ir_unop_d2u:
+   case ir_unop_u2d:
+   case ir_unop_d2b:
    case ir_unop_trunc:
    case ir_unop_ceil:
    case ir_unop_floor:
@@ -289,6 +299,7 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_binop_gequal:
    case ir_binop_equal:
    case ir_binop_nequal:
+   case ir_binop_ldexp:
       for (i = 0; i < vector_elements; i++) {
 	 ir_rvalue *op0 = get_element(op_var[0], i);
 	 ir_rvalue *op1 = get_element(op_var[1], i);
@@ -404,7 +415,6 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_unpack_unorm_2x16:
    case ir_unop_unpack_unorm_4x8:
    case ir_unop_unpack_half_2x16:
-   case ir_binop_ldexp:
    case ir_binop_vector_extract:
    case ir_triop_vector_insert:
    case ir_quadop_vector:
@@ -414,20 +424,15 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_interpolate_at_centroid:
    case ir_binop_interpolate_at_offset:
    case ir_binop_interpolate_at_sample:
+   case ir_unop_unpack_double_2x32:
       unreachable("not reached: expression operates on scalars only");
 
    case ir_unop_pack_double_2x32:
-   case ir_unop_unpack_double_2x32:
+      unreachable("not reached: to be lowered in NIR, should've been skipped");
+
    case ir_unop_frexp_sig:
    case ir_unop_frexp_exp:
-   case ir_unop_d2f:
-   case ir_unop_f2d:
-   case ir_unop_d2i:
-   case ir_unop_i2d:
-   case ir_unop_d2u:
-   case ir_unop_u2d:
-   case ir_unop_d2b:
-      unreachable("no fp64 support yet");
+      unreachable("should have been lowered by lower_instructions");
    }
 
    ir->remove();

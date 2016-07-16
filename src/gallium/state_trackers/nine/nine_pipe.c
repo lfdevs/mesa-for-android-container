@@ -94,7 +94,7 @@ nine_convert_rasterizer_state(struct pipe_rasterizer_state *rast_state, const DW
     rast.sprite_coord_mode = PIPE_SPRITE_COORD_UPPER_LEFT;
     rast.point_quad_rasterization = 1;
     rast.point_size_per_vertex = rs[NINED3DRS_VSPOINTSIZE];
-    rast.multisample = !!rs[D3DRS_MULTISAMPLEANTIALIAS];
+    rast.multisample = rs[NINED3DRS_MULTISAMPLE];
     rast.line_smooth = !!rs[D3DRS_ANTIALIASEDLINEENABLE];
  /* rast.line_stipple_enable = 0; */
     rast.line_last_pixel = !!rs[D3DRS_LASTPIXEL];
@@ -162,7 +162,7 @@ nine_convert_blend_state(struct pipe_blend_state *blend_state, const DWORD *rs)
     blend.dither = !!rs[D3DRS_DITHERENABLE];
 
  /* blend.alpha_to_one = 0; */
-    blend.alpha_to_coverage = !!rs[NINED3DRS_ALPHACOVERAGE];
+    blend.alpha_to_coverage = rs[NINED3DRS_ALPHACOVERAGE] & 1;
 
     blend.rt[0].blend_enable = !!rs[D3DRS_ALPHABLENDENABLE];
     if (blend.rt[0].blend_enable) {
@@ -289,8 +289,8 @@ const enum pipe_format nine_d3d9_to_pipe_format_map[120] =
    [D3DFMT_A8L8]          = PIPE_FORMAT_L8A8_UNORM,
    [D3DFMT_A4L4]          = PIPE_FORMAT_L4A4_UNORM,
    [D3DFMT_V8U8]          = PIPE_FORMAT_R8G8_SNORM,
-   [D3DFMT_L6V5U5]        = PIPE_FORMAT_NONE,
-   [D3DFMT_X8L8V8U8]      = PIPE_FORMAT_NONE,
+   [D3DFMT_L6V5U5]        = PIPE_FORMAT_NONE, /* Should be PIPE_FORMAT_R5SG5SB6U_NORM, but interpretation of the data differs a bit. */
+   [D3DFMT_X8L8V8U8]      = PIPE_FORMAT_R8SG8SB8UX8U_NORM,
    [D3DFMT_Q8W8V8U8]      = PIPE_FORMAT_R8G8B8A8_SNORM,
    [D3DFMT_V16U16]        = PIPE_FORMAT_R16G16_SNORM,
    [D3DFMT_A2W10V10U10]   = PIPE_FORMAT_R10SG10SB10SA2U_NORM,

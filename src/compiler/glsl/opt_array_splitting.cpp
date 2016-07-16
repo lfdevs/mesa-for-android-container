@@ -55,9 +55,9 @@ public:
       this->components = NULL;
       this->mem_ctx = NULL;
       if (var->type->is_array())
-	 this->size = var->type->length;
+         this->size = var->type->length;
       else
-	 this->size = var->type->matrix_columns;
+         this->size = var->type->matrix_columns;
    }
 
    ir_variable *var; /* The key: the variable's pointer. */
@@ -93,6 +93,7 @@ public:
    {
       this->mem_ctx = ralloc_context(NULL);
       this->variable_list.make_empty();
+      this->in_whole_array_copy = false;
    }
 
    ~ir_array_reference_visitor(void)
@@ -104,6 +105,8 @@ public:
 
    virtual ir_visitor_status visit(ir_variable *);
    virtual ir_visitor_status visit(ir_dereference_variable *);
+   virtual ir_visitor_status visit_enter(ir_assignment *);
+   virtual ir_visitor_status visit_leave(ir_assignment *);
    virtual ir_visitor_status visit_enter(ir_dereference_array *);
    virtual ir_visitor_status visit_enter(ir_function_signature *);
 
@@ -113,6 +116,8 @@ public:
    exec_list variable_list;
 
    void *mem_ctx;
+
+   bool in_whole_array_copy;
 };
 
 } /* namespace */
@@ -137,7 +142,7 @@ ir_array_reference_visitor::get_variable_entry(ir_variable *var)
 
    foreach_in_list(variable_entry, entry, &this->variable_list) {
       if (entry->var == var)
-	 return entry;
+         return entry;
    }
 
    variable_entry *entry = new(mem_ctx) variable_entry(var);
@@ -158,9 +163,32 @@ ir_array_reference_visitor::visit(ir_variable *ir)
 }
 
 ir_visitor_status
+ir_array_reference_visitor::visit_enter(ir_assignment *ir)
+{
+   in_whole_array_copy =
+      ir->lhs->type->is_array() && ir->whole_variable_written();
+
+   return visit_continue;
+}
+
+ir_visitor_status
+ir_array_reference_visitor::visit_leave(ir_assignment *ir)
+{
+   in_whole_array_copy = false;
+
+   return visit_continue;
+}
+
+ir_visitor_status
 ir_array_reference_visitor::visit(ir_dereference_variable *ir)
 {
    variable_entry *entry = this->get_variable_entry(ir->var);
+
+   /* Allow whole-array assignments on the LHS.  We can split those
+    * by "unrolling" the assignment into component-wise assignments.
+    */
+   if (in_assignee && in_whole_array_copy)
+      return visit_continue;
 
    /* If we made it to here without seeing an ir_dereference_array,
     * then the dereference of this array didn't have a constant index
@@ -185,8 +213,18 @@ ir_array_reference_visitor::visit_enter(ir_dereference_array *ir)
    /* If the access to the array has a variable index, we wouldn't
     * know which split variable this dereference should go to.
     */
-   if (entry && !ir->array_index->as_constant())
-      entry->split = false;
+   if (!ir->array_index->as_constant()) {
+      if (entry)
+         entry->split = false;
+      /* This variable indexing could come from a different array dereference
+       * that also has variable indexing, that is, something like a[b[a[b[0]]]].
+       * If we return visit_continue_with_parent here for the first appearence
+       * of a, then we can miss that b also has indirect indexing (if this is
+       * the only place in the program where such indirect indexing into b
+       * happens), so keep going.
+       */
+      return visit_continue;
+   }
 
    /* If the index is also array dereference, visit index. */
    if (ir->array_index->as_dereference_array())
@@ -208,7 +246,7 @@ ir_array_reference_visitor::visit_enter(ir_function_signature *ir)
 
 bool
 ir_array_reference_visitor::get_split_list(exec_list *instructions,
-					   bool linked)
+                                           bool linked)
 {
    visit_list_elements(this, instructions);
 
@@ -217,25 +255,25 @@ ir_array_reference_visitor::get_split_list(exec_list *instructions,
     */
    if (!linked) {
       foreach_in_list(ir_instruction, node, instructions) {
-	 ir_variable *var = node->as_variable();
-	 if (var) {
-	    variable_entry *entry = get_variable_entry(var);
-	    if (entry)
-	       entry->remove();
-	 }
+         ir_variable *var = node->as_variable();
+         if (var) {
+            variable_entry *entry = get_variable_entry(var);
+            if (entry)
+               entry->remove();
+         }
       }
    }
 
    /* Trim out variables we found that we can't split. */
    foreach_in_list_safe(variable_entry, entry, &variable_list) {
       if (debug) {
-	 printf("array %s@%p: decl %d, split %d\n",
-		entry->var->name, (void *) entry->var, entry->declaration,
-		entry->split);
+         printf("array %s@%p: decl %d, split %d\n",
+                entry->var->name, (void *) entry->var, entry->declaration,
+                entry->split);
       }
 
       if (!(entry->declaration && entry->split)) {
-	 entry->remove();
+         entry->remove();
       }
    }
 
@@ -273,7 +311,7 @@ ir_array_splitting_visitor::get_splitting_entry(ir_variable *var)
 
    foreach_in_list(variable_entry, entry, this->variable_list) {
       if (entry->var == var) {
-	 return entry;
+         return entry;
       }
    }
 
@@ -301,7 +339,7 @@ ir_array_splitting_visitor::split_deref(ir_dereference **deref)
 
    if (constant->value.i[0] >= 0 && constant->value.i[0] < (int)entry->size) {
       *deref = new(entry->mem_ctx)
-	 ir_dereference_variable(entry->components[constant->value.i[0]]);
+               ir_dereference_variable(entry->components[constant->value.i[0]]);
    } else {
       /* There was a constant array access beyond the end of the
        * array.  This might have happened due to constant folding
@@ -310,8 +348,8 @@ ir_array_splitting_visitor::split_deref(ir_dereference **deref)
        * variable.
        */
       ir_variable *temp = new(entry->mem_ctx) ir_variable(deref_array->type,
-							  "undef",
-							  ir_var_temporary);
+                                                          "undef",
+                                                          ir_var_temporary);
       entry->components[0]->insert_before(temp);
       *deref = new(entry->mem_ctx) ir_dereference_variable(temp);
    }
@@ -339,6 +377,33 @@ ir_array_splitting_visitor::visit_leave(ir_assignment *ir)
     * need to process those just the same.
     */
    ir_rvalue *lhs = ir->lhs;
+
+   /* "Unroll" any whole array assignments, creating assignments for
+    * each array element.  Then, do splitting on each new assignment.
+    */
+   if (lhs->type->is_array() && ir->whole_variable_written() &&
+       get_splitting_entry(ir->whole_variable_written())) {
+      void *mem_ctx = ralloc_parent(ir);
+
+      for (unsigned i = 0; i < lhs->type->length; i++) {
+         ir_rvalue *lhs_i =
+            new(mem_ctx) ir_dereference_array(ir->lhs->clone(mem_ctx, NULL),
+                                              new(mem_ctx) ir_constant(i));
+         ir_rvalue *rhs_i =
+            new(mem_ctx) ir_dereference_array(ir->rhs->clone(mem_ctx, NULL),
+                                              new(mem_ctx) ir_constant(i));
+         ir_rvalue *condition_i =
+            ir->condition ? ir->condition->clone(mem_ctx, NULL) : NULL;
+
+         ir_assignment *assign_i =
+            new(mem_ctx) ir_assignment(lhs_i, rhs_i, condition_i);
+
+         ir->insert_before(assign_i);
+         assign_i->accept(this);
+      }
+      ir->remove();
+      return visit_continue;
+   }
 
    handle_rvalue(&lhs);
    ir->lhs = lhs->as_dereference();
@@ -373,23 +438,21 @@ optimize_split_arrays(exec_list *instructions, bool linked)
       const struct glsl_type *subtype;
 
       if (type->is_matrix())
-	 subtype = type->column_type();
+         subtype = type->column_type();
       else
-	 subtype = type->fields.array;
+         subtype = type->fields.array;
 
       entry->mem_ctx = ralloc_parent(entry->var);
 
-      entry->components = ralloc_array(mem_ctx,
-				       ir_variable *,
-				       entry->size);
+      entry->components = ralloc_array(mem_ctx, ir_variable *, entry->size);
 
       for (unsigned int i = 0; i < entry->size; i++) {
-	 const char *name = ralloc_asprintf(mem_ctx, "%s_%d",
-					    entry->var->name, i);
+         const char *name = ralloc_asprintf(mem_ctx, "%s_%d",
+                                            entry->var->name, i);
 
-	 entry->components[i] =
-	    new(entry->mem_ctx) ir_variable(subtype, name, ir_var_temporary);
-	 entry->var->insert_before(entry->components[i]);
+         entry->components[i] =
+            new(entry->mem_ctx) ir_variable(subtype, name, ir_var_temporary);
+         entry->var->insert_before(entry->components[i]);
       }
 
       entry->var->remove();

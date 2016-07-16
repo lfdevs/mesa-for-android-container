@@ -76,7 +76,11 @@ offset(src_reg reg, unsigned delta)
 static inline src_reg
 swizzle(src_reg reg, unsigned swizzle)
 {
-   reg.swizzle = brw_compose_swizzle(swizzle, reg.swizzle);
+   if (reg.file == IMM)
+      reg.ud = brw_swizzle_immediate(reg.type, reg.ud, swizzle);
+   else
+      reg.swizzle = brw_compose_swizzle(swizzle, reg.swizzle);
+
    return reg;
 }
 
@@ -168,6 +172,7 @@ public:
                       int swizzle, int swizzle_mask);
    void reswizzle(int dst_writemask, int swizzle);
    bool can_do_source_mods(const struct brw_device_info *devinfo);
+   bool can_do_writemask(const struct brw_device_info *devinfo);
    bool can_change_types() const;
    bool has_source_and_destination_hazard() const;
 

@@ -82,12 +82,7 @@ static uint64_t
 count_samples(const struct fd_rb_samp_ctrs *start,
 		const struct fd_rb_samp_ctrs *end)
 {
-	uint64_t n = 0;
-
-	for (unsigned i = 0; i < 16; i += 4)
-		n += end->ctr[i] - start->ctr[i];
-
-	return n / 2;
+	return end->ctr[0] - start->ctr[0];
 }
 
 static void
@@ -173,7 +168,7 @@ time_elapsed_get_sample(struct fd_context *ctx, struct fd_ringbuffer *ring)
 	OUT_RING(ring, CP_REG_TO_MEM_0_REG(REG_A4XX_RBBM_PERFCTR_CP_0_LO) |
 			CP_REG_TO_MEM_0_64B |
 			CP_REG_TO_MEM_0_CNT(2-1)); /* write 2 regs to mem */
-	OUT_RELOC(ring, scratch_bo, sample_off, 0, 0);
+	OUT_RELOCW(ring, scratch_bo, sample_off, 0, 0);
 
 	/* ok... here we really *would* like to use the CP_SET_CONSTANT
 	 * mode which can add a constant to value in reg2 and write to
@@ -187,7 +182,7 @@ time_elapsed_get_sample(struct fd_context *ctx, struct fd_ringbuffer *ring)
 
 	/* per-sample offset to scratch bo: */
 	OUT_PKT3(ring, CP_MEM_WRITE, 2);
-	OUT_RELOC(ring, scratch_bo, addr_off, 0, 0);
+	OUT_RELOCW(ring, scratch_bo, addr_off, 0, 0);
 	OUT_RING(ring, samp->offset);
 
 	/* now add to that the per-tile base: */
@@ -195,7 +190,7 @@ time_elapsed_get_sample(struct fd_context *ctx, struct fd_ringbuffer *ring)
 	OUT_RING(ring, CP_REG_TO_MEM_0_REG(HW_QUERY_BASE_REG) |
 			CP_REG_TO_MEM_0_ACCUMULATE |
 			CP_REG_TO_MEM_0_CNT(1-1));       /* readback 1 regs */
-	OUT_RELOC(ring, scratch_bo, addr_off, 0, 0);
+	OUT_RELOCW(ring, scratch_bo, addr_off, 0, 0);
 
 	/* now copy that back to CP_ME_NRT_ADDR: */
 	OUT_PKT3(ring, CP_MEM_TO_REG, 2);

@@ -192,22 +192,31 @@ pipe_vmwgfx_la_LIBADD = \
 
 endif
 
-if HAVE_GALLIUM_SOFTPIPE
-AM_CPPFLAGS += -DGALLIUM_SOFTPIPE
-
+if HAVE_GALLIUM_SWRAST
 pipe_LTLIBRARIES += pipe_swrast.la
 pipe_swrast_la_SOURCES = pipe_swrast.c
 nodist_EXTRA_pipe_swrast_la_SOURCES = dummy.cpp
+pipe_swrast_la_LIBADD = $(PIPE_LIBS)
 
-pipe_swrast_la_LIBADD = \
-	$(PIPE_LIBS) \
+if HAVE_GALLIUM_SOFTPIPE
+AM_CPPFLAGS += -DGALLIUM_SOFTPIPE
+
+pipe_swrast_la_LIBADD += \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la
+endif
 
 if HAVE_GALLIUM_LLVMPIPE
 AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
 
 pipe_swrast_la_LIBADD += \
 	$(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la
+endif
+
+if HAVE_GALLIUM_SWR
+AM_CPPFLAGS += -DGALLIUM_SWR
+
+pipe_swrast_la_LIBADD += \
+	$(top_builddir)/src/gallium/drivers/swr/libmesaswr.la
 endif
 
 pipe_swrast_la_LIBADD += \

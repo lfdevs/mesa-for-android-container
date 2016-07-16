@@ -56,6 +56,12 @@ struct intel_screen
    bool has_resource_streamer;
 
    /**
+    * Does the current hardware and kernel support MI_MATH and
+    * MI_LOAD_REGISTER_REG?
+    */
+   bool has_mi_math_and_lrr;
+
+   /**
     * Does the kernel support context reset notifications?
     */
    bool has_context_reset_notification;
@@ -81,7 +87,17 @@ struct intel_screen
     * I915_PARAM_CMD_PARSER_VERSION parameter
     */
    int cmd_parser_version;
- };
+
+   /**
+    * Number of subslices reported by the I915_PARAM_SUBSLICE_TOTAL parameter
+    */
+   int subslice_total;
+
+   /**
+    * Number of EUs reported by the I915_PARAM_EU_TOTAL parameter
+    */
+   int eu_total;
+};
 
 extern void intelDestroyContext(__DRIcontext * driContextPriv);
 

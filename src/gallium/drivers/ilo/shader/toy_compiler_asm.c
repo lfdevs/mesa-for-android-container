@@ -943,7 +943,7 @@ codegen_validate_region_restrictions(const struct codegen *cg)
    /* 1. (we don't do 32 anyway) */
    assert(exec_size <= 16);
 
-   for (i = 0; i < Elements(cg->src); i++) {
+   for (i = 0; i < ARRAY_SIZE(cg->src); i++) {
       const int width = width_map[cg->src[i].width];
       const int horz_stride = horz_stride_map[cg->src[i].horz_stride];
       const int vert_stride = vert_stride_map[cg->src[i].vert_stride];
@@ -1077,7 +1077,7 @@ codegen_prepare(struct codegen *cg, const struct ilo_dev *dev,
       break;
    }
 
-   for (i = 0; i < Elements(cg->src); i++) {
+   for (i = 0; i < ARRAY_SIZE(cg->src); i++) {
       struct codegen_src *src = &cg->src[i];
 
       src->file = translate_vfile(inst->src[i].file);

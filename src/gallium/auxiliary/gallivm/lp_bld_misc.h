@@ -55,10 +55,6 @@ extern void
 lp_set_target_options(void);
 
 
-extern LLVMValueRef
-lp_build_load_volatile(LLVMBuilderRef B, LLVMValueRef PointerVal,
-                       const char *Name);
-
 extern int
 lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
                                         struct lp_generated_code **OutCode,

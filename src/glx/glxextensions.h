@@ -31,6 +31,10 @@
 #ifndef GLX_GLXEXTENSIONS_H
 #define GLX_GLXEXTENSIONS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum
 {
    ARB_create_context_bit = 0,
@@ -302,5 +306,9 @@ typedef void (*PFNGLXDISABLEEXTENSIONPROC) (const char *name);
    { aliased_func args ; }
 # endif /* __GNUC__ */
 #endif /* GLX_NO_STATIC_EXTENSION_FUNCTIONS */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* GLX_GLXEXTENSIONS_H */

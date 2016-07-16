@@ -29,7 +29,7 @@
 
 #include "radeon/radeon_winsys.h"
 
-#define SI_PM4_MAX_DW		160
+#define SI_PM4_MAX_DW		176
 #define SI_PM4_MAX_BO		1
 
 // forward defines

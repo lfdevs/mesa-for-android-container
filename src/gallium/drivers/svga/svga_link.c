@@ -45,7 +45,7 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
 {
    unsigned i, free_slot;
 
-   for (i = 0; i < Elements(linkage->input_map); i++) {
+   for (i = 0; i < ARRAY_SIZE(linkage->input_map); i++) {
       linkage->input_map[i] = INVALID_INDEX;
    }
 
@@ -55,7 +55,7 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
     * We'll modify the input shader's inputs to match the output shader.
     */
    assert(inshader_info->num_inputs <=
-          Elements(inshader_info->input_semantic_name));
+          ARRAY_SIZE(inshader_info->input_semantic_name));
 
    /* free register index that can be used for built-in varyings */
    free_slot = outshader_info->num_outputs + 1;
@@ -76,7 +76,7 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
       else {
          /* search output shader outputs for same item */
          for (j = 0; j < outshader_info->num_outputs; j++) {
-            assert(j < Elements(outshader_info->output_semantic_name));
+            assert(j < ARRAY_SIZE(outshader_info->output_semantic_name));
             if (outshader_info->output_semantic_name[j] == sem_name &&
                 outshader_info->output_semantic_index[j] == sem_index) {
                linkage->input_map[i] = j;

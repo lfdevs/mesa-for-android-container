@@ -163,7 +163,7 @@ fs_visitor::opt_peephole_sel()
          /* Check that the MOVs are the right form. */
          if (!then_mov[i]->dst.equals(else_mov[i]->dst) ||
              then_mov[i]->exec_size != else_mov[i]->exec_size ||
-             then_mov[i]->force_sechalf != else_mov[i]->force_sechalf ||
+             then_mov[i]->group != else_mov[i]->group ||
              then_mov[i]->force_writemask_all != else_mov[i]->force_writemask_all ||
              then_mov[i]->is_partial_write() ||
              else_mov[i]->is_partial_write() ||

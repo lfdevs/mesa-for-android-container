@@ -92,21 +92,22 @@ sp_create_tile_cache( struct pipe_context *pipe )
 {
    struct softpipe_tile_cache *tc;
    uint pos;
-   int maxLevels, maxTexSize;
+   MAYBE_UNUSED int maxTexSize;
+   int maxLevels;
 
    /* sanity checking: max sure MAX_WIDTH/HEIGHT >= largest texture image */
    maxLevels = pipe->screen->get_param(pipe->screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
    maxTexSize = 1 << (maxLevels - 1);
    assert(MAX_WIDTH >= maxTexSize);
 
-   assert(sizeof(union tile_address) == 4);
+   STATIC_ASSERT(sizeof(union tile_address) == 4);
 
-   assert((TILE_SIZE << TILE_ADDR_BITS) >= MAX_WIDTH);
+   STATIC_ASSERT((TILE_SIZE << TILE_ADDR_BITS) >= MAX_WIDTH);
 
    tc = CALLOC_STRUCT( softpipe_tile_cache );
    if (tc) {
       tc->pipe = pipe;
-      for (pos = 0; pos < Elements(tc->tile_addrs); pos++) {
+      for (pos = 0; pos < ARRAY_SIZE(tc->tile_addrs); pos++) {
          tc->tile_addrs[pos].bits.invalid = 1;
       }
       tc->last_tile_addr.bits.invalid = 1;
@@ -141,7 +142,7 @@ sp_destroy_tile_cache(struct softpipe_tile_cache *tc)
    if (tc) {
       uint pos;
 
-      for (pos = 0; pos < Elements(tc->entries); pos++) {
+      for (pos = 0; pos < ARRAY_SIZE(tc->entries); pos++) {
          /*assert(tc->entries[pos].x < 0);*/
          FREE( tc->entries[pos] );
       }
@@ -447,7 +448,7 @@ sp_flush_tile_cache(struct softpipe_tile_cache *tc)
    int i;
    if (tc->num_maps) {
       /* caching a drawing transfer */
-      for (pos = 0; pos < Elements(tc->entries); pos++) {
+      for (pos = 0; pos < ARRAY_SIZE(tc->entries); pos++) {
          struct softpipe_cached_tile *tile = tc->entries[pos];
          if (!tile)
          {
@@ -484,7 +485,7 @@ sp_alloc_tile(struct softpipe_tile_cache *tc)
       if (!tc->tile)
       {
          unsigned pos;
-         for (pos = 0; pos < Elements(tc->entries); ++pos) {
+         for (pos = 0; pos < ARRAY_SIZE(tc->entries); ++pos) {
             if (!tc->entries[pos])
                continue;
 
@@ -644,7 +645,7 @@ sp_tile_cache_clear(struct softpipe_tile_cache *tc,
    /* set flags to indicate all the tiles are cleared */
    memset(tc->clear_flags, 255, tc->clear_flags_size);
 
-   for (pos = 0; pos < Elements(tc->tile_addrs); pos++) {
+   for (pos = 0; pos < ARRAY_SIZE(tc->tile_addrs); pos++) {
       tc->tile_addrs[pos].bits.invalid = 1;
    }
    tc->last_tile_addr.bits.invalid = 1;

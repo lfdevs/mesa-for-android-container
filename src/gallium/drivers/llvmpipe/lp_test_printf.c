@@ -89,12 +89,14 @@ static boolean
 test_printf(unsigned verbose, FILE *fp,
             const struct printf_test_case *testcase)
 {
+   LLVMContextRef context;
    struct gallivm_state *gallivm;
    LLVMValueRef test;
    test_printf_t test_printf_func;
    boolean success = TRUE;
 
-   gallivm = gallivm_create("test_module", LLVMGetGlobalContext());
+   context = LLVMContextCreate();
+   gallivm = gallivm_create("test_module", context);
 
    test = add_printf_test(gallivm);
 
@@ -107,6 +109,7 @@ test_printf(unsigned verbose, FILE *fp,
    test_printf_func(0);
 
    gallivm_destroy(gallivm);
+   LLVMContextDispose(context);
 
    return success;
 }

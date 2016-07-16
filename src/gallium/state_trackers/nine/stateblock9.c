@@ -172,7 +172,7 @@ nine_state_copy_common(struct nine_state *dst,
     /* Render states.
      * TODO: Maybe build a list ?
      */
-    for (i = 0; i < Elements(dst->changed.rs); ++i) {
+    for (i = 0; i < ARRAY_SIZE(dst->changed.rs); ++i) {
         uint32_t m = mask->changed.rs[i];
         if (apply)
             dst->changed.rs[i] |= m;
@@ -309,7 +309,7 @@ nine_state_copy_common(struct nine_state *dst,
         dst->ff.num_lights_active = src->ff.num_lights_active;
     }
     if (mask->changed.group & NINE_STATE_FF_VSTRANSF) {
-        for (i = 0; i < Elements(mask->ff.changed.transform); ++i) {
+        for (i = 0; i < ARRAY_SIZE(mask->ff.changed.transform); ++i) {
             if (!mask->ff.changed.transform[i])
                 continue;
             for (s = i * 32; s < (i * 32 + 32); ++s) {
@@ -404,7 +404,7 @@ nine_state_copy_common_all(struct nine_state *dst,
 
     /* Vertex streams. */
     if (1) {
-        for (i = 0; i < Elements(dst->stream); ++i) {
+        for (i = 0; i < ARRAY_SIZE(dst->stream); ++i) {
             nine_bind(&dst->stream[i], src->stream[i]);
             if (src->stream[i]) {
                 dst->vtxbuf[i].buffer_offset = src->vtxbuf[i].buffer_offset;

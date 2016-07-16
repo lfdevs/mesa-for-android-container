@@ -35,14 +35,18 @@ PRIMS=('tris',
        'tristrip', 
        'quads', 
        'quadstrip', 
-       'polygon')
+       'polygon',
+       'trisadj',
+       'tristripadj')
 
 LONGPRIMS=('PIPE_PRIM_TRIANGLES', 
            'PIPE_PRIM_TRIANGLE_FAN', 
            'PIPE_PRIM_TRIANGLE_STRIP', 
            'PIPE_PRIM_QUADS', 
            'PIPE_PRIM_QUAD_STRIP', 
-           'PIPE_PRIM_POLYGON')
+           'PIPE_PRIM_POLYGON',
+           'PIPE_PRIM_TRIANGLES_ADJACENCY',
+           'PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY')
 
 longprim = dict(zip(PRIMS, LONGPRIMS))
 intype_idx = dict(ubyte='IN_UBYTE', ushort='IN_USHORT', uint='IN_UINT')
@@ -194,6 +198,22 @@ def quadstrip(intype, outtype):
     postamble()
 
 
+def trisadj(intype, outtype):
+    preamble(intype, outtype, prim='trisadj')
+    print '  for (i = start, j = 0; j < out_nr; j+=6, i+=6) { '
+    do_tri( intype, outtype, 'out+j',  'i', 'i+2', 'i+4' );
+    print '   }'
+    postamble()
+
+
+def tristripadj(intype, outtype):
+    preamble(intype, outtype, prim='tristripadj')
+    print '  for (i = start, j = 0; j < out_nr; j+=6, i+=2) { '
+    do_tri( intype, outtype, 'out+j',  'i', 'i+2', 'i+4' );
+    print '   }'
+    postamble()
+
+
 def emit_funcs():
     for intype in INTYPES:
         for outtype in OUTTYPES:
@@ -203,6 +223,8 @@ def emit_funcs():
             quads(intype, outtype)
             quadstrip(intype, outtype)
             polygon(intype, outtype)
+            trisadj(intype, outtype)
+            tristripadj(intype, outtype)
 
 def init(intype, outtype, prim):
     if intype == GENERATE:

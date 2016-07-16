@@ -2,18 +2,18 @@
 #ifndef R600_OPCODES_H
 #define R600_OPCODES_H
 
-#define R600_S_SQ_CF_WORD1_CF_INST(x)                              (((x) & 0x7F) << 23)
+#define R600_S_SQ_CF_WORD1_CF_INST(x)                              (((unsigned)(x) & 0x7F) << 23)
 #define R600_G_SQ_CF_WORD1_CF_INST(x)                              (((x) >> 23) & 0x7F)
-#define R600_S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(x)                 (((x) & 0x7F) << 23)
+#define R600_S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(x)                 (((unsigned)(x) & 0x7F) << 23)
 #define R600_G_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(x)                 (((x) >> 23) & 0x7F)
-#define R600_S_SQ_CF_ALU_WORD1_CF_INST(x)                          (((x) & 0xF) << 26)
+#define R600_S_SQ_CF_ALU_WORD1_CF_INST(x)                          (((unsigned)(x) & 0xF) << 26)
 #define R600_G_SQ_CF_ALU_WORD1_CF_INST(x)                          (((x) >> 26) & 0xF)
 
-#define EG_S_SQ_CF_WORD1_CF_INST(x)                                (((x) & 0xFF) << 22)
+#define EG_S_SQ_CF_WORD1_CF_INST(x)                                (((unsigned)(x) & 0xFF) << 22)
 #define EG_G_SQ_CF_WORD1_CF_INST(x)                                (((x) >> 22) & 0xFF)
-#define EG_S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(x)                   (((x) & 0xFF) << 22)
+#define EG_S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(x)                   (((unsigned)(x) & 0xFF) << 22)
 #define EG_G_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(x)                   (((x) >> 22) & 0xFF)
-#define EG_S_SQ_CF_ALU_WORD1_CF_INST(x)                            (((x) & 0xF) << 26)
+#define EG_S_SQ_CF_ALU_WORD1_CF_INST(x)                            (((unsigned)(x) & 0xF) << 26)
 #define EG_G_SQ_CF_ALU_WORD1_CF_INST(x)                            (((x) >> 26) & 0xF)
 
 #define     V_SQ_CF_WORD1_SQ_CF_INST_NOP                             R600_S_SQ_CF_WORD1_CF_INST(0x00000000)

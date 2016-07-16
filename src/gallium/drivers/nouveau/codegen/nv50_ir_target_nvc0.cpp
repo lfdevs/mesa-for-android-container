@@ -238,9 +238,11 @@ void TargetNVC0::initOpInfo()
 unsigned int
 TargetNVC0::getFileSize(DataFile file) const
 {
+   const unsigned int gprs = (chipset >= NVISA_GK20A_CHIPSET) ? 255 : 63;
+   const unsigned int smregs = (chipset >= NVISA_GK104_CHIPSET) ? 65536 : 32768;
    switch (file) {
    case FILE_NULL:          return 0;
-   case FILE_GPR:           return (chipset >= NVISA_GK20A_CHIPSET) ? 255 : 63;
+   case FILE_GPR:           return MIN2(gprs, smregs / threads);
    case FILE_PREDICATE:     return 7;
    case FILE_FLAGS:         return 1;
    case FILE_ADDRESS:       return 0;
@@ -248,6 +250,7 @@ TargetNVC0::getFileSize(DataFile file) const
    case FILE_MEMORY_CONST:  return 65536;
    case FILE_SHADER_INPUT:  return 0x400;
    case FILE_SHADER_OUTPUT: return 0x400;
+   case FILE_MEMORY_BUFFER: return 0xffffffff;
    case FILE_MEMORY_GLOBAL: return 0xffffffff;
    case FILE_MEMORY_SHARED: return 16 << 10;
    case FILE_MEMORY_LOCAL:  return 48 << 10;
@@ -624,7 +627,7 @@ bool TargetNVC0::canDualIssue(const Instruction *a, const Instruction *b) const
       // nothing with TEXBAR
       if (a->op == OP_TEXBAR || b->op == OP_TEXBAR)
          return false;
-      // no loads and stores accessing the the same space
+      // no loads and stores accessing the same space
       if ((clA == OPCLASS_LOAD && clB == OPCLASS_STORE) ||
           (clB == OPCLASS_LOAD && clA == OPCLASS_STORE))
          if (a->src(0).getFile() == b->src(0).getFile())

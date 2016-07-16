@@ -375,10 +375,8 @@ tgsi_util_get_src_from_ind(const struct tgsi_ind_register *reg)
  * sample index.
  */
 int
-tgsi_util_get_texture_coord_dim(int tgsi_tex, int *shadow_or_sample)
+tgsi_util_get_texture_coord_dim(unsigned tgsi_tex)
 {
-   int dim;
-
    /*
     * Depending on the texture target, (src0.xyzw, src1.x) is interpreted
     * differently:
@@ -407,8 +405,7 @@ tgsi_util_get_texture_coord_dim(int tgsi_tex, int *shadow_or_sample)
    case TGSI_TEXTURE_BUFFER:
    case TGSI_TEXTURE_1D:
    case TGSI_TEXTURE_SHADOW1D:
-      dim = 1;
-      break;
+      return 1;
    case TGSI_TEXTURE_2D:
    case TGSI_TEXTURE_RECT:
    case TGSI_TEXTURE_1D_ARRAY:
@@ -416,52 +413,48 @@ tgsi_util_get_texture_coord_dim(int tgsi_tex, int *shadow_or_sample)
    case TGSI_TEXTURE_SHADOWRECT:
    case TGSI_TEXTURE_SHADOW1D_ARRAY:
    case TGSI_TEXTURE_2D_MSAA:
-      dim = 2;
-      break;
+      return 2;
    case TGSI_TEXTURE_3D:
    case TGSI_TEXTURE_CUBE:
    case TGSI_TEXTURE_2D_ARRAY:
    case TGSI_TEXTURE_SHADOWCUBE:
    case TGSI_TEXTURE_SHADOW2D_ARRAY:
    case TGSI_TEXTURE_2D_ARRAY_MSAA:
-      dim = 3;
-      break;
+      return 3;
    case TGSI_TEXTURE_CUBE_ARRAY:
    case TGSI_TEXTURE_SHADOWCUBE_ARRAY:
-      dim = 4;
-      break;
+      return 4;
    default:
       assert(!"unknown texture target");
-      dim = 0;
-      break;
+      return 0;
    }
+}
 
-   if (shadow_or_sample) {
-      switch (tgsi_tex) {
-      case TGSI_TEXTURE_SHADOW1D:
-         /* there is a gap */
-         *shadow_or_sample = 2;
-         break;
-      case TGSI_TEXTURE_SHADOW2D:
-      case TGSI_TEXTURE_SHADOWRECT:
-      case TGSI_TEXTURE_SHADOWCUBE:
-      case TGSI_TEXTURE_SHADOW1D_ARRAY:
-      case TGSI_TEXTURE_SHADOW2D_ARRAY:
-      case TGSI_TEXTURE_SHADOWCUBE_ARRAY:
-         *shadow_or_sample = dim;
-         break;
-      case TGSI_TEXTURE_2D_MSAA:
-      case TGSI_TEXTURE_2D_ARRAY_MSAA:
-         *shadow_or_sample = 3;
-         break;
-      default:
-         /* no shadow nor sample */
-         *shadow_or_sample = -1;
-         break;
-      }
+
+/**
+ * Given a TGSI_TEXTURE_x target, return the src register index for the
+ * shadow reference coordinate.
+ */
+int
+tgsi_util_get_shadow_ref_src_index(unsigned tgsi_tex)
+{
+   switch (tgsi_tex) {
+   case TGSI_TEXTURE_SHADOW1D:
+   case TGSI_TEXTURE_SHADOW2D:
+   case TGSI_TEXTURE_SHADOWRECT:
+   case TGSI_TEXTURE_SHADOW1D_ARRAY:
+      return 2;
+   case TGSI_TEXTURE_SHADOWCUBE:
+   case TGSI_TEXTURE_SHADOW2D_ARRAY:
+   case TGSI_TEXTURE_2D_MSAA:
+   case TGSI_TEXTURE_2D_ARRAY_MSAA:
+      return 3;
+   case TGSI_TEXTURE_SHADOWCUBE_ARRAY:
+      return 4;
+   default:
+      /* no shadow nor sample */
+      return -1;
    }
-
-   return dim;
 }
 
 

@@ -22,7 +22,8 @@ nv50_resource_create(struct pipe_screen *screen,
 static struct pipe_resource *
 nv50_resource_from_handle(struct pipe_screen * screen,
                           const struct pipe_resource *templ,
-                          struct winsys_handle *whandle)
+                          struct winsys_handle *whandle,
+                          unsigned usage)
 {
    if (templ->target == PIPE_BUFFER)
       return NULL;
@@ -84,6 +85,13 @@ nv50_surface_destroy(struct pipe_context *pipe, struct pipe_surface *ps)
 }
 
 void
+nv50_invalidate_resource(struct pipe_context *pipe, struct pipe_resource *res)
+{
+   if (res->target == PIPE_BUFFER)
+      nouveau_buffer_invalidate(pipe, res);
+}
+
+void
 nv50_init_resource_functions(struct pipe_context *pcontext)
 {
    pcontext->transfer_map = u_transfer_map_vtbl;
@@ -92,6 +100,7 @@ nv50_init_resource_functions(struct pipe_context *pcontext)
    pcontext->transfer_inline_write = u_transfer_inline_write_vtbl;
    pcontext->create_surface = nv50_surface_create;
    pcontext->surface_destroy = nv50_surface_destroy;
+   pcontext->invalidate_resource = nv50_invalidate_resource;
 }
 
 void

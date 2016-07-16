@@ -38,7 +38,6 @@ upload_sbe_state(struct brw_context *brw)
    uint32_t num_outputs = brw->wm.prog_data->num_varying_inputs;
    uint32_t dw1;
    uint32_t point_sprite_enables;
-   uint32_t flat_enables;
    int i;
    uint16_t attr_overrides[16];
    /* _NEW_BUFFERS */
@@ -66,8 +65,7 @@ upload_sbe_state(struct brw_context *brw)
    uint32_t urb_entry_read_length;
    uint32_t urb_entry_read_offset;
    calculate_attr_overrides(brw, attr_overrides, &point_sprite_enables,
-                            &flat_enables, &urb_entry_read_length,
-                            &urb_entry_read_offset);
+                            &urb_entry_read_length, &urb_entry_read_offset);
    dw1 |= urb_entry_read_length << GEN7_SBE_URB_ENTRY_READ_LENGTH_SHIFT |
           urb_entry_read_offset << GEN7_SBE_URB_ENTRY_READ_OFFSET_SHIFT;
 
@@ -81,7 +79,7 @@ upload_sbe_state(struct brw_context *brw)
    }
 
    OUT_BATCH(point_sprite_enables); /* dw10 */
-   OUT_BATCH(flat_enables);
+   OUT_BATCH(brw->wm.prog_data->flat_inputs);
    OUT_BATCH(0); /* wrapshortest enables 0-7 */
    OUT_BATCH(0); /* wrapshortest enables 8-15 */
    ADVANCE_BATCH();
@@ -93,7 +91,8 @@ const struct brw_tracked_state gen7_sbe_state = {
                _NEW_LIGHT |
                _NEW_POINT |
                _NEW_PROGRAM,
-      .brw   = BRW_NEW_CONTEXT |
+      .brw   = BRW_NEW_BLORP |
+               BRW_NEW_CONTEXT |
                BRW_NEW_FRAGMENT_PROGRAM |
                BRW_NEW_FS_PROG_DATA |
                BRW_NEW_GEOMETRY_PROGRAM |
@@ -188,8 +187,9 @@ upload_sf_state(struct brw_context *brw)
       dw2 |= GEN6_SF_CULL_NONE;
    }
 
-   /* _NEW_SCISSOR */
-   if (ctx->Scissor.EnableFlags)
+   /* _NEW_SCISSOR _NEW_POLYGON BRW_NEW_GEOMETRY_PROGRAM BRW_NEW_PRIMITIVE */
+   if (ctx->Scissor.EnableFlags ||
+       is_drawing_points(brw) || is_drawing_lines(brw))
       dw2 |= GEN6_SF_SCISSOR_ENABLE;
 
    /* _NEW_LINE */
@@ -254,7 +254,9 @@ const struct brw_tracked_state gen7_sf_state = {
                _NEW_POLYGON |
                _NEW_PROGRAM |
                _NEW_SCISSOR,
-      .brw   = BRW_NEW_CONTEXT,
+      .brw   = BRW_NEW_BLORP |
+               BRW_NEW_CONTEXT |
+               BRW_NEW_PRIMITIVE,
    },
    .emit = upload_sf_state,
 };

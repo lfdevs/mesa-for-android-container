@@ -61,6 +61,8 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
     info.sampler_mask_shadow = 0x0;
     info.sampler_ps1xtypes = 0x0;
     info.fog_enable = 0;
+    info.point_size_min = 0;
+    info.point_size_max = 0;
 
     hr = nine_translate_shader(device, &info);
     if (FAILED(hr))
@@ -82,7 +84,7 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
     This->position_t = info.position_t;
     This->point_size = info.point_size;
 
-    for (i = 0; i < info.num_inputs && i < Elements(This->input_map); ++i)
+    for (i = 0; i < info.num_inputs && i < ARRAY_SIZE(This->input_map); ++i)
         This->input_map[i].ndecl = info.input_map[i];
     This->num_inputs = i;
 
@@ -145,7 +147,7 @@ void *
 NineVertexShader9_GetVariant( struct NineVertexShader9 *This )
 {
     void *cso;
-    uint32_t key;
+    uint64_t key;
 
     key = This->next_key;
     if (key == This->last_key)
@@ -163,6 +165,8 @@ NineVertexShader9_GetVariant( struct NineVertexShader9 *This )
         info.byte_code = This->byte_code.tokens;
         info.sampler_mask_shadow = key & 0xf;
         info.fog_enable = device->state.rs[D3DRS_FOGENABLE];
+        info.point_size_min = asfloat(device->state.rs[D3DRS_POINTSIZE_MIN]);
+        info.point_size_max = asfloat(device->state.rs[D3DRS_POINTSIZE_MAX]);
 
         hr = nine_translate_shader(This->base.device, &info);
         if (FAILED(hr))

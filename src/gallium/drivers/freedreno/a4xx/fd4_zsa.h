@@ -39,7 +39,6 @@ struct fd4_zsa_stateobj {
 	struct pipe_depth_stencil_alpha_state base;
 	uint32_t gras_alpha_control;
 	uint32_t rb_alpha_control;
-	uint32_t rb_render_control;
 	uint32_t rb_depth_control;
 	uint32_t rb_stencil_control;
 	uint32_t rb_stencil_control2;

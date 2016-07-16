@@ -16,8 +16,8 @@
 static void
 stipple_quad(struct quad_stage *qs, struct quad_header *quads[], unsigned nr)
 {
-   static const uint bit31 = 1 << 31;
-   static const uint bit30 = 1 << 30;
+   static const uint bit31 = 1u << 31;
+   static const uint bit30 = 1u << 30;
    unsigned pass = nr;
 
    struct softpipe_context *softpipe = qs->softpipe;

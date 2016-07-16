@@ -38,6 +38,63 @@
 
 #include "pipe/p_screen.h"
 
+/* These formats are supported by swapping their bytes.
+ * The swizzles must be set exactly like their non-swapped counterparts,
+ * because byte-swapping is what reverses the component order, not swizzling.
+ *
+ * This function returns the format that must be used to program CB and TX
+ * swizzles.
+ */
+static enum pipe_format r300_unbyteswap_array_format(enum pipe_format format)
+{
+    /* Only BGRA 8888 array formats are supported for simplicity of
+     * the implementation. */
+    switch (format) {
+    case PIPE_FORMAT_A8R8G8B8_UNORM:
+        return PIPE_FORMAT_B8G8R8A8_UNORM;
+    case PIPE_FORMAT_A8R8G8B8_SRGB:
+        return PIPE_FORMAT_B8G8R8A8_SRGB;
+    case PIPE_FORMAT_X8R8G8B8_UNORM:
+        return PIPE_FORMAT_B8G8R8X8_UNORM;
+    case PIPE_FORMAT_X8R8G8B8_SRGB:
+        return PIPE_FORMAT_B8G8R8X8_SRGB;
+    default:
+        return format;
+    }
+}
+
+static unsigned r300_get_endian_swap(enum pipe_format format)
+{
+    const struct util_format_description *desc;
+    unsigned swap_size;
+
+    if (r300_unbyteswap_array_format(format) != format)
+        return R300_SURF_DWORD_SWAP;
+
+    if (PIPE_ENDIAN_NATIVE != PIPE_ENDIAN_BIG)
+        return R300_SURF_NO_SWAP;
+
+    desc = util_format_description(format);
+    if (!desc)
+        return R300_SURF_NO_SWAP;
+
+    /* Compressed formats should be in the little endian format. */
+    if (desc->block.width != 1 || desc->block.height != 1)
+        return R300_SURF_NO_SWAP;
+
+    swap_size = desc->is_array ? desc->channel[0].size : desc->block.bits;
+
+    switch (swap_size) {
+    default: /* shouldn't happen? */
+    case 8:
+        return R300_SURF_NO_SWAP;
+    case 16:
+        return R300_SURF_WORD_SWAP;
+    case 32:
+        return R300_SURF_DWORD_SWAP;
+    }
+}
+
 unsigned r300_get_swizzle_combined(const unsigned char *swizzle_format,
                                    const unsigned char *swizzle_view,
                                    boolean dxtc_swizzle)
@@ -68,22 +125,22 @@ unsigned r300_get_swizzle_combined(const unsigned char *swizzle_format,
     /* Get swizzle. */
     for (i = 0; i < 4; i++) {
         switch (swizzle[i]) {
-            case UTIL_FORMAT_SWIZZLE_Y:
+            case PIPE_SWIZZLE_Y:
                 result |= swizzle_bit[1] << swizzle_shift[i];
                 break;
-            case UTIL_FORMAT_SWIZZLE_Z:
+            case PIPE_SWIZZLE_Z:
                 result |= swizzle_bit[2] << swizzle_shift[i];
                 break;
-            case UTIL_FORMAT_SWIZZLE_W:
+            case PIPE_SWIZZLE_W:
                 result |= swizzle_bit[3] << swizzle_shift[i];
                 break;
-            case UTIL_FORMAT_SWIZZLE_0:
+            case PIPE_SWIZZLE_0:
                 result |= R300_TX_FORMAT_ZERO << swizzle_shift[i];
                 break;
-            case UTIL_FORMAT_SWIZZLE_1:
+            case PIPE_SWIZZLE_1:
                 result |= R300_TX_FORMAT_ONE << swizzle_shift[i];
                 break;
-            default: /* UTIL_FORMAT_SWIZZLE_X */
+            default: /* PIPE_SWIZZLE_X */
                 result |= swizzle_bit[0] << swizzle_shift[i];
         }
     }
@@ -118,6 +175,7 @@ uint32_t r300_translate_texformat(enum pipe_format format,
         R300_TX_FORMAT_SIGNED_X,
     };
 
+    format = r300_unbyteswap_array_format(format);
     desc = util_format_description(format);
 
     /* Colorspace (return non-RGB formats directly). */
@@ -400,6 +458,8 @@ uint32_t r500_tx_format_msb_bit(enum pipe_format format)
  * output. For the swizzling of the targets, check the shader's format. */
 static uint32_t r300_translate_colorformat(enum pipe_format format)
 {
+    format = r300_unbyteswap_array_format(format);
+
     switch (format) {
         /* 8-bit buffers. */
         case PIPE_FORMAT_A8_UNORM:
@@ -534,6 +594,7 @@ static uint32_t r300_translate_out_fmt(enum pipe_format format)
     const struct util_format_description *desc;
     boolean uniform_sign;
 
+    format = r300_unbyteswap_array_format(format);
     desc = util_format_description(format);
 
     /* Find the first non-VOID channel. */
@@ -730,6 +791,8 @@ static uint32_t r300_translate_out_fmt(enum pipe_format format)
 
 static uint32_t r300_translate_colormask_swizzle(enum pipe_format format)
 {
+    format = r300_unbyteswap_array_format(format);
+
     switch (format) {
     case PIPE_FORMAT_A8_UNORM:
     case PIPE_FORMAT_A8_SNORM:
@@ -918,7 +981,8 @@ void r300_texture_setup_format_state(struct r300_screen *screen,
     }
 
     out->tile_config = R300_TXO_MACRO_TILE(desc->macrotile[level]) |
-                       R300_TXO_MICRO_TILE(desc->microtile);
+                       R300_TXO_MICRO_TILE(desc->microtile) |
+                       R300_TXO_ENDIAN(r300_get_endian_swap(format));
 }
 
 static void r300_texture_setup_fb_state(struct r300_surface *surf)
@@ -933,7 +997,8 @@ static void r300_texture_setup_fb_state(struct r300_surface *surf)
         surf->pitch =
                 stride |
                 R300_DEPTHMACROTILE(tex->tex.macrotile[level]) |
-                R300_DEPTHMICROTILE(tex->tex.microtile);
+                R300_DEPTHMICROTILE(tex->tex.microtile) |
+                R300_DEPTHENDIAN(r300_get_endian_swap(surf->base.format));
         surf->format = r300_translate_zsformat(surf->base.format);
         surf->pitch_zmask = tex->tex.zmask_stride_in_pixels[level];
         surf->pitch_hiz = tex->tex.hiz_stride_in_pixels[level];
@@ -944,7 +1009,8 @@ static void r300_texture_setup_fb_state(struct r300_surface *surf)
                 stride |
                 r300_translate_colorformat(format) |
                 R300_COLOR_TILE(tex->tex.macrotile[level]) |
-                R300_COLOR_MICROTILE(tex->tex.microtile);
+                R300_COLOR_MICROTILE(tex->tex.microtile) |
+                R300_COLOR_ENDIAN(r300_get_endian_swap(format));
         surf->format = r300_translate_out_fmt(format);
         surf->colormask_swizzle =
             r300_translate_colormask_swizzle(format);
@@ -971,7 +1037,8 @@ static void r300_texture_destroy(struct pipe_screen *screen,
 
 boolean r300_resource_get_handle(struct pipe_screen* screen,
                                  struct pipe_resource *texture,
-                                 struct winsys_handle *whandle)
+                                 struct winsys_handle *whandle,
+                                 unsigned usage)
 {
     struct radeon_winsys *rws = r300_screen(screen)->rws;
     struct r300_resource* tex = (struct r300_resource*)texture;
@@ -980,8 +1047,8 @@ boolean r300_resource_get_handle(struct pipe_screen* screen,
         return FALSE;
     }
 
-    return rws->buffer_get_handle(tex->buf,
-                                  tex->tex.stride_in_bytes[0], whandle);
+    return rws->buffer_get_handle(tex->buf, tex->tex.stride_in_bytes[0],
+                                  0, 0, whandle);
 }
 
 static const struct u_resource_vtbl r300_texture_vtbl =
@@ -1005,6 +1072,7 @@ r300_texture_create_object(struct r300_screen *rscreen,
 {
     struct radeon_winsys *rws = rscreen->rws;
     struct r300_resource *tex = NULL;
+    struct radeon_bo_metadata tiling = {};
 
     tex = CALLOC_STRUCT(r300_resource);
     if (!tex) {
@@ -1045,7 +1113,7 @@ r300_texture_create_object(struct r300_screen *rscreen,
 
     /* Create the backing buffer if needed. */
     if (!tex->buf) {
-        tex->buf = rws->buffer_create(rws, tex->tex.size_in_bytes, 2048, TRUE,
+        tex->buf = rws->buffer_create(rws, tex->tex.size_in_bytes, 2048,
                                       tex->domain, 0);
 
         if (!tex->buf) {
@@ -1059,10 +1127,10 @@ r300_texture_create_object(struct r300_screen *rscreen,
                 util_format_is_depth_or_stencil(base->format) ? "depth" : "color");
     }
 
-    rws->buffer_set_tiling(tex->buf, NULL,
-            tex->tex.microtile, tex->tex.macrotile[0],
-            0, 0, 0, 0, 0, 0, 0,
-            tex->tex.stride_in_bytes[0], false);
+    tiling.microtile = tex->tex.microtile;
+    tiling.macrotile = tex->tex.macrotile[0];
+    tiling.stride = tex->tex.stride_in_bytes[0];
+    rws->buffer_set_metadata(tex->buf, &tiling);
 
     return tex;
 
@@ -1097,13 +1165,14 @@ struct pipe_resource *r300_texture_create(struct pipe_screen *screen,
 
 struct pipe_resource *r300_texture_from_handle(struct pipe_screen *screen,
                                                const struct pipe_resource *base,
-                                               struct winsys_handle *whandle)
+                                               struct winsys_handle *whandle,
+                                               unsigned usage)
 {
     struct r300_screen *rscreen = r300_screen(screen);
     struct radeon_winsys *rws = rscreen->rws;
     struct pb_buffer *buffer;
-    enum radeon_bo_layout microtile, macrotile;
     unsigned stride;
+    struct radeon_bo_metadata tiling = {};
 
     /* Support only 2D textures without mipmaps */
     if ((base->target != PIPE_TEXTURE_2D &&
@@ -1113,29 +1182,28 @@ struct pipe_resource *r300_texture_from_handle(struct pipe_screen *screen,
         return NULL;
     }
 
-    buffer = rws->buffer_from_handle(rws, whandle, &stride);
+    buffer = rws->buffer_from_handle(rws, whandle, &stride, NULL);
     if (!buffer)
         return NULL;
 
-    rws->buffer_get_tiling(buffer, &microtile, &macrotile, NULL, NULL, NULL,
-                           NULL, NULL, NULL);
+    rws->buffer_get_metadata(buffer, &tiling);
 
     /* Enforce a microtiled zbuffer. */
     if (util_format_is_depth_or_stencil(base->format) &&
-        microtile == RADEON_LAYOUT_LINEAR) {
+        tiling.microtile == RADEON_LAYOUT_LINEAR) {
         switch (util_format_get_blocksize(base->format)) {
             case 4:
-                microtile = RADEON_LAYOUT_TILED;
+                tiling.microtile = RADEON_LAYOUT_TILED;
                 break;
 
             case 2:
-                microtile = RADEON_LAYOUT_SQUARETILED;
+                tiling.microtile = RADEON_LAYOUT_SQUARETILED;
                 break;
         }
     }
 
     return (struct pipe_resource*)
-           r300_texture_create_object(rscreen, base, microtile, macrotile,
+           r300_texture_create_object(rscreen, base, tiling.microtile, tiling.macrotile,
                                       stride, buffer);
 }
 

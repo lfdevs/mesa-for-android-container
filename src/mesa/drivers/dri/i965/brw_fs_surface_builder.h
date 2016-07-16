@@ -71,13 +71,13 @@ namespace brw {
       emit_image_load(const fs_builder &bld,
                       const fs_reg &image, const fs_reg &addr,
                       unsigned surf_dims, unsigned arr_dims,
-                      mesa_format format);
+                      unsigned gl_format);
 
       void
       emit_image_store(const fs_builder &bld, const fs_reg &image,
                        const fs_reg &addr, const fs_reg &src,
                        unsigned surf_dims, unsigned arr_dims,
-                       mesa_format format);
+                       unsigned gl_format);
       fs_reg
       emit_image_atomic(const fs_builder &bld,
                         const fs_reg &image, const fs_reg &addr,

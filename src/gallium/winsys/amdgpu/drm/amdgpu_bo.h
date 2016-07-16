@@ -53,6 +53,10 @@ struct amdgpu_winsys_bo {
    /* how many command streams is this bo referenced in? */
    int num_cs_references;
 
+   /* how many command streams, which are being emitted in a separate
+    * thread, is this bo referenced in? */
+   volatile int num_active_ioctls;
+
    /* whether buffer_get_handle or buffer_from_handle was called,
     * it can only transition from false to true
     */
@@ -67,6 +71,12 @@ struct amdgpu_winsys_bo {
 bool amdgpu_bo_can_reclaim(struct pb_buffer *_buf);
 void amdgpu_bo_destroy(struct pb_buffer *_buf);
 void amdgpu_bo_init_functions(struct amdgpu_winsys *ws);
+
+static inline
+struct amdgpu_winsys_bo *amdgpu_winsys_bo(struct pb_buffer *bo)
+{
+   return (struct amdgpu_winsys_bo *)bo;
+}
 
 static inline
 void amdgpu_winsys_bo_reference(struct amdgpu_winsys_bo **dst,

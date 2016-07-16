@@ -611,11 +611,11 @@ gen6_gs_visitor::xfb_write()
    emit(CMP(dst_null_d(), sol_temp, this->max_svbi, BRW_CONDITIONAL_LE));
    emit(IF(BRW_PREDICATE_NORMAL));
    {
-      src_reg destination_indices_uw =
-         retype(destination_indices, BRW_REGISTER_TYPE_UW);
-
-      vec4_instruction *inst = emit(MOV(dst_reg(destination_indices_uw),
-                                        brw_imm_v(0x00020100))); /* (0, 1, 2) */
+      vec4_instruction *inst = emit(MOV(dst_reg(destination_indices),
+                                        brw_imm_vf4(brw_float_to_vf(0.0),
+                                                    brw_float_to_vf(1.0),
+                                                    brw_float_to_vf(2.0),
+                                                    brw_float_to_vf(0.0))));
       inst->force_writemask_all = true;
 
       emit(ADD(dst_reg(this->destination_indices),

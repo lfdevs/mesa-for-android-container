@@ -4,31 +4,6 @@
 
 #include "nvc0/nve4_compute.xml.h"
 
-/* Input space is implemented as c0[], to which we bind the screen->parm bo.
- */
-#define NVE4_CP_INPUT_USER           0x0000
-#define NVE4_CP_INPUT_USER_LIMIT     0x1000
-#define NVE4_CP_INPUT_GRID_INFO(i)  (0x1000 + (i) * 4)
-#define NVE4_CP_INPUT_NTID(i)       (0x1000 + (i) * 4)
-#define NVE4_CP_INPUT_NCTAID(i)     (0x100c + (i) * 4)
-#define NVE4_CP_INPUT_GRIDID         0x1018
-#define NVE4_CP_INPUT_TEX(i)        (0x1040 + (i) * 4)
-#define NVE4_CP_INPUT_TEX_STRIDE     4
-#define NVE4_CP_INPUT_TEX_MAX        32
-#define NVE4_CP_INPUT_MS_OFFSETS     0x10c0
-#define NVE4_CP_INPUT_SUF_STRIDE     64
-#define NVE4_CP_INPUT_SUF(i)        (0x1100 + (i) * NVE4_CP_INPUT_SUF_STRIDE)
-#define NVE4_CP_INPUT_SUF_MAX        32
-#define NVE4_CP_INPUT_TRAP_INFO_PTR  0x1900
-#define NVE4_CP_INPUT_TEMP_PTR       0x1908
-#define NVE4_CP_INPUT_MP_TEMP_SIZE   0x1910
-#define NVE4_CP_INPUT_WARP_TEMP_SIZE 0x1914
-#define NVE4_CP_INPUT_CSTACK_SIZE    0x1918
-#define NVE4_CP_INPUT_SIZE           0x1a00
-#define NVE4_CP_PARAM_TRAP_INFO      0x2000
-#define NVE4_CP_PARAM_TRAP_INFO_SZ  (1 << 16)
-#define NVE4_CP_PARAM_SIZE          (NVE4_CP_PARAM_TRAP_INFO + (1 << 16))
-
 struct nve4_cp_launch_desc
 {
    u32 unk0[8];
@@ -81,7 +56,7 @@ static inline void
 nve4_cp_launch_desc_set_cb(struct nve4_cp_launch_desc *desc,
                            unsigned index,
                            struct nouveau_bo *bo,
-                           uint32_t base, uint16_t size)
+                           uint32_t base, uint32_t size)
 {
    uint64_t address = bo->offset + base;
 
@@ -93,23 +68,6 @@ nve4_cp_launch_desc_set_cb(struct nve4_cp_launch_desc *desc,
    desc->cb[index].size = size;
 
    desc->cb_mask |= 1 << index;
-}
-
-static inline void
-nve4_cp_launch_desc_set_ctx_cb(struct nve4_cp_launch_desc *desc,
-                               unsigned index,
-                               const struct nvc0_constbuf *cb)
-{
-   assert(index < 8);
-
-   if (!cb->u.buf) {
-      desc->cb_mask &= ~(1 << index);
-   } else {
-      const struct nv04_resource *buf = nv04_resource(cb->u.buf);
-      assert(!cb->user);
-      nve4_cp_launch_desc_set_cb(desc, index,
-                                 buf->bo, buf->offset + cb->offset, cb->size);
-   }
 }
 
 struct nve4_mp_trap_info {

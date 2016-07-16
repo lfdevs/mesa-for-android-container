@@ -254,7 +254,6 @@ i915CreateContext(int api,
    /* FINISHME: Are there other options that should be enabled for software
     * FINISHME: vertex shaders?
     */
-   ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitCondCodes = true;
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoIndirectSampler =
       true;
 

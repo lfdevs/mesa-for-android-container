@@ -302,7 +302,8 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
          memset(&whandle, 0, sizeof(whandle));
          whandle.type = DRM_API_HANDLE_TYPE_FD;
 
-         if (!screen->resource_get_handle(screen, buf->derived_surface.resource, &whandle))
+         if (!screen->resource_get_handle(screen, buf->derived_surface.resource,
+                                          &whandle, PIPE_HANDLE_USAGE_READ_WRITE))
             return VA_STATUS_ERROR_INVALID_BUFFER;
 
          buf_info->handle = (intptr_t)whandle.handle;

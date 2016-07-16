@@ -103,8 +103,17 @@ svga_validate_pipe_sampler_view(struct svga_context *svga,
       SVGA3dSurfaceFormat format;
       SVGA3dResourceType resourceDim;
       SVGA3dShaderResourceViewDesc viewDesc;
+      enum pipe_format pformat = sv->base.format;
 
-      format = svga_translate_format(ss, sv->base.format,
+      /* vgpu10 cannot create a BGRX view for a BGRA resource, so force it to
+       * create a BGRA view.
+       */
+      if (pformat == PIPE_FORMAT_B8G8R8X8_UNORM &&
+          sv->base.texture->format == PIPE_FORMAT_B8G8R8A8_UNORM) {
+         pformat = PIPE_FORMAT_B8G8R8A8_UNORM;
+      }
+
+      format = svga_translate_format(ss, pformat,
                                      PIPE_BIND_SAMPLER_VIEW);
       assert(format != SVGA3D_FORMAT_INVALID);
 
@@ -217,7 +226,7 @@ update_sampler_resources(struct svga_context *svga, unsigned dirty)
          surfaces[i] = surface;
       }
 
-      for (; i < Elements(ids); i++) {
+      for (; i < ARRAY_SIZE(ids); i++) {
          ids[i] = SVGA3D_INVALID_ID;
          surfaces[i] = NULL;
       }

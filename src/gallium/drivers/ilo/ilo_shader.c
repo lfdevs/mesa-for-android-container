@@ -265,16 +265,16 @@ ilo_shader_variant_init(struct ilo_shader_variant *variant,
          variant->sampler_view_swizzles[i].a = view->swizzle_a;
       }
       else if (info->shadow_samplers & (1 << i)) {
-         variant->sampler_view_swizzles[i].r = PIPE_SWIZZLE_RED;
-         variant->sampler_view_swizzles[i].g = PIPE_SWIZZLE_RED;
-         variant->sampler_view_swizzles[i].b = PIPE_SWIZZLE_RED;
-         variant->sampler_view_swizzles[i].a = PIPE_SWIZZLE_ONE;
+         variant->sampler_view_swizzles[i].r = PIPE_SWIZZLE_X;
+         variant->sampler_view_swizzles[i].g = PIPE_SWIZZLE_X;
+         variant->sampler_view_swizzles[i].b = PIPE_SWIZZLE_X;
+         variant->sampler_view_swizzles[i].a = PIPE_SWIZZLE_1;
       }
       else {
-         variant->sampler_view_swizzles[i].r = PIPE_SWIZZLE_RED;
-         variant->sampler_view_swizzles[i].g = PIPE_SWIZZLE_GREEN;
-         variant->sampler_view_swizzles[i].b = PIPE_SWIZZLE_BLUE;
-         variant->sampler_view_swizzles[i].a = PIPE_SWIZZLE_ALPHA;
+         variant->sampler_view_swizzles[i].r = PIPE_SWIZZLE_X;
+         variant->sampler_view_swizzles[i].g = PIPE_SWIZZLE_Y;
+         variant->sampler_view_swizzles[i].b = PIPE_SWIZZLE_Z;
+         variant->sampler_view_swizzles[i].a = PIPE_SWIZZLE_W;
       }
 
       /*
@@ -323,16 +323,16 @@ ilo_shader_variant_guess(struct ilo_shader_variant *variant,
    variant->num_sampler_views = info->num_samplers;
    for (i = 0; i < info->num_samplers; i++) {
       if (info->shadow_samplers & (1 << i)) {
-         variant->sampler_view_swizzles[i].r = PIPE_SWIZZLE_RED;
-         variant->sampler_view_swizzles[i].g = PIPE_SWIZZLE_RED;
-         variant->sampler_view_swizzles[i].b = PIPE_SWIZZLE_RED;
-         variant->sampler_view_swizzles[i].a = PIPE_SWIZZLE_ONE;
+         variant->sampler_view_swizzles[i].r = PIPE_SWIZZLE_X;
+         variant->sampler_view_swizzles[i].g = PIPE_SWIZZLE_X;
+         variant->sampler_view_swizzles[i].b = PIPE_SWIZZLE_X;
+         variant->sampler_view_swizzles[i].a = PIPE_SWIZZLE_1;
       }
       else {
-         variant->sampler_view_swizzles[i].r = PIPE_SWIZZLE_RED;
-         variant->sampler_view_swizzles[i].g = PIPE_SWIZZLE_GREEN;
-         variant->sampler_view_swizzles[i].b = PIPE_SWIZZLE_BLUE;
-         variant->sampler_view_swizzles[i].a = PIPE_SWIZZLE_ALPHA;
+         variant->sampler_view_swizzles[i].r = PIPE_SWIZZLE_X;
+         variant->sampler_view_swizzles[i].g = PIPE_SWIZZLE_Y;
+         variant->sampler_view_swizzles[i].b = PIPE_SWIZZLE_Z;
+         variant->sampler_view_swizzles[i].a = PIPE_SWIZZLE_W;
       }
    }
 }
@@ -1168,8 +1168,8 @@ ilo_shader_select_kernel_sbe(struct ilo_shader_state *shader,
    routing->sprite_coord_enable = sprite_coord_enable;
    routing->sprite_coord_mode = sprite_coord_mode;
 
-   assert(kernel->in.count <= Elements(swizzles));
-   dst_len = MIN2(kernel->in.count, Elements(swizzles));
+   assert(kernel->in.count <= ARRAY_SIZE(swizzles));
+   dst_len = MIN2(kernel->in.count, ARRAY_SIZE(swizzles));
 
    memset(&swizzles, 0, sizeof(swizzles));
    memset(&info, 0, sizeof(info));

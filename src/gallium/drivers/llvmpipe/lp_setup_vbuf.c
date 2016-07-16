@@ -108,7 +108,7 @@ lp_setup_unmap_vertices(struct vbuf_render *vbr,
                        ushort min_index,
                        ushort max_index )
 {
-   struct lp_setup_context *setup = lp_setup_context(vbr);
+   MAYBE_UNUSED struct lp_setup_context *setup = lp_setup_context(vbr);
    assert( setup->vertex_buffer_size >= (max_index+1) * setup->vertex_size );
    /* do nothing */
 }

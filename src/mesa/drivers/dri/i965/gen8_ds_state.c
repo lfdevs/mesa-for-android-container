@@ -38,10 +38,11 @@ gen8_upload_ds_state(struct brw_context *brw)
    const struct brw_tes_prog_data *tes_prog_data = brw->tes.prog_data;
    const struct brw_vue_prog_data *vue_prog_data = &tes_prog_data->base;
    const struct brw_stage_prog_data *prog_data = &vue_prog_data->base;
+   const int ds_pkt_len = brw->gen >= 9 ? 11 : 9;
 
    if (active) {
-      BEGIN_BATCH(9);
-      OUT_BATCH(_3DSTATE_DS << 16 | (9 - 2));
+      BEGIN_BATCH(ds_pkt_len);
+      OUT_BATCH(_3DSTATE_DS << 16 | (ds_pkt_len - 2));
       OUT_BATCH(stage_state->prog_offset);
       OUT_BATCH(0);
       OUT_BATCH(SET_FIELD(DIV_ROUND_UP(stage_state->sampler_count, 4),
@@ -51,7 +52,7 @@ gen8_upload_ds_state(struct brw_context *brw)
       if (prog_data->total_scratch) {
          OUT_RELOC64(stage_state->scratch_bo,
                      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-                     ffs(prog_data->total_scratch) - 11);
+                     ffs(stage_state->per_thread_scratch) - 11);
       } else {
          OUT_BATCH(0);
          OUT_BATCH(0);
@@ -69,11 +70,20 @@ gen8_upload_ds_state(struct brw_context *brw)
                 (tes_prog_data->domain == BRW_TESS_DOMAIN_TRI ?
                  GEN7_DS_COMPUTE_W_COORDINATE_ENABLE : 0));
       OUT_BATCH(SET_FIELD(ctx->Transform.ClipPlanesEnabled,
-                          GEN8_DS_USER_CLIP_DISTANCE));
+                          GEN8_DS_USER_CLIP_DISTANCE) |
+                SET_FIELD(vue_prog_data->cull_distance_mask,
+                          GEN8_DS_USER_CULL_DISTANCE));
+
+
+      if (brw->gen >= 9) {
+         OUT_BATCH(0);
+         OUT_BATCH(0);
+      }
+
       ADVANCE_BATCH();
    } else {
-      BEGIN_BATCH(9);
-      OUT_BATCH(_3DSTATE_DS << 16 | (9 - 2));
+      BEGIN_BATCH(ds_pkt_len);
+      OUT_BATCH(_3DSTATE_DS << 16 | (ds_pkt_len - 2));
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
@@ -82,8 +92,15 @@ gen8_upload_ds_state(struct brw_context *brw)
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
+
+      if (brw->gen >= 9) {
+         OUT_BATCH(0);
+         OUT_BATCH(0);
+      }
+
       ADVANCE_BATCH();
    }
+
    brw->tes.enabled = active;
 }
 
@@ -91,6 +108,7 @@ const struct brw_tracked_state gen8_ds_state = {
    .dirty = {
       .mesa  = 0,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_TESS_PROGRAMS |
                BRW_NEW_TES_PROG_DATA,
    },

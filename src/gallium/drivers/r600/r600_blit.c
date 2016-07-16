@@ -54,8 +54,6 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 
-	r600_suspend_nontimer_queries(&rctx->b);
-
 	util_blitter_save_vertex_buffer_slot(rctx->blitter, rctx->vertex_buffer_state.vb);
 	util_blitter_save_vertex_elements(rctx->blitter, rctx->vertex_fetch_shader.cso);
 	util_blitter_save_vertex_shader(rctx->blitter, rctx->vs_shader);
@@ -67,8 +65,8 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 	util_blitter_save_rasterizer(rctx->blitter, rctx->rasterizer_state.cso);
 
 	if (op & R600_SAVE_FRAGMENT_STATE) {
-		util_blitter_save_viewport(rctx->blitter, &rctx->viewport.state[0]);
-		util_blitter_save_scissor(rctx->blitter, &rctx->scissor.scissor[0]);
+		util_blitter_save_viewport(rctx->blitter, &rctx->b.viewports.states[0]);
+		util_blitter_save_scissor(rctx->blitter, &rctx->b.scissors.states[0]);
 		util_blitter_save_fragment_shader(rctx->blitter, rctx->ps_shader);
 		util_blitter_save_blend(rctx->blitter, rctx->blend_state.cso);
 		util_blitter_save_depth_stencil_alpha(rctx->blitter, rctx->dsa_state.cso);
@@ -98,7 +96,6 @@ static void r600_blitter_end(struct pipe_context *ctx)
 	struct r600_context *rctx = (struct r600_context *)ctx;
 
 	rctx->b.render_cond_force_off = false;
-	r600_resume_nontimer_queries(&rctx->b);
 }
 
 static unsigned u_max_sample(struct pipe_resource *r)
@@ -584,8 +581,8 @@ static void r600_copy_global_buffer(struct pipe_context *ctx,
 }
 
 static void r600_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
-			      unsigned offset, unsigned size, unsigned value,
-			      bool is_framebuffer)
+			      uint64_t offset, uint64_t size, unsigned value,
+			      enum r600_coherency coher)
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
 
@@ -709,7 +706,7 @@ void r600_resource_copy_region(struct pipe_context *ctx,
 				dst_templ.format = PIPE_FORMAT_R8_UNORM;
 				src_templ.format = PIPE_FORMAT_R8_UNORM;
 				break;
-                        case 2:
+			case 2:
 				dst_templ.format = PIPE_FORMAT_R8G8_UNORM;
 				src_templ.format = PIPE_FORMAT_R8G8_UNORM;
 				break;
@@ -717,14 +714,14 @@ void r600_resource_copy_region(struct pipe_context *ctx,
 				dst_templ.format = PIPE_FORMAT_R8G8B8A8_UNORM;
 				src_templ.format = PIPE_FORMAT_R8G8B8A8_UNORM;
 				break;
-                        case 8:
-                                dst_templ.format = PIPE_FORMAT_R16G16B16A16_UINT;
-                                src_templ.format = PIPE_FORMAT_R16G16B16A16_UINT;
-                                break;
-                        case 16:
-                                dst_templ.format = PIPE_FORMAT_R32G32B32A32_UINT;
-                                src_templ.format = PIPE_FORMAT_R32G32B32A32_UINT;
-                                break;
+			case 8:
+				dst_templ.format = PIPE_FORMAT_R16G16B16A16_UINT;
+				src_templ.format = PIPE_FORMAT_R16G16B16A16_UINT;
+				break;
+			case 16:
+				dst_templ.format = PIPE_FORMAT_R32G32B32A32_UINT;
+				src_templ.format = PIPE_FORMAT_R32G32B32A32_UINT;
+				break;
 			default:
 				fprintf(stderr, "Unhandled format %s with blocksize %u\n",
 					util_format_short_name(src->format), blocksize);
@@ -811,7 +808,8 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
 	    info->dst.resource->nr_samples <= 1 &&
 	    util_max_layer(info->src.resource, 0) == 0 &&
 	    util_max_layer(info->dst.resource, info->dst.level) == 0 &&
-	    info->dst.format == info->src.format &&
+	    util_is_format_compatible(util_format_description(info->src.format),
+				      util_format_description(info->dst.format)) &&
 	    !util_format_is_pure_integer(format) &&
 	    !util_format_is_depth_or_stencil(format) &&
 	    !info->scissor_enable &&

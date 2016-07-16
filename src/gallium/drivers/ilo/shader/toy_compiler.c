@@ -449,7 +449,7 @@ tc_dump_inst(struct toy_compiler *tc, const struct toy_inst *inst)
 
    tc_dump_dst(tc, inst->dst);
 
-   for (i = 0; i < Elements(inst->src); i++) {
+   for (i = 0; i < ARRAY_SIZE(inst->src); i++) {
       if (tsrc_is_null(inst->src[i]))
          break;
 
@@ -522,10 +522,10 @@ tc_init_inst_templ(struct toy_compiler *tc)
    templ->marker = false;
 
    templ->dst = tdst_null();
-   for (i = 0; i < Elements(templ->src); i++)
+   for (i = 0; i < ARRAY_SIZE(templ->src); i++)
       templ->src[i] = tsrc_null();
 
-   for (i = 0; i < Elements(templ->tex.offsets); i++)
+   for (i = 0; i < ARRAY_SIZE(templ->tex.offsets); i++)
       templ->tex.offsets[i] = tsrc_null();
 
    list_inithead(&templ->list);

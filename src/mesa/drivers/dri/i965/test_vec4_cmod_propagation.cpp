@@ -39,7 +39,6 @@ public:
    struct brw_device_info *devinfo;
    struct gl_context *ctx;
    struct gl_shader_program *shader_prog;
-   struct brw_vertex_program *vp;
    struct brw_vue_prog_data *prog_data;
    vec4_visitor *v;
 };
@@ -58,8 +57,7 @@ public:
 
 protected:
    /* Dummy implementation for pure virtual methods */
-   virtual dst_reg *make_reg_for_system_value(int location,
-                                              const glsl_type *type)
+   virtual dst_reg *make_reg_for_system_value(int location)
    {
       unreachable("Not reached");
    }
@@ -104,13 +102,9 @@ void cmod_propagation_test::SetUp()
    prog_data = (struct brw_vue_prog_data *)calloc(1, sizeof(*prog_data));
    compiler->devinfo = devinfo;
 
-   vp = ralloc(NULL, struct brw_vertex_program);
-
    nir_shader *shader = nir_shader_create(NULL, MESA_SHADER_VERTEX, NULL);
 
    v = new cmod_propagation_vec4_visitor(compiler, shader, prog_data);
-
-   _mesa_init_gl_program(&vp->program.Base, GL_VERTEX_SHADER, 0);
 
    devinfo->gen = 4;
 }

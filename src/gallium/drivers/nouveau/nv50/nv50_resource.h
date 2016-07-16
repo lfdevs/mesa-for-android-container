@@ -152,6 +152,9 @@ void
 nv50_surface_destroy(struct pipe_context *, struct pipe_surface *);
 
 void
+nv50_invalidate_resource(struct pipe_context *, struct pipe_resource *);
+
+void
 nv50_clear_texture(struct pipe_context *pipe,
                    struct pipe_resource *res,
                    unsigned level,

@@ -1,10 +1,6 @@
 #ifndef _WAYLAND_EGL_PRIV_H
 #define _WAYLAND_EGL_PRIV_H
 
-#ifdef  __cplusplus
-extern "C" {
-#endif
-
 /* GCC visibility */
 #if defined(__GNUC__)
 #define WL_EGL_EXPORT __attribute__ ((visibility("default")))
@@ -13,6 +9,10 @@ extern "C" {
 #endif
 
 #include <wayland-client.h>
+
+#ifdef  __cplusplus
+extern "C" {
+#endif
 
 struct wl_egl_window {
 	struct wl_surface *surface;

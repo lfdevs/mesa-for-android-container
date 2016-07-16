@@ -40,26 +40,29 @@ struct r600_query;
 struct r600_query_hw;
 struct r600_resource;
 
-#define R600_QUERY_DRAW_CALLS		(PIPE_QUERY_DRIVER_SPECIFIC + 0)
-#define R600_QUERY_REQUESTED_VRAM	(PIPE_QUERY_DRIVER_SPECIFIC + 1)
-#define R600_QUERY_REQUESTED_GTT	(PIPE_QUERY_DRIVER_SPECIFIC + 2)
-#define R600_QUERY_BUFFER_WAIT_TIME	(PIPE_QUERY_DRIVER_SPECIFIC + 3)
-#define R600_QUERY_NUM_CS_FLUSHES	(PIPE_QUERY_DRIVER_SPECIFIC + 4)
-#define R600_QUERY_NUM_BYTES_MOVED	(PIPE_QUERY_DRIVER_SPECIFIC + 5)
-#define R600_QUERY_VRAM_USAGE		(PIPE_QUERY_DRIVER_SPECIFIC + 6)
-#define R600_QUERY_GTT_USAGE		(PIPE_QUERY_DRIVER_SPECIFIC + 7)
-#define R600_QUERY_GPU_TEMPERATURE	(PIPE_QUERY_DRIVER_SPECIFIC + 8)
-#define R600_QUERY_CURRENT_GPU_SCLK	(PIPE_QUERY_DRIVER_SPECIFIC + 9)
-#define R600_QUERY_CURRENT_GPU_MCLK	(PIPE_QUERY_DRIVER_SPECIFIC + 10)
-#define R600_QUERY_GPU_LOAD		(PIPE_QUERY_DRIVER_SPECIFIC + 11)
-#define R600_QUERY_NUM_COMPILATIONS	(PIPE_QUERY_DRIVER_SPECIFIC + 12)
-#define R600_QUERY_NUM_SHADERS_CREATED	(PIPE_QUERY_DRIVER_SPECIFIC + 13)
-#define R600_QUERY_GPIN_ASIC_ID		(PIPE_QUERY_DRIVER_SPECIFIC + 14)
-#define R600_QUERY_GPIN_NUM_SIMD	(PIPE_QUERY_DRIVER_SPECIFIC + 15)
-#define R600_QUERY_GPIN_NUM_RB		(PIPE_QUERY_DRIVER_SPECIFIC + 16)
-#define R600_QUERY_GPIN_NUM_SPI		(PIPE_QUERY_DRIVER_SPECIFIC + 17)
-#define R600_QUERY_GPIN_NUM_SE		(PIPE_QUERY_DRIVER_SPECIFIC + 18)
-#define R600_QUERY_FIRST_PERFCOUNTER	(PIPE_QUERY_DRIVER_SPECIFIC + 100)
+enum {
+	R600_QUERY_DRAW_CALLS = PIPE_QUERY_DRIVER_SPECIFIC,
+	R600_QUERY_REQUESTED_VRAM,
+	R600_QUERY_REQUESTED_GTT,
+	R600_QUERY_BUFFER_WAIT_TIME,
+	R600_QUERY_NUM_CS_FLUSHES,
+	R600_QUERY_NUM_BYTES_MOVED,
+	R600_QUERY_VRAM_USAGE,
+	R600_QUERY_GTT_USAGE,
+	R600_QUERY_GPU_TEMPERATURE,
+	R600_QUERY_CURRENT_GPU_SCLK,
+	R600_QUERY_CURRENT_GPU_MCLK,
+	R600_QUERY_GPU_LOAD,
+	R600_QUERY_NUM_COMPILATIONS,
+	R600_QUERY_NUM_SHADERS_CREATED,
+	R600_QUERY_GPIN_ASIC_ID,
+	R600_QUERY_GPIN_NUM_SIMD,
+	R600_QUERY_GPIN_NUM_RB,
+	R600_QUERY_GPIN_NUM_SPI,
+	R600_QUERY_GPIN_NUM_SE,
+
+	R600_QUERY_FIRST_PERFCOUNTER = PIPE_QUERY_DRIVER_SPECIFIC + 100,
+};
 
 enum {
 	R600_QUERY_GROUP_GPIN = 0,
@@ -69,7 +72,7 @@ enum {
 struct r600_query_ops {
 	void (*destroy)(struct r600_common_context *, struct r600_query *);
 	boolean (*begin)(struct r600_common_context *, struct r600_query *);
-	void (*end)(struct r600_common_context *, struct r600_query *);
+	bool (*end)(struct r600_common_context *, struct r600_query *);
 	boolean (*get_result)(struct r600_common_context *,
 			      struct r600_query *, boolean wait,
 			      union pipe_query_result *result);
@@ -84,12 +87,11 @@ struct r600_query {
 
 enum {
 	R600_QUERY_HW_FLAG_NO_START = (1 << 0),
-	R600_QUERY_HW_FLAG_TIMER = (1 << 1),
-	R600_QUERY_HW_FLAG_PREDICATE = (1 << 2),
+	R600_QUERY_HW_FLAG_PREDICATE = (1 << 1),
 };
 
 struct r600_query_hw_ops {
-	void (*prepare_buffer)(struct r600_common_context *,
+	bool (*prepare_buffer)(struct r600_common_context *,
 			       struct r600_query_hw *,
 			       struct r600_resource *);
 	void (*emit_start)(struct r600_common_context *,
@@ -140,7 +142,7 @@ void r600_query_hw_destroy(struct r600_common_context *rctx,
 			   struct r600_query *rquery);
 boolean r600_query_hw_begin(struct r600_common_context *rctx,
 			    struct r600_query *rquery);
-void r600_query_hw_end(struct r600_common_context *rctx,
+bool r600_query_hw_end(struct r600_common_context *rctx,
 		       struct r600_query *rquery);
 boolean r600_query_hw_get_result(struct r600_common_context *rctx,
 				 struct r600_query *rquery,

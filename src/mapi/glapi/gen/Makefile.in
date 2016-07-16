@@ -92,9 +92,6 @@ target_triplet = @target@
 @HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__append_2 = $(MESA_GLAPI_DIR)/glapi_x86-64.S
 @HAVE_X86_64_ASM_FALSE@@HAVE_X86_ASM_TRUE@am__append_3 = $(MESA_GLAPI_DIR)/glapi_x86.S
 @HAVE_SPARC_ASM_TRUE@am__append_4 = $(MESA_GLAPI_DIR)/glapi_sparc.S
-@HAVE_APPLEDRI_TRUE@am__append_5 = \
-@HAVE_APPLEDRI_TRUE@	$(XORG_GLAPI_DIR)/glapi_gentable.c
-
 subdir = src/mapi/glapi/gen
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -203,6 +200,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -301,6 +300,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -321,6 +322,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -337,6 +341,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -494,11 +499,7 @@ EXTRA_DIST = \
 ######################################################################
 XORG_GLX_DIR = $(XORG_BASE)/glx
 XORG_GLAPI_DIR = $(XORG_BASE)/glx
-XORG_GLAPI_OUTPUTS = $(XORG_GLAPI_DIR)/glprocs.h \
-	$(XORG_GLAPI_DIR)/glapitable.h $(XORG_GLAPI_DIR)/dispatch.h \
-	$(am__append_5)
 XORG_OUTPUTS = \
-	$(XORG_GLAPI_OUTPUTS) \
 	$(XORG_GLX_DIR)/indirect_dispatch.c \
 	$(XORG_GLX_DIR)/indirect_dispatch_swap.c \
 	$(XORG_GLX_DIR)/indirect_dispatch.h \
@@ -546,6 +547,7 @@ API_XML = \
 	ARB_indirect_parameters.xml \
 	ARB_instanced_arrays.xml \
 	ARB_internalformat_query.xml \
+	ARB_internalformat_query2.xml \
 	ARB_invalidate_subdata.xml \
 	ARB_map_buffer_range.xml \
 	ARB_multi_bind.xml \
@@ -598,6 +600,8 @@ API_XML = \
 	INTEL_performance_query.xml \
 	KHR_debug.xml \
 	KHR_context_flush_control.xml \
+	KHR_robustness.xml \
+	KHR_robustness_es.xml \
 	KHR_texture_compression_astc.xml \
 	NV_conditional_render.xml \
 	NV_primitive_restart.xml \
@@ -606,6 +610,7 @@ API_XML = \
 	OES_EGL_image.xml \
 	OES_fixed_point.xml \
 	OES_single_precision.xml \
+	OES_texture_compression_astc.xml \
 	GL3x.xml \
 	GL4x.xml
 
@@ -814,6 +819,8 @@ uninstall-am:
 .PRECIOUS: Makefile
 
 
+.PHONY: $(XORG_OUTPUTS)
+
 ######################################################################
 
 xorg: check-xorg-source $(XORG_OUTPUTS)
@@ -921,7 +928,7 @@ $(XORG_GLX_DIR)/indirect_dispatch.h: glX_proto_recv.py gl_and_glX_API.xml $(COMM
 
 $(XORG_GLX_DIR)/indirect_size_get.h: glX_proto_size.py $(COMMON_GLX)
 	$(PYTHON_GEN) $< -f $(srcdir)/gl_API.xml -m size_h \
-           --only-get -h '_INDIRECT_SIZE_GET_H_' \
+           --only-get --header-tag '_INDIRECT_SIZE_GET_H_' \
 	  | $(INDENT) $(XORG_INDENT_FLAGS) > $@
 
 $(XORG_GLX_DIR)/indirect_size_get.c: glX_proto_size.py $(COMMON_GLX)
@@ -930,7 +937,7 @@ $(XORG_GLX_DIR)/indirect_size_get.c: glX_proto_size.py $(COMMON_GLX)
 
 $(XORG_GLX_DIR)/indirect_reqsize.h: glX_proto_size.py $(COMMON_GLX)
 	$(PYTHON_GEN) $< -f $(srcdir)/gl_API.xml -m reqsize_h \
-           --only-get -h '_INDIRECT_SIZE_GET_H_' \
+           --only-get --header-tag '_INDIRECT_SIZE_GET_H_' \
 	  | $(INDENT) $(XORG_INDENT_FLAGS) > $@
 
 $(XORG_GLX_DIR)/indirect_reqsize.c: glX_proto_size.py $(COMMON_GLX)

@@ -22,8 +22,15 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+
+/*
+ * NOTE: This file is not compiled by itself.  It's actually #included
+ * by the generated u_unfilled_gen.c file!
+ */
+
 #include "u_indices.h"
 #include "u_indices_priv.h"
+#include "util/u_prim.h"
 
 
 static void translate_ubyte_ushort( const void *in,
@@ -49,7 +56,7 @@ static void translate_memcpy_ushort( const void *in,
 {
    memcpy(out, &((short *)in)[start], out_nr*sizeof(short));
 }
-                              
+
 static void translate_memcpy_uint( const void *in,
                                    unsigned start,
                                    unsigned in_nr,
@@ -70,7 +77,7 @@ static void generate_linear_ushort( unsigned start,
    for (i = 0; i < nr; i++)
       out_us[i] = (ushort)(i + start);
 }
-                              
+
 static void generate_linear_uint( unsigned start,
                                   unsigned nr,
                                   void *out )
@@ -87,12 +94,12 @@ static void generate_linear_uint( unsigned start,
  * needed to draw the primitive with fill mode = PIPE_POLYGON_MODE_LINE using
  * separate lines (PIPE_PRIM_LINES).
  */
-static unsigned nr_lines( unsigned prim,
-                          unsigned nr )
+static unsigned
+nr_lines(enum pipe_prim_type prim, unsigned nr)
 {
    switch (prim) {
    case PIPE_PRIM_TRIANGLES:
-      return (nr / 3) * 6; 
+      return (nr / 3) * 6;
    case PIPE_PRIM_TRIANGLE_STRIP:
       return (nr - 2) * 6;
    case PIPE_PRIM_TRIANGLE_FAN:
@@ -103,20 +110,27 @@ static unsigned nr_lines( unsigned prim,
       return (nr - 2) / 2 * 8;
    case PIPE_PRIM_POLYGON:
       return 2 * nr; /* a line (two verts) for each polygon edge */
+   /* Note: these cases can't really be handled since drawing lines instead
+    * of triangles would also require changing the GS.  But if there's no GS,
+    * this should work.
+    */
+   case PIPE_PRIM_TRIANGLES_ADJACENCY:
+      return (nr / 6) * 6;
+   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return ((nr - 4) / 2) * 6;
    default:
       assert(0);
       return 0;
    }
 }
-                              
 
 
 enum indices_mode
-u_unfilled_translator(unsigned prim,
+u_unfilled_translator(enum pipe_prim_type prim,
                       unsigned in_index_size,
                       unsigned nr,
                       unsigned unfilled_mode,
-                      unsigned *out_prim,
+                      enum pipe_prim_type *out_prim,
                       unsigned *out_index_size,
                       unsigned *out_nr,
                       u_translate_func *out_translate)
@@ -124,19 +138,19 @@ u_unfilled_translator(unsigned prim,
    unsigned in_idx;
    unsigned out_idx;
 
+   assert(u_reduced_prim(prim) == PIPE_PRIM_TRIANGLES);
+
    u_unfilled_init();
 
    in_idx = in_size_idx(in_index_size);
    *out_index_size = (in_index_size == 4) ? 4 : 2;
    out_idx = out_size_idx(*out_index_size);
 
-   if (unfilled_mode == PIPE_POLYGON_MODE_POINT) 
-   {
+   if (unfilled_mode == PIPE_POLYGON_MODE_POINT) {
       *out_prim = PIPE_PRIM_POINTS;
       *out_nr = nr;
 
-      switch (in_index_size)
-      {
+      switch (in_index_size) {
       case 1:
          *out_translate = translate_ubyte_ushort;
          return U_TRANSLATE_NORMAL;
@@ -172,16 +186,18 @@ u_unfilled_translator(unsigned prim,
  * 'draw' module.
  */
 enum indices_mode
-u_unfilled_generator(unsigned prim,
+u_unfilled_generator(enum pipe_prim_type prim,
                      unsigned start,
                      unsigned nr,
                      unsigned unfilled_mode,
-                     unsigned *out_prim,
+                     enum pipe_prim_type *out_prim,
                      unsigned *out_index_size,
                      unsigned *out_nr,
                      u_generate_func *out_generate)
 {
    unsigned out_idx;
+
+   assert(u_reduced_prim(prim) == PIPE_PRIM_TRIANGLES);
 
    u_unfilled_init();
 
@@ -189,7 +205,6 @@ u_unfilled_generator(unsigned prim,
    out_idx = out_size_idx(*out_index_size);
 
    if (unfilled_mode == PIPE_POLYGON_MODE_POINT) {
-
       if (*out_index_size == 4)
          *out_generate = generate_linear_uint;
       else
@@ -208,4 +223,3 @@ u_unfilled_generator(unsigned prim,
       return U_GENERATE_REUSABLE;
    }
 }
-

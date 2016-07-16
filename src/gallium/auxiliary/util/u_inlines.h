@@ -230,12 +230,12 @@ pipe_surface_equal(struct pipe_surface *s1, struct pipe_surface *s2)
 /**
  * Create a new resource.
  * \param bind  bitmask of PIPE_BIND_x flags
- * \param usage  bitmask of PIPE_USAGE_x flags
+ * \param usage  a PIPE_USAGE_x value
  */
 static inline struct pipe_resource *
 pipe_buffer_create( struct pipe_screen *screen,
 		    unsigned bind,
-		    unsigned usage,
+		    enum pipe_resource_usage usage,
 		    unsigned size )
 {
    struct pipe_resource buffer;
@@ -395,7 +395,7 @@ pipe_buffer_write_nooverlap(struct pipe_context *pipe,
 static inline struct pipe_resource *
 pipe_buffer_create_with_data(struct pipe_context *pipe,
                              unsigned bind,
-                             unsigned usage,
+                             enum pipe_resource_usage usage,
                              unsigned size,
                              const void *ptr)
 {
@@ -622,6 +622,16 @@ util_copy_constant_buffer(struct pipe_constant_buffer *dst,
    }
 }
 
+static inline void
+util_copy_image_view(struct pipe_image_view *dst,
+                     const struct pipe_image_view *src)
+{
+   pipe_resource_reference(&dst->resource, src->resource);
+   dst->format = src->format;
+   dst->access = src->access;
+   dst->u = src->u;
+}
+
 static inline unsigned
 util_max_layer(const struct pipe_resource *r, unsigned level)
 {
@@ -637,28 +647,6 @@ util_max_layer(const struct pipe_resource *r, unsigned level)
       return r->array_size - 1;
    default:
       return 0;
-   }
-}
-
-static inline unsigned
-util_pipe_shader_from_tgsi_processor(unsigned processor)
-{
-   switch (processor) {
-   case TGSI_PROCESSOR_VERTEX:
-      return PIPE_SHADER_VERTEX;
-   case TGSI_PROCESSOR_TESS_CTRL:
-      return PIPE_SHADER_TESS_CTRL;
-   case TGSI_PROCESSOR_TESS_EVAL:
-      return PIPE_SHADER_TESS_EVAL;
-   case TGSI_PROCESSOR_GEOMETRY:
-      return PIPE_SHADER_GEOMETRY;
-   case TGSI_PROCESSOR_FRAGMENT:
-      return PIPE_SHADER_FRAGMENT;
-   case TGSI_PROCESSOR_COMPUTE:
-      return PIPE_SHADER_COMPUTE;
-   default:
-      assert(0);
-      return PIPE_SHADER_VERTEX;
    }
 }
 

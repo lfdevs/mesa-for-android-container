@@ -34,8 +34,7 @@ vec4_vs_visitor::emit_prolog()
 
 
 dst_reg *
-vec4_vs_visitor::make_reg_for_system_value(int location,
-                                           const glsl_type *type)
+vec4_vs_visitor::make_reg_for_system_value(int location)
 {
    /* VertexID is stored by the VF as the last vertex element, but
     * we don't represent it with a flag in inputs_read, so we call
@@ -161,7 +160,6 @@ void
 vec4_vs_visitor::setup_uniform_clipplane_values()
 {
    for (int i = 0; i < key->nr_userclip_plane_consts; ++i) {
-      assert(this->uniforms < uniform_array_size);
       this->userplane[i] = dst_reg(UNIFORM, this->uniforms);
       this->userplane[i].type = BRW_REGISTER_TYPE_F;
       for (int j = 0; j < 4; ++j) {

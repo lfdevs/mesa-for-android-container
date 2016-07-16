@@ -536,6 +536,7 @@ const struct brw_tracked_state gen7_l3_state = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_CS_PROG_DATA |
              BRW_NEW_FS_PROG_DATA |
              BRW_NEW_GS_PROG_DATA |

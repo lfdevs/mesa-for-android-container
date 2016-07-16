@@ -115,7 +115,7 @@ VOID* AddrObject::ClientAlloc(
 VOID* AddrObject::AddrMalloc(
     size_t objSize) const   ///< [in] Size to allocate
 {
-    return ClientAlloc(objSize, &m_client);;
+    return ClientAlloc(objSize, &m_client);
 }
 
 /**

@@ -227,7 +227,7 @@ static void draw( void )
    union pipe_color_union clear_color = { {.1,.3,.5,0} };
 
    ctx->clear(ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
-   util_draw_arrays(ctx, PIPE_PRIM_POINTS, 0, Elements(vertices));
+   util_draw_arrays(ctx, PIPE_PRIM_POINTS, 0, ARRAY_SIZE(vertices));
    ctx->flush(ctx, NULL, 0);
 
    graw_save_surface_to_file(ctx, surf, NULL);

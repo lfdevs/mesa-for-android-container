@@ -68,7 +68,7 @@ os_get_process_name(char *procname, size_t size)
       char *lpProcessName;
       char *lpProcessExt;
 
-      GetModuleFileNameA(NULL, szProcessPath, Elements(szProcessPath));
+      GetModuleFileNameA(NULL, szProcessPath, ARRAY_SIZE(szProcessPath));
 
       lpProcessName = strrchr(szProcessPath, '\\');
       lpProcessName = lpProcessName ? lpProcessName + 1 : szProcessPath;

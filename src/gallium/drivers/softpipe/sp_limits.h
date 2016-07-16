@@ -31,7 +31,7 @@
 
 #define SP_MAX_TEXTURE_SIZE (1 * 1024 * 1024 * 1024ULL)  /* 1GB for now */
 #define SP_MAX_TEXTURE_2D_LEVELS 15  /* 16K x 16K */
-#define SP_MAX_TEXTURE_3D_LEVELS 9   /* 256 x 256 x 256 */
+#define SP_MAX_TEXTURE_3D_LEVELS 12   /* 2048 x 2048 x 2048 */
 #define SP_MAX_TEXTURE_CUBE_LEVELS 13  /* 4K x 4K */
 
 

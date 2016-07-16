@@ -62,14 +62,16 @@ sp_exec_fragment_shader(const struct sp_fragment_shader_variant *var)
 static void
 exec_prepare( const struct sp_fragment_shader_variant *var,
               struct tgsi_exec_machine *machine,
-              struct tgsi_sampler *sampler )
+              struct tgsi_sampler *sampler,
+              struct tgsi_image *image,
+              struct tgsi_buffer *buffer )
 {
    /*
     * Bind tokens/shader to the interpreter's machine state.
     */
    tgsi_exec_machine_bind_shader(machine,
                                  var->tokens,
-                                 sampler);
+                                 sampler, image, buffer);
 }
 
 
@@ -116,7 +118,8 @@ setup_pos_vector(const struct tgsi_interp_coef *coef,
 static unsigned 
 exec_run( const struct sp_fragment_shader_variant *var,
 	  struct tgsi_exec_machine *machine,
-	  struct quad_header *quad )
+	  struct quad_header *quad,
+	  bool early_depth_test )
 {
    /* Compute X, Y, Z, W vals for this quad */
    setup_pos_vector(quad->posCoef, 
@@ -126,7 +129,8 @@ exec_run( const struct sp_fragment_shader_variant *var,
    /* convert 0 to 1.0 and 1 to -1.0 */
    machine->Face = (float) (quad->input.facing * -2 + 1);
 
-   quad->inout.mask &= tgsi_exec_machine_run( machine );
+   machine->NonHelperMask = quad->inout.mask;
+   quad->inout.mask &= tgsi_exec_machine_run( machine, 0 );
    if (quad->inout.mask == 0)
       return FALSE;
 
@@ -155,16 +159,19 @@ exec_run( const struct sp_fragment_shader_variant *var,
             {
                uint j;
 
-               for (j = 0; j < 4; j++)
-                  quad->output.depth[j] = machine->Outputs[i].xyzw[2].f[j];
+               if (!early_depth_test) {
+                  for (j = 0; j < 4; j++)
+                     quad->output.depth[j] = machine->Outputs[i].xyzw[2].f[j];
+               }
             }
             break;
          case TGSI_SEMANTIC_STENCIL:
             {
                uint j;
-
-               for (j = 0; j < 4; j++)
-                  quad->output.stencil[j] = (unsigned)machine->Outputs[i].xyzw[1].u[j];
+               if (!early_depth_test) {
+                  for (j = 0; j < 4; j++)
+                     quad->output.stencil[j] = (unsigned)machine->Outputs[i].xyzw[1].u[j];
+               }
             }
             break;
          }
@@ -180,7 +187,7 @@ exec_delete(struct sp_fragment_shader_variant *var,
             struct tgsi_exec_machine *machine)
 {
    if (machine->Tokens == var->tokens) {
-      tgsi_exec_machine_bind_shader(machine, NULL, NULL);
+      tgsi_exec_machine_bind_shader(machine, NULL, NULL, NULL, NULL);
    }
 
    FREE( (void *) var->tokens );

@@ -237,7 +237,7 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
 
    if (llvmpipe->dirty & LP_NEW_CONSTANTS)
       lp_setup_set_fs_constants(llvmpipe->setup,
-                                Elements(llvmpipe->constants[PIPE_SHADER_FRAGMENT]),
+                                ARRAY_SIZE(llvmpipe->constants[PIPE_SHADER_FRAGMENT]),
                                 llvmpipe->constants[PIPE_SHADER_FRAGMENT]);
 
    if (llvmpipe->dirty & (LP_NEW_SAMPLER_VIEW))

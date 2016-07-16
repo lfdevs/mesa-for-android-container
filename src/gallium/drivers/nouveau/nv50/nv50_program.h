@@ -79,6 +79,9 @@ struct nv50_program {
       ubyte clpd[2];     /* output slot of clip distance[i]'s 1st component */
       ubyte clpd_nr;
       bool need_vertex_id;
+      uint32_t clip_mode;
+      uint8_t clip_enable; /* mask of defined clip planes */
+      uint8_t cull_enable; /* mask of defined cull distances */
    } vp;
 
    struct {

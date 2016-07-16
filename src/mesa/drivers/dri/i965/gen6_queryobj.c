@@ -37,48 +37,34 @@
 #include "brw_defines.h"
 #include "brw_state.h"
 #include "intel_batchbuffer.h"
+#include "intel_buffer_objects.h"
 #include "intel_reg.h"
 
-/*
- * Write an arbitrary 64-bit register to a buffer via MI_STORE_REGISTER_MEM.
- *
- * Only TIMESTAMP and PS_DEPTH_COUNT have special PIPE_CONTROL support; other
- * counters have to be read via the generic MI_STORE_REGISTER_MEM.
- *
- * Callers must explicitly flush the pipeline to ensure the desired value is
- * available.
- */
-void
-brw_store_register_mem64(struct brw_context *brw,
-                         drm_intel_bo *bo, uint32_t reg, int idx)
+static inline void
+set_query_availability(struct brw_context *brw, struct brw_query_object *query,
+                       bool available)
 {
-   assert(brw->gen >= 6);
-
-   /* MI_STORE_REGISTER_MEM only stores a single 32-bit value, so to
-    * read a full 64-bit register, we need to do two of them.
+   /* For platforms that support ARB_query_buffer_object, we write the
+    * query availability for "pipelined" queries.
+    *
+    * Most counter snapshots are written by the command streamer, by
+    * doing a CS stall and then MI_STORE_REGISTER_MEM.  For these
+    * counters, the CS stall guarantees that the results will be
+    * available when subsequent CS commands run.  So we don't need to
+    * do any additional tracking.
+    *
+    * Other counters (occlusion queries and timestamp) are written by
+    * PIPE_CONTROL, without a CS stall.  This means that we can't be
+    * sure whether the writes have landed yet or not.  Performing a
+    * PIPE_CONTROL with an immediate write will synchronize with
+    * those earlier writes, so we write 1 when the value has landed.
     */
-   if (brw->gen >= 8) {
-      BEGIN_BATCH(8);
-      OUT_BATCH(MI_STORE_REGISTER_MEM | (4 - 2));
-      OUT_BATCH(reg);
-      OUT_RELOC64(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                  idx * sizeof(uint64_t));
-      OUT_BATCH(MI_STORE_REGISTER_MEM | (4 - 2));
-      OUT_BATCH(reg + sizeof(uint32_t));
-      OUT_RELOC64(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                  sizeof(uint32_t) + idx * sizeof(uint64_t));
-      ADVANCE_BATCH();
-   } else {
-      BEGIN_BATCH(6);
-      OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
-      OUT_BATCH(reg);
-      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                idx * sizeof(uint64_t));
-      OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
-      OUT_BATCH(reg + sizeof(uint32_t));
-      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                sizeof(uint32_t) + idx * sizeof(uint64_t));
-      ADVANCE_BATCH();
+   if (brw->ctx.Extensions.ARB_query_buffer_object &&
+       brw_is_query_pipelined(query)) {
+      brw_emit_pipe_control_write(brw,
+                                  PIPE_CONTROL_WRITE_IMMEDIATE,
+                                  query->bo, 2 * sizeof(uint64_t),
+                                  available, 0);
    }
 }
 
@@ -90,9 +76,11 @@ write_primitives_generated(struct brw_context *brw,
 
    if (brw->gen >= 7 && stream > 0) {
       brw_store_register_mem64(brw, query_bo,
-                               GEN7_SO_PRIM_STORAGE_NEEDED(stream), idx);
+                               GEN7_SO_PRIM_STORAGE_NEEDED(stream),
+                               idx * sizeof(uint64_t));
    } else {
-      brw_store_register_mem64(brw, query_bo, CL_INVOCATION_COUNT, idx);
+      brw_store_register_mem64(brw, query_bo, CL_INVOCATION_COUNT,
+                               idx * sizeof(uint64_t));
    }
 }
 
@@ -103,9 +91,11 @@ write_xfb_primitives_written(struct brw_context *brw,
    brw_emit_mi_flush(brw);
 
    if (brw->gen >= 7) {
-      brw_store_register_mem64(brw, bo, GEN7_SO_NUM_PRIMS_WRITTEN(stream), idx);
+      brw_store_register_mem64(brw, bo, GEN7_SO_NUM_PRIMS_WRITTEN(stream),
+                               idx * sizeof(uint64_t));
    } else {
-      brw_store_register_mem64(brw, bo, GEN6_SO_NUM_PRIMS_WRITTEN, idx);
+      brw_store_register_mem64(brw, bo, GEN6_SO_NUM_PRIMS_WRITTEN,
+                               idx * sizeof(uint64_t));
    }
 }
 
@@ -159,7 +149,7 @@ emit_pipeline_stat(struct brw_context *brw, drm_intel_bo *bo,
     */
    brw_emit_mi_flush(brw);
 
-   brw_store_register_mem64(brw, bo, reg, idx);
+   brw_store_register_mem64(brw, bo, reg, idx * sizeof(uint64_t));
 }
 
 
@@ -282,6 +272,9 @@ gen6_begin_query(struct gl_context *ctx, struct gl_query_object *q)
    drm_intel_bo_unreference(query->bo);
    query->bo = drm_intel_bo_alloc(brw->bufmgr, "query results", 4096, 4096);
 
+   /* For ARB_query_buffer_object: The result is not available */
+   set_query_availability(brw, query, false);
+
    switch (query->Base.Target) {
    case GL_TIME_ELAPSED:
       /* For timestamp queries, we record the starting time right away so that
@@ -314,6 +307,8 @@ gen6_begin_query(struct gl_context *ctx, struct gl_query_object *q)
 
    case GL_PRIMITIVES_GENERATED:
       write_primitives_generated(brw, query->bo, query->Base.Stream, 0);
+      if (query->Base.Stream == 0)
+         ctx->NewDriverState |= BRW_NEW_RASTERIZER_DISCARD;
       break;
 
    case GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN:
@@ -366,6 +361,8 @@ gen6_end_query(struct gl_context *ctx, struct gl_query_object *q)
 
    case GL_PRIMITIVES_GENERATED:
       write_primitives_generated(brw, query->bo, query->Base.Stream, 1);
+      if (query->Base.Stream == 0)
+         ctx->NewDriverState |= BRW_NEW_RASTERIZER_DISCARD;
       break;
 
    case GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN:
@@ -395,6 +392,9 @@ gen6_end_query(struct gl_context *ctx, struct gl_query_object *q)
     * but they won't actually execute until it is flushed.
     */
    query->flushed = false;
+
+   /* For ARB_query_buffer_object: The result is now available */
+   set_query_availability(brw, query, true);
 }
 
 /**
@@ -464,6 +464,15 @@ static void gen6_check_query(struct gl_context *ctx, struct gl_query_object *q)
    }
 }
 
+static void
+gen6_query_counter(struct gl_context *ctx, struct gl_query_object *q)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct brw_query_object *query = (struct brw_query_object *)q;
+   brw_query_counter(ctx, q);
+   set_query_availability(brw, query, true);
+}
+
 /* Initialize Gen6+-specific query object functions. */
 void gen6_init_queryobj_functions(struct dd_function_table *functions)
 {
@@ -471,4 +480,5 @@ void gen6_init_queryobj_functions(struct dd_function_table *functions)
    functions->EndQuery = gen6_end_query;
    functions->CheckQuery = gen6_check_query;
    functions->WaitQuery = gen6_wait_query;
+   functions->QueryCounter = gen6_query_counter;
 }

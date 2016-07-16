@@ -166,6 +166,7 @@ const struct brw_tracked_state brw_vs_binding_table = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_VS_CONSTBUF |
              BRW_NEW_VS_PROG_DATA |
              BRW_NEW_SURFACES,
@@ -190,6 +191,7 @@ const struct brw_tracked_state brw_wm_binding_table = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_FS_PROG_DATA |
              BRW_NEW_SURFACES,
    },
@@ -216,6 +218,7 @@ const struct brw_tracked_state brw_tcs_binding_table = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_DEFAULT_TESS_LEVELS |
              BRW_NEW_SURFACES |
              BRW_NEW_TCS_CONSTBUF |
@@ -244,6 +247,7 @@ const struct brw_tracked_state brw_tes_binding_table = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_SURFACES |
              BRW_NEW_TES_CONSTBUF |
              BRW_NEW_TES_PROG_DATA,
@@ -271,6 +275,7 @@ const struct brw_tracked_state brw_gs_binding_table = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_GS_CONSTBUF |
              BRW_NEW_GS_PROG_DATA |
              BRW_NEW_SURFACES,
@@ -425,7 +430,8 @@ gen7_reset_hw_bt_pool_offsets(struct brw_context *brw)
 const struct brw_tracked_state gen7_hw_binding_tables = {
    .dirty = {
       .mesa = 0,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP,
    },
    .emit = gen7_enable_hw_binding_tables
 };
@@ -460,6 +466,7 @@ const struct brw_tracked_state brw_binding_table_pointers = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_BINDING_TABLE_POINTERS |
              BRW_NEW_STATE_BASE_ADDRESS,
    },
@@ -494,6 +501,7 @@ const struct brw_tracked_state gen6_binding_table_pointers = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_BINDING_TABLE_POINTERS |
              BRW_NEW_STATE_BASE_ADDRESS,
    },

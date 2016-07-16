@@ -1022,6 +1022,17 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
 		   " (%i, %s).\n", ret, strerror(-ret));
       goto out_no_caps;
    }
+
+   if (((version->version_major == 2 && version->version_minor >= 10)
+       || version->version_major > 2) && vws->base.have_vgpu10) {
+
+     /* support for these commands didn't make it into vmwgfx kernel
+      * modules before 2.10.
+      */
+      vws->base.have_generate_mipmap_cmd = TRUE;
+      vws->base.have_set_predication_cmd = TRUE;
+   }
+
    free(cap_buffer);
    drmFreeVersion(version);
    vmw_printf("%s OK\n", __FUNCTION__);

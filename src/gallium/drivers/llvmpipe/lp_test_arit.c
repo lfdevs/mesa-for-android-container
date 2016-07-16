@@ -108,6 +108,28 @@ static float sgnf(float x)
 }
 
 
+const float sgn_values[] = {
+   -INFINITY,
+   -60,
+   -4,
+   -2,
+   -1,
+   -1e-007,
+   0,
+   1e-007,
+   0.01,
+   0.1,
+   0.9,
+   0.99,
+   1,
+   2,
+   4,
+   60,
+   INFINITY,
+   NAN
+};
+
+
 const float exp2_values[] = {
    -INFINITY,
    -60,
@@ -218,6 +240,7 @@ const float round_values[] = {
       -10.0, -1, 0.0, 12.0,
       -1.49, -0.25, 1.25, 2.51,
       -0.99, -0.01, 0.01, 0.99,
+      -1.5, -0.5, 0.5, 1.5,
       1.401298464324817e-45f, // smallest denormal
       -1.401298464324817e-45f,
       1.62981451e-08f,
@@ -272,21 +295,23 @@ const float fract_values[] = {
 
 static const struct unary_test_t
 unary_tests[] = {
-   {"neg", &lp_build_negate, &negf, exp2_values, Elements(exp2_values), 20.0 },
-   {"exp2", &lp_build_exp2, &exp2f, exp2_values, Elements(exp2_values), 20.0 },
-   {"log2", &lp_build_log2_safe, &log2f, log2_values, Elements(log2_values), 20.0 },
-   {"exp", &lp_build_exp, &expf, exp2_values, Elements(exp2_values), 18.0 },
-   {"log", &lp_build_log_safe, &logf, log2_values, Elements(log2_values), 20.0 },
-   {"rcp", &lp_build_rcp, &rcpf, rcp_values, Elements(rcp_values), 20.0 },
-   {"rsqrt", &lp_build_rsqrt, &rsqrtf, rsqrt_values, Elements(rsqrt_values), 20.0 },
-   {"sin", &lp_build_sin, &sinf, sincos_values, Elements(sincos_values), 20.0 },
-   {"cos", &lp_build_cos, &cosf, sincos_values, Elements(sincos_values), 20.0 },
-   {"sgn", &lp_build_sgn, &sgnf, exp2_values, Elements(exp2_values), 20.0 },
-   {"round", &lp_build_round, &roundf, round_values, Elements(round_values), 24.0 },
-   {"trunc", &lp_build_trunc, &truncf, round_values, Elements(round_values), 24.0 },
-   {"floor", &lp_build_floor, &floorf, round_values, Elements(round_values), 24.0 },
-   {"ceil", &lp_build_ceil, &ceilf, round_values, Elements(round_values), 24.0 },
-   {"fract", &lp_build_fract_safe, &fractf, fract_values, Elements(fract_values), 24.0 },
+   {"abs", &lp_build_abs, &fabsf, sgn_values, ARRAY_SIZE(sgn_values), 20.0 },
+   {"neg", &lp_build_negate, &negf, sgn_values, ARRAY_SIZE(sgn_values), 20.0 },
+   {"sgn", &lp_build_sgn, &sgnf, sgn_values, ARRAY_SIZE(sgn_values), 20.0 },
+   {"exp2", &lp_build_exp2, &exp2f, exp2_values, ARRAY_SIZE(exp2_values), 18.0 },
+   {"log2", &lp_build_log2_safe, &log2f, log2_values, ARRAY_SIZE(log2_values), 20.0 },
+   {"exp", &lp_build_exp, &expf, exp2_values, ARRAY_SIZE(exp2_values), 18.0 },
+   {"log", &lp_build_log_safe, &logf, log2_values, ARRAY_SIZE(log2_values), 20.0 },
+   {"rcp", &lp_build_rcp, &rcpf, rcp_values, ARRAY_SIZE(rcp_values), 20.0 },
+   {"rsqrt", &lp_build_rsqrt, &rsqrtf, rsqrt_values, ARRAY_SIZE(rsqrt_values), 20.0 },
+   {"sin", &lp_build_sin, &sinf, sincos_values, ARRAY_SIZE(sincos_values), 20.0 },
+   {"cos", &lp_build_cos, &cosf, sincos_values, ARRAY_SIZE(sincos_values), 20.0 },
+   {"sgn", &lp_build_sgn, &sgnf, sgn_values, ARRAY_SIZE(sgn_values), 20.0 },
+   {"round", &lp_build_round, &nearbyintf, round_values, ARRAY_SIZE(round_values), 24.0 },
+   {"trunc", &lp_build_trunc, &truncf, round_values, ARRAY_SIZE(round_values), 24.0 },
+   {"floor", &lp_build_floor, &floorf, round_values, ARRAY_SIZE(round_values), 24.0 },
+   {"ceil", &lp_build_ceil, &ceilf, round_values, ARRAY_SIZE(round_values), 24.0 },
+   {"fract", &lp_build_fract_safe, &fractf, fract_values, ARRAY_SIZE(fract_values), 24.0 },
 };
 
 
@@ -295,16 +320,18 @@ unary_tests[] = {
  */
 static LLVMValueRef
 build_unary_test_func(struct gallivm_state *gallivm,
-                      const struct unary_test_t *test)
+                      const struct unary_test_t *test,
+                      unsigned length,
+                      const char *test_name)
 {
-   struct lp_type type = lp_type_float_vec(32, lp_native_vector_width);
+   struct lp_type type = lp_type_float_vec(32, length * 32);
    LLVMContextRef context = gallivm->context;
    LLVMModuleRef module = gallivm->module;
    LLVMTypeRef vf32t = lp_build_vec_type(gallivm, type);
    LLVMTypeRef args[2] = { LLVMPointerType(vf32t, 0), LLVMPointerType(vf32t, 0) };
-   LLVMValueRef func = LLVMAddFunction(module, test->name,
+   LLVMValueRef func = LLVMAddFunction(module, test_name,
                                        LLVMFunctionType(LLVMVoidTypeInContext(context),
-                                                        args, Elements(args), 0));
+                                                        args, ARRAY_SIZE(args), 0));
    LLVMValueRef arg0 = LLVMGetParam(func, 0);
    LLVMValueRef arg1 = LLVMGetParam(func, 1);
    LLVMBuilderRef builder = gallivm->builder;
@@ -369,14 +396,16 @@ flush_denorm_to_zero(float val)
  * Test one LLVM unary arithmetic builder function.
  */
 static boolean
-test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test)
+test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test, unsigned length)
 {
+   char test_name[128];
+   util_snprintf(test_name, sizeof test_name, "%s.v%u", test->name, length);
+   LLVMContextRef context;
    struct gallivm_state *gallivm;
    LLVMValueRef test_func;
    unary_func_t test_func_jit;
    boolean success = TRUE;
    int i, j;
-   int length = lp_native_vector_width / 32;
    float *in, *out;
 
    in = align_malloc(length * 4, length * 4);
@@ -387,9 +416,10 @@ test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test)
       in[i] = 1.0;
    }
 
-   gallivm = gallivm_create("test_module", LLVMGetGlobalContext());
+   context = LLVMContextCreate();
+   gallivm = gallivm_create("test_module", context);
 
-   test_func = build_unary_test_func(gallivm, test);
+   test_func = build_unary_test_func(gallivm, test, length, test_name);
 
    gallivm_compile_module(gallivm);
 
@@ -409,6 +439,7 @@ test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test)
       for (i = 0; i < num_vals; ++i) {
          float testval, ref;
          double error, precision;
+         boolean expected_pass = TRUE;
          bool pass;
 
          testval = flush_denorm_to_zero(in[i]);
@@ -427,20 +458,37 @@ test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test)
             continue;
          }
 
-         if (!pass || verbose) {
-            printf("%s(%.9g): ref = %.9g, out = %.9g, precision = %f bits, %s\n",
-                  test->name, in[i], ref, out[i], precision,
-                  pass ? "PASS" : "FAIL");
+         if (test->ref == &nearbyintf && length == 2 && 
+             ref != roundf(testval)) {
+            /* FIXME: The generic (non SSE) path in lp_build_iround, which is
+             * always taken for length==2 regardless of native round support,
+             * does not round to even. */
+            expected_pass = FALSE;
+         }
+
+         if (test->ref == &expf && util_inf_sign(testval) == -1) {
+            /* XXX: 64bits MSVCRT's expf(-inf) returns -inf instead of 0 */
+#if defined(_MSC_VER) && defined(_WIN64)
+            expected_pass = FALSE;
+#endif
+         }
+
+         if (pass != expected_pass || verbose) {
+            printf("%s(%.9g): ref = %.9g, out = %.9g, precision = %f bits, %s%s\n",
+                  test_name, in[i], ref, out[i], precision,
+                  pass ? "PASS" : "FAIL",
+                  !expected_pass ? (pass ? " (unexpected)" : " (expected)" ): "");
             fflush(stdout);
          }
 
-         if (!pass) {
+         if (pass != expected_pass) {
             success = FALSE;
          }
       }
    }
 
    gallivm_destroy(gallivm);
+   LLVMContextDispose(context);
 
    align_free(in);
    align_free(out);
@@ -455,9 +503,13 @@ test_all(unsigned verbose, FILE *fp)
    boolean success = TRUE;
    int i;
 
-   for (i = 0; i < Elements(unary_tests); ++i) {
-      if (!test_unary(verbose, fp, &unary_tests[i])) {
-         success = FALSE;
+   for (i = 0; i < ARRAY_SIZE(unary_tests); ++i) {
+      unsigned max_length = lp_native_vector_width / 32;
+      unsigned length;
+      for (length = 1; length <= max_length; length *= 2) {
+         if (!test_unary(verbose, fp, &unary_tests[i], length)) {
+            success = FALSE;
+         }
       }
    }
 

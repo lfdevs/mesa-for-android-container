@@ -174,6 +174,7 @@ struct dri2_egl_display
    const __DRI2configQueryExtension *config;
    const __DRI2fenceExtension *fence;
    const __DRI2rendererQueryExtension *rendererQuery;
+   const __DRI2interopExtension *interop;
    int                       fd;
 
    int                       own_device;
@@ -212,9 +213,9 @@ struct dri2_egl_display
    int			     authenticated;
    int			     formats;
    uint32_t                  capabilities;
-   int			     is_render_node;
 #endif
 
+   int              is_render_node;
    int			     is_different_gpu;
 };
 
@@ -285,6 +286,7 @@ struct dri2_egl_surface
 #ifdef HAVE_ANDROID_PLATFORM
    struct ANativeWindow *window;
    struct ANativeWindowBuffer *buffer;
+   __DRIimage *dri_image;
 
    /* EGL-owned buffers */
    __DRIbuffer           *local_buffers[__DRI_BUFFER_COUNT];
@@ -307,6 +309,8 @@ struct dri2_egl_image
 
 struct dri2_egl_sync {
    _EGLSync base;
+   mtx_t mutex;
+   cnd_t cond;
    int refcount;
    void *fence;
 };
@@ -356,6 +360,10 @@ _EGLImage *
 dri2_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
 		      _EGLContext *ctx, EGLenum target,
 		      EGLClientBuffer buffer, const EGLint *attr_list);
+
+_EGLImage *
+dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
+			  EGLClientBuffer buffer, const EGLint *attr_list);
 
 EGLBoolean
 dri2_initialize_x11(_EGLDriver *drv, _EGLDisplay *disp);

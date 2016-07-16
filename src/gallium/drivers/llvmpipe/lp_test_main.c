@@ -414,5 +414,7 @@ int main(int argc, char **argv)
    if (fp)
       fclose(fp);
 
+   LLVMShutdown();
+
    return success ? 0 : 1;
 }

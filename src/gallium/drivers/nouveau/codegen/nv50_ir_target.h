@@ -58,21 +58,36 @@ struct RelocInfo
    RelocEntry entry[0];
 };
 
-struct InterpEntry
-{
-   InterpEntry(int ipa, int reg, int loc) : ipa(ipa), reg(reg), loc(loc) {}
-   uint32_t ipa:4; // SC mode used to identify colors
-   uint32_t reg:8; // The reg used for perspective division
-   uint32_t loc:20; // Let's hope we don't have more than 1M-sized shaders
+struct FixupData {
+   FixupData(bool force, bool flat) :
+      force_persample_interp(force), flatshade(flat) {}
+   bool force_persample_interp;
+   bool flatshade;
 };
 
-typedef void (*InterpApply)(const InterpEntry*, uint32_t*, bool, bool);
+struct FixupEntry;
+typedef void (*FixupApply)(const FixupEntry*, uint32_t*, const FixupData&);
 
-struct InterpInfo
+struct FixupEntry
+{
+   FixupEntry(FixupApply apply, int ipa, int reg, int loc) :
+      apply(apply), ipa(ipa), reg(reg), loc(loc) {}
+
+   FixupApply apply;
+   union {
+      struct {
+         uint32_t ipa:4; // SC mode used to identify colors
+         uint32_t reg:8; // The reg used for perspective division
+         uint32_t loc:20; // Let's hope we don't have more than 1M-sized shaders
+      };
+      uint32_t val;
+   };
+};
+
+struct FixupInfo
 {
    uint32_t count;
-   InterpApply apply;
-   InterpEntry entry[0];
+   FixupEntry entry[0];
 };
 
 class CodeEmitter
@@ -95,8 +110,8 @@ public:
 
    inline void *getRelocInfo() const { return relocInfo; }
 
-   bool addInterp(int ipa, int reg, InterpApply apply);
-   inline void *getInterpInfo() const { return interpInfo; }
+   bool addInterp(int ipa, int reg, FixupApply apply);
+   inline void *getFixupInfo() const { return fixupInfo; }
 
    virtual void prepareEmission(Program *);
    virtual void prepareEmission(Function *);
@@ -112,7 +127,7 @@ protected:
    uint32_t codeSizeLimit;
 
    RelocInfo *relocInfo;
-   InterpInfo *interpInfo;
+   FixupInfo *fixupInfo;
 };
 
 
@@ -157,7 +172,9 @@ public:
    // The address chosen is supplied to the relocation routine.
    virtual void getBuiltinCode(const uint32_t **code, uint32_t *size) const = 0;
 
-   virtual void parseDriverInfo(const struct nv50_ir_prog_info *info) { }
+   virtual void parseDriverInfo(const struct nv50_ir_prog_info *info) {
+      threads = info->prop.cp.numThreads;
+   }
 
    virtual bool runLegalizePass(Program *, CGStage stage) const = 0;
 
@@ -233,6 +250,7 @@ public:
 
 protected:
    uint32_t chipset;
+   uint32_t threads;
 
    DataFile nativeFileMap[DATA_FILE_COUNT];
 

@@ -58,7 +58,9 @@ struct context {
                 uint64_t __v[4];                                        \
                 int __i, __n;                                           \
                                                                         \
-                __n = ctx->screen->get_compute_param(ctx->screen, c, __v); \
+                __n = ctx->screen->get_compute_param(ctx->screen,       \
+                                                     PIPE_SHADER_IR_TGSI, \
+                                                     c, __v);           \
                 printf("%s: {", #c);                                    \
                                                                         \
                 for (__i = 0; __i < __n / sizeof(*__v); ++__i)          \
@@ -144,6 +146,7 @@ static void init_prog(struct context *ctx, unsigned local_sz,
         struct pipe_context *pipe = ctx->pipe;
         struct tgsi_token prog[1024];
         struct pipe_compute_state cs = {
+                .ir_type = PIPE_SHADER_IR_TGSI,
                 .prog = prog,
                 .req_local_mem = local_sz,
                 .req_private_mem = private_sz,
@@ -152,7 +155,7 @@ static void init_prog(struct context *ctx, unsigned local_sz,
         char *psrc = preprocess_prog(ctx, src, defs);
         int ret;
 
-        ret = tgsi_text_translate(psrc, prog, Elements(prog));
+        ret = tgsi_text_translate(psrc, prog, ARRAY_SIZE(prog));
         assert(ret);
         free(psrc);
 
@@ -421,7 +424,7 @@ static void destroy_globals(struct context *ctx)
 
 static void launch_grid(struct context *ctx, const uint *block_layout,
                         const uint *grid_layout, uint32_t pc,
-                        const void *input)
+                        void *input)
 {
         struct pipe_context *pipe = ctx->pipe;
         struct pipe_grid_info info;
@@ -1122,7 +1125,7 @@ static void test_surface_ld(struct context *ctx)
 
         init_prog(ctx, 0, 0, 0, src, NULL);
 
-        for (i = 0; i < Elements(surface_fmts); i++) {
+        for (i = 0; i < ARRAY_SIZE(surface_fmts); i++) {
                 bool is_int = util_format_is_pure_integer(surface_fmts[i]);
 
                 printf("   - %s\n", util_format_name(surface_fmts[i]));
@@ -1240,7 +1243,7 @@ static void test_surface_st(struct context *ctx)
 
         init_prog(ctx, 0, 0, 0, src, NULL);
 
-        for (i = 0; i < Elements(surface_fmts); i++) {
+        for (i = 0; i < ARRAY_SIZE(surface_fmts); i++) {
                 bool is_signed = (util_format_description(surface_fmts[i])
                                   ->channel[0].type == UTIL_FORMAT_TYPE_SIGNED);
                 bool is_int = util_format_is_pure_integer(surface_fmts[i]);

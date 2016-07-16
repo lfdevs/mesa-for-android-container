@@ -68,6 +68,12 @@ struct gbm_device {
                                uint32_t usage);
    struct gbm_bo *(*bo_import)(struct gbm_device *gbm, uint32_t type,
                                void *buffer, uint32_t usage);
+   void *(*bo_map)(struct gbm_bo *bo,
+                               uint32_t x, uint32_t y,
+                               uint32_t width, uint32_t height,
+                               uint32_t flags, uint32_t *stride,
+                               void **map_data);
+   void (*bo_unmap)(struct gbm_bo *bo, void *map_data);
    int (*bo_write)(struct gbm_bo *bo, const void *buf, size_t data);
    int (*bo_get_fd)(struct gbm_bo *bo);
    void (*bo_destroy)(struct gbm_bo *bo);

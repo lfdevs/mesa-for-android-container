@@ -248,7 +248,8 @@ vl_dri2_screen_texture_from_drawable(struct vl_screen *vscreen, void *drawable)
    template.flags = 0;
 
    tex = scrn->base.pscreen->resource_from_handle(scrn->base.pscreen, &template,
-                                                  &dri2_handle);
+                                                  &dri2_handle,
+                                                  PIPE_HANDLE_USAGE_READ_WRITE);
    free(reply);
 
    return tex;
@@ -426,13 +427,15 @@ vl_dri2_screen_create(Display *display, int screen)
    return &scrn->base;
 
 release_pipe:
-   if (scrn->base.dev)
+   if (scrn->base.dev) {
       pipe_loader_release(&scrn->base.dev, 1);
-   fd = -1;
+      fd = -1;
+   }
 free_authenticate:
    free(authenticate);
 close_fd:
-   close(fd);
+   if (fd != -1)
+      close(fd);
 free_connect:
    free(connect);
 free_query:

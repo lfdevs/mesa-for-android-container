@@ -161,6 +161,8 @@ enum operation
    OP_VSEL,
    OP_CCTL, // cache control
    OP_SHFL, // warp shuffle
+   OP_VOTE,
+   OP_BUFQ, // buffer query
    OP_LAST
 };
 
@@ -244,6 +246,9 @@ enum operation
 #define NV50_IR_SUBOP_V2(d,a,b)    (((d) << 10) | ((b) << 5) | (a) | 0x4000)
 #define NV50_IR_SUBOP_V4(d,a,b)    (((d) << 10) | ((b) << 5) | (a) | 0x8000)
 #define NV50_IR_SUBOP_Vn(n)        ((n) >> 14)
+#define NV50_IR_SUBOP_VOTE_ALL 0
+#define NV50_IR_SUBOP_VOTE_ANY 1
+#define NV50_IR_SUBOP_VOTE_UNI 2
 
 enum DataType
 {
@@ -328,6 +333,7 @@ enum DataFile
    FILE_MEMORY_CONST,
    FILE_SHADER_INPUT,
    FILE_SHADER_OUTPUT,
+   FILE_MEMORY_BUFFER,
    FILE_MEMORY_GLOBAL,
    FILE_MEMORY_SHARED,
    FILE_MEMORY_LOCAL,
@@ -356,6 +362,65 @@ enum TexTarget
    TEX_TARGET_CUBE_ARRAY_SHADOW,
    TEX_TARGET_BUFFER,
    TEX_TARGET_COUNT
+};
+
+enum ImgFormat
+{
+   FMT_NONE,
+
+   FMT_RGBA32F,
+   FMT_RGBA16F,
+   FMT_RG32F,
+   FMT_RG16F,
+   FMT_R11G11B10F,
+   FMT_R32F,
+   FMT_R16F,
+
+   FMT_RGBA32UI,
+   FMT_RGBA16UI,
+   FMT_RGB10A2UI,
+   FMT_RGBA8UI,
+   FMT_RG32UI,
+   FMT_RG16UI,
+   FMT_RG8UI,
+   FMT_R32UI,
+   FMT_R16UI,
+   FMT_R8UI,
+
+   FMT_RGBA32I,
+   FMT_RGBA16I,
+   FMT_RGBA8I,
+   FMT_RG32I,
+   FMT_RG16I,
+   FMT_RG8I,
+   FMT_R32I,
+   FMT_R16I,
+   FMT_R8I,
+
+   FMT_RGBA16,
+   FMT_RGB10A2,
+   FMT_RGBA8,
+   FMT_RG16,
+   FMT_RG8,
+   FMT_R16,
+   FMT_R8,
+
+   FMT_RGBA16_SNORM,
+   FMT_RGBA8_SNORM,
+   FMT_RG16_SNORM,
+   FMT_RG8_SNORM,
+   FMT_R16_SNORM,
+   FMT_R8_SNORM,
+
+   IMG_FORMAT_COUNT,
+};
+
+enum ImgType {
+   UINT,
+   SINT,
+   UNORM,
+   SNORM,
+   FLOAT,
 };
 
 enum SVSemantic
@@ -895,6 +960,17 @@ public:
    };
 
 public:
+   struct ImgFormatDesc
+   {
+      char name[19];
+      uint8_t components;
+      uint8_t bits[4];
+      ImgType type;
+   };
+
+   static const struct ImgFormatDesc formatTable[IMG_FORMAT_COUNT];
+
+public:
    TexInstruction(Function *, operation);
    virtual ~TexInstruction();
 
@@ -933,6 +1009,7 @@ public:
       int8_t offset[3]; // only used on nv50
 
       enum TexQuery query;
+      const struct ImgFormatDesc *format;
    } tex;
 
    ValueRef dPdx[3];

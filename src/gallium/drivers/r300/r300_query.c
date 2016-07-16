@@ -58,7 +58,9 @@ static struct pipe_query *r300_create_query(struct pipe_context *pipe,
     else
         q->num_pipes = r300screen->info.r300_num_gb_pipes;
 
-    q->buf = r300->rws->buffer_create(r300->rws, 4096, 4096, TRUE,
+    q->buf = r300->rws->buffer_create(r300->rws,
+                                      r300screen->info.gart_page_size,
+                                      r300screen->info.gart_page_size,
                                       RADEON_DOMAIN_GTT, 0);
     if (!q->buf) {
         FREE(q);
@@ -110,7 +112,7 @@ void r300_stop_query(struct r300_context *r300)
     r300->query_current = NULL;
 }
 
-static void r300_end_query(struct pipe_context* pipe,
+static bool r300_end_query(struct pipe_context* pipe,
 	                   struct pipe_query* query)
 {
     struct r300_context* r300 = r300_context(pipe);
@@ -120,16 +122,18 @@ static void r300_end_query(struct pipe_context* pipe,
         pb_reference(&q->buf, NULL);
         r300_flush(pipe, RADEON_FLUSH_ASYNC,
                    (struct pipe_fence_handle**)&q->buf);
-        return;
+        return true;
     }
 
     if (q != r300->query_current) {
         fprintf(stderr, "r300: end_query: Got invalid query.\n");
         assert(0);
-        return;
+        return false;
     }
 
     r300_stop_query(r300);
+
+    return true;
 }
 
 static boolean r300_get_query_result(struct pipe_context* pipe,
@@ -200,6 +204,11 @@ static void r300_render_condition(struct pipe_context *pipe,
     }
 }
 
+static void
+r300_set_active_query_state(struct pipe_context *pipe, boolean enable)
+{
+}
+
 void r300_init_query_functions(struct r300_context* r300)
 {
     r300->context.create_query = r300_create_query;
@@ -207,5 +216,6 @@ void r300_init_query_functions(struct r300_context* r300)
     r300->context.begin_query = r300_begin_query;
     r300->context.end_query = r300_end_query;
     r300->context.get_query_result = r300_get_query_result;
+    r300->context.set_active_query_state = r300_set_active_query_state;
     r300->context.render_condition = r300_render_condition;
 }

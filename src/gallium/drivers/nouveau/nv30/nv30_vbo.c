@@ -445,7 +445,7 @@ nv30_draw_elements_inline_u32_short(struct nouveau_pushbuf *push,
 
    count >>= 1;
    while (count) {
-      unsigned npush = MIN2(count, NV04_PFIFO_MAX_PACKET_LEN);;
+      unsigned npush = MIN2(count, NV04_PFIFO_MAX_PACKET_LEN);
       count -= npush;
 
       BEGIN_NI04(push, NV30_3D(VB_ELEMENT_U16), npush);

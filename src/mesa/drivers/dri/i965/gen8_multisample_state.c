@@ -81,7 +81,8 @@ upload_multisample_state(struct brw_context *brw)
 const struct brw_tracked_state gen8_multisample_state = {
    .dirty = {
       .mesa = _NEW_MULTISAMPLE,
-      .brw = BRW_NEW_CONTEXT |
+      .brw = BRW_NEW_BLORP |
+             BRW_NEW_CONTEXT |
              BRW_NEW_NUM_SAMPLES,
    },
    .emit = upload_multisample_state

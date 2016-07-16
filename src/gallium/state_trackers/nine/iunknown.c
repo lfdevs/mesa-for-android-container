@@ -39,6 +39,7 @@ NineUnknown_ctor( struct NineUnknown *This,
         NineUnknown_AddRef(NineUnknown(This->device));
 
     This->vtable = pParams->vtable;
+    This->vtable_internal = pParams->vtable;
     This->guids = pParams->guids;
     This->dtor = pParams->dtor;
 
@@ -48,6 +49,8 @@ NineUnknown_ctor( struct NineUnknown *This,
 void
 NineUnknown_dtor( struct NineUnknown *This )
 {
+    if (This->refs && This->device) /* Possible only if early exit after a ctor failed */
+        (void) NineUnknown_Release(NineUnknown(This->device));
     FREE(This);
 }
 

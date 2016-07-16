@@ -179,6 +179,7 @@ ilo_get_video_param(struct pipe_screen *screen,
 
 static int
 ilo_get_compute_param(struct pipe_screen *screen,
+                      enum pipe_shader_ir ir_type,
                       enum pipe_compute_cap param,
                       void *ret)
 {
@@ -210,7 +211,7 @@ ilo_get_compute_param(struct pipe_screen *screen,
       size = strlen(val.ir_target) + 1;
       break;
    case PIPE_COMPUTE_CAP_GRID_DIMENSION:
-      val.grid_dimension = Elements(val.max_grid_size);
+      val.grid_dimension = ARRAY_SIZE(val.max_grid_size);
 
       ptr = &val.grid_dimension;
       size = sizeof(val.grid_dimension);
@@ -493,6 +494,14 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
    case PIPE_CAP_QUERY_MEMORY_INFO:
+   case PIPE_CAP_PCI_GROUP:
+   case PIPE_CAP_PCI_BUS:
+   case PIPE_CAP_PCI_DEVICE:
+   case PIPE_CAP_PCI_FUNCTION:
+   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+   case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+   case PIPE_CAP_CULL_DISTANCE:
+   case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:

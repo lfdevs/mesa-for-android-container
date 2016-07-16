@@ -273,6 +273,7 @@ gen7_emit_texture_surface_state(struct brw_context *brw,
                                 unsigned format,
                                 unsigned swizzle,
                                 uint32_t *surf_offset,
+                                int surf_index /* unused */,
                                 bool rw, bool for_gather)
 {
    const unsigned depth = max_layer - min_layer;
@@ -352,7 +353,8 @@ static void
 gen7_update_texture_surface(struct gl_context *ctx,
                             unsigned unit,
                             uint32_t *surf_offset,
-                            bool for_gather)
+                            bool for_gather,
+                            uint32_t plane)
 {
    struct brw_context *brw = brw_context(ctx);
    struct gl_texture_object *obj = ctx->Texture.Unit[unit]._Current;
@@ -363,6 +365,13 @@ gen7_update_texture_surface(struct gl_context *ctx,
    } else {
       struct intel_texture_object *intel_obj = intel_texture_object(obj);
       struct intel_mipmap_tree *mt = intel_obj->mt;
+
+      if (plane > 0) {
+         if (mt->plane[plane - 1] == NULL)
+            return;
+         mt = mt->plane[plane - 1];
+      }
+
       struct gl_sampler_object *sampler = _mesa_get_samplerobj(ctx, unit);
       /* If this is a view with restricted NumLayers, then our effective depth
        * is not just the miptree depth.
@@ -381,18 +390,21 @@ gen7_update_texture_surface(struct gl_context *ctx,
       const unsigned swizzle = (unlikely(alpha_depth) ? SWIZZLE_XYZW :
                                 brw_get_texture_swizzle(&brw->ctx, obj));
 
-      unsigned format = translate_tex_format(
-         brw, intel_obj->_Format, sampler->sRGBDecode);
+      mesa_format mesa_fmt = plane == 0 ? intel_obj->_Format : mt->format;
+      unsigned format = translate_tex_format(brw, mesa_fmt,
+                                             sampler->sRGBDecode);
 
       if (for_gather && format == BRW_SURFACEFORMAT_R32G32_FLOAT)
          format = BRW_SURFACEFORMAT_R32G32_FLOAT_LD;
+
+      const int surf_index = surf_offset - &brw->wm.base.surf_offset[0];
 
       gen7_emit_texture_surface_state(brw, mt, obj->Target,
                                       obj->MinLayer, obj->MinLayer + depth,
                                       obj->MinLevel + obj->BaseLevel,
                                       obj->MinLevel + intel_obj->_MaxLevel + 1,
-                                      format, swizzle,
-                                      surf_offset, false, for_gather);
+                                      format, swizzle, surf_offset,
+                                      surf_index, false, for_gather);
    }
 }
 

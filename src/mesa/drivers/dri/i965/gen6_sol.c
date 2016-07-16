@@ -69,13 +69,13 @@ gen6_update_sol_surfaces(struct brw_context *brw)
                brw, xfb_obj->Buffers[buffer],
                &brw->gs.base.surf_offset[surf_index],
                linked_xfb_info->Outputs[i].NumComponents,
-               linked_xfb_info->BufferStride[buffer], buffer_offset);
+               linked_xfb_info->Buffers[buffer].Stride, buffer_offset);
          } else {
             brw_update_sol_surface(
                brw, xfb_obj->Buffers[buffer],
                &brw->ff_gs.surf_offset[surf_index],
                linked_xfb_info->Outputs[i].NumComponents,
-               linked_xfb_info->BufferStride[buffer], buffer_offset);
+               linked_xfb_info->Buffers[buffer].Stride, buffer_offset);
          }
       } else {
          if (!brw->geometry_program)
@@ -92,6 +92,7 @@ const struct brw_tracked_state gen6_sol_surface = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_GEOMETRY_PROGRAM |
              BRW_NEW_VERTEX_PROGRAM |
              BRW_NEW_TRANSFORM_FEEDBACK,
@@ -186,6 +187,7 @@ const struct brw_tracked_state gen6_gs_binding_table = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_GEOMETRY_PROGRAM |
              BRW_NEW_VERTEX_PROGRAM |
              BRW_NEW_SURFACES,
@@ -256,7 +258,7 @@ brw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
     * overflowing any of the buffers currently being used for feedback.
     */
    unsigned max_index
-      = _mesa_compute_max_transform_feedback_vertices(xfb_obj,
+      = _mesa_compute_max_transform_feedback_vertices(ctx, xfb_obj,
                                                       linked_xfb_info);
 
    /* Initialize the SVBI 0 register to zero and set the maximum index. */

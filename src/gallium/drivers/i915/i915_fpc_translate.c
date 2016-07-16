@@ -134,8 +134,8 @@ i915_use_passthrough_shader(struct i915_fragment_shader *fs)
    if (fs->program) {
       memcpy(fs->program, passthrough_program, sizeof(passthrough_program));
       memcpy(fs->decl, passthrough_decl, sizeof(passthrough_decl));
-      fs->program_len = Elements(passthrough_program);
-      fs->decl_len = Elements(passthrough_decl);
+      fs->program_len = ARRAY_SIZE(passthrough_program);
+      fs->decl_len = ARRAY_SIZE(passthrough_decl);
    }
    fs->num_constants = 0;
 }

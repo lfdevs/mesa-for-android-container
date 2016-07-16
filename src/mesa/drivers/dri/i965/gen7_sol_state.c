@@ -70,7 +70,7 @@ upload_3dstate_so_buffers(struct brw_context *brw)
 	 continue;
       }
 
-      stride = linked_xfb_info->BufferStride[i] * 4;
+      stride = linked_xfb_info->Buffers[i].Stride * 4;
 
       start = xfb_obj->Offset[i];
       assert(start % 4 == 0);
@@ -123,7 +123,7 @@ gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
       const unsigned components = linked_xfb_info->Outputs[i].NumComponents;
       unsigned component_mask = (1 << components) - 1;
       unsigned stream_id = linked_xfb_info->Outputs[i].StreamId;
-
+      unsigned decl_buffer_slot = buffer << SO_DECL_OUTPUT_BUFFER_SLOT_SHIFT;
       assert(stream_id < MAX_VERTEX_STREAMS);
 
       /* gl_PointSize is stored in VARYING_SLOT_PSIZ.w
@@ -145,7 +145,7 @@ gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
 
       buffer_mask[stream_id] |= 1 << buffer;
 
-      decl |= buffer << SO_DECL_OUTPUT_BUFFER_SLOT_SHIFT;
+      decl |= decl_buffer_slot;
       if (varying == VARYING_SLOT_LAYER || varying == VARYING_SLOT_VIEWPORT) {
          decl |= vue_map->varying_to_slot[VARYING_SLOT_PSIZ] <<
             SO_DECL_REGISTER_INDEX_SHIFT;
@@ -172,12 +172,14 @@ gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
       next_offset[buffer] += skip_components;
 
       while (skip_components >= 4) {
-         so_decl[stream_id][decls[stream_id]++] = SO_DECL_HOLE_FLAG | 0xf;
+         so_decl[stream_id][decls[stream_id]++] =
+            SO_DECL_HOLE_FLAG | 0xf | decl_buffer_slot;
          skip_components -= 4;
       }
       if (skip_components > 0)
          so_decl[stream_id][decls[stream_id]++] =
-            SO_DECL_HOLE_FLAG | ((1 << skip_components) - 1);
+            SO_DECL_HOLE_FLAG | ((1 << skip_components) - 1) |
+            decl_buffer_slot;
 
       assert(linked_xfb_info->Outputs[i].DstOffset == next_offset[buffer]);
 
@@ -212,6 +214,12 @@ gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
    ADVANCE_BATCH();
 }
 
+static bool
+query_active(struct gl_query_object *q)
+{
+   return q && q->Active;
+}
+
 static void
 upload_3dstate_streamout(struct brw_context *brw, bool active,
 			 const struct brw_vue_map *vue_map)
@@ -220,7 +228,9 @@ upload_3dstate_streamout(struct brw_context *brw, bool active,
    /* BRW_NEW_TRANSFORM_FEEDBACK */
    struct gl_transform_feedback_object *xfb_obj =
       ctx->TransformFeedback.CurrentObject;
-   uint32_t dw1 = 0, dw2 = 0;
+   const struct gl_transform_feedback_info *linked_xfb_info =
+      &xfb_obj->shader_program->LinkedTransformFeedback;
+   uint32_t dw1 = 0, dw2 = 0, dw3 = 0, dw4 = 0;
    int i;
 
    if (active) {
@@ -231,14 +241,26 @@ upload_3dstate_streamout(struct brw_context *brw, bool active,
       dw1 |= SO_FUNCTION_ENABLE;
       dw1 |= SO_STATISTICS_ENABLE;
 
+      /* BRW_NEW_RASTERIZER_DISCARD */
+      if (ctx->RasterDiscard) {
+         if (!query_active(ctx->Query.PrimitivesGenerated[0])) {
+            dw1 |= SO_RENDERING_DISABLE;
+         } else {
+            perf_debug("Rasterizer discard with a GL_PRIMITIVES_GENERATED "
+                       "query active relies on the clipper.");
+         }
+      }
+
       /* _NEW_LIGHT */
       if (ctx->Light.ProvokingVertex != GL_FIRST_VERTEX_CONVENTION)
 	 dw1 |= SO_REORDER_TRAILING;
 
-      for (i = 0; i < 4; i++) {
-	 if (xfb_obj->Buffers[i]) {
-	    dw1 |= SO_BUFFER_ENABLE(i);
-	 }
+      if (brw->gen < 8) {
+         for (i = 0; i < 4; i++) {
+            if (xfb_obj->Buffers[i]) {
+               dw1 |= SO_BUFFER_ENABLE(i);
+            }
+         }
       }
 
       /* We always read the whole vertex.  This could be reduced at some
@@ -256,12 +278,30 @@ upload_3dstate_streamout(struct brw_context *brw, bool active,
 
       dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_3_VERTEX_READ_OFFSET);
       dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_3_VERTEX_READ_LENGTH);
+
+      if (brw->gen >= 8) {
+	 /* Set buffer pitches; 0 means unbound. */
+	 if (xfb_obj->Buffers[0])
+	    dw3 |= linked_xfb_info->Buffers[0].Stride * 4;
+	 if (xfb_obj->Buffers[1])
+	    dw3 |= (linked_xfb_info->Buffers[1].Stride * 4) << 16;
+	 if (xfb_obj->Buffers[2])
+	    dw4 |= linked_xfb_info->Buffers[2].Stride * 4;
+	 if (xfb_obj->Buffers[3])
+	    dw4 |= (linked_xfb_info->Buffers[3].Stride * 4) << 16;
+      }
    }
 
-   BEGIN_BATCH(3);
-   OUT_BATCH(_3DSTATE_STREAMOUT << 16 | (3 - 2));
+   const int dwords = brw->gen >= 8 ? 5 : 3;
+
+   BEGIN_BATCH(dwords);
+   OUT_BATCH(_3DSTATE_STREAMOUT << 16 | (dwords - 2));
    OUT_BATCH(dw1);
    OUT_BATCH(dw2);
+   if (dwords > 3) {
+      OUT_BATCH(dw3);
+      OUT_BATCH(dw4);
+   }
    ADVANCE_BATCH();
 }
 
@@ -273,7 +313,11 @@ upload_sol_state(struct brw_context *brw)
    bool active = _mesa_is_xfb_active_and_unpaused(ctx);
 
    if (active) {
-      upload_3dstate_so_buffers(brw);
+      if (brw->gen >= 8)
+         gen8_upload_3dstate_so_buffers(brw);
+      else
+         upload_3dstate_so_buffers(brw);
+
       /* BRW_NEW_VUE_MAP_GEOM_OUT */
       gen7_upload_3dstate_so_decl_list(brw, &brw->vue_map_geom_out);
    }
@@ -290,6 +334,8 @@ const struct brw_tracked_state gen7_sol_state = {
    .dirty = {
       .mesa  = _NEW_LIGHT,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
+               BRW_NEW_RASTERIZER_DISCARD |
                BRW_NEW_VUE_MAP_GEOM_OUT |
                BRW_NEW_TRANSFORM_FEEDBACK,
    },
@@ -369,9 +415,10 @@ gen7_save_primitives_written_counters(struct brw_context *brw,
 
    /* Emit MI_STORE_REGISTER_MEM commands to write the values. */
    for (int i = 0; i < streams; i++) {
+      int offset = (obj->prim_count_buffer_index + i) * sizeof(uint64_t);
       brw_store_register_mem64(brw, obj->prim_count_bo,
                                GEN7_SO_NUM_PRIMS_WRITTEN(i),
-                               obj->prim_count_buffer_index + i);
+                               offset);
    }
 
    /* Update where to write data to. */
@@ -483,7 +530,8 @@ gen7_end_transform_feedback(struct gl_context *ctx,
       (struct brw_transform_feedback_object *) obj;
 
    /* Store the ending value of the SO_NUM_PRIMS_WRITTEN counters. */
-   gen7_save_primitives_written_counters(brw, brw_obj);
+   if (!obj->Paused)
+      gen7_save_primitives_written_counters(brw, brw_obj);
 
    /* EndTransformFeedback() means that we need to update the number of
     * vertices written.  Since it's only necessary if DrawTransformFeedback()

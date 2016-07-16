@@ -205,7 +205,7 @@ static inline uint32_t
 swizzle(const struct nv30_texfmt *fmt, unsigned cmp, unsigned swz)
 {
    uint32_t data = fmt->swz[swz].src << 8;
-   if (swz <= PIPE_SWIZZLE_ALPHA)
+   if (swz <= PIPE_SWIZZLE_W)
       data |= fmt->swz[swz].cmp;
    else
       data |= fmt->swz[cmp].cmp;

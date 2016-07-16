@@ -68,9 +68,9 @@ struct gl_format_info
    bool IsSRGBFormat;
 
    /**
-    * To describe compressed formats.  If not compressed, Width=Height=1.
+    * To describe compressed formats.  If not compressed, Width=Height=Depth=1.
     */
-   GLubyte BlockWidth, BlockHeight;
+   GLubyte BlockWidth, BlockHeight, BlockDepth;
    GLubyte BytesPerBlock;
 
    uint8_t Swizzle[4];
@@ -132,21 +132,25 @@ _mesa_get_format_bits(mesa_format format, GLenum pname)
    case GL_TEXTURE_RED_SIZE:
    case GL_RENDERBUFFER_RED_SIZE_EXT:
    case GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE:
+   case GL_INTERNALFORMAT_RED_SIZE:
       return info->RedBits;
    case GL_GREEN_BITS:
    case GL_TEXTURE_GREEN_SIZE:
    case GL_RENDERBUFFER_GREEN_SIZE_EXT:
    case GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE:
+   case GL_INTERNALFORMAT_GREEN_SIZE:
       return info->GreenBits;
    case GL_BLUE_BITS:
    case GL_TEXTURE_BLUE_SIZE:
    case GL_RENDERBUFFER_BLUE_SIZE_EXT:
    case GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE:
+   case GL_INTERNALFORMAT_BLUE_SIZE:
       return info->BlueBits;
    case GL_ALPHA_BITS:
    case GL_TEXTURE_ALPHA_SIZE:
    case GL_RENDERBUFFER_ALPHA_SIZE_EXT:
    case GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE:
+   case GL_INTERNALFORMAT_ALPHA_SIZE:
       return info->AlphaBits;
    case GL_TEXTURE_INTENSITY_SIZE:
       return info->IntensityBits;
@@ -158,11 +162,13 @@ _mesa_get_format_bits(mesa_format format, GLenum pname)
    case GL_TEXTURE_DEPTH_SIZE_ARB:
    case GL_RENDERBUFFER_DEPTH_SIZE_EXT:
    case GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE:
+   case GL_INTERNALFORMAT_DEPTH_SIZE:
       return info->DepthBits;
    case GL_STENCIL_BITS:
    case GL_TEXTURE_STENCIL_SIZE_EXT:
    case GL_RENDERBUFFER_STENCIL_SIZE_EXT:
    case GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE:
+   case GL_INTERNALFORMAT_STENCIL_SIZE:
       return info->StencilBits;
    default:
       _mesa_problem(NULL, "bad pname in _mesa_get_format_bits()");
@@ -309,8 +315,32 @@ void
 _mesa_get_format_block_size(mesa_format format, GLuint *bw, GLuint *bh)
 {
    const struct gl_format_info *info = _mesa_get_format_info(format);
+   /* Use _mesa_get_format_block_size_3d() for 3D blocks. */
+   assert(info->BlockDepth == 1);
+
    *bw = info->BlockWidth;
    *bh = info->BlockHeight;
+}
+
+
+/**
+ * Return the block size (in pixels) for the given format. Normally
+ * the block size is 1x1x1. But compressed formats will have block
+ * sizes of 4x4x4, 3x3x3 pixels, etc.
+ * \param bw  returns block width in pixels
+ * \param bh  returns block height in pixels
+ * \param bd  returns block depth in pixels
+ */
+void
+_mesa_get_format_block_size_3d(mesa_format format,
+                               GLuint *bw,
+                               GLuint *bh,
+                               GLuint *bd)
+{
+   const struct gl_format_info *info = _mesa_get_format_info(format);
+   *bw = info->BlockWidth;
+   *bh = info->BlockHeight;
+   *bd = info->BlockDepth;
 }
 
 
@@ -831,20 +861,22 @@ _mesa_format_image_size(mesa_format format, GLsizei width,
                         GLsizei height, GLsizei depth)
 {
    const struct gl_format_info *info = _mesa_get_format_info(format);
+   GLuint sz;
    /* Strictly speaking, a conditional isn't needed here */
-   if (info->BlockWidth > 1 || info->BlockHeight > 1) {
+   if (info->BlockWidth > 1 || info->BlockHeight > 1 || info->BlockDepth > 1) {
       /* compressed format (2D only for now) */
-      const GLuint bw = info->BlockWidth, bh = info->BlockHeight;
+      const GLuint bw = info->BlockWidth;
+      const GLuint bh = info->BlockHeight;
+      const GLuint bd = info->BlockDepth;
       const GLuint wblocks = (width + bw - 1) / bw;
       const GLuint hblocks = (height + bh - 1) / bh;
-      const GLuint sz = wblocks * hblocks * info->BytesPerBlock;
-      return sz * depth;
-   }
-   else {
+      const GLuint dblocks = (depth + bd - 1) / bd;
+      sz = wblocks * hblocks * dblocks * info->BytesPerBlock;
+   } else
       /* non-compressed */
-      const GLuint sz = width * height * depth * info->BytesPerBlock;
-      return sz;
-   }
+      sz = width * height * depth * info->BytesPerBlock;
+
+   return sz;
 }
 
 
@@ -857,23 +889,23 @@ _mesa_format_image_size64(mesa_format format, GLsizei width,
                           GLsizei height, GLsizei depth)
 {
    const struct gl_format_info *info = _mesa_get_format_info(format);
+   uint64_t sz;
    /* Strictly speaking, a conditional isn't needed here */
-   if (info->BlockWidth > 1 || info->BlockHeight > 1) {
+   if (info->BlockWidth > 1 || info->BlockHeight > 1 || info->BlockDepth > 1) {
       /* compressed format (2D only for now) */
-      const uint64_t bw = info->BlockWidth, bh = info->BlockHeight;
+      const uint64_t bw = info->BlockWidth;
+      const uint64_t bh = info->BlockHeight;
+      const uint64_t bd = info->BlockDepth;
       const uint64_t wblocks = (width + bw - 1) / bw;
       const uint64_t hblocks = (height + bh - 1) / bh;
-      const uint64_t sz = wblocks * hblocks * info->BytesPerBlock;
-      return sz * depth;
-   }
-   else {
+      const uint64_t dblocks = (depth + bd - 1) / bd;
+      sz = wblocks * hblocks * dblocks * info->BytesPerBlock;
+   } else
       /* non-compressed */
-      const uint64_t sz = ((uint64_t) width *
-                           (uint64_t) height *
-                           (uint64_t) depth *
-                           info->BytesPerBlock);
-      return sz;
-   }
+      sz = ((uint64_t) width * (uint64_t) height *
+            (uint64_t) depth * info->BytesPerBlock);
+
+   return sz;
 }
 
 

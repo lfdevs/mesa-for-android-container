@@ -68,238 +68,12 @@ src1_is_null(const struct brw_device_info *devinfo, const brw_inst *inst)
           brw_inst_src1_da_reg_nr(devinfo, inst) == BRW_ARF_NULL;
 }
 
-enum gen {
-   GEN4  = (1 << 0),
-   GEN45 = (1 << 1),
-   GEN5  = (1 << 2),
-   GEN6  = (1 << 3),
-   GEN7  = (1 << 4),
-   GEN75 = (1 << 5),
-   GEN8  = (1 << 6),
-   GEN9  = (1 << 7),
-   GEN_ALL = ~0
-};
-
-#define GEN_GE(gen) (~((gen) - 1) | gen)
-#define GEN_LE(gen) (((gen) - 1) | gen)
-
-struct inst_info {
-   enum gen gen;
-};
-
-static const struct inst_info inst_info[128] = {
-   [BRW_OPCODE_ILLEGAL] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_MOV] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_SEL] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_MOVI] = {
-      .gen = GEN_GE(GEN45),
-   },
-   [BRW_OPCODE_NOT] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_AND] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_OR] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_XOR] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_SHR] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_SHL] = {
-      .gen = GEN_ALL,
-   },
-   /* BRW_OPCODE_DIM / BRW_OPCODE_SMOV */
-   /* Reserved - 11 */
-   [BRW_OPCODE_ASR] = {
-      .gen = GEN_ALL,
-   },
-   /* Reserved - 13-15 */
-   [BRW_OPCODE_CMP] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_CMPN] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_CSEL] = {
-      .gen = GEN_GE(GEN8),
-   },
-   [BRW_OPCODE_F32TO16] = {
-      .gen = GEN7 | GEN75,
-   },
-   [BRW_OPCODE_F16TO32] = {
-      .gen = GEN7 | GEN75,
-   },
-   /* Reserved - 21-22 */
-   [BRW_OPCODE_BFREV] = {
-      .gen = GEN_GE(GEN7),
-   },
-   [BRW_OPCODE_BFE] = {
-      .gen = GEN_GE(GEN7),
-   },
-   [BRW_OPCODE_BFI1] = {
-      .gen = GEN_GE(GEN7),
-   },
-   [BRW_OPCODE_BFI2] = {
-      .gen = GEN_GE(GEN7),
-   },
-   /* Reserved - 27-31 */
-   [BRW_OPCODE_JMPI] = {
-      .gen = GEN_ALL,
-   },
-   /* BRW_OPCODE_BRD */
-   [BRW_OPCODE_IF] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_IFF] = { /* also BRW_OPCODE_BRC */
-      .gen = GEN_LE(GEN5),
-   },
-   [BRW_OPCODE_ELSE] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_ENDIF] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_DO] = { /* also BRW_OPCODE_CASE */
-      .gen = GEN_LE(GEN5),
-   },
-   [BRW_OPCODE_WHILE] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_BREAK] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_CONTINUE] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_HALT] = {
-      .gen = GEN_ALL,
-   },
-   /* BRW_OPCODE_CALLA */
-   /* BRW_OPCODE_MSAVE / BRW_OPCODE_CALL */
-   /* BRW_OPCODE_MREST / BRW_OPCODE_RET */
-   /* BRW_OPCODE_PUSH / BRW_OPCODE_FORK / BRW_OPCODE_GOTO */
-   /* BRW_OPCODE_POP */
-   [BRW_OPCODE_WAIT] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_SEND] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_SENDC] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_SENDS] = {
-      .gen = GEN_GE(GEN9),
-   },
-   [BRW_OPCODE_SENDSC] = {
-      .gen = GEN_GE(GEN9),
-   },
-   /* Reserved 53-55 */
-   [BRW_OPCODE_MATH] = {
-      .gen = GEN_GE(GEN6),
-   },
-   /* Reserved 57-63 */
-   [BRW_OPCODE_ADD] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_MUL] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_AVG] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_FRC] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_RNDU] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_RNDD] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_RNDE] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_RNDZ] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_MAC] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_MACH] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_LZD] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_FBH] = {
-      .gen = GEN_GE(GEN7),
-   },
-   [BRW_OPCODE_FBL] = {
-      .gen = GEN_GE(GEN7),
-   },
-   [BRW_OPCODE_CBIT] = {
-      .gen = GEN_GE(GEN7),
-   },
-   [BRW_OPCODE_ADDC] = {
-      .gen = GEN_GE(GEN7),
-   },
-   [BRW_OPCODE_SUBB] = {
-      .gen = GEN_GE(GEN7),
-   },
-   [BRW_OPCODE_SAD2] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_SADA2] = {
-      .gen = GEN_ALL,
-   },
-   /* Reserved 82-83 */
-   [BRW_OPCODE_DP4] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_DPH] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_DP3] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_DP2] = {
-      .gen = GEN_ALL,
-   },
-   /* Reserved 88 */
-   [BRW_OPCODE_LINE] = {
-      .gen = GEN_ALL,
-   },
-   [BRW_OPCODE_PLN] = {
-      .gen = GEN_GE(GEN45),
-   },
-   [BRW_OPCODE_MAD] = {
-      .gen = GEN_GE(GEN6),
-   },
-   [BRW_OPCODE_LRP] = {
-      .gen = GEN_GE(GEN6),
-   },
-   /* Reserved 93-124 */
-   /* BRW_OPCODE_NENOP */
-   [BRW_OPCODE_NOP] = {
-      .gen = GEN_ALL,
-   },
-};
-
 static unsigned
 num_sources_from_inst(const struct brw_device_info *devinfo,
                       const brw_inst *inst)
 {
+   const struct opcode_desc *desc =
+      brw_opcode_desc(devinfo, brw_inst_opcode(devinfo, inst));
    unsigned math_function;
 
    if (brw_inst_opcode(devinfo, inst) == BRW_OPCODE_MATH) {
@@ -314,8 +88,10 @@ num_sources_from_inst(const struct brw_device_info *devinfo,
           */
          return 0;
       }
+   } else if (desc) {
+      return desc->nsrc;
    } else {
-      return opcode_descs[brw_inst_opcode(devinfo, inst)].nsrc;
+      return 0;
    }
 
    switch (math_function) {
@@ -341,27 +117,11 @@ num_sources_from_inst(const struct brw_device_info *devinfo,
    }
 }
 
-static enum gen
-gen_from_devinfo(const struct brw_device_info *devinfo)
-{
-   switch (devinfo->gen) {
-   case 4: return devinfo->is_g4x ? GEN45 : GEN4;
-   case 5: return GEN5;
-   case 6: return GEN6;
-   case 7: return devinfo->is_haswell ? GEN75 : GEN7;
-   case 8: return GEN8;
-   case 9: return GEN9;
-   default:
-      unreachable("not reached");
-   }
-}
-
 static bool
 is_unsupported_inst(const struct brw_device_info *devinfo,
                     const brw_inst *inst)
 {
-   enum gen gen = gen_from_devinfo(devinfo);
-   return (inst_info[brw_inst_opcode(devinfo, inst)].gen & gen) == 0;
+   return brw_opcode_desc(devinfo, brw_inst_opcode(devinfo, inst)) == NULL;
 }
 
 bool

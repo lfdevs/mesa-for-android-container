@@ -32,6 +32,7 @@
  
 
 #include "main/macros.h"
+#include "main/framebuffer.h"
 #include "st_context.h"
 #include "pipe/p_context.h"
 #include "st_atom.h"
@@ -46,14 +47,17 @@ update_scissor( struct st_context *st )
    struct pipe_scissor_state scissor[PIPE_MAX_VIEWPORTS];
    const struct gl_context *ctx = st->ctx;
    const struct gl_framebuffer *fb = ctx->DrawBuffer;
+   const unsigned int fb_width = _mesa_geometric_width(fb);
+   const unsigned int fb_height = _mesa_geometric_height(fb);
    GLint miny, maxy;
    unsigned i;
    bool changed = false;
+
    for (i = 0 ; i < ctx->Const.MaxViewports; i++) {
       scissor[i].minx = 0;
       scissor[i].miny = 0;
-      scissor[i].maxx = fb->Width;
-      scissor[i].maxy = fb->Height;
+      scissor[i].maxx = fb_width;
+      scissor[i].maxy = fb_height;
 
       if (ctx->Scissor.EnableFlags & (1 << i)) {
          /* need to be careful here with xmax or ymax < 0 */

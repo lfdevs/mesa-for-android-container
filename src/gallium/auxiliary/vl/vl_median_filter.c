@@ -50,7 +50,7 @@ create_vert_shader(struct vl_median_filter *filter)
    struct ureg_src i_vpos;
    struct ureg_dst o_vpos, o_vtex;
 
-   shader = ureg_create(TGSI_PROCESSOR_VERTEX);
+   shader = ureg_create(PIPE_SHADER_VERTEX);
    if (!shader)
       return NULL;
 
@@ -93,13 +93,13 @@ create_frag_shader(struct vl_median_filter *filter,
    }
 
    if (num_offsets > screen->get_shader_param(
-      screen, TGSI_PROCESSOR_FRAGMENT, PIPE_SHADER_CAP_MAX_TEMPS)) {
+      screen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_MAX_TEMPS)) {
 
       FREE(t_array);
       return NULL;
    }
 
-   shader = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+   shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader) {
       FREE(t_array);
       return NULL;

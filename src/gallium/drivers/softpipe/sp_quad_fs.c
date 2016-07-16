@@ -80,7 +80,7 @@ shade_quad(struct quad_stage *qs, struct quad_header *quad)
 
    /* run shader */
    machine->flatshade_color = softpipe->rasterizer->flatshade ? TRUE : FALSE;
-   return softpipe->fs_variant->run( softpipe->fs_variant, machine, quad );
+   return softpipe->fs_variant->run( softpipe->fs_variant, machine, quad, softpipe->early_depth );
 }
 
 

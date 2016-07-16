@@ -35,9 +35,12 @@
 
 static void print_instr_name(struct ir3_instruction *instr)
 {
+	if (!instr)
+		return;
 #ifdef DEBUG
 	printf("%04u:", instr->serialno);
 #endif
+	printf("%04u:", instr->name);
 	printf("%03u: ", instr->depth);
 
 	if (instr->flags & IR3_INSTR_SY)
@@ -61,7 +64,7 @@ static void print_instr_name(struct ir3_instruction *instr)
 			}
 			break;
 		}
-	} else if (instr->category == 1) {
+	} else if (instr->opc == OPC_MOV) {
 		static const char *type[] = {
 				[TYPE_F16] = "f16",
 				[TYPE_F32] = "f32",
@@ -146,16 +149,6 @@ tab(int lvl)
 		printf("\t");
 }
 
-static uint32_t
-block_id(struct ir3_block *block)
-{
-#ifdef DEBUG
-	return block->serialno;
-#else
-	return (uint32_t)(unsigned long)block;
-#endif
-}
-
 static void
 print_instr(struct ir3_instruction *instr, int lvl)
 {
@@ -191,10 +184,8 @@ print_instr(struct ir3_instruction *instr, int lvl)
 		printf("]");
 	}
 
-	if (is_meta(instr)) {
-		if (instr->opc == OPC_META_FO) {
-			printf(", off=%d", instr->fo.off);
-		}
+	if (instr->opc == OPC_META_FO) {
+		printf(", off=%d", instr->fo.off);
 	}
 
 	if (is_flow(instr) && instr->cat0.target) {

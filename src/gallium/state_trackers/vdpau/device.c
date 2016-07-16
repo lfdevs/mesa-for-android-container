@@ -63,7 +63,11 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
 
    pipe_reference_init(&dev->reference, 1);
 
-   dev->vscreen = vl_dri2_screen_create(display, screen);
+#if defined(HAVE_DRI3)
+   dev->vscreen = vl_dri3_screen_create(display, screen);
+#endif
+   if (!dev->vscreen)
+      dev->vscreen = vl_dri2_screen_create(display, screen);
    if (!dev->vscreen) {
       ret = VDP_STATUS_RESOURCES;
       goto no_vscreen;
@@ -106,10 +110,10 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
    memset(&sv_tmpl, 0, sizeof(sv_tmpl));
    u_sampler_view_default_template(&sv_tmpl, res, res->format);
 
-   sv_tmpl.swizzle_r = PIPE_SWIZZLE_ONE;
-   sv_tmpl.swizzle_g = PIPE_SWIZZLE_ONE;
-   sv_tmpl.swizzle_b = PIPE_SWIZZLE_ONE;
-   sv_tmpl.swizzle_a = PIPE_SWIZZLE_ONE;
+   sv_tmpl.swizzle_r = PIPE_SWIZZLE_1;
+   sv_tmpl.swizzle_g = PIPE_SWIZZLE_1;
+   sv_tmpl.swizzle_b = PIPE_SWIZZLE_1;
+   sv_tmpl.swizzle_a = PIPE_SWIZZLE_1;
 
    dev->dummy_sv = dev->context->create_sampler_view(dev->context, res, &sv_tmpl);
    pipe_resource_reference(&res, NULL);
@@ -308,14 +312,14 @@ vlVdpDefaultSamplerViewTemplate(struct pipe_sampler_view *templ, struct pipe_res
    u_sampler_view_default_template(templ, res, res->format);
 
    desc = util_format_description(res->format);
-   if (desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_0)
-      templ->swizzle_r = PIPE_SWIZZLE_ONE;
-   if (desc->swizzle[1] == UTIL_FORMAT_SWIZZLE_0)
-      templ->swizzle_g = PIPE_SWIZZLE_ONE;
-   if (desc->swizzle[2] == UTIL_FORMAT_SWIZZLE_0)
-      templ->swizzle_b = PIPE_SWIZZLE_ONE;
-   if (desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_0)
-      templ->swizzle_a = PIPE_SWIZZLE_ONE;
+   if (desc->swizzle[0] == PIPE_SWIZZLE_0)
+      templ->swizzle_r = PIPE_SWIZZLE_1;
+   if (desc->swizzle[1] == PIPE_SWIZZLE_0)
+      templ->swizzle_g = PIPE_SWIZZLE_1;
+   if (desc->swizzle[2] == PIPE_SWIZZLE_0)
+      templ->swizzle_b = PIPE_SWIZZLE_1;
+   if (desc->swizzle[3] == PIPE_SWIZZLE_0)
+      templ->swizzle_a = PIPE_SWIZZLE_1;
 }
 
 void

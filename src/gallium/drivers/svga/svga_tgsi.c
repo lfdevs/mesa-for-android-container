@@ -50,15 +50,6 @@
  */
 static char err_buf[128];
 
-#if 0
-static void
-svga_destroy_shader_emitter(struct svga_shader_emitter *emit)
-{
-   if (emit->buf != err_buf)
-      FREE(emit->buf);
-}
-#endif
-
 
 static boolean
 svga_shader_expand(struct svga_shader_emitter *emit)
@@ -265,6 +256,7 @@ svga_tgsi_vgpu9_translate(struct svga_context *svga,
 
  fail:
    FREE(variant);
-   FREE(emit.buf);
+   if (emit.buf != err_buf)
+      FREE(emit.buf);
    return NULL;
 }

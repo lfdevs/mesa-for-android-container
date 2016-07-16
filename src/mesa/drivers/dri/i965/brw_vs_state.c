@@ -83,7 +83,7 @@ brw_upload_vs_unit(struct brw_context *brw)
       vs->thread2.scratch_space_base_pointer =
 	 stage_state->scratch_bo->offset64 >> 10; /* reloc */
       vs->thread2.per_thread_scratch_space =
-	 ffs(brw->vs.prog_data->base.base.total_scratch) - 11;
+	 ffs(stage_state->per_thread_scratch) - 11;
    } else {
       vs->thread2.scratch_space_base_pointer = 0;
       vs->thread2.per_thread_scratch_space = 0;
@@ -185,6 +185,7 @@ const struct brw_tracked_state brw_vs_unit = {
    .dirty = {
       .mesa  = 0,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_CURBE_OFFSETS |
                BRW_NEW_PROGRAM_CACHE |
                BRW_NEW_SAMPLER_STATE_TABLE |

@@ -127,7 +127,8 @@ gen6_upload_urb( struct brw_context *brw )
 const struct brw_tracked_state gen6_urb = {
    .dirty = {
       .mesa = 0,
-      .brw = BRW_NEW_CONTEXT |
+      .brw = BRW_NEW_BLORP |
+             BRW_NEW_CONTEXT |
              BRW_NEW_FF_GS_PROG_DATA |
              BRW_NEW_GEOMETRY_PROGRAM |
              BRW_NEW_GS_PROG_DATA |

@@ -109,13 +109,16 @@ struct pipe_screen {
 
    /**
     * Query a compute-specific capability/parameter/limit.
-    * \param param  one of PIPE_COMPUTE_CAP_x
-    * \param ret    pointer to a preallocated buffer that will be
-    *               initialized to the parameter value, or NULL.
-    * \return       size in bytes of the parameter value that would be
-    *               returned.
+    * \param ir_type shader IR type for which the param applies, or don't care
+    *                if the param is not shader related
+    * \param param   one of PIPE_COMPUTE_CAP_x
+    * \param ret     pointer to a preallocated buffer that will be
+    *                initialized to the parameter value, or NULL.
+    * \return        size in bytes of the parameter value that would be
+    *                returned.
     */
    int (*get_compute_param)(struct pipe_screen *,
+			    enum pipe_shader_ir ir_type,
 			    enum pipe_compute_cap param,
 			    void *ret);
 
@@ -182,10 +185,13 @@ struct pipe_screen {
     * NOTE: in the case of DRM_API_HANDLE_TYPE_FD handles, the caller
     * retains ownership of the FD.  (This is consistent with
     * EGL_EXT_image_dma_buf_import)
+    *
+    * \param usage  A combination of PIPE_HANDLE_USAGE_* flags.
     */
    struct pipe_resource * (*resource_from_handle)(struct pipe_screen *,
 						  const struct pipe_resource *templat,
-						  struct winsys_handle *handle);
+						  struct winsys_handle *handle,
+						  unsigned usage);
 
    /**
     * Create a resource from user memory. This maps the user memory into
@@ -203,10 +209,13 @@ struct pipe_screen {
     * NOTE: in the case of DRM_API_HANDLE_TYPE_FD handles, the caller
     * takes ownership of the FD.  (This is consistent with
     * EGL_MESA_image_dma_buf_export)
+    *
+    * \param usage  A combination of PIPE_HANDLE_USAGE_* flags.
     */
    boolean (*resource_get_handle)(struct pipe_screen *,
 				  struct pipe_resource *tex,
-				  struct winsys_handle *handle);
+				  struct winsys_handle *handle,
+				  unsigned usage);
 
 
    void (*resource_destroy)(struct pipe_screen *,
@@ -266,6 +275,15 @@ struct pipe_screen {
     */
    void (*query_memory_info)(struct pipe_screen *screen,
                              struct pipe_memory_info *info);
+
+   /**
+    * Get IR specific compiler options struct.  For PIPE_SHADER_IR_NIR this
+    * returns a 'struct nir_shader_compiler_options'.  Drivers reporting
+    * NIR as the preferred IR must implement this.
+    */
+   const void *(*get_compiler_options)(struct pipe_screen *screen,
+                                      enum pipe_shader_ir ir,
+                                      unsigned shader);
 };
 
 

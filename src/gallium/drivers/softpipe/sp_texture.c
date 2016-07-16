@@ -218,7 +218,8 @@ softpipe_resource_destroy(struct pipe_screen *pscreen,
 static struct pipe_resource *
 softpipe_resource_from_handle(struct pipe_screen *screen,
                               const struct pipe_resource *templat,
-                              struct winsys_handle *whandle)
+                              struct winsys_handle *whandle,
+                              unsigned usage)
 {
    struct sw_winsys *winsys = softpipe_screen(screen)->winsys;
    struct softpipe_resource *spr = CALLOC_STRUCT(softpipe_resource);
@@ -251,7 +252,8 @@ softpipe_resource_from_handle(struct pipe_screen *screen,
 static boolean
 softpipe_resource_get_handle(struct pipe_screen *screen,
                              struct pipe_resource *pt,
-                             struct winsys_handle *whandle)
+                             struct winsys_handle *whandle,
+                             unsigned usage)
 {
    struct sw_winsys *winsys = softpipe_screen(screen)->winsys;
    struct softpipe_resource *spr = softpipe_resource(pt);
@@ -268,9 +270,9 @@ softpipe_resource_get_handle(struct pipe_screen *screen,
  * Helper function to compute offset (in bytes) for a particular
  * texture level/face/slice from the start of the buffer.
  */
-static unsigned
-sp_get_tex_image_offset(const struct softpipe_resource *spr,
-                        unsigned level, unsigned layer)
+unsigned
+softpipe_get_tex_image_offset(const struct softpipe_resource *spr,
+                              unsigned level, unsigned layer)
 {
    unsigned offset = spr->level_offset[level];
 
@@ -420,7 +422,7 @@ softpipe_transfer_map(struct pipe_context *pipe,
    pt->stride = spr->stride[level];
    pt->layer_stride = spr->img_stride[level];
 
-   spt->offset = sp_get_tex_image_offset(spr, level, box->z);
+   spt->offset = softpipe_get_tex_image_offset(spr, level, box->z);
 
    spt->offset +=
          box->y / util_format_get_blockheight(format) * spt->base.stride +

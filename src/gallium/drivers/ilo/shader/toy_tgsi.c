@@ -190,7 +190,7 @@ aos_simple(struct toy_compiler *tc,
       inst->dst = dst[0];
    }
 
-   assert(num_src <= Elements(inst->src));
+   assert(num_src <= ARRAY_SIZE(inst->src));
    for (i = 0; i < num_src; i++)
       inst->src[i] = src[i];
 }
@@ -380,7 +380,7 @@ aos_tex(struct toy_compiler *tc,
    inst->opcode = opcode;
    inst->tex.target = tgsi_inst->Texture.Texture;
 
-   assert(tgsi_inst->Instruction.NumSrcRegs <= Elements(inst->src));
+   assert(tgsi_inst->Instruction.NumSrcRegs <= ARRAY_SIZE(inst->src));
    assert(tgsi_inst->Instruction.NumDstRegs == 1);
 
    inst->dst = dst[0];
@@ -449,7 +449,7 @@ aos_sample(struct toy_compiler *tc,
    inst = tc_add(tc);
    inst->opcode = opcode;
 
-   assert(tgsi_inst->Instruction.NumSrcRegs <= Elements(inst->src));
+   assert(tgsi_inst->Instruction.NumSrcRegs <= ARRAY_SIZE(inst->src));
    assert(tgsi_inst->Instruction.NumDstRegs == 1);
 
    inst->dst = dst[0];
@@ -2118,7 +2118,7 @@ decl_add_in(struct toy_tgsi *tgsi, const struct tgsi_full_declaration *decl)
       (decl->Declaration.Interpolate) ? &decl->Interp: &default_interp;
    int index;
 
-   if (decl->Range.Last >= Elements(tgsi->inputs)) {
+   if (decl->Range.Last >= ARRAY_SIZE(tgsi->inputs)) {
       assert(!"invalid IN");
       return;
    }
@@ -2146,7 +2146,7 @@ decl_add_out(struct toy_tgsi *tgsi, const struct tgsi_full_declaration *decl)
 {
    int index;
 
-   if (decl->Range.Last >= Elements(tgsi->outputs)) {
+   if (decl->Range.Last >= ARRAY_SIZE(tgsi->outputs)) {
       assert(!"invalid OUT");
       return;
    }
@@ -2169,7 +2169,7 @@ decl_add_sv(struct toy_tgsi *tgsi, const struct tgsi_full_declaration *decl)
 {
    int index;
 
-   if (decl->Range.Last >= Elements(tgsi->system_values)) {
+   if (decl->Range.Last >= ARRAY_SIZE(tgsi->system_values)) {
       assert(!"invalid SV");
       return;
    }

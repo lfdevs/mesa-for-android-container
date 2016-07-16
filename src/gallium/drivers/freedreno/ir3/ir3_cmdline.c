@@ -44,17 +44,60 @@
 #include "instr-a3xx.h"
 #include "ir3.h"
 
+#include "compiler/glsl/standalone.h"
+#include "compiler/glsl/glsl_to_nir.h"
+
 static void dump_info(struct ir3_shader_variant *so, const char *str)
 {
 	uint32_t *bin;
 	const char *type = ir3_shader_stage(so->shader);
-	// TODO make gpu_id configurable on cmdline
-	bin = ir3_shader_assemble(so, 320);
+	bin = ir3_shader_assemble(so, so->shader->compiler->gpu_id);
 	debug_printf("; %s: %s\n", type, str);
 	ir3_shader_disasm(so, bin);
 	free(bin);
 }
 
+int st_glsl_type_size(const struct glsl_type *type);
+
+static nir_shader *
+load_glsl(const char *filename, gl_shader_stage stage)
+{
+	static const struct standalone_options options = {
+			.glsl_version = 140,
+			.do_link = true,
+	};
+	struct gl_shader_program *prog;
+
+	prog = standalone_compile_shader(&options, 1, (char * const*)&filename);
+	if (!prog)
+		errx(1, "couldn't parse `%s'", filename);
+
+	nir_shader *nir = glsl_to_nir(prog, stage, ir3_get_compiler_options());
+
+	standalone_compiler_cleanup(prog);
+
+	/* required NIR passes: */
+	/* TODO cmdline args for some of the conditional lowering passes? */
+
+	NIR_PASS_V(nir, nir_lower_io_to_temporaries,
+			nir_shader_get_entrypoint(nir),
+			true, true);
+	NIR_PASS_V(nir, nir_lower_global_vars_to_local);
+	NIR_PASS_V(nir, nir_split_var_copies);
+	NIR_PASS_V(nir, nir_lower_var_copies);
+
+	NIR_PASS_V(nir, nir_split_var_copies);
+	NIR_PASS_V(nir, nir_lower_var_copies);
+	NIR_PASS_V(nir, nir_lower_io_types);
+
+	// TODO nir_assign_var_locations??
+
+	NIR_PASS_V(nir, nir_lower_system_values);
+	NIR_PASS_V(nir, nir_lower_io, nir_var_all, st_glsl_type_size);
+	NIR_PASS_V(nir, nir_lower_samplers, prog);
+
+	return nir;
+}
 
 static int
 read_file(const char *filename, void **ptr, size_t *size)
@@ -86,7 +129,7 @@ read_file(const char *filename, void **ptr, size_t *size)
 
 static void print_usage(void)
 {
-	printf("Usage: ir3_compiler [OPTIONS]... FILE\n");
+	printf("Usage: ir3_compiler [OPTIONS]... <file.tgsi | file.vert | file.frag>\n");
 	printf("    --verbose         - verbose compiler/debug messages\n");
 	printf("    --binning-pass    - generate binning pass shader (VERT)\n");
 	printf("    --color-two-side  - emulate two-sided color (FRAG)\n");
@@ -94,6 +137,7 @@ static void print_usage(void)
 	printf("    --saturate-s MASK - bitmask of samplers to saturate S coord\n");
 	printf("    --saturate-t MASK - bitmask of samplers to saturate T coord\n");
 	printf("    --saturate-r MASK - bitmask of samplers to saturate R coord\n");
+	printf("    --astc-srgb MASK  - bitmask of samplers to enable astc-srgb workaround\n");
 	printf("    --stream-out      - enable stream-out (aka transform feedback)\n");
 	printf("    --ucp MASK        - bitmask of enabled user-clip-planes\n");
 	printf("    --gpu GPU_ID      - specify gpu-id (default 320)\n");
@@ -104,8 +148,6 @@ int main(int argc, char **argv)
 {
 	int ret = 0, n = 1;
 	const char *filename;
-	struct tgsi_token toks[65536];
-	struct tgsi_parse_context parse;
 	struct ir3_shader_variant v;
 	struct ir3_shader s;
 	struct ir3_shader_key key = {};
@@ -174,6 +216,13 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (!strcmp(argv[n], "--astc-srgb")) {
+			debug_printf(" %s %s", argv[n], argv[n+1]);
+			key.vastc_srgb = key.fastc_srgb = strtol(argv[n+1], NULL, 0);
+			n += 2;
+			continue;
+		}
+
 		if (!strcmp(argv[n], "--stream-out")) {
 			struct pipe_stream_output_info *so = &s.stream_output;
 			debug_printf(" %s", argv[n]);
@@ -226,30 +275,50 @@ int main(int argc, char **argv)
 	if (fd_mesa_debug & FD_DBG_OPTMSGS)
 		debug_printf("%s\n", (char *)ptr);
 
-	if (!tgsi_text_translate(ptr, toks, Elements(toks)))
-		errx(1, "could not parse `%s'", filename);
+	nir_shader *nir;
 
-	if (fd_mesa_debug & FD_DBG_OPTMSGS)
-		tgsi_dump(toks, 0);
+	char *ext = rindex(filename, '.');
 
-	nir_shader *nir = ir3_tgsi_to_nir(toks);
-	s.compiler = ir3_compiler_create(gpu_id);
+	if (strcmp(ext, ".tgsi") == 0) {
+		struct tgsi_token toks[65536];
+
+		if (!tgsi_text_translate(ptr, toks, ARRAY_SIZE(toks)))
+			errx(1, "could not parse `%s'", filename);
+
+		if (fd_mesa_debug & FD_DBG_OPTMSGS)
+			tgsi_dump(toks, 0);
+
+		nir = ir3_tgsi_to_nir(toks);
+		s.from_tgsi = true;
+	} else if (strcmp(ext, ".frag") == 0) {
+		nir = load_glsl(filename, MESA_SHADER_FRAGMENT);
+		s.from_tgsi = false;
+	} else if (strcmp(ext, ".vert") == 0) {
+		nir = load_glsl(filename, MESA_SHADER_FRAGMENT);
+		s.from_tgsi = false;
+	} else {
+		print_usage();
+		return -1;
+	}
+
+	s.compiler = ir3_compiler_create(NULL, gpu_id);
 	s.nir = ir3_optimize_nir(&s, nir, NULL);
 
 	v.key = key;
 	v.shader = &s;
 
-	tgsi_parse_init(&parse, toks);
-	switch (parse.FullHeader.Processor.Processor) {
-	case TGSI_PROCESSOR_FRAGMENT:
+	switch (nir->stage) {
+	case MESA_SHADER_FRAGMENT:
 		s.type = v.type = SHADER_FRAGMENT;
 		break;
-	case TGSI_PROCESSOR_VERTEX:
+	case MESA_SHADER_VERTEX:
 		s.type = v.type = SHADER_VERTEX;
 		break;
-	case TGSI_PROCESSOR_COMPUTE:
+	case MESA_SHADER_COMPUTE:
 		s.type = v.type = SHADER_COMPUTE;
 		break;
+	default:
+		errx(1, "unhandled shader stage: %d", nir->stage);
 	}
 
 	info = "NIR compiler";

@@ -108,26 +108,6 @@ static ADDR_E_RETURNCODE ADDR_API freeSysMem(const ADDR_FREESYSMEM_INPUT * pInpu
    return ADDR_OK;
 }
 
-/**
- * This returns the number of banks for the surface.
- * Possible values: 2, 4, 8, 16.
- */
-static uint32_t cik_num_banks(struct amdgpu_winsys *ws,
-                              struct radeon_surf *surf)
-{
-   unsigned index, tileb;
-
-   tileb = 8 * 8 * surf->bpe;
-   tileb = MIN2(surf->tile_split, tileb);
-
-   for (index = 0; tileb > 64; index++) {
-      tileb >>= 1;
-   }
-   assert(index < 16);
-
-   return 2 << ((ws->amdinfo.gb_macro_tile_mode[index] >> 6) & 0x3);
-}
-
 ADDR_HANDLE amdgpu_addr_create(struct amdgpu_winsys *ws)
 {
    ADDR_CREATE_INPUT addrCreateInput = {0};
@@ -212,7 +192,7 @@ static int compute_level(struct amdgpu_winsys *ws,
    }
 
    surf_level = is_stencil ? &surf->stencil_level[level] : &surf->level[level];
-   surf_level->offset = align(surf->bo_size, AddrSurfInfoOut->baseAlign);
+   surf_level->offset = align64(surf->bo_size, AddrSurfInfoOut->baseAlign);
    surf_level->slice_size = AddrSurfInfoOut->sliceSize;
    surf_level->pitch_bytes = AddrSurfInfoOut->pitch * (is_stencil ? 1 : surf->bpe);
    surf_level->npix_x = u_minify(surf->npix_x, level);
@@ -226,9 +206,6 @@ static int compute_level(struct amdgpu_winsys *ws,
       surf_level->nblk_z = 1;
 
    switch (AddrSurfInfoOut->tileMode) {
-   case ADDR_TM_LINEAR_GENERAL:
-      surf_level->mode = RADEON_SURF_MODE_LINEAR;
-      break;
    case ADDR_TM_LINEAR_ALIGNED:
       surf_level->mode = RADEON_SURF_MODE_LINEAR_ALIGNED;
       break;
@@ -316,9 +293,6 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
 
    /* Set the requested tiling mode. */
    switch (mode) {
-   case RADEON_SURF_MODE_LINEAR:
-      AddrSurfInfoIn.tileMode = ADDR_TM_LINEAR_GENERAL;
-      break;
    case RADEON_SURF_MODE_LINEAR_ALIGNED:
       AddrSurfInfoIn.tileMode = ADDR_TM_LINEAR_ALIGNED;
       break;
@@ -370,6 +344,7 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    AddrSurfInfoIn.flags.degrade4Space = 1;
    AddrSurfInfoIn.flags.dccCompatible = !(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
                                         !(surf->flags & RADEON_SURF_SCANOUT) &&
+                                        !(surf->flags & RADEON_SURF_DISABLE_DCC) &&
                                         !compressed && AddrDccIn.numSamples <= 1;
 
    /* This disables incorrect calculations (hacks) in addrlib. */
@@ -381,11 +356,12 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
        surf->bankw && surf->bankh && surf->mtilea && surf->tile_split) {
       /* If any of these parameters are incorrect, the calculation
        * will fail. */
-      AddrTileInfoIn.banks = cik_num_banks(ws, surf);
+      AddrTileInfoIn.banks = surf->num_banks;
       AddrTileInfoIn.bankWidth = surf->bankw;
       AddrTileInfoIn.bankHeight = surf->bankh;
       AddrTileInfoIn.macroAspectRatio = surf->mtilea;
       AddrTileInfoIn.tileSplitBytes = surf->tile_split;
+      AddrTileInfoIn.pipeConfig = surf->pipe_config + 1; /* +1 compared to GB_TILE_MODE */
       AddrSurfInfoIn.flags.degrade4Space = 0;
       AddrSurfInfoIn.pTileInfo = &AddrTileInfoIn;
 
@@ -428,6 +404,9 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
             surf->mtilea = AddrSurfInfoOut.pTileInfo->macroAspectRatio;
             surf->tile_split = AddrSurfInfoOut.pTileInfo->tileSplitBytes;
             surf->num_banks = AddrSurfInfoOut.pTileInfo->banks;
+            surf->macro_tile_index = AddrSurfInfoOut.macroModeIndex;
+         } else {
+            surf->macro_tile_index = 0;
          }
       }
    }

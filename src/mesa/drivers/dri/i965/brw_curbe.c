@@ -142,6 +142,7 @@ const struct brw_tracked_state brw_curbe_offsets = {
    .dirty = {
       .mesa = _NEW_TRANSFORM,
       .brw  = BRW_NEW_CONTEXT |
+              BRW_NEW_BLORP |
               BRW_NEW_FS_PROG_DATA |
               BRW_NEW_VS_PROG_DATA,
    },
@@ -334,6 +335,7 @@ const struct brw_tracked_state brw_constant_buffer = {
    .dirty = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw  = BRW_NEW_BATCH |
+              BRW_NEW_BLORP |
               BRW_NEW_CURBE_OFFSETS |
               BRW_NEW_FRAGMENT_PROGRAM |
               BRW_NEW_FS_PROG_DATA |

@@ -50,8 +50,10 @@ static struct fd4_shader_stateobj *
 create_shader_stateobj(struct pipe_context *pctx, const struct pipe_shader_state *cso,
 		enum shader_t type)
 {
+	struct fd_context *ctx = fd_context(pctx);
+	struct ir3_compiler *compiler = ctx->screen->compiler;
 	struct fd4_shader_stateobj *so = CALLOC_STRUCT(fd4_shader_stateobj);
-	so->shader = ir3_shader_create(pctx, cso, type);
+	so->shader = ir3_shader_create(compiler, cso, type, &ctx->debug);
 	return so;
 }
 
@@ -150,14 +152,7 @@ setup_stages(struct fd4_emit *emit, struct stage *s)
 	unsigned i;
 
 	s[VS].v = fd4_emit_get_vp(emit);
-
-	if (emit->key.binning_pass) {
-		/* use dummy stateobj to simplify binning vs non-binning: */
-		static const struct ir3_shader_variant binning_fp = {};
-		s[FS].v = &binning_fp;
-	} else {
-		s[FS].v = fd4_emit_get_fp(emit);
-	}
+	s[FS].v = fd4_emit_get_fp(emit);
 
 	s[HS].v = s[DS].v = s[GS].v = NULL;  /* for now */
 
@@ -223,6 +218,9 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 
 	debug_assert(nr <= ARRAY_SIZE(color_regid));
 
+	if (emit->key.binning_pass)
+		nr = 0;
+
 	setup_stages(emit, s);
 
 	fssz = (s[FS].i->max_reg >= 24) ? TWO_QUADS : FOUR_QUADS;
@@ -231,6 +229,13 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 	constmode = 1;
 
 	pos_regid = ir3_find_output_regid(s[VS].v, VARYING_SLOT_POS);
+	if (pos_regid == regid(63, 0)) {
+		/* hw dislikes when there is no position output, which can
+		 * happen for transform-feedback vertex shaders.  Just tell
+		 * the hw to use r0.x, with whatever random value is there:
+		 */
+		pos_regid = regid(0, 0);
+	}
 	posz_regid = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DEPTH);
 	psize_regid = ir3_find_output_regid(s[VS].v, VARYING_SLOT_PSIZ);
 	if (s[FS].v->color0_mrt) {
@@ -379,31 +384,49 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			A4XX_SP_VS_OBJ_OFFSET_REG_SHADEROBJOFFSET(s[VS].instroff));
 	OUT_RELOC(ring, s[VS].v->bo, 0, 0, 0);  /* SP_VS_OBJ_START_REG */
 
-	OUT_PKT0(ring, REG_A4XX_SP_FS_LENGTH_REG, 1);
-	OUT_RING(ring, s[FS].v->instrlen);  /* SP_FS_LENGTH_REG */
+	if (emit->key.binning_pass) {
+		OUT_PKT0(ring, REG_A4XX_SP_FS_LENGTH_REG, 1);
+		OUT_RING(ring, 0x00000000);         /* SP_FS_LENGTH_REG */
 
-	OUT_PKT0(ring, REG_A4XX_SP_FS_CTRL_REG0, 2);
-	OUT_RING(ring, A4XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
-			COND(s[FS].v->total_in > 0, A4XX_SP_FS_CTRL_REG0_VARYING) |
-			A4XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(s[FS].i->max_half_reg + 1) |
-			A4XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(s[FS].i->max_reg + 1) |
-			A4XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
-			A4XX_SP_FS_CTRL_REG0_THREADSIZE(fssz) |
-			A4XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
-			COND(s[FS].v->has_samp, A4XX_SP_FS_CTRL_REG0_PIXLODENABLE));
-	OUT_RING(ring, A4XX_SP_FS_CTRL_REG1_CONSTLENGTH(s[FS].constlen) |
-			0x80000000 |      /* XXX */
-			COND(s[FS].v->frag_face, A4XX_SP_FS_CTRL_REG1_FACENESS) |
-			COND(s[FS].v->total_in > 0, A4XX_SP_FS_CTRL_REG1_VARYING) |
-			COND(s[FS].v->frag_coord, A4XX_SP_FS_CTRL_REG1_FRAGCOORD));
+		OUT_PKT0(ring, REG_A4XX_SP_FS_CTRL_REG0, 2);
+		OUT_RING(ring, A4XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
+				COND(s[FS].v->total_in > 0, A4XX_SP_FS_CTRL_REG0_VARYING) |
+				A4XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(0) |
+				A4XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(0) |
+				A4XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
+				A4XX_SP_FS_CTRL_REG0_THREADSIZE(fssz) |
+				A4XX_SP_FS_CTRL_REG0_SUPERTHREADMODE);
+		OUT_RING(ring, A4XX_SP_FS_CTRL_REG1_CONSTLENGTH(s[FS].constlen) |
+				0x80000000);
 
-	OUT_PKT0(ring, REG_A4XX_SP_FS_OBJ_OFFSET_REG, 2);
-	OUT_RING(ring, A4XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(s[FS].constoff) |
-			A4XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(s[FS].instroff));
-	if (emit->key.binning_pass)
+		OUT_PKT0(ring, REG_A4XX_SP_FS_OBJ_OFFSET_REG, 2);
+		OUT_RING(ring, A4XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(s[FS].constoff) |
+				A4XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(s[FS].instroff));
 		OUT_RING(ring, 0x00000000);
-	else
+	} else {
+		OUT_PKT0(ring, REG_A4XX_SP_FS_LENGTH_REG, 1);
+		OUT_RING(ring, s[FS].v->instrlen);  /* SP_FS_LENGTH_REG */
+
+		OUT_PKT0(ring, REG_A4XX_SP_FS_CTRL_REG0, 2);
+		OUT_RING(ring, A4XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
+				COND(s[FS].v->total_in > 0, A4XX_SP_FS_CTRL_REG0_VARYING) |
+				A4XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(s[FS].i->max_half_reg + 1) |
+				A4XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(s[FS].i->max_reg + 1) |
+				A4XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
+				A4XX_SP_FS_CTRL_REG0_THREADSIZE(fssz) |
+				A4XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
+				COND(s[FS].v->has_samp, A4XX_SP_FS_CTRL_REG0_PIXLODENABLE));
+		OUT_RING(ring, A4XX_SP_FS_CTRL_REG1_CONSTLENGTH(s[FS].constlen) |
+				0x80000000 |      /* XXX */
+				COND(s[FS].v->frag_face, A4XX_SP_FS_CTRL_REG1_FACENESS) |
+				COND(s[FS].v->total_in > 0, A4XX_SP_FS_CTRL_REG1_VARYING) |
+				COND(s[FS].v->frag_coord, A4XX_SP_FS_CTRL_REG1_FRAGCOORD));
+
+		OUT_PKT0(ring, REG_A4XX_SP_FS_OBJ_OFFSET_REG, 2);
+		OUT_RING(ring, A4XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(s[FS].constoff) |
+				A4XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(s[FS].instroff));
 		OUT_RELOC(ring, s[FS].v->bo, 0, 0, 0);  /* SP_FS_OBJ_START_REG */
+	}
 
 	OUT_PKT0(ring, REG_A4XX_SP_HS_OBJ_OFFSET_REG, 1);
 	OUT_RING(ring, A4XX_SP_HS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(s[HS].constoff) |
@@ -427,11 +450,11 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 					A4XX_RB_RENDER_CONTROL2_WCOORD));
 
 	OUT_PKT0(ring, REG_A4XX_RB_FS_OUTPUT_REG, 1);
-	OUT_RING(ring, A4XX_RB_FS_OUTPUT_REG_MRT(MAX2(1, nr)) |
+	OUT_RING(ring, A4XX_RB_FS_OUTPUT_REG_MRT(nr) |
 			COND(s[FS].v->writes_pos, A4XX_RB_FS_OUTPUT_REG_FRAG_WRITES_Z));
 
 	OUT_PKT0(ring, REG_A4XX_SP_FS_OUTPUT_REG, 1);
-	OUT_RING(ring, A4XX_SP_FS_OUTPUT_REG_MRT(MAX2(1, nr)) |
+	OUT_RING(ring, A4XX_SP_FS_OUTPUT_REG_MRT(nr) |
 			COND(s[FS].v->writes_pos, A4XX_SP_FS_OUTPUT_REG_DEPTH_ENABLE) |
 			A4XX_SP_FS_OUTPUT_REG_DEPTH_REGID(posz_regid));
 

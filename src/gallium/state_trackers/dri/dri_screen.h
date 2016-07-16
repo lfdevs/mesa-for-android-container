@@ -109,6 +109,7 @@ struct __DRIimageRec {
    unsigned layer;
    uint32_t dri_format;
    uint32_t dri_components;
+   unsigned use;
 
    void *loader_private;
 

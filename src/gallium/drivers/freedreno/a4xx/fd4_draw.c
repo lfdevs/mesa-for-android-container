@@ -49,9 +49,6 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	const struct pipe_draw_info *info = emit->info;
 	enum pc_di_primtype primtype = ctx->primtypes[info->mode];
 
-	if (!(fd4_emit_get_vp(emit) && fd4_emit_get_fp(emit)))
-		return;
-
 	fd4_emit_state(ctx, ring, emit);
 
 	if (emit->dirty & (FD_DIRTY_VTXBUF | FD_DIRTY_VTXSTATE))
@@ -88,75 +85,111 @@ fixup_shader_state(struct fd_context *ctx, struct ir3_shader_key *key)
 	struct ir3_shader_key *last_key = &fd4_ctx->last_key;
 
 	if (!ir3_shader_key_equal(last_key, key)) {
-		ctx->dirty |= FD_DIRTY_PROG;
-
 		if (last_key->has_per_samp || key->has_per_samp) {
 			if ((last_key->vsaturate_s != key->vsaturate_s) ||
 					(last_key->vsaturate_t != key->vsaturate_t) ||
-					(last_key->vsaturate_r != key->vsaturate_r))
-				ctx->prog.dirty |= FD_SHADER_DIRTY_VP;
+					(last_key->vsaturate_r != key->vsaturate_r) ||
+					(last_key->vastc_srgb != key->vastc_srgb))
+				ctx->dirty |= FD_SHADER_DIRTY_VP;
 
 			if ((last_key->fsaturate_s != key->fsaturate_s) ||
 					(last_key->fsaturate_t != key->fsaturate_t) ||
-					(last_key->fsaturate_r != key->fsaturate_r))
-				ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
+					(last_key->fsaturate_r != key->fsaturate_r) ||
+					(last_key->fastc_srgb != key->fastc_srgb))
+				ctx->dirty |= FD_SHADER_DIRTY_FP;
 		}
 
+		if (last_key->vclamp_color != key->vclamp_color)
+			ctx->dirty |= FD_SHADER_DIRTY_VP;
+
+		if (last_key->fclamp_color != key->fclamp_color)
+			ctx->dirty |= FD_SHADER_DIRTY_FP;
+
 		if (last_key->color_two_side != key->color_two_side)
-			ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
+			ctx->dirty |= FD_SHADER_DIRTY_FP;
 
 		if (last_key->half_precision != key->half_precision)
-			ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
+			ctx->dirty |= FD_SHADER_DIRTY_FP;
 
 		if (last_key->rasterflat != key->rasterflat)
-			ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
+			ctx->dirty |= FD_SHADER_DIRTY_FP;
 
 		fd4_ctx->last_key = *key;
 	}
 }
 
-static void
+static bool
 fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 {
 	struct fd4_context *fd4_ctx = fd4_context(ctx);
 	struct fd4_emit emit = {
+		.debug = &ctx->debug,
 		.vtx  = &ctx->vtx,
 		.prog = &ctx->prog,
 		.info = info,
 		.key = {
-			/* do binning pass first: */
-			.binning_pass = true,
 			.color_two_side = ctx->rasterizer->light_twoside,
+			.vclamp_color = ctx->rasterizer->clamp_vertex_color,
+			.fclamp_color = ctx->rasterizer->clamp_fragment_color,
 			.rasterflat = ctx->rasterizer->flatshade,
 			// TODO set .half_precision based on render target format,
 			// ie. float16 and smaller use half, float32 use full..
 			.half_precision = !!(fd_mesa_debug & FD_DBG_FRAGHALF),
 			.ucp_enables = ctx->rasterizer->clip_plane_enable,
-			.has_per_samp = (fd4_ctx->fsaturate || fd4_ctx->vsaturate),
+			.has_per_samp = (fd4_ctx->fsaturate || fd4_ctx->vsaturate ||
+					fd4_ctx->fastc_srgb || fd4_ctx->vastc_srgb),
 			.vsaturate_s = fd4_ctx->vsaturate_s,
 			.vsaturate_t = fd4_ctx->vsaturate_t,
 			.vsaturate_r = fd4_ctx->vsaturate_r,
 			.fsaturate_s = fd4_ctx->fsaturate_s,
 			.fsaturate_t = fd4_ctx->fsaturate_t,
 			.fsaturate_r = fd4_ctx->fsaturate_r,
+			.vastc_srgb = fd4_ctx->vastc_srgb,
+			.fastc_srgb = fd4_ctx->fastc_srgb,
 		},
 		.rasterflat = ctx->rasterizer->flatshade,
 		.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
 		.sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
 	};
-	unsigned dirty;
 
 	fixup_shader_state(ctx, &emit.key);
 
-	dirty = ctx->dirty;
-	emit.dirty = dirty & ~(FD_DIRTY_BLEND);
-	draw_impl(ctx, ctx->binning_ring, &emit);
+	unsigned dirty = ctx->dirty;
 
-	/* and now regular (non-binning) pass: */
+	/* do regular pass first, since that is more likely to fail compiling: */
+
+	if (!(fd4_emit_get_vp(&emit) && fd4_emit_get_fp(&emit)))
+		return false;
+
 	emit.key.binning_pass = false;
 	emit.dirty = dirty;
-	emit.vp = NULL;   /* we changed key so need to refetch vp */
+
+	if (ctx->rasterizer->rasterizer_discard) {
+		fd_wfi(ctx, ctx->ring);
+		OUT_PKT3(ctx->ring, CP_REG_RMW, 3);
+		OUT_RING(ctx->ring, REG_A4XX_RB_RENDER_CONTROL);
+		OUT_RING(ctx->ring, ~A4XX_RB_RENDER_CONTROL_DISABLE_COLOR_PIPE);
+		OUT_RING(ctx->ring, A4XX_RB_RENDER_CONTROL_DISABLE_COLOR_PIPE);
+	}
+
 	draw_impl(ctx, ctx->ring, &emit);
+
+	if (ctx->rasterizer->rasterizer_discard) {
+		fd_wfi(ctx, ctx->ring);
+		OUT_PKT3(ctx->ring, CP_REG_RMW, 3);
+		OUT_RING(ctx->ring, REG_A4XX_RB_RENDER_CONTROL);
+		OUT_RING(ctx->ring, ~A4XX_RB_RENDER_CONTROL_DISABLE_COLOR_PIPE);
+		OUT_RING(ctx->ring, 0);
+	}
+
+	/* and now binning pass: */
+	emit.key.binning_pass = true;
+	emit.dirty = dirty & ~(FD_DIRTY_BLEND);
+	emit.vp = NULL;   /* we changed key so need to refetch vp */
+	emit.fp = NULL;
+	draw_impl(ctx, ctx->binning_ring, &emit);
+
+	return true;
 }
 
 /* clear operations ignore viewport state, so we need to reset it
@@ -175,6 +208,44 @@ reset_viewport(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb)
 	OUT_RING(ring, A4XX_GRAS_CL_VPORT_YSCALE_0(-half_height));
 }
 
+/* TODO maybe we should just migrate u_blitter for clear and do it in
+ * core (so we get normal draw pass state mgmt and binning).. That should
+ * work well enough for a3xx/a4xx (but maybe not a2xx?)
+ */
+
+static void
+fd4_clear_binning(struct fd_context *ctx, unsigned dirty)
+{
+	struct fd4_context *fd4_ctx = fd4_context(ctx);
+	struct fd_ringbuffer *ring = ctx->binning_ring;
+	struct fd4_emit emit = {
+		.debug = &ctx->debug,
+		.vtx  = &fd4_ctx->solid_vbuf_state,
+		.prog = &ctx->solid_prog,
+		.key = {
+			.binning_pass = true,
+			.half_precision = true,
+		},
+		.dirty = dirty,
+	};
+
+	fd4_emit_state(ctx, ring, &emit);
+	fd4_emit_vertex_bufs(ring, &emit);
+	reset_viewport(ring, &ctx->framebuffer);
+
+	OUT_PKT0(ring, REG_A4XX_PC_PRIM_VTX_CNTL, 2);
+	OUT_RING(ring, A4XX_PC_PRIM_VTX_CNTL_VAROUT(0) |
+			A4XX_PC_PRIM_VTX_CNTL_PROVOKING_VTX_LAST);
+	OUT_RING(ring, A4XX_PC_PRIM_VTX_CNTL2_POLYMODE_FRONT_PTYPE(PC_DRAW_TRIANGLES) |
+			A4XX_PC_PRIM_VTX_CNTL2_POLYMODE_BACK_PTYPE(PC_DRAW_TRIANGLES));
+
+	OUT_PKT0(ring, REG_A4XX_GRAS_ALPHA_CONTROL, 1);
+	OUT_RING(ring, 0x00000002);
+
+	fd4_draw(ctx, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
+			DI_SRC_SEL_AUTO_INDEX, 2, 1, INDEX_SIZE_IGN, 0, 0, NULL);
+}
+
 static void
 fd4_clear(struct fd_context *ctx, unsigned buffers,
 		const union pipe_color_union *color, double depth, unsigned stencil)
@@ -186,6 +257,7 @@ fd4_clear(struct fd_context *ctx, unsigned buffers,
 	unsigned dirty = ctx->dirty;
 	unsigned i;
 	struct fd4_emit emit = {
+		.debug = &ctx->debug,
 		.vtx  = &fd4_ctx->solid_vbuf_state,
 		.prog = &ctx->solid_prog,
 		.key = {
@@ -196,6 +268,8 @@ fd4_clear(struct fd_context *ctx, unsigned buffers,
 	dirty &= FD_DIRTY_FRAMEBUFFER | FD_DIRTY_SCISSOR;
 	dirty |= FD_DIRTY_PROG;
 	emit.dirty = dirty;
+
+	fd4_clear_binning(ctx, dirty);
 
 	OUT_PKT0(ring, REG_A4XX_PC_PRIM_VTX_CNTL, 1);
 	OUT_RING(ring, A4XX_PC_PRIM_VTX_CNTL_PROVOKING_VTX_LAST);

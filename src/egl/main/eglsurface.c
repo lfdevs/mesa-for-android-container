@@ -71,6 +71,8 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
    EGLint type = surf->Type;
    EGLint texture_type = EGL_PBUFFER_BIT;
    EGLint i, err = EGL_SUCCESS;
+   EGLint tex_target = -1;
+   EGLint tex_format = -1;
 
    if (!attrib_list)
       return EGL_SUCCESS;
@@ -186,6 +188,8 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
             err = EGL_BAD_ATTRIBUTE;
             break;
          }
+
+         tex_format = val;
          switch (val) {
          case EGL_TEXTURE_RGB:
          case EGL_TEXTURE_RGBA:
@@ -204,6 +208,8 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
             err = EGL_BAD_ATTRIBUTE;
             break;
          }
+
+         tex_target = val;
          switch (val) {
          case EGL_TEXTURE_2D:
          case EGL_NO_TEXTURE:
@@ -227,6 +233,13 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
       default:
          err = EGL_BAD_ATTRIBUTE;
          break;
+      }
+
+      if (type == EGL_PBUFFER_BIT) {
+         if ((tex_target == EGL_NO_TEXTURE && tex_format != EGL_NO_TEXTURE) ||
+             (tex_format == EGL_NO_TEXTURE && tex_target != EGL_NO_TEXTURE)) {
+            err = EGL_BAD_MATCH;
+         }
       }
 
       if (err != EGL_SUCCESS) {

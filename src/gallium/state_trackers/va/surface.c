@@ -470,7 +470,8 @@ suface_from_external_memory(VADriverContextP ctx, vlVaSurface *surface,
    whandle.handle = memory_attibute->buffers[index];
    whandle.stride = memory_attibute->pitches[index];
 
-   resource = pscreen->resource_from_handle(pscreen, &res_templ, &whandle);
+   resource = pscreen->resource_from_handle(pscreen, &res_templ, &whandle,
+                                            PIPE_HANDLE_USAGE_READ_WRITE);
 
    if (!resource)
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
@@ -744,9 +745,9 @@ vlVaQueryVideoProcPipelineCaps(VADriverContextP ctx, VAContextID context,
    pipeline_cap->filter_flags = 0;
    pipeline_cap->num_forward_references = 0;
    pipeline_cap->num_backward_references = 0;
-   pipeline_cap->num_input_color_standards = Elements(vpp_input_color_standards);
+   pipeline_cap->num_input_color_standards = ARRAY_SIZE(vpp_input_color_standards);
    pipeline_cap->input_color_standards = vpp_input_color_standards;
-   pipeline_cap->num_output_color_standards = Elements(vpp_output_color_standards);
+   pipeline_cap->num_output_color_standards = ARRAY_SIZE(vpp_output_color_standards);
    pipeline_cap->output_color_standards = vpp_output_color_standards;
 
    for (i = 0; i < num_filters; i++) {

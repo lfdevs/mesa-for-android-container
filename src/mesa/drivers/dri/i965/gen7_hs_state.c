@@ -49,6 +49,7 @@ const struct brw_tracked_state gen7_tcs_push_constants = {
    .dirty = {
       .mesa  = _NEW_PROGRAM_CONSTANTS,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_DEFAULT_TESS_LEVELS |
                BRW_NEW_PUSH_CONSTANT_ALLOCATION |
                BRW_NEW_TESS_PROGRAMS |
@@ -82,7 +83,7 @@ gen7_upload_hs_state(struct brw_context *brw)
       if (prog_data->base.total_scratch) {
          OUT_RELOC(stage_state->scratch_bo,
                    I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-                   ffs(prog_data->base.total_scratch) - 11);
+                   ffs(stage_state->per_thread_scratch) - 11);
       } else {
          OUT_BATCH(0);
       }
@@ -110,6 +111,7 @@ const struct brw_tracked_state gen7_hs_state = {
    .dirty = {
       .mesa  = 0,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_TCS_PROG_DATA |
                BRW_NEW_TESS_PROGRAMS,
    },

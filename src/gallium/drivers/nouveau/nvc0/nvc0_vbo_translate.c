@@ -19,6 +19,7 @@ struct push_context {
 
    uint32_t vertex_size;
    uint32_t restart_index;
+   uint32_t start_instance;
    uint32_t instance_id;
 
    bool prim_restart;
@@ -44,6 +45,7 @@ nvc0_push_context_init(struct nvc0_context *nvc0, struct push_context *ctx)
 
    ctx->translate = nvc0->vertex->translate;
    ctx->vertex_size = nvc0->vertex->size;
+   ctx->instance_id = 0;
 
    ctx->need_vertex_id =
       nvc0->vertprog->vp.need_vertex_id && (nvc0->vertex->num_elements < 32);
@@ -225,7 +227,7 @@ nvc0_push_setup_vertex_array(struct nvc0_context *nvc0, const unsigned count)
    PUSH_DATAh(push, va + size - 1);
    PUSH_DATA (push, va + size - 1);
 
-   BCTX_REFN_bo(nvc0->bufctx_3d, VTX_TMP, NOUVEAU_BO_GART | NOUVEAU_BO_RD,
+   BCTX_REFN_bo(nvc0->bufctx_3d, 3D_VTX_TMP, NOUVEAU_BO_GART | NOUVEAU_BO_RD,
                 bo);
    nouveau_pushbuf_validate(push);
 
@@ -246,7 +248,8 @@ disp_vertices_i08(struct push_context *ctx, unsigned start, unsigned count)
       if (unlikely(ctx->prim_restart))
          nR = prim_restart_search_i08(elts, nR, ctx->restart_index);
 
-      translate->run_elts8(translate, elts, nR, 0, ctx->instance_id, ctx->dest);
+      translate->run_elts8(translate, elts, nR,
+                           ctx->start_instance, ctx->instance_id, ctx->dest);
       count -= nR;
       ctx->dest += nR * ctx->vertex_size;
 
@@ -302,7 +305,8 @@ disp_vertices_i16(struct push_context *ctx, unsigned start, unsigned count)
       if (unlikely(ctx->prim_restart))
          nR = prim_restart_search_i16(elts, nR, ctx->restart_index);
 
-      translate->run_elts16(translate, elts, nR, 0, ctx->instance_id, ctx->dest);
+      translate->run_elts16(translate, elts, nR,
+                            ctx->start_instance, ctx->instance_id, ctx->dest);
       count -= nR;
       ctx->dest += nR * ctx->vertex_size;
 
@@ -358,7 +362,8 @@ disp_vertices_i32(struct push_context *ctx, unsigned start, unsigned count)
       if (unlikely(ctx->prim_restart))
          nR = prim_restart_search_i32(elts, nR, ctx->restart_index);
 
-      translate->run_elts(translate, elts, nR, 0, ctx->instance_id, ctx->dest);
+      translate->run_elts(translate, elts, nR,
+                          ctx->start_instance, ctx->instance_id, ctx->dest);
       count -= nR;
       ctx->dest += nR * ctx->vertex_size;
 
@@ -410,7 +415,8 @@ disp_vertices_seq(struct push_context *ctx, unsigned start, unsigned count)
    /* XXX: This will read the data corresponding to the primitive restart index,
     *  maybe we should avoid that ?
     */
-   translate->run(translate, start, count, 0, ctx->instance_id, ctx->dest);
+   translate->run(translate, start, count,
+                  ctx->start_instance, ctx->instance_id, ctx->dest);
    do {
       unsigned nr = count;
 
@@ -515,7 +521,7 @@ nvc0_push_vbo(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
       index_size = 0;
    }
 
-   ctx.instance_id = info->start_instance;
+   ctx.start_instance = info->start_instance;
 
    prim = nvc0_prim_gl(info->mode);
    do {
@@ -554,7 +560,7 @@ nvc0_push_vbo(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
          prim |= NVC0_3D_VERTEX_BEGIN_GL_INSTANCE_NEXT;
          ++ctx.instance_id;
       }
-      nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_VTX_TMP);
+      nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_VTX_TMP);
       nouveau_scratch_done(&nvc0->base);
    } while (inst_count);
 
@@ -629,7 +635,7 @@ nvc0_push_upload_vertex_ids(struct push_context *ctx,
    data = (uint32_t *)nouveau_scratch_get(&nvc0->base,
                                           info->count * index_size, &va, &bo);
 
-   BCTX_REFN_bo(nvc0->bufctx_3d, VTX_TMP, NOUVEAU_BO_GART | NOUVEAU_BO_RD,
+   BCTX_REFN_bo(nvc0->bufctx_3d, 3D_VTX_TMP, NOUVEAU_BO_GART | NOUVEAU_BO_RD,
                 bo);
    nouveau_pushbuf_validate(push);
 

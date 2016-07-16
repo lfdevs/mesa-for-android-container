@@ -90,7 +90,7 @@ store_cached_block(struct gallivm_state *gallivm,
    indices[0] = lp_build_const_int32(gallivm, 0);
    indices[1] = lp_build_const_int32(gallivm, LP_BUILD_FORMAT_CACHE_MEMBER_TAGS);
    indices[2] = hash_index;
-   ptr = LLVMBuildGEP(builder, cache, indices, Elements(indices), "");
+   ptr = LLVMBuildGEP(builder, cache, indices, ARRAY_SIZE(indices), "");
    LLVMBuildStore(builder, tag_value, ptr);
 
    indices[1] = lp_build_const_int32(gallivm, LP_BUILD_FORMAT_CACHE_MEMBER_DATA);
@@ -98,7 +98,7 @@ store_cached_block(struct gallivm_state *gallivm,
                              lp_build_const_int32(gallivm, 16), "");
    for (count = 0; count < 4; count++) {
       indices[2] = hash_index;
-      ptr = LLVMBuildGEP(builder, cache, indices, Elements(indices), "");
+      ptr = LLVMBuildGEP(builder, cache, indices, ARRAY_SIZE(indices), "");
       ptr = LLVMBuildBitCast(builder, ptr, type_ptr4x32, "");
       LLVMBuildStore(builder, col[count], ptr);
       hash_index = LLVMBuildAdd(builder, hash_index,
@@ -118,7 +118,7 @@ lookup_cached_pixel(struct gallivm_state *gallivm,
    indices[0] = lp_build_const_int32(gallivm, 0);
    indices[1] = lp_build_const_int32(gallivm, LP_BUILD_FORMAT_CACHE_MEMBER_DATA);
    indices[2] = index;
-   member_ptr = LLVMBuildGEP(builder, ptr, indices, Elements(indices), "");
+   member_ptr = LLVMBuildGEP(builder, ptr, indices, ARRAY_SIZE(indices), "");
    return LLVMBuildLoad(builder, member_ptr, "cache_data");
 }
 
@@ -134,7 +134,7 @@ lookup_tag_data(struct gallivm_state *gallivm,
    indices[0] = lp_build_const_int32(gallivm, 0);
    indices[1] = lp_build_const_int32(gallivm, LP_BUILD_FORMAT_CACHE_MEMBER_TAGS);
    indices[2] = index;
-   member_ptr = LLVMBuildGEP(builder, ptr, indices, Elements(indices), "");
+   member_ptr = LLVMBuildGEP(builder, ptr, indices, ARRAY_SIZE(indices), "");
    return LLVMBuildLoad(builder, member_ptr, "tag_data");
 }
 
@@ -181,7 +181,7 @@ update_cached_block(struct gallivm_state *gallivm,
       arg_types[2] = i32t;
       arg_types[3] = i32t;
       function_type = LLVMFunctionType(ret_type, arg_types,
-                                       Elements(arg_types), 0);
+                                       ARRAY_SIZE(arg_types), 0);
 
       /* make const pointer for the C fetch_rgba_8unorm function */
       function = lp_build_const_int_pointer(gallivm,
@@ -217,7 +217,7 @@ update_cached_block(struct gallivm_state *gallivm,
          args[1] = ptr_addr;
          args[2] = LLVMConstInt(i32t, i, 0);
          args[3] = LLVMConstInt(i32t, j, 0);
-         LLVMBuildCall(builder, function, args, Elements(args), "");
+         LLVMBuildCall(builder, function, args, ARRAY_SIZE(args), "");
       }
    }
 

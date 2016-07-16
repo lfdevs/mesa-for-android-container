@@ -351,6 +351,8 @@ AddrChipFamily CIAddrLib::HwlConvertChipFamily(
             m_settings.isIceland         = ASICREV_IS_ICELAND_M(uChipRevision);
             m_settings.isTonga           = ASICREV_IS_TONGA_P(uChipRevision);
             m_settings.isFiji            = ASICREV_IS_FIJI_P(uChipRevision);
+            m_settings.isPolaris10       = ASICREV_IS_POLARIS10_P(uChipRevision);
+            m_settings.isPolaris11       = ASICREV_IS_POLARIS11_M(uChipRevision);
             break;
         case FAMILY_CZ:
             m_settings.isCarrizo         = 1;
@@ -403,7 +405,7 @@ BOOL_32 CIAddrLib::HwlInitGlobalParams(
 
     // @todo: VI
     // Move this to VI code path once created
-    if (m_settings.isTonga)
+    if (m_settings.isTonga || m_settings.isPolaris10)
     {
         m_pipes = 8;
     }
@@ -414,6 +416,10 @@ BOOL_32 CIAddrLib::HwlInitGlobalParams(
     else if (m_settings.isFiji)
     {
         m_pipes = 16;
+    }
+    else if (m_settings.isPolaris11)
+    {
+        m_pipes = 4;
     }
 
     if (valid)

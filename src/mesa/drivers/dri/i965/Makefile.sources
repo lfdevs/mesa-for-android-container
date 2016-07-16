@@ -26,6 +26,8 @@ i965_compiler_FILES = \
 	brw_fs.h \
 	brw_fs_live_variables.cpp \
 	brw_fs_live_variables.h \
+	brw_fs_lower_d2x.cpp \
+	brw_fs_lower_pack.cpp \
 	brw_fs_nir.cpp \
 	brw_fs_reg_allocate.cpp \
 	brw_fs_register_coalesce.cpp \
@@ -44,15 +46,14 @@ i965_compiler_FILES = \
 	brw_nir.c \
 	brw_nir_analyze_boolean_resolves.c \
 	brw_nir_attribute_workarounds.c \
+	brw_nir_intrinsics.c \
 	brw_nir_opt_peephole_ffma.c \
-	brw_nir_uniforms.cpp \
 	brw_packed_float.c \
 	brw_predicated_break.cpp \
 	brw_reg.h \
 	brw_schedule_instructions.cpp \
 	brw_shader.cpp \
 	brw_shader.h \
-	brw_surface_formats.c \
 	brw_util.c \
 	brw_util.h \
 	brw_vec4_builder.h \
@@ -90,12 +91,14 @@ i965_compiler_FILES = \
 	intel_resolve_map.c \
 	intel_resolve_map.h
 
+i965_compiler_GENERATED_FILES = \
+	brw_nir_trig_workarounds.c
+
 i965_FILES = \
 	brw_binding_tables.c \
 	brw_blorp_blit.cpp \
-	brw_blorp_blit_eu.cpp \
-	brw_blorp_blit_eu.h \
-	brw_blorp.cpp \
+	brw_blorp_clear.cpp \
+	brw_blorp.c \
 	brw_blorp.h \
 	brw_cc.c \
 	brw_clear.c \
@@ -123,6 +126,7 @@ i965_FILES = \
 	brw_ff_gs.h \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_vector_splitting.cpp \
+	brw_formatquery.c \
 	brw_gs.c \
 	brw_gs.h \
 	brw_gs_state.c \
@@ -130,13 +134,11 @@ i965_FILES = \
 	brw_link.cpp \
 	brw_lower_texture_gradients.cpp \
 	brw_lower_unnormalized_offset.cpp \
-	brw_meta_fast_clear.c \
-	brw_meta_stencil_blit.c \
-	brw_meta_updownsample.c \
 	brw_meta_util.c \
 	brw_meta_util.h \
 	brw_misc_state.c \
 	brw_multisample_state.h \
+	brw_nir_uniforms.cpp \
 	brw_object_purgeable.c \
 	brw_performance_monitor.c \
 	brw_pipe_control.c \
@@ -156,6 +158,7 @@ i965_FILES = \
 	brw_state.h \
 	brw_state_upload.c \
 	brw_structs.h \
+	brw_surface_formats.c \
 	brw_tcs.c \
 	brw_tcs_surface_state.c \
 	brw_tes.c \
@@ -171,7 +174,7 @@ i965_FILES = \
 	brw_wm.h \
 	brw_wm_state.c \
 	brw_wm_surface_state.c \
-	gen6_blorp.cpp \
+	gen6_blorp.c \
 	gen6_cc.c \
 	gen6_clip_state.c \
 	gen6_constant_state.c \
@@ -189,7 +192,7 @@ i965_FILES = \
 	gen6_viewport_state.c \
 	gen6_vs_state.c \
 	gen6_wm_state.c \
-	gen7_blorp.cpp \
+	gen7_blorp.c \
 	gen7_cs_state.c \
 	gen7_ds_state.c \
 	gen7_gs_state.c \
@@ -205,13 +208,13 @@ i965_FILES = \
 	gen7_wm_state.c \
 	gen7_wm_surface_state.c \
 	gen8_blend_state.c \
+	gen8_blorp.c \
 	gen8_depth_state.c \
 	gen8_disable.c \
 	gen8_draw_upload.c \
 	gen8_ds_state.c \
 	gen8_gs_state.c \
 	gen8_hs_state.c \
-	gen8_misc_state.c \
 	gen8_multisample_state.c \
 	gen8_ps_state.c \
 	gen8_sf_state.c \
@@ -220,6 +223,8 @@ i965_FILES = \
 	gen8_viewport_state.c \
 	gen8_vs_state.c \
 	gen8_wm_depth_stencil.c \
+	hsw_queryobj.c \
+	hsw_sol.c \
 	intel_batchbuffer.c \
 	intel_batchbuffer.h \
 	intel_blit.c \

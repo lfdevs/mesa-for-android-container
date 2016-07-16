@@ -211,6 +211,18 @@ fd_context_destroy(struct pipe_context *pctx)
 	FREE(ctx);
 }
 
+static void
+fd_set_debug_callback(struct pipe_context *pctx,
+		const struct pipe_debug_callback *cb)
+{
+	struct fd_context *ctx = fd_context(pctx);
+
+	if (cb)
+		ctx->debug = *cb;
+	else
+		memset(&ctx->debug, 0, sizeof(ctx->debug));
+}
+
 struct pipe_context *
 fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 		const uint8_t *primtypes, void *priv)
@@ -237,6 +249,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	pctx->priv = priv;
 	pctx->flush = fd_context_flush;
 	pctx->emit_string_marker = fd_emit_string_marker;
+	pctx->set_debug_callback = fd_set_debug_callback;
 
 	for (i = 0; i < ARRAY_SIZE(ctx->rings); i++) {
 		ctx->rings[i] = fd_ringbuffer_new(screen->pipe, 0x100000);

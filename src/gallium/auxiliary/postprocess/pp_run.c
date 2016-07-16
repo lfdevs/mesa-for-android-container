@@ -133,6 +133,7 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
                         CSO_BIT_VERTEX_SHADER |
                         CSO_BIT_VIEWPORT |
                         CSO_BIT_AUX_VERTEX_BUFFER_SLOT |
+                        CSO_BIT_PAUSE_QUERIES |
                         CSO_BIT_RENDER_CONDITION));
    cso_save_constant_buffer_slot0(cso, PIPE_SHADER_VERTEX);
    cso_save_constant_buffer_slot0(cso, PIPE_SHADER_FRAGMENT);
@@ -254,8 +255,7 @@ pp_tgsi_to_state(struct pipe_context *pipe, const char *text, bool isvs,
       return NULL;
    }
 
-   state.tokens = tokens;
-   memset(&state.stream_output, 0, sizeof(state.stream_output));
+   pipe_shader_state_from_tgsi(&state, tokens);
 
    if (isvs) {
       ret_state = pipe->create_vs_state(pipe, &state);

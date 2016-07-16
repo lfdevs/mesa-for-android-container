@@ -312,12 +312,6 @@ void r600_emit_streamout_end(struct r600_common_context *rctx)
  * are no buffers bound.
  */
 
-static bool r600_get_strmout_en(struct r600_common_context *rctx)
-{
-	return rctx->streamout.streamout_enabled ||
-	       rctx->streamout.prims_gen_query_enabled;
-}
-
 static void r600_emit_streamout_enable(struct r600_common_context *rctx,
 				       struct r600_atom *atom)
 {

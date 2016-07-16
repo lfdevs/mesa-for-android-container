@@ -467,8 +467,8 @@ translate_attr_convert(struct translate_sse *p,
    unsigned i;
    boolean id_swizzle = TRUE;
    unsigned swizzle[4] =
-      { UTIL_FORMAT_SWIZZLE_NONE, UTIL_FORMAT_SWIZZLE_NONE,
-        UTIL_FORMAT_SWIZZLE_NONE, UTIL_FORMAT_SWIZZLE_NONE };
+      { PIPE_SWIZZLE_NONE, PIPE_SWIZZLE_NONE,
+        PIPE_SWIZZLE_NONE, PIPE_SWIZZLE_NONE };
    unsigned needed_chans = 0;
    unsigned imms[2] = { 0, 0x3f800000 };
 
@@ -510,7 +510,7 @@ translate_attr_convert(struct translate_sse *p,
       struct x86_reg dataXMM = x86_make_reg(file_XMM, 0);
 
       for (i = 0; i < output_desc->nr_channels; ++i) {
-         if (swizzle[i] == UTIL_FORMAT_SWIZZLE_0
+         if (swizzle[i] == PIPE_SWIZZLE_0
              && i >= input_desc->nr_channels)
             swizzle[i] = i;
       }
@@ -518,7 +518,7 @@ translate_attr_convert(struct translate_sse *p,
       for (i = 0; i < output_desc->nr_channels; ++i) {
          if (swizzle[i] < 4)
             needed_chans = MAX2(needed_chans, swizzle[i] + 1);
-         if (swizzle[i] < UTIL_FORMAT_SWIZZLE_0 && swizzle[i] != i)
+         if (swizzle[i] < PIPE_SWIZZLE_0 && swizzle[i] != i)
             id_swizzle = FALSE;
       }
 
@@ -630,9 +630,9 @@ translate_attr_convert(struct translate_sse *p,
                 && input_desc->channel[0].size != 64) {
                return FALSE;
             }
-            if (swizzle[3] == UTIL_FORMAT_SWIZZLE_1
+            if (swizzle[3] == PIPE_SWIZZLE_1
                 && input_desc->nr_channels <= 3) {
-               swizzle[3] = UTIL_FORMAT_SWIZZLE_W;
+               swizzle[3] = PIPE_SWIZZLE_W;
                needed_chans = CHANNELS_0001;
             }
             switch (input_desc->channel[0].size) {
@@ -661,63 +661,63 @@ translate_attr_convert(struct translate_sse *p,
       }
 
       if (output_desc->nr_channels >= 4
-          && swizzle[0] < UTIL_FORMAT_SWIZZLE_0
-          && swizzle[1] < UTIL_FORMAT_SWIZZLE_0
-          && swizzle[2] < UTIL_FORMAT_SWIZZLE_0
-          && swizzle[3] < UTIL_FORMAT_SWIZZLE_0) {
+          && swizzle[0] < PIPE_SWIZZLE_0
+          && swizzle[1] < PIPE_SWIZZLE_0
+          && swizzle[2] < PIPE_SWIZZLE_0
+          && swizzle[3] < PIPE_SWIZZLE_0) {
          sse_movups(p->func, dst, dataXMM);
       }
       else {
          if (output_desc->nr_channels >= 2
-             && swizzle[0] < UTIL_FORMAT_SWIZZLE_0
-             && swizzle[1] < UTIL_FORMAT_SWIZZLE_0) {
+             && swizzle[0] < PIPE_SWIZZLE_0
+             && swizzle[1] < PIPE_SWIZZLE_0) {
             sse_movlps(p->func, dst, dataXMM);
          }
          else {
-            if (swizzle[0] < UTIL_FORMAT_SWIZZLE_0) {
+            if (swizzle[0] < PIPE_SWIZZLE_0) {
                sse_movss(p->func, dst, dataXMM);
             }
             else {
                x86_mov_imm(p->func, dst,
-                           imms[swizzle[0] - UTIL_FORMAT_SWIZZLE_0]);
+                           imms[swizzle[0] - PIPE_SWIZZLE_0]);
             }
 
             if (output_desc->nr_channels >= 2) {
-               if (swizzle[1] < UTIL_FORMAT_SWIZZLE_0) {
+               if (swizzle[1] < PIPE_SWIZZLE_0) {
                   sse_shufps(p->func, dataXMM, dataXMM, SHUF(1, 1, 2, 3));
                   sse_movss(p->func, x86_make_disp(dst, 4), dataXMM);
                }
                else {
                   x86_mov_imm(p->func, x86_make_disp(dst, 4),
-                              imms[swizzle[1] - UTIL_FORMAT_SWIZZLE_0]);
+                              imms[swizzle[1] - PIPE_SWIZZLE_0]);
                }
             }
          }
 
          if (output_desc->nr_channels >= 3) {
             if (output_desc->nr_channels >= 4
-                && swizzle[2] < UTIL_FORMAT_SWIZZLE_0
-                && swizzle[3] < UTIL_FORMAT_SWIZZLE_0) {
+                && swizzle[2] < PIPE_SWIZZLE_0
+                && swizzle[3] < PIPE_SWIZZLE_0) {
                sse_movhps(p->func, x86_make_disp(dst, 8), dataXMM);
             }
             else {
-               if (swizzle[2] < UTIL_FORMAT_SWIZZLE_0) {
+               if (swizzle[2] < PIPE_SWIZZLE_0) {
                   sse_shufps(p->func, dataXMM, dataXMM, SHUF(2, 2, 2, 3));
                   sse_movss(p->func, x86_make_disp(dst, 8), dataXMM);
                }
                else {
                   x86_mov_imm(p->func, x86_make_disp(dst, 8),
-                              imms[swizzle[2] - UTIL_FORMAT_SWIZZLE_0]);
+                              imms[swizzle[2] - PIPE_SWIZZLE_0]);
                }
 
                if (output_desc->nr_channels >= 4) {
-                  if (swizzle[3] < UTIL_FORMAT_SWIZZLE_0) {
+                  if (swizzle[3] < PIPE_SWIZZLE_0) {
                      sse_shufps(p->func, dataXMM, dataXMM, SHUF(3, 3, 3, 3));
                      sse_movss(p->func, x86_make_disp(dst, 12), dataXMM);
                   }
                   else {
                      x86_mov_imm(p->func, x86_make_disp(dst, 12),
-                                 imms[swizzle[3] - UTIL_FORMAT_SWIZZLE_0]);
+                                 imms[swizzle[3] - PIPE_SWIZZLE_0]);
                   }
                }
             }
@@ -742,7 +742,7 @@ translate_attr_convert(struct translate_sse *p,
       unsigned imms[2] = { 0, 1 };
 
       for (i = 0; i < output_desc->nr_channels; ++i) {
-         if (swizzle[i] == UTIL_FORMAT_SWIZZLE_0
+         if (swizzle[i] == PIPE_SWIZZLE_0
              && i >= input_desc->nr_channels) {
             swizzle[i] = i;
          }
@@ -751,7 +751,7 @@ translate_attr_convert(struct translate_sse *p,
       for (i = 0; i < output_desc->nr_channels; ++i) {
          if (swizzle[i] < 4)
             needed_chans = MAX2(needed_chans, swizzle[i] + 1);
-         if (swizzle[i] < UTIL_FORMAT_SWIZZLE_0 && swizzle[i] != i)
+         if (swizzle[i] < PIPE_SWIZZLE_0 && swizzle[i] != i)
             id_swizzle = FALSE;
       }
 
@@ -806,16 +806,16 @@ translate_attr_convert(struct translate_sse *p,
       }
 
       if (output_desc->nr_channels >= 4
-          && swizzle[0] < UTIL_FORMAT_SWIZZLE_0
-          && swizzle[1] < UTIL_FORMAT_SWIZZLE_0
-          && swizzle[2] < UTIL_FORMAT_SWIZZLE_0
-          && swizzle[3] < UTIL_FORMAT_SWIZZLE_0) {
+          && swizzle[0] < PIPE_SWIZZLE_0
+          && swizzle[1] < PIPE_SWIZZLE_0
+          && swizzle[2] < PIPE_SWIZZLE_0
+          && swizzle[3] < PIPE_SWIZZLE_0) {
          sse2_movq(p->func, dst, dataXMM);
       }
       else {
-         if (swizzle[0] < UTIL_FORMAT_SWIZZLE_0) {
+         if (swizzle[0] < PIPE_SWIZZLE_0) {
             if (output_desc->nr_channels >= 2
-                && swizzle[1] < UTIL_FORMAT_SWIZZLE_0) {
+                && swizzle[1] < PIPE_SWIZZLE_0) {
                sse2_movd(p->func, dst, dataXMM);
             }
             else {
@@ -823,19 +823,19 @@ translate_attr_convert(struct translate_sse *p,
                x86_mov16(p->func, dst, tmp);
                if (output_desc->nr_channels >= 2)
                   x86_mov16_imm(p->func, x86_make_disp(dst, 2),
-                                imms[swizzle[1] - UTIL_FORMAT_SWIZZLE_0]);
+                                imms[swizzle[1] - PIPE_SWIZZLE_0]);
             }
          }
          else {
             if (output_desc->nr_channels >= 2
-                && swizzle[1] >= UTIL_FORMAT_SWIZZLE_0) {
+                && swizzle[1] >= PIPE_SWIZZLE_0) {
                x86_mov_imm(p->func, dst,
-                           (imms[swizzle[1] - UTIL_FORMAT_SWIZZLE_0] << 16) |
-                           imms[swizzle[0] - UTIL_FORMAT_SWIZZLE_0]);
+                           (imms[swizzle[1] - PIPE_SWIZZLE_0] << 16) |
+                           imms[swizzle[0] - PIPE_SWIZZLE_0]);
             }
             else {
                x86_mov16_imm(p->func, dst,
-                             imms[swizzle[0] - UTIL_FORMAT_SWIZZLE_0]);
+                             imms[swizzle[0] - PIPE_SWIZZLE_0]);
                if (output_desc->nr_channels >= 2) {
                   sse2_movd(p->func, tmp, dataXMM);
                   x86_shr_imm(p->func, tmp, 16);
@@ -845,9 +845,9 @@ translate_attr_convert(struct translate_sse *p,
          }
 
          if (output_desc->nr_channels >= 3) {
-            if (swizzle[2] < UTIL_FORMAT_SWIZZLE_0) {
+            if (swizzle[2] < PIPE_SWIZZLE_0) {
                if (output_desc->nr_channels >= 4
-                   && swizzle[3] < UTIL_FORMAT_SWIZZLE_0) {
+                   && swizzle[3] < PIPE_SWIZZLE_0) {
                   sse2_psrlq_imm(p->func, dataXMM, 32);
                   sse2_movd(p->func, x86_make_disp(dst, 4), dataXMM);
                }
@@ -857,20 +857,20 @@ translate_attr_convert(struct translate_sse *p,
                   x86_mov16(p->func, x86_make_disp(dst, 4), tmp);
                   if (output_desc->nr_channels >= 4) {
                      x86_mov16_imm(p->func, x86_make_disp(dst, 6),
-                                   imms[swizzle[3] - UTIL_FORMAT_SWIZZLE_0]);
+                                   imms[swizzle[3] - PIPE_SWIZZLE_0]);
                   }
                }
             }
             else {
                if (output_desc->nr_channels >= 4
-                   && swizzle[3] >= UTIL_FORMAT_SWIZZLE_0) {
+                   && swizzle[3] >= PIPE_SWIZZLE_0) {
                   x86_mov_imm(p->func, x86_make_disp(dst, 4),
-                              (imms[swizzle[3] - UTIL_FORMAT_SWIZZLE_0] << 16)
-                              | imms[swizzle[2] - UTIL_FORMAT_SWIZZLE_0]);
+                              (imms[swizzle[3] - PIPE_SWIZZLE_0] << 16)
+                              | imms[swizzle[2] - PIPE_SWIZZLE_0]);
                }
                else {
                   x86_mov16_imm(p->func, x86_make_disp(dst, 4),
-                                imms[swizzle[2] - UTIL_FORMAT_SWIZZLE_0]);
+                                imms[swizzle[2] - PIPE_SWIZZLE_0]);
 
                   if (output_desc->nr_channels >= 4) {
                      sse2_psrlq_imm(p->func, dataXMM, 48);
@@ -890,10 +890,10 @@ translate_attr_convert(struct translate_sse *p,
 
       if (input_desc->channel[0].size == 8 && input_desc->nr_channels == 4
           && output_desc->nr_channels == 4
-          && swizzle[0] == UTIL_FORMAT_SWIZZLE_W
-          && swizzle[1] == UTIL_FORMAT_SWIZZLE_Z
-          && swizzle[2] == UTIL_FORMAT_SWIZZLE_Y
-          && swizzle[3] == UTIL_FORMAT_SWIZZLE_X) {
+          && swizzle[0] == PIPE_SWIZZLE_W
+          && swizzle[1] == PIPE_SWIZZLE_Z
+          && swizzle[2] == PIPE_SWIZZLE_Y
+          && swizzle[3] == PIPE_SWIZZLE_X) {
          /* TODO: support movbe */
          x86_mov(p->func, tmp, src);
          x86_bswap(p->func, tmp);
@@ -904,9 +904,9 @@ translate_attr_convert(struct translate_sse *p,
       for (i = 0; i < output_desc->nr_channels; ++i) {
          switch (output_desc->channel[0].size) {
          case 8:
-            if (swizzle[i] >= UTIL_FORMAT_SWIZZLE_0) {
+            if (swizzle[i] >= PIPE_SWIZZLE_0) {
                unsigned v = 0;
-               if (swizzle[i] == UTIL_FORMAT_SWIZZLE_1) {
+               if (swizzle[i] == PIPE_SWIZZLE_1) {
                   switch (output_desc->channel[0].type) {
                   case UTIL_FORMAT_TYPE_UNSIGNED:
                      v = output_desc->channel[0].normalized ? 0xff : 1;
@@ -926,9 +926,9 @@ translate_attr_convert(struct translate_sse *p,
             }
             break;
          case 16:
-            if (swizzle[i] >= UTIL_FORMAT_SWIZZLE_0) {
+            if (swizzle[i] >= PIPE_SWIZZLE_0) {
                unsigned v = 0;
-               if (swizzle[i] == UTIL_FORMAT_SWIZZLE_1) {
+               if (swizzle[i] == PIPE_SWIZZLE_1) {
                   switch (output_desc->channel[1].type) {
                   case UTIL_FORMAT_TYPE_UNSIGNED:
                      v = output_desc->channel[1].normalized ? 0xffff : 1;
@@ -945,7 +945,7 @@ translate_attr_convert(struct translate_sse *p,
                }
                x86_mov16_imm(p->func, x86_make_disp(dst, i * 2), v);
             }
-            else if (swizzle[i] == UTIL_FORMAT_SWIZZLE_0) {
+            else if (swizzle[i] == PIPE_SWIZZLE_0) {
                x86_mov16_imm(p->func, x86_make_disp(dst, i * 2), 0);
             }
             else {
@@ -954,9 +954,9 @@ translate_attr_convert(struct translate_sse *p,
             }
             break;
          case 32:
-            if (swizzle[i] >= UTIL_FORMAT_SWIZZLE_0) {
+            if (swizzle[i] >= PIPE_SWIZZLE_0) {
                unsigned v = 0;
-               if (swizzle[i] == UTIL_FORMAT_SWIZZLE_1) {
+               if (swizzle[i] == PIPE_SWIZZLE_1) {
                   switch (output_desc->channel[1].type) {
                   case UTIL_FORMAT_TYPE_UNSIGNED:
                      v = output_desc->channel[1].normalized ? 0xffffffff : 1;
@@ -979,10 +979,10 @@ translate_attr_convert(struct translate_sse *p,
             }
             break;
          case 64:
-            if (swizzle[i] >= UTIL_FORMAT_SWIZZLE_0) {
+            if (swizzle[i] >= PIPE_SWIZZLE_0) {
                unsigned l = 0;
                unsigned h = 0;
-               if (swizzle[i] == UTIL_FORMAT_SWIZZLE_1) {
+               if (swizzle[i] == PIPE_SWIZZLE_1) {
                   switch (output_desc->channel[1].type) {
                   case UTIL_FORMAT_TYPE_UNSIGNED:
                      h = output_desc->channel[1].normalized ? 0xffffffff : 0;
@@ -1098,13 +1098,14 @@ init_inputs(struct translate_sse *p, unsigned index_size)
           *   base_ptr + stride * index, where index depends on instance divisor
           */
          if (variant->instance_divisor) {
+            struct x86_reg tmp_EDX = p->tmp2_EDX;
+
             /* Start with instance = instance_id
              * which is true if divisor is 1.
              */
             x86_mov(p->func, tmp_EAX, instance_id);
 
             if (variant->instance_divisor != 1) {
-               struct x86_reg tmp_EDX = p->tmp2_EDX;
                struct x86_reg tmp_ECX = p->src_ECX;
 
                /* TODO: Add x86_shr() to rtasm and use it whenever
@@ -1113,13 +1114,12 @@ init_inputs(struct translate_sse *p, unsigned index_size)
                x86_xor(p->func, tmp_EDX, tmp_EDX);
                x86_mov_reg_imm(p->func, tmp_ECX, variant->instance_divisor);
                x86_div(p->func, tmp_ECX);       /* EAX = EDX:EAX / ECX */
-
-               /* instance = (instance_id - start_instance) / divisor + 
-                *             start_instance 
-                */
-               x86_mov(p->func, tmp_EDX, start_instance);
-               x86_add(p->func, tmp_EAX, tmp_EDX);
             }
+
+            /* instance = (instance_id / divisor) + start_instance
+             */
+            x86_mov(p->func, tmp_EDX, start_instance);
+            x86_add(p->func, tmp_EAX, tmp_EDX);
 
             /* XXX we need to clamp the index here too, but to a
              * per-array max value, not the draw->pt.max_index value

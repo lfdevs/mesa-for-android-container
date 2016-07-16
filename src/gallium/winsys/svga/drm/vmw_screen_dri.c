@@ -186,6 +186,12 @@ vmw_drm_gb_surface_from_handle(struct svga_winsys_screen *sws,
     uint32_t handle;
     int ret;
 
+    if (whandle->offset != 0) {
+       fprintf(stderr, "Attempt to import unsupported winsys offset %u\n",
+               whandle->offset);
+       return NULL;
+    }
+
     ret = vmw_ioctl_gb_surface_ref(vws, whandle, &flags, format,
                                    &mip_levels, &handle, &desc.region);
 
@@ -252,6 +258,12 @@ vmw_drm_surface_from_handle(struct svga_winsys_screen *sws,
     SVGA3dSize base_size;
     int ret;
     int i;
+
+    if (whandle->offset != 0) {
+       fprintf(stderr, "Attempt to import unsupported winsys offset %u\n",
+               whandle->offset);
+       return NULL;
+    }
 
     switch (whandle->type) {
     case DRM_API_HANDLE_TYPE_SHARED:
@@ -357,6 +369,7 @@ vmw_drm_surface_get_handle(struct svga_winsys_screen *sws,
     vsrf = vmw_svga_winsys_surface(surface);
     whandle->handle = vsrf->sid;
     whandle->stride = stride;
+    whandle->offset = 0;
 
     switch (whandle->type) {
     case DRM_API_HANDLE_TYPE_SHARED:

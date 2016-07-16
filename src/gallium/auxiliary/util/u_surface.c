@@ -254,7 +254,8 @@ util_resource_copy_region(struct pipe_context *pipe,
    struct pipe_transfer *src_trans, *dst_trans;
    uint8_t *dst_map;
    const uint8_t *src_map;
-   enum pipe_format src_format, dst_format;
+   MAYBE_UNUSED enum pipe_format src_format;
+   enum pipe_format dst_format;
    struct pipe_box dst_box;
 
    assert(src && dst);

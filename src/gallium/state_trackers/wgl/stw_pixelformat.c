@@ -247,7 +247,7 @@ add_color_format_variants(const struct stw_pf_color_info *color_formats,
       bind_flags |= PIPE_BIND_DISPLAY_TARGET;
    }
 
-   for (ms = 0; ms < Elements(stw_pf_multisample); ms++) {
+   for (ms = 0; ms < ARRAY_SIZE(stw_pf_multisample); ms++) {
       unsigned samples = stw_pf_multisample[ms];
 
       if (force_samples && samples != force_samples)
@@ -260,10 +260,10 @@ add_color_format_variants(const struct stw_pf_color_info *color_formats,
             continue;
          }
 
-         for (db = 0; db < Elements(stw_pf_doublebuffer); db++) {
+         for (db = 0; db < ARRAY_SIZE(stw_pf_doublebuffer); db++) {
             unsigned doublebuffer = stw_pf_doublebuffer[db];
 
-            for (ds = 0; ds < Elements(stw_pf_depth_stencil); ds++) {
+            for (ds = 0; ds < ARRAY_SIZE(stw_pf_depth_stencil); ds++) {
                const struct stw_pf_depth_info *depth = &stw_pf_depth_stencil[ds];
 
                if (!screen->is_format_supported(screen, depth->format,
@@ -297,12 +297,12 @@ stw_pixelformat_init( void )
 
    /* normal, displayable formats */
    num_formats = add_color_format_variants(stw_pf_color,
-                                           Elements(stw_pf_color), FALSE);
+                                           ARRAY_SIZE(stw_pf_color), FALSE);
    assert(num_formats > 0);
 
    /* extended, pbuffer-only formats */
    add_color_format_variants(stw_pf_color_extended,
-                             Elements(stw_pf_color_extended), TRUE);
+                             ARRAY_SIZE(stw_pf_color_extended), TRUE);
 
    assert( stw_dev->pixelformat_count <= stw_dev->pixelformat_extended_count );
    assert( stw_dev->pixelformat_extended_count <= STW_MAX_PIXELFORMATS );

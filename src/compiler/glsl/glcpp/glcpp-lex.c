@@ -604,8 +604,8 @@ static yyconst flex_int16_t yy_chk[482] =
 #define yymore() yymore_used_but_not_detected
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
-#line 1 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
-#line 2 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 1 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 2 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 /*
  * Copyright © 2010 Intel Corporation
  *
@@ -727,6 +727,11 @@ void glcpp_set_column (int  column_no , yyscan_t yyscanner);
 static int
 glcpp_lex_update_state_per_token (glcpp_parser_t *parser, int token)
 {
+	if (token != NEWLINE && token != SPACE && token != HASH_TOKEN &&
+	    !parser->lexing_version_directive) {
+		glcpp_parser_resolve_implicit_version(parser);
+	}
+
 	/* After the first non-space token in a line, we won't
 	 * allow any '#' to introduce a directive. */
 	if (token == NEWLINE) {
@@ -770,7 +775,7 @@ match longer strings take priority over those matching shorter
 strings, we have to be careful to avoid OTHER matching and hiding
 something that CPP does care about. So we simply exclude all
 characters that appear in any other expressions. */
-#line 774 "glsl/glcpp/glcpp-lex.c"
+#line 779 "glsl/glcpp/glcpp-lex.c"
 
 #define INITIAL 0
 #define COMMENT 1
@@ -1065,7 +1070,7 @@ YY_DECL
 		}
 
 	{
-#line 194 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 199 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 
 
 	glcpp_parser_t *parser = yyextra;
@@ -1126,7 +1131,7 @@ YY_DECL
 	}
 
 	/* Single-line comments */
-#line 1130 "glsl/glcpp/glcpp-lex.c"
+#line 1135 "glsl/glcpp/glcpp-lex.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1181,41 +1186,41 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 254 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 259 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 }
 	YY_BREAK
 /* Multi-line comments */
 case 2:
 YY_RULE_SETUP
-#line 258 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 263 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 { yy_push_state(COMMENT, yyscanner); }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 259 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 264 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 
 	YY_BREAK
 case 4:
 /* rule 4 can match eol */
 YY_RULE_SETUP
-#line 260 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 265 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 { yylineno++; yycolumn = 0; parser->commented_newlines++; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 261 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 266 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 
 	YY_BREAK
 case 6:
 /* rule 6 can match eol */
 YY_RULE_SETUP
-#line 262 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 267 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 { yylineno++; yycolumn = 0; parser->commented_newlines++; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 263 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 268 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	yy_pop_state(yyscanner);
 	/* In the <HASH> start condition, we don't want any SPACE token. */
@@ -1225,7 +1230,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 270 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 275 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 
 	/* If the '#' is the first non-whitespace, non-comment token on this
@@ -1243,10 +1248,11 @@ YY_RULE_SETUP
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 285 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 290 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	yyextra->space_tokens = 0;
+	yyextra->lexing_version_directive = 1;
 	RETURN_STRING_TOKEN (VERSION_TOKEN);
 }
 	YY_BREAK
@@ -1265,7 +1271,7 @@ YY_LINENO_REWIND_TO(yy_cp - 1);
 yyg->yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 299 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 305 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 }
@@ -1274,7 +1280,7 @@ YY_RULE_SETUP
 	 * Simply pass them through to the main compiler's lexer/parser. */
 case 11:
 YY_RULE_SETUP
-#line 305 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 311 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	RETURN_STRING_TOKEN (PRAGMA);
@@ -1282,7 +1288,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 310 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 316 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	RETURN_TOKEN (LINE);
@@ -1291,9 +1297,12 @@ YY_RULE_SETUP
 case 13:
 /* rule 13 can match eol */
 YY_RULE_SETUP
-#line 315 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 321 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
+	yyextra->space_tokens = 0;
+	yylineno++;
+	yycolumn = 0;
 	RETURN_TOKEN_NEVER_SKIP (NEWLINE);
 }
 	YY_BREAK
@@ -1301,7 +1310,7 @@ YY_RULE_SETUP
 	 * even when we are otherwise skipping. */
 case 14:
 YY_RULE_SETUP
-#line 322 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 331 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	yyextra->lexing_directive = 1;
@@ -1311,7 +1320,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 329 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 338 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	yyextra->lexing_directive = 1;
@@ -1326,7 +1335,7 @@ YY_LINENO_REWIND_TO(yy_bp + 2);
 yyg->yy_c_buf_p = yy_cp = yy_bp + 2;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 336 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 345 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	yyextra->lexing_directive = 1;
@@ -1341,7 +1350,7 @@ YY_LINENO_REWIND_TO(yy_bp + 4);
 yyg->yy_c_buf_p = yy_cp = yy_bp + 4;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 343 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 352 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	yyextra->lexing_directive = 1;
@@ -1351,7 +1360,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 350 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 359 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	yyextra->space_tokens = 0;
@@ -1360,7 +1369,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 356 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 365 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	yyextra->space_tokens = 0;
@@ -1369,7 +1378,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 362 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 371 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	RETURN_STRING_TOKEN (ERROR_TOKEN);
@@ -1395,7 +1404,7 @@ YY_RULE_SETUP
 	 */
 case 21:
 YY_RULE_SETUP
-#line 385 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 394 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	if (! parser->skipping) {
 		BEGIN DEFINE;
@@ -1406,7 +1415,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 393 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 402 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	yyextra->space_tokens = 0;
@@ -1415,7 +1424,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 399 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 408 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	/* Nothing to do here. Importantly, don't leave the <HASH>
 	 * start condition, since it's legal to have space between the
@@ -1425,7 +1434,7 @@ YY_RULE_SETUP
 /* This will catch any non-directive garbage after a HASH */
 case 24:
 YY_RULE_SETUP
-#line 406 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 415 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	RETURN_TOKEN (GARBAGE);
@@ -1437,7 +1446,7 @@ case 25:
 yyg->yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 412 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 421 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	RETURN_STRING_TOKEN (FUNC_IDENTIFIER);
@@ -1446,7 +1455,7 @@ YY_RULE_SETUP
 /* An identifier not immediately followed by '(' */
 case 26:
 YY_RULE_SETUP
-#line 418 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 427 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	RETURN_STRING_TOKEN (OBJ_IDENTIFIER);
@@ -1455,7 +1464,7 @@ YY_RULE_SETUP
 /* Whitespace */
 case 27:
 YY_RULE_SETUP
-#line 424 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 433 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	/* Just ignore it. Nothing to do here. */
 }
@@ -1464,7 +1473,7 @@ YY_RULE_SETUP
 case 28:
 /* rule 28 can match eol */
 YY_RULE_SETUP
-#line 429 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 438 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	glcpp_error(yylloc, yyextra, "#define followed by a non-identifier: %s", yytext);
@@ -1475,7 +1484,7 @@ YY_RULE_SETUP
 	 * space. This is an error. */
 case 29:
 YY_RULE_SETUP
-#line 437 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 446 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	BEGIN INITIAL;
 	glcpp_error(yylloc, yyextra, "#define followed by a non-identifier: %s", yytext);
@@ -1484,98 +1493,98 @@ YY_RULE_SETUP
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 443 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 452 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_STRING_TOKEN (INTEGER_STRING);
 }
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 447 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 456 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_STRING_TOKEN (INTEGER_STRING);
 }
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 451 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 460 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_STRING_TOKEN (INTEGER_STRING);
 }
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 455 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 464 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (LEFT_SHIFT);
 }
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 459 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 468 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (RIGHT_SHIFT);
 }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 463 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 472 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (LESS_OR_EQUAL);
 }
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 467 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 476 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (GREATER_OR_EQUAL);
 }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 471 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 480 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (EQUAL);
 }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 475 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 484 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (NOT_EQUAL);
 }
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 479 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 488 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (AND);
 }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 483 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 492 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (OR);
 }
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 487 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 496 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (PLUS_PLUS);
 }
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 491 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 500 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (MINUS_MINUS);
 }
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 495 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 504 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	if (! parser->skipping) {
 		if (parser->is_gles)
@@ -1586,42 +1595,42 @@ YY_RULE_SETUP
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 503 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 512 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (DEFINED);
 }
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 507 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 516 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_STRING_TOKEN (IDENTIFIER);
 }
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 511 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 520 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_STRING_TOKEN (OTHER);
 }
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 515 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 524 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_TOKEN (yytext[0]);
 }
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 519 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 528 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	RETURN_STRING_TOKEN (OTHER);
 }
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 523 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 532 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	if (yyextra->space_tokens) {
 		RETURN_TOKEN (SPACE);
@@ -1633,7 +1642,7 @@ YY_RULE_SETUP
 case 50:
 /* rule 50 can match eol */
 YY_RULE_SETUP
-#line 531 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 540 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	if (parser->commented_newlines) {
 		BEGIN NEWLINE_CATCHUP;
@@ -1642,6 +1651,7 @@ YY_RULE_SETUP
 	}
 	yyextra->space_tokens = 1;
 	yyextra->lexing_directive = 0;
+	yyextra->lexing_version_directive = 0;
 	yylineno++;
 	yycolumn = 0;
 	RETURN_TOKEN_NEVER_SKIP (NEWLINE);
@@ -1651,12 +1661,13 @@ case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(COMMENT):
 case YY_STATE_EOF(DEFINE):
 case YY_STATE_EOF(HASH):
-#line 544 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 554 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	if (YY_START == COMMENT)
 		glcpp_error(yylloc, yyextra, "Unterminated comment");
 	BEGIN DONE; /* Don't keep matching this rule forever. */
 	yyextra->lexing_directive = 0;
+	yyextra->lexing_version_directive = 0;
 	if (! parser->last_token_was_newline)
 		RETURN_TOKEN (NEWLINE);
 }
@@ -1667,7 +1678,7 @@ case YY_STATE_EOF(HASH):
 	 * of the preceding patterns to match that input. */
 case 51:
 YY_RULE_SETUP
-#line 558 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 569 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 {
 	glcpp_error(yylloc, yyextra, "Internal compiler error: Unexpected character: %s", yytext);
 
@@ -1683,10 +1694,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 571 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 582 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1690 "glsl/glcpp/glcpp-lex.c"
+#line 1701 "glsl/glcpp/glcpp-lex.c"
 case YY_STATE_EOF(DONE):
 case YY_STATE_EOF(NEWLINE_CATCHUP):
 case YY_STATE_EOF(UNREACHABLE):
@@ -2922,7 +2933,7 @@ void glcpp_free (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 571 "/home/emil/development/mesa/src/compiler/glsl/glcpp/glcpp-lex.l"
+#line 582 "../../../src/compiler/glsl/glcpp/glcpp-lex.l"
 
 
 

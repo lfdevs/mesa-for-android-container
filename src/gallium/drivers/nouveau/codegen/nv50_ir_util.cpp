@@ -365,6 +365,12 @@ int BitSet::findFreeRange(unsigned int count) const
          }
       }
    }
+
+   // If we couldn't find a position, we can have a left-over -1 in pos. Make
+   // sure to abort in such a case.
+   if (pos < 0)
+      return -1;
+
    pos += i * 32;
 
    return ((pos + count) <= size) ? pos : -1;

@@ -49,6 +49,7 @@ const struct brw_tracked_state gen6_sampler_state = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_SAMPLER_STATE_TABLE |
              BRW_NEW_STATE_BASE_ADDRESS,
    },

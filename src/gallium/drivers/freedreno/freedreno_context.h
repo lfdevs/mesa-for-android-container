@@ -54,10 +54,8 @@ struct fd_texture_stateobj {
 
 struct fd_program_stateobj {
 	void *vp, *fp;
-	enum {
-		FD_SHADER_DIRTY_VP = (1 << 0),
-		FD_SHADER_DIRTY_FP = (1 << 1),
-	} dirty;
+
+	/* rest only used by fd2.. split out: */
 	uint8_t num_exports;
 	/* Indexed by semantic name or TGSI_SEMANTIC_COUNT + semantic index
 	 * for TGSI_SEMANTIC_GENERIC.  Special vs exports (position and point-
@@ -241,6 +239,7 @@ struct fd_context {
 	 */
 	struct {
 		uint64_t prims_emitted;
+		uint64_t prims_generated;
 		uint64_t draw_calls;
 		uint64_t batch_total, batch_sysmem, batch_gmem, batch_restore;
 	} stats;
@@ -316,7 +315,7 @@ struct fd_context {
 	 */
 	struct fd_gmem_stateobj gmem;
 	struct fd_vsc_pipe      pipe[8];
-	struct fd_tile          tile[256];
+	struct fd_tile          tile[512];
 
 	/* which state objects need to be re-emit'd: */
 	enum {
@@ -326,21 +325,26 @@ struct fd_context {
 		FD_DIRTY_FRAGTEX     = (1 <<  3),
 		FD_DIRTY_VERTTEX     = (1 <<  4),
 		FD_DIRTY_TEXSTATE    = (1 <<  5),
-		FD_DIRTY_PROG        = (1 <<  6),
-		FD_DIRTY_BLEND_COLOR = (1 <<  7),
-		FD_DIRTY_STENCIL_REF = (1 <<  8),
-		FD_DIRTY_SAMPLE_MASK = (1 <<  9),
-		FD_DIRTY_FRAMEBUFFER = (1 << 10),
-		FD_DIRTY_STIPPLE     = (1 << 11),
-		FD_DIRTY_VIEWPORT    = (1 << 12),
-		FD_DIRTY_CONSTBUF    = (1 << 13),
-		FD_DIRTY_VTXSTATE    = (1 << 14),
-		FD_DIRTY_VTXBUF      = (1 << 15),
-		FD_DIRTY_INDEXBUF    = (1 << 16),
-		FD_DIRTY_SCISSOR     = (1 << 17),
-		FD_DIRTY_STREAMOUT   = (1 << 18),
-		FD_DIRTY_UCP         = (1 << 19),
-		FD_DIRTY_BLEND_DUAL  = (1 << 20),
+
+		FD_SHADER_DIRTY_VP   = (1 <<  6),
+		FD_SHADER_DIRTY_FP   = (1 <<  7),
+		/* skip geom/tcs/tes/compute */
+		FD_DIRTY_PROG        = FD_SHADER_DIRTY_FP | FD_SHADER_DIRTY_VP,
+
+		FD_DIRTY_BLEND_COLOR = (1 << 12),
+		FD_DIRTY_STENCIL_REF = (1 << 13),
+		FD_DIRTY_SAMPLE_MASK = (1 << 14),
+		FD_DIRTY_FRAMEBUFFER = (1 << 15),
+		FD_DIRTY_STIPPLE     = (1 << 16),
+		FD_DIRTY_VIEWPORT    = (1 << 17),
+		FD_DIRTY_CONSTBUF    = (1 << 18),
+		FD_DIRTY_VTXSTATE    = (1 << 19),
+		FD_DIRTY_VTXBUF      = (1 << 20),
+		FD_DIRTY_INDEXBUF    = (1 << 21),
+		FD_DIRTY_SCISSOR     = (1 << 22),
+		FD_DIRTY_STREAMOUT   = (1 << 23),
+		FD_DIRTY_UCP         = (1 << 24),
+		FD_DIRTY_BLEND_DUAL  = (1 << 25),
 	} dirty;
 
 	struct pipe_blend_state *blend;
@@ -368,6 +372,8 @@ struct fd_context {
 	bool cond_cond; /* inverted rendering condition */
 	uint cond_mode;
 
+	struct pipe_debug_callback debug;
+
 	/* GMEM/tile handling fxns: */
 	void (*emit_tile_init)(struct fd_context *ctx);
 	void (*emit_tile_prep)(struct fd_context *ctx, struct fd_tile *tile);
@@ -379,7 +385,7 @@ struct fd_context {
 	void (*emit_sysmem_prep)(struct fd_context *ctx);
 
 	/* draw: */
-	void (*draw_vbo)(struct fd_context *ctx, const struct pipe_draw_info *info);
+	bool (*draw_vbo)(struct fd_context *ctx, const struct pipe_draw_info *info);
 	void (*clear)(struct fd_context *ctx, unsigned buffers,
 			const union pipe_color_union *color, double depth, unsigned stencil);
 

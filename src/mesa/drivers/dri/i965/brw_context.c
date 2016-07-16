@@ -70,58 +70,35 @@
 #include "tnl/t_pipeline.h"
 #include "util/ralloc.h"
 #include "util/debug.h"
+#include "isl/isl.h"
 
 /***************************************
  * Mesa's Driver Functions
  ***************************************/
 
-static size_t
-brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
-                             GLenum internalFormat, int samples[16])
+const char *const brw_vendor_string = "Intel Open Source Technology Center";
+
+static const char *
+get_bsw_model(const struct intel_screen *intelScreen)
 {
-   struct brw_context *brw = brw_context(ctx);
-
-   (void) target;
-
-   switch (brw->gen) {
-   case 9:
-      samples[0] = 16;
-      samples[1] = 8;
-      samples[2] = 4;
-      samples[3] = 2;
-      return 4;
-
-   case 8:
-      samples[0] = 8;
-      samples[1] = 4;
-      samples[2] = 2;
-      return 3;
-
-   case 7:
-      samples[0] = 8;
-      samples[1] = 4;
-      return 2;
-
-   case 6:
-      samples[0] = 4;
-      return 1;
-
+   switch (intelScreen->eu_total) {
+   case 16:
+      return "405";
+   case 12:
+      return "400";
    default:
-      assert(brw->gen < 6);
-      samples[0] = 1;
-      return 1;
+      return "   ";
    }
 }
 
-const char *const brw_vendor_string = "Intel Open Source Technology Center";
-
 const char *
-brw_get_renderer_string(unsigned deviceID)
+brw_get_renderer_string(const struct intel_screen *intelScreen)
 {
    const char *chipset;
    static char buffer[128];
+   char *bsw = NULL;
 
-   switch (deviceID) {
+   switch (intelScreen->deviceID) {
 #undef CHIPSET
 #define CHIPSET(id, symbol, str) case id: chipset = str; break;
 #include "pci_ids/i965_pci_ids.h"
@@ -130,7 +107,18 @@ brw_get_renderer_string(unsigned deviceID)
       break;
    }
 
+   /* Braswell branding is funny, so we have to fix it up here */
+   if (intelScreen->deviceID == 0x22B1) {
+      bsw = strdup(chipset);
+      char *needle = strstr(bsw, "XXX");
+      if (needle) {
+         memcpy(needle, get_bsw_model(intelScreen), 3);
+         chipset = bsw;
+      }
+   }
+
    (void) driGetRendererString(buffer, chipset, 0);
+   free(bsw);
    return buffer;
 }
 
@@ -145,7 +133,7 @@ intel_get_string(struct gl_context * ctx, GLenum name)
 
    case GL_RENDERER:
       return
-         (GLubyte *) brw_get_renderer_string(brw->intelScreen->deviceID);
+         (GLubyte *) brw_get_renderer_string(brw->intelScreen);
 
    default:
       return NULL;
@@ -177,6 +165,38 @@ intel_update_framebuffer(struct gl_context *ctx,
    fb->DefaultGeometry._NumSamples =
       intel_quantize_num_samples(brw->intelScreen,
                                  fb->DefaultGeometry.NumSamples);
+}
+
+/* On Gen9 color buffers may be compressed by the hardware (lossless
+ * compression). There are, however, format restrictions and care needs to be
+ * taken that the sampler engine is capable for re-interpreting a buffer with
+ * format different the buffer was originally written with.
+ *
+ * For example, SRGB formats are not compressible and the sampler engine isn't
+ * capable of treating RGBA_UNORM as SRGB_ALPHA. In such a case the underlying
+ * color buffer needs to be resolved so that the sampling surface can be
+ * sampled as non-compressed (i.e., without the auxiliary MCS buffer being
+ * set).
+ */
+static bool
+intel_texture_view_requires_resolve(struct brw_context *brw,
+                                    struct intel_texture_object *intel_tex)
+{
+   if (brw->gen < 9 ||
+       !intel_miptree_is_lossless_compressed(brw, intel_tex->mt))
+     return false;
+
+   const uint32_t brw_format = brw_format_for_mesa_format(intel_tex->_Format);
+
+   if (isl_format_supports_lossless_compression(brw->intelScreen->devinfo,
+                                                brw_format))
+      return false;
+
+   perf_debug("Incompatible sampling format (%s) for rbc (%s)\n",
+              _mesa_get_format_name(intel_tex->_Format),
+              _mesa_get_format_name(intel_tex->mt->format));
+
+   return true;
 }
 
 static void
@@ -211,8 +231,9 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
       /* Sampling engine understands lossless compression and resolving
        * those surfaces should be skipped for performance reasons.
        */
-      intel_miptree_resolve_color(brw, tex_obj->mt,
-                                  INTEL_MIPTREE_IGNORE_CCS_E);
+      const int flags = intel_texture_view_requires_resolve(brw, tex_obj) ?
+                           0 : INTEL_MIPTREE_IGNORE_CCS_E;
+      intel_miptree_resolve_color(brw, tex_obj->mt, flags);
       brw_render_cache_set_check_flush(brw, tex_obj->mt->bo);
    }
 
@@ -371,7 +392,9 @@ brw_init_driver_functions(struct brw_context *brw,
 
    brwInitFragProgFuncs( functions );
    brw_init_common_queryobj_functions(functions);
-   if (brw->gen >= 6)
+   if (brw->gen >= 8 || brw->is_haswell)
+      hsw_init_queryobj_functions(functions);
+   else if (brw->gen >= 6)
       gen6_init_queryobj_functions(functions);
    else
       gen4_init_queryobj_functions(functions);
@@ -379,17 +402,22 @@ brw_init_driver_functions(struct brw_context *brw,
    if (brw->gen >= 7)
       brw_init_conditional_render_functions(functions);
 
-   functions->QuerySamplesForFormat = brw_query_samples_for_format;
+   functions->QueryInternalFormat = brw_query_internal_format;
 
    functions->NewTransformFeedback = brw_new_transform_feedback;
    functions->DeleteTransformFeedback = brw_delete_transform_feedback;
-   functions->GetTransformFeedbackVertexCount =
-      brw_get_transform_feedback_vertex_count;
-   if (brw->gen >= 7) {
+   if (brw->intelScreen->has_mi_math_and_lrr) {
+      functions->BeginTransformFeedback = hsw_begin_transform_feedback;
+      functions->EndTransformFeedback = hsw_end_transform_feedback;
+      functions->PauseTransformFeedback = hsw_pause_transform_feedback;
+      functions->ResumeTransformFeedback = hsw_resume_transform_feedback;
+   } else if (brw->gen >= 7) {
       functions->BeginTransformFeedback = gen7_begin_transform_feedback;
       functions->EndTransformFeedback = gen7_end_transform_feedback;
       functions->PauseTransformFeedback = gen7_pause_transform_feedback;
       functions->ResumeTransformFeedback = gen7_resume_transform_feedback;
+      functions->GetTransformFeedbackVertexCount =
+         brw_get_transform_feedback_vertex_count;
    } else {
       functions->BeginTransformFeedback = brw_begin_transform_feedback;
       functions->EndTransformFeedback = brw_end_transform_feedback;
@@ -439,7 +467,16 @@ brw_initialize_context_constants(struct brw_context *brw)
    ctx->Const.MaxImageUnits = MAX_IMAGE_UNITS;
    ctx->Const.MaxRenderbufferSize = 8192;
    ctx->Const.MaxTextureLevels = MIN2(14 /* 8192 */, MAX_TEXTURE_LEVELS);
-   ctx->Const.Max3DTextureLevels = 12; /* 2048 */
+
+   /* On Sandy Bridge and prior, the "Render Target View Extent" field of
+    * RENDER_SURFACE_STATE is only 9 bits so the largest 3-D texture we can do
+    * a layered render into has a depth of 512.  On Iron Lake and earlier, we
+    * don't support layered rendering and we use manual offsetting to render
+    * into the different layers so this doesn't matter.  On Sandy Bridge,
+    * however, we do support layered rendering so this is a problem.
+    */
+   ctx->Const.Max3DTextureLevels = brw->gen == 6 ? 10 /* 512 */ : 12; /* 2048 */
+
    ctx->Const.MaxCubeTextureLevels = 14; /* 8192 */
    ctx->Const.MaxArrayTextureLayers = brw->gen >= 7 ? 2048 : 512;
    ctx->Const.MaxTextureMbytes = 1536;
@@ -505,7 +542,8 @@ brw_initialize_context_constants(struct brw_context *brw)
    ctx->Const.MaxTransformFeedbackSeparateComponents =
       BRW_MAX_SOL_BINDINGS / BRW_MAX_SOL_BUFFERS;
 
-   ctx->Const.AlwaysUseGetTransformFeedbackVertexCount = true;
+   ctx->Const.AlwaysUseGetTransformFeedbackVertexCount =
+      !brw->intelScreen->has_mi_math_and_lrr;
 
    int max_samples;
    const int *msaa_modes = intel_supported_msaa_modes(brw->intelScreen);
@@ -570,6 +608,9 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.MaxClipPlanes = 8;
 
    ctx->Const.LowerTessLevel = true;
+   ctx->Const.LowerTCSPatchVerticesIn = brw->gen >= 8;
+   ctx->Const.LowerTESPatchVerticesIn = true;
+   ctx->Const.PrimitiveRestartForPatches = true;
 
    ctx->Const.Program[MESA_SHADER_VERTEX].MaxNativeInstructions = 16 * 1024;
    ctx->Const.Program[MESA_SHADER_VERTEX].MaxAluInstructions = 0;
@@ -682,6 +723,11 @@ brw_initialize_context_constants(struct brw_context *brw)
          brw->intelScreen->compiler->glsl_compiler_options[i];
    }
 
+   if (brw->gen >= 7) {
+      ctx->Const.MaxViewportWidth = 32768;
+      ctx->Const.MaxViewportHeight = 32768;
+   }
+
    /* ARB_viewport_array */
    if (brw->gen >= 6 && ctx->API == API_OPENGL_CORE) {
       ctx->Const.MaxViewports = GEN6_NUM_VIEWPORTS;
@@ -698,8 +744,8 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.MaxVertexStreams = MIN2(4, MAX_VERTEX_STREAMS);
 
    /* ARB_framebuffer_no_attachments */
-   ctx->Const.MaxFramebufferWidth = ctx->Const.MaxViewportWidth;
-   ctx->Const.MaxFramebufferHeight = ctx->Const.MaxViewportHeight;
+   ctx->Const.MaxFramebufferWidth = 16384;
+   ctx->Const.MaxFramebufferHeight = 16384;
    ctx->Const.MaxFramebufferLayers = ctx->Const.MaxArrayTextureLayers;
    ctx->Const.MaxFramebufferSamples = max_samples;
 }
@@ -708,18 +754,10 @@ static void
 brw_initialize_cs_context_constants(struct brw_context *brw, unsigned max_threads)
 {
    struct gl_context *ctx = &brw->ctx;
-
-   /* For ES, we set these constants based on SIMD8.
-    *
-    * TODO: Once we can always generate SIMD16, we should update this.
-    *
-    * For GL, we assume we can generate a SIMD16 program, but this currently
-    * is not always true. This allows us to run more test cases, and will be
-    * required based on desktop GL compute shader requirements.
+   /* Maximum number of scalar compute shader invocations that can be run in
+    * parallel in the same subslice assuming SIMD32 dispatch.
     */
-   const int simd_size = ctx->API == API_OPENGL_CORE ? 16 : 8;
-
-   const uint32_t max_invocations = simd_size * max_threads;
+   const uint32_t max_invocations = 32 * max_threads;
    ctx->Const.MaxComputeWorkGroupSize[0] = max_invocations;
    ctx->Const.MaxComputeWorkGroupSize[1] = max_invocations;
    ctx->Const.MaxComputeWorkGroupSize[2] = max_invocations;
@@ -784,6 +822,8 @@ brw_process_driconf_options(struct brw_context *brw)
 
    ctx->Const.AllowGLSLExtensionDirectiveMidShader =
       driQueryOptionb(options, "allow_glsl_extension_directive_midshader");
+
+   ctx->Const.GLSLZeroInit = driQueryOptionb(options, "glsl_zero_init");
 
    brw->dual_color_blend_by_location =
       driQueryOptionb(options, "dual_color_blend_by_location");
@@ -962,7 +1002,18 @@ brwCreateContext(gl_api api,
    brw->max_ds_threads = devinfo->max_ds_threads;
    brw->max_gs_threads = devinfo->max_gs_threads;
    brw->max_wm_threads = devinfo->max_wm_threads;
-   brw->max_cs_threads = devinfo->max_cs_threads;
+   /* FINISHME: Do this for all platforms that the kernel supports */
+   if (brw->is_cherryview &&
+       screen->subslice_total > 0 && screen->eu_total > 0) {
+      /* Logical CS threads = EUs per subslice * 7 threads per EU */
+      brw->max_cs_threads = screen->eu_total / screen->subslice_total * 7;
+
+      /* Fuse configurations may give more threads than expected, never less. */
+      if (brw->max_cs_threads < devinfo->max_cs_threads)
+         brw->max_cs_threads = devinfo->max_cs_threads;
+   } else {
+      brw->max_cs_threads = devinfo->max_cs_threads;
+   }
    brw->urb.size = devinfo->urb.size;
    brw->urb.min_vs_entries = devinfo->urb.min_vs_entries;
    brw->urb.max_vs_entries = devinfo->urb.max_vs_entries;
@@ -1044,7 +1095,6 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    }
 
    _mesa_meta_free(&brw->ctx);
-   brw_meta_fast_clear_free(brw);
 
    if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
       /* Force a report. */
@@ -1060,6 +1110,10 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    drm_intel_bo_unreference(brw->curbe.curbe_bo);
    if (brw->vs.base.scratch_bo)
       drm_intel_bo_unreference(brw->vs.base.scratch_bo);
+   if (brw->tcs.base.scratch_bo)
+      drm_intel_bo_unreference(brw->tcs.base.scratch_bo);
+   if (brw->tes.base.scratch_bo)
+      drm_intel_bo_unreference(brw->tes.base.scratch_bo);
    if (brw->gs.base.scratch_bo)
       drm_intel_bo_unreference(brw->gs.base.scratch_bo);
    if (brw->wm.base.scratch_bo)
@@ -1148,10 +1202,9 @@ intel_gles3_srgb_workaround(struct brw_context *brw,
     */
    fb->Visual.sRGBCapable = false;
    for (int i = 0; i < BUFFER_COUNT; i++) {
-      if (fb->Attachment[i].Renderbuffer &&
-          fb->Attachment[i].Renderbuffer->Format == MESA_FORMAT_B8G8R8A8_SRGB) {
-         fb->Attachment[i].Renderbuffer->Format = MESA_FORMAT_B8G8R8A8_UNORM;
-      }
+      struct gl_renderbuffer *rb = fb->Attachment[i].Renderbuffer;
+      if (rb)
+         rb->Format = _mesa_get_srgb_format_linear(rb->Format);
    }
 }
 
@@ -1606,6 +1659,7 @@ intel_update_image_buffers(struct brw_context *brw, __DRIdrawable *drawable)
    struct __DRIimageList images;
    unsigned int format;
    uint32_t buffer_mask = 0;
+   int ret;
 
    front_rb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
    back_rb = intel_get_renderbuffer(fb, BUFFER_BACK_LEFT);
@@ -1625,12 +1679,14 @@ intel_update_image_buffers(struct brw_context *brw, __DRIdrawable *drawable)
    if (back_rb)
       buffer_mask |= __DRI_IMAGE_BUFFER_BACK;
 
-   (*screen->image.loader->getBuffers) (drawable,
-                                        driGLFormatToImageFormat(format),
-                                        &drawable->dri2.stamp,
-                                        drawable->loaderPrivate,
-                                        buffer_mask,
-                                        &images);
+   ret = screen->image.loader->getBuffers(drawable,
+                                          driGLFormatToImageFormat(format),
+                                          &drawable->dri2.stamp,
+                                          drawable->loaderPrivate,
+                                          buffer_mask,
+                                          &images);
+   if (!ret)
+      return;
 
    if (images.image_mask & __DRI_IMAGE_BUFFER_FRONT) {
       drawable->w = images.front->width;

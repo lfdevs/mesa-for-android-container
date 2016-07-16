@@ -48,11 +48,11 @@ lp_build_format_swizzle_soa(const struct util_format_description *format_desc,
                             const LLVMValueRef *unswizzled,
                             LLVMValueRef swizzled_out[4])
 {
-   assert(UTIL_FORMAT_SWIZZLE_0 == PIPE_SWIZZLE_ZERO);
-   assert(UTIL_FORMAT_SWIZZLE_1 == PIPE_SWIZZLE_ONE);
+   assert(PIPE_SWIZZLE_0 == (int)PIPE_SWIZZLE_0);
+   assert(PIPE_SWIZZLE_1 == (int)PIPE_SWIZZLE_1);
 
    if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
-      enum util_format_swizzle swizzle;
+      enum pipe_swizzle swizzle;
       LLVMValueRef depth_or_stencil;
 
       if (util_format_has_stencil(format_desc) &&
@@ -76,7 +76,7 @@ lp_build_format_swizzle_soa(const struct util_format_description *format_desc,
    else {
       unsigned chan;
       for (chan = 0; chan < 4; ++chan) {
-         enum util_format_swizzle swizzle = format_desc->swizzle[chan];
+         enum pipe_swizzle swizzle = format_desc->swizzle[chan];
          swizzled_out[chan] = lp_build_swizzle_soa_channel(bld, unswizzled, swizzle);
       }
    }

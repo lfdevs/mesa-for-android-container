@@ -634,6 +634,8 @@ static const struct glx_context_vtable dri3_context_vtable = {
    .bind_tex_image      = dri3_bind_tex_image,
    .release_tex_image   = dri3_release_tex_image,
    .get_proc_address    = NULL,
+   .interop_query_device_info = dri3_interop_query_device_info,
+   .interop_export_object = dri3_interop_export_object
 };
 
 /** dri3_bind_extensions
@@ -700,6 +702,9 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
          psc->rendererQuery = (__DRI2rendererQueryExtension *) extensions[i];
          __glXEnableDirectExtension(&psc->base, "GLX_MESA_query_renderer");
       }
+
+      if (strcmp(extensions[i]->name, __DRI2_INTEROP) == 0)
+	 psc->interop = (__DRI2interopExtension*)extensions[i];
    }
 }
 

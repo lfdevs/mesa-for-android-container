@@ -185,7 +185,8 @@ wsw_dt_from_handle(struct sw_winsys *ws,
    struct wrapper_sw_winsys *wsw = wrapper_sw_winsys(ws);
    struct pipe_resource *tex;
 
-   tex = wsw->screen->resource_from_handle(wsw->screen, templ, whandle);
+   tex = wsw->screen->resource_from_handle(wsw->screen, templ, whandle,
+                                           PIPE_HANDLE_USAGE_READ_WRITE);
    if (!tex)
       return NULL;
 
@@ -201,7 +202,8 @@ wsw_dt_get_handle(struct sw_winsys *ws,
    struct wrapper_sw_displaytarget *wdt = wrapper_sw_displaytarget(dt);
    struct pipe_resource *tex = wdt->tex;
 
-   return wsw->screen->resource_get_handle(wsw->screen, tex, whandle);
+   return wsw->screen->resource_get_handle(wsw->screen, tex, whandle,
+                                           PIPE_HANDLE_USAGE_READ_WRITE);
 }
 
 static void *

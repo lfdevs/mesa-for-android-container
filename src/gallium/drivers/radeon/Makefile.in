@@ -130,18 +130,19 @@ am__DEPENDENCIES_1 =
 am__libradeon_la_SOURCES_DIST = cayman_msaa.c r600_buffer_common.c \
 	r600_cs.h r600d_common.h r600_gpu_load.c r600_perfcounter.c \
 	r600_pipe_common.c r600_pipe_common.h r600_query.c \
-	r600_query.h r600_streamout.c r600_texture.c radeon_uvd.c \
-	radeon_uvd.h radeon_vce_40_2_2.c radeon_vce_50.c \
-	radeon_vce_52.c radeon_vce.c radeon_vce.h radeon_video.c \
-	radeon_video.h radeon_winsys.h radeon_elf_util.c \
-	radeon_elf_util.h radeon_llvm_emit.c radeon_llvm_emit.h \
-	radeon_llvm.h radeon_llvm_util.c radeon_llvm_util.h \
-	radeon_setup_tgsi_llvm.c
+	r600_query.h r600_streamout.c r600_test_dma.c r600_texture.c \
+	r600_viewport.c radeon_uvd.c radeon_uvd.h radeon_vce_40_2_2.c \
+	radeon_vce_50.c radeon_vce_52.c radeon_vce.c radeon_vce.h \
+	radeon_video.c radeon_video.h radeon_winsys.h \
+	radeon_elf_util.c radeon_elf_util.h radeon_llvm_emit.c \
+	radeon_llvm_emit.h radeon_llvm.h radeon_llvm_util.c \
+	radeon_llvm_util.h radeon_setup_tgsi_llvm.c
 am__objects_1 = cayman_msaa.lo r600_buffer_common.lo r600_gpu_load.lo \
 	r600_perfcounter.lo r600_pipe_common.lo r600_query.lo \
-	r600_streamout.lo r600_texture.lo radeon_uvd.lo \
-	radeon_vce_40_2_2.lo radeon_vce_50.lo radeon_vce_52.lo \
-	radeon_vce.lo radeon_video.lo
+	r600_streamout.lo r600_test_dma.lo r600_texture.lo \
+	r600_viewport.lo radeon_uvd.lo radeon_vce_40_2_2.lo \
+	radeon_vce_50.lo radeon_vce_52.lo radeon_vce.lo \
+	radeon_video.lo
 am__objects_2 = radeon_elf_util.lo radeon_llvm_emit.lo \
 	radeon_llvm_util.lo radeon_setup_tgsi_llvm.lo
 @NEED_RADEON_LLVM_TRUE@am__objects_3 = $(am__objects_2)
@@ -286,6 +287,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -384,6 +387,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -404,6 +409,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -420,6 +428,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -517,7 +526,9 @@ C_SOURCES := \
 	r600_query.c \
 	r600_query.h \
 	r600_streamout.c \
+	r600_test_dma.c \
 	r600_texture.c \
+	r600_viewport.c \
 	radeon_uvd.c \
 	radeon_uvd.h \
 	radeon_vce_40_2_2.c \
@@ -682,7 +693,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_pipe_common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_streamout.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_test_dma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_texture.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_viewport.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_elf_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_llvm_emit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_llvm_util.Plo@am__quote@

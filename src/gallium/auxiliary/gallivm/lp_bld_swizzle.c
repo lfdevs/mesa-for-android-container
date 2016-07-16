@@ -361,10 +361,10 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
    const unsigned n = type.length;
    unsigned i, j;
 
-   if (swizzles[0] == PIPE_SWIZZLE_RED &&
-       swizzles[1] == PIPE_SWIZZLE_GREEN &&
-       swizzles[2] == PIPE_SWIZZLE_BLUE &&
-       swizzles[3] == PIPE_SWIZZLE_ALPHA) {
+   if (swizzles[0] == PIPE_SWIZZLE_X &&
+       swizzles[1] == PIPE_SWIZZLE_Y &&
+       swizzles[2] == PIPE_SWIZZLE_Z &&
+       swizzles[3] == PIPE_SWIZZLE_W) {
       return a;
    }
 
@@ -372,14 +372,14 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
        swizzles[1] == swizzles[2] &&
        swizzles[2] == swizzles[3]) {
       switch (swizzles[0]) {
-      case PIPE_SWIZZLE_RED:
-      case PIPE_SWIZZLE_GREEN:
-      case PIPE_SWIZZLE_BLUE:
-      case PIPE_SWIZZLE_ALPHA:
+      case PIPE_SWIZZLE_X:
+      case PIPE_SWIZZLE_Y:
+      case PIPE_SWIZZLE_Z:
+      case PIPE_SWIZZLE_W:
          return lp_build_swizzle_scalar_aos(bld, a, swizzles[0], 4);
-      case PIPE_SWIZZLE_ZERO:
+      case PIPE_SWIZZLE_0:
          return bld->zero;
-      case PIPE_SWIZZLE_ONE:
+      case PIPE_SWIZZLE_1:
          return bld->one;
       case LP_BLD_SWIZZLE_DONTCARE:
          return bld->undef;
@@ -408,21 +408,21 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
             default:
                assert(0);
                /* fall through */
-            case PIPE_SWIZZLE_RED:
-            case PIPE_SWIZZLE_GREEN:
-            case PIPE_SWIZZLE_BLUE:
-            case PIPE_SWIZZLE_ALPHA:
+            case PIPE_SWIZZLE_X:
+            case PIPE_SWIZZLE_Y:
+            case PIPE_SWIZZLE_Z:
+            case PIPE_SWIZZLE_W:
                shuffle = j + swizzles[i];
                shuffles[j + i] = LLVMConstInt(i32t, shuffle, 0);
                break;
-            case PIPE_SWIZZLE_ZERO:
+            case PIPE_SWIZZLE_0:
                shuffle = type.length + 0;
                shuffles[j + i] = LLVMConstInt(i32t, shuffle, 0);
                if (!aux[0]) {
                   aux[0] = lp_build_const_elem(bld->gallivm, type, 0.0);
                }
                break;
-            case PIPE_SWIZZLE_ONE:
+            case PIPE_SWIZZLE_1:
                shuffle = type.length + 1;
                shuffles[j + i] = LLVMConstInt(i32t, shuffle, 0);
                if (!aux[1]) {
@@ -474,7 +474,7 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
        * Start with a mixture of 1 and 0.
        */
       for (chan = 0; chan < 4; ++chan) {
-         if (swizzles[chan] == PIPE_SWIZZLE_ONE) {
+         if (swizzles[chan] == PIPE_SWIZZLE_1) {
             cond |= 1 << chan;
          }
       }
@@ -574,14 +574,14 @@ lp_build_swizzle_soa_channel(struct lp_build_context *bld,
                              unsigned swizzle)
 {
    switch (swizzle) {
-   case PIPE_SWIZZLE_RED:
-   case PIPE_SWIZZLE_GREEN:
-   case PIPE_SWIZZLE_BLUE:
-   case PIPE_SWIZZLE_ALPHA:
+   case PIPE_SWIZZLE_X:
+   case PIPE_SWIZZLE_Y:
+   case PIPE_SWIZZLE_Z:
+   case PIPE_SWIZZLE_W:
       return unswizzled[swizzle];
-   case PIPE_SWIZZLE_ZERO:
+   case PIPE_SWIZZLE_0:
       return bld->zero;
-   case PIPE_SWIZZLE_ONE:
+   case PIPE_SWIZZLE_1:
       return bld->one;
    default:
       assert(0);

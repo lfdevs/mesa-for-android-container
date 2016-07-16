@@ -24,10 +24,8 @@
 #include <signal.h>
 #include <setjmp.h>
 
-extern "C" {
 #include "glxclient.h"
 #include "glx_error.h"
-}
 
 extern bool GetGLXScreenConfigs_called;
 extern struct glx_screen *psc;

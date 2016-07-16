@@ -79,7 +79,8 @@ NineSwapChain9_ctor( struct NineSwapChain9 *This,
 static D3DWindowBuffer *
 D3DWindowBuffer_create(struct NineSwapChain9 *This,
                        struct pipe_resource *resource,
-                       int depth)
+                       int depth,
+                       int for_frontbuffer_reading)
 {
     D3DWindowBuffer *ret;
     struct winsys_handle whandle;
@@ -87,7 +88,11 @@ D3DWindowBuffer_create(struct NineSwapChain9 *This,
 
     memset(&whandle, 0, sizeof(whandle));
     whandle.type = DRM_API_HANDLE_TYPE_FD;
-    This->screen->resource_get_handle(This->screen, resource, &whandle);
+    This->screen->resource_get_handle(This->screen, resource, &whandle,
+                                      for_frontbuffer_reading ?
+                                          PIPE_HANDLE_USAGE_WRITE :
+                                          PIPE_HANDLE_USAGE_EXPLICIT_FLUSH |
+                                          PIPE_HANDLE_USAGE_READ);
     stride = whandle.stride;
     dmaBufFd = whandle.handle;
     ID3DPresent_NewD3DWindowBufferFromDmaBuf(This->present,
@@ -239,12 +244,12 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     desc.Height = pParams->BackBufferHeight;
 
     if (This->pool) {
-        _mesa_threadpool_destroy(This->pool);
+        _mesa_threadpool_destroy(This, This->pool);
         This->pool = NULL;
     }
     This->enable_threadpool = This->actx->thread_submit && (pParams->SwapEffect != D3DSWAPEFFECT_COPY);
     if (This->enable_threadpool)
-        This->pool = _mesa_threadpool_create();
+        This->pool = _mesa_threadpool_create(This);
     if (!This->pool)
         This->enable_threadpool = FALSE;
 
@@ -342,7 +347,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
             resource = This->screen->resource_create(This->screen, &tmplt);
             pipe_resource_reference(&(This->present_buffers[i]), resource);
         }
-        This->present_handles[i] = D3DWindowBuffer_create(This, resource, depth);
+        This->present_handles[i] = D3DWindowBuffer_create(This, resource, depth, false);
         pipe_resource_reference(&resource, NULL);
     }
     if (pParams->EnableAutoDepthStencil) {
@@ -502,7 +507,7 @@ NineSwapChain9_dtor( struct NineSwapChain9 *This )
     DBG("This=%p\n", This);
 
     if (This->pool)
-        _mesa_threadpool_destroy(This->pool);
+        _mesa_threadpool_destroy(This, This->pool);
 
     if (This->buffers) {
         for (i = 0; i < This->params.BackBufferCount; i++) {
@@ -549,7 +554,7 @@ create_present_buffer( struct NineSwapChain9 *This,
         tmplt.bind |= PIPE_BIND_LINEAR;
     *resource = This->screen->resource_create(This->screen, &tmplt);
 
-    *present_handle = D3DWindowBuffer_create(This, *resource, 24);
+    *present_handle = D3DWindowBuffer_create(This, *resource, 24, true);
 }
 
 static void
@@ -776,29 +781,31 @@ NineSwapChain9_Present( struct NineSwapChain9 *This,
     D3DWindowBuffer *handle_temp;
     struct threadpool_task *task_temp;
     int i;
-    HRESULT hr = present(This, pSourceRect, pDestRect,
-                         hDestWindowOverride, pDirtyRegion, dwFlags);
+    HRESULT hr;
 
     DBG("This=%p pSourceRect=%p pDestRect=%p hDestWindowOverride=%p "
         "pDirtyRegion=%p dwFlags=%d\n",
         This, pSourceRect, pDestRect, hDestWindowOverride,
         pDirtyRegion,dwFlags);
 
-    if (hr == D3DERR_WASSTILLDRAWING)
-        return hr;
-
     if (This->base.device->ex) {
         if (NineSwapChain9_GetOccluded(This)) {
             return S_PRESENT_OCCLUDED;
         }
     } else {
-        if (NineSwapChain9_GetOccluded(This)) {
+        if (NineSwapChain9_GetOccluded(This) ||
+            NineSwapChain9_ResolutionMismatch(This)) {
             This->base.device->device_needs_reset = TRUE;
         }
         if (This->base.device->device_needs_reset) {
             return D3DERR_DEVICELOST;
         }
     }
+
+    hr = present(This, pSourceRect, pDestRect,
+                 hDestWindowOverride, pDirtyRegion, dwFlags);
+    if (hr == D3DERR_WASSTILLDRAWING)
+        return hr;
 
     switch (This->params.SwapEffect) {
         case D3DSWAPEFFECT_FLIP:
@@ -1013,4 +1020,35 @@ NineSwapChain9_GetOccluded( struct NineSwapChain9 *This )
     }
 
     return FALSE;
+}
+
+BOOL
+NineSwapChain9_ResolutionMismatch( struct NineSwapChain9 *This )
+{
+    if (This->base.device->minor_version_num > 1) {
+        return ID3DPresent_ResolutionMismatch(This->present);
+    }
+
+    return FALSE;
+}
+
+HANDLE
+NineSwapChain9_CreateThread( struct NineSwapChain9 *This,
+                                 void *pFuncAddress,
+                                 void *pParam )
+{
+    if (This->base.device->minor_version_num > 1) {
+        return ID3DPresent_CreateThread(This->present, pFuncAddress, pParam);
+    }
+
+    return NULL;
+}
+
+void
+NineSwapChain9_WaitForThread( struct NineSwapChain9 *This,
+                                  HANDLE thread )
+{
+    if (This->base.device->minor_version_num > 1) {
+        (void) ID3DPresent_WaitForThread(This->present, thread);
+    }
 }

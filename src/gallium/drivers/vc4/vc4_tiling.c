@@ -269,8 +269,8 @@ vc4_store_t_image(void *dst, uint32_t dst_stride,
 }
 
 /**
- * Loads pixel data from the start (microtile-aligned) box in @src to the
- * start of @dst according to the given tiling format.
+ * Loads pixel data from the start (microtile-aligned) box in \p src to the
+ * start of \p dst according to the given tiling format.
  */
 void
 vc4_load_tiled_image(void *dst, uint32_t dst_stride,
@@ -293,8 +293,8 @@ vc4_load_tiled_image(void *dst, uint32_t dst_stride,
 }
 
 /**
- * Stores pixel data from the start of @src into a (microtile-aligned) box in
- * @dst according to the given tiling format.
+ * Stores pixel data from the start of \p src into a (microtile-aligned) box in
+ * \p dst according to the given tiling format.
  */
 void
 vc4_store_tiled_image(void *dst, uint32_t dst_stride,

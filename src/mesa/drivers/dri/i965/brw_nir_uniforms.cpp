@@ -75,7 +75,7 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
    int namelen = strlen(var->name);
 
    /* The data for our (non-builtin) uniforms is stored in a series of
-    * gl_uniform_driver_storage structs for each subcomponent that
+    * gl_uniform_storage structs for each subcomponent that
     * glGetUniformLocation() could name.  We know it's been set up in the same
     * order we'd walk the type, so walk the list of storage and find anything
     * with our name, or the prefix of a component that starts with our name.
@@ -104,6 +104,11 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
          unsigned vector_count = (MAX2(storage->array_elements, 1) *
                                   storage->type->matrix_columns);
          unsigned vector_size = storage->type->vector_elements;
+         unsigned max_vector_size = 4;
+         if (storage->type->base_type == GLSL_TYPE_DOUBLE) {
+            vector_size *= 2;
+            max_vector_size *= 2;
+         }
 
          for (unsigned s = 0; s < vector_count; s++) {
             unsigned i;
@@ -113,7 +118,7 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
 
             if (!is_scalar) {
                /* Pad out with zeros if needed (only needed for vec4) */
-               for (; i < 4; i++) {
+               for (; i < max_vector_size; i++) {
                   static const gl_constant_value zero = { 0.0 };
                   stage_prog_data->param[uniform_index++] = &zero;
                }
@@ -152,17 +157,11 @@ brw_nir_setup_arb_uniforms(nir_shader *shader, struct gl_program *prog,
 {
    struct gl_program_parameter_list *plist = prog->Parameters;
 
-#ifndef NDEBUG
-   if (!shader->uniforms.is_empty()) {
-      /* For ARB programs, only a single "parameters" variable is generated to
-       * support uniform data.
-       */
-      assert(shader->uniforms.length() == 1);
-      nir_variable *var = (nir_variable *) shader->uniforms.get_head();
-      assert(strcmp(var->name, "parameters") == 0);
-      assert(var->type->array_size() == (int)plist->NumParameters);
-   }
-#endif
+   /* For ARB programs, prog_to_nir generates a single "parameters" variable
+    * for all uniform data.  nir_lower_wpos_ytransform may also create an
+    * additional variable.
+    */
+   assert(shader->uniforms.length() <= 2);
 
    for (unsigned p = 0; p < plist->NumParameters; p++) {
       /* Parameters should be either vec4 uniforms or single component

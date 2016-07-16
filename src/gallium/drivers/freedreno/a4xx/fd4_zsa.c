@@ -103,7 +103,5 @@ fd4_zsa_state_create(struct pipe_context *pctx,
 			A4XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE;
 	}
 
-	so->rb_render_control = 0x8;  /* XXX */
-
 	return so;
 }

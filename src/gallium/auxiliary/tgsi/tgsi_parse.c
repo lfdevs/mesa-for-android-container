@@ -313,7 +313,7 @@ tgsi_dump_tokens(const struct tgsi_token *tokens)
    int nr = tgsi_num_tokens(tokens);
    int i;
    
-   assert(sizeof(*tokens) == sizeof(unsigned));
+   STATIC_ASSERT(sizeof(*tokens) == sizeof(unsigned));
 
    debug_printf("const unsigned tokens[%d] = {\n", nr);
    for (i = 0; i < nr; i++)

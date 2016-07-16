@@ -359,7 +359,7 @@ get_z_shift_and_mask(const struct util_format_description *format_desc,
 
    z_swizzle = format_desc->swizzle[0];
 
-   if (z_swizzle == UTIL_FORMAT_SWIZZLE_NONE)
+   if (z_swizzle == PIPE_SWIZZLE_NONE)
       return FALSE;
 
    *width = format_desc->channel[z_swizzle].size;
@@ -390,7 +390,7 @@ get_s_shift_and_mask(const struct util_format_description *format_desc,
 
    s_swizzle = format_desc->swizzle[1];
 
-   if (s_swizzle == UTIL_FORMAT_SWIZZLE_NONE)
+   if (s_swizzle == PIPE_SWIZZLE_NONE)
       return FALSE;
 
    /* just special case 64bit d/s format */
@@ -873,8 +873,8 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
       const unsigned z_swizzle = format_desc->swizzle[0];
       const unsigned s_swizzle = format_desc->swizzle[1];
 
-      assert(z_swizzle != UTIL_FORMAT_SWIZZLE_NONE ||
-             s_swizzle != UTIL_FORMAT_SWIZZLE_NONE);
+      assert(z_swizzle != PIPE_SWIZZLE_NONE ||
+             s_swizzle != PIPE_SWIZZLE_NONE);
 
       assert(depth->enabled || stencil[0].enabled);
 

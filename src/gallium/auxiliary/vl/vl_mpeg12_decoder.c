@@ -189,7 +189,7 @@ init_zscan_buffer(struct vl_mpeg12_decoder *dec, struct vl_mpeg12_buffer *buffer
 
    memset(&sv_tmpl, 0, sizeof(sv_tmpl));
    u_sampler_view_default_template(&sv_tmpl, res, res->format);
-   sv_tmpl.swizzle_r = sv_tmpl.swizzle_g = sv_tmpl.swizzle_b = sv_tmpl.swizzle_a = PIPE_SWIZZLE_RED;
+   sv_tmpl.swizzle_r = sv_tmpl.swizzle_g = sv_tmpl.swizzle_b = sv_tmpl.swizzle_a = PIPE_SWIZZLE_X;
    buffer->zscan_source = dec->context->create_sampler_view(dec->context, res, &sv_tmpl);
    pipe_resource_reference(&res, NULL);
    if (!buffer->zscan_source)

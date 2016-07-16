@@ -112,7 +112,7 @@ static void insert_output_before(struct tgsi_transform_context *ctx,
     unsigned i;
 
     /* Make a place for the new output. */
-    for (i = before->Range.First; i < Elements(vsctx->out_remap); i++) {
+    for (i = before->Range.First; i < ARRAY_SIZE(vsctx->out_remap); i++) {
         ++vsctx->out_remap[i];
     }
 
@@ -131,7 +131,7 @@ static void insert_output_after(struct tgsi_transform_context *ctx,
     unsigned i;
 
     /* Make a place for the new output. */
-    for (i = after->Range.First+1; i < Elements(vsctx->out_remap); i++) {
+    for (i = after->Range.First+1; i < ARRAY_SIZE(vsctx->out_remap); i++) {
         ++vsctx->out_remap[i];
     }
 
@@ -234,7 +234,7 @@ static void transform_inst(struct tgsi_transform_context *ctx,
                     TGSI_INTERPOLATE_PERSPECTIVE, vsctx->num_outputs);
 
         /* Find a free temp for POSITION. */
-        for (i = 0; i < Elements(vsctx->temp_used); i++) {
+        for (i = 0; i < ARRAY_SIZE(vsctx->temp_used); i++) {
             if (!vsctx->temp_used[i]) {
                 emit_temp(ctx, i);
                 vsctx->pos_temp = i;
@@ -325,7 +325,7 @@ void r300_draw_init_vertex_shader(struct r300_context *r300,
         return;
 
     memset(&transform, 0, sizeof(transform));
-    for (i = 0; i < Elements(transform.out_remap); i++) {
+    for (i = 0; i < ARRAY_SIZE(transform.out_remap); i++) {
         transform.out_remap[i] = i;
     }
     transform.last_generic = -1;

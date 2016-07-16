@@ -92,6 +92,7 @@ static void set_fragment_shader( void )
       "DCL OUT[0], COLOR\n"
       "DCL TEMP[0]\n"
       "DCL SAMP[0]\n"
+      "DCL SVIEW[0], 2D, FLOAT\n"
       "  0: TXP TEMP[0], IN[0], SAMP[0], 2D\n"
       "  1: MOV OUT[0], TEMP[0]\n"
       "  2: END\n";

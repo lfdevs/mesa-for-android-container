@@ -154,7 +154,7 @@ vmw_gmr_buffer_unmap(struct pb_buffer *_buf)
 static void
 vmw_gmr_buffer_get_base_buffer(struct pb_buffer *buf,
                            struct pb_buffer **base_buf,
-                           unsigned *offset)
+                           pb_size *offset)
 {
    *base_buf = buf;
    *offset = 0;
@@ -266,7 +266,7 @@ vmw_gmr_bufmgr_region_ptr(struct pb_buffer *buf,
                           struct SVGAGuestPtr *ptr)
 {
    struct pb_buffer *base_buf;
-   unsigned offset = 0;
+   pb_size offset = 0;
    struct vmw_gmr_buffer *gmr_buf;
    
    pb_get_base_buffer( buf, &base_buf, &offset );

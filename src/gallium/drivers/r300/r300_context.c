@@ -156,7 +156,6 @@ static boolean r300_setup_atoms(struct r300_context* r300)
     boolean is_rv350 = r300->screen->caps.is_rv350;
     boolean is_r500 = r300->screen->caps.is_r500;
     boolean has_tcl = r300->screen->caps.has_tcl;
-    boolean drm_2_6_0 = r300->screen->info.drm_minor >= 6;
 
     /* Create the actual atom list.
      *
@@ -175,11 +174,11 @@ static boolean r300_setup_atoms(struct r300_context* r300)
     R300_INIT_ATOM(gpu_flush, 9);
     R300_INIT_ATOM(aa_state, 4);
     R300_INIT_ATOM(fb_state, 0);
-    R300_INIT_ATOM(hyperz_state, is_r500 || (is_rv350 && drm_2_6_0) ? 10 : 8);
+    R300_INIT_ATOM(hyperz_state, is_r500 || is_rv350 ? 10 : 8);
     /* ZB (unpipelined), SC. */
     R300_INIT_ATOM(ztop_state, 2);
     /* ZB, FG. */
-    R300_INIT_ATOM(dsa_state, is_r500 ? (drm_2_6_0 ? 10 : 8) : 6);
+    R300_INIT_ATOM(dsa_state, is_r500 ? 10 : 6);
     /* RB3D. */
     R300_INIT_ATOM(blend_state, 8);
     R300_INIT_ATOM(blend_color_state, is_r500 ? 3 : 2);
@@ -353,9 +352,7 @@ static void r300_init_states(struct pipe_context *pipe)
         OUT_CB_REG(R300_ZB_DEPTHCLEARVALUE, 0);
         OUT_CB_REG(R300_SC_HYPERZ, R300_SC_HYPERZ_ADJ_2);
 
-        if (r300->screen->caps.is_r500 ||
-            (r300->screen->caps.is_rv350 &&
-             r300->screen->info.drm_minor >= 6)) {
+        if (r300->screen->caps.is_r500 || r300->screen->caps.is_rv350) {
             OUT_CB_REG(R300_GB_Z_PEQ_CONFIG, 0);
         }
         END_CB;
@@ -388,7 +385,7 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     if (!r300->ctx)
         goto fail;
 
-    r300->cs = rws->cs_create(r300->ctx, RING_GFX, r300_flush_callback, r300, NULL);
+    r300->cs = rws->cs_create(r300->ctx, RING_GFX, r300_flush_callback, r300);
     if (r300->cs == NULL)
         goto fail;
 

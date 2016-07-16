@@ -107,24 +107,31 @@ static void si_emit_cp_dma_clear_buffer(struct si_context *sctx,
 	}
 }
 
-static unsigned get_flush_flags(struct si_context *sctx, bool is_framebuffer)
+static unsigned get_flush_flags(struct si_context *sctx, enum r600_coherency coher)
 {
-	if (is_framebuffer)
-		return SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER;
-
-	return SI_CONTEXT_INV_SMEM_L1 |
-	       SI_CONTEXT_INV_VMEM_L1 |
-	       (sctx->b.chip_class == SI ? SI_CONTEXT_INV_GLOBAL_L2 : 0);
+	switch (coher) {
+	default:
+	case R600_COHERENCY_NONE:
+		return 0;
+	case R600_COHERENCY_SHADER:
+		return SI_CONTEXT_INV_SMEM_L1 |
+		       SI_CONTEXT_INV_VMEM_L1 |
+		       (sctx->b.chip_class == SI ? SI_CONTEXT_INV_GLOBAL_L2 : 0);
+	case R600_COHERENCY_CB_META:
+		return SI_CONTEXT_FLUSH_AND_INV_CB |
+		       SI_CONTEXT_FLUSH_AND_INV_CB_META;
+	}
 }
 
-static unsigned get_tc_l2_flag(struct si_context *sctx, bool is_framebuffer)
+static unsigned get_tc_l2_flag(struct si_context *sctx, enum r600_coherency coher)
 {
-	return is_framebuffer || sctx->b.chip_class == SI ? 0 : CIK_CP_DMA_USE_L2;
+	return coher == R600_COHERENCY_SHADER &&
+	       sctx->b.chip_class >= CIK ? CIK_CP_DMA_USE_L2 : 0;
 }
 
 static void si_cp_dma_prepare(struct si_context *sctx, struct pipe_resource *dst,
 			      struct pipe_resource *src, unsigned byte_count,
-			      unsigned remaining_size, unsigned *flags)
+			      uint64_t remaining_size, unsigned *flags)
 {
 	si_need_cs_space(sctx);
 
@@ -158,12 +165,12 @@ static void si_cp_dma_prepare(struct si_context *sctx, struct pipe_resource *dst
 #define CP_DMA_MAX_BYTE_COUNT	((1 << 21) - CP_DMA_ALIGNMENT)
 
 static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
-			    unsigned offset, unsigned size, unsigned value,
-			    bool is_framebuffer)
+			    uint64_t offset, uint64_t size, unsigned value,
+			    enum r600_coherency coher)
 {
 	struct si_context *sctx = (struct si_context*)ctx;
-	unsigned tc_l2_flag = get_tc_l2_flag(sctx, is_framebuffer);
-	unsigned flush_flags = get_flush_flags(sctx, is_framebuffer);
+	unsigned tc_l2_flag = get_tc_l2_flag(sctx, coher);
+	unsigned flush_flags = get_flush_flags(sctx, coher);
 
 	if (!size)
 		return;
@@ -180,7 +187,7 @@ static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 						      sctx->b.gfx.cs,
 						      PIPE_TRANSFER_WRITE);
 		map += offset;
-		for (unsigned i = 0; i < size; i++) {
+		for (uint64_t i = 0; i < size; i++) {
 			unsigned byte_within_dword = (offset + i) % 4;
 			*map++ = (value >> (byte_within_dword * 8)) & 0xff;
 		}
@@ -190,7 +197,8 @@ static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 	uint64_t va = r600_resource(dst)->gpu_address + offset;
 
 	/* Flush the caches. */
-	sctx->b.flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | flush_flags;
+	sctx->b.flags |= SI_CONTEXT_PS_PARTIAL_FLUSH |
+	                 SI_CONTEXT_CS_PARTIAL_FLUSH | flush_flags;
 
 	while (size) {
 		unsigned byte_count = MIN2(size, CP_DMA_MAX_BYTE_COUNT);
@@ -204,10 +212,6 @@ static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 		size -= byte_count;
 		va += byte_count;
 	}
-
-	/* Flush the caches again in case the 3D engine has been prefetching
-	 * the resource. */
-	sctx->b.flags |= flush_flags;
 
 	if (tc_l2_flag)
 		r600_resource(dst)->TC_L2_dirty = true;
@@ -252,14 +256,13 @@ static void si_cp_dma_realign_engine(struct si_context *sctx, unsigned size)
 
 void si_copy_buffer(struct si_context *sctx,
 		    struct pipe_resource *dst, struct pipe_resource *src,
-		    uint64_t dst_offset, uint64_t src_offset, unsigned size,
-		    bool is_framebuffer)
+		    uint64_t dst_offset, uint64_t src_offset, unsigned size)
 {
 	uint64_t main_dst_offset, main_src_offset;
 	unsigned skipped_size = 0;
 	unsigned realign_size = 0;
-	unsigned tc_l2_flag = get_tc_l2_flag(sctx, is_framebuffer);
-	unsigned flush_flags = get_flush_flags(sctx, is_framebuffer);
+	unsigned tc_l2_flag = get_tc_l2_flag(sctx, R600_COHERENCY_SHADER);
+	unsigned flush_flags = get_flush_flags(sctx, R600_COHERENCY_SHADER);
 
 	if (!size)
 		return;
@@ -296,7 +299,8 @@ void si_copy_buffer(struct si_context *sctx,
 	}
 
 	/* Flush the caches. */
-	sctx->b.flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | flush_flags;
+	sctx->b.flags |= SI_CONTEXT_PS_PARTIAL_FLUSH |
+	                 SI_CONTEXT_CS_PARTIAL_FLUSH | flush_flags;
 
 	/* This is the main part doing the copying. Src is always aligned. */
 	main_dst_offset = dst_offset + skipped_size;
@@ -333,10 +337,6 @@ void si_copy_buffer(struct si_context *sctx,
 	/* Finally, realign the engine if the size wasn't aligned. */
 	if (realign_size)
 		si_cp_dma_realign_engine(sctx, realign_size);
-
-	/* Flush the caches again in case the 3D engine has been prefetching
-	 * the resource. */
-	sctx->b.flags |= flush_flags;
 
 	if (tc_l2_flag)
 		r600_resource(dst)->TC_L2_dirty = true;

@@ -380,6 +380,12 @@ virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
    struct virgl_hw_res *res;
    uint32_t handle = whandle->handle;
 
+   if (whandle->offset != 0) {
+      fprintf(stderr, "attempt to import unsupported winsys offset %u\n",
+              whandle->offset);
+      return NULL;
+   }
+
    pipe_mutex_lock(qdws->bo_handles_mutex);
 
    if (whandle->type == DRM_API_HANDLE_TYPE_SHARED) {
@@ -728,7 +734,7 @@ static bool virgl_fence_wait(struct virgl_winsys *vws,
    struct virgl_hw_res *res = virgl_hw_res(fence);
 
    if (timeout == 0)
-      return virgl_drm_resource_is_busy(vdws, res);
+      return !virgl_drm_resource_is_busy(vdws, res);
 
    if (timeout != PIPE_TIMEOUT_INFINITE) {
       int64_t start_time = os_time_get();

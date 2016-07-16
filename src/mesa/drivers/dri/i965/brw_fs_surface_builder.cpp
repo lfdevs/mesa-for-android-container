@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "isl/isl.h"
 #include "brw_fs_surface_builder.h"
 #include "brw_fs.h"
 
@@ -164,6 +165,60 @@ namespace brw {
 
 namespace {
    namespace image_format_info {
+      /* The higher compiler layers use the GL enums for image formats even if
+       * they come in from SPIR-V or Vulkan.  We need to turn them into an ISL
+       * enum before we can use them.
+       */
+      enum isl_format
+      isl_format_for_gl_format(uint32_t gl_format)
+      {
+         switch (gl_format) {
+         case GL_R8:             return ISL_FORMAT_R8_UNORM;
+         case GL_R8_SNORM:       return ISL_FORMAT_R8_SNORM;
+         case GL_R8UI:           return ISL_FORMAT_R8_UINT;
+         case GL_R8I:            return ISL_FORMAT_R8_SINT;
+         case GL_RG8:            return ISL_FORMAT_R8G8_UNORM;
+         case GL_RG8_SNORM:      return ISL_FORMAT_R8G8_SNORM;
+         case GL_RG8UI:          return ISL_FORMAT_R8G8_UINT;
+         case GL_RG8I:           return ISL_FORMAT_R8G8_SINT;
+         case GL_RGBA8:          return ISL_FORMAT_R8G8B8A8_UNORM;
+         case GL_RGBA8_SNORM:    return ISL_FORMAT_R8G8B8A8_SNORM;
+         case GL_RGBA8UI:        return ISL_FORMAT_R8G8B8A8_UINT;
+         case GL_RGBA8I:         return ISL_FORMAT_R8G8B8A8_SINT;
+         case GL_R11F_G11F_B10F: return ISL_FORMAT_R11G11B10_FLOAT;
+         case GL_RGB10_A2:       return ISL_FORMAT_R10G10B10A2_UNORM;
+         case GL_RGB10_A2UI:     return ISL_FORMAT_R10G10B10A2_UINT;
+         case GL_R16:            return ISL_FORMAT_R16_UNORM;
+         case GL_R16_SNORM:      return ISL_FORMAT_R16_SNORM;
+         case GL_R16F:           return ISL_FORMAT_R16_FLOAT;
+         case GL_R16UI:          return ISL_FORMAT_R16_UINT;
+         case GL_R16I:           return ISL_FORMAT_R16_SINT;
+         case GL_RG16:           return ISL_FORMAT_R16G16_UNORM;
+         case GL_RG16_SNORM:     return ISL_FORMAT_R16G16_SNORM;
+         case GL_RG16F:          return ISL_FORMAT_R16G16_FLOAT;
+         case GL_RG16UI:         return ISL_FORMAT_R16G16_UINT;
+         case GL_RG16I:          return ISL_FORMAT_R16G16_SINT;
+         case GL_RGBA16:         return ISL_FORMAT_R16G16B16A16_UNORM;
+         case GL_RGBA16_SNORM:   return ISL_FORMAT_R16G16B16A16_SNORM;
+         case GL_RGBA16F:        return ISL_FORMAT_R16G16B16A16_FLOAT;
+         case GL_RGBA16UI:       return ISL_FORMAT_R16G16B16A16_UINT;
+         case GL_RGBA16I:        return ISL_FORMAT_R16G16B16A16_SINT;
+         case GL_R32F:           return ISL_FORMAT_R32_FLOAT;
+         case GL_R32UI:          return ISL_FORMAT_R32_UINT;
+         case GL_R32I:           return ISL_FORMAT_R32_SINT;
+         case GL_RG32F:          return ISL_FORMAT_R32G32_FLOAT;
+         case GL_RG32UI:         return ISL_FORMAT_R32G32_UINT;
+         case GL_RG32I:          return ISL_FORMAT_R32G32_SINT;
+         case GL_RGBA32F:        return ISL_FORMAT_R32G32B32A32_FLOAT;
+         case GL_RGBA32UI:       return ISL_FORMAT_R32G32B32A32_UINT;
+         case GL_RGBA32I:        return ISL_FORMAT_R32G32B32A32_SINT;
+         case GL_NONE:           return ISL_FORMAT_UNSUPPORTED;
+         default:
+            assert(!"Invalid image format");
+            return ISL_FORMAT_UNSUPPORTED;
+         }
+      }
+
       /**
        * Simple 4-tuple of scalars used to pass around per-color component
        * values.
@@ -192,19 +247,21 @@ namespace {
        * Return the per-channel bitfield widths for a given image format.
        */
       inline color_u
-      get_bit_widths(mesa_format format)
+      get_bit_widths(isl_format format)
       {
-         return color_u(_mesa_get_format_bits(format, GL_RED_BITS),
-                        _mesa_get_format_bits(format, GL_GREEN_BITS),
-                        _mesa_get_format_bits(format, GL_BLUE_BITS),
-                        _mesa_get_format_bits(format, GL_ALPHA_BITS));
+         const isl_format_layout *fmtl = isl_format_get_layout(format);
+
+         return color_u(fmtl->channels.r.bits,
+                        fmtl->channels.g.bits,
+                        fmtl->channels.b.bits,
+                        fmtl->channels.a.bits);
       }
 
       /**
        * Return the per-channel bitfield shifts for a given image format.
        */
       inline color_u
-      get_bit_shifts(mesa_format format)
+      get_bit_shifts(isl_format format)
       {
          const color_u widths = get_bit_widths(format);
          return color_u(0, widths.r, widths.r + widths.g,
@@ -215,7 +272,7 @@ namespace {
        * Return true if all present components have the same bit width.
        */
       inline bool
-      is_homogeneous(mesa_format format)
+      is_homogeneous(isl_format format)
       {
          const color_u widths = get_bit_widths(format);
          return ((widths.g == 0 || widths.g == widths.r) &&
@@ -227,10 +284,10 @@ namespace {
        * Return true if the format conversion boils down to a trivial copy.
        */
       inline bool
-      is_conversion_trivial(const brw_device_info *devinfo, mesa_format format)
+      is_conversion_trivial(const brw_device_info *devinfo, isl_format format)
       {
          return (get_bit_widths(format).r == 32 && is_homogeneous(format)) ||
-                 format == brw_lower_mesa_image_format(devinfo, format);
+                 format == isl_lower_storage_image_format(devinfo, format);
       }
 
       /**
@@ -239,11 +296,11 @@ namespace {
        */
       inline bool
       has_supported_bit_layout(const brw_device_info *devinfo,
-                               mesa_format format)
+                               isl_format format)
       {
          const color_u widths = get_bit_widths(format);
          const color_u lower_widths = get_bit_widths(
-            brw_lower_mesa_image_format(devinfo, format));
+            isl_lower_storage_image_format(devinfo, format));
 
          return (widths.r == lower_widths.r &&
                  widths.g == lower_widths.g &&
@@ -257,27 +314,13 @@ namespace {
        * friends implemented as RGBA16UI).
        */
       inline bool
-      has_split_bit_layout(const brw_device_info *devinfo, mesa_format format)
+      has_split_bit_layout(const brw_device_info *devinfo, isl_format format)
       {
-         const mesa_format lower_format =
-            brw_lower_mesa_image_format(devinfo, format);
+         const isl_format lower_format =
+            isl_lower_storage_image_format(devinfo, format);
 
-         return (_mesa_format_num_components(format) <
-                 _mesa_format_num_components(lower_format));
-      }
-
-      /**
-       * Return true unless we have to fall back to untyped surface access.
-       * Fail!
-       */
-      inline bool
-      has_matching_typed_format(const brw_device_info *devinfo,
-                                mesa_format format)
-      {
-         return (_mesa_get_format_bytes(format) <= 4 ||
-                 (_mesa_get_format_bytes(format) <= 8 &&
-                  (devinfo->gen >= 8 || devinfo->is_haswell)) ||
-                 devinfo->gen >= 9);
+         return (isl_format_get_num_channels(format) <
+                 isl_format_get_num_channels(lower_format));
       }
 
       /**
@@ -289,14 +332,14 @@ namespace {
        */
       inline bool
       has_undefined_high_bits(const brw_device_info *devinfo,
-                              mesa_format format)
+                              isl_format format)
       {
-         const mesa_format lower_format =
-            brw_lower_mesa_image_format(devinfo, format);
+         const isl_format lower_format =
+            isl_lower_storage_image_format(devinfo, format);
 
          return (devinfo->gen == 7 && !devinfo->is_haswell &&
-                 (lower_format == MESA_FORMAT_R_UINT16 ||
-                  lower_format == MESA_FORMAT_R_UINT8));
+                 (lower_format == ISL_FORMAT_R16_UINT ||
+                  lower_format == ISL_FORMAT_R8_UINT));
       }
 
       /**
@@ -304,10 +347,10 @@ namespace {
        * requiring sign extension when unpacking.
        */
       inline bool
-      needs_sign_extension(mesa_format format)
+      needs_sign_extension(isl_format format)
       {
-         return (_mesa_get_format_datatype(format) == GL_SIGNED_NORMALIZED ||
-                 _mesa_get_format_datatype(format) == GL_INT);
+         return isl_format_has_snorm_channel(format) ||
+                isl_format_has_sint_channel(format);
       }
    }
 
@@ -403,13 +446,14 @@ namespace {
       unsigned
       num_image_coordinates(const fs_builder &bld,
                             unsigned surf_dims, unsigned arr_dims,
-                            mesa_format format)
+                            isl_format format)
       {
          /* HSW in vec4 mode and our software coordinate handling for untyped
           * reads want the array index to be at the Z component.
           */
          const bool array_index_at_z =
-            !image_format_info::has_matching_typed_format(
+            format != ISL_FORMAT_UNSUPPORTED &&
+            !isl_has_matching_typed_storage_image_format(
                bld.shader->devinfo, format);
          const unsigned zero_dims =
             ((surf_dims == 1 && arr_dims == 1 && array_index_at_z) ? 1 : 0);
@@ -424,7 +468,7 @@ namespace {
       fs_reg
       emit_image_coordinates(const fs_builder &bld, const fs_reg &addr,
                              unsigned surf_dims, unsigned arr_dims,
-                             mesa_format format)
+                             isl_format format)
       {
          const unsigned dims =
             num_image_coordinates(bld, surf_dims, arr_dims, format);
@@ -717,6 +761,15 @@ namespace {
                   bld.emit_minmax(offset(dst, bld, c), offset(dst, bld, c),
                                   brw_imm_d(-(int)scale(widths[c] - s) - 1),
                                   BRW_CONDITIONAL_GE);
+
+               /* Mask off all but the bits we actually want.  Otherwise, if
+                * we pass a negative number into the hardware when it's
+                * expecting something like UINT8, it will happily clamp it to
+                * +255 for us.
+                */
+               if (is_signed && widths[c] < 32)
+                  bld.AND(offset(dst, bld, c), offset(dst, bld, c),
+                          brw_imm_d(scale(widths[c])));
             }
          }
 
@@ -787,6 +840,15 @@ namespace {
                /* Convert to integer. */
                bld.RNDE(offset(fdst, bld, c), offset(fdst, bld, c));
                bld.MOV(offset(dst, bld, c), offset(fdst, bld, c));
+
+               /* Mask off all but the bits we actually want.  Otherwise, if
+                * we pass a negative number into the hardware when it's
+                * expecting something like UINT8, it will happily clamp it to
+                * +255 for us.
+                */
+               if (is_signed && widths[c] < 32)
+                  bld.AND(offset(dst, bld, c), offset(dst, bld, c),
+                          brw_imm_d(scale(widths[c])));
             }
          }
 
@@ -893,7 +955,7 @@ namespace brw {
       emit_image_load(const fs_builder &bld,
                       const fs_reg &image, const fs_reg &addr,
                       unsigned surf_dims, unsigned arr_dims,
-                      mesa_format format)
+                      unsigned gl_format)
       {
          using namespace image_format_info;
          using namespace image_format_conversion;
@@ -901,8 +963,9 @@ namespace brw {
          using namespace image_coordinates;
          using namespace surface_access;
          const brw_device_info *devinfo = bld.shader->devinfo;
-         const mesa_format lower_format =
-            brw_lower_mesa_image_format(devinfo, format);
+         const isl_format format = isl_format_for_gl_format(gl_format);
+         const isl_format lower_format =
+            isl_lower_storage_image_format(devinfo, format);
          fs_reg tmp;
 
          /* Transform the image coordinates into actual surface coordinates. */
@@ -911,16 +974,15 @@ namespace brw {
          const unsigned dims =
             num_image_coordinates(bld, surf_dims, arr_dims, format);
 
-         if (has_matching_typed_format(devinfo, format)) {
+         if (isl_has_matching_typed_storage_image_format(devinfo, format)) {
             /* Hopefully we get here most of the time... */
             tmp = emit_typed_read(bld, image, saddr, dims,
-                                  _mesa_format_num_components(lower_format));
+                                  isl_format_get_num_channels(lower_format));
          } else {
             /* Untyped surface reads return 32 bits of the surface per
              * component, without any sort of unpacking or type conversion,
              */
-            const unsigned size = _mesa_get_format_bytes(format) / 4;
-
+            const unsigned size = isl_format_get_layout(format)->bs / 4;
             /* they don't properly handle out of bounds access, so we have to
              * check manually if the coordinates are valid and predicate the
              * surface read on the result,
@@ -972,19 +1034,19 @@ namespace brw {
                               get_bit_widths(format));
          }
 
-         if (!_mesa_is_format_integer(format)) {
+         if (!isl_format_has_int_channel(format)) {
             if (is_conversion_trivial(devinfo, format)) {
                /* Just need to cast the vector to the target type. */
                tmp = retype(tmp, BRW_REGISTER_TYPE_F);
             } else {
                /* Do the right sort of type conversion to float. */
-               if (_mesa_get_format_datatype(format) == GL_FLOAT)
+               if (isl_format_has_float_channel(format))
                   tmp = emit_convert_from_float(
                      bld, tmp, get_bit_widths(format));
                else
                   tmp = emit_convert_from_scaled(
                      bld, tmp, get_bit_widths(format),
-                     _mesa_is_format_signed(format));
+                     isl_format_has_snorm_channel(format));
             }
          }
 
@@ -1001,13 +1063,14 @@ namespace brw {
       emit_image_store(const fs_builder &bld, const fs_reg &image,
                        const fs_reg &addr, const fs_reg &src,
                        unsigned surf_dims, unsigned arr_dims,
-                       mesa_format format)
+                       unsigned gl_format)
       {
          using namespace image_format_info;
          using namespace image_format_conversion;
          using namespace image_validity;
          using namespace image_coordinates;
          using namespace surface_access;
+         const isl_format format = isl_format_for_gl_format(gl_format);
          const brw_device_info *devinfo = bld.shader->devinfo;
 
          /* Transform the image coordinates into actual surface coordinates. */
@@ -1016,7 +1079,7 @@ namespace brw {
          const unsigned dims =
             num_image_coordinates(bld, surf_dims, arr_dims, format);
 
-         if (format == MESA_FORMAT_NONE) {
+         if (gl_format == GL_NONE) {
             /* We don't know what the format is, but that's fine because it
              * implies write-only access, and typed surface writes are always
              * able to take care of type conversion and packing for us.
@@ -1024,22 +1087,22 @@ namespace brw {
             emit_typed_write(bld, image, saddr, src, dims, 4);
 
          } else {
-            const mesa_format lower_format =
-               brw_lower_mesa_image_format(devinfo, format);
+            const isl_format lower_format =
+               isl_lower_storage_image_format(devinfo, format);
             fs_reg tmp = src;
 
             if (!is_conversion_trivial(devinfo, format)) {
                /* Do the right sort of type conversion. */
-               if (_mesa_get_format_datatype(format) == GL_FLOAT)
+               if (isl_format_has_float_channel(format))
                   tmp = emit_convert_to_float(bld, tmp, get_bit_widths(format));
 
-               else if (_mesa_is_format_integer(format))
+               else if (isl_format_has_int_channel(format))
                   tmp = emit_convert_to_integer(bld, tmp, get_bit_widths(format),
-                                                _mesa_is_format_signed(format));
+                                                isl_format_has_sint_channel(format));
 
                else
                   tmp = emit_convert_to_scaled(bld, tmp, get_bit_widths(format),
-                                               _mesa_is_format_signed(format));
+                                               isl_format_has_snorm_channel(format));
             }
 
             /* We're down to bit manipulation at this point. */
@@ -1058,16 +1121,16 @@ namespace brw {
                                   get_bit_widths(format));
             }
 
-            if (has_matching_typed_format(devinfo, format)) {
+            if (isl_has_matching_typed_storage_image_format(devinfo, format)) {
                /* Hopefully we get here most of the time... */
                emit_typed_write(bld, image, saddr, tmp, dims,
-                                _mesa_format_num_components(lower_format));
+                                isl_format_get_num_channels(lower_format));
 
             } else {
                /* Untyped surface writes store 32 bits of the surface per
                 * component, without any sort of packing or type conversion,
                 */
-               const unsigned size = _mesa_get_format_bytes(format) / 4;
+               const unsigned size = isl_format_get_layout(format)->bs / 4;
 
                /* they don't properly handle out of bounds access, so we have
                 * to check manually if the coordinates are valid and predicate
@@ -1112,10 +1175,10 @@ namespace brw {
          /* Transform the image coordinates into actual surface coordinates. */
          const fs_reg saddr =
             emit_image_coordinates(bld, addr, surf_dims, arr_dims,
-                                  MESA_FORMAT_R_UINT32);
+                                   ISL_FORMAT_R32_UINT);
          const unsigned dims =
             num_image_coordinates(bld, surf_dims, arr_dims,
-                                  MESA_FORMAT_R_UINT32);
+                                  ISL_FORMAT_R32_UINT);
 
          /* Thankfully we can do without untyped atomics here. */
          const fs_reg tmp = emit_typed_atomic(bld, image, saddr, src0, src1,
@@ -1125,7 +1188,7 @@ namespace brw {
          if (rsize && pred)
             set_predicate(pred, bld.SEL(tmp, tmp, brw_imm_d(0)));
 
-         return tmp;
+         return retype(tmp, src0.type);
       }
    }
 }

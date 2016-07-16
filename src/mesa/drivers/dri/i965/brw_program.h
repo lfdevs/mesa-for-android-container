@@ -32,6 +32,12 @@ extern "C" {
 
 struct brw_context;
 
+struct nir_shader *brw_create_nir(struct brw_context *brw,
+                                  const struct gl_shader_program *shader_prog,
+                                  const struct gl_program *prog,
+                                  gl_shader_stage stage,
+                                  bool is_scalar);
+
 void brw_setup_tex_for_precompile(struct brw_context *brw,
                                   struct brw_sampler_prog_key_data *tex,
                                   struct gl_program *prog);

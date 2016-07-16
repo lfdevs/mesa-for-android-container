@@ -311,6 +311,25 @@ svga_set_stream_output_targets(struct pipe_context *pipe,
    svga->num_so_targets = num_targets;
 }
 
+/**
+ * Rebind stream output target surfaces
+ */
+enum pipe_error
+svga_rebind_stream_output_targets(struct svga_context *svga)
+{
+   struct svga_winsys_context *swc = svga->swc;
+   enum pipe_error ret;
+   unsigned i;
+
+   for (i = 0; i < svga->num_so_targets; i++) {
+      ret = swc->resource_rebind(swc, svga->so_surfaces[i], NULL, SVGA_RELOC_WRITE);
+      if (ret != PIPE_OK)
+         return ret;
+   }
+
+   return PIPE_OK;
+}
+
 void
 svga_init_stream_output_functions(struct svga_context *svga)
 {

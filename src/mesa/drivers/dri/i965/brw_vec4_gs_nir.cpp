@@ -43,8 +43,7 @@ vec4_gs_visitor::nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_load_invocation_id:
       reg = &this->nir_system_values[SYSTEM_VALUE_INVOCATION_ID];
       if (reg->file == BAD_FILE)
-         *reg = *this->make_reg_for_system_value(SYSTEM_VALUE_INVOCATION_ID,
-                                                 glsl_type::int_type);
+         *reg = *this->make_reg_for_system_value(SYSTEM_VALUE_INVOCATION_ID);
       break;
 
    default:
@@ -70,8 +69,8 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       /* Make up a type...we have no way of knowing... */
       const glsl_type *const type = glsl_type::ivec(instr->num_components);
 
-      src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u[0] +
-                          instr->const_index[0] + offset->u[0],
+      src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u32[0] +
+                          instr->const_index[0] + offset->u32[0],
                     type);
       /* gl_PointSize is passed in the .w component of the VUE header */
       if (instr->const_index[0] == VARYING_SLOT_PSIZ)

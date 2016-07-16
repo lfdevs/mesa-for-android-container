@@ -98,14 +98,12 @@ struct svga_compile_key
       unsigned compare_func:3;
       unsigned unnormalized:1;
       unsigned width_height_idx:5; /**< texture unit */
-      unsigned texture_target:4;   /**< PIPE_TEXTURE_x */
-      unsigned texture_msaa:1;    /**< A multisample texture? */
+      unsigned is_array:1;
       unsigned sprite_texgen:1;
       unsigned swizzle_r:3;
       unsigned swizzle_g:3;
       unsigned swizzle_b:3;
       unsigned swizzle_a:3;
-      unsigned return_type:3;  /**< TGSI_RETURN_TYPE_x */
    } tex[PIPE_MAX_SAMPLERS];
    /* Note: svga_compile_keys_equal() depends on the variable-size
     * tex[] array being at the end of this structure.

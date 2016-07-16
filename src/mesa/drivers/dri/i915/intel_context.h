@@ -40,16 +40,15 @@ extern "C" {
 	#define virtual virt
 #endif
 
-#include "drm.h"
-#include "intel_bufmgr.h"
-
-#include "intel_screen.h"
-#include "intel_tex_obj.h"
-#include "i915_drm.h"
-
+#include <drm.h>
+#include <intel_bufmgr.h>
+#include <i915_drm.h>
 #ifdef __cplusplus
 	#undef virtual
 #endif
+
+#include "intel_screen.h"
+#include "intel_tex_obj.h"
 
 #include "tnl/t_vertex.h"
 

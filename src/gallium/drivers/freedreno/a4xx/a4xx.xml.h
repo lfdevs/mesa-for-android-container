@@ -12,9 +12,9 @@ The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2016-02-10 17:07:21)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32901 bytes, from 2015-05-20 20:03:14)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  11518 bytes, from 2016-02-10 21:03:25)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  16166 bytes, from 2016-02-11 21:20:31)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  16185 bytes, from 2016-03-05 03:08:05)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83967 bytes, from 2016-02-10 17:07:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 109858 bytes, from 2016-02-10 17:07:21)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 110685 bytes, from 2016-04-25 17:56:43)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2015-09-24 17:30:00)
 
 Copyright (C) 2013-2016 by the following authors:
@@ -46,6 +46,9 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 enum a4xx_color_fmt {
 	RB4_A8_UNORM = 1,
 	RB4_R8_UNORM = 2,
+	RB4_R8_SNORM = 3,
+	RB4_R8_UINT = 4,
+	RB4_R8_SINT = 5,
 	RB4_R4G4B4A4_UNORM = 8,
 	RB4_R5G5B5A1_UNORM = 10,
 	RB4_R5G6B5_UNORM = 14,
@@ -940,6 +943,7 @@ static inline uint32_t A4XX_RB_MODE_CONTROL_HEIGHT(uint32_t val)
 {
 	return ((val >> 5) << A4XX_RB_MODE_CONTROL_HEIGHT__SHIFT) & A4XX_RB_MODE_CONTROL_HEIGHT__MASK;
 }
+#define A4XX_RB_MODE_CONTROL_ENABLE_GMEM			0x00010000
 
 #define REG_A4XX_RB_RENDER_CONTROL				0x000020a1
 #define A4XX_RB_RENDER_CONTROL_BINNING_PASS			0x00000001
@@ -1073,11 +1077,17 @@ static inline uint32_t A4XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(enum adreno_r
 }
 
 #define REG_A4XX_RB_BLEND_RED					0x000020f0
-#define A4XX_RB_BLEND_RED_UINT__MASK				0x0000ffff
+#define A4XX_RB_BLEND_RED_UINT__MASK				0x000000ff
 #define A4XX_RB_BLEND_RED_UINT__SHIFT				0
 static inline uint32_t A4XX_RB_BLEND_RED_UINT(uint32_t val)
 {
 	return ((val) << A4XX_RB_BLEND_RED_UINT__SHIFT) & A4XX_RB_BLEND_RED_UINT__MASK;
+}
+#define A4XX_RB_BLEND_RED_SINT__MASK				0x0000ff00
+#define A4XX_RB_BLEND_RED_SINT__SHIFT				8
+static inline uint32_t A4XX_RB_BLEND_RED_SINT(uint32_t val)
+{
+	return ((val) << A4XX_RB_BLEND_RED_SINT__SHIFT) & A4XX_RB_BLEND_RED_SINT__MASK;
 }
 #define A4XX_RB_BLEND_RED_FLOAT__MASK				0xffff0000
 #define A4XX_RB_BLEND_RED_FLOAT__SHIFT				16
@@ -1095,11 +1105,17 @@ static inline uint32_t A4XX_RB_BLEND_RED_F32(float val)
 }
 
 #define REG_A4XX_RB_BLEND_GREEN					0x000020f2
-#define A4XX_RB_BLEND_GREEN_UINT__MASK				0x0000ffff
+#define A4XX_RB_BLEND_GREEN_UINT__MASK				0x000000ff
 #define A4XX_RB_BLEND_GREEN_UINT__SHIFT				0
 static inline uint32_t A4XX_RB_BLEND_GREEN_UINT(uint32_t val)
 {
 	return ((val) << A4XX_RB_BLEND_GREEN_UINT__SHIFT) & A4XX_RB_BLEND_GREEN_UINT__MASK;
+}
+#define A4XX_RB_BLEND_GREEN_SINT__MASK				0x0000ff00
+#define A4XX_RB_BLEND_GREEN_SINT__SHIFT				8
+static inline uint32_t A4XX_RB_BLEND_GREEN_SINT(uint32_t val)
+{
+	return ((val) << A4XX_RB_BLEND_GREEN_SINT__SHIFT) & A4XX_RB_BLEND_GREEN_SINT__MASK;
 }
 #define A4XX_RB_BLEND_GREEN_FLOAT__MASK				0xffff0000
 #define A4XX_RB_BLEND_GREEN_FLOAT__SHIFT			16
@@ -1117,11 +1133,17 @@ static inline uint32_t A4XX_RB_BLEND_GREEN_F32(float val)
 }
 
 #define REG_A4XX_RB_BLEND_BLUE					0x000020f4
-#define A4XX_RB_BLEND_BLUE_UINT__MASK				0x0000ffff
+#define A4XX_RB_BLEND_BLUE_UINT__MASK				0x000000ff
 #define A4XX_RB_BLEND_BLUE_UINT__SHIFT				0
 static inline uint32_t A4XX_RB_BLEND_BLUE_UINT(uint32_t val)
 {
 	return ((val) << A4XX_RB_BLEND_BLUE_UINT__SHIFT) & A4XX_RB_BLEND_BLUE_UINT__MASK;
+}
+#define A4XX_RB_BLEND_BLUE_SINT__MASK				0x0000ff00
+#define A4XX_RB_BLEND_BLUE_SINT__SHIFT				8
+static inline uint32_t A4XX_RB_BLEND_BLUE_SINT(uint32_t val)
+{
+	return ((val) << A4XX_RB_BLEND_BLUE_SINT__SHIFT) & A4XX_RB_BLEND_BLUE_SINT__MASK;
 }
 #define A4XX_RB_BLEND_BLUE_FLOAT__MASK				0xffff0000
 #define A4XX_RB_BLEND_BLUE_FLOAT__SHIFT				16
@@ -1139,11 +1161,17 @@ static inline uint32_t A4XX_RB_BLEND_BLUE_F32(float val)
 }
 
 #define REG_A4XX_RB_BLEND_ALPHA					0x000020f6
-#define A4XX_RB_BLEND_ALPHA_UINT__MASK				0x0000ffff
+#define A4XX_RB_BLEND_ALPHA_UINT__MASK				0x000000ff
 #define A4XX_RB_BLEND_ALPHA_UINT__SHIFT				0
 static inline uint32_t A4XX_RB_BLEND_ALPHA_UINT(uint32_t val)
 {
 	return ((val) << A4XX_RB_BLEND_ALPHA_UINT__SHIFT) & A4XX_RB_BLEND_ALPHA_UINT__MASK;
+}
+#define A4XX_RB_BLEND_ALPHA_SINT__MASK				0x0000ff00
+#define A4XX_RB_BLEND_ALPHA_SINT__SHIFT				8
+static inline uint32_t A4XX_RB_BLEND_ALPHA_SINT(uint32_t val)
+{
+	return ((val) << A4XX_RB_BLEND_ALPHA_SINT__SHIFT) & A4XX_RB_BLEND_ALPHA_SINT__MASK;
 }
 #define A4XX_RB_BLEND_ALPHA_FLOAT__MASK				0xffff0000
 #define A4XX_RB_BLEND_ALPHA_FLOAT__SHIFT			16
@@ -1613,6 +1641,7 @@ static inline uint32_t REG_A4XX_RBBM_CLOCK_DELAY_TP_REG(uint32_t i0) { return 0x
 
 #define REG_A4XX_RBBM_POWER_CNTL_IP				0x00000098
 #define A4XX_RBBM_POWER_CNTL_IP_SW_COLLAPSE			0x00000001
+#define A4XX_RBBM_POWER_CNTL_IP_SP_TP_PWR_ON			0x00100000
 
 #define REG_A4XX_RBBM_PERFCTR_CP_0_LO				0x0000009c
 
@@ -3688,6 +3717,20 @@ static inline uint32_t A4XX_HLSQ_GS_CONTROL_REG_INSTRLENGTH(uint32_t val)
 #define REG_A4XX_PC_PERFCTR_PC_SEL_7				0x00000d17
 
 #define REG_A4XX_PC_BIN_BASE					0x000021c0
+
+#define REG_A4XX_PC_VSTREAM_CONTROL				0x000021c2
+#define A4XX_PC_VSTREAM_CONTROL_SIZE__MASK			0x003f0000
+#define A4XX_PC_VSTREAM_CONTROL_SIZE__SHIFT			16
+static inline uint32_t A4XX_PC_VSTREAM_CONTROL_SIZE(uint32_t val)
+{
+	return ((val) << A4XX_PC_VSTREAM_CONTROL_SIZE__SHIFT) & A4XX_PC_VSTREAM_CONTROL_SIZE__MASK;
+}
+#define A4XX_PC_VSTREAM_CONTROL_N__MASK				0x07c00000
+#define A4XX_PC_VSTREAM_CONTROL_N__SHIFT			22
+static inline uint32_t A4XX_PC_VSTREAM_CONTROL_N(uint32_t val)
+{
+	return ((val) << A4XX_PC_VSTREAM_CONTROL_N__SHIFT) & A4XX_PC_VSTREAM_CONTROL_N__MASK;
+}
 
 #define REG_A4XX_PC_PRIM_VTX_CNTL				0x000021c4
 #define A4XX_PC_PRIM_VTX_CNTL_VAROUT__MASK			0x0000000f

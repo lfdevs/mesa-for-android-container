@@ -58,11 +58,12 @@ nvc0_begin_query(struct pipe_context *pipe, struct pipe_query *pq)
    return q->funcs->begin_query(nvc0_context(pipe), q);
 }
 
-static void
+static bool
 nvc0_end_query(struct pipe_context *pipe, struct pipe_query *pq)
 {
    struct nvc0_query *q = nvc0_query(pq);
    q->funcs->end_query(nvc0_context(pipe), q);
+   return true;
 }
 
 static boolean
@@ -204,10 +205,7 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
 
    if (screen->base.drm->version >= 0x01000101) {
       if (screen->compute) {
-         if (screen->base.class_3d == NVE4_3D_CLASS) {
-            count += 2;
-         } else
-         if (screen->base.class_3d < NVE4_3D_CLASS) {
+         if (screen->base.class_3d <= NVF0_3D_CLASS) {
             count += 2;
          }
       }
@@ -227,29 +225,16 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
           * currently only used by AMD_performance_monitor.
           */
          info->max_active_queries = 1;
-
-         if (screen->base.class_3d == NVE4_3D_CLASS) {
-            info->num_queries = NVE4_HW_SM_QUERY_COUNT;
-            return 1;
-         } else
-         if (screen->base.class_3d < NVE4_3D_CLASS) {
-            info->num_queries = NVC0_HW_SM_QUERY_COUNT;
-            return 1;
-         }
+         info->num_queries = nvc0_hw_sm_get_num_queries(screen);
+         return 1;
       }
    } else
    if (id == NVC0_HW_METRIC_QUERY_GROUP) {
       if (screen->compute) {
-          if (screen->base.class_3d == NVE4_3D_CLASS) {
+          if (screen->base.class_3d <= NVF0_3D_CLASS) {
             info->name = "Performance metrics";
             info->max_active_queries = 1;
-            info->num_queries = NVE4_HW_METRIC_QUERY_COUNT;
-            return 1;
-         } else
-         if (screen->base.class_3d < NVE4_3D_CLASS) {
-            info->name = "Performance metrics";
-            info->max_active_queries = 1;
-            info->num_queries = NVC0_HW_METRIC_QUERY_COUNT;
+            info->num_queries = nvc0_hw_metric_get_num_queries(screen);
             return 1;
          }
       }
@@ -270,6 +255,11 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
    return 0;
 }
 
+static void
+nvc0_set_active_query_state(struct pipe_context *pipe, boolean enable)
+{
+}
+
 void
 nvc0_init_query_functions(struct nvc0_context *nvc0)
 {
@@ -281,6 +271,7 @@ nvc0_init_query_functions(struct nvc0_context *nvc0)
    pipe->end_query = nvc0_end_query;
    pipe->get_query_result = nvc0_get_query_result;
    pipe->get_query_result_resource = nvc0_get_query_result_resource;
+   pipe->set_active_query_state = nvc0_set_active_query_state;
    pipe->render_condition = nvc0_render_condition;
    nvc0->cond_condmode = NVC0_3D_COND_MODE_ALWAYS;
 }

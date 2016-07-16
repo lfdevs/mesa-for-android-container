@@ -2113,7 +2113,7 @@ lp_build_lod_property(
        reg->Register.File == TGSI_FILE_IMMEDIATE) {
       lod_property = LP_SAMPLER_LOD_SCALAR;
    }
-   else if (bld_base->info->processor == TGSI_PROCESSOR_FRAGMENT) {
+   else if (bld_base->info->processor == PIPE_SHADER_FRAGMENT) {
       if (gallivm_debug & GALLIVM_DEBUG_NO_QUAD_LOD) {
          lod_property = LP_SAMPLER_LOD_PER_ELEMENT;
       }
@@ -2301,7 +2301,7 @@ emit_tex( struct lp_build_tgsi_soa_context *bld,
        * could also check all src regs if constant but I doubt such
        * cases exist in practice.
        */
-      if (bld->bld_base.info->processor == TGSI_PROCESSOR_FRAGMENT) {
+      if (bld->bld_base.info->processor == PIPE_SHADER_FRAGMENT) {
          if (gallivm_debug & GALLIVM_DEBUG_NO_QUAD_LOD) {
             lod_property = LP_SAMPLER_LOD_PER_ELEMENT;
          }
@@ -2469,7 +2469,7 @@ emit_sample(struct lp_build_tgsi_soa_context *bld,
        * could also check all src regs if constant but I doubt such
        * cases exist in practice.
        */
-      if (bld->bld_base.info->processor == TGSI_PROCESSOR_FRAGMENT) {
+      if (bld->bld_base.info->processor == PIPE_SHADER_FRAGMENT) {
          if (gallivm_debug & GALLIVM_DEBUG_NO_QUAD_LOD) {
             lod_property = LP_SAMPLER_LOD_PER_ELEMENT;
          }
@@ -2507,10 +2507,10 @@ emit_sample(struct lp_build_tgsi_soa_context *bld,
                                  bld->bld_base.base.gallivm,
                                  &params);
 
-   if (inst->Src[1].Register.SwizzleX != PIPE_SWIZZLE_RED ||
-       inst->Src[1].Register.SwizzleY != PIPE_SWIZZLE_GREEN ||
-       inst->Src[1].Register.SwizzleZ != PIPE_SWIZZLE_BLUE ||
-       inst->Src[1].Register.SwizzleW != PIPE_SWIZZLE_ALPHA) {
+   if (inst->Src[1].Register.SwizzleX != PIPE_SWIZZLE_X ||
+       inst->Src[1].Register.SwizzleY != PIPE_SWIZZLE_Y ||
+       inst->Src[1].Register.SwizzleZ != PIPE_SWIZZLE_Z ||
+       inst->Src[1].Register.SwizzleW != PIPE_SWIZZLE_W) {
       unsigned char swizzles[4];
       swizzles[0] = inst->Src[1].Register.SwizzleX;
       swizzles[1] = inst->Src[1].Register.SwizzleY;
@@ -2638,10 +2638,10 @@ emit_fetch_texels( struct lp_build_tgsi_soa_context *bld,
                                  &params);
 
    if (is_samplei &&
-       (inst->Src[1].Register.SwizzleX != PIPE_SWIZZLE_RED ||
-        inst->Src[1].Register.SwizzleY != PIPE_SWIZZLE_GREEN ||
-        inst->Src[1].Register.SwizzleZ != PIPE_SWIZZLE_BLUE ||
-        inst->Src[1].Register.SwizzleW != PIPE_SWIZZLE_ALPHA)) {
+       (inst->Src[1].Register.SwizzleX != PIPE_SWIZZLE_X ||
+        inst->Src[1].Register.SwizzleY != PIPE_SWIZZLE_Y ||
+        inst->Src[1].Register.SwizzleZ != PIPE_SWIZZLE_Z ||
+        inst->Src[1].Register.SwizzleW != PIPE_SWIZZLE_W)) {
       unsigned char swizzles[4];
       swizzles[0] = inst->Src[1].Register.SwizzleX;
       swizzles[1] = inst->Src[1].Register.SwizzleY;
@@ -2664,6 +2664,7 @@ emit_size_query( struct lp_build_tgsi_soa_context *bld,
    unsigned i;
    unsigned unit = inst->Src[1].Register.Index;
    unsigned target, pipe_target;
+   struct lp_sampler_size_query_params params;
 
    if (is_sviewinfo) {
       target = bld->sv[unit].Resource;
@@ -2701,15 +2702,18 @@ emit_size_query( struct lp_build_tgsi_soa_context *bld,
 
    pipe_target = tgsi_to_pipe_tex_target(target);
 
+   params.int_type = bld->bld_base.int_bld.type;
+   params.texture_unit = unit;
+   params.target = pipe_target;
+   params.context_ptr = bld->context_ptr;
+   params.is_sviewinfo = TRUE;
+   params.lod_property = lod_property;
+   params.explicit_lod = explicit_lod;
+   params.sizes_out = sizes_out;
+
    bld->sampler->emit_size_query(bld->sampler,
                                  bld->bld_base.base.gallivm,
-                                 bld->bld_base.int_bld.type,
-                                 unit, pipe_target,
-                                 bld->context_ptr,
-                                 TRUE,
-                                 lod_property,
-                                 explicit_lod,
-                                 sizes_out);
+                                 &params);
 }
 
 static boolean

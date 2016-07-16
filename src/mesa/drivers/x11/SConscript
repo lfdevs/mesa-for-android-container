@@ -34,9 +34,13 @@ sources = [
 	'xm_tri.c',
 ]
 
-# Disallow undefined symbols
 if env['platform'] != 'darwin':
-    env.Append(SHLINKFLAGS = ['-Wl,-z,defs'])
+    # Disallow undefined symbols, except with Address Sanitizer, since libasan
+    # is not linked on shared libs, as it should be LD_PRELOAD'ed instead
+    if not env['asan']:
+        env.Append(SHLINKFLAGS = [
+            '-Wl,-z,defs',
+        ])
 
 # libGL.so.1.6
 libgl_1_6 = env.SharedLibrary(

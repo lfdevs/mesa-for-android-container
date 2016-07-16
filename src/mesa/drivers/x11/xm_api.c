@@ -856,6 +856,7 @@ XMesaVisual XMesaCreateVisual( XMesaDisplay *display,
                                 accum_red_size, accum_green_size,
                                 accum_blue_size, accum_alpha_size,
                                 0)) {
+      free(v->visinfo);
       free(v);
       return NULL;
    }

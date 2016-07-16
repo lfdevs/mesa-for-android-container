@@ -31,13 +31,13 @@ static inline uint32_t
 nv50_tic_swizzle(const struct nv50_format *fmt, unsigned swz, bool tex_int)
 {
    switch (swz) {
-   case PIPE_SWIZZLE_RED  : return fmt->tic.src_x;
-   case PIPE_SWIZZLE_GREEN: return fmt->tic.src_y;
-   case PIPE_SWIZZLE_BLUE : return fmt->tic.src_z;
-   case PIPE_SWIZZLE_ALPHA: return fmt->tic.src_w;
-   case PIPE_SWIZZLE_ONE:
+   case PIPE_SWIZZLE_X  : return fmt->tic.src_x;
+   case PIPE_SWIZZLE_Y: return fmt->tic.src_y;
+   case PIPE_SWIZZLE_Z : return fmt->tic.src_z;
+   case PIPE_SWIZZLE_W: return fmt->tic.src_w;
+   case PIPE_SWIZZLE_1:
       return tex_int ? G80_TIC_SOURCE_ONE_INT : G80_TIC_SOURCE_ONE_FLOAT;
-   case PIPE_SWIZZLE_ZERO:
+   case PIPE_SWIZZLE_0:
    default:
       return G80_TIC_SOURCE_ZERO;
    }
@@ -299,7 +299,7 @@ nv50_validate_tic(struct nv50_context *nv50, int s)
       res->status &= ~NOUVEAU_BUFFER_STATUS_GPU_WRITING;
       res->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
 
-      BCTX_REFN(nv50->bufctx_3d, TEXTURES, res, RD);
+      BCTX_REFN(nv50->bufctx_3d, 3D_TEXTURES, res, RD);
 
       BEGIN_NV04(push, NV50_3D(BIND_TIC(s)), 1);
       PUSH_DATA (push, (tic->id << 9) | (i << 1) | 1);
@@ -449,6 +449,6 @@ void nv50_upload_ms_info(struct nouveau_pushbuf *push)
 {
    BEGIN_NV04(push, NV50_3D(CB_ADDR), 1);
    PUSH_DATA (push, (NV50_CB_AUX_MS_OFFSET << (8 - 2)) | NV50_CB_AUX);
-   BEGIN_NI04(push, NV50_3D(CB_DATA(0)), Elements(msaa_sample_xy_offsets));
-   PUSH_DATAp(push, msaa_sample_xy_offsets, Elements(msaa_sample_xy_offsets));
+   BEGIN_NI04(push, NV50_3D(CB_DATA(0)), ARRAY_SIZE(msaa_sample_xy_offsets));
+   PUSH_DATAp(push, msaa_sample_xy_offsets, ARRAY_SIZE(msaa_sample_xy_offsets));
 }

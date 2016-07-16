@@ -83,7 +83,7 @@ namespace {
    read_body(const char *source, module &m, std::string &r_log) {
       tgsi_token prog[1024];
 
-      if (!tgsi_text_translate(source, prog, Elements(prog))) {
+      if (!tgsi_text_translate(source, prog, ARRAY_SIZE(prog))) {
          r_log = "translate failed";
          throw compile_error();
       }

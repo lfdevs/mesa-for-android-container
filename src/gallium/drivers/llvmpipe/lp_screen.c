@@ -291,6 +291,8 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
    case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
       return 1;
+   case PIPE_CAP_CULL_DISTANCE:
+      return 1;
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
@@ -315,6 +317,13 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
    case PIPE_CAP_QUERY_MEMORY_INFO:
+   case PIPE_CAP_PCI_GROUP:
+   case PIPE_CAP_PCI_BUS:
+   case PIPE_CAP_PCI_DEVICE:
+   case PIPE_CAP_PCI_FUNCTION:
+   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+   case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+   case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
       return 0;
    }
    /* should only get here on unhandled cases */
@@ -469,7 +478,7 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
          return FALSE;
 
       /* TODO: Support stencil-only formats */
-      if (format_desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_NONE) {
+      if (format_desc->swizzle[0] == PIPE_SWIZZLE_NONE) {
          return FALSE;
       }
    }

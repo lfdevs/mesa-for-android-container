@@ -50,8 +50,10 @@ static struct fd3_shader_stateobj *
 create_shader_stateobj(struct pipe_context *pctx, const struct pipe_shader_state *cso,
 		enum shader_t type)
 {
+	struct fd_context *ctx = fd_context(pctx);
+	struct ir3_compiler *compiler = ctx->screen->compiler;
 	struct fd3_shader_stateobj *so = CALLOC_STRUCT(fd3_shader_stateobj);
-	so->shader = ir3_shader_create(pctx, cso, type);
+	so->shader = ir3_shader_create(compiler, cso, type, &ctx->debug);
 	return so;
 }
 
@@ -139,14 +141,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	debug_assert(nr <= ARRAY_SIZE(color_regid));
 
 	vp = fd3_emit_get_vp(emit);
-
-	if (emit->key.binning_pass) {
-		/* use dummy stateobj to simplify binning vs non-binning: */
-		static const struct ir3_shader_variant binning_fp = {};
-		fp = &binning_fp;
-	} else {
-		fp = fd3_emit_get_fp(emit);
-	}
+	fp = fd3_emit_get_fp(emit);
 
 	vsi = &vp->info;
 	fsi = &fp->info;

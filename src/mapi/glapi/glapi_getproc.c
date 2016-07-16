@@ -325,7 +325,7 @@ set_entry_info( struct _glapi_function * entry, const char * signature, unsigned
  * Fill-in the dispatch stub for the named function.
  * 
  * This function is intended to be called by a hardware driver.  When called,
- * a dispatch stub may be created created for the function.  A pointer to this
+ * a dispatch stub may be created for the function.  A pointer to this
  * dispatch function will be returned by glXGetProcAddress.
  *
  * \param function_names       Array of pointers to function names that should

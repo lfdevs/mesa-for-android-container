@@ -48,6 +48,7 @@
 
 #include "state_tracker/st_debug.h"
 #include "state_tracker/st_context.h"
+#include "state_tracker/st_cb_bitmap.h"
 #include "state_tracker/st_cb_fbo.h"
 #include "state_tracker/st_cb_flush.h"
 #include "state_tracker/st_cb_texture.h"
@@ -455,23 +456,46 @@ guess_and_alloc_texture(struct st_context *st,
 			struct st_texture_object *stObj,
 			const struct st_texture_image *stImage)
 {
+   const struct gl_texture_image *firstImage;
    GLuint lastLevel, width, height, depth;
    GLuint bindings;
    GLuint ptWidth, ptHeight, ptDepth, ptLayers;
    enum pipe_format fmt;
+   bool guessed_box = false;
 
    DBG("%s\n", __func__);
 
    assert(!stObj->pt);
 
-   if (!guess_base_level_size(stObj->base.Target,
-                              stImage->base.Width2,
-                              stImage->base.Height2,
-                              stImage->base.Depth2,
-                              stImage->base.Level,
-                              &width, &height, &depth)) {
+   /* If a base level image with compatible size exists, use that as our guess.
+    */
+   firstImage = _mesa_base_tex_image(&stObj->base);
+   if (firstImage &&
+       firstImage->Width2 > 0 &&
+       firstImage->Height2 > 0 &&
+       firstImage->Depth2 > 0 &&
+       guess_base_level_size(stObj->base.Target,
+                             firstImage->Width2,
+                             firstImage->Height2,
+                             firstImage->Depth2,
+                             firstImage->Level,
+                             &width, &height, &depth)) {
+      if (stImage->base.Width2 == u_minify(width, stImage->base.Level) &&
+          stImage->base.Height2 == u_minify(height, stImage->base.Level) &&
+          stImage->base.Depth2 == u_minify(depth, stImage->base.Level))
+         guessed_box = true;
+   }
+
+   if (!guessed_box)
+      guessed_box = guess_base_level_size(stObj->base.Target,
+                                          stImage->base.Width2,
+                                          stImage->base.Height2,
+                                          stImage->base.Depth2,
+                                          stImage->base.Level,
+                                          &width, &height, &depth);
+
+   if (!guessed_box) {
       /* we can't determine the image size at level=0 */
-      stObj->width0 = stObj->height0 = stObj->depth0 = 0;
       /* this is not an out of memory error */
       return GL_TRUE;
    }
@@ -495,11 +519,6 @@ guess_and_alloc_texture(struct st_context *st,
       /* only alloc space for a single mipmap level */
       lastLevel = 0;
    }
-
-   /* Save the level=0 dimensions */
-   stObj->width0 = width;
-   stObj->height0 = height;
-   stObj->depth0 = depth;
 
    fmt = st_mesa_format_to_pipe_format(st, stImage->base.TexFormat);
 
@@ -900,10 +919,10 @@ format_is_alpha(enum pipe_format format)
    const struct util_format_description *desc = util_format_description(format);
 
    if (desc->nr_channels == 1 &&
-       desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_0 &&
-       desc->swizzle[1] == UTIL_FORMAT_SWIZZLE_0 &&
-       desc->swizzle[2] == UTIL_FORMAT_SWIZZLE_0 &&
-       desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_X)
+       desc->swizzle[0] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[1] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[2] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[3] == PIPE_SWIZZLE_X)
       return true;
 
    return false;
@@ -918,10 +937,10 @@ format_is_red(enum pipe_format format)
    const struct util_format_description *desc = util_format_description(format);
 
    if (desc->nr_channels == 1 &&
-       desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_X &&
-       desc->swizzle[1] == UTIL_FORMAT_SWIZZLE_0 &&
-       desc->swizzle[2] == UTIL_FORMAT_SWIZZLE_0 &&
-       desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_1)
+       desc->swizzle[0] == PIPE_SWIZZLE_X &&
+       desc->swizzle[1] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[2] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[3] == PIPE_SWIZZLE_1)
       return true;
 
    return false;
@@ -937,10 +956,10 @@ format_is_luminance(enum pipe_format format)
    const struct util_format_description *desc = util_format_description(format);
 
    if (desc->nr_channels == 1 &&
-       desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_X &&
-       desc->swizzle[1] == UTIL_FORMAT_SWIZZLE_X &&
-       desc->swizzle[2] == UTIL_FORMAT_SWIZZLE_X &&
-       desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_1)
+       desc->swizzle[0] == PIPE_SWIZZLE_X &&
+       desc->swizzle[1] == PIPE_SWIZZLE_X &&
+       desc->swizzle[2] == PIPE_SWIZZLE_X &&
+       desc->swizzle[3] == PIPE_SWIZZLE_1)
       return true;
 
    return false;
@@ -955,10 +974,10 @@ format_is_red_alpha(enum pipe_format format)
    const struct util_format_description *desc = util_format_description(format);
 
    if (desc->nr_channels == 2 &&
-       desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_X &&
-       desc->swizzle[1] == UTIL_FORMAT_SWIZZLE_0 &&
-       desc->swizzle[2] == UTIL_FORMAT_SWIZZLE_0 &&
-       desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_Y)
+       desc->swizzle[0] == PIPE_SWIZZLE_X &&
+       desc->swizzle[1] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[2] == PIPE_SWIZZLE_0 &&
+       desc->swizzle[3] == PIPE_SWIZZLE_Y)
       return true;
 
    return false;
@@ -969,10 +988,10 @@ format_is_swizzled_rgba(enum pipe_format format)
 {
     const struct util_format_description *desc = util_format_description(format);
 
-    if ((desc->swizzle[0] == TGSI_SWIZZLE_X || desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_0) &&
-        (desc->swizzle[1] == TGSI_SWIZZLE_Y || desc->swizzle[1] == UTIL_FORMAT_SWIZZLE_0) &&
-        (desc->swizzle[2] == TGSI_SWIZZLE_Z || desc->swizzle[2] == UTIL_FORMAT_SWIZZLE_0) &&
-        (desc->swizzle[3] == TGSI_SWIZZLE_W || desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_1))
+    if ((desc->swizzle[0] == TGSI_SWIZZLE_X || desc->swizzle[0] == PIPE_SWIZZLE_0) &&
+        (desc->swizzle[1] == TGSI_SWIZZLE_Y || desc->swizzle[1] == PIPE_SWIZZLE_0) &&
+        (desc->swizzle[2] == TGSI_SWIZZLE_Z || desc->swizzle[2] == PIPE_SWIZZLE_0) &&
+        (desc->swizzle[3] == TGSI_SWIZZLE_W || desc->swizzle[3] == PIPE_SWIZZLE_1))
        return false;
 
     return true;
@@ -1101,10 +1120,10 @@ reinterpret_formats(enum pipe_format *src_format, enum pipe_format *dst_format)
       unsigned i;
 
       /* Make sure the format is an RGBA and not an RGBX format */
-      if (src_desc->nr_channels != 4 || src_desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_1)
+      if (src_desc->nr_channels != 4 || src_desc->swizzle[3] == PIPE_SWIZZLE_1)
          return false;
 
-      if (dst_desc->nr_channels != 4 || dst_desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_1)
+      if (dst_desc->nr_channels != 4 || dst_desc->swizzle[3] == PIPE_SWIZZLE_1)
          return false;
 
       for (i = 0; i < 4; i++)
@@ -1131,7 +1150,7 @@ create_pbo_upload_vs(struct st_context *st)
    struct ureg_dst out_pos;
    struct ureg_dst out_layer;
 
-   ureg = ureg_create(TGSI_PROCESSOR_VERTEX);
+   ureg = ureg_create(PIPE_SHADER_VERTEX);
    if (!ureg)
       return NULL;
 
@@ -1176,7 +1195,7 @@ create_pbo_upload_gs(struct st_context *st)
    struct ureg_src imm;
    unsigned i;
 
-   ureg = ureg_create(TGSI_PROCESSOR_GEOMETRY);
+   ureg = ureg_create(PIPE_SHADER_GEOMETRY);
    if (!ureg)
       return NULL;
 
@@ -1222,7 +1241,7 @@ create_pbo_upload_fs(struct st_context *st)
    struct ureg_src const0;
    struct ureg_dst temp0;
 
-   ureg = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+   ureg = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!ureg)
       return NULL;
 
@@ -1345,6 +1364,7 @@ try_pbo_upload_common(struct gl_context *ctx,
                         CSO_BIT_DEPTH_STENCIL_ALPHA |
                         CSO_BIT_RASTERIZER |
                         CSO_BIT_STREAM_OUTPUTS |
+                        CSO_BIT_PAUSE_QUERIES |
                         CSO_BITS_ALL_SHADERS));
    cso_save_constant_buffer_slot0(cso, PIPE_SHADER_FRAGMENT);
 
@@ -1370,10 +1390,10 @@ try_pbo_upload_common(struct gl_context *ctx,
       templ.format = src_format;
       templ.u.buf.first_element = first_element;
       templ.u.buf.last_element = last_element;
-      templ.swizzle_r = PIPE_SWIZZLE_RED;
-      templ.swizzle_g = PIPE_SWIZZLE_GREEN;
-      templ.swizzle_b = PIPE_SWIZZLE_BLUE;
-      templ.swizzle_a = PIPE_SWIZZLE_ALPHA;
+      templ.swizzle_r = PIPE_SWIZZLE_X;
+      templ.swizzle_g = PIPE_SWIZZLE_Y;
+      templ.swizzle_b = PIPE_SWIZZLE_Z;
+      templ.swizzle_a = PIPE_SWIZZLE_W;
 
       sampler_view = pipe->create_sampler_view(pipe, buffer, &templ);
       if (sampler_view == NULL)
@@ -1697,15 +1717,52 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    GLenum gl_target = texImage->TexObject->Target;
    unsigned bind;
    GLubyte *map;
+   unsigned dstz = texImage->Face + texImage->TexObject->MinLayer;
+   unsigned dst_level = 0;
+
+   st_flush_bitmap_cache(st);
+
+   if (stObj->pt == stImage->pt)
+      dst_level = texImage->TexObject->MinLevel + texImage->Level;
 
    assert(!_mesa_is_format_etc2(texImage->TexFormat) &&
           texImage->TexFormat != MESA_FORMAT_ETC1_RGB8);
 
-   if (!st->prefer_blit_based_texture_transfer) {
+   if (!dst)
       goto fallback;
+
+   /* Try transfer_inline_write, which should be the fastest memcpy path. */
+   if (pixels &&
+       !_mesa_is_bufferobj(unpack->BufferObj) &&
+       _mesa_texstore_can_use_memcpy(ctx, texImage->_BaseFormat,
+                                     texImage->TexFormat, format, type,
+                                     unpack)) {
+      struct pipe_box box;
+      unsigned stride, layer_stride;
+      void *data;
+
+      stride = _mesa_image_row_stride(unpack, width, format, type);
+      layer_stride = _mesa_image_image_stride(unpack, width, height, format,
+                                              type);
+      data = _mesa_image_address(dims, unpack, pixels, width, height, format,
+                                 type, 0, 0, 0);
+
+      /* Convert to Gallium coordinates. */
+      if (gl_target == GL_TEXTURE_1D_ARRAY) {
+         zoffset = yoffset;
+         yoffset = 0;
+         depth = height;
+         height = 1;
+         layer_stride = stride;
+      }
+
+      u_box_3d(xoffset, yoffset, zoffset + dstz, width, height, depth, &box);
+      pipe->transfer_inline_write(pipe, dst, dst_level, 0,
+                                  &box, data, stride, layer_stride);
+      return;
    }
 
-   if (!dst) {
+   if (!st->prefer_blit_based_texture_transfer) {
       goto fallback;
    }
 
@@ -1845,7 +1902,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
             /* 1D array textures.
              * We need to convert gallium coords to GL coords.
              */
-            GLvoid *src = _mesa_image_address2d(unpack, pixels,
+            void *src = _mesa_image_address2d(unpack, pixels,
                                                 width, depth, format,
                                                 type, slice, 0);
             memcpy(map, src, bytesPerRow);
@@ -1854,7 +1911,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
             ubyte *slice_map = map;
 
             for (row = 0; row < (unsigned) height; row++) {
-               GLvoid *src = _mesa_image_address(dims, unpack, pixels,
+               void *src = _mesa_image_address(dims, unpack, pixels,
                                                  width, height, format,
                                                  type, slice, row, 0);
                memcpy(slice_map, src, bytesPerRow);
@@ -1874,12 +1931,12 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    blit.src.level = 0;
    blit.src.format = src_format;
    blit.dst.resource = dst;
-   blit.dst.level = stObj->pt != stImage->pt ? 0 : texImage->TexObject->MinLevel + texImage->Level;
+   blit.dst.level = dst_level;
    blit.dst.format = dst_format;
    blit.src.box.x = blit.src.box.y = blit.src.box.z = 0;
    blit.dst.box.x = xoffset;
    blit.dst.box.y = yoffset;
-   blit.dst.box.z = zoffset + texImage->Face + texImage->TexObject->MinLayer;
+   blit.dst.box.z = zoffset + dstz;
    blit.src.box.width = blit.dst.box.width = width;
    blit.src.box.height = blit.dst.box.height = height;
    blit.src.box.depth = blit.dst.box.depth = depth;
@@ -1928,7 +1985,7 @@ st_CompressedTexSubImage(struct gl_context *ctx, GLuint dims,
                          struct gl_texture_image *texImage,
                          GLint x, GLint y, GLint z,
                          GLsizei w, GLsizei h, GLsizei d,
-                         GLenum format, GLsizei imageSize, const GLvoid *data)
+                         GLenum format, GLsizei imageSize, const void *data)
 {
    struct st_context *st = st_context(ctx);
    struct st_texture_image *stImage = st_texture_image(texImage);
@@ -2053,7 +2110,7 @@ fallback:
 static void
 st_CompressedTexImage(struct gl_context *ctx, GLuint dims,
                       struct gl_texture_image *texImage,
-                      GLsizei imageSize, const GLvoid *data)
+                      GLsizei imageSize, const void *data)
 {
    prep_teximage(ctx, texImage, GL_NONE, GL_NONE);
 
@@ -2106,7 +2163,7 @@ static void
 st_GetTexSubImage(struct gl_context * ctx,
                   GLint xoffset, GLint yoffset, GLint zoffset,
                   GLsizei width, GLsizei height, GLint depth,
-                  GLenum format, GLenum type, GLvoid * pixels,
+                  GLenum format, GLenum type, void * pixels,
                   struct gl_texture_image *texImage)
 {
    struct st_context *st = st_context(ctx);
@@ -2129,6 +2186,8 @@ st_GetTexSubImage(struct gl_context * ctx,
 
    assert(!_mesa_is_format_etc2(texImage->TexFormat) &&
           texImage->TexFormat != MESA_FORMAT_ETC1_RGB8);
+
+   st_flush_bitmap_cache(st);
 
    if (!st->prefer_blit_based_texture_transfer &&
        !_mesa_is_format_compressed(texImage->TexFormat)) {
@@ -2320,7 +2379,7 @@ st_GetTexSubImage(struct gl_context * ctx,
             /* 1D array textures.
              * We need to convert gallium coords to GL coords.
              */
-            GLvoid *dest = _mesa_image_address3d(&ctx->Pack, pixels,
+            void *dest = _mesa_image_address3d(&ctx->Pack, pixels,
                                                  width, depth, format,
                                                  type, 0, slice, 0);
             memcpy(dest, map, bytesPerRow);
@@ -2329,7 +2388,7 @@ st_GetTexSubImage(struct gl_context * ctx,
             ubyte *slice_map = map;
 
             for (row = 0; row < height; row++) {
-               GLvoid *dest = _mesa_image_address3d(&ctx->Pack, pixels,
+               void *dest = _mesa_image_address3d(&ctx->Pack, pixels,
                                                     width, height, format,
                                                     type, slice, row, 0);
                memcpy(dest, slice_map, bytesPerRow);
@@ -2364,7 +2423,7 @@ st_GetTexSubImage(struct gl_context * ctx,
             /* 1D array textures.
              * We need to convert gallium coords to GL coords.
              */
-            GLvoid *dest = _mesa_image_address3d(&ctx->Pack, pixels,
+            void *dest = _mesa_image_address3d(&ctx->Pack, pixels,
                                                  width, depth, format,
                                                  type, 0, slice, 0);
 
@@ -2378,7 +2437,7 @@ st_GetTexSubImage(struct gl_context * ctx,
          }
          else {
             for (row = 0; row < height; row++) {
-               GLvoid *dest = _mesa_image_address3d(&ctx->Pack, pixels,
+               void *dest = _mesa_image_address3d(&ctx->Pack, pixels,
                                                     width, height, format,
                                                     type, slice, row, 0);
 
@@ -2593,6 +2652,8 @@ st_CopyTexSubImage(struct gl_context *ctx, GLuint dims,
    unsigned bind;
    GLint srcY0, srcY1;
 
+   st_flush_bitmap_cache(st);
+
    assert(!_mesa_is_format_etc2(texImage->TexFormat) &&
           texImage->TexFormat != MESA_FORMAT_ETC1_RGB8);
 
@@ -2776,9 +2837,6 @@ st_finalize_texture(struct gl_context *ctx,
       if (st_obj->buffer != stObj->pt) {
          pipe_resource_reference(&stObj->pt, st_obj->buffer);
          st_texture_release_all_sampler_views(st, stObj);
-         stObj->width0 = stObj->pt->width0 / _mesa_get_format_bytes(tObj->_BufferObjectFormat);
-         stObj->height0 = 1;
-         stObj->depth0 = 1;
       }
       return GL_TRUE;
 
@@ -2811,25 +2869,44 @@ st_finalize_texture(struct gl_context *ctx,
    /* Find size of level=0 Gallium mipmap image, plus number of texture layers */
    {
       GLuint width, height, depth;
-      if (!guess_base_level_size(stObj->base.Target,
-                                 firstImage->base.Width2,
-                                 firstImage->base.Height2,
-                                 firstImage->base.Depth2,
-                                 firstImage->base.Level,
-                                 &width, &height, &depth)) {
-         width = stObj->width0;
-         height = stObj->height0;
-         depth = stObj->depth0;
+
+      st_gl_texture_dims_to_pipe_dims(stObj->base.Target,
+                                      firstImage->base.Width2,
+                                      firstImage->base.Height2,
+                                      firstImage->base.Depth2,
+                                      &width, &height, &depth, &ptLayers);
+
+      /* If we previously allocated a pipe texture and its sizes are
+       * compatible, use them.
+       */
+      if (stObj->pt &&
+          u_minify(stObj->pt->width0, firstImage->base.Level) == width &&
+          u_minify(stObj->pt->height0, firstImage->base.Level) == height &&
+          u_minify(stObj->pt->depth0, firstImage->base.Level) == depth) {
+         ptWidth = stObj->pt->width0;
+         ptHeight = stObj->pt->height0;
+         ptDepth = stObj->pt->depth0;
       } else {
-         /* The width/height/depth may have been previously reset in
-          * guess_and_alloc_texture. */
-         stObj->width0 = width;
-         stObj->height0 = height;
-         stObj->depth0 = depth;
+         /* Otherwise, compute a new level=0 size that is compatible with the
+          * base level image.
+          */
+         ptWidth = width > 1 ? width << firstImage->base.Level : 1;
+         ptHeight = height > 1 ? height << firstImage->base.Level : 1;
+         ptDepth = depth > 1 ? depth << firstImage->base.Level : 1;
+
+         /* If the base level image is 1x1x1, we still need to ensure that the
+          * resulting pipe texture ends up with the required number of levels
+          * in total.
+          */
+         if (ptWidth == 1 && ptHeight == 1 && ptDepth == 1) {
+            ptWidth <<= firstImage->base.Level;
+
+            if (stObj->base.Target == GL_TEXTURE_CUBE_MAP ||
+                stObj->base.Target == GL_TEXTURE_CUBE_MAP_ARRAY)
+               ptHeight = ptWidth;
+         }
       }
-      /* convert GL dims to Gallium dims */
-      st_gl_texture_dims_to_pipe_dims(stObj->base.Target, width, height, depth,
-                                      &ptWidth, &ptHeight, &ptDepth, &ptLayers);
+
       ptNumSamples = firstImage->base.NumSamples;
    }
 
@@ -2887,12 +2964,24 @@ st_finalize_texture(struct gl_context *ctx,
          /* Need to import images in main memory or held in other textures.
           */
          if (stImage && stObj->pt != stImage->pt) {
-            GLuint depth = stObj->depth0;
+            GLuint height;
+            GLuint depth;
+
+            if (stObj->base.Target != GL_TEXTURE_1D_ARRAY)
+               height = u_minify(ptHeight, level);
+            else
+               height = ptLayers;
+
             if (stObj->base.Target == GL_TEXTURE_3D)
-               depth = u_minify(depth, level);
+               depth = u_minify(ptDepth, level);
+            else if (stObj->base.Target == GL_TEXTURE_CUBE_MAP)
+               depth = 1;
+            else
+               depth = ptLayers;
+
             if (level == 0 ||
-                (stImage->base.Width == u_minify(stObj->width0, level) &&
-                 stImage->base.Height == u_minify(stObj->height0, level) &&
+                (stImage->base.Width == u_minify(ptWidth, level) &&
+                 stImage->base.Height == height &&
                  stImage->base.Depth == depth)) {
                /* src image fits expected dest mipmap level size */
                copy_image_data_to_texture(st, stObj, level, stImage);
@@ -2927,10 +3016,6 @@ st_AllocTextureStorage(struct gl_context *ctx,
 
    assert(levels > 0);
 
-   /* Save the level=0 dimensions */
-   stObj->width0 = width;
-   stObj->height0 = height;
-   stObj->depth0 = depth;
    stObj->lastLevel = levels - 1;
 
    fmt = st_mesa_format_to_pipe_format(st, texImage->TexFormat);
@@ -3068,9 +3153,6 @@ st_TextureView(struct gl_context *ctx,
    tex->surface_format =
       st_mesa_format_to_pipe_format(st_context(ctx), image->TexFormat);
 
-   tex->width0 = image->Width;
-   tex->height0 = image->Height;
-   tex->depth0 = image->Depth;
    tex->lastLevel = numLevels - 1;
 
    return GL_TRUE;
@@ -3081,7 +3163,7 @@ st_ClearTexSubImage(struct gl_context *ctx,
                     struct gl_texture_image *texImage,
                     GLint xoffset, GLint yoffset, GLint zoffset,
                     GLsizei width, GLsizei height, GLsizei depth,
-                    const GLvoid *clearValue)
+                    const void *clearValue)
 {
    static const char zeros[16] = {0};
    struct st_texture_image *stImage = st_texture_image(texImage);
@@ -3093,6 +3175,8 @@ st_ClearTexSubImage(struct gl_context *ctx,
 
    if (!pt)
       return;
+
+   st_flush_bitmap_cache(st);
 
    u_box_3d(xoffset, yoffset, zoffset + texImage->Face,
             width, height, depth, &box);
@@ -3108,7 +3192,7 @@ void
 st_init_texture_functions(struct dd_function_table *functions)
 {
    functions->ChooseTextureFormat = st_ChooseTextureFormat;
-   functions->QuerySamplesForFormat = st_QuerySamplesForFormat;
+   functions->QueryInternalFormat = st_QueryInternalFormat;
    functions->TexImage = st_TexImage;
    functions->TexSubImage = st_TexSubImage;
    functions->CompressedTexSubImage = st_CompressedTexSubImage;

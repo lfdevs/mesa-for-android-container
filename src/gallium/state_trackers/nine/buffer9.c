@@ -65,15 +65,41 @@ NineBuffer9_ctor( struct NineBuffer9 *This,
     info->width0 = Size;
     info->flags = 0;
 
-    info->bind = PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_TRANSFER_WRITE;
-    if (!(Usage & D3DUSAGE_WRITEONLY))
-        info->bind |= PIPE_BIND_TRANSFER_READ;
+    /* Note: WRITEONLY is just tip for resource placement, the resource
+     * can still be read (but slower). */
+    info->bind = PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_TRANSFER_READ;
 
-    info->usage = PIPE_USAGE_DEFAULT;
-    if (Usage & D3DUSAGE_DYNAMIC)
-        info->usage = PIPE_USAGE_STREAM;
-    else if (Pool == D3DPOOL_SYSTEMMEM)
+    /* It is hard to find clear information on where to place the buffer in
+     * memory depending on the flag.
+     * MSDN: resources are static, except for those with DYNAMIC, thus why you
+     *   can only use DISCARD on them.
+     * ATI doc: The driver has the liberty it wants for having things static
+     *   or not.
+     *   MANAGED: Ram + uploads to Vram copy at unlock (msdn and nvidia doc say
+     *   at first draw call using the buffer)
+     *   DEFAULT + Usage = 0 => System memory backing for easy read access
+     *   (That doc is very unclear on the details, like whether some copies to
+     *   vram copy are involved or not).
+     *   DEFAULT + WRITEONLY => Vram
+     *   DEFAULT + WRITEONLY + DYNAMIC => Either Vram buffer or GTT_WC, depending on what the driver wants.
+     */
+    if (Pool == D3DPOOL_SYSTEMMEM)
         info->usage = PIPE_USAGE_STAGING;
+    else if (Pool == D3DPOOL_MANAGED)
+        info->usage = PIPE_USAGE_DEFAULT;
+    else if (Usage & D3DUSAGE_DYNAMIC && Usage & D3DUSAGE_WRITEONLY)
+        info->usage = PIPE_USAGE_STREAM;
+    else if (Usage & D3DUSAGE_WRITEONLY)
+        info->usage = PIPE_USAGE_DEFAULT;
+    /* For the remaining two, PIPE_USAGE_STAGING would probably be
+     * a good fit according to the doc. However it seems rather a mistake
+     * from apps to use these (mistakes that do really happen). Try
+     * to put the flags that are the best compromise between the real
+     * behaviour and what buggy apps should get for better performance. */
+    else if (Usage & D3DUSAGE_DYNAMIC)
+        info->usage = PIPE_USAGE_STREAM;
+    else
+        info->usage = PIPE_USAGE_DYNAMIC;
 
     /* if (pDesc->Usage & D3DUSAGE_DONOTCLIP) { } */
     /* if (pDesc->Usage & D3DUSAGE_NONSECURE) { } */
@@ -118,6 +144,8 @@ NineBuffer9_ctor( struct NineBuffer9 *This,
 void
 NineBuffer9_dtor( struct NineBuffer9 *This )
 {
+    DBG("This=%p\n", This);
+
     if (This->maps) {
         while (This->nmaps) {
             NineBuffer9_Unlock(This);
@@ -152,7 +180,7 @@ NineBuffer9_Lock( struct NineBuffer9 *This,
 {
     struct pipe_box box;
     void *data;
-    unsigned usage = d3dlock_buffer_to_pipe_transfer_usage(Flags);
+    unsigned usage;
 
     DBG("This=%p(pipe=%p) OffsetToLock=0x%x, SizeToLock=0x%x, Flags=0x%x\n",
         This, This->base.resource,
@@ -193,6 +221,26 @@ NineBuffer9_Lock( struct NineBuffer9 *This,
         return D3D_OK;
     }
 
+    /* Driver ddi doc: READONLY is never passed to the device. So it can only
+     * have effect on things handled by the driver (MANAGED pool for example).
+     * Msdn doc: DISCARD and NOOVERWRITE are only for DYNAMIC.
+     * ATI doc: You can use DISCARD and NOOVERWRITE without DYNAMIC.
+     * Msdn doc: D3DLOCK_DONOTWAIT is not among the valid flags for buffers.
+     * Our tests: On win 7 nvidia, D3DLOCK_DONOTWAIT does return
+     * D3DERR_WASSTILLDRAWING if the resource is in use, except for DYNAMIC.
+     * Our tests: some apps do use both DISCARD and NOOVERWRITE at the same
+     * time. On windows it seems to return different pointer, thus indicating
+     * DISCARD is taken into account. */
+
+    if (Flags & D3DLOCK_DISCARD)
+        usage = PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
+    else if (Flags & D3DLOCK_NOOVERWRITE)
+        usage = PIPE_TRANSFER_WRITE | PIPE_TRANSFER_UNSYNCHRONIZED;
+    else
+        usage = PIPE_TRANSFER_READ_WRITE;
+    if (Flags & D3DLOCK_DONOTWAIT && !(This->base.usage & D3DUSAGE_DYNAMIC))
+        usage |= PIPE_TRANSFER_DONTBLOCK;
+
     if (This->nmaps == This->maxmaps) {
         struct pipe_transfer **newmaps =
             REALLOC(This->maps, sizeof(struct pipe_transfer *)*This->maxmaps,
@@ -213,7 +261,7 @@ NineBuffer9_Lock( struct NineBuffer9 *This,
             " box.x = %u\n"
             " box.width = %u\n",
             usage, box.x, box.width);
-        /* not sure what to return, msdn suggests this */
+
         if (Flags & D3DLOCK_DONOTWAIT)
             return D3DERR_WASSTILLDRAWING;
         return D3DERR_INVALIDCALL;

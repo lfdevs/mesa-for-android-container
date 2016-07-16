@@ -30,48 +30,23 @@
 #include <stdbool.h>
 #include <errno.h>
 
+#include "util/ralloc.h"
+
 #include "freedreno_util.h"
 #include "instr-a3xx.h"
-
-#define CHUNK_SZ 1020
-
-struct ir3_heap_chunk {
-	struct ir3_heap_chunk *next;
-	uint32_t heap[CHUNK_SZ];
-};
-
-static void grow_heap(struct ir3 *shader)
-{
-	struct ir3_heap_chunk *chunk = calloc(1, sizeof(*chunk));
-	chunk->next = shader->chunk;
-	shader->chunk = chunk;
-	shader->heap_idx = 0;
-}
 
 /* simple allocator to carve allocations out of an up-front allocated heap,
  * so that we can free everything easily in one shot.
  */
 void * ir3_alloc(struct ir3 *shader, int sz)
 {
-	void *ptr;
-
-	sz = align(sz, 4) / 4;
-
-	if ((shader->heap_idx + sz) > CHUNK_SZ)
-		grow_heap(shader);
-
-	ptr = &shader->chunk->heap[shader->heap_idx];
-	shader->heap_idx += sz;
-
-	return ptr;
+	return ralloc_size(shader, sz);
 }
 
 struct ir3 * ir3_create(struct ir3_compiler *compiler,
 		unsigned nin, unsigned nout)
 {
-	struct ir3 *shader = calloc(1, sizeof(struct ir3));
-
-	grow_heap(shader);
+	struct ir3 *shader = ralloc(compiler, struct ir3);
 
 	shader->compiler = compiler;
 	shader->ninputs = nin;
@@ -88,15 +63,13 @@ struct ir3 * ir3_create(struct ir3_compiler *compiler,
 
 void ir3_destroy(struct ir3 *shader)
 {
-	while (shader->chunk) {
-		struct ir3_heap_chunk *chunk = shader->chunk;
-		shader->chunk = chunk->next;
-		free(chunk);
-	}
+	/* TODO convert the dynamic array to ralloc too: */
 	free(shader->indirects);
 	free(shader->predicates);
 	free(shader->baryfs);
-	free(shader);
+	free(shader->keeps);
+	free(shader->astc_srgb);
+	ralloc_free(shader);
 }
 
 #define iassert(cond) do { \
@@ -612,7 +585,7 @@ void * ir3_assemble(struct ir3 *shader, struct ir3_info *info,
 
 	list_for_each_entry (struct ir3_block, block, &shader->block_list, node) {
 		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
-			int ret = emit[instr->category](instr, dwords, info);
+			int ret = emit[opc_cat(instr->opc)](instr, dwords, info);
 			if (ret)
 				goto fail;
 			info->instrs_count += 1 + instr->repeat;
@@ -683,23 +656,21 @@ static struct ir3_instruction *instr_create(struct ir3_block *block, int nreg)
 }
 
 struct ir3_instruction * ir3_instr_create2(struct ir3_block *block,
-		int category, opc_t opc, int nreg)
+		opc_t opc, int nreg)
 {
 	struct ir3_instruction *instr = instr_create(block, nreg);
 	instr->block = block;
-	instr->category = category;
 	instr->opc = opc;
 	insert_instr(block, instr);
 	return instr;
 }
 
-struct ir3_instruction * ir3_instr_create(struct ir3_block *block,
-		int category, opc_t opc)
+struct ir3_instruction * ir3_instr_create(struct ir3_block *block, opc_t opc)
 {
 	/* NOTE: we could be slightly more clever, at least for non-meta,
 	 * and choose # of regs based on category.
 	 */
-	return ir3_instr_create2(block, category, opc, 4);
+	return ir3_instr_create2(block, opc, 4);
 }
 
 struct ir3_instruction * ir3_instr_clone(struct ir3_instruction *instr)

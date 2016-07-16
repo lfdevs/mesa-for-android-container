@@ -33,17 +33,85 @@
 #include "main/imports.h"
 #include "program/prog_parameter.h"
 #include "program/prog_print.h"
+#include "program/prog_to_nir.h"
 #include "program/program.h"
 #include "program/programopt.h"
 #include "tnl/tnl.h"
 #include "util/ralloc.h"
 #include "compiler/glsl/ir.h"
+#include "compiler/glsl/glsl_to_nir.h"
 
 #include "brw_program.h"
 #include "brw_context.h"
 #include "brw_shader.h"
 #include "brw_nir.h"
 #include "intel_batchbuffer.h"
+
+static void
+brw_nir_lower_uniforms(nir_shader *nir, bool is_scalar)
+{
+   if (is_scalar) {
+      nir_assign_var_locations(&nir->uniforms, &nir->num_uniforms,
+                               type_size_scalar_bytes);
+      nir_lower_io(nir, nir_var_uniform, type_size_scalar_bytes);
+   } else {
+      nir_assign_var_locations(&nir->uniforms, &nir->num_uniforms,
+                               type_size_vec4_bytes);
+      nir_lower_io(nir, nir_var_uniform, type_size_vec4_bytes);
+   }
+}
+
+nir_shader *
+brw_create_nir(struct brw_context *brw,
+               const struct gl_shader_program *shader_prog,
+               const struct gl_program *prog,
+               gl_shader_stage stage,
+               bool is_scalar)
+{
+   struct gl_context *ctx = &brw->ctx;
+   const nir_shader_compiler_options *options =
+      ctx->Const.ShaderCompilerOptions[stage].NirOptions;
+   bool progress;
+   nir_shader *nir;
+
+   /* First, lower the GLSL IR or Mesa IR to NIR */
+   if (shader_prog) {
+      nir = glsl_to_nir(shader_prog, stage, options);
+      nir_remove_dead_variables(nir, nir_var_shader_in | nir_var_shader_out);
+      NIR_PASS_V(nir, nir_lower_io_to_temporaries,
+                 nir_shader_get_entrypoint(nir), true, false);
+   } else {
+      nir = prog_to_nir(prog, options);
+      NIR_PASS_V(nir, nir_convert_to_ssa); /* turn registers into SSA */
+   }
+   nir_validate_shader(nir);
+
+   (void)progress;
+
+   nir = brw_preprocess_nir(brw->intelScreen->compiler, nir);
+
+   if (stage == MESA_SHADER_FRAGMENT) {
+      static const struct nir_lower_wpos_ytransform_options wpos_options = {
+         .state_tokens = {STATE_INTERNAL, STATE_FB_WPOS_Y_TRANSFORM, 0, 0, 0},
+         .fs_coord_pixel_center_integer = 1,
+         .fs_coord_origin_upper_left = 1,
+      };
+      _mesa_add_state_reference(prog->Parameters,
+                                (gl_state_index *) wpos_options.state_tokens);
+
+      NIR_PASS(progress, nir, nir_lower_wpos_ytransform, &wpos_options);
+   }
+
+   NIR_PASS(progress, nir, nir_lower_system_values);
+   NIR_PASS_V(nir, brw_nir_lower_uniforms, is_scalar);
+
+   if (shader_prog) {
+      NIR_PASS_V(nir, nir_lower_samplers, shader_prog);
+      NIR_PASS_V(nir, nir_lower_atomics, shader_prog);
+   }
+
+   return nir;
+}
 
 static unsigned
 get_new_program_id(struct intel_screen *screen)
@@ -274,6 +342,28 @@ brw_get_scratch_bo(struct brw_context *brw,
 
    if (!old_bo) {
       *scratch_bo = drm_intel_bo_alloc(brw->bufmgr, "scratch bo", size, 4096);
+   }
+}
+
+/**
+ * Reserve enough scratch space for the given stage to hold \p per_thread_size
+ * bytes times the given \p thread_count.
+ */
+void
+brw_alloc_stage_scratch(struct brw_context *brw,
+                        struct brw_stage_state *stage_state,
+                        unsigned per_thread_size,
+                        unsigned thread_count)
+{
+   if (stage_state->per_thread_scratch < per_thread_size) {
+      stage_state->per_thread_scratch = per_thread_size;
+
+      if (stage_state->scratch_bo)
+         drm_intel_bo_unreference(stage_state->scratch_bo);
+
+      stage_state->scratch_bo =
+         drm_intel_bo_alloc(brw->bufmgr, "shader scratch space",
+                            per_thread_size * thread_count, 4096);
    }
 }
 

@@ -54,7 +54,7 @@ read_counter(struct fd_context *ctx, int type)
 {
 	switch (type) {
 	case PIPE_QUERY_PRIMITIVES_GENERATED:
-		/* for now same thing as _PRIMITIVES_EMITTED */
+		return ctx->stats.prims_generated;
 	case PIPE_QUERY_PRIMITIVES_EMITTED:
 		return ctx->stats.prims_emitted;
 	case FD_QUERY_DRAW_CALLS:

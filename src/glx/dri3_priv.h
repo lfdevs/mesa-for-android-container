@@ -96,6 +96,7 @@ struct dri3_screen {
    const __DRI2configQueryExtension *config;
    const __DRItexBufferExtension *texBuffer;
    const __DRI2rendererQueryExtension *rendererQuery;
+   const __DRI2interopExtension *interop;
    const __DRIconfig **driver_configs;
 
    void *driver;
@@ -131,3 +132,12 @@ dri3_query_renderer_integer(struct glx_screen *base, int attribute,
 _X_HIDDEN int
 dri3_query_renderer_string(struct glx_screen *base, int attribute,
                            const char **value);
+
+_X_HIDDEN int
+dri3_interop_query_device_info(struct glx_context *ctx,
+                               struct mesa_glinterop_device_info *out);
+
+_X_HIDDEN int
+dri3_interop_export_object(struct glx_context *ctx,
+                           struct mesa_glinterop_export_in *in,
+                           struct mesa_glinterop_export_out *out);

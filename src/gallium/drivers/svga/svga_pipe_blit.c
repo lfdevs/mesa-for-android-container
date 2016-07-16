@@ -36,22 +36,18 @@
 #define FILE_DEBUG_FLAG DEBUG_BLIT
 
 
-/* XXX still have doubts about this... */
-static void svga_surface_copy(struct pipe_context *pipe,
-                              struct pipe_resource* dst_tex,
-                              unsigned dst_level,
-                              unsigned dstx, unsigned dsty, unsigned dstz,
-                              struct pipe_resource* src_tex,
-                              unsigned src_level,
-                              const struct pipe_box *src_box)
+static void
+svga_surface_copy(struct pipe_context *pipe,
+                  struct pipe_resource* dst_tex,
+                  unsigned dst_level,
+                  unsigned dstx, unsigned dsty, unsigned dstz,
+                  struct pipe_resource* src_tex,
+                  unsigned src_level,
+                  const struct pipe_box *src_box)
  {
    struct svga_context *svga = svga_context(pipe);
    struct svga_texture *stex, *dtex;
-/*   struct pipe_screen *screen = pipe->screen;
-   SVGA3dCopyBox *box;
-   enum pipe_error ret;
-   struct pipe_surface *srcsurf, *dstsurf;*/
-   unsigned dst_face, dst_z, src_face, src_z;
+   unsigned dst_face_layer, dst_z, src_face_layer, src_z;
 
    /* Emit buffered drawing commands, and any back copies.
     */
@@ -67,95 +63,46 @@ static void svga_surface_copy(struct pipe_context *pipe,
    stex = svga_texture(src_tex);
    dtex = svga_texture(dst_tex);
 
-#if 0
-   srcsurf = screen->get_tex_surface(screen, src_tex,
-                                     src_level, src_box->z, src_box->z,
-                                     PIPE_BIND_SAMPLER_VIEW);
-
-   dstsurf = screen->get_tex_surface(screen, dst_tex,
-                                     dst_level, dst_box->z, dst_box->z,
-                                     PIPE_BIND_RENDER_TARGET);
-
-   SVGA_DBG(DEBUG_DMA, "blit to sid %p (%d,%d), from sid %p (%d,%d) sz %dx%d\n",
-            svga_surface(dstsurf)->handle,
-            dstx, dsty,
-            svga_surface(srcsurf)->handle,
-            src_box->x, src_box->y,
-            width, height);
-
-   ret = SVGA3D_BeginSurfaceCopy(svga->swc,
-                                 srcsurf,
-                                 dstsurf,
-                                 &box,
-                                 1);
-   if(ret != PIPE_OK) {
-
-      svga_context_flush(svga, NULL);
-
-      ret = SVGA3D_BeginSurfaceCopy(svga->swc,
-                                    srcsurf,
-                                    dstsurf,
-                                    &box,
-                                    1);
-      assert(ret == PIPE_OK);
-   }
-
-   box->x = dstx;
-   box->y = dsty;
-   box->z = 0;
-   box->w = width;
-   box->h = height;
-   box->d = 1;
-   box->srcx = src_box->x;
-   box->srcy = src_box->y;
-   box->srcz = 0;
-
-   SVGA_FIFOCommitAll(svga->swc);
-
-   svga_surface(dstsurf)->dirty = TRUE;
-   svga_propagate_surface(pipe, dstsurf);
-
-   pipe_surface_reference(&srcsurf, NULL);
-   pipe_surface_reference(&dstsurf, NULL);
-
-#else
-   if (src_tex->target == PIPE_TEXTURE_CUBE) {
-      src_face = src_box->z;
+   if (src_tex->target == PIPE_TEXTURE_CUBE ||
+       src_tex->target == PIPE_TEXTURE_1D_ARRAY) {
+      src_face_layer = src_box->z;
       src_z = 0;
       assert(src_box->depth == 1);
    }
    else {
-      src_face = 0;
+      src_face_layer = 0;
       src_z = src_box->z;
    }
+
    /* different src/dst type???*/
-   if (dst_tex->target == PIPE_TEXTURE_CUBE) {
-      dst_face = dstz;
+   if (dst_tex->target == PIPE_TEXTURE_CUBE ||
+       dst_tex->target == PIPE_TEXTURE_1D_ARRAY) {
+      dst_face_layer = dstz;
       dst_z = 0;
       assert(src_box->depth == 1);
    }
    else {
-      dst_face = 0;
+      dst_face_layer = 0;
       dst_z = dstz;
    }
+
    svga_texture_copy_handle(svga,
                             stex->handle,
                             src_box->x, src_box->y, src_z,
-                            src_level, src_face,
+                            src_level, src_face_layer,
                             dtex->handle,
                             dstx, dsty, dst_z,
-                            dst_level, dst_face,
+                            dst_level, dst_face_layer,
                             src_box->width, src_box->height, src_box->depth);
 
-#endif
-
    /* Mark the destination image as being defined */
-   svga_define_texture_level(dtex, dst_face, dst_level);
+   svga_define_texture_level(dtex, dst_face_layer, dst_level);
 }
 
 
-static void svga_blit(struct pipe_context *pipe,
-                      const struct pipe_blit_info *blit_info)
+static void
+svga_blit(struct pipe_context *pipe,
+          const struct pipe_blit_info *blit_info)
 {
    struct svga_context *svga = svga_context(pipe);
    struct pipe_blit_info info = *blit_info;

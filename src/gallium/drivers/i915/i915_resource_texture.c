@@ -133,7 +133,7 @@ static void
 i915_texture_set_level_info(struct i915_texture *tex,
                             unsigned level, unsigned nr_images)
 {
-   assert(level < Elements(tex->nr_images));
+   assert(level < ARRAY_SIZE(tex->nr_images));
    assert(nr_images);
    assert(!tex->image_offset[level]);
 
@@ -705,7 +705,7 @@ i915_texture_destroy(struct pipe_screen *screen,
    if (tex->buffer)
       iws->buffer_destroy(iws, tex->buffer);
 
-   for (i = 0; i < Elements(tex->image_offset); i++)
+   for (i = 0; i < ARRAY_SIZE(tex->image_offset); i++)
       FREE(tex->image_offset[i]);
 
    FREE(tex);

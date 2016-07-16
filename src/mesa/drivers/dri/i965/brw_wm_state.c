@@ -86,48 +86,37 @@ brw_upload_wm_unit(struct brw_context *brw)
 			sizeof(*wm), 32, &brw->wm.base.state_offset);
    memset(wm, 0, sizeof(*wm));
 
-   if (prog_data->prog_offset_16) {
+   if (prog_data->dispatch_8 && prog_data->dispatch_16) {
       /* These two fields should be the same pre-gen6, which is why we
        * only have one hardware field to program for both dispatch
        * widths.
        */
       assert(prog_data->base.dispatch_grf_start_reg ==
-	     prog_data->dispatch_grf_start_reg_16);
+	     prog_data->dispatch_grf_start_reg_2);
    }
 
    /* BRW_NEW_PROGRAM_CACHE | BRW_NEW_FS_PROG_DATA */
-   if (prog_data->no_8) {
-      wm->wm5.enable_16_pix = 1;
-      wm->thread0.grf_reg_count = prog_data->reg_blocks_16;
-      wm->thread0.kernel_start_pointer =
-         brw_program_reloc(brw,
-                           brw->wm.base.state_offset +
-                           offsetof(struct brw_wm_unit_state, thread0),
-                           brw->wm.base.prog_offset +
-                           prog_data->prog_offset_16 +
-                           (prog_data->reg_blocks_16 << 1)) >> 6;
+   wm->wm5.enable_8_pix = prog_data->dispatch_8;
+   wm->wm5.enable_16_pix = prog_data->dispatch_16;
 
-   } else {
-      wm->thread0.grf_reg_count = prog_data->reg_blocks;
-      wm->wm9.grf_reg_count_2 = prog_data->reg_blocks_16;
-
-      wm->wm5.enable_8_pix = 1;
-      if (prog_data->prog_offset_16)
-         wm->wm5.enable_16_pix = 1;
-
+   if (prog_data->dispatch_8 || prog_data->dispatch_16) {
+      wm->thread0.grf_reg_count = prog_data->reg_blocks_0;
       wm->thread0.kernel_start_pointer =
          brw_program_reloc(brw,
                            brw->wm.base.state_offset +
                            offsetof(struct brw_wm_unit_state, thread0),
                            brw->wm.base.prog_offset +
                            (wm->thread0.grf_reg_count << 1)) >> 6;
+   }
 
+   if (prog_data->prog_offset_2) {
+      wm->wm9.grf_reg_count_2 = prog_data->reg_blocks_2;
       wm->wm9.kernel_start_pointer_2 =
          brw_program_reloc(brw,
                            brw->wm.base.state_offset +
                            offsetof(struct brw_wm_unit_state, wm9),
                            brw->wm.base.prog_offset +
-                           prog_data->prog_offset_16 +
+                           prog_data->prog_offset_2 +
                            (wm->wm9.grf_reg_count_2 << 1)) >> 6;
    }
 
@@ -144,7 +133,7 @@ brw_upload_wm_unit(struct brw_context *brw)
       wm->thread2.scratch_space_base_pointer =
 	 brw->wm.base.scratch_bo->offset64 >> 10; /* reloc */
       wm->thread2.per_thread_scratch_space =
-	 ffs(prog_data->base.total_scratch) - 11;
+	 ffs(brw->wm.base.per_thread_scratch) - 11;
    } else {
       wm->thread2.scratch_space_base_pointer = 0;
       wm->thread2.per_thread_scratch_space = 0;
@@ -271,6 +260,7 @@ const struct brw_tracked_state brw_wm_unit = {
               _NEW_POLYGON |
               _NEW_POLYGONSTIPPLE,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_CURBE_OFFSETS |
              BRW_NEW_FRAGMENT_PROGRAM |
              BRW_NEW_FS_PROG_DATA |

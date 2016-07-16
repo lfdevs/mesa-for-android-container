@@ -37,6 +37,8 @@
 #include "util/u_video.h"
 #include "vl/vl_defines.h"
 
+#include "state_tracker/drm_driver.h"
+
 #include "vdpau_private.h"
 
 enum getbits_conversion {
@@ -411,4 +413,71 @@ struct pipe_video_buffer *vlVdpVideoSurfaceGallium(VdpVideoSurface surface)
    pipe_mutex_unlock(p_surf->device->mutex);
 
    return p_surf->video_buffer;
+}
+
+VdpStatus vlVdpVideoSurfaceDMABuf(VdpVideoSurface surface,
+                                  VdpVideoSurfacePlane plane,
+                                  struct VdpSurfaceDMABufDesc *result)
+{
+   vlVdpSurface *p_surf = vlGetDataHTAB(surface);
+
+   struct pipe_screen *pscreen;
+   struct winsys_handle whandle;
+
+   struct pipe_surface *surf;
+
+   if (!p_surf)
+      return VDP_STATUS_INVALID_HANDLE;
+
+   if (plane > 3)
+      return VDP_STATUS_INVALID_VALUE;
+
+   if (!result)
+      return VDP_STATUS_INVALID_POINTER;
+
+   memset(result, 0, sizeof(*result));
+   result->handle = -1;
+
+   pipe_mutex_lock(p_surf->device->mutex);
+   if (p_surf->video_buffer == NULL) {
+      struct pipe_context *pipe = p_surf->device->context;
+
+      /* try to create a video buffer if we don't already have one */
+      p_surf->video_buffer = pipe->create_video_buffer(pipe, &p_surf->templat);
+   }
+
+   /* Check if surface match interop requirements */
+   if (p_surf->video_buffer == NULL || !p_surf->video_buffer->interlaced ||
+       p_surf->video_buffer->buffer_format != PIPE_FORMAT_NV12) {
+      pipe_mutex_unlock(p_surf->device->mutex);
+      return VDP_STATUS_NO_IMPLEMENTATION;
+   }
+
+   surf = p_surf->video_buffer->get_surfaces(p_surf->video_buffer)[plane];
+   pipe_mutex_unlock(p_surf->device->mutex);
+
+   if (!surf)
+      return VDP_STATUS_RESOURCES;
+
+   memset(&whandle, 0, sizeof(struct winsys_handle));
+   whandle.type = DRM_API_HANDLE_TYPE_FD;
+   whandle.layer = surf->u.tex.first_layer;
+
+   pscreen = surf->texture->screen;
+   if (!pscreen->resource_get_handle(pscreen, surf->texture, &whandle,
+				     PIPE_HANDLE_USAGE_READ_WRITE))
+      return VDP_STATUS_NO_IMPLEMENTATION;
+
+   result->handle = whandle.handle;
+   result->width = surf->width;
+   result->height = surf->height;
+   result->offset = whandle.offset;
+   result->stride = whandle.stride;
+
+   if (surf->format == PIPE_FORMAT_R8_UNORM)
+      result->format = VDP_RGBA_FORMAT_R8;
+   else
+      result->format = VDP_RGBA_FORMAT_R8G8;
+
+   return VDP_STATUS_OK;
 }

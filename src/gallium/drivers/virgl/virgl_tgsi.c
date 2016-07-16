@@ -40,6 +40,7 @@ virgl_tgsi_transform_property(struct tgsi_transform_context *ctx,
    switch (prop->Property.PropertyName) {
    case TGSI_PROPERTY_NUM_CLIPDIST_ENABLED:
    case TGSI_PROPERTY_NUM_CULLDIST_ENABLED:
+   case TGSI_PROPERTY_NEXT_SHADER:
       break;
    default:
       ctx->emit_property(ctx, prop);

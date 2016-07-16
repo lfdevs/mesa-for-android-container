@@ -49,7 +49,7 @@ libEGL_la_LDFLAGS = \
 dri2_backend_FILES =
 dri3_backend_FILES =
 
-if HAVE_EGL_PLATFORM_X11
+if HAVE_PLATFORM_X11
 AM_CFLAGS += -DHAVE_X11_PLATFORM
 AM_CFLAGS += $(XCB_DRI2_CFLAGS)
 libEGL_la_LIBADD += $(XCB_DRI2_LIBS)
@@ -64,7 +64,7 @@ libEGL_la_LIBADD += $(top_builddir)/src/loader/libloader_dri3_helper.la
 endif
 endif
 
-if HAVE_EGL_PLATFORM_WAYLAND
+if HAVE_PLATFORM_WAYLAND
 AM_CFLAGS += -DHAVE_WAYLAND_PLATFORM
 AM_CFLAGS += $(WAYLAND_CFLAGS)
 libEGL_la_LIBADD += $(WAYLAND_LIBS)
@@ -84,6 +84,11 @@ AM_CFLAGS += -DHAVE_SURFACELESS_PLATFORM
 dri2_backend_FILES += drivers/dri2/platform_surfaceless.c
 endif
 
+if HAVE_EGL_PLATFORM_ANDROID
+AM_CFLAGS += -DHAVE_ANDROID_PLATFORM
+dri2_backend_FILES += drivers/dri2/platform_android.c
+endif
+
 if HAVE_EGL_DRIVER_DRI2
 AM_CFLAGS += \
 	-I$(top_srcdir)/src/loader \
@@ -101,7 +106,7 @@ libEGL_la_SOURCES += \
 	$(dri3_backend_FILES)
 
 libEGL_la_LIBADD += $(top_builddir)/src/loader/libloader.la
-libEGL_la_LIBADD += $(DLOPEN_LIBS) $(LIBDRM_LIBS)
+libEGL_la_LIBADD += $(DLOPEN_LIBS) $(LIBDRM_LIBS) $(CLOCK_LIB)
 endif
 
 include $(top_srcdir)/install-lib-links.mk

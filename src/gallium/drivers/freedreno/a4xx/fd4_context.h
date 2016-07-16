@@ -40,11 +40,6 @@
 struct fd4_context {
 	struct fd_context base;
 
-	/* Keep track of writes to RB_RENDER_CONTROL which need to be patched
-	 * once we know whether or not to use GMEM, and GMEM tile pitch.
-	 */
-	struct util_dynarray rbrc_patches;
-
 	struct fd_bo *vs_pvt_mem, *fs_pvt_mem;
 
 	/* This only needs to be 4 * num_of_pipes bytes (ie. 32 bytes).  We
@@ -89,6 +84,9 @@ struct fd4_context {
 	 * shader:
 	 */
 	uint16_t fsaturate_s, fsaturate_t, fsaturate_r;
+
+	/* bitmask of samplers which need astc srgb workaround: */
+	uint16_t vastc_srgb, fastc_srgb;
 
 	/* some state changes require a different shader variant.  Keep
 	 * track of this so we know when we need to re-emit shader state

@@ -150,7 +150,6 @@ NVC0_C_SOURCES := \
 	nvc0/gm107_texture.xml.h \
 	nvc0/nvc0_3d.xml.h \
 	nvc0/nvc0_compute.c \
-	nvc0/nvc0_compute.h \
 	nvc0/nvc0_compute.xml.h \
 	nvc0/nvc0_context.c \
 	nvc0/nvc0_context.h \

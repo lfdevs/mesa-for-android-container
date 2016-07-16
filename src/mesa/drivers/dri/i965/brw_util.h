@@ -34,6 +34,7 @@
 #define BRW_UTIL_H
 
 #include "brw_context.h"
+#include "main/framebuffer.h"
 
 extern GLuint brw_translate_blend_factor( GLenum factor );
 extern GLuint brw_translate_blend_equation( GLenum mode );
@@ -49,13 +50,13 @@ brw_get_line_width(struct brw_context *brw)
     * implementation-dependent maximum non-antialiased line width."
     */
    float line_width =
-      CLAMP(!brw->ctx.Multisample._Enabled && !brw->ctx.Line.SmoothFlag
+      CLAMP(!_mesa_is_multisample_enabled(&brw->ctx) && !brw->ctx.Line.SmoothFlag
             ? roundf(brw->ctx.Line.Width) : brw->ctx.Line.Width,
             0.0f, brw->ctx.Const.MaxLineWidth);
    uint32_t line_width_u3_7 = U_FIXED(line_width, 7);
 
    /* Line width of 0 is not allowed when MSAA enabled */
-   if (brw->ctx.Multisample._Enabled) {
+   if (_mesa_is_multisample_enabled(&brw->ctx)) {
       if (line_width_u3_7 == 0)
          line_width_u3_7 = 1;
    } else if (brw->ctx.Line.SmoothFlag && line_width < 1.5f) {

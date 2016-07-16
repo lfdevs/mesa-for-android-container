@@ -214,6 +214,10 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
         case PIPE_CAP_QUERY_BUFFER_OBJECT:
         case PIPE_CAP_QUERY_MEMORY_INFO:
+        case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+	case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+        case PIPE_CAP_CULL_DISTANCE:
+        case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
             return 0;
 
         /* SWTCL-only features. */
@@ -259,6 +263,14 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
                 return r300screen->info.vram_size >> 20;
         case PIPE_CAP_UMA:
                 return 0;
+        case PIPE_CAP_PCI_GROUP:
+            return r300screen->info.pci_domain;
+        case PIPE_CAP_PCI_BUS:
+            return r300screen->info.pci_bus;
+        case PIPE_CAP_PCI_DEVICE:
+            return r300screen->info.pci_dev;
+        case PIPE_CAP_PCI_FUNCTION:
+            return r300screen->info.pci_func;
     }
     return 0;
 }
@@ -529,7 +541,6 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                                         unsigned usage)
 {
     uint32_t retval = 0;
-    boolean drm_2_8_0 = r300_screen(screen)->info.drm_minor >= 8;
     boolean is_r500 = r300_screen(screen)->caps.is_r500;
     boolean is_r400 = r300_screen(screen)->caps.is_r400;
     boolean is_color2101010 = format == PIPE_FORMAT_R10G10B10A2_UNORM ||
@@ -545,13 +556,6 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                        format == PIPE_FORMAT_RGTC2_SNORM ||
                        format == PIPE_FORMAT_LATC2_UNORM ||
                        format == PIPE_FORMAT_LATC2_SNORM;
-    boolean is_x16f_xy16f = format == PIPE_FORMAT_R16_FLOAT ||
-                            format == PIPE_FORMAT_R16G16_FLOAT ||
-                            format == PIPE_FORMAT_A16_FLOAT ||
-                            format == PIPE_FORMAT_L16_FLOAT ||
-                            format == PIPE_FORMAT_L16A16_FLOAT ||
-                            format == PIPE_FORMAT_R16A16_FLOAT ||
-                            format == PIPE_FORMAT_I16_FLOAT;
     boolean is_half_float = format == PIPE_FORMAT_R16_FLOAT ||
                             format == PIPE_FORMAT_R16G16_FLOAT ||
                             format == PIPE_FORMAT_R16G16B16_FLOAT ||
@@ -570,10 +574,6 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
         case 2:
         case 4:
         case 6:
-            /* We need DRM 2.8.0. */
-            if (!drm_2_8_0) {
-                return FALSE;
-            }
             /* No texturing and scanout. */
             if (usage & (PIPE_BIND_SAMPLER_VIEW |
                          PIPE_BIND_DISPLAY_TARGET |
@@ -613,8 +613,6 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
         (is_r500 || !is_ati1n) &&
         /* ATI2N is supported on r4xx-r5xx. */
         (is_r400 || is_r500 || !is_ati2n) &&
-        /* R16F and RG16F texture support was added in as late as DRM 2.8.0 */
-        (drm_2_8_0 || !is_x16f_xy16f) &&
         r300_is_sampler_format_supported(format)) {
         retval |= PIPE_BIND_SAMPLER_VIEW;
     }
@@ -626,7 +624,7 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                   PIPE_BIND_SHARED |
                   PIPE_BIND_BLENDABLE)) &&
         /* 2101010 cannot be rendered to on non-r5xx. */
-        (!is_color2101010 || (is_r500 && drm_2_8_0)) &&
+        (!is_color2101010 || is_r500) &&
         r300_is_colorbuffer_format_supported(format)) {
         retval |= usage &
             (PIPE_BIND_RENDER_TARGET |
@@ -722,9 +720,6 @@ struct pipe_screen* r300_screen_create(struct radeon_winsys *rws)
         r300screen->caps.zmask_ram = 0;
     if (SCREEN_DBG_ON(r300screen, DBG_NO_HIZ))
         r300screen->caps.hiz_ram = 0;
-
-    if (r300screen->info.drm_minor < 8)
-        r300screen->caps.has_us_format = FALSE;
 
     r300screen->rws = rws;
     r300screen->screen.destroy = r300_destroy_screen;

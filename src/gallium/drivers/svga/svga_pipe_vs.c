@@ -80,7 +80,7 @@ substitute_vs(unsigned shader_id, const struct tgsi_token *old_tokens)
 
    if (!tgsi_text_translate(text,
                              tokens,
-                             Elements(tokens)))
+                             ARRAY_SIZE(tokens)))
    {
       assert(0);
       return NULL;

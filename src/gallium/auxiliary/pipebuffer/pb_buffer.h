@@ -87,9 +87,9 @@ struct pb_desc
 
 
 /**
- * Size. Regular (32bit) unsigned for now.
+ * 64-bit type for GPU buffer sizes and offsets.
  */
-typedef unsigned pb_size;
+typedef uint64_t pb_size;
 
 
 /**
@@ -98,8 +98,8 @@ typedef unsigned pb_size;
 struct pb_buffer 
 {
    struct pipe_reference  reference;
-   unsigned               size;
    unsigned               alignment;
+   pb_size                size;
    unsigned               usage;
 
    /**

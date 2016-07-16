@@ -35,12 +35,15 @@
 #define FLUSH_MAP_CACHE				(1 << 0)
 #define INHIBIT_FLUSH_RENDER_CACHE		(1 << 2)
 
+#define MI_STORE_DATA_IMM		(CMD_MI | (0x20 << 23))
 #define MI_LOAD_REGISTER_IMM		(CMD_MI | (0x22 << 23))
+#define MI_LOAD_REGISTER_REG		(CMD_MI | (0x2A << 23))
 
 #define MI_FLUSH_DW			(CMD_MI | (0x26 << 23) | 2)
 
 #define MI_STORE_REGISTER_MEM		(CMD_MI | (0x24 << 23))
 # define MI_STORE_REGISTER_MEM_USE_GGTT		(1 << 22)
+# define MI_STORE_REGISTER_MEM_PREDICATE	(1 << 21)
 
 /* Load a value from memory into a register.  Only available on Gen7+. */
 #define GEN7_MI_LOAD_REGISTER_MEM	(CMD_MI | (0x29 << 23))
@@ -62,6 +65,42 @@
 # define MI_PREDICATE_COMPAREOP_FALSE		(1 << 0)
 # define MI_PREDICATE_COMPAREOP_SRCS_EQUAL	(2 << 0)
 # define MI_PREDICATE_COMPAREOP_DELTAS_EQUAL	(3 << 0)
+
+#define HSW_MI_MATH			(CMD_MI | (0x1a << 23))
+
+#define MI_MATH_ALU2(opcode, operand1, operand2) \
+   ( ((MI_MATH_OPCODE_##opcode) << 20) | ((MI_MATH_OPERAND_##operand1) << 10) | \
+     ((MI_MATH_OPERAND_##operand2) << 0) )
+
+#define MI_MATH_ALU1(opcode, operand1) \
+   ( ((MI_MATH_OPCODE_##opcode) << 20) | ((MI_MATH_OPERAND_##operand1) << 10) )
+
+#define MI_MATH_ALU0(opcode) \
+   ( ((MI_MATH_OPCODE_##opcode) << 20) )
+
+#define MI_MATH_OPCODE_NOOP      0x000
+#define MI_MATH_OPCODE_LOAD      0x080
+#define MI_MATH_OPCODE_LOADINV   0x480
+#define MI_MATH_OPCODE_LOAD0     0x081
+#define MI_MATH_OPCODE_LOAD1     0x481
+#define MI_MATH_OPCODE_ADD       0x100
+#define MI_MATH_OPCODE_SUB       0x101
+#define MI_MATH_OPCODE_AND       0x102
+#define MI_MATH_OPCODE_OR        0x103
+#define MI_MATH_OPCODE_XOR       0x104
+#define MI_MATH_OPCODE_STORE     0x180
+#define MI_MATH_OPCODE_STOREINV  0x580
+
+#define MI_MATH_OPERAND_R0   0x00
+#define MI_MATH_OPERAND_R1   0x01
+#define MI_MATH_OPERAND_R2   0x02
+#define MI_MATH_OPERAND_R3   0x03
+#define MI_MATH_OPERAND_R4   0x04
+#define MI_MATH_OPERAND_SRCA 0x20
+#define MI_MATH_OPERAND_SRCB 0x21
+#define MI_MATH_OPERAND_ACCU 0x31
+#define MI_MATH_OPERAND_ZF   0x32
+#define MI_MATH_OPERAND_CF   0x33
 
 /** @{
  *
@@ -192,6 +231,8 @@
 #define MI_PREDICATE_RESULT             0x2418
 #define MI_PREDICATE_RESULT_1           0x241C
 #define MI_PREDICATE_RESULT_2           0x2214
+
+#define HSW_CS_GPR(n) (0x2600 + (n) * 8)
 
 /* L3 cache control registers. */
 #define GEN7_L3SQCREG1                     0xb010

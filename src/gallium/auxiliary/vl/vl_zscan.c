@@ -109,7 +109,7 @@ create_vert_shader(struct vl_zscan *zscan)
 
    signed i;
 
-   shader = ureg_create(TGSI_PROCESSOR_VERTEX);
+   shader = ureg_create(PIPE_SHADER_VERTEX);
    if (!shader)
       return NULL;
 
@@ -186,7 +186,7 @@ create_frag_shader(struct vl_zscan *zscan)
 
    unsigned i;
 
-   shader = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+   shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader)
       return NULL;
 

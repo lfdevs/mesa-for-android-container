@@ -44,10 +44,4 @@ void fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 
 void fd3_prog_init(struct pipe_context *pctx);
 
-static inline struct ir3_shader_variant *
-fd3_shader_variant(struct fd3_shader_stateobj *so, struct ir3_shader_key key)
-{
-	return ir3_shader_variant(so->shader, key);
-}
-
 #endif /* FD3_PROGRAM_H_ */

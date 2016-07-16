@@ -72,15 +72,27 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case BRW_OPCODE_MAD:
    case BRW_OPCODE_LRP:
    case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
+   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL:
    case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7:
-   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD:
    case FS_OPCODE_CINTERP:
    case FS_OPCODE_LINTERP:
    case SHADER_OPCODE_FIND_LIVE_CHANNEL:
    case SHADER_OPCODE_BROADCAST:
-   case SHADER_OPCODE_EXTRACT_BYTE:
-   case SHADER_OPCODE_EXTRACT_WORD:
    case SHADER_OPCODE_MOV_INDIRECT:
+   case SHADER_OPCODE_TEX_LOGICAL:
+   case SHADER_OPCODE_TXD_LOGICAL:
+   case SHADER_OPCODE_TXF_LOGICAL:
+   case SHADER_OPCODE_TXL_LOGICAL:
+   case SHADER_OPCODE_TXS_LOGICAL:
+   case FS_OPCODE_TXB_LOGICAL:
+   case SHADER_OPCODE_TXF_CMS_LOGICAL:
+   case SHADER_OPCODE_TXF_CMS_W_LOGICAL:
+   case SHADER_OPCODE_TXF_UMS_LOGICAL:
+   case SHADER_OPCODE_TXF_MCS_LOGICAL:
+   case SHADER_OPCODE_LOD_LOGICAL:
+   case SHADER_OPCODE_TG4_LOGICAL:
+   case SHADER_OPCODE_TG4_OFFSET_LOGICAL:
+   case FS_OPCODE_PACK:
       return true;
    case SHADER_OPCODE_RCP:
    case SHADER_OPCODE_RSQ:
@@ -163,7 +175,7 @@ instructions_match(fs_inst *a, fs_inst *b, bool *negate)
    return a->opcode == b->opcode &&
           a->force_writemask_all == b->force_writemask_all &&
           a->exec_size == b->exec_size &&
-          a->force_sechalf == b->force_sechalf &&
+          a->group == b->group &&
           a->saturate == b->saturate &&
           a->predicate == b->predicate &&
           a->predicate_inverse == b->predicate_inverse &&
@@ -186,10 +198,12 @@ static void
 create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
 {
    int written = inst->regs_written;
-   int dst_width = inst->exec_size / 8;
+   int dst_width =
+      DIV_ROUND_UP(inst->dst.component_size(inst->exec_size), REG_SIZE);
    fs_inst *copy;
 
-   if (written > dst_width) {
+   if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD ||
+       written != dst_width) {
       fs_reg *payload;
       int sources, header_size;
       if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
@@ -214,7 +228,7 @@ create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
       copy = bld.LOAD_PAYLOAD(inst->dst, payload, sources, header_size);
    } else {
       copy = bld.MOV(inst->dst, src);
-      copy->force_sechalf = inst->force_sechalf;
+      copy->group = inst->group;
       copy->force_writemask_all = inst->force_writemask_all;
       copy->src[0].negate = negate;
    }
@@ -302,10 +316,10 @@ fs_visitor::opt_cse_local(bblock_t *block)
          /* Kill all AEB entries that write a different value to or read from
           * the flag register if we just wrote it.
           */
-         if (inst->writes_flag()) {
+         if (inst->flags_written()) {
             bool negate; /* dummy */
-            if (entry->generator->reads_flag() ||
-                (entry->generator->writes_flag() &&
+            if (entry->generator->flags_read(devinfo) ||
+                (entry->generator->flags_written() &&
                  !instructions_match(inst, entry->generator, &negate))) {
                entry->remove();
                ralloc_free(entry);

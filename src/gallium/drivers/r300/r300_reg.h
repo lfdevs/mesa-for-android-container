@@ -1700,10 +1700,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define R300_TX_OFFSET_6                    0x4558
 #define R300_TX_OFFSET_7                    0x455C
 
-#       define R300_TXO_ENDIAN_NO_SWAP           (0 << 0)
-#       define R300_TXO_ENDIAN_BYTE_SWAP         (1 << 0)
-#       define R300_TXO_ENDIAN_WORD_SWAP         (2 << 0)
-#       define R300_TXO_ENDIAN_HALFDW_SWAP       (3 << 0)
+#       define R300_TXO_ENDIAN(x)                ((x) << 0)
 #       define R300_TXO_MACRO_TILE_LINEAR        (0 << 2)
 #       define R300_TXO_MACRO_TILE_TILED         (1 << 2)
 #       define R300_TXO_MACRO_TILE(x)            ((x) << 2)
@@ -2418,10 +2415,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_COLOR_MICROTILE_ENABLE        (1 << 17)
 #       define R300_COLOR_MICROTILE_ENABLE_SQUARE (2 << 17) /* Only available in 16-bit */
 #       define R300_COLOR_MICROTILE(x)            ((x) << 17)
-#       define R300_COLOR_ENDIAN_NO_SWAP          (0 << 19)
-#       define R300_COLOR_ENDIAN_WORD_SWAP        (1 << 19)
-#       define R300_COLOR_ENDIAN_DWORD_SWAP       (2 << 19)
-#       define R300_COLOR_ENDIAN_HALF_DWORD_SWAP  (3 << 19)
+#       define R300_COLOR_ENDIAN(x)               ((x) << 19)
 #	define R500_COLOR_FORMAT_ARGB10101010     (0 << 21)
 #	define R500_COLOR_FORMAT_UV1010           (1 << 21)
 #	define R500_COLOR_FORMAT_CI8              (2 << 21) /* 2D only */
@@ -2693,10 +2687,12 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_DEPTHMICROTILE_TILED        (1 << 17)
 #       define R300_DEPTHMICROTILE_TILED_SQUARE (2 << 17)
 #       define R300_DEPTHMICROTILE(x)           ((x) << 17)
-#       define R300_DEPTHENDIAN_NO_SWAP         (0 << 18)
-#       define R300_DEPTHENDIAN_WORD_SWAP       (1 << 18)
-#       define R300_DEPTHENDIAN_DWORD_SWAP      (2 << 18)
-#       define R300_DEPTHENDIAN_HALF_DWORD_SWAP (3 << 18)
+#       define R300_DEPTHENDIAN(x)              ((x) << 19)
+
+#define R300_SURF_NO_SWAP         0
+#define R300_SURF_WORD_SWAP       1
+#define R300_SURF_DWORD_SWAP      2
+#define R300_SURF_HALF_DWORD_SWAP 3
 
 /* Z Buffer Clear Value */
 #define R300_ZB_DEPTHCLEARVALUE                  0x4f28

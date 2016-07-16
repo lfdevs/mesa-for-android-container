@@ -76,22 +76,6 @@ is_channel_updated(vec4_instruction *inst, src_reg *values[4], int ch)
            inst->dst.writemask & (1 << BRW_GET_SWZ(src->swizzle, ch)));
 }
 
-static unsigned
-swizzle_vf_imm(unsigned vf4, unsigned swizzle)
-{
-   union {
-      unsigned vf4;
-      uint8_t vf[4];
-   } v = { vf4 }, ret;
-
-   ret.vf[0] = v.vf[BRW_GET_SWZ(swizzle, 0)];
-   ret.vf[1] = v.vf[BRW_GET_SWZ(swizzle, 1)];
-   ret.vf[2] = v.vf[BRW_GET_SWZ(swizzle, 2)];
-   ret.vf[3] = v.vf[BRW_GET_SWZ(swizzle, 3)];
-
-   return ret.vf4;
-}
-
 static bool
 is_logic_op(enum opcode opcode)
 {
@@ -101,21 +85,66 @@ is_logic_op(enum opcode opcode)
            opcode == BRW_OPCODE_NOT);
 }
 
+/**
+ * Get the origin of a copy as a single register if all components present in
+ * the given readmask originate from the same register and have compatible
+ * regions, otherwise return a BAD_FILE register.
+ */
+static src_reg
+get_copy_value(const copy_entry &entry, unsigned readmask)
+{
+   unsigned swz[4] = {};
+   src_reg value;
+
+   for (unsigned i = 0; i < 4; i++) {
+      if (readmask & (1 << i)) {
+         if (entry.value[i]) {
+            src_reg src = *entry.value[i];
+
+            if (src.file == IMM) {
+               swz[i] = i;
+            } else {
+               swz[i] = BRW_GET_SWZ(src.swizzle, i);
+               /* Overwrite the original swizzle so the src_reg::equals call
+                * below doesn't care about it, the correct swizzle will be
+                * calculated once the swizzles of all components are known.
+                */
+               src.swizzle = BRW_SWIZZLE_XYZW;
+            }
+
+            if (value.file == BAD_FILE) {
+               value = src;
+            } else if (!value.equals(src)) {
+               return src_reg();
+            }
+         } else {
+            return src_reg();
+         }
+      }
+   }
+
+   return swizzle(value,
+                  brw_compose_swizzle(brw_swizzle_for_mask(readmask),
+                                      BRW_SWIZZLE4(swz[0], swz[1],
+                                                   swz[2], swz[3])));
+}
+
 static bool
 try_constant_propagate(const struct brw_device_info *devinfo,
                        vec4_instruction *inst,
-                       int arg, struct copy_entry *entry)
+                       int arg, const copy_entry *entry)
 {
    /* For constant propagation, we only handle the same constant
     * across all 4 channels.  Some day, we should handle the 8-bit
     * float vector format, which would let us constant propagate
     * vectors better.
+    * We could be more aggressive here -- some channels might not get used
+    * based on the destination writemask.
     */
-   src_reg value = *entry->value[0];
-   for (int i = 1; i < 4; i++) {
-      if (!value.equals(*entry->value[i]))
-	 return false;
-   }
+   src_reg value =
+      get_copy_value(*entry,
+                     brw_apply_inv_swizzle_to_mask(inst->src[arg].swizzle,
+                                                   WRITEMASK_XYZW));
 
    if (value.file != IMM)
       return false;
@@ -144,8 +173,7 @@ try_constant_propagate(const struct brw_device_info *devinfo,
       }
    }
 
-   if (value.type == BRW_REGISTER_TYPE_VF)
-      value.ud = swizzle_vf_imm(value.ud, inst->src[arg].swizzle);
+   value = swizzle(value, inst->src[arg].swizzle);
 
    switch (inst->opcode) {
    case BRW_OPCODE_MOV:
@@ -255,38 +283,15 @@ try_constant_propagate(const struct brw_device_info *devinfo,
 static bool
 try_copy_propagate(const struct brw_device_info *devinfo,
                    vec4_instruction *inst, int arg,
-                   struct copy_entry *entry, int attributes_per_reg)
+                   const copy_entry *entry, int attributes_per_reg)
 {
    /* Build up the value we are propagating as if it were the source of a
     * single MOV
     */
-   /* For constant propagation, we only handle the same constant
-    * across all 4 channels.  Some day, we should handle the 8-bit
-    * float vector format, which would let us constant propagate
-    * vectors better.
-    */
-   src_reg value = *entry->value[0];
-   for (int i = 1; i < 4; i++) {
-      /* This is equals() except we don't care about the swizzle. */
-      if (value.file != entry->value[i]->file ||
-          value.nr != entry->value[i]->nr ||
-	  value.reg_offset != entry->value[i]->reg_offset ||
-	  value.type != entry->value[i]->type ||
-	  value.negate != entry->value[i]->negate ||
-	  value.abs != entry->value[i]->abs) {
-	 return false;
-      }
-   }
-
-   /* Compute the swizzle of the original register by swizzling the
-    * component loaded from each value according to the swizzle of
-    * operand we're going to change.
-    */
-   int s[4];
-   for (int i = 0; i < 4; i++) {
-      s[i] = BRW_GET_SWZ(entry->value[i]->swizzle, i);
-   }
-   value.swizzle = BRW_SWIZZLE4(s[0], s[1], s[2], s[3]);
+   src_reg value =
+      get_copy_value(*entry,
+                     brw_apply_inv_swizzle_to_mask(inst->src[arg].swizzle,
+                                                   WRITEMASK_XYZW));
 
    /* Check that we can propagate that value */
    if (value.file != UNIFORM &&
@@ -319,7 +324,7 @@ try_copy_propagate(const struct brw_device_info *devinfo,
 
    unsigned composed_swizzle = brw_compose_swizzle(inst->src[arg].swizzle,
                                                    value.swizzle);
-   if (inst->is_3src() &&
+   if (inst->is_3src(devinfo) &&
        (value.file == UNIFORM ||
         (value.file == ATTR && attributes_per_reg != 1)) &&
        !brw_is_single_value_swizzle(composed_swizzle))
@@ -435,43 +440,13 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
          if (inst->regs_read(i) != 1)
             continue;
 
-         int reg = (alloc.offsets[inst->src[i].nr] +
-		    inst->src[i].reg_offset);
-
-	 /* Find the regs that each swizzle component came from.
-	  */
-         struct copy_entry entry;
-         memset(&entry, 0, sizeof(copy_entry));
-	 int c;
-	 for (c = 0; c < 4; c++) {
-            int channel = BRW_GET_SWZ(inst->src[i].swizzle, c);
-            entry.value[c] = entries[reg].value[channel];
-
-	    /* If there's no available copy for this channel, bail.
-	     * We could be more aggressive here -- some channels might
-	     * not get used based on the destination writemask.
-	     */
-	    if (!entry.value[c])
-	       break;
-
-            entry.saturatemask |=
-               (entries[reg].saturatemask & (1 << channel) ? 1 : 0) << c;
-
-	    /* We'll only be able to copy propagate if the sources are
-	     * all from the same file -- there's no ability to swizzle
-	     * 0 or 1 constants in with source registers like in i915.
-	     */
-	    if (c > 0 && entry.value[c - 1]->file != entry.value[c]->file)
-	       break;
-	 }
-
-	 if (c != 4)
-	    continue;
+         const unsigned reg = (alloc.offsets[inst->src[i].nr] +
+                                inst->src[i].reg_offset);
+         const copy_entry &entry = entries[reg];
 
          if (do_constant_prop && try_constant_propagate(devinfo, inst, i, &entry))
             progress = true;
-
-         if (try_copy_propagate(devinfo, inst, i, &entry, attributes_per_reg))
+         else if (try_copy_propagate(devinfo, inst, i, &entry, attributes_per_reg))
 	    progress = true;
       }
 

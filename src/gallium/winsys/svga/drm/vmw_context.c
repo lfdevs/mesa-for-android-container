@@ -315,6 +315,13 @@ vmw_swc_reserve(struct svga_winsys_context *swc,
    return vswc->command.buffer + vswc->command.used;
 }
 
+static unsigned
+vmw_swc_get_command_buffer_size(struct svga_winsys_context *swc)
+{
+   const struct vmw_svga_winsys_context *vswc = vmw_svga_winsys_context(swc);
+   return vswc->command.used;
+}
+
 static void
 vmw_swc_context_relocation(struct svga_winsys_context *swc,
 			   uint32 *cid)
@@ -761,6 +768,7 @@ vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
 
    vswc->base.destroy = vmw_swc_destroy;
    vswc->base.reserve = vmw_swc_reserve;
+   vswc->base.get_command_buffer_size = vmw_swc_get_command_buffer_size;
    vswc->base.surface_relocation = vmw_swc_surface_relocation;
    vswc->base.region_relocation = vmw_swc_region_relocation;
    vswc->base.mob_relocation = vmw_swc_mob_relocation;

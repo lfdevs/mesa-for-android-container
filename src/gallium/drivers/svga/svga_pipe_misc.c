@@ -254,10 +254,13 @@ svga_set_debug_callback(struct pipe_context *pipe,
 {
    struct svga_context *svga = svga_context(pipe);
 
-   if (cb)
+   if (cb) {
       svga->debug.callback = *cb;
-   else
+      svga->swc->debug_callback = &svga->debug.callback;
+   } else {
       memset(&svga->debug.callback, 0, sizeof(svga->debug.callback));
+      svga->swc->debug_callback = NULL;
+   }
 }
 
 

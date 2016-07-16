@@ -51,49 +51,56 @@ enum pipe_error
    /* TODO */
 };
 
+enum pipe_blendfactor {
+   PIPE_BLENDFACTOR_ONE = 1,
+   PIPE_BLENDFACTOR_SRC_COLOR,
+   PIPE_BLENDFACTOR_SRC_ALPHA,
+   PIPE_BLENDFACTOR_DST_ALPHA,
+   PIPE_BLENDFACTOR_DST_COLOR,
+   PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE,
+   PIPE_BLENDFACTOR_CONST_COLOR,
+   PIPE_BLENDFACTOR_CONST_ALPHA,
+   PIPE_BLENDFACTOR_SRC1_COLOR,
+   PIPE_BLENDFACTOR_SRC1_ALPHA,
 
-#define PIPE_BLENDFACTOR_ONE                 0x1
-#define PIPE_BLENDFACTOR_SRC_COLOR           0x2
-#define PIPE_BLENDFACTOR_SRC_ALPHA           0x3
-#define PIPE_BLENDFACTOR_DST_ALPHA           0x4
-#define PIPE_BLENDFACTOR_DST_COLOR           0x5
-#define PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE  0x6
-#define PIPE_BLENDFACTOR_CONST_COLOR         0x7
-#define PIPE_BLENDFACTOR_CONST_ALPHA         0x8
-#define PIPE_BLENDFACTOR_SRC1_COLOR          0x9
-#define PIPE_BLENDFACTOR_SRC1_ALPHA          0x0A
-#define PIPE_BLENDFACTOR_ZERO                0x11
-#define PIPE_BLENDFACTOR_INV_SRC_COLOR       0x12
-#define PIPE_BLENDFACTOR_INV_SRC_ALPHA       0x13
-#define PIPE_BLENDFACTOR_INV_DST_ALPHA       0x14
-#define PIPE_BLENDFACTOR_INV_DST_COLOR       0x15
-#define PIPE_BLENDFACTOR_INV_CONST_COLOR     0x17
-#define PIPE_BLENDFACTOR_INV_CONST_ALPHA     0x18
-#define PIPE_BLENDFACTOR_INV_SRC1_COLOR      0x19
-#define PIPE_BLENDFACTOR_INV_SRC1_ALPHA      0x1A
+   PIPE_BLENDFACTOR_ZERO = 0x11,
+   PIPE_BLENDFACTOR_INV_SRC_COLOR,
+   PIPE_BLENDFACTOR_INV_SRC_ALPHA,
+   PIPE_BLENDFACTOR_INV_DST_ALPHA,
+   PIPE_BLENDFACTOR_INV_DST_COLOR,
 
-#define PIPE_BLEND_ADD               0
-#define PIPE_BLEND_SUBTRACT          1
-#define PIPE_BLEND_REVERSE_SUBTRACT  2
-#define PIPE_BLEND_MIN               3
-#define PIPE_BLEND_MAX               4
+   PIPE_BLENDFACTOR_INV_CONST_COLOR = 0x17,
+   PIPE_BLENDFACTOR_INV_CONST_ALPHA,
+   PIPE_BLENDFACTOR_INV_SRC1_COLOR,
+   PIPE_BLENDFACTOR_INV_SRC1_ALPHA,
+};
 
-#define PIPE_LOGICOP_CLEAR            0
-#define PIPE_LOGICOP_NOR              1
-#define PIPE_LOGICOP_AND_INVERTED     2
-#define PIPE_LOGICOP_COPY_INVERTED    3
-#define PIPE_LOGICOP_AND_REVERSE      4
-#define PIPE_LOGICOP_INVERT           5
-#define PIPE_LOGICOP_XOR              6
-#define PIPE_LOGICOP_NAND             7
-#define PIPE_LOGICOP_AND              8
-#define PIPE_LOGICOP_EQUIV            9
-#define PIPE_LOGICOP_NOOP             10
-#define PIPE_LOGICOP_OR_INVERTED      11
-#define PIPE_LOGICOP_COPY             12
-#define PIPE_LOGICOP_OR_REVERSE       13
-#define PIPE_LOGICOP_OR               14
-#define PIPE_LOGICOP_SET              15  
+enum pipe_blend_func {
+   PIPE_BLEND_ADD,
+   PIPE_BLEND_SUBTRACT,
+   PIPE_BLEND_REVERSE_SUBTRACT,
+   PIPE_BLEND_MIN,
+   PIPE_BLEND_MAX,
+};
+
+enum pipe_logicop {
+   PIPE_LOGICOP_CLEAR,
+   PIPE_LOGICOP_NOR,
+   PIPE_LOGICOP_AND_INVERTED,
+   PIPE_LOGICOP_COPY_INVERTED,
+   PIPE_LOGICOP_AND_REVERSE,
+   PIPE_LOGICOP_INVERT,
+   PIPE_LOGICOP_XOR,
+   PIPE_LOGICOP_NAND,
+   PIPE_LOGICOP_AND,
+   PIPE_LOGICOP_EQUIV,
+   PIPE_LOGICOP_NOOP,
+   PIPE_LOGICOP_OR_INVERTED,
+   PIPE_LOGICOP_COPY,
+   PIPE_LOGICOP_OR_REVERSE,
+   PIPE_LOGICOP_OR,
+   PIPE_LOGICOP_SET,
+};
 
 #define PIPE_MASK_R  0x1
 #define PIPE_MASK_G  0x2
@@ -110,19 +117,23 @@ enum pipe_error
  * Inequality functions.  Used for depth test, stencil compare, alpha
  * test, shadow compare, etc.
  */
-#define PIPE_FUNC_NEVER    0
-#define PIPE_FUNC_LESS     1
-#define PIPE_FUNC_EQUAL    2
-#define PIPE_FUNC_LEQUAL   3
-#define PIPE_FUNC_GREATER  4
-#define PIPE_FUNC_NOTEQUAL 5
-#define PIPE_FUNC_GEQUAL   6
-#define PIPE_FUNC_ALWAYS   7
+enum pipe_compare_func {
+   PIPE_FUNC_NEVER,
+   PIPE_FUNC_LESS,
+   PIPE_FUNC_EQUAL,
+   PIPE_FUNC_LEQUAL,
+   PIPE_FUNC_GREATER,
+   PIPE_FUNC_NOTEQUAL,
+   PIPE_FUNC_GEQUAL,
+   PIPE_FUNC_ALWAYS,
+};
 
 /** Polygon fill mode */
-#define PIPE_POLYGON_MODE_FILL  0
-#define PIPE_POLYGON_MODE_LINE  1
-#define PIPE_POLYGON_MODE_POINT 2
+enum {
+   PIPE_POLYGON_MODE_FILL,
+   PIPE_POLYGON_MODE_LINE,
+   PIPE_POLYGON_MODE_POINT,
+};
 
 /** Polygon face specification, eg for culling */
 #define PIPE_FACE_NONE           0
@@ -131,60 +142,72 @@ enum pipe_error
 #define PIPE_FACE_FRONT_AND_BACK (PIPE_FACE_FRONT | PIPE_FACE_BACK)
 
 /** Stencil ops */
-#define PIPE_STENCIL_OP_KEEP       0
-#define PIPE_STENCIL_OP_ZERO       1
-#define PIPE_STENCIL_OP_REPLACE    2
-#define PIPE_STENCIL_OP_INCR       3
-#define PIPE_STENCIL_OP_DECR       4
-#define PIPE_STENCIL_OP_INCR_WRAP  5
-#define PIPE_STENCIL_OP_DECR_WRAP  6
-#define PIPE_STENCIL_OP_INVERT     7
+enum pipe_stencil_op {
+   PIPE_STENCIL_OP_KEEP,
+   PIPE_STENCIL_OP_ZERO,
+   PIPE_STENCIL_OP_REPLACE,
+   PIPE_STENCIL_OP_INCR,
+   PIPE_STENCIL_OP_DECR,
+   PIPE_STENCIL_OP_INCR_WRAP,
+   PIPE_STENCIL_OP_DECR_WRAP,
+   PIPE_STENCIL_OP_INVERT,
+};
 
 /** Texture types.
  * See the documentation for info on PIPE_TEXTURE_RECT vs PIPE_TEXTURE_2D
  */
 enum pipe_texture_target
 {
-   PIPE_BUFFER           = 0,
-   PIPE_TEXTURE_1D       = 1,
-   PIPE_TEXTURE_2D       = 2,
-   PIPE_TEXTURE_3D       = 3,
-   PIPE_TEXTURE_CUBE     = 4,
-   PIPE_TEXTURE_RECT     = 5,
-   PIPE_TEXTURE_1D_ARRAY = 6,
-   PIPE_TEXTURE_2D_ARRAY = 7,
-   PIPE_TEXTURE_CUBE_ARRAY = 8,
-   PIPE_MAX_TEXTURE_TYPES
+   PIPE_BUFFER,
+   PIPE_TEXTURE_1D,
+   PIPE_TEXTURE_2D,
+   PIPE_TEXTURE_3D,
+   PIPE_TEXTURE_CUBE,
+   PIPE_TEXTURE_RECT,
+   PIPE_TEXTURE_1D_ARRAY,
+   PIPE_TEXTURE_2D_ARRAY,
+   PIPE_TEXTURE_CUBE_ARRAY,
+   PIPE_MAX_TEXTURE_TYPES,
 };
 
-#define PIPE_TEX_FACE_POS_X 0
-#define PIPE_TEX_FACE_NEG_X 1
-#define PIPE_TEX_FACE_POS_Y 2
-#define PIPE_TEX_FACE_NEG_Y 3
-#define PIPE_TEX_FACE_POS_Z 4
-#define PIPE_TEX_FACE_NEG_Z 5
-#define PIPE_TEX_FACE_MAX   6
+enum pipe_tex_face {
+   PIPE_TEX_FACE_POS_X,
+   PIPE_TEX_FACE_NEG_X,
+   PIPE_TEX_FACE_POS_Y,
+   PIPE_TEX_FACE_NEG_Y,
+   PIPE_TEX_FACE_POS_Z,
+   PIPE_TEX_FACE_NEG_Z,
+   PIPE_TEX_FACE_MAX,
+};
 
-#define PIPE_TEX_WRAP_REPEAT                   0
-#define PIPE_TEX_WRAP_CLAMP                    1
-#define PIPE_TEX_WRAP_CLAMP_TO_EDGE            2
-#define PIPE_TEX_WRAP_CLAMP_TO_BORDER          3
-#define PIPE_TEX_WRAP_MIRROR_REPEAT            4
-#define PIPE_TEX_WRAP_MIRROR_CLAMP             5
-#define PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE     6
-#define PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER   7
+enum pipe_tex_wrap {
+   PIPE_TEX_WRAP_REPEAT,
+   PIPE_TEX_WRAP_CLAMP,
+   PIPE_TEX_WRAP_CLAMP_TO_EDGE,
+   PIPE_TEX_WRAP_CLAMP_TO_BORDER,
+   PIPE_TEX_WRAP_MIRROR_REPEAT,
+   PIPE_TEX_WRAP_MIRROR_CLAMP,
+   PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE,
+   PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER,
+};
 
 /** Between mipmaps, ie mipfilter */
-#define PIPE_TEX_MIPFILTER_NEAREST  0
-#define PIPE_TEX_MIPFILTER_LINEAR   1
-#define PIPE_TEX_MIPFILTER_NONE     2
+enum pipe_tex_mipfilter {
+   PIPE_TEX_MIPFILTER_NEAREST,
+   PIPE_TEX_MIPFILTER_LINEAR,
+   PIPE_TEX_MIPFILTER_NONE,
+};
 
 /** Within a mipmap, ie min/mag filter */
-#define PIPE_TEX_FILTER_NEAREST      0
-#define PIPE_TEX_FILTER_LINEAR       1
+enum pipe_tex_filter {
+   PIPE_TEX_FILTER_NEAREST,
+   PIPE_TEX_FILTER_LINEAR,
+};
 
-#define PIPE_TEX_COMPARE_NONE          0
-#define PIPE_TEX_COMPARE_R_TO_TEXTURE  1
+enum pipe_tex_compare {
+   PIPE_TEX_COMPARE_NONE,
+   PIPE_TEX_COMPARE_R_TO_TEXTURE,
+};
 
 /**
  * Clear buffer bits
@@ -360,6 +383,15 @@ enum pipe_flush_flags
 #define PIPE_BARRIER_MAPPED_BUFFER     (1 << 0)
 #define PIPE_BARRIER_SHADER_BUFFER     (1 << 1)
 #define PIPE_BARRIER_QUERY_BUFFER      (1 << 2)
+#define PIPE_BARRIER_VERTEX_BUFFER     (1 << 3)
+#define PIPE_BARRIER_INDEX_BUFFER      (1 << 4)
+#define PIPE_BARRIER_CONSTANT_BUFFER   (1 << 5)
+#define PIPE_BARRIER_INDIRECT_BUFFER   (1 << 6)
+#define PIPE_BARRIER_TEXTURE           (1 << 7)
+#define PIPE_BARRIER_IMAGE             (1 << 8)
+#define PIPE_BARRIER_FRAMEBUFFER       (1 << 9)
+#define PIPE_BARRIER_STREAMOUT_BUFFER  (1 << 10)
+#define PIPE_BARRIER_GLOBAL_BUFFER     (1 << 11)
 
 /**
  * Resource binding flags -- state tracker must specify in advance all
@@ -404,9 +436,9 @@ enum pipe_flush_flags
  * The third flag has been added to be able to force textures to be created
  * in linear mode (no tiling).
  */
-#define PIPE_BIND_SCANOUT     (1 << 18) /*  */
-#define PIPE_BIND_SHARED      (1 << 19) /* get_texture_handle ??? */
-#define PIPE_BIND_LINEAR      (1 << 20)
+#define PIPE_BIND_SCANOUT     (1 << 19) /*  */
+#define PIPE_BIND_SHARED      (1 << 20) /* get_texture_handle ??? */
+#define PIPE_BIND_LINEAR      (1 << 21)
 
 
 /**
@@ -421,98 +453,109 @@ enum pipe_flush_flags
  * Hint about the expected lifecycle of a resource.
  * Sorted according to GPU vs CPU access.
  */
-#define PIPE_USAGE_DEFAULT        0 /* fast GPU access */
-#define PIPE_USAGE_IMMUTABLE      1 /* fast GPU access, immutable */
-#define PIPE_USAGE_DYNAMIC        2 /* uploaded data is used multiple times */
-#define PIPE_USAGE_STREAM         3 /* uploaded data is used once */
-#define PIPE_USAGE_STAGING        4 /* fast CPU access */
-
+enum pipe_resource_usage {
+   PIPE_USAGE_DEFAULT,        /* fast GPU access */
+   PIPE_USAGE_IMMUTABLE,      /* fast GPU access, immutable */
+   PIPE_USAGE_DYNAMIC,        /* uploaded data is used multiple times */
+   PIPE_USAGE_STREAM,         /* uploaded data is used once */
+   PIPE_USAGE_STAGING,        /* fast CPU access */
+};
 
 /**
  * Shaders
  */
-#define PIPE_SHADER_VERTEX   0
-#define PIPE_SHADER_FRAGMENT 1
-#define PIPE_SHADER_GEOMETRY 2
-#define PIPE_SHADER_TESS_CTRL 3
-#define PIPE_SHADER_TESS_EVAL 4
-#define PIPE_SHADER_COMPUTE  5
-#define PIPE_SHADER_TYPES    6
-
+enum pipe_shader_type {
+   PIPE_SHADER_VERTEX,
+   PIPE_SHADER_FRAGMENT,
+   PIPE_SHADER_GEOMETRY,
+   PIPE_SHADER_TESS_CTRL,
+   PIPE_SHADER_TESS_EVAL,
+   PIPE_SHADER_COMPUTE,
+   PIPE_SHADER_TYPES,
+};
 
 /**
  * Primitive types:
  */
-#define PIPE_PRIM_POINTS                    0
-#define PIPE_PRIM_LINES                     1
-#define PIPE_PRIM_LINE_LOOP                 2
-#define PIPE_PRIM_LINE_STRIP                3
-#define PIPE_PRIM_TRIANGLES                 4
-#define PIPE_PRIM_TRIANGLE_STRIP            5
-#define PIPE_PRIM_TRIANGLE_FAN              6
-#define PIPE_PRIM_QUADS                     7
-#define PIPE_PRIM_QUAD_STRIP                8
-#define PIPE_PRIM_POLYGON                   9
-#define PIPE_PRIM_LINES_ADJACENCY          10
-#define PIPE_PRIM_LINE_STRIP_ADJACENCY     11
-#define PIPE_PRIM_TRIANGLES_ADJACENCY      12
-#define PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY 13
-#define PIPE_PRIM_PATCHES                  14
-#define PIPE_PRIM_MAX                      15
-
+enum pipe_prim_type {
+   PIPE_PRIM_POINTS,
+   PIPE_PRIM_LINES,
+   PIPE_PRIM_LINE_LOOP,
+   PIPE_PRIM_LINE_STRIP,
+   PIPE_PRIM_TRIANGLES,
+   PIPE_PRIM_TRIANGLE_STRIP,
+   PIPE_PRIM_TRIANGLE_FAN,
+   PIPE_PRIM_QUADS,
+   PIPE_PRIM_QUAD_STRIP,
+   PIPE_PRIM_POLYGON,
+   PIPE_PRIM_LINES_ADJACENCY,
+   PIPE_PRIM_LINE_STRIP_ADJACENCY,
+   PIPE_PRIM_TRIANGLES_ADJACENCY,
+   PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY,
+   PIPE_PRIM_PATCHES,
+   PIPE_PRIM_MAX,
+};
 
 /**
  * Tessellator spacing types
  */
-#define PIPE_TESS_SPACING_FRACTIONAL_ODD    0
-#define PIPE_TESS_SPACING_FRACTIONAL_EVEN   1
-#define PIPE_TESS_SPACING_EQUAL             2
+enum pipe_tess_spacing {
+   PIPE_TESS_SPACING_FRACTIONAL_ODD,
+   PIPE_TESS_SPACING_FRACTIONAL_EVEN,
+   PIPE_TESS_SPACING_EQUAL,
+};
 
 /**
  * Query object types
  */
-#define PIPE_QUERY_OCCLUSION_COUNTER     0
-#define PIPE_QUERY_OCCLUSION_PREDICATE   1
-#define PIPE_QUERY_TIMESTAMP             2
-#define PIPE_QUERY_TIMESTAMP_DISJOINT    3
-#define PIPE_QUERY_TIME_ELAPSED          4
-#define PIPE_QUERY_PRIMITIVES_GENERATED  5
-#define PIPE_QUERY_PRIMITIVES_EMITTED    6
-#define PIPE_QUERY_SO_STATISTICS         7
-#define PIPE_QUERY_SO_OVERFLOW_PREDICATE 8
-#define PIPE_QUERY_GPU_FINISHED          9
-#define PIPE_QUERY_PIPELINE_STATISTICS  10
-#define PIPE_QUERY_TYPES                11
-/* start of driver queries, see pipe_screen::get_driver_query_info */
-#define PIPE_QUERY_DRIVER_SPECIFIC     256
-
+enum pipe_query_type {
+   PIPE_QUERY_OCCLUSION_COUNTER,
+   PIPE_QUERY_OCCLUSION_PREDICATE,
+   PIPE_QUERY_TIMESTAMP,
+   PIPE_QUERY_TIMESTAMP_DISJOINT,
+   PIPE_QUERY_TIME_ELAPSED,
+   PIPE_QUERY_PRIMITIVES_GENERATED,
+   PIPE_QUERY_PRIMITIVES_EMITTED,
+   PIPE_QUERY_SO_STATISTICS,
+   PIPE_QUERY_SO_OVERFLOW_PREDICATE,
+   PIPE_QUERY_GPU_FINISHED,
+   PIPE_QUERY_PIPELINE_STATISTICS,
+   PIPE_QUERY_TYPES,
+   /* start of driver queries, see pipe_screen::get_driver_query_info */
+   PIPE_QUERY_DRIVER_SPECIFIC = 256,
+};
 
 /**
  * Conditional rendering modes
  */
-#define PIPE_RENDER_COND_WAIT              0
-#define PIPE_RENDER_COND_NO_WAIT           1
-#define PIPE_RENDER_COND_BY_REGION_WAIT    2
-#define PIPE_RENDER_COND_BY_REGION_NO_WAIT 3
-
+enum pipe_render_cond_flag {
+   PIPE_RENDER_COND_WAIT,
+   PIPE_RENDER_COND_NO_WAIT,
+   PIPE_RENDER_COND_BY_REGION_WAIT,
+   PIPE_RENDER_COND_BY_REGION_NO_WAIT,
+};
 
 /**
  * Point sprite coord modes
  */
-#define PIPE_SPRITE_COORD_UPPER_LEFT 0
-#define PIPE_SPRITE_COORD_LOWER_LEFT 1
-
+enum pipe_sprite_coord_mode {
+   PIPE_SPRITE_COORD_UPPER_LEFT,
+   PIPE_SPRITE_COORD_LOWER_LEFT,
+};
 
 /**
- * Texture swizzles
+ * Texture & format swizzles
  */
-#define PIPE_SWIZZLE_RED   0
-#define PIPE_SWIZZLE_GREEN 1
-#define PIPE_SWIZZLE_BLUE  2
-#define PIPE_SWIZZLE_ALPHA 3
-#define PIPE_SWIZZLE_ZERO  4
-#define PIPE_SWIZZLE_ONE   5
-
+enum pipe_swizzle {
+   PIPE_SWIZZLE_X,
+   PIPE_SWIZZLE_Y,
+   PIPE_SWIZZLE_Z,
+   PIPE_SWIZZLE_W,
+   PIPE_SWIZZLE_0,
+   PIPE_SWIZZLE_1,
+   PIPE_SWIZZLE_NONE,
+   PIPE_SWIZZLE_MAX, /**< Number of enums counter (must be last) */
+};
 
 #define PIPE_TIMEOUT_INFINITE 0xffffffffffffffffull
 
@@ -522,12 +565,31 @@ enum pipe_flush_flags
  */
 enum pipe_reset_status
 {
-   PIPE_NO_RESET = 0,
-   PIPE_GUILTY_CONTEXT_RESET = 1,
-   PIPE_INNOCENT_CONTEXT_RESET = 2,
-   PIPE_UNKNOWN_CONTEXT_RESET = 3
+   PIPE_NO_RESET,
+   PIPE_GUILTY_CONTEXT_RESET,
+   PIPE_INNOCENT_CONTEXT_RESET,
+   PIPE_UNKNOWN_CONTEXT_RESET,
 };
 
+
+/**
+ * resource_get_handle flags.
+ */
+/* Requires pipe_context::flush_resource before external use. */
+#define PIPE_HANDLE_USAGE_EXPLICIT_FLUSH  (1 << 0)
+/* Expected external use of the resource: */
+#define PIPE_HANDLE_USAGE_READ            (1 << 1)
+#define PIPE_HANDLE_USAGE_WRITE           (1 << 2)
+#define PIPE_HANDLE_USAGE_READ_WRITE      (PIPE_HANDLE_USAGE_READ | \
+                                           PIPE_HANDLE_USAGE_WRITE)
+
+/**
+ * pipe_image_view access flags.
+ */
+#define PIPE_IMAGE_ACCESS_READ       (1 << 0)
+#define PIPE_IMAGE_ACCESS_WRITE      (1 << 1)
+#define PIPE_IMAGE_ACCESS_READ_WRITE (PIPE_IMAGE_ACCESS_READ | \
+                                      PIPE_IMAGE_ACCESS_WRITE)
 
 /**
  * Implementation capabilities/limits which are queried through
@@ -658,6 +720,14 @@ enum pipe_cap
    PIPE_CAP_SURFACE_REINTERPRET_BLOCKS,
    PIPE_CAP_QUERY_BUFFER_OBJECT,
    PIPE_CAP_QUERY_MEMORY_INFO,
+   PIPE_CAP_PCI_GROUP,
+   PIPE_CAP_PCI_BUS,
+   PIPE_CAP_PCI_DEVICE,
+   PIPE_CAP_PCI_FUNCTION,
+   PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT,
+   PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR,
+   PIPE_CAP_CULL_DISTANCE,
+   PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES,
 };
 
 #define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 (1 << 0)
@@ -731,12 +801,21 @@ enum pipe_shader_cap
 
 /**
  * Shader intermediate representation.
+ *
+ * Note that if the driver requests something other than TGSI, it must
+ * always be prepared to receive TGSI in addition to its preferred IR.
+ * If the driver requests TGSI as its preferred IR, it will *always*
+ * get TGSI.
+ *
+ * Note that PIPE_SHADER_IR_TGSI should be zero for backwards compat with
+ * state trackers that only understand TGSI.
  */
 enum pipe_shader_ir
 {
-   PIPE_SHADER_IR_TGSI,
+   PIPE_SHADER_IR_TGSI = 0,
    PIPE_SHADER_IR_LLVM,
-   PIPE_SHADER_IR_NATIVE
+   PIPE_SHADER_IR_NATIVE,
+   PIPE_SHADER_IR_NIR,
 };
 
 /**
@@ -869,13 +948,13 @@ union pipe_color_union
 
 enum pipe_driver_query_type
 {
-   PIPE_DRIVER_QUERY_TYPE_UINT64       = 0,
-   PIPE_DRIVER_QUERY_TYPE_UINT         = 1,
-   PIPE_DRIVER_QUERY_TYPE_FLOAT        = 2,
-   PIPE_DRIVER_QUERY_TYPE_PERCENTAGE   = 3,
-   PIPE_DRIVER_QUERY_TYPE_BYTES        = 4,
-   PIPE_DRIVER_QUERY_TYPE_MICROSECONDS = 5,
-   PIPE_DRIVER_QUERY_TYPE_HZ           = 6,
+   PIPE_DRIVER_QUERY_TYPE_UINT64,
+   PIPE_DRIVER_QUERY_TYPE_UINT,
+   PIPE_DRIVER_QUERY_TYPE_FLOAT,
+   PIPE_DRIVER_QUERY_TYPE_PERCENTAGE,
+   PIPE_DRIVER_QUERY_TYPE_BYTES,
+   PIPE_DRIVER_QUERY_TYPE_MICROSECONDS,
+   PIPE_DRIVER_QUERY_TYPE_HZ,
 };
 
 /* Whether an average value per frame or a cumulative value should be
@@ -883,8 +962,8 @@ enum pipe_driver_query_type
  */
 enum pipe_driver_query_result_type
 {
-   PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE = 0,
-   PIPE_DRIVER_QUERY_RESULT_TYPE_CUMULATIVE = 1,
+   PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE,
+   PIPE_DRIVER_QUERY_RESULT_TYPE_CUMULATIVE,
 };
 
 /**

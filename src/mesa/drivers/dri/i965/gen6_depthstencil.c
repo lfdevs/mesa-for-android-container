@@ -108,6 +108,7 @@ const struct brw_tracked_state gen6_depth_stencil_state = {
               _NEW_DEPTH |
               _NEW_STENCIL,
       .brw  = BRW_NEW_BATCH |
+              BRW_NEW_BLORP |
               BRW_NEW_STATE_BASE_ADDRESS,
    },
    .emit = gen6_upload_depth_stencil_state,

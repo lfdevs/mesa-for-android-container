@@ -217,7 +217,7 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				j = 1;
 			} else {
 				unsigned start = fd_sampler_first_level(&view->base);
-				unsigned end   = fd_sampler_last_level(&view->base);;
+				unsigned end   = fd_sampler_last_level(&view->base);
 
 				for (j = 0; j < (end - start + 1); j++) {
 					struct fd_resource_slice *slice =
@@ -309,8 +309,8 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring,
 
 		OUT_RING(ring, A3XX_TEX_CONST_0_FMT(fd3_pipe2tex(format)) |
 				 A3XX_TEX_CONST_0_TYPE(A3XX_TEX_2D) |
-				 fd3_tex_swiz(format,  PIPE_SWIZZLE_RED, PIPE_SWIZZLE_GREEN,
-							  PIPE_SWIZZLE_BLUE, PIPE_SWIZZLE_ALPHA));
+				 fd3_tex_swiz(format,  PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y,
+							  PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W));
 		OUT_RING(ring, A3XX_TEX_CONST_1_FETCHSIZE(TFETCH_DISABLE) |
 				 A3XX_TEX_CONST_1_WIDTH(psurf[i]->width) |
 				 A3XX_TEX_CONST_1_HEIGHT(psurf[i]->height));
@@ -353,7 +353,7 @@ fd3_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 	int32_t i, j, last = -1;
 	uint32_t total_in = 0;
 	const struct fd_vertex_state *vtx = emit->vtx;
-	struct ir3_shader_variant *vp = fd3_emit_get_vp(emit);
+	const struct ir3_shader_variant *vp = fd3_emit_get_vp(emit);
 	unsigned vertex_regid = regid(63, 0);
 	unsigned instance_regid = regid(63, 0);
 	unsigned vtxcnt_regid = regid(63, 0);
@@ -478,8 +478,8 @@ void
 fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd3_emit *emit)
 {
-	struct ir3_shader_variant *vp = fd3_emit_get_vp(emit);
-	struct ir3_shader_variant *fp = fd3_emit_get_fp(emit);
+	const struct ir3_shader_variant *vp = fd3_emit_get_vp(emit);
+	const struct ir3_shader_variant *fp = fd3_emit_get_fp(emit);
 	uint32_t dirty = emit->dirty;
 
 	emit_marker(ring, 5);
@@ -656,11 +656,9 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_RING(ring, HLSQ_FLUSH);
 
 	if (emit->prog == &ctx->prog) { /* evil hack to deal sanely with clear path */
-		ir3_emit_consts(vp, ring, emit->info, dirty);
+		ir3_emit_consts(vp, ring, ctx, emit->info, dirty);
 		if (!emit->key.binning_pass)
-			ir3_emit_consts(fp, ring, emit->info, dirty);
-		/* mark clean after emitting consts: */
-		ctx->prog.dirty = 0;
+			ir3_emit_consts(fp, ring, ctx, emit->info, dirty);
 	}
 
 	if (dirty & (FD_DIRTY_BLEND | FD_DIRTY_FRAMEBUFFER)) {

@@ -74,8 +74,7 @@ int ir3_delayslots(struct ir3_instruction *assigner,
 	if (is_flow(consumer) || is_sfu(consumer) || is_tex(consumer) ||
 			is_mem(consumer)) {
 		return 6;
-	} else if ((consumer->category == 3) &&
-			(is_mad(consumer->opc) || is_madsh(consumer->opc)) &&
+	} else if ((is_mad(consumer->opc) || is_madsh(consumer->opc)) &&
 			(n == 3)) {
 		/* special case, 3rd src to cat3 not required on first cycle */
 		return 1;
@@ -138,7 +137,7 @@ remove_unused_by_block(struct ir3_block *block)
 {
 	list_for_each_entry_safe (struct ir3_instruction, instr, &block->instr_list, node) {
 		if (!ir3_instr_check_mark(instr)) {
-			if (is_flow(instr) && (instr->opc == OPC_END))
+			if (instr->opc == OPC_END)
 				continue;
 			/* mark it, in case it is input, so we can
 			 * remove unused inputs:

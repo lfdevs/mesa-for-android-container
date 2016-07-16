@@ -56,6 +56,8 @@
 
 
 struct tgsi_sampler;
+struct tgsi_image;
+struct tgsi_buffer;
 struct tgsi_exec_machine;
 struct vertex_info;
 
@@ -81,11 +83,14 @@ struct sp_fragment_shader_variant
 
    void (*prepare)(const struct sp_fragment_shader_variant *shader,
 		   struct tgsi_exec_machine *machine,
-		   struct tgsi_sampler *sampler);
+		   struct tgsi_sampler *sampler,
+		   struct tgsi_image *image,
+		   struct tgsi_buffer *buffer);
 
    unsigned (*run)(const struct sp_fragment_shader_variant *shader,
 		   struct tgsi_exec_machine *machine,
-		   struct quad_header *quad);
+		   struct quad_header *quad,
+		   bool early_depth_test);
 
    /* Deletes this instance of the object */
    void (*delete)(struct sp_fragment_shader_variant *shader,
@@ -126,6 +131,13 @@ struct sp_so_state {
    struct pipe_stream_output_info base;
 };
 
+/** Subclass of pipe_compute_state */
+struct sp_compute_shader {
+   struct pipe_compute_state shader;
+   struct tgsi_token *tokens;
+   struct tgsi_shader_info info;
+   int max_sampler;             /* -1 if no samplers */
+};
 
 void
 softpipe_init_blend_funcs(struct pipe_context *pipe);
@@ -147,6 +159,9 @@ softpipe_init_streamout_funcs(struct pipe_context *pipe);
 
 void
 softpipe_init_vertex_funcs(struct pipe_context *pipe);
+
+void
+softpipe_init_image_funcs(struct pipe_context *pipe);
 
 void
 softpipe_set_framebuffer_state(struct pipe_context *,
@@ -205,4 +220,10 @@ void
 softpipe_cleanup_geometry_sampling(struct softpipe_context *ctx);
 
 
+void
+softpipe_launch_grid(struct pipe_context *context,
+                     const struct pipe_grid_info *info);
+
+void
+softpipe_update_compute_samplers(struct softpipe_context *softpipe);
 #endif

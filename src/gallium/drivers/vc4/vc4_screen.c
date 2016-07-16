@@ -91,9 +91,12 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 {
         switch (param) {
                 /* Supported features (boolean caps). */
+        case PIPE_CAP_VERTEX_COLOR_CLAMPED:
         case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
+        case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
         case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
         case PIPE_CAP_NPOT_TEXTURES:
+        case PIPE_CAP_SHAREABLE_SHADERS:
         case PIPE_CAP_USER_CONSTANT_BUFFERS:
         case PIPE_CAP_TEXTURE_SHADOW_MAP:
         case PIPE_CAP_BLEND_EQUATION_SEPARATE:
@@ -155,8 +158,6 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
         case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
         case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
-        case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
-        case PIPE_CAP_VERTEX_COLOR_CLAMPED:
         case PIPE_CAP_USER_VERTEX_BUFFERS:
         case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
         case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
@@ -189,7 +190,6 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_DEPTH_BOUNDS_TEST:
         case PIPE_CAP_TGSI_TXQS:
         case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
-        case PIPE_CAP_SHAREABLE_SHADERS:
         case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
         case PIPE_CAP_CLEAR_TEXTURE:
         case PIPE_CAP_DRAW_PARAMETERS:
@@ -203,6 +203,14 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
         case PIPE_CAP_QUERY_BUFFER_OBJECT:
 	case PIPE_CAP_QUERY_MEMORY_INFO:
+	case PIPE_CAP_PCI_GROUP:
+        case PIPE_CAP_PCI_BUS:
+        case PIPE_CAP_PCI_DEVICE:
+        case PIPE_CAP_PCI_FUNCTION:
+        case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+        case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+        case PIPE_CAP_CULL_DISTANCE:
+        case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
                 return 0;
 
                 /* Stream output. */
@@ -550,6 +558,13 @@ vc4_screen_bo_from_handle(struct pipe_screen *pscreen,
                           struct winsys_handle *whandle)
 {
         struct vc4_screen *screen = vc4_screen(pscreen);
+
+        if (whandle->offset != 0) {
+                fprintf(stderr,
+                        "Attempt to import unsupported winsys offset %u\n",
+                        whandle->offset);
+                return NULL;
+        }
 
         switch (whandle->type) {
         case DRM_API_HANDLE_TYPE_SHARED:

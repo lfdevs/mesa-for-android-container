@@ -110,14 +110,6 @@ void xmesa_set_driver( const struct xm_driver *templ )
 }
 
 
-/*
- * XXX replace this with a linked list, or better yet, try to attach the
- * gallium/mesa extra bits to the X Display object with XAddExtension().
- */
-#define MAX_DISPLAYS 10
-static struct xmesa_display Displays[MAX_DISPLAYS];
-static int NumDisplays = 0;
-
 static int
 xmesa_get_param(struct st_manager *smapi,
                 enum st_manager_param param)
@@ -130,60 +122,144 @@ xmesa_get_param(struct st_manager *smapi,
    }
 }
 
+/* linked list of XMesaDisplay hooks per display */
+typedef struct _XMesaExtDisplayInfo {
+   struct _XMesaExtDisplayInfo *next;
+   Display *display;
+   struct xmesa_display mesaDisplay;
+} XMesaExtDisplayInfo;
+
+typedef struct _XMesaExtInfo {
+   XMesaExtDisplayInfo *head;
+   int ndisplays;
+} XMesaExtInfo;
+
+static XMesaExtInfo MesaExtInfo;
+
+/* hook to delete XMesaDisplay on XDestroyDisplay */
+extern void
+xmesa_close_display(Display *display)
+{
+   XMesaExtDisplayInfo *info, *prev;
+
+   assert(MesaExtInfo.ndisplays > 0);
+   assert(MesaExtInfo.head);
+
+   _XLockMutex(_Xglobal_lock);
+   /* first find display */
+   prev = NULL;
+   for (info = MesaExtInfo.head; info; info = info->next) {
+      if (info->display == display) {
+         prev = info;
+         break;
+      }
+   }
+
+   if (info == NULL) {
+      /* no display found */
+      _XUnlockMutex(_Xglobal_lock);
+      return;
+   }
+
+   /* remove display entry from list */
+   if (prev != MesaExtInfo.head) {
+      prev->next = info->next;
+   } else {
+      MesaExtInfo.head = info->next;
+   }
+   MesaExtInfo.ndisplays--;
+
+   _XUnlockMutex(_Xglobal_lock);
+
+   /* don't forget to clean up mesaDisplay */
+   XMesaDisplay xmdpy = &info->mesaDisplay;
+
+   /**
+    * XXX: Don't destroy the screens here, since there may still
+    * be some dangling screen pointers that are used after this point
+    * if (xmdpy->screen) {
+    *    xmdpy->screen->destroy(xmdpy->screen);
+    * }
+    */
+   free(xmdpy->smapi);
+
+   XFree((char *) info);
+}
+
 static XMesaDisplay
 xmesa_init_display( Display *display )
 {
    pipe_static_mutex(init_mutex);
    XMesaDisplay xmdpy;
-   int i;
+   XMesaExtDisplayInfo *info;
+
+   if (display == NULL) {
+      return NULL;
+   }
 
    pipe_mutex_lock(init_mutex);
 
-   /* Look for XMesaDisplay which corresponds to 'display' */
-   for (i = 0; i < NumDisplays; i++) {
-      if (Displays[i].display == display) {
+   /* Look for XMesaDisplay which corresponds to this display */
+   info = MesaExtInfo.head;
+   while(info) {
+      if (info->display == display) {
          /* Found it */
          pipe_mutex_unlock(init_mutex);
-         return &Displays[i];
+         return  &info->mesaDisplay;
       }
+      info = info->next;
    }
 
-   /* Create new XMesaDisplay */
+   /* Not found.  Create new XMesaDisplay */
+   /* first allocate X-related resources and hook destroy callback */
 
-   assert(NumDisplays < MAX_DISPLAYS);
-   xmdpy = &Displays[NumDisplays];
-   NumDisplays++;
-
-   if (!xmdpy->display && display) {
-      xmdpy->display = display;
-      xmdpy->screen = driver.create_pipe_screen(display);
-      xmdpy->smapi = CALLOC_STRUCT(st_manager);
-      if (xmdpy->smapi) {
-         xmdpy->smapi->screen = xmdpy->screen;
-         xmdpy->smapi->get_param = xmesa_get_param;
-      }
-
-      if (xmdpy->screen && xmdpy->smapi) {
-         pipe_mutex_init(xmdpy->mutex);
-      }
-      else {
-         if (xmdpy->screen) {
-            xmdpy->screen->destroy(xmdpy->screen);
-            xmdpy->screen = NULL;
-         }
-         free(xmdpy->smapi);
-         xmdpy->smapi = NULL;
-
-         xmdpy->display = NULL;
-      }
+   /* allocate mesa display info */
+   info = (XMesaExtDisplayInfo *) Xmalloc(sizeof(XMesaExtDisplayInfo));
+   if (info == NULL) {
+      pipe_mutex_unlock(init_mutex);
+      return NULL;
    }
-   if (!xmdpy->display || xmdpy->display != display)
-      xmdpy = NULL;
+   info->display = display;
+   xmdpy = &info->mesaDisplay; /* to be filled out below */
+
+   /* chain to the list of displays */
+   _XLockMutex(_Xglobal_lock);
+   info->next = MesaExtInfo.head;
+   MesaExtInfo.head = info;
+   MesaExtInfo.ndisplays++;
+   _XUnlockMutex(_Xglobal_lock);
+
+   /* now create the new XMesaDisplay info */
+   assert(display);
+
+   xmdpy->display = display;
+   xmdpy->screen = driver.create_pipe_screen(display);
+   xmdpy->smapi = CALLOC_STRUCT(st_manager);
+   xmdpy->pipe = NULL;
+   if (xmdpy->smapi) {
+      xmdpy->smapi->screen = xmdpy->screen;
+      xmdpy->smapi->get_param = xmesa_get_param;
+   }
+
+   if (xmdpy->screen && xmdpy->smapi) {
+      pipe_mutex_init(xmdpy->mutex);
+   }
+   else {
+      if (xmdpy->screen) {
+         xmdpy->screen->destroy(xmdpy->screen);
+         xmdpy->screen = NULL;
+      }
+      free(xmdpy->smapi);
+      xmdpy->smapi = NULL;
+
+      xmdpy->display = NULL;
+   }
 
    pipe_mutex_unlock(init_mutex);
 
    return xmdpy;
 }
+
 
 /**********************************************************************/
 /*****                     X Utility Functions                    *****/

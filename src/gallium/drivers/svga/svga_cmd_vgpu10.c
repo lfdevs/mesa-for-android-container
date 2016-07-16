@@ -1112,7 +1112,7 @@ SVGA3D_vgpu10_DefineStreamOutput(struct svga_winsys_context *swc,
    cmd->soid = soid;
    cmd->numOutputStreamEntries = numOutputStreamEntries;
 
-   for (i = 0; i < Elements(cmd->streamOutputStrideInBytes); i++)
+   for (i = 0; i < ARRAY_SIZE(cmd->streamOutputStrideInBytes); i++)
       cmd->streamOutputStrideInBytes[i] = streamOutputStrideInBytes[i];
 
    memcpy(cmd->decl, decl,

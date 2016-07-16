@@ -81,6 +81,11 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CBindingWrapping.h>
 
+#include <llvm/Config/llvm-config.h>
+#if LLVM_USE_INTEL_JITEVENTS
+#include <llvm/ExecutionEngine/JITEventListener.h>
+#endif
+
 // Workaround http://llvm.org/PR23628
 #if HAVE_LLVM >= 0x0307
 #  pragma pop_macro("DEBUG")
@@ -110,7 +115,7 @@ static LLVMEnsureMultithreaded lLVMEnsureMultithreaded;
 
 }
 
-static once_flag init_native_targets_once_flag;
+static once_flag init_native_targets_once_flag = ONCE_FLAG_INIT;
 
 static void init_native_targets()
 {
@@ -178,30 +183,28 @@ gallivm_dispose_target_library_info(LLVMTargetLibraryInfoRef library_info)
    *>(library_info);
 }
 
-extern "C"
-LLVMValueRef
-lp_build_load_volatile(LLVMBuilderRef B, LLVMValueRef PointerVal,
-                       const char *Name)
-{
-   return llvm::wrap(llvm::unwrap(B)->CreateLoad(llvm::unwrap(PointerVal), true, Name));
-}
 
+#if HAVE_LLVM < 0x0304
 
 extern "C"
 void
-lp_set_load_alignment(LLVMValueRef Inst,
-                       unsigned Align)
+LLVMSetAlignmentBackport(LLVMValueRef V,
+                         unsigned Bytes)
 {
-   llvm::unwrap<llvm::LoadInst>(Inst)->setAlignment(Align);
+   switch (LLVMGetInstructionOpcode(V)) {
+   case LLVMLoad:
+      llvm::unwrap<llvm::LoadInst>(V)->setAlignment(Bytes);
+      break;
+   case LLVMStore:
+      llvm::unwrap<llvm::StoreInst>(V)->setAlignment(Bytes);
+      break;
+   default:
+      assert(0);
+      break;
+   }
 }
 
-extern "C"
-void
-lp_set_store_alignment(LLVMValueRef Inst,
-                       unsigned Align)
-{
-   llvm::unwrap<llvm::StoreInst>(Inst)->setAlignment(Align);
-}
+#endif
 
 
 #if HAVE_LLVM < 0x0306
@@ -520,10 +523,16 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 #ifdef _WIN32
        /*
         * MCJIT works on Windows, but currently only through ELF object format.
+        *
+        * XXX: We could use `LLVM_HOST_TRIPLE "-elf"` but LLVM_HOST_TRIPLE has
+        * different strings for MinGW/MSVC, so better play it safe and be
+        * explicit.
         */
-       std::string targetTriple = llvm::sys::getProcessTriple();
-       targetTriple.append("-elf");
-       unwrap(M)->setTargetTriple(targetTriple);
+#  ifdef _WIN64
+       LLVMSetTarget(M, "x86_64-pc-win32-elf");
+#  else
+       LLVMSetTarget(M, "i686-pc-win32-elf");
+#  endif
 #endif
    }
 
@@ -562,6 +571,18 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    MAttrs.push_back(util_cpu_caps.has_avx  ? "+avx"  : "-avx");
    MAttrs.push_back(util_cpu_caps.has_f16c ? "+f16c" : "-f16c");
    MAttrs.push_back(util_cpu_caps.has_avx2 ? "+avx2" : "-avx2");
+   /* disable avx512 and all subvariants */
+#if HAVE_LLVM >= 0x0304
+   MAttrs.push_back("-avx512cd");
+   MAttrs.push_back("-avx512er");
+   MAttrs.push_back("-avx512f");
+   MAttrs.push_back("-avx512pf");
+#endif
+#if HAVE_LLVM >= 0x0305
+   MAttrs.push_back("-avx512bw");
+   MAttrs.push_back("-avx512dq");
+   MAttrs.push_back("-avx512vl");
+#endif
 #endif
 
 #if defined(PIPE_ARCH_PPC)
@@ -598,7 +619,6 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 
    ShaderMemoryManager *MM = NULL;
    if (useMCJIT) {
-#if HAVE_LLVM > 0x0303
        BaseMemoryManager* JMM = reinterpret_cast<BaseMemoryManager*>(CMM);
        MM = new ShaderMemoryManager(JMM);
        *OutCode = MM->getGeneratedCode();
@@ -606,9 +626,10 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 #if HAVE_LLVM >= 0x0306
        builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(MM));
        MM = NULL; // ownership taken by std::unique_ptr
-#else
+#elif HAVE_LLVM > 0x0303
        builder.setMCJITMemoryManager(MM);
-#endif
+#else
+       builder.setJITMemoryManager(MM);
 #endif
    } else {
 #if HAVE_LLVM < 0x0306
@@ -625,6 +646,10 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    ExecutionEngine *JIT;
 
    JIT = builder.create();
+#if LLVM_USE_INTEL_JITEVENTS
+   JITEventListener *JEL = JITEventListener::createIntelJITEventListener();
+   JIT->RegisterJITEventListener(JEL);
+#endif
    if (JIT) {
       *OutJIT = wrap(JIT);
       return 0;

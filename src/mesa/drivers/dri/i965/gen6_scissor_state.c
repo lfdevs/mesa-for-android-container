@@ -58,10 +58,10 @@ gen6_upload_scissor_state(struct brw_context *brw)
    for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
       int bbox[4];
 
-      bbox[0] = 0;
-      bbox[1] = fb_width;
-      bbox[2] = 0;
-      bbox[3] = fb_height;
+      bbox[0] = MAX2(ctx->ViewportArray[i].X, 0);
+      bbox[1] = MIN2(bbox[0] + ctx->ViewportArray[i].Width, fb_width);
+      bbox[2] = MAX2(ctx->ViewportArray[i].Y, 0);
+      bbox[3] = MIN2(bbox[2] + ctx->ViewportArray[i].Height, fb_height);
       _mesa_intersect_scissor_bounding_box(ctx, i, bbox);
 
       if (bbox[0] == bbox[1] || bbox[2] == bbox[3]) {
@@ -101,7 +101,8 @@ const struct brw_tracked_state gen6_scissor_state = {
       .mesa = _NEW_BUFFERS |
               _NEW_SCISSOR |
               _NEW_VIEWPORT,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP,
    },
    .emit = gen6_upload_scissor_state,
 };

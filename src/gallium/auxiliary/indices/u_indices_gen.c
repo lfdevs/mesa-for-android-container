@@ -207,6 +207,81 @@ static void generate_polygon_ushort_first2first(
       (out+j)[2] = (ushort)(i+2);
    }
 }
+static void generate_linesadj_ushort_first2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)(i+0);
+      (out+i)[1] = (ushort)(i+1);
+      (out+i)[2] = (ushort)(i+2);
+      (out+i)[3] = (ushort)(i+3);
+  }
+}
+static void generate_linestripadj_ushort_first2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)(i+0);
+      (out+j)[1] = (ushort)(i+1);
+      (out+j)[2] = (ushort)(i+2);
+      (out+j)[3] = (ushort)(i+3);
+  }
+}
+static void generate_trisadj_ushort_first2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)(i+0);
+      (out+i)[1] = (ushort)(i+1);
+      (out+i)[2] = (ushort)(i+2);
+      (out+i)[3] = (ushort)(i+3);
+      (out+i)[4] = (ushort)(i+4);
+      (out+i)[5] = (ushort)(i+5);
+  }
+}
+static void generate_tristripadj_ushort_first2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)(i+0);
+      (out+j)[1] = (ushort)(i+1);
+      (out+j)[2] = (ushort)(i+2);
+      (out+j)[3] = (ushort)(i+3);
+      (out+j)[4] = (ushort)(i+4);
+      (out+j)[5] = (ushort)(i+5);
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)(i+2);
+      (out+j)[1] = (ushort)(i-2);
+      (out+j)[2] = (ushort)(i+0);
+      (out+j)[3] = (ushort)(i+3);
+      (out+j)[4] = (ushort)(i+4);
+      (out+j)[5] = (ushort)(i+6);
+    }
+  }
+}
 static void generate_points_ushort_first2last(
     unsigned start,
     unsigned out_nr,
@@ -349,6 +424,81 @@ static void generate_polygon_ushort_first2last(
       (out+j)[1] = (ushort)(i+2);
       (out+j)[2] = (ushort)(start);
    }
+}
+static void generate_linesadj_ushort_first2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)(i+3);
+      (out+i)[1] = (ushort)(i+2);
+      (out+i)[2] = (ushort)(i+1);
+      (out+i)[3] = (ushort)(i+0);
+  }
+}
+static void generate_linestripadj_ushort_first2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)(i+3);
+      (out+j)[1] = (ushort)(i+2);
+      (out+j)[2] = (ushort)(i+1);
+      (out+j)[3] = (ushort)(i+0);
+  }
+}
+static void generate_trisadj_ushort_first2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)(i+4);
+      (out+i)[1] = (ushort)(i+5);
+      (out+i)[2] = (ushort)(i+0);
+      (out+i)[3] = (ushort)(i+1);
+      (out+i)[4] = (ushort)(i+2);
+      (out+i)[5] = (ushort)(i+3);
+  }
+}
+static void generate_tristripadj_ushort_first2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)(i+4);
+      (out+j)[1] = (ushort)(i+5);
+      (out+j)[2] = (ushort)(i+0);
+      (out+j)[3] = (ushort)(i+1);
+      (out+j)[4] = (ushort)(i+2);
+      (out+j)[5] = (ushort)(i+3);
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)(i+4);
+      (out+j)[1] = (ushort)(i+6);
+      (out+j)[2] = (ushort)(i+2);
+      (out+j)[3] = (ushort)(i-2);
+      (out+j)[4] = (ushort)(i+0);
+      (out+j)[5] = (ushort)(i+3);
+    }
+  }
 }
 static void generate_points_ushort_last2first(
     unsigned start,
@@ -493,6 +643,81 @@ static void generate_polygon_ushort_last2first(
       (out+j)[2] = (ushort)(i+2);
    }
 }
+static void generate_linesadj_ushort_last2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)(i+3);
+      (out+i)[1] = (ushort)(i+2);
+      (out+i)[2] = (ushort)(i+1);
+      (out+i)[3] = (ushort)(i+0);
+  }
+}
+static void generate_linestripadj_ushort_last2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)(i+3);
+      (out+j)[1] = (ushort)(i+2);
+      (out+j)[2] = (ushort)(i+1);
+      (out+j)[3] = (ushort)(i+0);
+  }
+}
+static void generate_trisadj_ushort_last2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)(i+4);
+      (out+i)[1] = (ushort)(i+5);
+      (out+i)[2] = (ushort)(i+0);
+      (out+i)[3] = (ushort)(i+1);
+      (out+i)[4] = (ushort)(i+2);
+      (out+i)[5] = (ushort)(i+3);
+  }
+}
+static void generate_tristripadj_ushort_last2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)(i+4);
+      (out+j)[1] = (ushort)(i+5);
+      (out+j)[2] = (ushort)(i+0);
+      (out+j)[3] = (ushort)(i+1);
+      (out+j)[4] = (ushort)(i+2);
+      (out+j)[5] = (ushort)(i+3);
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)(i+4);
+      (out+j)[1] = (ushort)(i+6);
+      (out+j)[2] = (ushort)(i+2);
+      (out+j)[3] = (ushort)(i-2);
+      (out+j)[4] = (ushort)(i+0);
+      (out+j)[5] = (ushort)(i+3);
+    }
+  }
+}
 static void generate_points_ushort_last2last(
     unsigned start,
     unsigned out_nr,
@@ -635,6 +860,81 @@ static void generate_polygon_ushort_last2last(
       (out+j)[1] = (ushort)(i+2);
       (out+j)[2] = (ushort)(start);
    }
+}
+static void generate_linesadj_ushort_last2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)(i+0);
+      (out+i)[1] = (ushort)(i+1);
+      (out+i)[2] = (ushort)(i+2);
+      (out+i)[3] = (ushort)(i+3);
+  }
+}
+static void generate_linestripadj_ushort_last2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)(i+0);
+      (out+j)[1] = (ushort)(i+1);
+      (out+j)[2] = (ushort)(i+2);
+      (out+j)[3] = (ushort)(i+3);
+  }
+}
+static void generate_trisadj_ushort_last2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)(i+0);
+      (out+i)[1] = (ushort)(i+1);
+      (out+i)[2] = (ushort)(i+2);
+      (out+i)[3] = (ushort)(i+3);
+      (out+i)[4] = (ushort)(i+4);
+      (out+i)[5] = (ushort)(i+5);
+  }
+}
+static void generate_tristripadj_ushort_last2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)(i+0);
+      (out+j)[1] = (ushort)(i+1);
+      (out+j)[2] = (ushort)(i+2);
+      (out+j)[3] = (ushort)(i+3);
+      (out+j)[4] = (ushort)(i+4);
+      (out+j)[5] = (ushort)(i+5);
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)(i+2);
+      (out+j)[1] = (ushort)(i-2);
+      (out+j)[2] = (ushort)(i+0);
+      (out+j)[3] = (ushort)(i+3);
+      (out+j)[4] = (ushort)(i+4);
+      (out+j)[5] = (ushort)(i+6);
+    }
+  }
 }
 static void generate_points_uint_first2first(
     unsigned start,
@@ -779,6 +1079,81 @@ static void generate_polygon_uint_first2first(
       (out+j)[2] = (uint)(i+2);
    }
 }
+static void generate_linesadj_uint_first2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)(i+0);
+      (out+i)[1] = (uint)(i+1);
+      (out+i)[2] = (uint)(i+2);
+      (out+i)[3] = (uint)(i+3);
+  }
+}
+static void generate_linestripadj_uint_first2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)(i+0);
+      (out+j)[1] = (uint)(i+1);
+      (out+j)[2] = (uint)(i+2);
+      (out+j)[3] = (uint)(i+3);
+  }
+}
+static void generate_trisadj_uint_first2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)(i+0);
+      (out+i)[1] = (uint)(i+1);
+      (out+i)[2] = (uint)(i+2);
+      (out+i)[3] = (uint)(i+3);
+      (out+i)[4] = (uint)(i+4);
+      (out+i)[5] = (uint)(i+5);
+  }
+}
+static void generate_tristripadj_uint_first2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)(i+0);
+      (out+j)[1] = (uint)(i+1);
+      (out+j)[2] = (uint)(i+2);
+      (out+j)[3] = (uint)(i+3);
+      (out+j)[4] = (uint)(i+4);
+      (out+j)[5] = (uint)(i+5);
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)(i+2);
+      (out+j)[1] = (uint)(i-2);
+      (out+j)[2] = (uint)(i+0);
+      (out+j)[3] = (uint)(i+3);
+      (out+j)[4] = (uint)(i+4);
+      (out+j)[5] = (uint)(i+6);
+    }
+  }
+}
 static void generate_points_uint_first2last(
     unsigned start,
     unsigned out_nr,
@@ -921,6 +1296,81 @@ static void generate_polygon_uint_first2last(
       (out+j)[1] = (uint)(i+2);
       (out+j)[2] = (uint)(start);
    }
+}
+static void generate_linesadj_uint_first2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)(i+3);
+      (out+i)[1] = (uint)(i+2);
+      (out+i)[2] = (uint)(i+1);
+      (out+i)[3] = (uint)(i+0);
+  }
+}
+static void generate_linestripadj_uint_first2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)(i+3);
+      (out+j)[1] = (uint)(i+2);
+      (out+j)[2] = (uint)(i+1);
+      (out+j)[3] = (uint)(i+0);
+  }
+}
+static void generate_trisadj_uint_first2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)(i+4);
+      (out+i)[1] = (uint)(i+5);
+      (out+i)[2] = (uint)(i+0);
+      (out+i)[3] = (uint)(i+1);
+      (out+i)[4] = (uint)(i+2);
+      (out+i)[5] = (uint)(i+3);
+  }
+}
+static void generate_tristripadj_uint_first2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)(i+4);
+      (out+j)[1] = (uint)(i+5);
+      (out+j)[2] = (uint)(i+0);
+      (out+j)[3] = (uint)(i+1);
+      (out+j)[4] = (uint)(i+2);
+      (out+j)[5] = (uint)(i+3);
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)(i+4);
+      (out+j)[1] = (uint)(i+6);
+      (out+j)[2] = (uint)(i+2);
+      (out+j)[3] = (uint)(i-2);
+      (out+j)[4] = (uint)(i+0);
+      (out+j)[5] = (uint)(i+3);
+    }
+  }
 }
 static void generate_points_uint_last2first(
     unsigned start,
@@ -1065,6 +1515,81 @@ static void generate_polygon_uint_last2first(
       (out+j)[2] = (uint)(i+2);
    }
 }
+static void generate_linesadj_uint_last2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)(i+3);
+      (out+i)[1] = (uint)(i+2);
+      (out+i)[2] = (uint)(i+1);
+      (out+i)[3] = (uint)(i+0);
+  }
+}
+static void generate_linestripadj_uint_last2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)(i+3);
+      (out+j)[1] = (uint)(i+2);
+      (out+j)[2] = (uint)(i+1);
+      (out+j)[3] = (uint)(i+0);
+  }
+}
+static void generate_trisadj_uint_last2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)(i+4);
+      (out+i)[1] = (uint)(i+5);
+      (out+i)[2] = (uint)(i+0);
+      (out+i)[3] = (uint)(i+1);
+      (out+i)[4] = (uint)(i+2);
+      (out+i)[5] = (uint)(i+3);
+  }
+}
+static void generate_tristripadj_uint_last2first(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)(i+4);
+      (out+j)[1] = (uint)(i+5);
+      (out+j)[2] = (uint)(i+0);
+      (out+j)[3] = (uint)(i+1);
+      (out+j)[4] = (uint)(i+2);
+      (out+j)[5] = (uint)(i+3);
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)(i+4);
+      (out+j)[1] = (uint)(i+6);
+      (out+j)[2] = (uint)(i+2);
+      (out+j)[3] = (uint)(i-2);
+      (out+j)[4] = (uint)(i+0);
+      (out+j)[5] = (uint)(i+3);
+    }
+  }
+}
 static void generate_points_uint_last2last(
     unsigned start,
     unsigned out_nr,
@@ -1207,6 +1732,81 @@ static void generate_polygon_uint_last2last(
       (out+j)[1] = (uint)(i+2);
       (out+j)[2] = (uint)(start);
    }
+}
+static void generate_linesadj_uint_last2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)(i+0);
+      (out+i)[1] = (uint)(i+1);
+      (out+i)[2] = (uint)(i+2);
+      (out+i)[3] = (uint)(i+3);
+  }
+}
+static void generate_linestripadj_uint_last2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)(i+0);
+      (out+j)[1] = (uint)(i+1);
+      (out+j)[2] = (uint)(i+2);
+      (out+j)[3] = (uint)(i+3);
+  }
+}
+static void generate_trisadj_uint_last2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)(i+0);
+      (out+i)[1] = (uint)(i+1);
+      (out+i)[2] = (uint)(i+2);
+      (out+i)[3] = (uint)(i+3);
+      (out+i)[4] = (uint)(i+4);
+      (out+i)[5] = (uint)(i+5);
+  }
+}
+static void generate_tristripadj_uint_last2last(
+    unsigned start,
+    unsigned out_nr,
+    void *_out )
+{
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)(i+0);
+      (out+j)[1] = (uint)(i+1);
+      (out+j)[2] = (uint)(i+2);
+      (out+j)[3] = (uint)(i+3);
+      (out+j)[4] = (uint)(i+4);
+      (out+j)[5] = (uint)(i+5);
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)(i+2);
+      (out+j)[1] = (uint)(i-2);
+      (out+j)[2] = (uint)(i+0);
+      (out+j)[3] = (uint)(i+3);
+      (out+j)[4] = (uint)(i+4);
+      (out+j)[5] = (uint)(i+6);
+    }
+  }
 }
 static void translate_points_ubyte2ushort_first2first_prdisable(
     const void * _in,
@@ -1390,6 +1990,97 @@ static void translate_polygon_ubyte2ushort_first2first_prdisable(
       (out+j)[1] = (ushort)in[i+1];
       (out+j)[2] = (ushort)in[i+2];
    }
+}
+static void translate_linesadj_ubyte2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_ubyte2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_ubyte2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_ubyte2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
 }
 static void translate_points_ubyte2ushort_first2first_prenable(
     const void * _in,
@@ -1648,6 +2339,97 @@ restart:
       (out+j)[2] = (ushort)in[i+2];
    }
 }
+static void translate_linesadj_ubyte2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_ubyte2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_ubyte2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_ubyte2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
+}
 static void translate_points_ubyte2ushort_first2last_prdisable(
     const void * _in,
     unsigned start,
@@ -1830,6 +2612,97 @@ static void translate_polygon_ubyte2ushort_first2last_prdisable(
       (out+j)[1] = (ushort)in[i+2];
       (out+j)[2] = (ushort)in[start];
    }
+}
+static void translate_linesadj_ubyte2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_ubyte2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_ubyte2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_ubyte2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
 }
 static void translate_points_ubyte2ushort_first2last_prenable(
     const void * _in,
@@ -2088,6 +2961,97 @@ restart:
       (out+j)[2] = (ushort)in[start];
    }
 }
+static void translate_linesadj_ubyte2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_ubyte2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_ubyte2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_ubyte2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
+}
 static void translate_points_ubyte2ushort_last2first_prdisable(
     const void * _in,
     unsigned start,
@@ -2270,6 +3234,97 @@ static void translate_polygon_ubyte2ushort_last2first_prdisable(
       (out+j)[1] = (ushort)in[i+1];
       (out+j)[2] = (ushort)in[i+2];
    }
+}
+static void translate_linesadj_ubyte2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_ubyte2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_ubyte2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_ubyte2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
 }
 static void translate_points_ubyte2ushort_last2first_prenable(
     const void * _in,
@@ -2528,6 +3583,97 @@ restart:
       (out+j)[2] = (ushort)in[i+2];
    }
 }
+static void translate_linesadj_ubyte2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_ubyte2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_ubyte2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_ubyte2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
+}
 static void translate_points_ubyte2ushort_last2last_prdisable(
     const void * _in,
     unsigned start,
@@ -2710,6 +3856,97 @@ static void translate_polygon_ubyte2ushort_last2last_prdisable(
       (out+j)[1] = (ushort)in[i+2];
       (out+j)[2] = (ushort)in[start];
    }
+}
+static void translate_linesadj_ubyte2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_ubyte2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_ubyte2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_ubyte2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
 }
 static void translate_points_ubyte2ushort_last2last_prenable(
     const void * _in,
@@ -2968,6 +4205,97 @@ restart:
       (out+j)[2] = (ushort)in[start];
    }
 }
+static void translate_linesadj_ubyte2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_ubyte2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_ubyte2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_ubyte2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
+}
 static void translate_points_ubyte2uint_first2first_prdisable(
     const void * _in,
     unsigned start,
@@ -3150,6 +4478,97 @@ static void translate_polygon_ubyte2uint_first2first_prdisable(
       (out+j)[1] = (uint)in[i+1];
       (out+j)[2] = (uint)in[i+2];
    }
+}
+static void translate_linesadj_ubyte2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_ubyte2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_ubyte2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_ubyte2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
 }
 static void translate_points_ubyte2uint_first2first_prenable(
     const void * _in,
@@ -3408,6 +4827,97 @@ restart:
       (out+j)[2] = (uint)in[i+2];
    }
 }
+static void translate_linesadj_ubyte2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_ubyte2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_ubyte2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_ubyte2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
+}
 static void translate_points_ubyte2uint_first2last_prdisable(
     const void * _in,
     unsigned start,
@@ -3590,6 +5100,97 @@ static void translate_polygon_ubyte2uint_first2last_prdisable(
       (out+j)[1] = (uint)in[i+2];
       (out+j)[2] = (uint)in[start];
    }
+}
+static void translate_linesadj_ubyte2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_ubyte2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_ubyte2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_ubyte2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
 }
 static void translate_points_ubyte2uint_first2last_prenable(
     const void * _in,
@@ -3848,6 +5449,97 @@ restart:
       (out+j)[2] = (uint)in[start];
    }
 }
+static void translate_linesadj_ubyte2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_ubyte2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_ubyte2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_ubyte2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
+}
 static void translate_points_ubyte2uint_last2first_prdisable(
     const void * _in,
     unsigned start,
@@ -4030,6 +5722,97 @@ static void translate_polygon_ubyte2uint_last2first_prdisable(
       (out+j)[1] = (uint)in[i+1];
       (out+j)[2] = (uint)in[i+2];
    }
+}
+static void translate_linesadj_ubyte2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_ubyte2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_ubyte2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_ubyte2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
 }
 static void translate_points_ubyte2uint_last2first_prenable(
     const void * _in,
@@ -4288,6 +6071,97 @@ restart:
       (out+j)[2] = (uint)in[i+2];
    }
 }
+static void translate_linesadj_ubyte2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_ubyte2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_ubyte2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_ubyte2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
+}
 static void translate_points_ubyte2uint_last2last_prdisable(
     const void * _in,
     unsigned start,
@@ -4470,6 +6344,97 @@ static void translate_polygon_ubyte2uint_last2last_prdisable(
       (out+j)[1] = (uint)in[i+2];
       (out+j)[2] = (uint)in[start];
    }
+}
+static void translate_linesadj_ubyte2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_ubyte2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_ubyte2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_ubyte2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
 }
 static void translate_points_ubyte2uint_last2last_prenable(
     const void * _in,
@@ -4728,6 +6693,97 @@ restart:
       (out+j)[2] = (uint)in[start];
    }
 }
+static void translate_linesadj_ubyte2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_ubyte2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_ubyte2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_ubyte2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ubyte*in = (const ubyte*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
+}
 static void translate_points_ushort2ushort_first2first_prdisable(
     const void * _in,
     unsigned start,
@@ -4910,6 +6966,97 @@ static void translate_polygon_ushort2ushort_first2first_prdisable(
       (out+j)[1] = (ushort)in[i+1];
       (out+j)[2] = (ushort)in[i+2];
    }
+}
+static void translate_linesadj_ushort2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_ushort2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_ushort2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_ushort2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
 }
 static void translate_points_ushort2ushort_first2first_prenable(
     const void * _in,
@@ -5168,6 +7315,97 @@ restart:
       (out+j)[2] = (ushort)in[i+2];
    }
 }
+static void translate_linesadj_ushort2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_ushort2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_ushort2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_ushort2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
+}
 static void translate_points_ushort2ushort_first2last_prdisable(
     const void * _in,
     unsigned start,
@@ -5350,6 +7588,97 @@ static void translate_polygon_ushort2ushort_first2last_prdisable(
       (out+j)[1] = (ushort)in[i+2];
       (out+j)[2] = (ushort)in[start];
    }
+}
+static void translate_linesadj_ushort2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_ushort2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_ushort2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_ushort2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
 }
 static void translate_points_ushort2ushort_first2last_prenable(
     const void * _in,
@@ -5608,6 +7937,97 @@ restart:
       (out+j)[2] = (ushort)in[start];
    }
 }
+static void translate_linesadj_ushort2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_ushort2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_ushort2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_ushort2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
+}
 static void translate_points_ushort2ushort_last2first_prdisable(
     const void * _in,
     unsigned start,
@@ -5790,6 +8210,97 @@ static void translate_polygon_ushort2ushort_last2first_prdisable(
       (out+j)[1] = (ushort)in[i+1];
       (out+j)[2] = (ushort)in[i+2];
    }
+}
+static void translate_linesadj_ushort2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_ushort2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_ushort2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_ushort2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
 }
 static void translate_points_ushort2ushort_last2first_prenable(
     const void * _in,
@@ -6048,6 +8559,97 @@ restart:
       (out+j)[2] = (ushort)in[i+2];
    }
 }
+static void translate_linesadj_ushort2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_ushort2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_ushort2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_ushort2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
+}
 static void translate_points_ushort2ushort_last2last_prdisable(
     const void * _in,
     unsigned start,
@@ -6230,6 +8832,97 @@ static void translate_polygon_ushort2ushort_last2last_prdisable(
       (out+j)[1] = (ushort)in[i+2];
       (out+j)[2] = (ushort)in[start];
    }
+}
+static void translate_linesadj_ushort2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_ushort2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_ushort2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_ushort2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
 }
 static void translate_points_ushort2ushort_last2last_prenable(
     const void * _in,
@@ -6488,6 +9181,97 @@ restart:
       (out+j)[2] = (ushort)in[start];
    }
 }
+static void translate_linesadj_ushort2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_ushort2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_ushort2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_ushort2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
+}
 static void translate_points_ushort2uint_first2first_prdisable(
     const void * _in,
     unsigned start,
@@ -6670,6 +9454,97 @@ static void translate_polygon_ushort2uint_first2first_prdisable(
       (out+j)[1] = (uint)in[i+1];
       (out+j)[2] = (uint)in[i+2];
    }
+}
+static void translate_linesadj_ushort2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_ushort2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_ushort2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_ushort2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
 }
 static void translate_points_ushort2uint_first2first_prenable(
     const void * _in,
@@ -6928,6 +9803,97 @@ restart:
       (out+j)[2] = (uint)in[i+2];
    }
 }
+static void translate_linesadj_ushort2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_ushort2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_ushort2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_ushort2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
+}
 static void translate_points_ushort2uint_first2last_prdisable(
     const void * _in,
     unsigned start,
@@ -7110,6 +10076,97 @@ static void translate_polygon_ushort2uint_first2last_prdisable(
       (out+j)[1] = (uint)in[i+2];
       (out+j)[2] = (uint)in[start];
    }
+}
+static void translate_linesadj_ushort2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_ushort2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_ushort2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_ushort2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
 }
 static void translate_points_ushort2uint_first2last_prenable(
     const void * _in,
@@ -7368,6 +10425,97 @@ restart:
       (out+j)[2] = (uint)in[start];
    }
 }
+static void translate_linesadj_ushort2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_ushort2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_ushort2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_ushort2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
+}
 static void translate_points_ushort2uint_last2first_prdisable(
     const void * _in,
     unsigned start,
@@ -7550,6 +10698,97 @@ static void translate_polygon_ushort2uint_last2first_prdisable(
       (out+j)[1] = (uint)in[i+1];
       (out+j)[2] = (uint)in[i+2];
    }
+}
+static void translate_linesadj_ushort2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_ushort2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_ushort2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_ushort2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
 }
 static void translate_points_ushort2uint_last2first_prenable(
     const void * _in,
@@ -7808,6 +11047,97 @@ restart:
       (out+j)[2] = (uint)in[i+2];
    }
 }
+static void translate_linesadj_ushort2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_ushort2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_ushort2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_ushort2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
+}
 static void translate_points_ushort2uint_last2last_prdisable(
     const void * _in,
     unsigned start,
@@ -7990,6 +11320,97 @@ static void translate_polygon_ushort2uint_last2last_prdisable(
       (out+j)[1] = (uint)in[i+2];
       (out+j)[2] = (uint)in[start];
    }
+}
+static void translate_linesadj_ushort2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_ushort2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_ushort2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_ushort2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
 }
 static void translate_points_ushort2uint_last2last_prenable(
     const void * _in,
@@ -8248,6 +11669,97 @@ restart:
       (out+j)[2] = (uint)in[start];
    }
 }
+static void translate_linesadj_ushort2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_ushort2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_ushort2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_ushort2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const ushort*in = (const ushort*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
+}
 static void translate_points_uint2ushort_first2first_prdisable(
     const void * _in,
     unsigned start,
@@ -8430,6 +11942,97 @@ static void translate_polygon_uint2ushort_first2first_prdisable(
       (out+j)[1] = (ushort)in[i+1];
       (out+j)[2] = (ushort)in[i+2];
    }
+}
+static void translate_linesadj_uint2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_uint2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_uint2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_uint2ushort_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
 }
 static void translate_points_uint2ushort_first2first_prenable(
     const void * _in,
@@ -8688,6 +12291,97 @@ restart:
       (out+j)[2] = (ushort)in[i+2];
    }
 }
+static void translate_linesadj_uint2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_uint2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_uint2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_uint2ushort_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
+}
 static void translate_points_uint2ushort_first2last_prdisable(
     const void * _in,
     unsigned start,
@@ -8870,6 +12564,97 @@ static void translate_polygon_uint2ushort_first2last_prdisable(
       (out+j)[1] = (ushort)in[i+2];
       (out+j)[2] = (ushort)in[start];
    }
+}
+static void translate_linesadj_uint2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_uint2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_uint2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_uint2ushort_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
 }
 static void translate_points_uint2ushort_first2last_prenable(
     const void * _in,
@@ -9128,6 +12913,97 @@ restart:
       (out+j)[2] = (ushort)in[start];
    }
 }
+static void translate_linesadj_uint2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_uint2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_uint2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_uint2ushort_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
+}
 static void translate_points_uint2ushort_last2first_prdisable(
     const void * _in,
     unsigned start,
@@ -9310,6 +13186,97 @@ static void translate_polygon_uint2ushort_last2first_prdisable(
       (out+j)[1] = (ushort)in[i+1];
       (out+j)[2] = (ushort)in[i+2];
    }
+}
+static void translate_linesadj_uint2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_uint2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_uint2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_uint2ushort_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
 }
 static void translate_points_uint2ushort_last2first_prenable(
     const void * _in,
@@ -9568,6 +13535,97 @@ restart:
       (out+j)[2] = (ushort)in[i+2];
    }
 }
+static void translate_linesadj_uint2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+3];
+      (out+i)[1] = (ushort)in[i+2];
+      (out+i)[2] = (ushort)in[i+1];
+      (out+i)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_linestripadj_uint2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+3];
+      (out+j)[1] = (ushort)in[i+2];
+      (out+j)[2] = (ushort)in[i+1];
+      (out+j)[3] = (ushort)in[i+0];
+  }
+}
+static void translate_trisadj_uint2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+4];
+      (out+i)[1] = (ushort)in[i+5];
+      (out+i)[2] = (ushort)in[i+0];
+      (out+i)[3] = (ushort)in[i+1];
+      (out+i)[4] = (ushort)in[i+2];
+      (out+i)[5] = (ushort)in[i+3];
+  }
+}
+static void translate_tristripadj_uint2ushort_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+5];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+1];
+      (out+j)[4] = (ushort)in[i+2];
+      (out+j)[5] = (ushort)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+4];
+      (out+j)[1] = (ushort)in[i+6];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i-2];
+      (out+j)[4] = (ushort)in[i+0];
+      (out+j)[5] = (ushort)in[i+3];
+    }
+  }
+}
 static void translate_points_uint2ushort_last2last_prdisable(
     const void * _in,
     unsigned start,
@@ -9750,6 +13808,97 @@ static void translate_polygon_uint2ushort_last2last_prdisable(
       (out+j)[1] = (ushort)in[i+2];
       (out+j)[2] = (ushort)in[start];
    }
+}
+static void translate_linesadj_uint2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_uint2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_uint2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_uint2ushort_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
 }
 static void translate_points_uint2ushort_last2last_prenable(
     const void * _in,
@@ -10008,6 +14157,97 @@ restart:
       (out+j)[2] = (ushort)in[start];
    }
 }
+static void translate_linesadj_uint2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_linestripadj_uint2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+  }
+}
+static void translate_trisadj_uint2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (ushort)in[i+0];
+      (out+i)[1] = (ushort)in[i+1];
+      (out+i)[2] = (ushort)in[i+2];
+      (out+i)[3] = (ushort)in[i+3];
+      (out+i)[4] = (ushort)in[i+4];
+      (out+i)[5] = (ushort)in[i+5];
+  }
+}
+static void translate_tristripadj_uint2ushort_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  ushort *out = (ushort*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (ushort)in[i+0];
+      (out+j)[1] = (ushort)in[i+1];
+      (out+j)[2] = (ushort)in[i+2];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (ushort)in[i+2];
+      (out+j)[1] = (ushort)in[i-2];
+      (out+j)[2] = (ushort)in[i+0];
+      (out+j)[3] = (ushort)in[i+3];
+      (out+j)[4] = (ushort)in[i+4];
+      (out+j)[5] = (ushort)in[i+6];
+    }
+  }
+}
 static void translate_points_uint2uint_first2first_prdisable(
     const void * _in,
     unsigned start,
@@ -10190,6 +14430,97 @@ static void translate_polygon_uint2uint_first2first_prdisable(
       (out+j)[1] = (uint)in[i+1];
       (out+j)[2] = (uint)in[i+2];
    }
+}
+static void translate_linesadj_uint2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_uint2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_uint2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_uint2uint_first2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
 }
 static void translate_points_uint2uint_first2first_prenable(
     const void * _in,
@@ -10448,6 +14779,97 @@ restart:
       (out+j)[2] = (uint)in[i+2];
    }
 }
+static void translate_linesadj_uint2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_uint2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_uint2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_uint2uint_first2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
+}
 static void translate_points_uint2uint_first2last_prdisable(
     const void * _in,
     unsigned start,
@@ -10630,6 +15052,97 @@ static void translate_polygon_uint2uint_first2last_prdisable(
       (out+j)[1] = (uint)in[i+2];
       (out+j)[2] = (uint)in[start];
    }
+}
+static void translate_linesadj_uint2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_uint2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_uint2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_uint2uint_first2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
 }
 static void translate_points_uint2uint_first2last_prenable(
     const void * _in,
@@ -10888,6 +15401,97 @@ restart:
       (out+j)[2] = (uint)in[start];
    }
 }
+static void translate_linesadj_uint2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_uint2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_uint2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_uint2uint_first2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
+}
 static void translate_points_uint2uint_last2first_prdisable(
     const void * _in,
     unsigned start,
@@ -11070,6 +15674,97 @@ static void translate_polygon_uint2uint_last2first_prdisable(
       (out+j)[1] = (uint)in[i+1];
       (out+j)[2] = (uint)in[i+2];
    }
+}
+static void translate_linesadj_uint2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_uint2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_uint2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_uint2uint_last2first_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
 }
 static void translate_points_uint2uint_last2first_prenable(
     const void * _in,
@@ -11328,6 +16023,97 @@ restart:
       (out+j)[2] = (uint)in[i+2];
    }
 }
+static void translate_linesadj_uint2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+3];
+      (out+i)[1] = (uint)in[i+2];
+      (out+i)[2] = (uint)in[i+1];
+      (out+i)[3] = (uint)in[i+0];
+  }
+}
+static void translate_linestripadj_uint2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+3];
+      (out+j)[1] = (uint)in[i+2];
+      (out+j)[2] = (uint)in[i+1];
+      (out+j)[3] = (uint)in[i+0];
+  }
+}
+static void translate_trisadj_uint2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+4];
+      (out+i)[1] = (uint)in[i+5];
+      (out+i)[2] = (uint)in[i+0];
+      (out+i)[3] = (uint)in[i+1];
+      (out+i)[4] = (uint)in[i+2];
+      (out+i)[5] = (uint)in[i+3];
+  }
+}
+static void translate_tristripadj_uint2uint_last2first_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+5];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+1];
+      (out+j)[4] = (uint)in[i+2];
+      (out+j)[5] = (uint)in[i+3];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+4];
+      (out+j)[1] = (uint)in[i+6];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i-2];
+      (out+j)[4] = (uint)in[i+0];
+      (out+j)[5] = (uint)in[i+3];
+    }
+  }
+}
 static void translate_points_uint2uint_last2last_prdisable(
     const void * _in,
     unsigned start,
@@ -11510,6 +16296,97 @@ static void translate_polygon_uint2uint_last2last_prdisable(
       (out+j)[1] = (uint)in[i+2];
       (out+j)[2] = (uint)in[start];
    }
+}
+static void translate_linesadj_uint2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_uint2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_uint2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_uint2uint_last2last_prdisable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
 }
 static void translate_points_uint2uint_last2last_prenable(
     const void * _in,
@@ -11768,6 +16645,97 @@ restart:
       (out+j)[2] = (uint)in[start];
    }
 }
+static void translate_linesadj_uint2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=4) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+  }
+}
+static void translate_linestripadj_uint2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; j+=4, i++) {
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+  }
+}
+static void translate_trisadj_uint2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start; i < (out_nr+start); i+=6) { 
+      (out+i)[0] = (uint)in[i+0];
+      (out+i)[1] = (uint)in[i+1];
+      (out+i)[2] = (uint)in[i+2];
+      (out+i)[3] = (uint)in[i+3];
+      (out+i)[4] = (uint)in[i+4];
+      (out+i)[5] = (uint)in[i+5];
+  }
+}
+static void translate_tristripadj_uint2uint_last2last_prenable(
+    const void * _in,
+    unsigned start,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
+    void *_out )
+{
+  const uint*in = (const uint*)_in;
+  uint *out = (uint*)_out;
+  unsigned i, j;
+  (void)j;
+  for (i = start, j = 0; j < out_nr; i+=2, j+=6) { 
+    if (i % 4 == 0) {
+      /* even triangle */
+      (out+j)[0] = (uint)in[i+0];
+      (out+j)[1] = (uint)in[i+1];
+      (out+j)[2] = (uint)in[i+2];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+5];
+    } else {
+      /* odd triangle */
+      (out+j)[0] = (uint)in[i+2];
+      (out+j)[1] = (uint)in[i-2];
+      (out+j)[2] = (uint)in[i+0];
+      (out+j)[3] = (uint)in[i+3];
+      (out+j)[4] = (uint)in[i+4];
+      (out+j)[5] = (uint)in[i+6];
+    }
+  }
+}
 void u_index_init( void )
 {
   static int firsttime = 1;
@@ -11783,6 +16751,10 @@ generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tr
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_QUADS] = generate_quads_ushort_first2first;
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_ushort_first2first;
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_POLYGON] = generate_polygon_ushort_first2first;
+generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_ushort_first2first;
+generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_ushort_first2first;
+generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_ushort_first2first;
+generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_ushort_first2first;
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_POINTS] = generate_points_ushort_first2first;
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINES] = generate_lines_ushort_first2first;
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_ushort_first2first;
@@ -11793,6 +16765,10 @@ generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tr
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_QUADS] = generate_quads_ushort_first2first;
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_ushort_first2first;
 generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_POLYGON] = generate_polygon_ushort_first2first;
+generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_ushort_first2first;
+generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_ushort_first2first;
+generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_ushort_first2first;
+generate[OUT_USHORT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_ushort_first2first;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_POINTS] = generate_points_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_LINES] = generate_lines_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_ushort_first2last;
@@ -11803,6 +16779,10 @@ generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tri
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_QUADS] = generate_quads_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_POLYGON] = generate_polygon_ushort_first2last;
+generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_ushort_first2last;
+generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_ushort_first2last;
+generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_ushort_first2last;
+generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_POINTS] = generate_points_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_LINES] = generate_lines_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_ushort_first2last;
@@ -11813,6 +16793,10 @@ generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tri
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_QUADS] = generate_quads_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_ushort_first2last;
 generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_POLYGON] = generate_polygon_ushort_first2last;
+generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_ushort_first2last;
+generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_ushort_first2last;
+generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_ushort_first2last;
+generate[OUT_USHORT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_ushort_first2last;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_POINTS] = generate_points_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_LINES] = generate_lines_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_ushort_last2first;
@@ -11823,6 +16807,10 @@ generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tri
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_QUADS] = generate_quads_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_POLYGON] = generate_polygon_ushort_last2first;
+generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_ushort_last2first;
+generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_ushort_last2first;
+generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_ushort_last2first;
+generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_POINTS] = generate_points_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_LINES] = generate_lines_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_ushort_last2first;
@@ -11833,6 +16821,10 @@ generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tri
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_QUADS] = generate_quads_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_POLYGON] = generate_polygon_ushort_last2first;
+generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_ushort_last2first;
+generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_ushort_last2first;
+generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_ushort_last2first;
+generate[OUT_USHORT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_ushort_last2first;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_POINTS] = generate_points_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_LINES] = generate_lines_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_ushort_last2last;
@@ -11843,6 +16835,10 @@ generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tris
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_QUADS] = generate_quads_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_POLYGON] = generate_polygon_ushort_last2last;
+generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_ushort_last2last;
+generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_ushort_last2last;
+generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_ushort_last2last;
+generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_POINTS] = generate_points_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_LINES] = generate_lines_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_ushort_last2last;
@@ -11853,6 +16849,10 @@ generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tris
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_QUADS] = generate_quads_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_ushort_last2last;
 generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_POLYGON] = generate_polygon_ushort_last2last;
+generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_ushort_last2last;
+generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_ushort_last2last;
+generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_ushort_last2last;
+generate[OUT_USHORT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_ushort_last2last;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_POINTS] = generate_points_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINES] = generate_lines_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_uint_first2first;
@@ -11863,6 +16863,10 @@ generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tris
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_QUADS] = generate_quads_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_POLYGON] = generate_polygon_uint_first2first;
+generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_uint_first2first;
+generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_uint_first2first;
+generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_uint_first2first;
+generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_POINTS] = generate_points_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINES] = generate_lines_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_uint_first2first;
@@ -11873,6 +16877,10 @@ generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tris
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_QUADS] = generate_quads_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_POLYGON] = generate_polygon_uint_first2first;
+generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_uint_first2first;
+generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_uint_first2first;
+generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_uint_first2first;
+generate[OUT_UINT][PV_FIRST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_uint_first2first;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_POINTS] = generate_points_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_LINES] = generate_lines_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_uint_first2last;
@@ -11883,6 +16891,10 @@ generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP] = generate_trist
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_QUADS] = generate_quads_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_POLYGON] = generate_polygon_uint_first2last;
+generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_uint_first2last;
+generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_uint_first2last;
+generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_uint_first2last;
+generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_POINTS] = generate_points_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_LINES] = generate_lines_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_uint_first2last;
@@ -11893,6 +16905,10 @@ generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP] = generate_trist
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_QUADS] = generate_quads_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_uint_first2last;
 generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_POLYGON] = generate_polygon_uint_first2last;
+generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_uint_first2last;
+generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_uint_first2last;
+generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_uint_first2last;
+generate[OUT_UINT][PV_FIRST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_uint_first2last;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_POINTS] = generate_points_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_LINES] = generate_lines_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_uint_last2first;
@@ -11903,6 +16919,10 @@ generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP] = generate_trist
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_QUADS] = generate_quads_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_POLYGON] = generate_polygon_uint_last2first;
+generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_uint_last2first;
+generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_uint_last2first;
+generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_uint_last2first;
+generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_POINTS] = generate_points_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_LINES] = generate_lines_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_uint_last2first;
@@ -11913,6 +16933,10 @@ generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP] = generate_trist
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_QUADS] = generate_quads_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_POLYGON] = generate_polygon_uint_last2first;
+generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_uint_last2first;
+generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_uint_last2first;
+generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_uint_last2first;
+generate[OUT_UINT][PV_LAST][PV_FIRST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_uint_last2first;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_POINTS] = generate_points_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_LINES] = generate_lines_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_uint_last2last;
@@ -11923,6 +16947,10 @@ generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tristr
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_QUADS] = generate_quads_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_POLYGON] = generate_polygon_uint_last2last;
+generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_uint_last2last;
+generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_uint_last2last;
+generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_uint_last2last;
+generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_POINTS] = generate_points_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_LINES] = generate_lines_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_LINE_STRIP] = generate_linestrip_uint_last2last;
@@ -11933,6 +16961,10 @@ generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP] = generate_tristr
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_QUADS] = generate_quads_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_QUAD_STRIP] = generate_quadstrip_uint_last2last;
 generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_POLYGON] = generate_polygon_uint_last2last;
+generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_LINES_ADJACENCY] = generate_linesadj_uint_last2last;
+generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_LINE_STRIP_ADJACENCY] = generate_linestripadj_uint_last2last;
+generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLES_ADJACENCY] = generate_trisadj_uint_last2last;
+generate[OUT_UINT][PV_LAST][PV_LAST][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = generate_tristripadj_uint_last2last;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2ushort_first2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2ushort_first2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2ushort_first2first_prdisable;
@@ -11943,6 +16975,10 @@ translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANG
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2ushort_first2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2ushort_first2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2ushort_first2first_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2ushort_first2first_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2ushort_first2first_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2ushort_first2first_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2ushort_first2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2ushort_first2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2ushort_first2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2ushort_first2first_prenable;
@@ -11953,6 +16989,10 @@ translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGL
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2ushort_first2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2ushort_first2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2ushort_first2first_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2ushort_first2first_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2ushort_first2first_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2ushort_first2first_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2ushort_first2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2ushort_first2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2ushort_first2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2ushort_first2last_prdisable;
@@ -11963,6 +17003,10 @@ translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGL
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2ushort_first2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2ushort_first2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2ushort_first2last_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2ushort_first2last_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2ushort_first2last_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2ushort_first2last_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2ushort_first2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2ushort_first2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2ushort_first2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2ushort_first2last_prenable;
@@ -11973,6 +17017,10 @@ translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2ushort_first2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2ushort_first2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2ushort_first2last_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2ushort_first2last_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2ushort_first2last_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2ushort_first2last_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2ushort_first2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2ushort_last2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2ushort_last2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2ushort_last2first_prdisable;
@@ -11983,6 +17031,10 @@ translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGL
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2ushort_last2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2ushort_last2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2ushort_last2first_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2ushort_last2first_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2ushort_last2first_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2ushort_last2first_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2ushort_last2first_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2ushort_last2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2ushort_last2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2ushort_last2first_prenable;
@@ -11993,6 +17045,10 @@ translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2ushort_last2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2ushort_last2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2ushort_last2first_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2ushort_last2first_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2ushort_last2first_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2ushort_last2first_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2ushort_last2first_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2ushort_last2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2ushort_last2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2ushort_last2last_prdisable;
@@ -12003,6 +17059,10 @@ translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2ushort_last2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2ushort_last2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2ushort_last2last_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2ushort_last2last_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2ushort_last2last_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2ushort_last2last_prdisable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2ushort_last2last_prdisable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2ushort_last2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2ushort_last2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2ushort_last2last_prenable;
@@ -12013,6 +17073,10 @@ translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2ushort_last2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2ushort_last2last_prenable;
 translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2ushort_last2last_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2ushort_last2last_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2ushort_last2last_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2ushort_last2last_prenable;
+translate[IN_UBYTE][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2ushort_last2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2uint_first2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2uint_first2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2uint_first2first_prdisable;
@@ -12023,6 +17087,10 @@ translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2uint_first2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2uint_first2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2uint_first2first_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2uint_first2first_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2uint_first2first_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2uint_first2first_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2uint_first2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2uint_first2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2uint_first2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2uint_first2first_prenable;
@@ -12033,6 +17101,10 @@ translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2uint_first2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2uint_first2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2uint_first2first_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2uint_first2first_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2uint_first2first_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2uint_first2first_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2uint_first2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2uint_first2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2uint_first2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2uint_first2last_prdisable;
@@ -12043,6 +17115,10 @@ translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2uint_first2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2uint_first2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2uint_first2last_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2uint_first2last_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2uint_first2last_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2uint_first2last_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2uint_first2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2uint_first2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2uint_first2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2uint_first2last_prenable;
@@ -12053,6 +17129,10 @@ translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_S
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2uint_first2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2uint_first2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2uint_first2last_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2uint_first2last_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2uint_first2last_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2uint_first2last_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2uint_first2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2uint_last2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2uint_last2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2uint_last2first_prdisable;
@@ -12063,6 +17143,10 @@ translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2uint_last2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2uint_last2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2uint_last2first_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2uint_last2first_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2uint_last2first_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2uint_last2first_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2uint_last2first_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2uint_last2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2uint_last2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2uint_last2first_prenable;
@@ -12073,6 +17157,10 @@ translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_S
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2uint_last2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2uint_last2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2uint_last2first_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2uint_last2first_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2uint_last2first_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2uint_last2first_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2uint_last2first_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2uint_last2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2uint_last2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2uint_last2last_prdisable;
@@ -12083,6 +17171,10 @@ translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_S
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2uint_last2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2uint_last2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2uint_last2last_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2uint_last2last_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2uint_last2last_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2uint_last2last_prdisable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2uint_last2last_prdisable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ubyte2uint_last2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ubyte2uint_last2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ubyte2uint_last2last_prenable;
@@ -12093,6 +17185,10 @@ translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_ST
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ubyte2uint_last2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ubyte2uint_last2last_prenable;
 translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ubyte2uint_last2last_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ubyte2uint_last2last_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ubyte2uint_last2last_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ubyte2uint_last2last_prenable;
+translate[IN_UBYTE][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ubyte2uint_last2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ushort2ushort_first2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ushort2ushort_first2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2ushort_first2first_prdisable;
@@ -12103,6 +17199,10 @@ translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIAN
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2ushort_first2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2ushort_first2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2ushort_first2first_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2ushort_first2first_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2ushort_first2first_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2ushort_first2first_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2ushort_first2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ushort2ushort_first2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ushort2ushort_first2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2ushort_first2first_prenable;
@@ -12113,6 +17213,10 @@ translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANG
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2ushort_first2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2ushort_first2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2ushort_first2first_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2ushort_first2first_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2ushort_first2first_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2ushort_first2first_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2ushort_first2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ushort2ushort_first2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ushort2ushort_first2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2ushort_first2last_prdisable;
@@ -12123,6 +17227,10 @@ translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANG
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2ushort_first2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2ushort_first2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2ushort_first2last_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2ushort_first2last_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2ushort_first2last_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2ushort_first2last_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2ushort_first2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ushort2ushort_first2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ushort2ushort_first2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2ushort_first2last_prenable;
@@ -12133,6 +17241,10 @@ translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGL
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2ushort_first2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2ushort_first2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2ushort_first2last_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2ushort_first2last_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2ushort_first2last_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2ushort_first2last_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2ushort_first2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ushort2ushort_last2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ushort2ushort_last2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2ushort_last2first_prdisable;
@@ -12143,6 +17255,10 @@ translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANG
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2ushort_last2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2ushort_last2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2ushort_last2first_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2ushort_last2first_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2ushort_last2first_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2ushort_last2first_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2ushort_last2first_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ushort2ushort_last2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ushort2ushort_last2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2ushort_last2first_prenable;
@@ -12153,6 +17269,10 @@ translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGL
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2ushort_last2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2ushort_last2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2ushort_last2first_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2ushort_last2first_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2ushort_last2first_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2ushort_last2first_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2ushort_last2first_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ushort2ushort_last2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ushort2ushort_last2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2ushort_last2last_prdisable;
@@ -12163,6 +17283,10 @@ translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGL
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2ushort_last2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2ushort_last2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2ushort_last2last_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2ushort_last2last_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2ushort_last2last_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2ushort_last2last_prdisable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2ushort_last2last_prdisable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ushort2ushort_last2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ushort2ushort_last2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2ushort_last2last_prenable;
@@ -12173,6 +17297,10 @@ translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2ushort_last2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2ushort_last2last_prenable;
 translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2ushort_last2last_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2ushort_last2last_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2ushort_last2last_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2ushort_last2last_prenable;
+translate[IN_USHORT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2ushort_last2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ushort2uint_first2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ushort2uint_first2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2uint_first2first_prdisable;
@@ -12183,6 +17311,10 @@ translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGL
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2uint_first2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2uint_first2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2uint_first2first_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2uint_first2first_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2uint_first2first_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2uint_first2first_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2uint_first2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ushort2uint_first2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ushort2uint_first2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2uint_first2first_prenable;
@@ -12193,6 +17325,10 @@ translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2uint_first2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2uint_first2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2uint_first2first_prenable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2uint_first2first_prenable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2uint_first2first_prenable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2uint_first2first_prenable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2uint_first2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ushort2uint_first2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ushort2uint_first2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2uint_first2last_prdisable;
@@ -12203,6 +17339,10 @@ translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2uint_first2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2uint_first2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2uint_first2last_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2uint_first2last_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2uint_first2last_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2uint_first2last_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2uint_first2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ushort2uint_first2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ushort2uint_first2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2uint_first2last_prenable;
@@ -12213,6 +17353,10 @@ translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2uint_first2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2uint_first2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2uint_first2last_prenable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2uint_first2last_prenable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2uint_first2last_prenable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2uint_first2last_prenable;
+translate[IN_USHORT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2uint_first2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ushort2uint_last2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ushort2uint_last2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2uint_last2first_prdisable;
@@ -12223,6 +17367,10 @@ translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2uint_last2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2uint_last2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2uint_last2first_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2uint_last2first_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2uint_last2first_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2uint_last2first_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2uint_last2first_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ushort2uint_last2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ushort2uint_last2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2uint_last2first_prenable;
@@ -12233,6 +17381,10 @@ translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2uint_last2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2uint_last2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2uint_last2first_prenable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2uint_last2first_prenable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2uint_last2first_prenable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2uint_last2first_prenable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2uint_last2first_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_ushort2uint_last2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_ushort2uint_last2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2uint_last2last_prdisable;
@@ -12243,6 +17395,10 @@ translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2uint_last2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2uint_last2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2uint_last2last_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2uint_last2last_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2uint_last2last_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2uint_last2last_prdisable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2uint_last2last_prdisable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_ushort2uint_last2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_ushort2uint_last2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_ushort2uint_last2last_prenable;
@@ -12253,6 +17409,10 @@ translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_S
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_ushort2uint_last2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_ushort2uint_last2last_prenable;
 translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_ushort2uint_last2last_prenable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_ushort2uint_last2last_prenable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_ushort2uint_last2last_prenable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_ushort2uint_last2last_prenable;
+translate[IN_USHORT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_ushort2uint_last2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_uint2ushort_first2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_uint2ushort_first2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2ushort_first2first_prdisable;
@@ -12263,6 +17423,10 @@ translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGL
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_uint2ushort_first2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2ushort_first2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2ushort_first2first_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2ushort_first2first_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2ushort_first2first_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2ushort_first2first_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2ushort_first2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_uint2ushort_first2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_uint2ushort_first2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2ushort_first2first_prenable;
@@ -12273,6 +17437,10 @@ translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_uint2ushort_first2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2ushort_first2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2ushort_first2first_prenable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2ushort_first2first_prenable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2ushort_first2first_prenable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2ushort_first2first_prenable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2ushort_first2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_uint2ushort_first2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_uint2ushort_first2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2ushort_first2last_prdisable;
@@ -12283,6 +17451,10 @@ translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_uint2ushort_first2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2ushort_first2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2ushort_first2last_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2ushort_first2last_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2ushort_first2last_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2ushort_first2last_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2ushort_first2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_uint2ushort_first2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_uint2ushort_first2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2ushort_first2last_prenable;
@@ -12293,6 +17465,10 @@ translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_uint2ushort_first2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2ushort_first2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2ushort_first2last_prenable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2ushort_first2last_prenable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2ushort_first2last_prenable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2ushort_first2last_prenable;
+translate[IN_UINT][OUT_USHORT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2ushort_first2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_uint2ushort_last2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_uint2ushort_last2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2ushort_last2first_prdisable;
@@ -12303,6 +17479,10 @@ translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_uint2ushort_last2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2ushort_last2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2ushort_last2first_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2ushort_last2first_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2ushort_last2first_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2ushort_last2first_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2ushort_last2first_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_uint2ushort_last2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_uint2ushort_last2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2ushort_last2first_prenable;
@@ -12313,6 +17493,10 @@ translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_uint2ushort_last2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2ushort_last2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2ushort_last2first_prenable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2ushort_last2first_prenable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2ushort_last2first_prenable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2ushort_last2first_prenable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2ushort_last2first_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_uint2ushort_last2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_uint2ushort_last2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2ushort_last2last_prdisable;
@@ -12323,6 +17507,10 @@ translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_uint2ushort_last2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2ushort_last2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2ushort_last2last_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2ushort_last2last_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2ushort_last2last_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2ushort_last2last_prdisable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2ushort_last2last_prdisable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_uint2ushort_last2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_uint2ushort_last2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2ushort_last2last_prenable;
@@ -12333,6 +17521,10 @@ translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_S
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_uint2ushort_last2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2ushort_last2last_prenable;
 translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2ushort_last2last_prenable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2ushort_last2last_prenable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2ushort_last2last_prenable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2ushort_last2last_prenable;
+translate[IN_UINT][OUT_USHORT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2ushort_last2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_uint2uint_first2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_uint2uint_first2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2uint_first2first_prdisable;
@@ -12343,6 +17535,10 @@ translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_uint2uint_first2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2uint_first2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2uint_first2first_prdisable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2uint_first2first_prdisable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2uint_first2first_prdisable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2uint_first2first_prdisable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2uint_first2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_uint2uint_first2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_uint2uint_first2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2uint_first2first_prenable;
@@ -12353,6 +17549,10 @@ translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_S
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_uint2uint_first2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2uint_first2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2uint_first2first_prenable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2uint_first2first_prenable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2uint_first2first_prenable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2uint_first2first_prenable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2uint_first2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_uint2uint_first2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_uint2uint_first2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2uint_first2last_prdisable;
@@ -12363,6 +17563,10 @@ translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_S
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_uint2uint_first2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2uint_first2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2uint_first2last_prdisable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2uint_first2last_prdisable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2uint_first2last_prdisable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2uint_first2last_prdisable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2uint_first2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_uint2uint_first2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_uint2uint_first2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2uint_first2last_prenable;
@@ -12373,6 +17577,10 @@ translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_ST
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_uint2uint_first2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2uint_first2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2uint_first2last_prenable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2uint_first2last_prenable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2uint_first2last_prenable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2uint_first2last_prenable;
+translate[IN_UINT][OUT_UINT][PV_FIRST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2uint_first2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_uint2uint_last2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_uint2uint_last2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2uint_last2first_prdisable;
@@ -12383,6 +17591,10 @@ translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_S
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_uint2uint_last2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2uint_last2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2uint_last2first_prdisable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2uint_last2first_prdisable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2uint_last2first_prdisable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2uint_last2first_prdisable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2uint_last2first_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_uint2uint_last2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_uint2uint_last2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2uint_last2first_prenable;
@@ -12393,6 +17605,10 @@ translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_ST
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_uint2uint_last2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2uint_last2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2uint_last2first_prenable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2uint_last2first_prenable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2uint_last2first_prenable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2uint_last2first_prenable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_FIRST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2uint_last2first_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POINTS] = translate_points_uint2uint_last2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES] = translate_lines_uint2uint_last2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2uint_last2last_prdisable;
@@ -12403,6 +17619,10 @@ translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_ST
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUADS] = translate_quads_uint2uint_last2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2uint_last2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2uint_last2last_prdisable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2uint_last2last_prdisable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2uint_last2last_prdisable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2uint_last2last_prdisable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_DISABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2uint_last2last_prdisable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POINTS] = translate_points_uint2uint_last2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES] = translate_lines_uint2uint_last2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP] = translate_linestrip_uint2uint_last2last_prenable;
@@ -12413,5 +17633,9 @@ translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STR
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUADS] = translate_quads_uint2uint_last2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_QUAD_STRIP] = translate_quadstrip_uint2uint_last2last_prenable;
 translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_POLYGON] = translate_polygon_uint2uint_last2last_prenable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINES_ADJACENCY] = translate_linesadj_uint2uint_last2last_prenable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_LINE_STRIP_ADJACENCY] = translate_linestripadj_uint2uint_last2last_prenable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLES_ADJACENCY] = translate_trisadj_uint2uint_last2last_prenable;
+translate[IN_UINT][OUT_UINT][PV_LAST][PV_LAST][PR_ENABLE][PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = translate_tristripadj_uint2uint_last2last_prenable;
 }
 #include "indices/u_indices.c"

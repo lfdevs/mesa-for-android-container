@@ -25,6 +25,7 @@
  *    Jason Ekstrand <jason.ekstrand@intel.com>
  */
 
+#include "brw_blorp.h"
 #include "intel_fbo.h"
 #include "intel_tex.h"
 #include "intel_blit.h"
@@ -46,6 +47,9 @@ copy_image_with_blitter(struct brw_context *brw,
 
    /* The blitter doesn't understand multisampling at all. */
    if (src_mt->num_samples > 0 || dst_mt->num_samples > 0)
+      return false;
+
+   if (src_mt->format == MESA_FORMAT_S_UINT8)
       return false;
 
    /* According to the Ivy Bridge PRM, Vol1 Part4, section 1.2.1.2 (Graphics
@@ -198,70 +202,39 @@ copy_image_with_memcpy(struct brw_context *brw,
    }
 }
 
-
 static void
-intel_copy_image_sub_data(struct gl_context *ctx,
-                          struct gl_texture_image *src_image,
-                          struct gl_renderbuffer *src_renderbuffer,
-                          int src_x, int src_y, int src_z,
-                          struct gl_texture_image *dst_image,
-                          struct gl_renderbuffer *dst_renderbuffer,
-                          int dst_x, int dst_y, int dst_z,
-                          int src_width, int src_height)
+copy_miptrees(struct brw_context *brw,
+              struct intel_mipmap_tree *src_mt,
+              int src_x, int src_y, int src_z, unsigned src_level,
+              struct intel_mipmap_tree *dst_mt,
+              int dst_x, int dst_y, int dst_z, unsigned dst_level,
+              int src_width, int src_height)
 {
-   struct brw_context *brw = brw_context(ctx);
-   struct intel_mipmap_tree *src_mt, *dst_mt;
-   unsigned src_level, dst_level;
-   GLuint bw, bh;
+   struct gl_context *ctx = &brw->ctx;
+   unsigned bw, bh;
 
-   if (_mesa_meta_CopyImageSubData_uncompressed(ctx,
-                                                src_image, src_renderbuffer,
-                                                src_x, src_y, src_z,
-                                                dst_image, dst_renderbuffer,
-                                                dst_x, dst_y, dst_z,
-                                                src_width, src_height)) {
+   if (brw->gen >= 6 &&
+       brw->format_supported_as_render_target[dst_mt->format] &&
+       !_mesa_is_format_compressed(src_mt->format)) {
+
+      /* We'll use the destination format for both images */
+      mesa_format format = dst_mt->format;
+
+      brw_blorp_blit_miptrees(brw,
+                              src_mt, src_level, src_z, format, SWIZZLE_XYZW,
+                              dst_mt, dst_level, dst_z, format,
+                              src_x, src_y,
+                              src_x + src_width, src_y + src_height,
+                              dst_x, dst_y,
+                              dst_x + src_width, dst_y + src_height,
+                              GL_NEAREST, false, false, /* mirror */
+                              false, false);
       return;
-   }
-
-   if (src_image) {
-      src_mt = intel_texture_image(src_image)->mt;
-   } else {
-      assert(src_renderbuffer);
-      src_mt = intel_renderbuffer(src_renderbuffer)->mt;
-      src_image = src_renderbuffer->TexImage;
-   }
-
-   if (dst_image) {
-      dst_mt = intel_texture_image(dst_image)->mt;
-   } else {
-      assert(dst_renderbuffer);
-      dst_mt = intel_renderbuffer(dst_renderbuffer)->mt;
-      dst_image = dst_renderbuffer->TexImage;
    }
 
    if (src_mt->num_samples > 0 || dst_mt->num_samples > 0) {
-      _mesa_problem(ctx, "Failed to copy multisampled texture with meta path\n");
+      _mesa_problem(ctx, "Failed to copy multisampled texture with BLORP\n");
       return;
-   }
-
-   if (src_image) {
-      src_level = src_image->Level + src_image->TexObject->MinLevel;
-
-      /* Cube maps actually have different images per face */
-      if (src_image->TexObject->Target == GL_TEXTURE_CUBE_MAP)
-         src_z = src_image->Face;
-   } else {
-      src_level = 0;
-   }
-
-   if (dst_image) {
-      dst_level = dst_image->Level + dst_image->TexObject->MinLevel;
-
-      /* Cube maps actually have different images per face */
-      if (dst_image->TexObject->Target == GL_TEXTURE_CUBE_MAP)
-         dst_z = dst_image->Face;
-   } else {
-      dst_level = 0;
    }
 
    /* We are now going to try and copy the texture using the blitter.  If
@@ -304,6 +277,83 @@ intel_copy_image_sub_data(struct gl_context *ctx,
                           dst_mt, dst_level,
                           dst_x, dst_y, dst_z,
                           src_width, src_height);
+}
+
+static void
+intel_copy_image_sub_data(struct gl_context *ctx,
+                          struct gl_texture_image *src_image,
+                          struct gl_renderbuffer *src_renderbuffer,
+                          int src_x, int src_y, int src_z,
+                          struct gl_texture_image *dst_image,
+                          struct gl_renderbuffer *dst_renderbuffer,
+                          int dst_x, int dst_y, int dst_z,
+                          int src_width, int src_height)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct intel_mipmap_tree *src_mt, *dst_mt;
+   unsigned src_level, dst_level;
+
+   if (brw->gen < 6 &&
+       _mesa_meta_CopyImageSubData_uncompressed(ctx,
+                                                src_image, src_renderbuffer,
+                                                src_x, src_y, src_z,
+                                                dst_image, dst_renderbuffer,
+                                                dst_x, dst_y, dst_z,
+                                                src_width, src_height)) {
+      return;
+   }
+
+   if (src_image) {
+      src_mt = intel_texture_image(src_image)->mt;
+      src_level = src_image->Level + src_image->TexObject->MinLevel;
+
+      /* Cube maps actually have different images per face */
+      if (src_image->TexObject->Target == GL_TEXTURE_CUBE_MAP)
+         src_z = src_image->Face;
+
+      src_z += src_image->TexObject->MinLayer;
+   } else {
+      assert(src_renderbuffer);
+      src_mt = intel_renderbuffer(src_renderbuffer)->mt;
+      src_image = src_renderbuffer->TexImage;
+      src_level = 0;
+   }
+
+   if (dst_image) {
+      dst_mt = intel_texture_image(dst_image)->mt;
+
+      dst_level = dst_image->Level + dst_image->TexObject->MinLevel;
+
+      /* Cube maps actually have different images per face */
+      if (dst_image->TexObject->Target == GL_TEXTURE_CUBE_MAP)
+         dst_z = dst_image->Face;
+
+      dst_z += dst_image->TexObject->MinLayer;
+   } else {
+      assert(dst_renderbuffer);
+      dst_mt = intel_renderbuffer(dst_renderbuffer)->mt;
+      dst_image = dst_renderbuffer->TexImage;
+      dst_level = 0;
+   }
+
+   copy_miptrees(brw, src_mt, src_x, src_y, src_z, src_level,
+                 dst_mt, dst_x, dst_y, dst_z, dst_level,
+                 src_width, src_height);
+
+   /* CopyImage only works for equal formats, texture view equivalence
+    * classes, and a couple special cases for compressed textures.
+    *
+    * Notably, GL_DEPTH_STENCIL does not appear in any equivalence
+    * classes, so we know the formats must be the same, and thus both
+    * will either have stencil, or not.  They can't be mismatched.
+    */
+   assert((src_mt->stencil_mt != NULL) == (dst_mt->stencil_mt != NULL));
+
+   if (dst_mt->stencil_mt) {
+      copy_miptrees(brw, src_mt->stencil_mt, src_x, src_y, src_z, src_level,
+                    dst_mt->stencil_mt, dst_x, dst_y, dst_z, dst_level,
+                    src_width, src_height);
+   }
 }
 
 void

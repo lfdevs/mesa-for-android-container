@@ -91,4 +91,6 @@ void trace_dump_query_result(unsigned query_type,
 
 void trace_dump_grid_info(const struct pipe_grid_info *state);
 
+void trace_dump_image_view(const struct pipe_image_view *view);
+
 #endif /* TR_STATE_H */

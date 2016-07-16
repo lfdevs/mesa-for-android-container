@@ -57,7 +57,7 @@ gen8_upload_gs_state(struct brw_context *brw)
       if (brw->gs.prog_data->base.base.total_scratch) {
          OUT_RELOC64(stage_state->scratch_bo,
                      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-                     ffs(brw->gs.prog_data->base.base.total_scratch) - 11);
+                     ffs(stage_state->per_thread_scratch) - 11);
       } else {
          OUT_BATCH(0);
          OUT_BATCH(0);
@@ -108,7 +108,8 @@ gen8_upload_gs_state(struct brw_context *brw)
       OUT_BATCH(dw8);
 
       /* DW9 / _NEW_TRANSFORM */
-      OUT_BATCH((ctx->Transform.ClipPlanesEnabled <<
+      OUT_BATCH((prog_data->cull_distance_mask |
+                 ctx->Transform.ClipPlanesEnabled <<
                  GEN8_GS_USER_CLIP_DISTANCE_SHIFT) |
                 (urb_entry_output_length << GEN8_GS_URB_OUTPUT_LENGTH_SHIFT) |
                 (urb_entry_write_offset <<
@@ -134,6 +135,7 @@ const struct brw_tracked_state gen8_gs_state = {
    .dirty = {
       .mesa  = _NEW_TRANSFORM,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
                BRW_NEW_GEOMETRY_PROGRAM |
                BRW_NEW_GS_PROG_DATA,

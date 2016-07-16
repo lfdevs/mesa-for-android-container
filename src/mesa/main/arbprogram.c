@@ -200,12 +200,17 @@ _mesa_GenProgramsARB(GLsizei n, GLuint *ids)
    if (!ids)
       return;
 
+   _mesa_HashLockMutex(ctx->Shared->Programs);
+
    first = _mesa_HashFindFreeKeyBlock(ctx->Shared->Programs, n);
 
    /* Insert pointer to dummy program as placeholder */
    for (i = 0; i < (GLuint) n; i++) {
-      _mesa_HashInsert(ctx->Shared->Programs, first + i, &_mesa_DummyProgram);
+      _mesa_HashInsertLocked(ctx->Shared->Programs, first + i,
+                             &_mesa_DummyProgram);
    }
+
+   _mesa_HashUnlockMutex(ctx->Shared->Programs);
 
    /* Return the program names */
    for (i = 0; i < (GLuint) n; i++) {

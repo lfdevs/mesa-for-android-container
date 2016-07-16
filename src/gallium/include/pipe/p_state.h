@@ -57,7 +57,7 @@ extern "C" {
 #define PIPE_MAX_CLIP_PLANES       8
 #define PIPE_MAX_COLOR_BUFS        8
 #define PIPE_MAX_CONSTANT_BUFFERS 32
-#define PIPE_MAX_SAMPLERS         18 /* 16 public + 2 driver internal */
+#define PIPE_MAX_SAMPLERS         32
 #define PIPE_MAX_SHADER_INPUTS    80 /* 32 GENERIC + 32 PATCH + 16 others */
 #define PIPE_MAX_SHADER_OUTPUTS   80 /* 32 GENERIC + 32 PATCH + 16 others */
 #define PIPE_MAX_SHADER_SAMPLER_VIEWS 32
@@ -211,13 +211,43 @@ struct pipe_stream_output_info
    } output[PIPE_MAX_SO_OUTPUTS];
 };
 
-
+/**
+ * The 'type' parameter identifies whether the shader state contains TGSI
+ * tokens, etc.  If the driver returns 'PIPE_SHADER_IR_TGSI' for the
+ * 'PIPE_SHADER_CAP_PREFERRED_IR' shader param, the ir will *always* be
+ * 'PIPE_SHADER_IR_TGSI' and the tokens ptr will be valid.  If the driver
+ * requests a different 'pipe_shader_ir' type, then it must check the 'type'
+ * enum to see if it is getting TGSI tokens or its preferred IR.
+ *
+ * TODO pipe_compute_state should probably get similar treatment to handle
+ * multiple IR's in a cleaner way..
+ *
+ * NOTE: since it is expected that the consumer will want to perform
+ * additional passes on the nir_shader, the driver takes ownership of
+ * the nir_shader.  If state trackers need to hang on to the IR (for
+ * example, variant management), it should use nir_shader_clone().
+ */
 struct pipe_shader_state
 {
+   enum pipe_shader_ir type;
+   /* TODO move tokens into union. */
    const struct tgsi_token *tokens;
+   union {
+      void *llvm;
+      void *native;
+      void *nir;
+   } ir;
    struct pipe_stream_output_info stream_output;
 };
 
+static inline void
+pipe_shader_state_from_tgsi(struct pipe_shader_state *state,
+                            const struct tgsi_token *tokens)
+{
+   state->type = PIPE_SHADER_IR_TGSI;
+   state->tokens = tokens;
+   memset(&state->stream_output, 0, sizeof(state->stream_output));
+}
 
 struct pipe_depth_state
 {
@@ -288,7 +318,17 @@ struct pipe_blend_state
 
 struct pipe_blend_color
 {
-   float color[4];
+   /**
+    * Making the color array explicitly 16-byte aligned provides a hint to
+    * compilers to make more efficient auto-vectorization optimizations.
+    * The actual performance gains from vectorizing the blend color array are
+    * fairly minimal, if any, but the alignment is necessary to work around
+    * buggy vectorization in some compilers which fail to generate the correct
+    * unaligned accessors resulting in a segfault.  Specifically several
+    * versions of the Intel compiler are known to be affected but it's likely
+    * others are as well.
+    */
+   PIPE_ALIGN_VAR(16) float color[4];
 };
 
 
@@ -298,9 +338,17 @@ struct pipe_stencil_ref
 };
 
 
+/**
+ * Note that pipe_surfaces are "texture views for rendering"
+ * and so in the case of ARB_framebuffer_no_attachment there
+ * is no pipe_surface state available such that we may
+ * extract the number of samples and layers.
+ */
 struct pipe_framebuffer_state
 {
    unsigned width, height;
+   unsigned samples; /**< Number of samples in a no-attachment framebuffer */
+   unsigned layers;  /**< Number of layers  in a no-attachment framebuffer */
 
    /** multiple color buffers for multiple render targets */
    unsigned nr_cbufs;
@@ -393,13 +441,14 @@ struct pipe_sampler_view
 
 
 /**
- * A description of a writable buffer or texture that can be bound to a shader
+ * A description of a buffer or texture image that can be bound to a shader
  * stage.
  */
 struct pipe_image_view
 {
    struct pipe_resource *resource; /**< resource into which this is a view  */
    enum pipe_format format;      /**< typed PIPE_FORMAT_x */
+   unsigned access;              /**< PIPE_IMAGE_ACCESS_x */
 
    union {
       struct {
@@ -578,7 +627,7 @@ struct pipe_draw_info
 {
    boolean indexed;  /**< use index buffer */
 
-   unsigned mode;  /**< the mode of the primitive */
+   enum pipe_prim_type mode;  /**< the mode of the primitive */
    unsigned start;  /**< the index of the first vertex */
    unsigned count;  /**< number of vertices */
 
@@ -726,6 +775,7 @@ struct pipe_llvm_program_header
 
 struct pipe_compute_state
 {
+   enum pipe_shader_ir ir_type; /**< IR type contained in prog. */
    const void *prog; /**< Compute program to be executed. */
    unsigned req_local_mem; /**< Required size of the LOCAL resource. */
    unsigned req_private_mem; /**< Required size of the PRIVATE resource. */

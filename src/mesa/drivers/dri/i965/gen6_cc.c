@@ -198,14 +198,14 @@ gen6_upload_blend_state(struct brw_context *brw)
       if(!is_buffer_zero_integer_format) {
          /* _NEW_MULTISAMPLE */
          blend[b].blend1.alpha_to_coverage =
-            ctx->Multisample._Enabled && ctx->Multisample.SampleAlphaToCoverage;
+            _mesa_is_multisample_enabled(ctx) && ctx->Multisample.SampleAlphaToCoverage;
 
 	/* From SandyBridge PRM, volume 2 Part 1, section 8.2.3, BLEND_STATE:
 	 * DWord 1, Bit 30 (AlphaToOne Enable):
 	 * "If Dual Source Blending is enabled, this bit must be disabled"
 	 */
          WARN_ONCE(ctx->Color.Blend[b]._UsesDualSrc &&
-                   ctx->Multisample._Enabled &&
+                   _mesa_is_multisample_enabled(ctx) &&
                    ctx->Multisample.SampleAlphaToOne,
                    "HW workaround: disabling alpha to one with dual src "
                    "blending\n");
@@ -213,7 +213,7 @@ gen6_upload_blend_state(struct brw_context *brw)
             blend[b].blend1.alpha_to_one = false;
 	 else
 	    blend[b].blend1.alpha_to_one =
-	       ctx->Multisample._Enabled && ctx->Multisample.SampleAlphaToOne;
+	       _mesa_is_multisample_enabled(ctx) && ctx->Multisample.SampleAlphaToOne;
 
          blend[b].blend1.alpha_to_coverage_dither = (brw->gen >= 7);
       }
@@ -245,6 +245,7 @@ const struct brw_tracked_state gen6_blend_state = {
               _NEW_COLOR |
               _NEW_MULTISAMPLE,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_STATE_BASE_ADDRESS,
    },
    .emit = gen6_upload_blend_state,
@@ -298,6 +299,7 @@ const struct brw_tracked_state gen6_color_calc_state = {
       .mesa = _NEW_COLOR |
               _NEW_STENCIL,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_CC_STATE |
              BRW_NEW_STATE_BASE_ADDRESS,
    },

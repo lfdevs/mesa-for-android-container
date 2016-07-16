@@ -23,10 +23,8 @@
 #include <gtest/gtest.h>
 #include <string.h>
 
-extern "C" {
 #include "glxclient.h"
 #include "glx_error.h"
-}
 
 #include <xcb/glx.h>
 #include "mock_xdisplay.h"

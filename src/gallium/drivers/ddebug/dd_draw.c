@@ -35,6 +35,7 @@
 enum call_type
 {
    CALL_DRAW_VBO,
+   CALL_LAUNCH_GRID,
    CALL_RESOURCE_COPY_REGION,
    CALL_BLIT,
    CALL_FLUSH_RESOURCE,
@@ -77,6 +78,7 @@ struct dd_call
 
    union {
       struct pipe_draw_info draw_vbo;
+      struct pipe_grid_info launch_grid;
       struct call_resource_copy_region resource_copy_region;
       struct pipe_blit_info blit;
       struct pipe_resource *flush_resource;
@@ -372,6 +374,13 @@ dd_dump_draw_vbo(struct dd_context *dctx, struct pipe_draw_info *info, FILE *f)
 }
 
 static void
+dd_dump_launch_grid(struct dd_context *dctx, struct pipe_grid_info *info, FILE *f)
+{
+   fprintf(f, "%s:\n", __func__+8);
+   /* TODO */
+}
+
+static void
 dd_dump_resource_copy_region(struct dd_context *dctx,
                              struct call_resource_copy_region *info,
                              FILE *f)
@@ -484,6 +493,9 @@ dd_dump_call(struct dd_context *dctx, struct dd_call *call, unsigned flags)
    switch (call->type) {
    case CALL_DRAW_VBO:
       dd_dump_draw_vbo(dctx, &call->info.draw_vbo, f);
+      break;
+   case CALL_LAUNCH_GRID:
+      dd_dump_launch_grid(dctx, &call->info.launch_grid, f);
       break;
    case CALL_RESOURCE_COPY_REGION:
       dd_dump_resource_copy_region(dctx, &call->info.resource_copy_region, f);
@@ -649,6 +661,22 @@ dd_context_draw_vbo(struct pipe_context *_pipe,
 }
 
 static void
+dd_context_launch_grid(struct pipe_context *_pipe,
+                       const struct pipe_grid_info *info)
+{
+   struct dd_context *dctx = dd_context(_pipe);
+   struct pipe_context *pipe = dctx->pipe;
+   struct dd_call call;
+
+   call.type = CALL_LAUNCH_GRID;
+   call.info.launch_grid = *info;
+
+   dd_before_draw(dctx);
+   pipe->launch_grid(pipe, info);
+   dd_after_draw(dctx, &call);
+}
+
+static void
 dd_context_resource_copy_region(struct pipe_context *_pipe,
                                 struct pipe_resource *dst, unsigned dst_level,
                                 unsigned dstx, unsigned dsty, unsigned dstz,
@@ -789,6 +817,7 @@ dd_init_draw_functions(struct dd_context *dctx)
 {
    CTX_INIT(flush);
    CTX_INIT(draw_vbo);
+   CTX_INIT(launch_grid);
    CTX_INIT(resource_copy_region);
    CTX_INIT(blit);
    CTX_INIT(clear);

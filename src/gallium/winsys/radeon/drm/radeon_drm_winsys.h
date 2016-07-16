@@ -92,9 +92,6 @@ struct radeon_drm_winsys {
     uint64_t va_offset;
     struct list_head va_holes;
 
-    /* BO size alignment */
-    unsigned size_align;
-
     struct radeon_surface_manager *surf_man;
 
     uint32_t num_cpus;      /* Number of CPUs. */

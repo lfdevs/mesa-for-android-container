@@ -133,11 +133,26 @@ static void compile_sf_prog( struct brw_context *brw,
 
 /* Calculate interpolants for triangle and line rasterization.
  */
-static void
+void
 brw_upload_sf_prog(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    struct brw_sf_prog_key key;
+
+   if (!brw_state_dirty(brw,
+                        _NEW_BUFFERS |
+                        _NEW_HINT |
+                        _NEW_LIGHT |
+                        _NEW_POINT |
+                        _NEW_POLYGON |
+                        _NEW_PROGRAM |
+                        _NEW_TRANSFORM,
+                        BRW_NEW_BLORP |
+                        BRW_NEW_INTERPOLATION_MAP |
+                        BRW_NEW_REDUCED_PRIMITIVE |
+                        BRW_NEW_VUE_MAP_GEOM_OUT))
+      return;
+
    /* _NEW_BUFFERS */
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
 
@@ -213,21 +228,3 @@ brw_upload_sf_prog(struct brw_context *brw)
       compile_sf_prog( brw, &key );
    }
 }
-
-
-const struct brw_tracked_state brw_sf_prog = {
-   .dirty = {
-      .mesa  = _NEW_BUFFERS |
-               _NEW_HINT |
-               _NEW_LIGHT |
-               _NEW_POINT |
-               _NEW_POLYGON |
-               _NEW_PROGRAM |
-               _NEW_TRANSFORM,
-      .brw   = BRW_NEW_INTERPOLATION_MAP |
-               BRW_NEW_REDUCED_PRIMITIVE |
-               BRW_NEW_VUE_MAP_GEOM_OUT,
-   },
-   .emit = brw_upload_sf_prog
-};
-

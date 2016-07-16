@@ -740,7 +740,9 @@ fs_prepare_tgsi_sampling(struct fs_compile_context *fcc,
       break;
    }
 
-   num_coords = tgsi_util_get_texture_coord_dim(inst->tex.target, &ref_pos);
+   num_coords = tgsi_util_get_texture_coord_dim(inst->tex.target);
+   ref_pos = tgsi_util_get_shadow_ref_src_index(inst->tex.target);
+
    tsrc_transpose(inst->src[0], coords);
    bias_or_lod = tsrc_null();
    ref_or_si = tsrc_null();
@@ -1121,7 +1123,7 @@ fs_lower_opcode_tgsi_sampling(struct fs_compile_context *fcc,
    toy_compiler_lower_to_send(tc, inst, false, GEN6_SFID_SAMPLER);
    inst->src[0] = tsrc(TOY_FILE_MRF, fcc->first_free_mrf, 0);
    inst->src[1] = desc;
-   for (i = 2; i < Elements(inst->src); i++)
+   for (i = 2; i < ARRAY_SIZE(inst->src); i++)
       inst->src[i] = tsrc_null();
 
    /* write to temps first */
@@ -1141,19 +1143,19 @@ fs_lower_opcode_tgsi_sampling(struct fs_compile_context *fcc,
       swizzles[3] = fcc->variant->sampler_view_swizzles[sampler_index].a;
    }
    else {
-      swizzles[0] = PIPE_SWIZZLE_RED;
-      swizzles[1] = PIPE_SWIZZLE_GREEN;
-      swizzles[2] = PIPE_SWIZZLE_BLUE;
-      swizzles[3] = PIPE_SWIZZLE_ALPHA;
+      swizzles[0] = PIPE_SWIZZLE_X;
+      swizzles[1] = PIPE_SWIZZLE_Y;
+      swizzles[2] = PIPE_SWIZZLE_Z;
+      swizzles[3] = PIPE_SWIZZLE_W;
    }
 
    /* swizzle the results */
    for (i = 0; i < 4; i++) {
       switch (swizzles[i]) {
-      case PIPE_SWIZZLE_ZERO:
+      case PIPE_SWIZZLE_0:
          tc_MOV(tc, dst[i], tsrc_imm_f(0.0f));
          break;
-      case PIPE_SWIZZLE_ONE:
+      case PIPE_SWIZZLE_1:
          tc_MOV(tc, dst[i], tsrc_imm_f(1.0f));
          break;
       default:
@@ -1448,12 +1450,12 @@ fs_write_fb(struct fs_compile_context *fcc)
    int color_slots[ILO_MAX_DRAW_BUFFERS], num_cbufs;
    int pos_slot = -1, cbuf, i;
 
-   for (i = 0; i < Elements(color_slots); i++)
+   for (i = 0; i < ARRAY_SIZE(color_slots); i++)
       color_slots[i] = -1;
 
    for (i = 0; i < fcc->tgsi.num_outputs; i++) {
       if (fcc->tgsi.outputs[i].semantic_name == TGSI_SEMANTIC_COLOR) {
-         assert(fcc->tgsi.outputs[i].semantic_index < Elements(color_slots));
+         assert(fcc->tgsi.outputs[i].semantic_index < ARRAY_SIZE(color_slots));
          color_slots[fcc->tgsi.outputs[i].semantic_index] = i;
       }
       else if (fcc->tgsi.outputs[i].semantic_name == TGSI_SEMANTIC_POSITION) {
@@ -1672,7 +1674,7 @@ fs_setup_payloads(struct fs_compile_context *fcc)
    /* r1-r2: coordinates and etc. */
    grf += (fcc->dispatch_mode == GEN6_PS_DISPATCH_32) ? 2 : 1;
 
-   for (i = 0; i < Elements(fcc->payloads); i++) {
+   for (i = 0; i < ARRAY_SIZE(fcc->payloads); i++) {
       const int reg_scale =
          (fcc->dispatch_mode == GEN6_PS_DISPATCH_8) ? 1 : 2;
 

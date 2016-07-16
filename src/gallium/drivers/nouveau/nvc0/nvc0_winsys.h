@@ -50,9 +50,9 @@ PUSH_REFN(struct nouveau_pushbuf *push, struct nouveau_bo *bo, uint32_t flags)
 #define NVC0_3D(n) SUBC_3D(NVC0_3D_##n)
 #define NVE4_3D(n) SUBC_3D(NVE4_3D_##n)
 
-#define SUBC_COMPUTE(m) 1, (m)
-#define NVC0_COMPUTE(n) SUBC_COMPUTE(NVC0_COMPUTE_##n)
-#define NVE4_COMPUTE(n) SUBC_COMPUTE(NVE4_COMPUTE_##n)
+#define SUBC_CP(m) 1, (m)
+#define NVC0_CP(n) SUBC_CP(NVC0_COMPUTE_##n)
+#define NVE4_CP(n) SUBC_CP(NVE4_COMPUTE_##n)
 
 #define SUBC_M2MF(m) 2, (m)
 #define SUBC_P2MF(m) 2, (m)

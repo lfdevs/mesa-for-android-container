@@ -199,7 +199,7 @@ lp_build_printf(struct gallivm_state *gallivm,
    int i;
 
    argcount = lp_get_printf_arg_count(fmt);
-   assert(Elements(params) >= argcount + 1);
+   assert(ARRAY_SIZE(params) >= argcount + 1);
 
    va_start(arglist, fmt);
    for (i = 1; i <= argcount; i++) {

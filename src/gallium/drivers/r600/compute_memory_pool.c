@@ -489,7 +489,7 @@ void compute_memory_move_item(struct compute_memory_pool *pool,
 	struct r600_context *rctx = (struct r600_context *)pipe;
 	struct pipe_box box;
 
-	struct compute_memory_item *prev;
+	MAYBE_UNUSED struct compute_memory_item *prev;
 
 	COMPUTE_DBG(pool->screen, "* compute_memory_move_item()\n"
 			"  + Moving item %"PRIi64" from %"PRIi64" (%"PRIi64" bytes) to %"PRIu64" (%"PRIu64" bytes)\n",

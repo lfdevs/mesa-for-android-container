@@ -170,6 +170,7 @@ void cso_set_render_condition(struct cso_context *cso,
 #define CSO_BIT_VERTEX_ELEMENTS       0x10000
 #define CSO_BIT_VERTEX_SHADER         0x20000
 #define CSO_BIT_VIEWPORT              0x40000
+#define CSO_BIT_PAUSE_QUERIES         0x80000
 
 #define CSO_BITS_ALL_SHADERS (CSO_BIT_VERTEX_SHADER | \
                               CSO_BIT_FRAGMENT_SHADER | \

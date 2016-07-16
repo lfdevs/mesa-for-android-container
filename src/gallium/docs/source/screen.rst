@@ -319,6 +319,27 @@ The integer capabilities:
   adjusted appropriately.
 * ``PIPE_CAP_QUERY_BUFFER_OBJECT``: Driver supports
   context::get_query_result_resource callback.
+* ``PIPE_CAP_PCI_GROUP``: Return the PCI segment group number.
+* ``PIPE_CAP_PCI_BUS``: Return the PCI bus number.
+* ``PIPE_CAP_PCI_DEVICE``: Return the PCI device number.
+* ``PIPE_CAP_PCI_FUNCTION``: Return the PCI function number.
+* ``PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT``:
+  If non-zero, rendering to framebuffers with no surface attachments
+  is supported. The context->is_format_supported function will be expected
+  to be implemented with PIPE_FORMAT_NONE yeilding the MSAA modes the hardware
+  supports. N.B., The maximum number of layers supported for rasterizing a
+  primitive on a layer is obtained from ``PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS``
+  even though it can be larger than the number of layers supported by either
+  rendering or textures.
+* ``PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR``: Implementation uses bounds
+  checking on resource accesses by shader if the context is created with
+  PIPE_CONTEXT_ROBUST_BUFFER_ACCESS. See the ARB_robust_buffer_access_behavior
+  extension for information on the required behavior for out of bounds accesses
+  and accesses to unbound resources.
+* ``PIPE_CAP_CULL_DISTANCE``: Whether the driver supports the arb_cull_distance
+  extension and thus implements proper support for culling planes.
+* ``PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES``: Whether primitive restart is
+  supported for patch primitives.
 
 
 .. _pipe_capf:
@@ -432,26 +453,26 @@ pipe_screen::get_compute_param.
   ``processor-arch-manufacturer-os`` that will be passed on to the compiler.
   This CAP is only relevant for drivers that specify PIPE_SHADER_IR_LLVM
   or PIPE_SHADER_IR_NATIVE for their preferred IR.
-  Value type: null-terminated string.
+  Value type: null-terminated string. Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_GRID_DIMENSION``: Number of supported dimensions
-  for grid and block coordinates.  Value type: ``uint64_t``.
+  for grid and block coordinates.  Value type: ``uint64_t``. Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_MAX_GRID_SIZE``: Maximum grid size in block
-  units.  Value type: ``uint64_t []``.
+  units.  Value type: ``uint64_t []``.  Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE``: Maximum block size in thread
-  units.  Value type: ``uint64_t []``.
+  units.  Value type: ``uint64_t []``. Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK``: Maximum number of threads that
-  a single block can contain.  Value type: ``uint64_t``.
+  a single block can contain.  Value type: ``uint64_t``. Shader IR type dependent.
   This may be less than the product of the components of MAX_BLOCK_SIZE and is
   usually limited by the number of threads that can be resident simultaneously
   on a compute unit.
 * ``PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE``: Maximum size of the GLOBAL
-  resource.  Value type: ``uint64_t``.
+  resource.  Value type: ``uint64_t``. Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE``: Maximum size of the LOCAL
-  resource.  Value type: ``uint64_t``.
+  resource.  Value type: ``uint64_t``. Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE``: Maximum size of the PRIVATE
-  resource.  Value type: ``uint64_t``.
+  resource.  Value type: ``uint64_t``. Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_MAX_INPUT_SIZE``: Maximum size of the INPUT
-  resource.  Value type: ``uint64_t``.
+  resource.  Value type: ``uint64_t``. Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE``: Maximum size of a memory object
   allocation in bytes.  Value type: ``uint64_t``.
 * ``PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY``: Maximum frequency of the GPU

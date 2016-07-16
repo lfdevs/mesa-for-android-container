@@ -34,15 +34,15 @@
 
 DEBUG_GET_ONCE_OPTION(replace_shaders, "RADEON_REPLACE_SHADERS", NULL)
 
-static void si_dump_shader(struct si_shader_ctx_state *state, const char *name,
-			   FILE *f)
+static void si_dump_shader(struct si_screen *sscreen,
+			   struct si_shader_ctx_state *state, FILE *f)
 {
 	if (!state->cso || !state->current)
 		return;
 
-	fprintf(f, "%s shader disassembly:\n", name);
 	si_dump_shader_key(state->cso->type, &state->current->key, f);
-	fprintf(f, "%s\n\n", state->current->binary.disasm_string);
+	si_shader_dump(sscreen, state->current, NULL,
+		       state->cso->info.processor, f);
 }
 
 /**
@@ -185,15 +185,16 @@ static void si_dump_reg(FILE *file, unsigned offset, uint32_t value,
 {
 	int r, f;
 
-	for (r = 0; r < ARRAY_SIZE(reg_table); r++) {
-		const struct si_reg *reg = &reg_table[r];
+	for (r = 0; r < ARRAY_SIZE(sid_reg_table); r++) {
+		const struct si_reg *reg = &sid_reg_table[r];
+		const char *reg_name = sid_strings + reg->name_offset;
 
 		if (reg->offset == offset) {
 			bool first_field = true;
 
 			print_spaces(file, INDENT_PKT);
 			fprintf(file, COLOR_YELLOW "%s" COLOR_RESET " <- ",
-				reg->name);
+				reg_name);
 
 			if (!reg->num_fields) {
 				print_value(file, value, 32);
@@ -201,7 +202,8 @@ static void si_dump_reg(FILE *file, unsigned offset, uint32_t value,
 			}
 
 			for (f = 0; f < reg->num_fields; f++) {
-				const struct si_field *field = &reg->fields[f];
+				const struct si_field *field = sid_fields_table + reg->fields_offset + f;
+				const int *values_offsets = sid_strings_offsets + field->values_offset;
 				uint32_t val = (value & field->mask) >>
 					       (ffs(field->mask) - 1);
 
@@ -211,13 +213,13 @@ static void si_dump_reg(FILE *file, unsigned offset, uint32_t value,
 				/* Indent the field. */
 				if (!first_field)
 					print_spaces(file,
-						     INDENT_PKT + strlen(reg->name) + 4);
+						     INDENT_PKT + strlen(reg_name) + 4);
 
 				/* Print the field. */
-				fprintf(file, "%s = ", field->name);
+				fprintf(file, "%s = ", sid_strings + field->name_offset);
 
-				if (val < field->num_values && field->values[val])
-					fprintf(file, "%s\n", field->values[val]);
+				if (val < field->num_values && values_offsets[val] >= 0)
+					fprintf(file, "%s\n", sid_strings + values_offsets[val]);
 				else
 					print_value(file, val,
 						    util_bitcount(field->mask));
@@ -254,17 +256,19 @@ static uint32_t *si_parse_packet3(FILE *f, uint32_t *ib, int *num_dw,
 		if (packet3_table[i].op == op)
 			break;
 
-	if (i < ARRAY_SIZE(packet3_table))
+	if (i < ARRAY_SIZE(packet3_table)) {
+		const char *name = sid_strings + packet3_table[i].name_offset;
+
 		if (op == PKT3_SET_CONTEXT_REG ||
 		    op == PKT3_SET_CONFIG_REG ||
 		    op == PKT3_SET_UCONFIG_REG ||
 		    op == PKT3_SET_SH_REG)
 			fprintf(f, COLOR_CYAN "%s%s" COLOR_CYAN ":\n",
-				packet3_table[i].name, predicate);
+				name, predicate);
 		else
 			fprintf(f, COLOR_GREEN "%s%s" COLOR_RESET ":\n",
-				packet3_table[i].name, predicate);
-	else
+				name, predicate);
+	} else
 		fprintf(f, COLOR_RED "PKT3_UNKNOWN 0x%x%s" COLOR_RESET ":\n",
 			op, predicate);
 
@@ -598,7 +602,7 @@ static void si_dump_last_bo_list(struct si_context *sctx, FILE *f)
 
 	for (i = 0; i < sctx->last_bo_count; i++) {
 		/* Note: Buffer sizes are expected to be aligned to 4k by the winsys. */
-		const unsigned page_size = 4096;
+		const unsigned page_size = sctx->b.screen->info.gart_page_size;
 		uint64_t va = sctx->last_bo_list[i].vm_address;
 		uint64_t size = sctx->last_bo_list[i].buf->size;
 		bool hit = false;
@@ -670,11 +674,11 @@ static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 		si_dump_debug_registers(sctx, f);
 
 	si_dump_framebuffer(sctx, f);
-	si_dump_shader(&sctx->vs_shader, "Vertex", f);
-	si_dump_shader(&sctx->tcs_shader, "Tessellation control", f);
-	si_dump_shader(&sctx->tes_shader, "Tessellation evaluation", f);
-	si_dump_shader(&sctx->gs_shader, "Geometry", f);
-	si_dump_shader(&sctx->ps_shader, "Fragment", f);
+	si_dump_shader(sctx->screen, &sctx->vs_shader, f);
+	si_dump_shader(sctx->screen, &sctx->tcs_shader, f);
+	si_dump_shader(sctx->screen, &sctx->tes_shader, f);
+	si_dump_shader(sctx->screen, &sctx->gs_shader, f);
+	si_dump_shader(sctx->screen, &sctx->ps_shader, f);
 
 	si_dump_last_bo_list(sctx, f);
 	si_dump_last_ib(sctx, f);
@@ -696,6 +700,9 @@ static bool si_vm_fault_occured(struct si_context *sctx, uint32_t *out_addr)
 
 	while (fgets(line, sizeof(line), p)) {
 		char *msg, len;
+
+		if (!line[0] || line[0] == '\n')
+			continue;
 
 		/* Get the timestamp. */
 		if (sscanf(line, "[%u.%u]", &sec, &usec) != 2) {
@@ -781,8 +788,7 @@ void si_check_vm_faults(struct si_context *sctx)
 	fprintf(f, "Device name: %s\n\n", screen->get_name(screen));
 	fprintf(f, "Failing VM page: 0x%08x\n\n", addr);
 
-	si_dump_last_bo_list(sctx, f);
-	si_dump_last_ib(sctx, f);
+	si_dump_debug_state(&sctx->b.b, f, 0);
 	fclose(f);
 
 	fprintf(stderr, "Detected a VM fault, exiting...\n");

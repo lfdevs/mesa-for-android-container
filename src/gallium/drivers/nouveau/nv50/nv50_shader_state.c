@@ -29,6 +29,8 @@
 #include "nv50/nv50_context.h"
 #include "nv50/nv50_query_hw.h"
 
+#include "nv50/nv50_compute.xml.h"
+
 void
 nv50_constbufs_validate(struct nv50_context *nv50)
 {
@@ -94,7 +96,7 @@ nv50_constbufs_validate(struct nv50_context *nv50)
                BEGIN_NV04(push, NV50_3D(SET_PROGRAM_CB), 1);
                PUSH_DATA (push, (b << 12) | (i << 8) | p | 1);
 
-               BCTX_REFN(nv50->bufctx_3d, CB(s, i), res, RD);
+               BCTX_REFN(nv50->bufctx_3d, 3D_CB(s, i), res, RD);
 
                nv50->cb_dirty = 1; /* Force cache flush for UBO. */
             } else {
@@ -131,14 +133,14 @@ nv50_program_update_context_state(struct nv50_context *nv50,
 
    if (prog && prog->tls_space) {
       if (nv50->state.new_tls_space)
-         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_TLS);
+         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_TLS);
       if (!nv50->state.tls_required || nv50->state.new_tls_space)
-         BCTX_REFN_bo(nv50->bufctx_3d, TLS, flags, nv50->screen->tls_bo);
+         BCTX_REFN_bo(nv50->bufctx_3d, 3D_TLS, flags, nv50->screen->tls_bo);
       nv50->state.new_tls_space = false;
       nv50->state.tls_required |= 1 << stage;
    } else {
       if (nv50->state.tls_required == (1 << stage))
-         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_TLS);
+         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_TLS);
       nv50->state.tls_required &= ~(1 << stage);
    }
 }
@@ -181,7 +183,7 @@ nv50_fragprog_validate(struct nv50_context *nv50)
       fp->fp.force_persample_interp = rast->force_persample_interp;
    }
 
-   if (fp->mem && !(nv50->dirty & (NV50_NEW_FRAGPROG | NV50_NEW_MIN_SAMPLES)))
+   if (fp->mem && !(nv50->dirty_3d & (NV50_NEW_3D_FRAGPROG | NV50_NEW_3D_MIN_SAMPLES)))
       return;
 
    if (!nv50_program_validate(nv50, fp))
@@ -236,6 +238,19 @@ nv50_gmtyprog_validate(struct nv50_context *nv50)
    nv50_program_update_context_state(nv50, gp, 2);
 
    /* GP_ENABLE is updated in linkage validation */
+}
+
+void
+nv50_compprog_validate(struct nv50_context *nv50)
+{
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   struct nv50_program *cp = nv50->compprog;
+
+   if (cp && !nv50_program_validate(nv50, cp))
+      return;
+
+   BEGIN_NV04(push, NV50_CP(CODE_CB_FLUSH), 1);
+   PUSH_DATA (push, 0);
 }
 
 static void
@@ -309,7 +324,7 @@ nv50_validate_derived_rs(struct nv50_context *nv50)
       PUSH_DATA (push, !nv50->rast->pipe.rasterizer_discard);
    }
 
-   if (nv50->dirty & NV50_NEW_FRAGPROG)
+   if (nv50->dirty_3d & NV50_NEW_3D_FRAGPROG)
       return;
    psize = nv50->state.semantic_psize & ~NV50_3D_SEMANTIC_PTSZ_PTSZ_EN__MASK;
    color = nv50->state.semantic_color & ~NV50_3D_SEMANTIC_COLOR_CLMP_EN;
@@ -374,13 +389,14 @@ nv50_fp_linkage_validate(struct nv50_context *nv50)
    uint32_t psiz = 0x000;
    uint32_t interp = fp->fp.interp;
    uint32_t colors = fp->fp.colors;
+   uint32_t clpd_nr = util_last_bit(vp->vp.clip_enable | vp->vp.cull_enable);
    uint32_t lin[4];
    uint8_t map[64];
    uint8_t so_map[64];
 
-   if (!(nv50->dirty & (NV50_NEW_VERTPROG |
-                        NV50_NEW_FRAGPROG |
-                        NV50_NEW_GMTYPROG))) {
+   if (!(nv50->dirty_3d & (NV50_NEW_3D_VERTPROG |
+                           NV50_NEW_3D_FRAGPROG |
+                           NV50_NEW_3D_GMTYPROG))) {
       uint8_t bfc, ffc;
       ffc = (nv50->state.semantic_color & NV50_3D_SEMANTIC_COLOR_FFC0_ID__MASK);
       bfc = (nv50->state.semantic_color & NV50_3D_SEMANTIC_COLOR_BFC0_ID__MASK)
@@ -400,7 +416,7 @@ nv50_fp_linkage_validate(struct nv50_context *nv50)
    dummy.linear = 0;
    m = nv50_vec4_map(map, 0, lin, &dummy, &vp->out[0]);
 
-   for (c = 0; c < vp->vp.clpd_nr; ++c)
+   for (c = 0; c < clpd_nr; ++c)
       map[m++] = vp->vp.clpd[c / 4] + (c % 4);
 
    colors |= m << 8; /* adjust BFC0 id */
@@ -507,7 +523,7 @@ nv50_fp_linkage_validate(struct nv50_context *nv50)
    BEGIN_NV04(push, NV50_3D(GP_VIEWPORT_ID_ENABLE), 5);
    PUSH_DATA (push, vp->gp.has_viewport);
    PUSH_DATA (push, colors);
-   PUSH_DATA (push, (vp->vp.clpd_nr << 8) | 4);
+   PUSH_DATA (push, (clpd_nr << 8) | 4);
    PUSH_DATA (push, layerid);
    PUSH_DATA (push, psiz);
 
@@ -662,7 +678,7 @@ nv50_stream_output_validate(struct nv50_context *nv50)
          prims = MIN2(prims, limit);
       }
       targ->stride = so->stride[i];
-      BCTX_REFN(nv50->bufctx_3d, SO, buf, WR);
+      BCTX_REFN(nv50->bufctx_3d, 3D_SO, buf, WR);
    }
    if (prims != ~0) {
       BEGIN_NV04(push, NV50_3D(STRMOUT_PRIMITIVE_LIMIT), 1);

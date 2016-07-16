@@ -25,14 +25,14 @@ C_SOURCES := \
 	vc4_opt_algebraic.c \
 	vc4_opt_constant_folding.c \
 	vc4_opt_copy_propagation.c \
-	vc4_opt_cse.c \
 	vc4_opt_dead_code.c \
 	vc4_opt_small_immediates.c \
-	vc4_opt_vpm_writes.c \
+	vc4_opt_vpm.c \
 	vc4_program.c \
 	vc4_qir.c \
 	vc4_qir_lower_uniforms.c \
 	vc4_qir_schedule.c \
+	vc4_qir_validate.c \
 	vc4_qir.h \
 	vc4_qpu.c \
 	vc4_qpu_defines.h \

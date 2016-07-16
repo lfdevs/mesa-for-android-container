@@ -134,6 +134,8 @@ NineQuery9_dtor( struct NineQuery9 *This )
 {
     struct pipe_context *pipe = This->base.device->pipe;
 
+    DBG("This=%p\n", This);
+
     if (This->pq) {
         if (This->state == NINE_QUERY_STATE_RUNNING)
             pipe->end_query(pipe, This->pq);

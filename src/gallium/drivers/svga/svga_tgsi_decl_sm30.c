@@ -118,7 +118,7 @@ emit_decl(struct svga_shader_emitter *emit,
    dcl.values[0] |= 1<<31;
 
    return (emit_instruction(emit, opcode) &&
-           svga_shader_emit_dwords( emit, dcl.values, Elements(dcl.values)));
+           svga_shader_emit_dwords( emit, dcl.values, ARRAY_SIZE(dcl.values)));
 }
 
 
@@ -410,7 +410,7 @@ vs30_input(struct svga_shader_emitter *emit,
    dcl.values[0] |= 1<<31;
 
    return (emit_instruction(emit, opcode) &&
-           svga_shader_emit_dwords( emit, dcl.values, Elements(dcl.values)));
+           svga_shader_emit_dwords( emit, dcl.values, ARRAY_SIZE(dcl.values)));
 }
 
 
@@ -509,7 +509,7 @@ vs30_output(struct svga_shader_emitter *emit,
    }
 
    return (emit_instruction(emit, opcode) &&
-           svga_shader_emit_dwords( emit, dcl.values, Elements(dcl.values)));
+           svga_shader_emit_dwords( emit, dcl.values, ARRAY_SIZE(dcl.values)));
 }
 
 
@@ -517,15 +517,15 @@ vs30_output(struct svga_shader_emitter *emit,
 static ubyte
 svga_tgsi_sampler_type(const struct svga_shader_emitter *emit, int idx)
 {
-   switch (emit->key.tex[idx].texture_target) {
-   case PIPE_TEXTURE_1D:
+   switch (emit->sampler_target[idx]) {
+   case TGSI_TEXTURE_1D:
       return SVGA3DSAMP_2D;
-   case PIPE_TEXTURE_2D:
-   case PIPE_TEXTURE_RECT:
+   case TGSI_TEXTURE_2D:
+   case TGSI_TEXTURE_RECT:
       return SVGA3DSAMP_2D;
-   case PIPE_TEXTURE_3D:
+   case TGSI_TEXTURE_3D:
       return SVGA3DSAMP_VOLUME;
-   case PIPE_TEXTURE_CUBE:
+   case TGSI_TEXTURE_CUBE:
       return SVGA3DSAMP_CUBE;
    }
 
@@ -535,7 +535,6 @@ svga_tgsi_sampler_type(const struct svga_shader_emitter *emit, int idx)
 
 static boolean
 ps30_sampler( struct svga_shader_emitter *emit,
-              struct tgsi_declaration_semantic semantic,
               unsigned idx )
 {
    SVGA3DOpDclArgs dcl;
@@ -550,9 +549,20 @@ ps30_sampler( struct svga_shader_emitter *emit,
    dcl.values[0] |= 1<<31;
 
    return (emit_instruction(emit, opcode) &&
-           svga_shader_emit_dwords( emit, dcl.values, Elements(dcl.values)));
+           svga_shader_emit_dwords( emit, dcl.values, ARRAY_SIZE(dcl.values)));
 }
 
+boolean
+svga_shader_emit_samplers_decl( struct svga_shader_emitter *emit )
+{
+   unsigned i;
+
+   for (i = 0; i < emit->num_samplers; i++) {
+      if (!ps30_sampler(emit, i))
+         return FALSE;
+   }
+   return TRUE;
+}
 
 boolean
 svga_translate_decl_sm30( struct svga_shader_emitter *emit,
@@ -563,12 +573,15 @@ svga_translate_decl_sm30( struct svga_shader_emitter *emit,
    unsigned idx;
 
    for( idx = first; idx <= last; idx++ ) {
-      boolean ok;
+      boolean ok = TRUE;
 
       switch (decl->Declaration.File) {
       case TGSI_FILE_SAMPLER:
          assert (emit->unit == PIPE_SHADER_FRAGMENT);
-         ok = ps30_sampler( emit, decl->Semantic, idx );
+         /* just keep track of the number of samplers here.
+          * Will emit the declaration in the helpers function.
+          */
+         emit->num_samplers = MAX2(emit->num_samplers, decl->Range.Last + 1);
          break;
 
       case TGSI_FILE_INPUT:
@@ -583,6 +596,14 @@ svga_translate_decl_sm30( struct svga_shader_emitter *emit,
             ok = vs30_output( emit, decl->Semantic, idx );
          else
             ok = ps30_output( emit, decl->Semantic, idx );
+         break;
+
+      case TGSI_FILE_SAMPLER_VIEW:
+         {
+            unsigned unit = decl->Range.First;
+            assert(decl->Range.First == decl->Range.Last);
+            emit->sampler_target[unit] = decl->SamplerView.Resource;
+         }
          break;
 
       default:

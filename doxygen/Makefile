@@ -12,20 +12,21 @@ FULL = \
 	vbo.doxy \
 	glapi.doxy \
 	glsl.doxy \
-	shader.doxy \
 	swrast.doxy \
 	swrast_setup.doxy \
 	tnl.doxy \
 	tnl_dd.doxy \
 	gbm.doxy \
-	i965.doxy
+	i965.doxy \
+	nir.doxy
 
 full: $(FULL:.doxy=.tag)
 	$(foreach FILE,$(FULL),doxygen $(FILE);)
 
 SUBSET = \
 	main.doxy \
-	math.doxy
+	math.doxy \
+	gallium.doxy
 
 subset: $(SUBSET:.doxy=.tag)
 	$(foreach FILE,$(SUBSET),doxygen $(FILE);)

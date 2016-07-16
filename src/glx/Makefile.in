@@ -121,6 +121,7 @@ target_triplet = @target@
 @HAVE_DRICOMMON_TRUE@	dri_common.c \
 @HAVE_DRICOMMON_TRUE@	dri_common.h \
 @HAVE_DRICOMMON_TRUE@	dri_common_query_renderer.c \
+@HAVE_DRICOMMON_TRUE@	dri_common_interop.c \
 @HAVE_DRICOMMON_TRUE@	xfont.c
 
 @HAVE_DRI2_TRUE@am__append_3 = \
@@ -144,6 +145,20 @@ target_triplet = @target@
 
 @HAVE_APPLEDRI_TRUE@am__append_7 = apple
 @HAVE_APPLEDRI_TRUE@am__append_8 = $(builddir)/apple/libappleglx.la
+@USE_LIBGLVND_GLX_TRUE@am__append_9 = \
+@USE_LIBGLVND_GLX_TRUE@	-DGL_LIB_NAME=\"lib@GL_LIB@.so.0\" \
+@USE_LIBGLVND_GLX_TRUE@	$(GLVND_CFLAGS)
+
+@USE_LIBGLVND_GLX_TRUE@am__append_10 = \
+@USE_LIBGLVND_GLX_TRUE@	g_glxglvnddispatchfuncs.c \
+@USE_LIBGLVND_GLX_TRUE@	g_glxglvnddispatchindices.h \
+@USE_LIBGLVND_GLX_TRUE@	glxglvnd.c \
+@USE_LIBGLVND_GLX_TRUE@	glxglvnd.h \
+@USE_LIBGLVND_GLX_TRUE@	glxglvnddispatchfuncs.h
+
+@USE_LIBGLVND_GLX_FALSE@am__append_11 = \
+@USE_LIBGLVND_GLX_FALSE@	-DGL_LIB_NAME=\"lib@GL_LIB@.so.1\"
+
 subdir = src/glx
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -220,16 +235,22 @@ am__libglx_la_SOURCES_DIST = clientattrib.c clientinfo.c compsize.c \
 	indirect_window_pos.c packrender.h packsingle.h pixel.c \
 	pixelstore.c query_renderer.c render2.c renderpix.c single2.c \
 	singlepix.c vertarr.c drisw_glx.c drisw_priv.h dri_common.c \
-	dri_common.h dri_common_query_renderer.c xfont.c dri2.c \
-	dri2_glx.c dri2.h dri2_priv.h dri_glx.c dri_sarea.h XF86dri.c \
-	xf86dri.h xf86dristr.h dri3_glx.c dri3_priv.h applegl_glx.c
+	dri_common.h dri_common_query_renderer.c dri_common_interop.c \
+	xfont.c dri2.c dri2_glx.c dri2.h dri2_priv.h dri_glx.c \
+	dri_sarea.h XF86dri.c xf86dri.h xf86dristr.h dri3_glx.c \
+	dri3_priv.h applegl_glx.c g_glxglvnddispatchfuncs.c \
+	g_glxglvnddispatchindices.h glxglvnd.c glxglvnd.h \
+	glxglvnddispatchfuncs.h
 @HAVE_DRISW_TRUE@am__objects_1 = drisw_glx.lo
 @HAVE_DRICOMMON_TRUE@am__objects_2 = dri_common.lo \
-@HAVE_DRICOMMON_TRUE@	dri_common_query_renderer.lo xfont.lo
+@HAVE_DRICOMMON_TRUE@	dri_common_query_renderer.lo \
+@HAVE_DRICOMMON_TRUE@	dri_common_interop.lo xfont.lo
 @HAVE_DRI2_TRUE@am__objects_3 = dri2.lo dri2_glx.lo dri_glx.lo \
 @HAVE_DRI2_TRUE@	XF86dri.lo
 @HAVE_DRI3_TRUE@am__objects_4 = dri3_glx.lo
 @HAVE_APPLEDRI_TRUE@am__objects_5 = applegl_glx.lo
+@USE_LIBGLVND_GLX_TRUE@am__objects_6 = g_glxglvnddispatchfuncs.lo \
+@USE_LIBGLVND_GLX_TRUE@	glxglvnd.lo
 am_libglx_la_OBJECTS = clientattrib.lo clientinfo.lo compsize.lo \
 	create_context.lo eval.lo glxcmds.lo glxconfig.lo \
 	glxcurrent.lo glx_error.lo glxext.lo glxextensions.lo \
@@ -240,7 +261,8 @@ am_libglx_la_OBJECTS = clientattrib.lo clientinfo.lo compsize.lo \
 	indirect_window_pos.lo pixel.lo pixelstore.lo \
 	query_renderer.lo render2.lo renderpix.lo single2.lo \
 	singlepix.lo vertarr.lo $(am__objects_1) $(am__objects_2) \
-	$(am__objects_3) $(am__objects_4) $(am__objects_5)
+	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
+	$(am__objects_6)
 libglx_la_OBJECTS = $(am_libglx_la_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -415,6 +437,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -513,6 +537,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -533,6 +559,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -549,6 +578,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -639,27 +669,16 @@ top_srcdir = @top_srcdir@
 SUBDIRS = $(am__append_7) . tests
 EXTRA_DIST = SConscript
 @HAVE_XF86VIDMODE_TRUE@EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
-AM_CFLAGS = \
-	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/include/GL/internal \
-	-I$(top_srcdir)/src \
-	-I$(top_srcdir)/src/loader \
-	-I$(top_srcdir)/src/mapi \
-	-I$(top_srcdir)/src/mapi/glapi \
-	-I$(top_builddir)/src/mapi \
-	-I$(top_builddir)/src/mapi/glapi \
-	$(VISIBILITY_CFLAGS) \
-	$(SHARED_GLAPI_CFLAGS) \
-	$(EXTRA_DEFINES_XF86VIDMODE) \
-	-D_REENTRANT \
-	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
-	-DGL_LIB_NAME=\"lib@GL_LIB@.so.1\" \
-	$(DEFINES) \
-	$(LIBDRM_CFLAGS) \
-	$(DRI2PROTO_CFLAGS) \
-	$(GLPROTO_CFLAGS) \
-	$(X11_INCLUDES)
-
+AM_CFLAGS = -I$(top_srcdir)/include \
+	-I$(top_srcdir)/include/GL/internal -I$(top_srcdir)/src \
+	-I$(top_srcdir)/src/loader -I$(top_srcdir)/src/mapi \
+	-I$(top_srcdir)/src/mapi/glapi -I$(top_builddir)/src/mapi \
+	-I$(top_builddir)/src/mapi/glapi $(VISIBILITY_CFLAGS) \
+	$(SHARED_GLAPI_CFLAGS) $(EXTRA_DEFINES_XF86VIDMODE) \
+	-D_REENTRANT -DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
+	$(DEFINES) $(LIBDRM_CFLAGS) $(DRI2PROTO_CFLAGS) \
+	$(GLPROTO_CFLAGS) $(X11_INCLUDES) $(am__append_9) \
+	$(am__append_11)
 lib_LTLIBRARIES = lib@GL_LIB@.la
 noinst_LTLIBRARIES = libglx.la
 libglx_la_SOURCES = clientattrib.c clientinfo.c compsize.c \
@@ -674,9 +693,12 @@ libglx_la_SOURCES = clientattrib.c clientinfo.c compsize.c \
 	indirect_window_pos.c packrender.h packsingle.h pixel.c \
 	pixelstore.c query_renderer.c render2.c renderpix.c single2.c \
 	singlepix.c vertarr.c $(am__append_1) $(am__append_2) \
-	$(am__append_3) $(am__append_4) $(am__append_6)
+	$(am__append_3) $(am__append_4) $(am__append_6) \
+	$(am__append_10)
 libglx_la_LIBADD = $(top_builddir)/src/loader/libloader.la \
 	$(am__append_5) $(am__append_8)
+@USE_LIBGLVND_GLX_FALSE@GL_LIB_VERSION = 1:2
+@USE_LIBGLVND_GLX_TRUE@GL_LIB_VERSION = 0
 GL_LIBS = \
 	libglx.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la \
@@ -685,7 +707,7 @@ GL_LIBS = \
 
 GL_LDFLAGS = \
 	-no-undefined \
-	-version-number 1:2 \
+	-version-number $(GL_LIB_VERSION) \
 	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
@@ -796,10 +818,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri2_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri3_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_common.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_common_interop.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_common_query_renderer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/drisw_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eval.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/g_glxglvnddispatchfuncs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glx_error.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glx_pbuffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glx_query.Plo@am__quote@
@@ -808,6 +832,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glxcurrent.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glxext.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glxextensions.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glxglvnd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glxhash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/indirect.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/indirect_glx.Plo@am__quote@

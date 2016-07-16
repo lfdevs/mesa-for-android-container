@@ -276,7 +276,7 @@ Status XvMCCreateSubpicture(Display *dpy, XvMCContext *context, XvMCSubpicture *
 
       memset(&sampler_templ, 0, sizeof(sampler_templ));
       u_sampler_view_default_template(&sampler_templ, tex, tex->format);
-      sampler_templ.swizzle_a = PIPE_SWIZZLE_ONE;
+      sampler_templ.swizzle_a = PIPE_SWIZZLE_1;
       subpicture_priv->palette = pipe->create_sampler_view(pipe, tex, &sampler_templ);
       pipe_resource_reference(&tex, NULL);
       if (!subpicture_priv->sampler) {

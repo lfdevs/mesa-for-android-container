@@ -39,6 +39,7 @@
 
 #include "lp_bld_type.h"
 #include "lp_bld_const.h"
+#include "lp_bld_swizzle.h"
 #include "lp_bld_init.h"
 #include "lp_bld_intr.h"
 #include "lp_bld_debug.h"
@@ -314,33 +315,32 @@ lp_build_select(struct lp_build_context *bld,
       mask = LLVMBuildTrunc(builder, mask, LLVMInt1TypeInContext(lc), "");
       res = LLVMBuildSelect(builder, mask, a, b, "");
    }
-   else if (0) {
+   else if (!(HAVE_LLVM == 0x0307) &&
+            (LLVMIsConstant(mask) ||
+             LLVMGetInstructionOpcode(mask) == LLVMSExt)) {
       /* Generate a vector select.
        *
-       * XXX: Using vector selects would avoid emitting intrinsics, but they aren't
-       * properly supported yet.
-       *
-       * LLVM 3.1 supports it, but it yields buggy code (e.g. lp_blend_test).
-       *
-       * LLVM 3.0 includes experimental support provided the -promote-elements
-       * options is passed to LLVM's command line (e.g., via
-       * llvm::cl::ParseCommandLineOptions), but resulting code quality is much
-       * worse, probably because some optimization passes don't know how to
-       * handle vector selects.
-       *
-       * See also:
-       * - http://lists.cs.uiuc.edu/pipermail/llvmdev/2011-October/043659.html
+       * Using vector selects should avoid emitting intrinsics hence avoid
+       * hindering optimization passes, but vector selects weren't properly
+       * supported yet for a long time, and LLVM will generate poor code when
+       * the mask is not the result of a comparison.
+       * Also, llvm 3.7 may miscompile them (bug 94972).
        */
 
       /* Convert the mask to a vector of booleans.
-       * XXX: There are two ways to do this. Decide what's best.
+       *
+       * XXX: In x86 the mask is controlled by the MSB, so if we shifted the
+       * mask by `type.width - 1`, LLVM should realize the mask is ready.  Alas
+       * what really happens is that LLVM will emit two shifts back to back.
        */
-      if (1) {
-         LLVMTypeRef bool_vec_type = LLVMVectorType(LLVMInt1TypeInContext(lc), type.length);
-         mask = LLVMBuildTrunc(builder, mask, bool_vec_type, "");
-      } else {
-         mask = LLVMBuildICmp(builder, LLVMIntNE, mask, LLVMConstNull(bld->int_vec_type), "");
+      if (0) {
+         LLVMValueRef shift = LLVMConstInt(bld->int_elem_type, bld->type.width - 1, 0);
+         shift = lp_build_broadcast(bld->gallivm, bld->int_vec_type, shift);
+         mask = LLVMBuildLShr(builder, mask, shift, "");
       }
+      LLVMTypeRef bool_vec_type = LLVMVectorType(LLVMInt1TypeInContext(lc), type.length);
+      mask = LLVMBuildTrunc(builder, mask, bool_vec_type, "");
+
       res = LLVMBuildSelect(builder, mask, a, b, "");
    }
    else if (((util_cpu_caps.has_sse4_1 &&
@@ -395,7 +395,7 @@ lp_build_select(struct lp_build_context *bld,
       args[2] = mask;
 
       res = lp_build_intrinsic(builder, intrinsic,
-                               arg_type, args, Elements(args), 0);
+                               arg_type, args, ARRAY_SIZE(args), 0);
 
       if (arg_type != bld->vec_type) {
          res = LLVMBuildBitCast(builder, res, bld->vec_type, "");

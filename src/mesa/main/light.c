@@ -250,17 +250,7 @@ _mesa_Lightfv( GLenum light, GLenum pname, const GLfloat *params )
       }
       break;
    case GL_CONSTANT_ATTENUATION:
-      if (params[0] < 0.0F) {
-	 _mesa_error(ctx, GL_INVALID_VALUE, "glLight");
-	 return;
-      }
-      break;
    case GL_LINEAR_ATTENUATION:
-      if (params[0] < 0.0F) {
-	 _mesa_error(ctx, GL_INVALID_VALUE, "glLight");
-	 return;
-      }
-      break;
    case GL_QUADRATIC_ATTENUATION:
       if (params[0] < 0.0F) {
 	 _mesa_error(ctx, GL_INVALID_VALUE, "glLight");

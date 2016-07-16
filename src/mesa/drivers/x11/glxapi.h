@@ -201,6 +201,11 @@ struct _glxapi_table {
    void (*BindTexImageEXT)(Display *dpy, GLXDrawable drawable, int buffer,
                            const int *attrib_list);
    void (*ReleaseTexImageEXT)(Display *dpy, GLXDrawable drawable, int buffer);
+
+   /*** GLX_ARB_create_context ***/
+   GLXContext (*CreateContextAttribs)(Display *dpy, GLXFBConfig config,
+                                      GLXContext share_context, Bool direct,
+                                      const int *attrib_list);
 };
 
 

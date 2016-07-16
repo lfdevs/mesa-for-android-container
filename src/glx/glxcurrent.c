@@ -145,7 +145,7 @@ __glXSetCurrentContextNull(void)
 #endif
 }
 
-_X_EXPORT GLXContext
+_GLX_PUBLIC GLXContext
 glXGetCurrentContext(void)
 {
    struct glx_context *cx = __glXGetCurrentContext();
@@ -158,7 +158,7 @@ glXGetCurrentContext(void)
    }
 }
 
-_X_EXPORT GLXDrawable
+_GLX_PUBLIC GLXDrawable
 glXGetCurrentDrawable(void)
 {
    struct glx_context *gc = __glXGetCurrentContext();
@@ -256,18 +256,18 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
 }
 
 
-_X_EXPORT Bool
+_GLX_PUBLIC Bool
 glXMakeCurrent(Display * dpy, GLXDrawable draw, GLXContext gc)
 {
    return MakeContextCurrent(dpy, draw, draw, gc);
 }
 
-_X_EXPORT
+_GLX_PUBLIC
 GLX_ALIAS(Bool, glXMakeCurrentReadSGI,
           (Display * dpy, GLXDrawable d, GLXDrawable r, GLXContext ctx),
           (dpy, d, r, ctx), MakeContextCurrent)
 
-_X_EXPORT
+_GLX_PUBLIC
 GLX_ALIAS(Bool, glXMakeContextCurrent,
           (Display * dpy, GLXDrawable d, GLXDrawable r,
            GLXContext ctx), (dpy, d, r, ctx), MakeContextCurrent)

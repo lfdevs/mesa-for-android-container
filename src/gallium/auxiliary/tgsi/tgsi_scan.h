@@ -65,6 +65,7 @@ struct tgsi_shader_info
    int file_max[TGSI_FILE_COUNT];  /**< highest index of declared registers */
    int const_file_max[PIPE_MAX_CONSTANT_BUFFERS];
    unsigned samplers_declared; /**< bitmask of declared samplers */
+   ubyte sampler_targets[PIPE_MAX_SHADER_SAMPLER_VIEWS];  /**< TGSI_TEXTURE_x values */
 
    ubyte input_array_first[PIPE_MAX_SHADER_INPUTS];
    ubyte input_array_last[PIPE_MAX_SHADER_INPUTS];
@@ -74,6 +75,7 @@ struct tgsi_shader_info
 
    uint immediate_count; /**< number of immediates declared */
    uint num_instructions;
+   uint num_memory_instructions; /**< sampler, buffer, and image instructions */
 
    uint opcode_count[TGSI_OPCODE_LAST];  /**< opcode histogram */
 
@@ -110,12 +112,23 @@ struct tgsi_shader_info
    boolean writes_clipvertex;
    boolean writes_viewport_index;
    boolean writes_layer;
+   boolean writes_memory; /**< contains stores or atomics to buffers or images */
    boolean is_msaa_sampler[PIPE_MAX_SAMPLERS];
    boolean uses_doubles; /**< uses any of the double instructions */
+   boolean uses_derivatives;
    unsigned clipdist_writemask;
    unsigned culldist_writemask;
    unsigned num_written_culldistance;
    unsigned num_written_clipdistance;
+   /**
+    * Bitmask indicating which images are written to (STORE / ATOM*).
+    * Indirect image accesses are not reflected in this mask.
+    */
+   unsigned images_writemask;
+   /**
+    * Bitmask indicating which declared image is a buffer.
+    */
+   unsigned images_buffers;
    /**
     * Bitmask indicating which register files are accessed with
     * indirect addressing.  The bits are (1 << TGSI_FILE_x), etc.

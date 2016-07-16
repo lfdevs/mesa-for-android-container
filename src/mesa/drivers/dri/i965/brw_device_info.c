@@ -312,7 +312,7 @@ static const struct brw_device_info brw_device_info_chv = {
    .max_ds_threads = 80,
    .max_gs_threads = 80,
    .max_wm_threads = 128,
-   .max_cs_threads = 28,
+   .max_cs_threads = 6 * 7,
    .urb = {
       .size = 192,
       .min_vs_entries = 34,
@@ -401,6 +401,28 @@ static const struct brw_device_info brw_device_info_bxt = {
    }
 };
 
+static const struct brw_device_info brw_device_info_bxt_2x6 = {
+   GEN9_FEATURES,
+   .is_broxton = 1,
+   .gt = 1,
+   .has_llc = false,
+
+   .num_slices = 1,
+   .max_vs_threads = 56, /* XXX: guess */
+   .max_hs_threads = 56, /* XXX: guess */
+   .max_ds_threads = 56,
+   .max_gs_threads = 56,
+   .max_wm_threads = 64 * 2,
+   .max_cs_threads = 6 * 6,
+   .urb = {
+      .size = 128,
+      .min_vs_entries = 34,
+      .max_vs_entries = 352,
+      .max_hs_entries = 128,
+      .max_ds_entries = 208,
+      .max_gs_entries = 128,
+   }
+};
 /*
  * Note: for all KBL SKUs, the PRM says SKL for GS entries, not SKL+.
  * There's no KBL entry. Using the default SKL (GEN9) GS entries value.
@@ -481,4 +503,16 @@ brw_get_device_info(int devid)
    }
 
    return devinfo;
+}
+
+const char *
+brw_get_device_name(int devid)
+{
+   switch (devid) {
+#undef CHIPSET
+#define CHIPSET(id, family, name) case id: return name;
+#include "pci_ids/i965_pci_ids.h"
+   default:
+      return NULL;
+   }
 }

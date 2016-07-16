@@ -3374,7 +3374,7 @@ UINT_64 EgBasedAddrLib::ComputeFmaskAddrFromCoordMicroTiled(
     //
     if (!resolved)
     {
-        effectiveSamples = ComputeFmaskNumPlanesFromNumSamples(numSamples);;
+        effectiveSamples = ComputeFmaskNumPlanesFromNumSamples(numSamples);
         effectiveBpp = numSamples;
 
         //

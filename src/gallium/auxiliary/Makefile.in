@@ -108,6 +108,9 @@ target_triplet = @target@
 
 @NEED_GALLIUM_VL_TRUE@am__append_6 = libgalliumvl.la
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_7 = libgalliumvlwinsys.la
+@HAVE_DRI3_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_8 = \
+@HAVE_DRI3_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(VL_WINSYS_DRI3_SOURCES)
+
 subdir = src/gallium/auxiliary
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -127,7 +130,7 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libgallium_la_DEPENDENCIES = libgallium_nir.la
+libgallium_la_LIBADD =
 am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	cso_cache/cso_cache.h cso_cache/cso_context.c \
 	cso_cache/cso_context.h cso_cache/cso_hash.c \
@@ -245,40 +248,40 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_tests.h util/u_texture.c util/u_texture.h util/u_tile.c \
 	util/u_tile.h util/u_time.h util/u_transfer.c \
 	util/u_transfer.h util/u_upload_mgr.c util/u_upload_mgr.h \
-	util/u_vbuf.c util/u_vbuf.h util/u_video.h \
-	indices/u_indices_gen.c indices/u_unfilled_gen.c \
-	util/u_format_table.c gallivm/lp_bld_arit.c \
-	gallivm/lp_bld_arit.h gallivm/lp_bld_arit_overflow.c \
-	gallivm/lp_bld_arit_overflow.h gallivm/lp_bld_assert.c \
-	gallivm/lp_bld_assert.h gallivm/lp_bld_bitarit.c \
-	gallivm/lp_bld_bitarit.h gallivm/lp_bld_const.c \
-	gallivm/lp_bld_const.h gallivm/lp_bld_conv.c \
-	gallivm/lp_bld_conv.h gallivm/lp_bld_debug.cpp \
-	gallivm/lp_bld_debug.h gallivm/lp_bld_flow.c \
-	gallivm/lp_bld_flow.h gallivm/lp_bld_format_aos_array.c \
-	gallivm/lp_bld_format_aos.c gallivm/lp_bld_format_cached.c \
-	gallivm/lp_bld_format_float.c gallivm/lp_bld_format.c \
-	gallivm/lp_bld_format.h gallivm/lp_bld_format_soa.c \
-	gallivm/lp_bld_format_srgb.c gallivm/lp_bld_format_yuv.c \
-	gallivm/lp_bld_gather.c gallivm/lp_bld_gather.h \
-	gallivm/lp_bld.h gallivm/lp_bld_init.c gallivm/lp_bld_init.h \
-	gallivm/lp_bld_intr.c gallivm/lp_bld_intr.h \
-	gallivm/lp_bld_limits.h gallivm/lp_bld_logic.c \
-	gallivm/lp_bld_logic.h gallivm/lp_bld_misc.cpp \
-	gallivm/lp_bld_misc.h gallivm/lp_bld_pack.c \
-	gallivm/lp_bld_pack.h gallivm/lp_bld_printf.c \
-	gallivm/lp_bld_printf.h gallivm/lp_bld_quad.c \
-	gallivm/lp_bld_quad.h gallivm/lp_bld_sample_aos.c \
-	gallivm/lp_bld_sample_aos.h gallivm/lp_bld_sample.c \
-	gallivm/lp_bld_sample.h gallivm/lp_bld_sample_soa.c \
-	gallivm/lp_bld_struct.c gallivm/lp_bld_struct.h \
-	gallivm/lp_bld_swizzle.c gallivm/lp_bld_swizzle.h \
-	gallivm/lp_bld_tgsi_action.c gallivm/lp_bld_tgsi_action.h \
-	gallivm/lp_bld_tgsi_aos.c gallivm/lp_bld_tgsi.c \
-	gallivm/lp_bld_tgsi.h gallivm/lp_bld_tgsi_info.c \
-	gallivm/lp_bld_tgsi_soa.c gallivm/lp_bld_type.c \
-	gallivm/lp_bld_type.h draw/draw_llvm.c draw/draw_llvm.h \
-	draw/draw_llvm_sample.c \
+	util/u_vbuf.c util/u_vbuf.h util/u_video.h nir/tgsi_to_nir.c \
+	nir/tgsi_to_nir.h indices/u_indices_gen.c \
+	indices/u_unfilled_gen.c util/u_format_table.c \
+	gallivm/lp_bld_arit.c gallivm/lp_bld_arit.h \
+	gallivm/lp_bld_arit_overflow.c gallivm/lp_bld_arit_overflow.h \
+	gallivm/lp_bld_assert.c gallivm/lp_bld_assert.h \
+	gallivm/lp_bld_bitarit.c gallivm/lp_bld_bitarit.h \
+	gallivm/lp_bld_const.c gallivm/lp_bld_const.h \
+	gallivm/lp_bld_conv.c gallivm/lp_bld_conv.h \
+	gallivm/lp_bld_debug.cpp gallivm/lp_bld_debug.h \
+	gallivm/lp_bld_flow.c gallivm/lp_bld_flow.h \
+	gallivm/lp_bld_format_aos_array.c gallivm/lp_bld_format_aos.c \
+	gallivm/lp_bld_format_cached.c gallivm/lp_bld_format_float.c \
+	gallivm/lp_bld_format.c gallivm/lp_bld_format.h \
+	gallivm/lp_bld_format_soa.c gallivm/lp_bld_format_srgb.c \
+	gallivm/lp_bld_format_yuv.c gallivm/lp_bld_gather.c \
+	gallivm/lp_bld_gather.h gallivm/lp_bld.h gallivm/lp_bld_init.c \
+	gallivm/lp_bld_init.h gallivm/lp_bld_intr.c \
+	gallivm/lp_bld_intr.h gallivm/lp_bld_limits.h \
+	gallivm/lp_bld_logic.c gallivm/lp_bld_logic.h \
+	gallivm/lp_bld_misc.cpp gallivm/lp_bld_misc.h \
+	gallivm/lp_bld_pack.c gallivm/lp_bld_pack.h \
+	gallivm/lp_bld_printf.c gallivm/lp_bld_printf.h \
+	gallivm/lp_bld_quad.c gallivm/lp_bld_quad.h \
+	gallivm/lp_bld_sample_aos.c gallivm/lp_bld_sample_aos.h \
+	gallivm/lp_bld_sample.c gallivm/lp_bld_sample.h \
+	gallivm/lp_bld_sample_soa.c gallivm/lp_bld_struct.c \
+	gallivm/lp_bld_struct.h gallivm/lp_bld_swizzle.c \
+	gallivm/lp_bld_swizzle.h gallivm/lp_bld_tgsi_action.c \
+	gallivm/lp_bld_tgsi_action.h gallivm/lp_bld_tgsi_aos.c \
+	gallivm/lp_bld_tgsi.c gallivm/lp_bld_tgsi.h \
+	gallivm/lp_bld_tgsi_info.c gallivm/lp_bld_tgsi_soa.c \
+	gallivm/lp_bld_type.c gallivm/lp_bld_type.h draw/draw_llvm.c \
+	draw/draw_llvm.h draw/draw_llvm_sample.c \
 	draw/draw_pt_fetch_shade_pipeline_llvm.c draw/draw_vs_llvm.c
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
@@ -341,9 +344,10 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	util/u_suballoc.lo util/u_surface.lo util/u_surfaces.lo \
 	util/u_tests.lo util/u_texture.lo util/u_tile.lo \
 	util/u_transfer.lo util/u_upload_mgr.lo util/u_vbuf.lo
-am__objects_2 = indices/u_indices_gen.lo indices/u_unfilled_gen.lo \
+am__objects_2 = nir/tgsi_to_nir.lo
+am__objects_3 = indices/u_indices_gen.lo indices/u_unfilled_gen.lo \
 	util/u_format_table.lo
-am__objects_3 = gallivm/lp_bld_arit.lo gallivm/lp_bld_arit_overflow.lo \
+am__objects_4 = gallivm/lp_bld_arit.lo gallivm/lp_bld_arit_overflow.lo \
 	gallivm/lp_bld_assert.lo gallivm/lp_bld_bitarit.lo \
 	gallivm/lp_bld_const.lo gallivm/lp_bld_conv.lo \
 	gallivm/lp_bld_debug.lo gallivm/lp_bld_flow.lo \
@@ -363,22 +367,14 @@ am__objects_3 = gallivm/lp_bld_arit.lo gallivm/lp_bld_arit_overflow.lo \
 	gallivm/lp_bld_tgsi_soa.lo gallivm/lp_bld_type.lo \
 	draw/draw_llvm.lo draw/draw_llvm_sample.lo \
 	draw/draw_pt_fetch_shade_pipeline_llvm.lo draw/draw_vs_llvm.lo
-@HAVE_MESA_LLVM_TRUE@am__objects_4 = $(am__objects_3)
+@HAVE_MESA_LLVM_TRUE@am__objects_5 = $(am__objects_4)
 am_libgallium_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	$(am__objects_4)
+	$(am__objects_3) $(am__objects_5)
 libgallium_la_OBJECTS = $(am_libgallium_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-libgallium_nir_la_LIBADD =
-am__objects_5 = nir/libgallium_nir_la-tgsi_to_nir.lo
-am_libgallium_nir_la_OBJECTS = $(am__objects_5)
-libgallium_nir_la_OBJECTS = $(am_libgallium_nir_la_OBJECTS)
-libgallium_nir_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
-	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
-	$(libgallium_nir_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
-	-o $@
 libgalliumvl_la_LIBADD =
 am__libgalliumvl_la_SOURCES_DIST = vl/vl_compositor.c \
 	vl/vl_compositor.h vl/vl_csc.c vl/vl_csc.h vl/vl_decoder.c \
@@ -416,10 +412,13 @@ am_libgalliumvl_stub_la_OBJECTS = $(am__objects_7)
 libgalliumvl_stub_la_OBJECTS = $(am_libgalliumvl_stub_la_OBJECTS)
 libgalliumvlwinsys_la_LIBADD =
 am__libgalliumvlwinsys_la_SOURCES_DIST = vl/vl_winsys_dri.c \
-	vl/vl_winsys_drm.c
+	vl/vl_winsys_drm.c vl/vl_winsys_dri3.c
 am__objects_8 = vl/libgalliumvlwinsys_la-vl_winsys_dri.lo \
 	vl/libgalliumvlwinsys_la-vl_winsys_drm.lo
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am_libgalliumvlwinsys_la_OBJECTS = $(am__objects_8)
+am__objects_9 = vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo
+@HAVE_DRI3_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_10 = $(am__objects_9)
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am_libgalliumvlwinsys_la_OBJECTS = $(am__objects_8) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_10)
 libgalliumvlwinsys_la_OBJECTS = $(am_libgalliumvlwinsys_la_OBJECTS)
 libgalliumvlwinsys_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
@@ -478,11 +477,10 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(libgallium_la_SOURCES) $(libgallium_nir_la_SOURCES) \
-	$(libgalliumvl_la_SOURCES) $(libgalliumvl_stub_la_SOURCES) \
+SOURCES = $(libgallium_la_SOURCES) $(libgalliumvl_la_SOURCES) \
+	$(libgalliumvl_stub_la_SOURCES) \
 	$(libgalliumvlwinsys_la_SOURCES)
 DIST_SOURCES = $(am__libgallium_la_SOURCES_DIST) \
-	$(libgallium_nir_la_SOURCES) \
 	$(am__libgalliumvl_la_SOURCES_DIST) \
 	$(libgalliumvl_stub_la_SOURCES) \
 	$(am__libgalliumvlwinsys_la_SOURCES_DIST)
@@ -582,6 +580,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -680,6 +680,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -700,6 +702,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -716,6 +721,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -1158,6 +1164,9 @@ VL_WINSYS_SOURCES := \
 	vl/vl_winsys_dri.c \
 	vl/vl_winsys_drm.c
 
+VL_WINSYS_DRI3_SOURCES := \
+	vl/vl_winsys_dri3.c
+
 VL_STUB_SOURCES := \
 	vl/vl_stubs.c
 
@@ -1299,27 +1308,16 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
-noinst_LTLIBRARIES = libgallium_nir.la libgallium.la \
-	libgalliumvl_stub.la $(am__append_6) $(am__append_7)
+noinst_LTLIBRARIES = libgallium.la libgalliumvl_stub.la \
+	$(am__append_6) $(am__append_7)
 AM_CFLAGS = -I$(top_srcdir)/src/loader \
+	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/gallium/auxiliary/util $(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) $(MSVC2013_COMPAT_CFLAGS) $(am__append_3)
 AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS) $(MSVC2013_COMPAT_CXXFLAGS) \
 	$(am__append_4)
-libgallium_nir_la_SOURCES = \
-	$(NIR_SOURCES)
-
-libgallium_nir_la_CFLAGS = \
-	-I$(top_builddir)/src/compiler/nir \
-	$(GALLIUM_CFLAGS) \
-	$(VISIBILITY_CFLAGS) \
-	$(MSVC2013_COMPAT_CFLAGS)
-
-libgallium_la_SOURCES = $(C_SOURCES) $(GENERATED_SOURCES) \
-	$(am__append_5)
-libgallium_la_LIBADD = \
-	libgallium_nir.la
-
+libgallium_la_SOURCES = $(C_SOURCES) $(NIR_SOURCES) \
+	$(GENERATED_SOURCES) $(am__append_5)
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 libgalliumvl_stub_la_SOURCES = \
@@ -1340,9 +1338,8 @@ libgalliumvl_stub_la_SOURCES = \
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@libgalliumvlwinsys_la_CFLAGS = \
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(COMMON_VL_CFLAGS)
 
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@libgalliumvlwinsys_la_SOURCES = \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(VL_WINSYS_SOURCES)
-
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@libgalliumvlwinsys_la_SOURCES = $(VL_WINSYS_SOURCES) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_8)
 EXTRA_DIST = \
 	SConscript \
 	indices/u_indices.c \
@@ -1732,6 +1729,13 @@ util/u_transfer.lo: util/$(am__dirstamp) \
 util/u_upload_mgr.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_vbuf.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
+nir/$(am__dirstamp):
+	@$(MKDIR_P) nir
+	@: > nir/$(am__dirstamp)
+nir/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) nir/$(DEPDIR)
+	@: > nir/$(DEPDIR)/$(am__dirstamp)
+nir/tgsi_to_nir.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 indices/u_indices_gen.lo: indices/$(am__dirstamp) \
 	indices/$(DEPDIR)/$(am__dirstamp)
 indices/u_unfilled_gen.lo: indices/$(am__dirstamp) \
@@ -1824,17 +1828,6 @@ draw/draw_vs_llvm.lo: draw/$(am__dirstamp) \
 
 libgallium.la: $(libgallium_la_OBJECTS) $(libgallium_la_DEPENDENCIES) $(EXTRA_libgallium_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(CXXLINK)  $(libgallium_la_OBJECTS) $(libgallium_la_LIBADD) $(LIBS)
-nir/$(am__dirstamp):
-	@$(MKDIR_P) nir
-	@: > nir/$(am__dirstamp)
-nir/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) nir/$(DEPDIR)
-	@: > nir/$(DEPDIR)/$(am__dirstamp)
-nir/libgallium_nir_la-tgsi_to_nir.lo: nir/$(am__dirstamp) \
-	nir/$(DEPDIR)/$(am__dirstamp)
-
-libgallium_nir.la: $(libgallium_nir_la_OBJECTS) $(libgallium_nir_la_DEPENDENCIES) $(EXTRA_libgallium_nir_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(libgallium_nir_la_LINK)  $(libgallium_nir_la_OBJECTS) $(libgallium_nir_la_LIBADD) $(LIBS)
 vl/$(am__dirstamp):
 	@$(MKDIR_P) vl
 	@: > vl/$(am__dirstamp)
@@ -1877,6 +1870,8 @@ libgalliumvl_stub.la: $(libgalliumvl_stub_la_OBJECTS) $(libgalliumvl_stub_la_DEP
 vl/libgalliumvlwinsys_la-vl_winsys_dri.lo: vl/$(am__dirstamp) \
 	vl/$(DEPDIR)/$(am__dirstamp)
 vl/libgalliumvlwinsys_la-vl_winsys_drm.lo: vl/$(am__dirstamp) \
+	vl/$(DEPDIR)/$(am__dirstamp)
+vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo: vl/$(am__dirstamp) \
 	vl/$(DEPDIR)/$(am__dirstamp)
 
 libgalliumvlwinsys.la: $(libgalliumvlwinsys_la_OBJECTS) $(libgalliumvlwinsys_la_DEPENDENCIES) $(EXTRA_libgalliumvlwinsys_la_DEPENDENCIES) 
@@ -2002,7 +1997,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@indices/$(DEPDIR)/u_indices_gen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@indices/$(DEPDIR)/u_primconvert.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@indices/$(DEPDIR)/u_unfilled_gen.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/libgallium_nir_la-tgsi_to_nir.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/tgsi_to_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@os/$(DEPDIR)/os_misc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@os/$(DEPDIR)/os_process.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@os/$(DEPDIR)/os_time.Plo@am__quote@
@@ -2126,6 +2121,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvl_la-vl_video_buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvl_la-vl_zscan.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri3.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/vl_stubs.Plo@am__quote@
 
@@ -2152,13 +2148,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
-
-nir/libgallium_nir_la-tgsi_to_nir.lo: nir/tgsi_to_nir.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgallium_nir_la_CFLAGS) $(CFLAGS) -MT nir/libgallium_nir_la-tgsi_to_nir.lo -MD -MP -MF nir/$(DEPDIR)/libgallium_nir_la-tgsi_to_nir.Tpo -c -o nir/libgallium_nir_la-tgsi_to_nir.lo `test -f 'nir/tgsi_to_nir.c' || echo '$(srcdir)/'`nir/tgsi_to_nir.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) nir/$(DEPDIR)/libgallium_nir_la-tgsi_to_nir.Tpo nir/$(DEPDIR)/libgallium_nir_la-tgsi_to_nir.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='nir/tgsi_to_nir.c' object='nir/libgallium_nir_la-tgsi_to_nir.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgallium_nir_la_CFLAGS) $(CFLAGS) -c -o nir/libgallium_nir_la-tgsi_to_nir.lo `test -f 'nir/tgsi_to_nir.c' || echo '$(srcdir)/'`nir/tgsi_to_nir.c
 
 vl/libgalliumvl_la-vl_compositor.lo: vl/vl_compositor.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvl_la_CFLAGS) $(CFLAGS) -MT vl/libgalliumvl_la-vl_compositor.lo -MD -MP -MF vl/$(DEPDIR)/libgalliumvl_la-vl_compositor.Tpo -c -o vl/libgalliumvl_la-vl_compositor.lo `test -f 'vl/vl_compositor.c' || echo '$(srcdir)/'`vl/vl_compositor.c
@@ -2264,6 +2253,13 @@ vl/libgalliumvlwinsys_la-vl_winsys_drm.lo: vl/vl_winsys_drm.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vl/vl_winsys_drm.c' object='vl/libgalliumvlwinsys_la-vl_winsys_drm.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvlwinsys_la-vl_winsys_drm.lo `test -f 'vl/vl_winsys_drm.c' || echo '$(srcdir)/'`vl/vl_winsys_drm.c
+
+vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo: vl/vl_winsys_dri3.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -MT vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo -MD -MP -MF vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri3.Tpo -c -o vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo `test -f 'vl/vl_winsys_dri3.c' || echo '$(srcdir)/'`vl/vl_winsys_dri3.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri3.Tpo vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri3.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vl/vl_winsys_dri3.c' object='vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo `test -f 'vl/vl_winsys_dri3.c' || echo '$(srcdir)/'`vl/vl_winsys_dri3.c
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\

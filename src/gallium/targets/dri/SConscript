@@ -44,6 +44,7 @@ env.Prepend(LIBS = [
     compiler,
     mesa,
     glsl,
+    nir,
     gallium,
     megadrivers_stub,
     dri_common,

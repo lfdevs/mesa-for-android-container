@@ -79,9 +79,9 @@ struct fd4_format {
 static struct fd4_format formats[PIPE_FORMAT_COUNT] = {
 	/* 8-bit */
 	VT(R8_UNORM,   8_UNORM, R8_UNORM, WZYX),
-	VT(R8_SNORM,   8_SNORM, NONE,     WZYX),
-	VT(R8_UINT,    8_UINT,  NONE,     WZYX),
-	VT(R8_SINT,    8_SINT,  NONE,     WZYX),
+	VT(R8_SNORM,   8_SNORM, R8_SNORM, WZYX),
+	VT(R8_UINT,    8_UINT,  R8_UINT,  WZYX),
+	VT(R8_SINT,    8_SINT,  R8_SINT,  WZYX),
 	V_(R8_USCALED, 8_UINT,  NONE,     WZYX),
 	V_(R8_SSCALED, 8_UINT,  NONE,     WZYX),
 
@@ -441,12 +441,12 @@ tex_swiz(unsigned swiz)
 {
 	switch (swiz) {
 	default:
-	case PIPE_SWIZZLE_RED:   return A4XX_TEX_X;
-	case PIPE_SWIZZLE_GREEN: return A4XX_TEX_Y;
-	case PIPE_SWIZZLE_BLUE:  return A4XX_TEX_Z;
-	case PIPE_SWIZZLE_ALPHA: return A4XX_TEX_W;
-	case PIPE_SWIZZLE_ZERO:  return A4XX_TEX_ZERO;
-	case PIPE_SWIZZLE_ONE:   return A4XX_TEX_ONE;
+	case PIPE_SWIZZLE_X: return A4XX_TEX_X;
+	case PIPE_SWIZZLE_Y: return A4XX_TEX_Y;
+	case PIPE_SWIZZLE_Z: return A4XX_TEX_Z;
+	case PIPE_SWIZZLE_W: return A4XX_TEX_W;
+	case PIPE_SWIZZLE_0: return A4XX_TEX_ZERO;
+	case PIPE_SWIZZLE_1: return A4XX_TEX_ONE;
 	}
 }
 

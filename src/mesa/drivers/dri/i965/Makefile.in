@@ -143,57 +143,58 @@ am__objects_1 = brw_cfg.lo brw_compiler.lo brw_dead_control_flow.lo \
 	brw_fs_cmod_propagation.lo brw_fs_combine_constants.lo \
 	brw_fs_copy_propagation.lo brw_fs.lo brw_fs_cse.lo \
 	brw_fs_dead_code_eliminate.lo brw_fs_generator.lo \
-	brw_fs_live_variables.lo brw_fs_nir.lo brw_fs_reg_allocate.lo \
+	brw_fs_live_variables.lo brw_fs_lower_d2x.lo \
+	brw_fs_lower_pack.lo brw_fs_nir.lo brw_fs_reg_allocate.lo \
 	brw_fs_register_coalesce.lo brw_fs_saturate_propagation.lo \
 	brw_fs_sel_peephole.lo brw_fs_surface_builder.lo \
 	brw_fs_validate.lo brw_fs_visitor.lo brw_interpolation_map.lo \
 	brw_nir.lo brw_nir_analyze_boolean_resolves.lo \
-	brw_nir_attribute_workarounds.lo brw_nir_opt_peephole_ffma.lo \
-	brw_nir_uniforms.lo brw_packed_float.lo \
+	brw_nir_attribute_workarounds.lo brw_nir_intrinsics.lo \
+	brw_nir_opt_peephole_ffma.lo brw_packed_float.lo \
 	brw_predicated_break.lo brw_schedule_instructions.lo \
-	brw_shader.lo brw_surface_formats.lo brw_util.lo \
-	brw_vec4_cmod_propagation.lo brw_vec4_copy_propagation.lo \
-	brw_vec4.lo brw_vec4_cse.lo brw_vec4_dead_code_eliminate.lo \
-	brw_vec4_generator.lo brw_vec4_gs_visitor.lo \
-	brw_vec4_live_variables.lo brw_vec4_nir.lo brw_vec4_gs_nir.lo \
-	brw_vec4_reg_allocate.lo brw_vec4_surface_builder.lo \
-	brw_vec4_tcs.lo brw_vec4_tes.lo brw_vec4_visitor.lo \
-	brw_vec4_vs_visitor.lo brw_vue_map.lo brw_wm_iz.lo \
-	gen6_gs_visitor.lo intel_asm_annotation.lo intel_debug.lo \
-	intel_resolve_map.lo
-am_libi965_compiler_la_OBJECTS = $(am__objects_1)
+	brw_shader.lo brw_util.lo brw_vec4_cmod_propagation.lo \
+	brw_vec4_copy_propagation.lo brw_vec4.lo brw_vec4_cse.lo \
+	brw_vec4_dead_code_eliminate.lo brw_vec4_generator.lo \
+	brw_vec4_gs_visitor.lo brw_vec4_live_variables.lo \
+	brw_vec4_nir.lo brw_vec4_gs_nir.lo brw_vec4_reg_allocate.lo \
+	brw_vec4_surface_builder.lo brw_vec4_tcs.lo brw_vec4_tes.lo \
+	brw_vec4_visitor.lo brw_vec4_vs_visitor.lo brw_vue_map.lo \
+	brw_wm_iz.lo gen6_gs_visitor.lo intel_asm_annotation.lo \
+	intel_debug.lo intel_resolve_map.lo
+am__objects_2 = brw_nir_trig_workarounds.lo
+am_libi965_compiler_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libi965_compiler_la_OBJECTS = $(am_libi965_compiler_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 am__DEPENDENCIES_1 =
-libi965_dri_la_DEPENDENCIES = libi965_compiler.la \
-	$(am__DEPENDENCIES_1)
-am__objects_2 = brw_binding_tables.lo brw_blorp_blit.lo \
-	brw_blorp_blit_eu.lo brw_blorp.lo brw_cc.lo brw_clear.lo \
+libi965_dri_la_DEPENDENCIES = $(top_builddir)/src/intel/isl/libisl.la \
+	libi965_compiler.la $(am__DEPENDENCIES_1)
+am__objects_3 = brw_binding_tables.lo brw_blorp_blit.lo \
+	brw_blorp_clear.lo brw_blorp.lo brw_cc.lo brw_clear.lo \
 	brw_clip.lo brw_clip_line.lo brw_clip_point.lo \
 	brw_clip_state.lo brw_clip_tri.lo brw_clip_unfilled.lo \
 	brw_clip_util.lo brw_compute.lo brw_conditional_render.lo \
 	brw_context.lo brw_cs.lo brw_cubemap_normalize.lo brw_curbe.lo \
 	brw_draw.lo brw_draw_upload.lo brw_ff_gs.lo brw_ff_gs_emit.lo \
 	brw_fs_channel_expressions.lo brw_fs_vector_splitting.lo \
-	brw_gs.lo brw_gs_state.lo brw_gs_surface_state.lo brw_link.lo \
+	brw_formatquery.lo brw_gs.lo brw_gs_state.lo \
+	brw_gs_surface_state.lo brw_link.lo \
 	brw_lower_texture_gradients.lo \
-	brw_lower_unnormalized_offset.lo brw_meta_fast_clear.lo \
-	brw_meta_stencil_blit.lo brw_meta_updownsample.lo \
-	brw_meta_util.lo brw_misc_state.lo brw_object_purgeable.lo \
+	brw_lower_unnormalized_offset.lo brw_meta_util.lo \
+	brw_misc_state.lo brw_nir_uniforms.lo brw_object_purgeable.lo \
 	brw_performance_monitor.lo brw_pipe_control.lo brw_program.lo \
 	brw_primitive_restart.lo brw_queryobj.lo brw_reset.lo \
 	brw_sampler_state.lo brw_sf.lo brw_sf_emit.lo brw_sf_state.lo \
 	brw_state_batch.lo brw_state_cache.lo brw_state_dump.lo \
-	brw_state_upload.lo brw_tcs.lo brw_tcs_surface_state.lo \
-	brw_tes.lo brw_tes_surface_state.lo brw_tex.lo \
-	brw_tex_layout.lo brw_urb.lo brw_vs.lo brw_vs_state.lo \
-	brw_vs_surface_state.lo brw_wm.lo brw_wm_state.lo \
-	brw_wm_surface_state.lo gen6_blorp.lo gen6_cc.lo \
-	gen6_clip_state.lo gen6_constant_state.lo gen6_depth_state.lo \
-	gen6_depthstencil.lo gen6_gs_state.lo \
+	brw_state_upload.lo brw_surface_formats.lo brw_tcs.lo \
+	brw_tcs_surface_state.lo brw_tes.lo brw_tes_surface_state.lo \
+	brw_tex.lo brw_tex_layout.lo brw_urb.lo brw_vs.lo \
+	brw_vs_state.lo brw_vs_surface_state.lo brw_wm.lo \
+	brw_wm_state.lo brw_wm_surface_state.lo gen6_blorp.lo \
+	gen6_cc.lo gen6_clip_state.lo gen6_constant_state.lo \
+	gen6_depth_state.lo gen6_depthstencil.lo gen6_gs_state.lo \
 	gen6_multisample_state.lo gen6_queryobj.lo \
 	gen6_sampler_state.lo gen6_scissor_state.lo gen6_sf_state.lo \
 	gen6_sol.lo gen6_surface_state.lo gen6_urb.lo \
@@ -203,20 +204,21 @@ am__objects_2 = brw_binding_tables.lo brw_blorp_blit.lo \
 	gen7_misc_state.lo gen7_sf_state.lo gen7_sol_state.lo \
 	gen7_te_state.lo gen7_urb.lo gen7_viewport_state.lo \
 	gen7_vs_state.lo gen7_wm_state.lo gen7_wm_surface_state.lo \
-	gen8_blend_state.lo gen8_depth_state.lo gen8_disable.lo \
-	gen8_draw_upload.lo gen8_ds_state.lo gen8_gs_state.lo \
-	gen8_hs_state.lo gen8_misc_state.lo gen8_multisample_state.lo \
+	gen8_blend_state.lo gen8_blorp.lo gen8_depth_state.lo \
+	gen8_disable.lo gen8_draw_upload.lo gen8_ds_state.lo \
+	gen8_gs_state.lo gen8_hs_state.lo gen8_multisample_state.lo \
 	gen8_ps_state.lo gen8_sf_state.lo gen8_sol_state.lo \
 	gen8_surface_state.lo gen8_viewport_state.lo gen8_vs_state.lo \
-	gen8_wm_depth_stencil.lo intel_batchbuffer.lo intel_blit.lo \
-	intel_buffer_objects.lo intel_buffers.lo intel_copy_image.lo \
-	intel_extensions.lo intel_fbo.lo intel_mipmap_tree.lo \
-	intel_pixel_bitmap.lo intel_pixel.lo intel_pixel_copy.lo \
-	intel_pixel_draw.lo intel_pixel_read.lo intel_screen.lo \
-	intel_state.lo intel_syncobj.lo intel_tex.lo intel_tex_copy.lo \
+	gen8_wm_depth_stencil.lo hsw_queryobj.lo hsw_sol.lo \
+	intel_batchbuffer.lo intel_blit.lo intel_buffer_objects.lo \
+	intel_buffers.lo intel_copy_image.lo intel_extensions.lo \
+	intel_fbo.lo intel_mipmap_tree.lo intel_pixel_bitmap.lo \
+	intel_pixel.lo intel_pixel_copy.lo intel_pixel_draw.lo \
+	intel_pixel_read.lo intel_screen.lo intel_state.lo \
+	intel_syncobj.lo intel_tex.lo intel_tex_copy.lo \
 	intel_tex_image.lo intel_tex_subimage.lo intel_tex_validate.lo \
 	intel_tiled_memcpy.lo intel_upload.lo
-am_libi965_dri_la_OBJECTS = $(am__objects_2)
+am_libi965_dri_la_OBJECTS = $(am__objects_3)
 libi965_dri_la_OBJECTS = $(am_libi965_dri_la_OBJECTS)
 am__EXEEXT_1 = test_fs_cmod_propagation$(EXEEXT) \
 	test_fs_saturate_propagation$(EXEEXT) test_eu_compact$(EXEEXT) \
@@ -226,9 +228,11 @@ am__EXEEXT_1 = test_fs_cmod_propagation$(EXEEXT) \
 	test_vec4_register_coalesce$(EXEEXT)
 am_test_eu_compact_OBJECTS = test_eu_compact.$(OBJEXT)
 test_eu_compact_OBJECTS = $(am_test_eu_compact_OBJECTS)
-am__DEPENDENCIES_2 = libi965_compiler.la ../../../libmesa.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	../common/libdri_test_stubs.la
+am__DEPENDENCIES_2 = libi965_compiler.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
+	$(top_builddir)/src/util/libmesautil.la \
+	$(top_builddir)/src/intel/isl/libisl.la $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 test_eu_compact_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_test_fs_cmod_propagation_OBJECTS =  \
 	test_fs_cmod_propagation.$(OBJEXT)
@@ -634,6 +638,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -732,6 +738,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -752,6 +760,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -768,6 +779,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -881,6 +893,8 @@ i965_compiler_FILES = \
 	brw_fs.h \
 	brw_fs_live_variables.cpp \
 	brw_fs_live_variables.h \
+	brw_fs_lower_d2x.cpp \
+	brw_fs_lower_pack.cpp \
 	brw_fs_nir.cpp \
 	brw_fs_reg_allocate.cpp \
 	brw_fs_register_coalesce.cpp \
@@ -899,15 +913,14 @@ i965_compiler_FILES = \
 	brw_nir.c \
 	brw_nir_analyze_boolean_resolves.c \
 	brw_nir_attribute_workarounds.c \
+	brw_nir_intrinsics.c \
 	brw_nir_opt_peephole_ffma.c \
-	brw_nir_uniforms.cpp \
 	brw_packed_float.c \
 	brw_predicated_break.cpp \
 	brw_reg.h \
 	brw_schedule_instructions.cpp \
 	brw_shader.cpp \
 	brw_shader.h \
-	brw_surface_formats.c \
 	brw_util.c \
 	brw_util.h \
 	brw_vec4_builder.h \
@@ -945,12 +958,14 @@ i965_compiler_FILES = \
 	intel_resolve_map.c \
 	intel_resolve_map.h
 
+i965_compiler_GENERATED_FILES = \
+	brw_nir_trig_workarounds.c
+
 i965_FILES = \
 	brw_binding_tables.c \
 	brw_blorp_blit.cpp \
-	brw_blorp_blit_eu.cpp \
-	brw_blorp_blit_eu.h \
-	brw_blorp.cpp \
+	brw_blorp_clear.cpp \
+	brw_blorp.c \
 	brw_blorp.h \
 	brw_cc.c \
 	brw_clear.c \
@@ -978,6 +993,7 @@ i965_FILES = \
 	brw_ff_gs.h \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_vector_splitting.cpp \
+	brw_formatquery.c \
 	brw_gs.c \
 	brw_gs.h \
 	brw_gs_state.c \
@@ -985,13 +1001,11 @@ i965_FILES = \
 	brw_link.cpp \
 	brw_lower_texture_gradients.cpp \
 	brw_lower_unnormalized_offset.cpp \
-	brw_meta_fast_clear.c \
-	brw_meta_stencil_blit.c \
-	brw_meta_updownsample.c \
 	brw_meta_util.c \
 	brw_meta_util.h \
 	brw_misc_state.c \
 	brw_multisample_state.h \
+	brw_nir_uniforms.cpp \
 	brw_object_purgeable.c \
 	brw_performance_monitor.c \
 	brw_pipe_control.c \
@@ -1011,6 +1025,7 @@ i965_FILES = \
 	brw_state.h \
 	brw_state_upload.c \
 	brw_structs.h \
+	brw_surface_formats.c \
 	brw_tcs.c \
 	brw_tcs_surface_state.c \
 	brw_tes.c \
@@ -1026,7 +1041,7 @@ i965_FILES = \
 	brw_wm.h \
 	brw_wm_state.c \
 	brw_wm_surface_state.c \
-	gen6_blorp.cpp \
+	gen6_blorp.c \
 	gen6_cc.c \
 	gen6_clip_state.c \
 	gen6_constant_state.c \
@@ -1044,7 +1059,7 @@ i965_FILES = \
 	gen6_viewport_state.c \
 	gen6_vs_state.c \
 	gen6_wm_state.c \
-	gen7_blorp.cpp \
+	gen7_blorp.c \
 	gen7_cs_state.c \
 	gen7_ds_state.c \
 	gen7_gs_state.c \
@@ -1060,13 +1075,13 @@ i965_FILES = \
 	gen7_wm_state.c \
 	gen7_wm_surface_state.c \
 	gen8_blend_state.c \
+	gen8_blorp.c \
 	gen8_depth_state.c \
 	gen8_disable.c \
 	gen8_draw_upload.c \
 	gen8_ds_state.c \
 	gen8_gs_state.c \
 	gen8_hs_state.c \
-	gen8_misc_state.c \
 	gen8_multisample_state.c \
 	gen8_ps_state.c \
 	gen8_sf_state.c \
@@ -1075,6 +1090,8 @@ i965_FILES = \
 	gen8_viewport_state.c \
 	gen8_vs_state.c \
 	gen8_wm_depth_stencil.c \
+	hsw_queryobj.c \
+	hsw_sol.c \
 	intel_batchbuffer.c \
 	intel_batchbuffer.h \
 	intel_blit.c \
@@ -1121,6 +1138,8 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/mesa/drivers/dri/intel/server \
 	-I$(top_srcdir)/src/gtest/include \
+	-I$(top_srcdir)/src/compiler/nir \
+	-I$(top_srcdir)/src/intel \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	$(DEFINES) \
@@ -1130,14 +1149,27 @@ AM_CFLAGS = \
 AM_CXXFLAGS = $(AM_CFLAGS)
 noinst_LTLIBRARIES = libi965_dri.la libi965_compiler.la
 libi965_dri_la_SOURCES = $(i965_FILES)
-libi965_dri_la_LIBADD = libi965_compiler.la $(INTEL_LIBS)
-libi965_compiler_la_SOURCES = $(i965_compiler_FILES)
+libi965_dri_la_LIBADD = \
+	$(top_builddir)/src/intel/isl/libisl.la \
+	libi965_compiler.la \
+	$(INTEL_LIBS)
+
+libi965_compiler_la_SOURCES = \
+	$(i965_compiler_FILES) \
+	$(i965_compiler_GENERATED_FILES)
+
+BUILT_SOURCES = $(i965_compiler_GENERATED_FILES)
+CLEANFILES = $(BUILT_SOURCES)
+EXTRA_DIST = \
+	brw_nir_trig_workarounds.py
+
 TEST_LIBS = \
 	libi965_compiler.la \
-        ../../../libmesa.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
+	$(top_builddir)/src/util/libmesautil.la \
+	$(top_builddir)/src/intel/isl/libisl.la \
 	$(PTHREAD_LIBS) \
-	$(DLOPEN_LIBS) \
-	../common/libdri_test_stubs.la
+	$(DLOPEN_LIBS)
 
 test_fs_cmod_propagation_SOURCES = \
 	test_fs_cmod_propagation.cpp
@@ -1186,7 +1218,8 @@ test_eu_compact_SOURCES = \
 
 nodist_EXTRA_test_eu_compact_SOURCES = dummy.cpp
 test_eu_compact_LDADD = $(TEST_LIBS)
-all: all-am
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
 .SUFFIXES: .c .cpp .lo .log .o .obj .test .test$(EXEEXT) .trs
@@ -1284,7 +1317,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_binding_tables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_blorp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_blorp_blit.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_blorp_blit_eu.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_blorp_clear.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_cc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_cfg.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_clear.Plo@am__quote@
@@ -1314,6 +1347,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_eu_validate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_ff_gs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_ff_gs_emit.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_formatquery.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_channel_expressions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_cmod_propagation.Plo@am__quote@
@@ -1323,6 +1357,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_dead_code_eliminate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_generator.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_live_variables.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_lower_d2x.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_lower_pack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_reg_allocate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_register_coalesce.Plo@am__quote@
@@ -1339,15 +1375,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_link.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_texture_gradients.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_unnormalized_offset.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_fast_clear.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_stencil_blit.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_updownsample.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_analyze_boolean_resolves.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_attribute_workarounds.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_intrinsics.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_opt_peephole_ffma.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_trig_workarounds.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_object_purgeable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_packed_float.Plo@am__quote@
@@ -1437,13 +1472,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_wm_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_wm_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_blend_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_blorp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_depth_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_disable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_draw_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_ds_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_gs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_hs_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_multisample_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_ps_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_sf_state.Plo@am__quote@
@@ -1452,6 +1487,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_viewport_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_vs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_wm_depth_stencil.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hsw_queryobj.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hsw_sol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_asm_annotation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_batchbuffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_blit.Plo@am__quote@
@@ -1830,10 +1867,12 @@ distdir: $(DISTFILES)
 check-am: all-am
 	$(MAKE) $(AM_MAKEFLAGS) $(check_PROGRAMS)
 	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
-check: check-am
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-am
 all-am: Makefile $(LTLIBRARIES)
 installdirs:
-install: install-am
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-am
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -1858,6 +1897,7 @@ mostlyclean-generic:
 	-test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -1866,6 +1906,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-am
 
 clean-am: clean-checkPROGRAMS clean-generic clean-libtool \
@@ -1937,7 +1978,7 @@ ps-am:
 
 uninstall-am:
 
-.MAKE: check-am install-am install-strip
+.MAKE: all check check-am install install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-TESTS check-am clean \
 	clean-checkPROGRAMS clean-generic clean-libtool \
@@ -1956,6 +1997,10 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
+
+brw_nir_trig_workarounds.c: brw_nir_trig_workarounds.py $(top_srcdir)/src/compiler/nir/nir_algebraic.py
+	$(MKDIR_GEN)
+	$(AM_V_GEN) PYTHONPATH=$(top_srcdir)/src/compiler/nir $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_nir_trig_workarounds.py > $@ || ($(RM) $@; false)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

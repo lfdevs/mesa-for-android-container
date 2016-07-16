@@ -56,7 +56,7 @@ util_staging_resource_template(struct pipe_resource *pt, unsigned width,
 struct util_staging_transfer *
 util_staging_transfer_init(struct pipe_context *pipe,
                            struct pipe_resource *pt,
-                           unsigned level, unsigned usage,
+                           unsigned level, enum pipe_resource_usage usage,
                            const struct pipe_box *box,
                            boolean direct, struct util_staging_transfer *tx)
 {

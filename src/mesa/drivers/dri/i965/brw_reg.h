@@ -81,7 +81,9 @@ struct brw_device_info;
 #define BRW_SWIZZLE_ZZZZ      BRW_SWIZZLE4(2,2,2,2)
 #define BRW_SWIZZLE_WWWW      BRW_SWIZZLE4(3,3,3,3)
 #define BRW_SWIZZLE_XYXY      BRW_SWIZZLE4(0,1,0,1)
+#define BRW_SWIZZLE_XZXZ      BRW_SWIZZLE4(0,2,0,2)
 #define BRW_SWIZZLE_YZXW      BRW_SWIZZLE4(1,2,0,3)
+#define BRW_SWIZZLE_YWYW      BRW_SWIZZLE4(1,3,1,3)
 #define BRW_SWIZZLE_ZXYW      BRW_SWIZZLE4(2,0,1,3)
 #define BRW_SWIZZLE_ZWZW      BRW_SWIZZLE4(2,3,2,3)
 #define BRW_SWIZZLE_WZYX      BRW_SWIZZLE4(3,2,1,0)
@@ -221,6 +223,7 @@ enum PACKED brw_reg_type {
 unsigned brw_reg_type_to_hw_type(const struct brw_device_info *devinfo,
                                  enum brw_reg_type type, enum brw_reg_file file);
 const char *brw_reg_type_letters(unsigned brw_reg_type);
+uint32_t brw_swizzle_immediate(enum brw_reg_type type, uint32_t x, unsigned swz);
 
 #define REG_SIZE (8*4)
 
@@ -231,14 +234,19 @@ const char *brw_reg_type_letters(unsigned brw_reg_type);
  * or "structure of array" form:
  */
 struct brw_reg {
-   enum brw_reg_type type:4;
-   enum brw_reg_file file:3;      /* :2 hardware format */
-   unsigned negate:1;             /* source only */
-   unsigned abs:1;                /* source only */
-   unsigned address_mode:1;       /* relative addressing, hopefully! */
-   unsigned pad0:1;
-   unsigned subnr:5;              /* :1 in align16 */
-   unsigned nr:16;
+   union {
+      struct {
+         enum brw_reg_type type:4;
+         enum brw_reg_file file:3;      /* :2 hardware format */
+         unsigned negate:1;             /* source only */
+         unsigned abs:1;                /* source only */
+         unsigned address_mode:1;       /* relative addressing, hopefully! */
+         unsigned pad0:1;
+         unsigned subnr:5;              /* :1 in align16 */
+         unsigned nr:16;
+      };
+      uint32_t bits;
+   };
 
    union {
       struct {
@@ -251,12 +259,20 @@ struct brw_reg {
          unsigned pad1:1;
       };
 
+      double df;
+      uint64_t u64;
       float f;
       int   d;
       unsigned ud;
    };
 };
 
+static inline bool
+brw_regs_equal(const struct brw_reg *a, const struct brw_reg *b)
+{
+   const bool df = a->type == BRW_REGISTER_TYPE_DF && a->file == IMM;
+   return a->bits == b->bits && (df ? a->u64 == b->u64 : a->ud == b->ud);
+}
 
 struct brw_indirect {
    unsigned addr_subnr:4;
@@ -271,6 +287,7 @@ type_sz(unsigned type)
    switch(type) {
    case BRW_REGISTER_TYPE_UQ:
    case BRW_REGISTER_TYPE_Q:
+   case BRW_REGISTER_TYPE_DF:
       return 8;
    case BRW_REGISTER_TYPE_UD:
    case BRW_REGISTER_TYPE_D:
@@ -284,6 +301,26 @@ type_sz(unsigned type)
       return 1;
    default:
       return 0;
+   }
+}
+
+/**
+ * Return an integer type of the requested size and signedness.
+ */
+static inline enum brw_reg_type
+brw_int_type(unsigned sz, bool is_signed)
+{
+   switch (sz) {
+   case 1:
+      return (is_signed ? BRW_REGISTER_TYPE_B : BRW_REGISTER_TYPE_UB);
+   case 2:
+      return (is_signed ? BRW_REGISTER_TYPE_W : BRW_REGISTER_TYPE_UW);
+   case 4:
+      return (is_signed ? BRW_REGISTER_TYPE_D : BRW_REGISTER_TYPE_UD);
+   case 8:
+      return (is_signed ? BRW_REGISTER_TYPE_Q : BRW_REGISTER_TYPE_UQ);
+   default:
+      unreachable("Not reached.");
    }
 }
 
@@ -539,6 +576,14 @@ brw_imm_reg(enum brw_reg_type type)
 }
 
 /** Construct float immediate register */
+static inline struct brw_reg
+brw_imm_df(double df)
+{
+   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_DF);
+   imm.df = df;
+   return imm;
+}
+
 static inline struct brw_reg
 brw_imm_f(float f)
 {
@@ -887,22 +932,15 @@ get_element_d(struct brw_reg reg, unsigned elt)
    return vec1(suboffset(retype(reg, BRW_REGISTER_TYPE_D), elt));
 }
 
-
 static inline struct brw_reg
-brw_swizzle(struct brw_reg reg, unsigned x, unsigned y, unsigned z, unsigned w)
+brw_swizzle(struct brw_reg reg, unsigned swz)
 {
-   assert(reg.file != BRW_IMMEDIATE_VALUE);
+   if (reg.file == BRW_IMMEDIATE_VALUE)
+      reg.ud = brw_swizzle_immediate(reg.type, reg.ud, swz);
+   else
+      reg.swizzle = brw_compose_swizzle(swz, reg.swizzle);
 
-   reg.swizzle = brw_compose_swizzle(BRW_SWIZZLE4(x, y, z, w),
-                                              reg.swizzle);
    return reg;
-}
-
-
-static inline struct brw_reg
-brw_swizzle1(struct brw_reg reg, unsigned x)
-{
-   return brw_swizzle(reg, x, x, x, x);
 }
 
 static inline struct brw_reg

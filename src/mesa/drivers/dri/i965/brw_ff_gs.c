@@ -149,7 +149,7 @@ brw_codegen_ff_gs_prog(struct brw_context *brw,
 }
 
 static bool
-brw_ff_gs_state_dirty(struct brw_context *brw)
+brw_ff_gs_state_dirty(const struct brw_context *brw)
 {
    return brw_state_dirty(brw,
                           _NEW_LIGHT,

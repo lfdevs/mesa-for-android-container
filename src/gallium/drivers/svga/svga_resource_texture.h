@@ -87,6 +87,11 @@ struct svga_texture
 
    /** array indexed by cube face or 3D/array slice, one bit per mipmap level */
    ushort *rendered_to;
+
+   /** array indexed by cube face or 3D/array slice, one bit per mipmap level.
+    *  Set if the level is marked as dirty.
+    */ 
+   ushort *dirty;
 };
 
 
@@ -136,7 +141,7 @@ svga_transfer(struct pipe_transfer *transfer)
 static inline void
 svga_age_texture_view(struct svga_texture *tex, unsigned level)
 {
-   assert(level < Elements(tex->view_age));
+   assert(level < ARRAY_SIZE(tex->view_age));
    tex->view_age[level] = ++(tex->age);
 }
 
@@ -207,6 +212,30 @@ svga_was_texture_rendered_to(const struct svga_texture *tex,
    return !!(tex->rendered_to[face] & (1 << level));
 }
 
+static inline void
+svga_set_texture_dirty(struct svga_texture *tex,
+                       unsigned face, unsigned level)
+{
+   check_face_level(tex, face, level);
+   tex->dirty[face] |= 1 << level;
+}
+
+static inline void
+svga_clear_texture_dirty(struct svga_texture *tex)
+{
+   unsigned i;
+   for (i = 0; i < tex->b.b.depth0 * tex->b.b.array_size; i++) {
+      tex->dirty[i] = 0;
+   }
+}
+
+static inline boolean
+svga_is_texture_dirty(const struct svga_texture *tex,
+                      unsigned face, unsigned level)
+{
+   check_face_level(tex, face, level);
+   return !!(tex->dirty[face] & (1 << level));
+}
 
 struct pipe_resource *
 svga_texture_create(struct pipe_screen *screen,

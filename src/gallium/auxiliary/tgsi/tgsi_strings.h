@@ -38,7 +38,7 @@ extern "C" {
 #endif
 
 
-extern const char *tgsi_processor_type_names[6];
+extern const char *tgsi_processor_type_names[PIPE_SHADER_TYPES];
 
 extern const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT];
 

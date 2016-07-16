@@ -43,6 +43,8 @@
 
 #include <errno.h>
 
+/* XXX this should go away, needed for 'struct winsys_handle' */
+#include "state_tracker/drm_driver.h"
 
 static bool
 pending(struct fd_resource *rsc, enum fd_resource_status status)
@@ -260,8 +262,7 @@ fd_resource_transfer_unmap(struct pipe_context *pctx,
 	pipe_resource_reference(&ptrans->resource, NULL);
 	util_slab_free(&ctx->transfer_pool, ptrans);
 
-	if (trans->staging)
-		free(trans->staging);
+	free(trans->staging);
 }
 
 static void *
@@ -298,7 +299,7 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	ptrans->usage = usage;
 	ptrans->box = *box;
 	ptrans->stride = util_format_get_nblocksx(format, slice->pitch) * rsc->cpp;
-	ptrans->layer_stride = slice->size0;
+	ptrans->layer_stride = rsc->layer_first ? rsc->layer_size : slice->size0;
 
 	if (usage & PIPE_TRANSFER_READ)
 		op |= DRM_FREEDRENO_PREP_READ;
@@ -637,7 +638,7 @@ fail:
 static struct pipe_resource *
 fd_resource_from_handle(struct pipe_screen *pscreen,
 		const struct pipe_resource *tmpl,
-		struct winsys_handle *handle)
+		struct winsys_handle *handle, unsigned usage)
 {
 	struct fd_resource *rsc = CALLOC_STRUCT(fd_resource);
 	struct fd_resource_slice *slice = &rsc->slices[0];
@@ -668,6 +669,7 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 	rsc->base.vtbl = &fd_resource_vtbl;
 	rsc->cpp = util_format_get_blocksize(tmpl->format);
 	slice->pitch /= rsc->cpp;
+	slice->offset = handle->offset;
 
 	assert(rsc->cpp);
 

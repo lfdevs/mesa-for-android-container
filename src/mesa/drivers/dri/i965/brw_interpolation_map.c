@@ -36,11 +36,18 @@ static char const *get_qual_name(int mode)
 
 
 /* Set up interpolation modes for every element in the VUE */
-static void
+void
 brw_setup_vue_interpolation(struct brw_context *brw)
 {
    const struct gl_fragment_program *fprog = brw->fragment_program;
    struct brw_vue_map *vue_map = &brw->vue_map_geom_out;
+
+   if (!brw_state_dirty(brw,
+                        _NEW_LIGHT,
+                        BRW_NEW_BLORP |
+                        BRW_NEW_FRAGMENT_PROGRAM |
+                        BRW_NEW_VUE_MAP_GEOM_OUT))
+      return;
 
    memset(&brw->interpolation_mode, INTERP_QUALIFIER_NONE, sizeof(brw->interpolation_mode));
 
@@ -100,13 +107,3 @@ brw_setup_vue_interpolation(struct brw_context *brw)
       }
    }
 }
-
-
-const struct brw_tracked_state brw_interpolation_map = {
-   .dirty = {
-      .mesa  = _NEW_LIGHT,
-      .brw   = BRW_NEW_FRAGMENT_PROGRAM |
-               BRW_NEW_VUE_MAP_GEOM_OUT,
-   },
-   .emit = brw_setup_vue_interpolation
-};

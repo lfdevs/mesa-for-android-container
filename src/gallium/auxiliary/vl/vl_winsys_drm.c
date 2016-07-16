@@ -41,20 +41,20 @@ struct vl_screen *
 vl_drm_screen_create(int fd)
 {
    struct vl_screen *vscreen;
-   int new_fd = -1;
+   int new_fd;
 
    vscreen = CALLOC_STRUCT(vl_screen);
    if (!vscreen)
       return NULL;
 
    if (fd < 0 || (new_fd = dup(fd)) < 0)
-      goto error;
+      goto free_screen;
 
    if (pipe_loader_drm_probe_fd(&vscreen->dev, new_fd))
       vscreen->pscreen = pipe_loader_create_screen(vscreen->dev);
 
    if (!vscreen->pscreen)
-      goto error;
+      goto release_pipe;
 
    vscreen->destroy = vl_drm_screen_destroy;
    vscreen->texture_from_drawable = NULL;
@@ -64,12 +64,13 @@ vl_drm_screen_create(int fd)
    vscreen->get_private = NULL;
    return vscreen;
 
-error:
+release_pipe:
    if (vscreen->dev)
       pipe_loader_release(&vscreen->dev, 1);
    else
       close(new_fd);
 
+free_screen:
    FREE(vscreen);
    return NULL;
 }

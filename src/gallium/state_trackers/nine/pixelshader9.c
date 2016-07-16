@@ -92,7 +92,7 @@ NinePixelShader9_dtor( struct NinePixelShader9 *This )
 
     if (This->base.device) {
         struct pipe_context *pipe = This->base.device->pipe;
-        struct nine_shader_variant64 *var = &This->variant;
+        struct nine_shader_variant *var = &This->variant;
 
         do {
             if (var->cso) {
@@ -109,7 +109,7 @@ NinePixelShader9_dtor( struct NinePixelShader9 *This )
             pipe->delete_fs_state(pipe, This->ff_cso);
         }
     }
-    nine_shader_variants_free64(&This->variant);
+    nine_shader_variants_free(&This->variant);
 
     FREE((void *)This->byte_code.tokens); /* const_cast */
 
@@ -146,7 +146,7 @@ NinePixelShader9_GetVariant( struct NinePixelShader9 *This )
     if (key == This->last_key)
         return This->last_cso;
 
-    cso = nine_shader_variant_get64(&This->variant, key);
+    cso = nine_shader_variant_get(&This->variant, key);
     if (!cso) {
         struct NineDevice9 *device = This->base.device;
         struct nine_shader_info info;
@@ -166,7 +166,7 @@ NinePixelShader9_GetVariant( struct NinePixelShader9 *This )
         hr = nine_translate_shader(This->base.device, &info);
         if (FAILED(hr))
             return NULL;
-        nine_shader_variant_add64(&This->variant, key, info.cso);
+        nine_shader_variant_add(&This->variant, key, info.cso);
         cso = info.cso;
     }
 

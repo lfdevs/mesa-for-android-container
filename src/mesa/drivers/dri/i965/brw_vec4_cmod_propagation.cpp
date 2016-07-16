@@ -115,6 +115,18 @@ opt_cmod_propagation_local(bblock_t *block)
                break;
             }
 
+            /* The conditional mod of the CMP/CMPN instructions behaves
+             * specially because the flag output is not calculated from the
+             * result of the instruction, but the other way around, which
+             * means that even if the condmod to propagate and the condmod
+             * from the CMP instruction are the same they will in general give
+             * different results because they are evaluated based on different
+             * inputs.
+             */
+            if (scan_inst->opcode == BRW_OPCODE_CMP ||
+                scan_inst->opcode == BRW_OPCODE_CMPN)
+               break;
+
             /* Otherwise, try propagating the conditional. */
             enum brw_conditional_mod cond =
                inst->src[0].negate ? brw_swap_cmod(inst->conditional_mod)

@@ -1,0 +1,6 @@
+GENXML_GENERATED_FILES = \
+	gen6_pack.h \
+	gen7_pack.h \
+	gen75_pack.h \
+	gen8_pack.h \
+	gen9_pack.h

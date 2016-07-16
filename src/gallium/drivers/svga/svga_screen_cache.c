@@ -413,7 +413,7 @@ svga_screen_cache_init(struct svga_screen *svgascreen)
  */
 struct svga_winsys_surface *
 svga_screen_surface_create(struct svga_screen *svgascreen,
-                           unsigned bind_flags, unsigned usage,
+                           unsigned bind_flags, enum pipe_resource_usage usage,
                            struct svga_host_surface_cache_key *key)
 {
    struct svga_winsys_screen *sws = svgascreen->sws;
@@ -563,8 +563,14 @@ svga_screen_cache_dump(const struct svga_screen *svgascreen)
          struct svga_host_surface_cache_entry *entry =
             LIST_ENTRY(struct svga_host_surface_cache_entry,
                        curr, bucket_head);
-         if (entry->key.format != 37) {
-            debug_printf("  %u x %u x %u format %u\n",
+         if (entry->key.format == SVGA3D_BUFFER) {
+            debug_printf("  %p: buffer %u bytes\n",
+                         entry->handle,
+                         entry->key.size.width);
+         }
+         else {
+            debug_printf("  %p: %u x %u x %u format %u\n",
+                         entry->handle,
                          entry->key.size.width,
                          entry->key.size.height,
                          entry->key.size.depth,

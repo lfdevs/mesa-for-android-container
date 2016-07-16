@@ -69,4 +69,9 @@ vl_dri2_screen_create(Display *display, int screen);
 struct vl_screen *
 vl_drm_screen_create(int fd);
 
+#if defined(HAVE_DRI3)
+struct vl_screen *
+vl_dri3_screen_create(Display *display, int screen);
+#endif
+
 #endif

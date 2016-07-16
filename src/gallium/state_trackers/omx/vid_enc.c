@@ -180,11 +180,6 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
                                 PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_SUPPORTED))
       return OMX_ErrorBadParameter;
 
-   priv->stacked_frames_num = screen->get_video_param(screen,
-                                PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH,
-                                PIPE_VIDEO_ENTRYPOINT_ENCODE,
-                                PIPE_VIDEO_CAP_STACKED_FRAMES);
-
    priv->s_pipe = screen->context_create(screen, priv->screen, 0);
    if (!priv->s_pipe)
       return OMX_ErrorInsufficientResources;
@@ -699,9 +694,19 @@ static OMX_ERRORTYPE vid_enc_MessageHandler(OMX_COMPONENTTYPE* comp, internalReq
                             priv->scale.xWidth : port->sPortParam.format.video.nFrameWidth;
          templat.height = priv->scale_buffer[priv->current_scale_buffer] ?
                             priv->scale.xHeight : port->sPortParam.format.video.nFrameHeight;
-         templat.max_references = (templat.profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE) ?
-                            1 : OMX_VID_ENC_P_PERIOD_DEFAULT;
 
+         if (templat.profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE) {
+            struct pipe_screen *screen = priv->screen->pscreen;
+            templat.max_references = 1;
+            priv->stacked_frames_num =
+               screen->get_video_param(screen,
+                                       PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH,
+                                       PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                       PIPE_VIDEO_CAP_STACKED_FRAMES);
+         } else {
+            templat.max_references = OMX_VID_ENC_P_PERIOD_DEFAULT;
+            priv->stacked_frames_num = 1;
+         }
          priv->codec = priv->s_pipe->create_video_codec(priv->s_pipe, &templat);
 
       } else if ((msg->messageParam == OMX_StateLoaded) && (priv->state == OMX_StateIdle)) {
@@ -1151,8 +1156,10 @@ static OMX_ERRORTYPE vid_enc_EncodeFrame(omx_base_PortType *port, OMX_BUFFERHEAD
    } else {
       /* ------- load input image into video buffer ---- */
       err = enc_LoadImage(port, buf, task->buf);
-      if (err != OMX_ErrorNone)
+      if (err != OMX_ErrorNone) {
+         FREE(task);
          return err;
+      }
    }
 
    /* -------------- determine picture type --------- */

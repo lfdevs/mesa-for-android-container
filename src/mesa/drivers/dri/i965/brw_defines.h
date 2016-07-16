@@ -656,6 +656,7 @@
 #define GEN8_SURFACE_AUX_MODE_MCS               1
 #define GEN8_SURFACE_AUX_MODE_APPEND            2
 #define GEN8_SURFACE_AUX_MODE_HIZ               3
+#define GEN9_SURFACE_AUX_MODE_CCS_E             5
 
 /* Surface state DW7 */
 #define GEN9_SURFACE_RT_COMPRESSION_SHIFT       30
@@ -949,9 +950,7 @@ enum opcode {
     */
    FS_OPCODE_FB_WRITE_LOGICAL,
 
-   FS_OPCODE_BLORP_FB_WRITE,
    FS_OPCODE_REP_FB_WRITE,
-   FS_OPCODE_PACK_STENCIL_REF,
    SHADER_OPCODE_RCP,
    SHADER_OPCODE_RSQ,
    SHADER_OPCODE_SQRT,
@@ -977,8 +976,10 @@ enum opcode {
    SHADER_OPCODE_TXD_LOGICAL,
    SHADER_OPCODE_TXF,
    SHADER_OPCODE_TXF_LOGICAL,
+   SHADER_OPCODE_TXF_LZ,
    SHADER_OPCODE_TXL,
    SHADER_OPCODE_TXL_LOGICAL,
+   SHADER_OPCODE_TXL_LZ,
    SHADER_OPCODE_TXS,
    SHADER_OPCODE_TXS_LOGICAL,
    FS_OPCODE_TXB,
@@ -998,6 +999,7 @@ enum opcode {
    SHADER_OPCODE_TG4_OFFSET,
    SHADER_OPCODE_TG4_OFFSET_LOGICAL,
    SHADER_OPCODE_SAMPLEINFO,
+   SHADER_OPCODE_SAMPLEINFO_LOGICAL,
 
    /**
     * Combines multiple sources of size 1 into a larger virtual GRF.
@@ -1012,6 +1014,15 @@ enum opcode {
     * used to reserve space for, say, a message header set up by the generators.
     */
    SHADER_OPCODE_LOAD_PAYLOAD,
+
+   /**
+    * Packs a number of sources into a single value. Unlike LOAD_PAYLOAD, this
+    * acts intra-channel, obtaining the final value for each channel by
+    * combining the sources values for the same channel, the first source
+    * occupying the lowest bits and the last source occupying the highest
+    * bits.
+    */
+   FS_OPCODE_PACK,
 
    SHADER_OPCODE_SHADER_TIME_ADD,
 
@@ -1071,20 +1082,14 @@ enum opcode {
    /**
     * Pick the channel from its first source register given by the index
     * specified as second source.  Useful for variable indexing of surfaces.
+    *
+    * Note that because the result of this instruction is by definition
+    * uniform and it can always be splatted to multiple channels using a
+    * scalar regioning mode, only the first channel of the destination region
+    * is guaranteed to be updated, which implies that BROADCAST instructions
+    * should usually be marked force_writemask_all.
     */
    SHADER_OPCODE_BROADCAST,
-
-   /**
-    * Pick the byte from its first source register given by the index
-    * specified as second source.
-    */
-   SHADER_OPCODE_EXTRACT_BYTE,
-
-   /**
-    * Pick the word from its first source register given by the index
-    * specified as second source.
-    */
-   SHADER_OPCODE_EXTRACT_WORD,
 
    VEC4_OPCODE_MOV_BYTES,
    VEC4_OPCODE_PACK_BYTES,
@@ -1094,7 +1099,6 @@ enum opcode {
    FS_OPCODE_DDX_FINE,
    /**
     * Compute dFdy(), dFdyCoarse(), or dFdyFine().
-    * src1 is an immediate storing the key->render_to_fbo boolean.
     */
    FS_OPCODE_DDY_COARSE,
    FS_OPCODE_DDY_FINE,
@@ -1104,8 +1108,9 @@ enum opcode {
    FS_OPCODE_PIXEL_Y,
    FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD,
    FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7,
-   FS_OPCODE_VARYING_PULL_CONSTANT_LOAD,
+   FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7,
+   FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL,
    FS_OPCODE_GET_BUFFER_SIZE,
    FS_OPCODE_MOV_DISPATCH_TO_FLAGS,
    FS_OPCODE_DISCARD_JUMP,
@@ -1391,6 +1396,7 @@ enum fb_write_logical_srcs {
    FB_WRITE_LOGICAL_SRC_SRC_STENCIL, /* gl_FragStencilRefARB */
    FB_WRITE_LOGICAL_SRC_OMASK,       /* Sample Mask (gl_SampleMask) */
    FB_WRITE_LOGICAL_SRC_COMPONENTS,  /* REQUIRED */
+   FB_WRITE_LOGICAL_NUM_SRCS
 };
 
 enum tex_logical_srcs {
@@ -1636,6 +1642,9 @@ enum brw_message_target {
 #define GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO   17
 #define GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C 18
 #define HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE 20
+#define GEN9_SAMPLER_MESSAGE_SAMPLE_LZ           24
+#define GEN9_SAMPLER_MESSAGE_SAMPLE_C_LZ         25
+#define GEN9_SAMPLER_MESSAGE_SAMPLE_LD_LZ        26
 #define GEN9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W     28
 #define GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS       29
 #define GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS       30
@@ -2934,6 +2943,9 @@ enum brw_wm_barycentric_interp_mode {
 # define MEDIA_GPGPU_THREAD_COUNT_MASK          INTEL_MASK(7, 0)
 # define GEN8_MEDIA_GPGPU_THREAD_COUNT_SHIFT    0
 # define GEN8_MEDIA_GPGPU_THREAD_COUNT_MASK     INTEL_MASK(9, 0)
+/* GEN7 DW6, GEN8+ DW7 */
+# define CROSS_THREAD_READ_LENGTH_SHIFT         0
+# define CROSS_THREAD_READ_LENGTH_MASK          INTEL_MASK(7, 0)
 #define MEDIA_STATE_FLUSH                       0x7004
 #define GPGPU_WALKER                            0x7105
 /* GEN7 DW0 */

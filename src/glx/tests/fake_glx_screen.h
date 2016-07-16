@@ -20,9 +20,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-extern "C" {
 #include "glxclient.h"
-};
 
 class fake_glx_screen : public glx_screen {
 public:

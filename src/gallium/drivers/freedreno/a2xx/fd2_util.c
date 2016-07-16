@@ -294,12 +294,12 @@ tex_swiz(unsigned swiz)
 {
 	switch (swiz) {
 	default:
-	case PIPE_SWIZZLE_RED:   return SQ_TEX_X;
-	case PIPE_SWIZZLE_GREEN: return SQ_TEX_Y;
-	case PIPE_SWIZZLE_BLUE:  return SQ_TEX_Z;
-	case PIPE_SWIZZLE_ALPHA: return SQ_TEX_W;
-	case PIPE_SWIZZLE_ZERO:  return SQ_TEX_ZERO;
-	case PIPE_SWIZZLE_ONE:   return SQ_TEX_ONE;
+	case PIPE_SWIZZLE_X: return SQ_TEX_X;
+	case PIPE_SWIZZLE_Y: return SQ_TEX_Y;
+	case PIPE_SWIZZLE_Z: return SQ_TEX_Z;
+	case PIPE_SWIZZLE_W: return SQ_TEX_W;
+	case PIPE_SWIZZLE_0: return SQ_TEX_ZERO;
+	case PIPE_SWIZZLE_1: return SQ_TEX_ONE;
 	}
 }
 
@@ -311,8 +311,8 @@ fd2_tex_swiz(enum pipe_format format, unsigned swizzle_r, unsigned swizzle_g,
 			util_format_description(format);
 	uint8_t swiz[] = {
 			swizzle_r, swizzle_g, swizzle_b, swizzle_a,
-			PIPE_SWIZZLE_ZERO, PIPE_SWIZZLE_ONE,
-			PIPE_SWIZZLE_ONE, PIPE_SWIZZLE_ONE,
+			PIPE_SWIZZLE_0, PIPE_SWIZZLE_1,
+			PIPE_SWIZZLE_1, PIPE_SWIZZLE_1,
 	};
 
 	return A2XX_SQ_TEX_3_SWIZ_X(tex_swiz(swiz[desc->swizzle[0]])) |

@@ -46,7 +46,7 @@ vec4_tes_visitor::vec4_tes_visitor(const struct brw_compiler *compiler,
 
 
 dst_reg *
-vec4_tes_visitor::make_reg_for_system_value(int location, const glsl_type *type)
+vec4_tes_visitor::make_reg_for_system_value(int location)
 {
    return NULL;
 }

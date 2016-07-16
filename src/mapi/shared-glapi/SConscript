@@ -40,7 +40,7 @@ def mapi_objects(env, printer, mode):
         '#/src',
         '#/src/mapi',
     ]
-    
+
     cppdefines = mapi_defines[mode] + [
         'MAPI_ABI_HEADER=\\"%s\\"' % (header_name),
     ]

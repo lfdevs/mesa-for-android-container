@@ -45,11 +45,6 @@
 
 static const struct brw_tracked_state *gen4_atoms[] =
 {
-   &brw_interpolation_map,
-
-   &brw_clip_prog, /* must do before state base address */
-   &brw_sf_prog, /* must do before state base address */
-
    /* Once all the programs are done, we know how large urb entry
     * sizes need to be and can decide if we need to change the urb
     * layout.
@@ -84,7 +79,6 @@ static const struct brw_tracked_state *gen4_atoms[] =
    /* Command packets:
     */
    &brw_invariant_state,
-   &brw_state_base_address,
 
    &brw_binding_table_pointers,
    &brw_blend_constant_color,
@@ -113,9 +107,6 @@ static const struct brw_tracked_state *gen6_atoms[] =
    &gen6_sf_vp,
 
    /* Command packets: */
-
-   /* must do before binding table pointers, cc state ptrs */
-   &brw_state_base_address,
 
    &brw_cc_vp,
    &gen6_viewport_state,	/* must do after *_vp stages */
@@ -179,9 +170,6 @@ static const struct brw_tracked_state *gen6_atoms[] =
 static const struct brw_tracked_state *gen7_render_atoms[] =
 {
    /* Command packets: */
-
-   /* must do before binding table pointers, cc state ptrs */
-   &brw_state_base_address,
 
    &brw_cc_vp,
    &gen7_sf_clip_viewport,
@@ -273,7 +261,6 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
 
 static const struct brw_tracked_state *gen7_compute_atoms[] =
 {
-   &brw_state_base_address,
    &gen7_l3_state,
    &brw_cs_image_surfaces,
    &gen7_cs_push_constants,
@@ -288,9 +275,6 @@ static const struct brw_tracked_state *gen7_compute_atoms[] =
 
 static const struct brw_tracked_state *gen8_render_atoms[] =
 {
-   /* Command packets: */
-   &gen8_state_base_address,
-
    &brw_cc_vp,
    &gen8_sf_clip_viewport,
 
@@ -353,7 +337,7 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &gen7_te_state,
    &gen8_ds_state,
    &gen8_gs_state,
-   &gen8_sol_state,
+   &gen7_sol_state,
    &gen6_clip_state,
    &gen8_raster_state,
    &gen8_sbe_state,
@@ -388,7 +372,6 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
 
 static const struct brw_tracked_state *gen8_compute_atoms[] =
 {
-   &gen8_state_base_address,
    &gen7_l3_state,
    &brw_cs_image_surfaces,
    &gen7_cs_push_constants,
@@ -667,6 +650,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_CS_WORK_GROUPS),
    DEFINE_BIT(BRW_NEW_URB_SIZE),
    DEFINE_BIT(BRW_NEW_CC_STATE),
+   DEFINE_BIT(BRW_NEW_BLORP),
    {0, 0, 0}
 };
 
@@ -747,6 +731,12 @@ brw_upload_programs(struct brw_context *brw,
       if (old_slots != brw->vue_map_geom_out.slots_valid ||
           old_separate != brw->vue_map_geom_out.separate)
          brw->ctx.NewDriverState |= BRW_NEW_VUE_MAP_GEOM_OUT;
+
+      if (brw->gen < 6) {
+         brw_setup_vue_interpolation(brw);
+         brw_upload_clip_prog(brw);
+         brw_upload_sf_prog(brw);
+      }
 
       brw_upload_wm_prog(brw);
    } else if (pipeline == BRW_COMPUTE_PIPELINE) {
@@ -844,6 +834,8 @@ brw_upload_pipeline_state(struct brw_context *brw,
 
    brw_upload_programs(brw, pipeline);
    merge_ctx_state(brw, &state);
+
+   brw_upload_state_base_address(brw);
 
    const struct brw_tracked_state *atoms =
       brw_get_pipeline_atoms(brw, pipeline);

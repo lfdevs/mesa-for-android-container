@@ -168,8 +168,7 @@ SKIP_FUNCTION_MACROS   = YES
 #---------------------------------------------------------------------------
 TAGFILES		= \
 			 core_subset.tag=../core_subset \
-                         math_subset.tag=../math_subset \
-                         miniglx.tag=../miniglx
+                         math_subset.tag=../math_subset
 GENERATE_TAGFILE       = radeon_subset.tag
 ALLEXTERNALS           = NO
 PERL_PATH              = 

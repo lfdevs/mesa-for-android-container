@@ -25,6 +25,7 @@
 #include "r300_context.h"
 
 #include "util/u_format.h"
+#include <inttypes.h>
 
 /* Returns the number of pixels that the texture should be aligned to
  * in the given dimension. */
@@ -614,7 +615,7 @@ void r300_texture_desc_init(struct r300_screen *rscreen,
                 "r300: I got a pre-allocated buffer to use it as a texture "
                 "storage, but the buffer is too small. I'll use the buffer "
                 "anyway, because I can't crash here, but it's dangerous. "
-                "This can be a DDX bug. Got: %iB, Need: %iB, Info:\n",
+                "This can be a DDX bug. Got: %"PRIu64"B, Need: %uB, Info:\n",
                 tex->buf->size, tex->tex.size_in_bytes);
             r300_tex_print_info(tex, "texture_desc_init");
             /* Ooops, what now. Apps will break if we fail this,

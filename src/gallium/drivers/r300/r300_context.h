@@ -199,7 +199,7 @@ struct r300_sampler_view {
     unsigned width0_override;
     unsigned height0_override;
 
-    /* Swizzles in the UTIL_FORMAT_SWIZZLE_* representation,
+    /* Swizzles in the PIPE_SWIZZLE_* representation,
      * derived from base. */
     unsigned char swizzle[4];
 

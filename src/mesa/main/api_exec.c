@@ -3,18 +3,18 @@
 /*
  * Copyright (C) 2012 Intel Corporation
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sub license,
  * and/or sell copies of the Software, and to permit persons to whom the
  * Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the next
  * paragraph) shall be included in all copies or substantial portions of the
  * Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.  IN NO EVENT SHALL
@@ -144,10 +144,6 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_BindSamplers(exec, _mesa_BindSamplers);
       SET_BindTextures(exec, _mesa_BindTextures);
       SET_BindVertexBuffers(exec, _mesa_BindVertexBuffers);
-      SET_BlendEquationSeparateiARB(exec, _mesa_BlendEquationSeparateiARB);
-      SET_BlendEquationiARB(exec, _mesa_BlendEquationiARB);
-      SET_BlendFuncSeparateiARB(exec, _mesa_BlendFuncSeparateiARB);
-      SET_BlendFunciARB(exec, _mesa_BlendFunciARB);
       SET_ClampColor(exec, _mesa_ClampColor);
       SET_ClearBufferData(exec, _mesa_ClearBufferData);
       SET_ClearBufferSubData(exec, _mesa_ClearBufferSubData);
@@ -157,10 +153,8 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_ClearTexImage(exec, _mesa_ClearTexImage);
       SET_ClearTexSubImage(exec, _mesa_ClearTexSubImage);
       SET_ClipControl(exec, _mesa_ClipControl);
-      SET_ColorMaski(exec, _mesa_ColorMaski);
       SET_CompressedTexImage1D(exec, _mesa_CompressedTexImage1D);
       SET_CompressedTexSubImage1D(exec, _mesa_CompressedTexSubImage1D);
-      SET_CopyImageSubData(exec, _mesa_CopyImageSubData);
       SET_CopyTexImage1D(exec, _mesa_CopyTexImage1D);
       SET_CopyTexSubImage1D(exec, _mesa_CopyTexSubImage1D);
       SET_CreateProgramObjectARB(exec, _mesa_CreateProgramObjectARB);
@@ -170,9 +164,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_DepthBoundsEXT(exec, _mesa_DepthBoundsEXT);
       SET_DepthRange(exec, _mesa_DepthRange);
       SET_DetachObjectARB(exec, _mesa_DetachObjectARB);
-      SET_Disablei(exec, _mesa_Disablei);
       SET_DrawBuffer(exec, _mesa_DrawBuffer);
-      SET_Enablei(exec, _mesa_Enablei);
       SET_EndConditionalRender(exec, _mesa_EndConditionalRender);
       SET_EndPerfMonitorAMD(exec, _mesa_EndPerfMonitorAMD);
       SET_EndQueryIndexed(exec, _mesa_EndQueryIndexed);
@@ -187,7 +179,6 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetDoublei_v(exec, _mesa_GetDoublei_v);
       SET_GetDoublev(exec, _mesa_GetDoublev);
       SET_GetFloati_v(exec, _mesa_GetFloati_v);
-      SET_GetGraphicsResetStatusARB(exec, _mesa_GetGraphicsResetStatusARB);
       SET_GetHandleARB(exec, _mesa_GetHandleARB);
       SET_GetInfoLogARB(exec, _mesa_GetInfoLogARB);
       SET_GetObjectParameterfvARB(exec, _mesa_GetObjectParameterfvARB);
@@ -203,37 +194,26 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetQueryObjecti64v(exec, _mesa_GetQueryObjecti64v);
       SET_GetQueryObjectiv(exec, _mesa_GetQueryObjectiv);
       SET_GetQueryObjectui64v(exec, _mesa_GetQueryObjectui64v);
-      SET_GetSamplerParameterIiv(exec, _mesa_GetSamplerParameterIiv);
-      SET_GetSamplerParameterIuiv(exec, _mesa_GetSamplerParameterIuiv);
       SET_GetTexImage(exec, _mesa_GetTexImage);
-      SET_GetTexParameterIiv(exec, _mesa_GetTexParameterIiv);
-      SET_GetTexParameterIuiv(exec, _mesa_GetTexParameterIuiv);
       SET_GetTextureSubImage(exec, _mesa_GetTextureSubImage);
       SET_GetVertexAttribdv(exec, _mesa_GetVertexAttribdv);
       SET_GetnCompressedTexImageARB(exec, _mesa_GetnCompressedTexImageARB);
       SET_GetnPolygonStippleARB(exec, _mesa_GetnPolygonStippleARB);
       SET_GetnTexImageARB(exec, _mesa_GetnTexImageARB);
       SET_GetnUniformdvARB(exec, _mesa_GetnUniformdvARB);
-      SET_GetnUniformfvARB(exec, _mesa_GetnUniformfvARB);
-      SET_GetnUniformivARB(exec, _mesa_GetnUniformivARB);
-      SET_GetnUniformuivARB(exec, _mesa_GetnUniformuivARB);
       SET_InvalidateBufferData(exec, _mesa_InvalidateBufferData);
       SET_InvalidateBufferSubData(exec, _mesa_InvalidateBufferSubData);
       SET_InvalidateTexImage(exec, _mesa_InvalidateTexImage);
       SET_InvalidateTexSubImage(exec, _mesa_InvalidateTexSubImage);
-      SET_IsEnabledi(exec, _mesa_IsEnabledi);
-      SET_MinSampleShading(exec, _mesa_MinSampleShading);
       SET_MultiModeDrawArraysIBM(exec, _mesa_MultiModeDrawArraysIBM);
       SET_MultiModeDrawElementsIBM(exec, _mesa_MultiModeDrawElementsIBM);
       SET_ObjectPurgeableAPPLE(exec, _mesa_ObjectPurgeableAPPLE);
       SET_ObjectUnpurgeableAPPLE(exec, _mesa_ObjectUnpurgeableAPPLE);
       SET_PatchParameterfv(exec, _mesa_PatchParameterfv);
-      SET_PatchParameteri(exec, _mesa_PatchParameteri);
       SET_PixelStoref(exec, _mesa_PixelStoref);
       SET_PointParameteri(exec, _mesa_PointParameteri);
       SET_PointParameteriv(exec, _mesa_PointParameteriv);
       SET_PolygonMode(exec, _mesa_PolygonMode);
-      SET_PolygonOffsetClampEXT(exec, _mesa_PolygonOffsetClampEXT);
       SET_PrimitiveRestartIndex(exec, _mesa_PrimitiveRestartIndex);
       SET_ProgramUniform1d(exec, _mesa_ProgramUniform1d);
       SET_ProgramUniform1dv(exec, _mesa_ProgramUniform1dv);
@@ -254,17 +234,12 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_ProgramUniformMatrix4x3dv(exec, _mesa_ProgramUniformMatrix4x3dv);
       SET_ProvokingVertex(exec, _mesa_ProvokingVertex);
       SET_QueryCounter(exec, _mesa_QueryCounter);
-      SET_ReadnPixelsARB(exec, _mesa_ReadnPixelsARB);
-      SET_SamplerParameterIiv(exec, _mesa_SamplerParameterIiv);
-      SET_SamplerParameterIuiv(exec, _mesa_SamplerParameterIuiv);
       SET_SelectPerfMonitorCountersAMD(exec, _mesa_SelectPerfMonitorCountersAMD);
       SET_ShaderStorageBlockBinding(exec, _mesa_ShaderStorageBlockBinding);
       SET_StringMarkerGREMEDY(exec, _mesa_StringMarkerGREMEDY);
       SET_TexImage1D(exec, _mesa_TexImage1D);
       SET_TexImage2DMultisample(exec, _mesa_TexImage2DMultisample);
       SET_TexImage3DMultisample(exec, _mesa_TexImage3DMultisample);
-      SET_TexParameterIiv(exec, _mesa_TexParameterIiv);
-      SET_TexParameterIuiv(exec, _mesa_TexParameterIuiv);
       SET_TexStorage1D(exec, _mesa_TexStorage1D);
       SET_TexSubImage1D(exec, _mesa_TexSubImage1D);
       SET_TextureBarrierNV(exec, _mesa_TextureBarrierNV);
@@ -327,17 +302,25 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_BindFragDataLocationIndexed(exec, _mesa_BindFragDataLocationIndexed);
       SET_BindSampler(exec, _mesa_BindSampler);
       SET_BindTransformFeedback(exec, _mesa_BindTransformFeedback);
+      SET_BlendEquationSeparateiARB(exec, _mesa_BlendEquationSeparateiARB);
+      SET_BlendEquationiARB(exec, _mesa_BlendEquationiARB);
+      SET_BlendFuncSeparateiARB(exec, _mesa_BlendFuncSeparateiARB);
+      SET_BlendFunciARB(exec, _mesa_BlendFunciARB);
       SET_BlitFramebuffer(exec, _mesa_BlitFramebuffer);
       SET_ClearBufferfi(exec, _mesa_ClearBufferfi);
       SET_ClearBufferfv(exec, _mesa_ClearBufferfv);
       SET_ClearBufferiv(exec, _mesa_ClearBufferiv);
       SET_ClearBufferuiv(exec, _mesa_ClearBufferuiv);
       SET_ClientWaitSync(exec, _mesa_ClientWaitSync);
+      SET_ColorMaski(exec, _mesa_ColorMaski);
       SET_CopyBufferSubData(exec, _mesa_CopyBufferSubData);
+      SET_CopyImageSubData(exec, _mesa_CopyImageSubData);
       SET_DeleteQueries(exec, _mesa_DeleteQueries);
       SET_DeleteSamplers(exec, _mesa_DeleteSamplers);
       SET_DeleteSync(exec, _mesa_DeleteSync);
       SET_DeleteTransformFeedbacks(exec, _mesa_DeleteTransformFeedbacks);
+      SET_Disablei(exec, _mesa_Disablei);
+      SET_Enablei(exec, _mesa_Enablei);
       SET_EndQuery(exec, _mesa_EndQuery);
       SET_EndTransformFeedback(exec, _mesa_EndTransformFeedback);
       SET_FenceSync(exec, _mesa_FenceSync);
@@ -354,13 +337,18 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetInteger64i_v(exec, _mesa_GetInteger64i_v);
       SET_GetInteger64v(exec, _mesa_GetInteger64v);
       SET_GetIntegeri_v(exec, _mesa_GetIntegeri_v);
+      SET_GetInternalformati64v(exec, _mesa_GetInternalformati64v);
       SET_GetInternalformativ(exec, _mesa_GetInternalformativ);
       SET_GetQueryObjectuiv(exec, _mesa_GetQueryObjectuiv);
       SET_GetQueryiv(exec, _mesa_GetQueryiv);
+      SET_GetSamplerParameterIiv(exec, _mesa_GetSamplerParameterIiv);
+      SET_GetSamplerParameterIuiv(exec, _mesa_GetSamplerParameterIuiv);
       SET_GetSamplerParameterfv(exec, _mesa_GetSamplerParameterfv);
       SET_GetSamplerParameteriv(exec, _mesa_GetSamplerParameteriv);
       SET_GetStringi(exec, _mesa_GetStringi);
       SET_GetSynciv(exec, _mesa_GetSynciv);
+      SET_GetTexParameterIiv(exec, _mesa_GetTexParameterIiv);
+      SET_GetTexParameterIuiv(exec, _mesa_GetTexParameterIuiv);
       SET_GetTransformFeedbackVarying(exec, _mesa_GetTransformFeedbackVarying);
       SET_GetUniformBlockIndex(exec, _mesa_GetUniformBlockIndex);
       SET_GetUniformIndices(exec, _mesa_GetUniformIndices);
@@ -369,10 +357,12 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetVertexAttribIuiv(exec, _mesa_GetVertexAttribIuiv);
       SET_InvalidateFramebuffer(exec, _mesa_InvalidateFramebuffer);
       SET_InvalidateSubFramebuffer(exec, _mesa_InvalidateSubFramebuffer);
+      SET_IsEnabledi(exec, _mesa_IsEnabledi);
       SET_IsQuery(exec, _mesa_IsQuery);
       SET_IsSampler(exec, _mesa_IsSampler);
       SET_IsSync(exec, _mesa_IsSync);
       SET_IsTransformFeedback(exec, _mesa_IsTransformFeedback);
+      SET_MinSampleShading(exec, _mesa_MinSampleShading);
       SET_PauseTransformFeedback(exec, _mesa_PauseTransformFeedback);
       SET_ProgramUniform1ui(exec, _mesa_ProgramUniform1ui);
       SET_ProgramUniform1uiv(exec, _mesa_ProgramUniform1uiv);
@@ -384,10 +374,14 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_ProgramUniform4uiv(exec, _mesa_ProgramUniform4uiv);
       SET_RenderbufferStorageMultisample(exec, _mesa_RenderbufferStorageMultisample);
       SET_ResumeTransformFeedback(exec, _mesa_ResumeTransformFeedback);
+      SET_SamplerParameterIiv(exec, _mesa_SamplerParameterIiv);
+      SET_SamplerParameterIuiv(exec, _mesa_SamplerParameterIuiv);
       SET_SamplerParameterf(exec, _mesa_SamplerParameterf);
       SET_SamplerParameterfv(exec, _mesa_SamplerParameterfv);
       SET_SamplerParameteri(exec, _mesa_SamplerParameteri);
       SET_SamplerParameteriv(exec, _mesa_SamplerParameteriv);
+      SET_TexParameterIiv(exec, _mesa_TexParameterIiv);
+      SET_TexParameterIuiv(exec, _mesa_TexParameterIuiv);
       SET_TexStorage2D(exec, _mesa_TexStorage2D);
       SET_TexStorage3D(exec, _mesa_TexStorage3D);
       SET_TransformFeedbackVaryings(exec, _mesa_TransformFeedbackVaryings);
@@ -436,6 +430,9 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_VertexAttribFormat(exec, _mesa_VertexAttribFormat);
       SET_VertexAttribIFormat(exec, _mesa_VertexAttribIFormat);
       SET_VertexBindingDivisor(exec, _mesa_VertexBindingDivisor);
+   }
+   if (_mesa_is_desktop_gl(ctx) || (ctx->API == API_OPENGLES2 && ctx->Version >= 32)) {
+      SET_PatchParameteri(exec, _mesa_PatchParameteri);
    }
    if (_mesa_is_desktop_gl(ctx) || ctx->API == API_OPENGLES) {
       SET_LogicOp(exec, _mesa_LogicOp);
@@ -520,6 +517,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_ObjectPtrLabel(exec, _mesa_ObjectPtrLabel);
       SET_PixelStorei(exec, _mesa_PixelStorei);
       SET_PolygonOffset(exec, _mesa_PolygonOffset);
+      SET_PolygonOffsetClampEXT(exec, _mesa_PolygonOffsetClampEXT);
       SET_PopDebugGroup(exec, _mesa_PopDebugGroup);
       SET_PushDebugGroup(exec, _mesa_PushDebugGroup);
       SET_ReadPixels(exec, _mesa_ReadPixels);
@@ -572,6 +570,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetAttachedShaders(exec, _mesa_GetAttachedShaders);
       SET_GetAttribLocation(exec, _mesa_GetAttribLocation);
       SET_GetFirstPerfQueryIdINTEL(exec, _mesa_GetFirstPerfQueryIdINTEL);
+      SET_GetGraphicsResetStatusARB(exec, _mesa_GetGraphicsResetStatusARB);
       SET_GetNextPerfQueryIdINTEL(exec, _mesa_GetNextPerfQueryIdINTEL);
       SET_GetPerfCounterInfoINTEL(exec, _mesa_GetPerfCounterInfoINTEL);
       SET_GetPerfQueryDataINTEL(exec, _mesa_GetPerfQueryDataINTEL);
@@ -592,6 +591,9 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetVertexAttribPointerv(exec, _mesa_GetVertexAttribPointerv);
       SET_GetVertexAttribfv(exec, _mesa_GetVertexAttribfv);
       SET_GetVertexAttribiv(exec, _mesa_GetVertexAttribiv);
+      SET_GetnUniformfvARB(exec, _mesa_GetnUniformfvARB);
+      SET_GetnUniformivARB(exec, _mesa_GetnUniformivARB);
+      SET_GetnUniformuivARB(exec, _mesa_GetnUniformuivARB);
       SET_IsProgram(exec, _mesa_IsProgram);
       SET_IsProgramPipeline(exec, _mesa_IsProgramPipeline);
       SET_IsShader(exec, _mesa_IsShader);
@@ -625,6 +627,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_ProgramUniformMatrix4x2fv(exec, _mesa_ProgramUniformMatrix4x2fv);
       SET_ProgramUniformMatrix4x3fv(exec, _mesa_ProgramUniformMatrix4x3fv);
       SET_ReadBuffer(exec, _mesa_ReadBuffer);
+      SET_ReadnPixelsARB(exec, _mesa_ReadnPixelsARB);
       SET_ReleaseShaderCompiler(exec, _mesa_ReleaseShaderCompiler);
       SET_ShaderBinary(exec, _mesa_ShaderBinary);
       SET_ShaderSource(exec, _mesa_ShaderSource);
@@ -1246,8 +1249,6 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_ScissorArrayv(exec, _mesa_ScissorArrayv);
       SET_ScissorIndexed(exec, _mesa_ScissorIndexed);
       SET_ScissorIndexedv(exec, _mesa_ScissorIndexedv);
-      SET_TexBuffer(exec, _mesa_TexBuffer);
-      SET_TexBufferRange(exec, _mesa_TexBufferRange);
       SET_TextureBuffer(exec, _mesa_TextureBuffer);
       SET_TextureBufferRange(exec, _mesa_TextureBufferRange);
       SET_TextureParameterIiv(exec, _mesa_TextureParameterIiv);
@@ -1308,6 +1309,8 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
    }
    if (ctx->API == API_OPENGL_CORE || (ctx->API == API_OPENGLES2 && ctx->Version >= 31)) {
       SET_FramebufferTexture(exec, _mesa_FramebufferTexture);
+      SET_TexBuffer(exec, _mesa_TexBuffer);
+      SET_TexBufferRange(exec, _mesa_TexBufferRange);
    }
 
 }

@@ -106,7 +106,7 @@ draw_llvm_texture_member(const struct lp_sampler_dynamic_state *base,
    /* context[0].textures[unit].member */
    indices[3] = lp_build_const_int32(gallivm, member_index);
 
-   ptr = LLVMBuildGEP(builder, context_ptr, indices, Elements(indices), "");
+   ptr = LLVMBuildGEP(builder, context_ptr, indices, ARRAY_SIZE(indices), "");
 
    if (emit_load)
       res = LLVMBuildLoad(builder, ptr, "");
@@ -152,7 +152,7 @@ draw_llvm_sampler_member(const struct lp_sampler_dynamic_state *base,
    /* context[0].samplers[unit].member */
    indices[3] = lp_build_const_int32(gallivm, member_index);
 
-   ptr = LLVMBuildGEP(builder, context_ptr, indices, Elements(indices), "");
+   ptr = LLVMBuildGEP(builder, context_ptr, indices, ARRAY_SIZE(indices), "");
 
    if (emit_load)
       res = LLVMBuildLoad(builder, ptr, "");
@@ -251,30 +251,16 @@ draw_llvm_sampler_soa_emit_fetch_texel(const struct lp_build_sampler_soa *base,
 static void
 draw_llvm_sampler_soa_emit_size_query(const struct lp_build_sampler_soa *base,
                                       struct gallivm_state *gallivm,
-                                      struct lp_type type,
-                                      unsigned texture_unit,
-                                      unsigned target,
-                                      LLVMValueRef context_ptr,
-                                      boolean is_sviewinfo,
-                                      enum lp_sampler_lod_property lod_property,
-                                      LLVMValueRef explicit_lod, /* optional */
-                                      LLVMValueRef *sizes_out)
+                                      const struct lp_sampler_size_query_params *params)
 {
    struct draw_llvm_sampler_soa *sampler = (struct draw_llvm_sampler_soa *)base;
 
-   assert(texture_unit < PIPE_MAX_SHADER_SAMPLER_VIEWS);
+   assert(params->texture_unit < PIPE_MAX_SHADER_SAMPLER_VIEWS);
 
    lp_build_size_query_soa(gallivm,
-                           &sampler->dynamic_state.static_state[texture_unit].texture_state,
+                           &sampler->dynamic_state.static_state[params->texture_unit].texture_state,
                            &sampler->dynamic_state.base,
-                           type,
-                           texture_unit,
-                           target,
-                           context_ptr,
-                           is_sviewinfo,
-                           lod_property,
-                           explicit_lod,
-                           sizes_out);
+                           params);
 }
 
 struct lp_build_sampler_soa *

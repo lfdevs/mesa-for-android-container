@@ -79,7 +79,7 @@ emit_vertexbufs(struct fd_context *ctx)
 	fd2_emit_vertex_bufs(ctx->ring, 0x78, bufs, vtx->num_elements);
 }
 
-static void
+static bool
 fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 {
 	struct fd_ringbuffer *ring = ctx->ring;
@@ -115,6 +115,8 @@ fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 	OUT_RING(ring, 0x00000000);
 
 	emit_cacheflush(ring);
+
+	return true;
 }
 
 

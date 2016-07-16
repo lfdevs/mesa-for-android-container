@@ -615,6 +615,7 @@ close_display_callback(Display *dpy, XExtCodes *codes)
 {
    xmesa_destroy_buffers_on_display(dpy);
    destroy_visuals_on_display(dpy);
+   xmesa_close_display(dpy);
    return 0;
 }
 

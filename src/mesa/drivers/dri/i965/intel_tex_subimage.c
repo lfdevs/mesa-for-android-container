@@ -119,8 +119,7 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
    if (ctx->_ImageTransferState)
       return false;
 
-   if (!intel_get_memcpy(texImage->TexFormat, format, type, &mem_copy, &cpp,
-                         INTEL_UPLOAD))
+   if (!intel_get_memcpy(texImage->TexFormat, format, type, &mem_copy, &cpp))
       return false;
 
    /* If this is a nontrivial texture view, let another path handle it instead. */
@@ -214,7 +213,7 @@ intelTexSubImage(struct gl_context * ctx,
    ok = _mesa_meta_pbo_TexSubImage(ctx, dims, texImage,
                                    xoffset, yoffset, zoffset,
                                    width, height, depth, format, type,
-                                   pixels, false, tex_busy, packing);
+                                   pixels, tex_busy, packing);
    if (ok)
       return;
 

@@ -62,7 +62,7 @@ vc4_nir_get_dst_color(nir_builder *b, int sample)
         load->num_components = 1;
         load->const_index[0] = VC4_NIR_TLB_COLOR_READ_INPUT + sample;
         load->src[0] = nir_src_for_ssa(nir_imm_int(b, 0));
-        nir_ssa_dest_init(&load->instr, &load->dest, 1, NULL);
+        nir_ssa_dest_init(&load->instr, &load->dest, 1, 32, NULL);
         nir_builder_instr_insert(b, &load->instr);
         return &load->dest.ssa;
 }
@@ -627,7 +627,7 @@ vc4_nir_lower_blend_instr(struct vc4_compile *c, nir_builder *b,
                         nir_intrinsic_instr_create(b->shader,
                                                    nir_intrinsic_load_sample_mask_in);
                 load->num_components = 1;
-                nir_ssa_dest_init(&load->instr, &load->dest, 1, NULL);
+                nir_ssa_dest_init(&load->instr, &load->dest, 1, 32, NULL);
                 nir_builder_instr_insert(b, &load->instr);
 
                 nir_ssa_def *bitmask = &load->dest.ssa;
@@ -674,11 +674,9 @@ vc4_nir_lower_blend_instr(struct vc4_compile *c, nir_builder *b,
 }
 
 static bool
-vc4_nir_lower_blend_block(nir_block *block, void *state)
+vc4_nir_lower_blend_block(nir_block *block, struct vc4_compile *c)
 {
-        struct vc4_compile *c = state;
-
-        nir_foreach_instr_safe(block, instr) {
+        nir_foreach_instr_safe(instr, block) {
                 if (instr->type != nir_instr_type_intrinsic)
                         continue;
                 nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
@@ -710,12 +708,13 @@ vc4_nir_lower_blend_block(nir_block *block, void *state)
 }
 
 void
-vc4_nir_lower_blend(struct vc4_compile *c)
+vc4_nir_lower_blend(nir_shader *s, struct vc4_compile *c)
 {
-        nir_foreach_function(c->s, function) {
+        nir_foreach_function(function, s) {
                 if (function->impl) {
-                        nir_foreach_block(function->impl,
-                                          vc4_nir_lower_blend_block, c);
+                        nir_foreach_block(block, function->impl) {
+                                vc4_nir_lower_blend_block(block, c);
+                        }
 
                         nir_metadata_preserve(function->impl,
                                               nir_metadata_block_index |

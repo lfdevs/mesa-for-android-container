@@ -83,6 +83,13 @@ LOCAL_CPPFLAGS += \
 	-Wno-error=non-virtual-dtor \
 	-Wno-non-virtual-dtor
 
+ifeq ($(MESA_LOLLIPOP_BUILD),true)
+  LOCAL_CFLAGS_32 += -DDEFAULT_DRIVER_DIR=\"/system/lib/$(MESA_DRI_MODULE_REL_PATH)\"
+  LOCAL_CFLAGS_64 += -DDEFAULT_DRIVER_DIR=\"/system/lib64/$(MESA_DRI_MODULE_REL_PATH)\"
+else
+  LOCAL_CFLAGS += -DDEFAULT_DRIVER_DIR=\"/system/lib/$(MESA_DRI_MODULE_REL_PATH)\"
+endif
+
 # uncomment to keep the debug symbols
 #LOCAL_STRIP_MODULE := false
 

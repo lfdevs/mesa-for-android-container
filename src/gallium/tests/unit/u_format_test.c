@@ -693,6 +693,10 @@ test_all(void)
          continue;
       }
 
+      assert(format_desc->block.bits   <= UTIL_FORMAT_MAX_PACKED_BYTES * 8);
+      assert(format_desc->block.height <= UTIL_FORMAT_MAX_UNPACKED_HEIGHT);
+      assert(format_desc->block.width  <= UTIL_FORMAT_MAX_UNPACKED_WIDTH);
+
       if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC &&
           !util_format_s3tc_enabled) {
          continue;

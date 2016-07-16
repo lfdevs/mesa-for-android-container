@@ -115,28 +115,29 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_EGL_PLATFORM_X11_TRUE@am__append_1 = -DHAVE_X11_PLATFORM \
-@HAVE_EGL_PLATFORM_X11_TRUE@	$(XCB_DRI2_CFLAGS)
-@HAVE_EGL_PLATFORM_X11_TRUE@am__append_2 = $(XCB_DRI2_LIBS)
-@HAVE_EGL_PLATFORM_X11_TRUE@am__append_3 = drivers/dri2/platform_x11.c
-@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@am__append_4 = \
-@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11_dri3.c \
-@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11_dri3.h
+@HAVE_PLATFORM_X11_TRUE@am__append_1 = -DHAVE_X11_PLATFORM \
+@HAVE_PLATFORM_X11_TRUE@	$(XCB_DRI2_CFLAGS)
+@HAVE_PLATFORM_X11_TRUE@am__append_2 = $(XCB_DRI2_LIBS)
+@HAVE_PLATFORM_X11_TRUE@am__append_3 = drivers/dri2/platform_x11.c
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_4 = \
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11_dri3.c \
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11_dri3.h
 
-@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@am__append_5 = $(top_builddir)/src/loader/libloader_dri3_helper.la
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_6 =  \
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@	-DHAVE_WAYLAND_PLATFORM \
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS)
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_7 = $(WAYLAND_LIBS) \
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(LIBDRM_LIBS) \
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_8 = drivers/dri2/platform_wayland.c
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_5 = $(top_builddir)/src/loader/libloader_dri3_helper.la
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = -DHAVE_WAYLAND_PLATFORM \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_7 = $(WAYLAND_LIBS) \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(LIBDRM_LIBS) \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = drivers/dri2/platform_wayland.c
 @HAVE_EGL_PLATFORM_DRM_TRUE@am__append_9 = -DHAVE_DRM_PLATFORM
 @HAVE_EGL_PLATFORM_DRM_TRUE@am__append_10 = $(top_builddir)/src/gbm/libgbm.la
 @HAVE_EGL_PLATFORM_DRM_TRUE@am__append_11 = drivers/dri2/platform_drm.c
 @HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__append_12 = -DHAVE_SURFACELESS_PLATFORM
 @HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__append_13 = drivers/dri2/platform_surfaceless.c
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_14 = \
+@HAVE_EGL_PLATFORM_ANDROID_TRUE@am__append_14 = -DHAVE_ANDROID_PLATFORM
+@HAVE_EGL_PLATFORM_ANDROID_TRUE@am__append_15 = drivers/dri2/platform_android.c
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_16 = \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-I$(top_srcdir)/src/loader \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-I$(top_srcdir)/src/egl/drivers/dri2 \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-I$(top_srcdir)/src/gbm/backends/dri \
@@ -146,13 +147,14 @@ target_triplet = @target@
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-D_EGL_BUILT_IN_DRIVER_DRI2
 
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_15 = \
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_17 = \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(dri2_backend_core_FILES) \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(dri2_backend_FILES) \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(dri3_backend_FILES)
 
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_16 = $(top_builddir)/src/loader/libloader.la \
-@HAVE_EGL_DRIVER_DRI2_TRUE@	$(DLOPEN_LIBS) $(LIBDRM_LIBS)
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_18 = $(top_builddir)/src/loader/libloader.la \
+@HAVE_EGL_DRIVER_DRI2_TRUE@	$(DLOPEN_LIBS) $(LIBDRM_LIBS) \
+@HAVE_EGL_DRIVER_DRI2_TRUE@	$(CLOCK_LIB)
 subdir = src/egl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -203,13 +205,13 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" \
 	"$(DESTDIR)$(egldir)" "$(DESTDIR)$(khrdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-@HAVE_EGL_PLATFORM_X11_TRUE@am__DEPENDENCIES_2 =  \
-@HAVE_EGL_PLATFORM_X11_TRUE@	$(am__DEPENDENCIES_1)
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_3 =  \
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
+@HAVE_PLATFORM_X11_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_3 =  \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
 @HAVE_EGL_DRIVER_DRI2_TRUE@am__DEPENDENCIES_4 = $(top_builddir)/src/loader/libloader.la \
+@HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__DEPENDENCIES_1)
 libEGL_la_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
@@ -229,6 +231,7 @@ am__libEGL_la_SOURCES_DIST = main/eglapi.c main/eglapi.h \
 	drivers/dri2/platform_x11.c drivers/dri2/platform_wayland.c \
 	drivers/dri2/platform_drm.c \
 	drivers/dri2/platform_surfaceless.c \
+	drivers/dri2/platform_android.c \
 	drivers/dri2/platform_x11_dri3.c \
 	drivers/dri2/platform_x11_dri3.h
 am__dirstamp = $(am__leading_dot)dirstamp
@@ -238,19 +241,20 @@ am__objects_1 = main/eglapi.lo main/eglarray.lo main/eglconfig.lo \
 	main/eglimage.lo main/egllog.lo main/eglsurface.lo \
 	main/eglsync.lo
 am__objects_2 = drivers/dri2/egl_dri2.lo
-@HAVE_EGL_PLATFORM_X11_TRUE@am__objects_3 =  \
-@HAVE_EGL_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11.lo
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__objects_4 = drivers/dri2/platform_wayland.lo
+@HAVE_PLATFORM_X11_TRUE@am__objects_3 = drivers/dri2/platform_x11.lo
+@HAVE_PLATFORM_WAYLAND_TRUE@am__objects_4 =  \
+@HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/platform_wayland.lo
 @HAVE_EGL_PLATFORM_DRM_TRUE@am__objects_5 =  \
 @HAVE_EGL_PLATFORM_DRM_TRUE@	drivers/dri2/platform_drm.lo
 @HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__objects_6 = drivers/dri2/platform_surfaceless.lo
-am__objects_7 = $(am__objects_3) $(am__objects_4) $(am__objects_5) \
-	$(am__objects_6)
-@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@am__objects_8 = drivers/dri2/platform_x11_dri3.lo
-am__objects_9 = $(am__objects_8)
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__objects_10 = $(am__objects_2) \
-@HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__objects_7) $(am__objects_9)
-am_libEGL_la_OBJECTS = $(am__objects_1) $(am__objects_10)
+@HAVE_EGL_PLATFORM_ANDROID_TRUE@am__objects_7 = drivers/dri2/platform_android.lo
+am__objects_8 = $(am__objects_3) $(am__objects_4) $(am__objects_5) \
+	$(am__objects_6) $(am__objects_7)
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__objects_9 = drivers/dri2/platform_x11_dri3.lo
+am__objects_10 = $(am__objects_9)
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__objects_11 = $(am__objects_2) \
+@HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__objects_8) $(am__objects_10)
+am_libEGL_la_OBJECTS = $(am__objects_1) $(am__objects_11)
 libEGL_la_OBJECTS = $(am_libEGL_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -570,6 +574,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -668,6 +674,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -688,6 +696,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -704,6 +715,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -829,11 +841,11 @@ AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/egl/main \
 	$(VISIBILITY_CFLAGS) $(LIBDRM_CFLAGS) $(EGL_CFLAGS) \
 	-D_EGL_NATIVE_PLATFORM=$(EGL_NATIVE_PLATFORM) $(am__append_1) \
 	$(am__append_6) $(am__append_9) $(am__append_12) \
-	$(am__append_14)
+	$(am__append_14) $(am__append_16)
 lib_LTLIBRARIES = libEGL.la
-libEGL_la_SOURCES = $(LIBEGL_C_FILES) $(am__append_15)
+libEGL_la_SOURCES = $(LIBEGL_C_FILES) $(am__append_17)
 libEGL_la_LIBADD = $(EGL_LIB_DEPS) $(am__append_2) $(am__append_5) \
-	$(am__append_7) $(am__append_10) $(am__append_16)
+	$(am__append_7) $(am__append_10) $(am__append_18)
 libEGL_la_LDFLAGS = \
 	-no-undefined \
 	-version-number 1:0 \
@@ -842,7 +854,7 @@ libEGL_la_LDFLAGS = \
 	$(LD_NO_UNDEFINED)
 
 dri2_backend_FILES = $(am__append_3) $(am__append_8) $(am__append_11) \
-	$(am__append_13)
+	$(am__append_13) $(am__append_15)
 dri3_backend_FILES = $(am__append_4)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = main/egl.pc
@@ -975,6 +987,8 @@ drivers/dri2/platform_drm.lo: drivers/dri2/$(am__dirstamp) \
 	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
 drivers/dri2/platform_surfaceless.lo: drivers/dri2/$(am__dirstamp) \
 	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
+drivers/dri2/platform_android.lo: drivers/dri2/$(am__dirstamp) \
+	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
 drivers/dri2/platform_x11_dri3.lo: drivers/dri2/$(am__dirstamp) \
 	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
 
@@ -992,6 +1006,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/egl_dri2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_android.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_drm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_surfaceless.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_wayland.Plo@am__quote@

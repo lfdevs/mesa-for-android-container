@@ -187,18 +187,23 @@ target_triplet = @target@
 @HAVE_GALLIUM_LLVMPIPE_TRUE@am__append_40 = \
 @HAVE_GALLIUM_LLVMPIPE_TRUE@	$(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la
 
-@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_41 = target.c
-@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_42 = \
+@HAVE_GALLIUM_SWR_TRUE@am__append_41 = swrast
+@HAVE_GALLIUM_SWR_TRUE@am__append_42 = -DGALLIUM_SWR
+@HAVE_GALLIUM_SWR_TRUE@am__append_43 = \
+@HAVE_GALLIUM_SWR_TRUE@	$(top_builddir)/src/gallium/drivers/swr/libmesaswr.la
+
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_44 = target.c
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_45 = \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_static.la \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(TARGET_LIB_DEPS) \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
-@HAVE_GALLIUM_STATIC_TARGETS_FALSE@am__append_43 = \
+@HAVE_GALLIUM_STATIC_TARGETS_FALSE@am__append_46 = \
 @HAVE_GALLIUM_STATIC_TARGETS_FALSE@	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_dynamic.la
 
-@HAVE_MESA_LLVM_TRUE@am__append_44 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_45 = $(LLVM_LDFLAGS)
+@HAVE_MESA_LLVM_TRUE@am__append_47 = $(LLVM_LIBS)
+@HAVE_MESA_LLVM_TRUE@am__append_48 = $(LLVM_LDFLAGS)
 subdir = src/gallium/targets/dri
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -292,7 +297,8 @@ am__DEPENDENCIES_14 = $(am__DEPENDENCIES_5) $(am__DEPENDENCIES_6) \
 	$(am__DEPENDENCIES_7) $(am__DEPENDENCIES_8) \
 	$(am__DEPENDENCIES_9) $(am__DEPENDENCIES_10) \
 	$(am__DEPENDENCIES_11) $(am__DEPENDENCIES_12) $(am__append_31) \
-	$(am__DEPENDENCIES_13) $(am__append_37) $(am__append_40)
+	$(am__DEPENDENCIES_13) $(am__append_37) $(am__append_40) \
+	$(am__append_43)
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_15 = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_static.la \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_4) \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_14) \
@@ -312,7 +318,7 @@ gallium_dri_la_DEPENDENCIES =  \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
-	$(am__DEPENDENCIES_15) $(am__append_43) $(am__DEPENDENCIES_16)
+	$(am__DEPENDENCIES_15) $(am__append_46) $(am__DEPENDENCIES_16)
 am__gallium_dri_la_SOURCES_DIST = target.c
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__objects_1 =  \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	gallium_dri_la-target.lo
@@ -417,6 +423,7 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/bin/depcomp \
 	$(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc \
 	$(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc \
 	$(top_srcdir)/src/gallium/drivers/svga/Automake.inc \
+	$(top_srcdir)/src/gallium/drivers/swr/Automake.inc \
 	$(top_srcdir)/src/gallium/drivers/vc4/Automake.inc \
 	$(top_srcdir)/src/gallium/drivers/virgl/Automake.inc
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -488,6 +495,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -586,6 +595,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -606,6 +617,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -622,6 +636,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -790,10 +805,10 @@ AM_CPPFLAGS = \
 dridir = $(DRI_DRIVER_INSTALL_DIR)
 dri_LTLIBRARIES = gallium_dri.la
 nodist_EXTRA_gallium_dri_la_SOURCES = dummy.cpp
-gallium_dri_la_SOURCES = $(am__append_41)
+gallium_dri_la_SOURCES = $(am__append_44)
 gallium_dri_la_LDFLAGS = -shared -shrext .so -module -avoid-version \
 	$(GC_SECTIONS) $(am__append_3) $(am__append_4) \
-	$(am__append_45)
+	$(am__append_48)
 gallium_dri_la_LIBADD = $(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
 	$(top_builddir)/src/mesa/drivers/dri/common/libmegadriver_stub.la \
@@ -805,8 +820,8 @@ gallium_dri_la_LIBADD = $(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(SELINUX_LIBS) $(EXPAT_LIBS) $(LIBDRM_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_42) $(am__append_43) \
-	$(am__append_44)
+	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_45) $(am__append_46) \
+	$(am__append_47)
 EXTRA_gallium_dri_la_DEPENDENCIES = \
 	dri.sym \
 	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
@@ -819,15 +834,18 @@ EXTRA_DIST = \
 TARGET_DRIVERS = $(am__append_5) $(am__append_8) $(am__append_11) \
 	$(am__append_14) $(am__append_17) $(am__append_20) \
 	$(am__append_23) $(am__append_26) $(am__append_29) \
-	$(am__append_32) $(am__append_35) $(am__append_38)
+	$(am__append_32) $(am__append_35) $(am__append_38) \
+	$(am__append_41)
 TARGET_CPPFLAGS = $(am__append_6) $(am__append_9) $(am__append_12) \
 	$(am__append_15) $(am__append_18) $(am__append_21) \
 	$(am__append_24) $(am__append_27) $(am__append_30) \
-	$(am__append_33) $(am__append_36) $(am__append_39)
+	$(am__append_33) $(am__append_36) $(am__append_39) \
+	$(am__append_42)
 TARGET_LIB_DEPS = $(am__append_7) $(am__append_10) $(am__append_13) \
 	$(am__append_16) $(am__append_19) $(am__append_22) \
 	$(am__append_25) $(am__append_28) $(am__append_31) \
-	$(am__append_34) $(am__append_37) $(am__append_40)
+	$(am__append_34) $(am__append_37) $(am__append_40) \
+	$(am__append_43)
 @HAVE_GALLIUM_R300_TRUE@TARGET_RADEON_WINSYS = \
 @HAVE_GALLIUM_R300_TRUE@	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la
 
@@ -849,7 +867,7 @@ all: all-am
 
 .SUFFIXES:
 .SUFFIXES: .c .cpp .lo .o .obj
-$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(top_srcdir)/src/gallium/Automake.inc $(top_srcdir)/src/gallium/drivers/i915/Automake.inc $(top_srcdir)/src/gallium/drivers/ilo/Automake.inc $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc $(top_srcdir)/src/gallium/drivers/r300/Automake.inc $(top_srcdir)/src/gallium/drivers/r600/Automake.inc $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc $(top_srcdir)/src/gallium/drivers/svga/Automake.inc $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc $(top_srcdir)/src/gallium/drivers/virgl/Automake.inc $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc $(am__configure_deps)
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(top_srcdir)/src/gallium/Automake.inc $(top_srcdir)/src/gallium/drivers/i915/Automake.inc $(top_srcdir)/src/gallium/drivers/ilo/Automake.inc $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc $(top_srcdir)/src/gallium/drivers/r300/Automake.inc $(top_srcdir)/src/gallium/drivers/r600/Automake.inc $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc $(top_srcdir)/src/gallium/drivers/svga/Automake.inc $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc $(top_srcdir)/src/gallium/drivers/virgl/Automake.inc $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc $(top_srcdir)/src/gallium/drivers/swr/Automake.inc $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -869,7 +887,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe);; \
 	esac;
-$(top_srcdir)/src/gallium/Automake.inc $(top_srcdir)/src/gallium/drivers/i915/Automake.inc $(top_srcdir)/src/gallium/drivers/ilo/Automake.inc $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc $(top_srcdir)/src/gallium/drivers/r300/Automake.inc $(top_srcdir)/src/gallium/drivers/r600/Automake.inc $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc $(top_srcdir)/src/gallium/drivers/svga/Automake.inc $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc $(top_srcdir)/src/gallium/drivers/virgl/Automake.inc $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc $(am__empty):
+$(top_srcdir)/src/gallium/Automake.inc $(top_srcdir)/src/gallium/drivers/i915/Automake.inc $(top_srcdir)/src/gallium/drivers/ilo/Automake.inc $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc $(top_srcdir)/src/gallium/drivers/r300/Automake.inc $(top_srcdir)/src/gallium/drivers/r600/Automake.inc $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc $(top_srcdir)/src/gallium/drivers/svga/Automake.inc $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc $(top_srcdir)/src/gallium/drivers/virgl/Automake.inc $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc $(top_srcdir)/src/gallium/drivers/swr/Automake.inc $(am__empty):
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh

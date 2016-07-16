@@ -319,7 +319,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
                        struct pipe_debug_callback *debug)
 {
    struct nv50_ir_prog_info *info;
-   int ret;
+   int i, ret;
    const uint8_t map_undef = (prog->type == PIPE_SHADER_VERTEX) ? 0x40 : 0x80;
 
    info = CALLOC_STRUCT(nv50_ir_prog_info);
@@ -335,7 +335,6 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    info->io.ucpBase = NV50_CB_AUX_UCP_OFFSET;
    info->io.genUserClip = prog->vp.clpd_nr;
 
-   info->io.resInfoCBSlot = 15;
    info->io.suInfoBase = NV50_CB_AUX_TEX_MS_OFFSET;
    info->io.sampleInfoBase = NV50_CB_AUX_SAMPLE_OFFSET;
    info->io.msInfoCBSlot = 15;
@@ -373,11 +372,18 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    prog->code = info->bin.code;
    prog->code_size = info->bin.codeSize;
    prog->fixups = info->bin.relocData;
-   prog->interps = info->bin.interpData;
+   prog->interps = info->bin.fixupData;
    prog->max_gpr = MAX2(4, (info->bin.maxGPR >> 1) + 1);
    prog->tls_space = info->bin.tlsSpace;
 
    prog->vp.need_vertex_id = info->io.vertexId < PIPE_MAX_SHADER_INPUTS;
+
+   prog->vp.clip_enable = (1 << info->io.clipDistances) - 1;
+   prog->vp.cull_enable =
+      ((1 << info->io.cullDistances) - 1) << info->io.clipDistances;
+   prog->vp.clip_mode = 0;
+   for (i = 0; i < info->io.cullDistances; ++i)
+      prog->vp.clip_mode |= 1 << ((info->io.clipDistances + i) * 4);
 
    if (prog->type == PIPE_SHADER_FRAGMENT) {
       if (info->prop.fp.writesDepth) {
@@ -401,7 +407,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
          prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_POINTS;
          break;
       }
-      prog->gp.vert_count = info->prop.gp.maxVertices;
+      prog->gp.vert_count = CLAMP(info->prop.gp.maxVertices, 1, 1024);
    }
 
    if (prog->type == PIPE_SHADER_COMPUTE) {
@@ -480,9 +486,9 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
    if (prog->fixups)
       nv50_ir_relocate_code(prog->fixups, prog->code, prog->code_base, 0, 0);
    if (prog->interps)
-      nv50_ir_change_interp(prog->interps, prog->code,
-                            prog->fp.force_persample_interp,
-                            false /* flatshade */);
+      nv50_ir_apply_fixups(prog->interps, prog->code,
+                           prog->fp.force_persample_interp,
+                           false /* flatshade */);
 
    nv50_sifc_linear_u8(&nv50->base, nv50->screen->code,
                        (prog_type << NV50_CODE_BO_SIZE_LOG2) + prog->code_base,

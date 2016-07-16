@@ -110,6 +110,8 @@ NineResource9_ctor( struct NineResource9 *This,
 void
 NineResource9_dtor( struct NineResource9 *This )
 {
+    DBG("This=%p\n", This);
+
     if (This->pdata) {
         util_hash_table_foreach(This->pdata, ht_guid_delete, NULL);
         util_hash_table_destroy(This->pdata);

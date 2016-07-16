@@ -55,6 +55,8 @@ const uint8_t Target::operationSrcNr[] =
    2, 2, 2, 2, 3, 2,       // VADD, VAVG, VMIN, VMAX, VSAD, VSET,
    2, 2, 2, 1,             // VSHR, VSHL, VSEL, CCTL
    3,                      // SHFL
+   1,                      // VOTE
+   1,                      // BUFQ
    0
 };
 
@@ -129,6 +131,10 @@ const OpClass Target::operationClass[] =
    OPCLASS_VECTOR, OPCLASS_CONTROL,
    // SHFL
    OPCLASS_OTHER,
+   // VOTE
+   OPCLASS_OTHER,
+   // BUFQ
+   OPCLASS_OTHER,
    OPCLASS_PSEUDO // LAST
 };
 
@@ -139,8 +145,8 @@ extern Target *getTargetNV50(unsigned int chipset);
 
 Target *Target::create(unsigned int chipset)
 {
-   STATIC_ASSERT(Elements(operationSrcNr) == OP_LAST + 1);
-   STATIC_ASSERT(Elements(operationClass) == OP_LAST + 1);
+   STATIC_ASSERT(ARRAY_SIZE(operationSrcNr) == OP_LAST + 1);
+   STATIC_ASSERT(ARRAY_SIZE(operationClass) == OP_LAST + 1);
    switch (chipset & ~0xf) {
    case 0x110:
    case 0x120:
@@ -167,7 +173,7 @@ void Target::destroy(Target *targ)
    delete targ;
 }
 
-CodeEmitter::CodeEmitter(const Target *target) : targ(target), interpInfo(NULL)
+CodeEmitter::CodeEmitter(const Target *target) : targ(target), fixupInfo(NULL)
 {
 }
 
@@ -391,7 +397,7 @@ Program::emitBinary(struct nv50_ir_prog_info *info)
       }
    }
    info->bin.relocData = emit->getRelocInfo();
-   info->bin.interpData = emit->getInterpInfo();
+   info->bin.fixupData = emit->getFixupInfo();
 
    emitSymbolTable(info);
 
@@ -433,24 +439,23 @@ CodeEmitter::addReloc(RelocEntry::Type ty, int w, uint32_t data, uint32_t m,
 }
 
 bool
-CodeEmitter::addInterp(int ipa, int reg, InterpApply apply)
+CodeEmitter::addInterp(int ipa, int reg, FixupApply apply)
 {
-   unsigned int n = interpInfo ? interpInfo->count : 0;
+   unsigned int n = fixupInfo ? fixupInfo->count : 0;
 
    if (!(n % RELOC_ALLOC_INCREMENT)) {
-      size_t size = sizeof(InterpInfo) + n * sizeof(InterpEntry);
-      interpInfo = reinterpret_cast<InterpInfo *>(
-         REALLOC(interpInfo, n ? size : 0,
-                 size + RELOC_ALLOC_INCREMENT * sizeof(InterpEntry)));
-      if (!interpInfo)
+      size_t size = sizeof(FixupInfo) + n * sizeof(FixupEntry);
+      fixupInfo = reinterpret_cast<FixupInfo *>(
+         REALLOC(fixupInfo, n ? size : 0,
+                 size + RELOC_ALLOC_INCREMENT * sizeof(FixupEntry)));
+      if (!fixupInfo)
          return false;
       if (n == 0)
-         memset(interpInfo, 0, sizeof(InterpInfo));
+         memset(fixupInfo, 0, sizeof(FixupInfo));
    }
-   ++interpInfo->count;
+   ++fixupInfo->count;
 
-   interpInfo->entry[n] = InterpEntry(ipa, reg, codeSize >> 2);
-   interpInfo->apply = apply;
+   fixupInfo->entry[n] = FixupEntry(apply, ipa, reg, codeSize >> 2);
 
    return true;
 }
@@ -499,16 +504,17 @@ nv50_ir_relocate_code(void *relocData, uint32_t *code,
 }
 
 void
-nv50_ir_change_interp(void *interpData, uint32_t *code,
-                      bool force_persample_interp, bool flatshade)
+nv50_ir_apply_fixups(void *fixupData, uint32_t *code,
+                     bool force_persample_interp, bool flatshade)
 {
-   nv50_ir::InterpInfo *info = reinterpret_cast<nv50_ir::InterpInfo *>(
-      interpData);
+   nv50_ir::FixupInfo *info = reinterpret_cast<nv50_ir::FixupInfo *>(
+      fixupData);
 
    // force_persample_interp: all non-flat -> per-sample
    // flatshade: all color -> flat
+   nv50_ir::FixupData data(force_persample_interp, flatshade);
    for (unsigned i = 0; i < info->count; ++i)
-      info->apply(&info->entry[i], code, force_persample_interp, flatshade);
+      info->entry[i].apply(&info->entry[i], code, data);
 }
 
 void

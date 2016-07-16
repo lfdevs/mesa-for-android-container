@@ -23,9 +23,7 @@
 #include <gtest/gtest.h>
 #include <string.h>
 
-extern "C" {
 #include "glxclient.h"
-}
 
 #include <xcb/glx.h>
 

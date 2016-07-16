@@ -123,7 +123,8 @@ fd4_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 
 static void
 emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		enum adreno_state_block sb, struct fd_texture_stateobj *tex)
+		enum adreno_state_block sb, struct fd_texture_stateobj *tex,
+		const struct ir3_shader_variant *v)
 {
 	static const uint32_t bcolor_reg[] = {
 			[SB_VERT_TEX] = REG_A4XX_TPL1_TP_VS_BORDER_COLOR_BASE_ADDR,
@@ -174,12 +175,14 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	}
 
 	if (tex->num_textures > 0) {
+		unsigned num_textures = tex->num_textures + v->astc_srgb.count;
+
 		/* emit texture state: */
-		OUT_PKT3(ring, CP_LOAD_STATE, 2 + (8 * tex->num_textures));
+		OUT_PKT3(ring, CP_LOAD_STATE, 2 + (8 * num_textures));
 		OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
 				CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
 				CP_LOAD_STATE_0_STATE_BLOCK(sb) |
-				CP_LOAD_STATE_0_NUM_UNIT(tex->num_textures));
+				CP_LOAD_STATE_0_NUM_UNIT(num_textures));
 		OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
 				CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
 		for (i = 0; i < tex->num_textures; i++) {
@@ -202,6 +205,34 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			OUT_RING(ring, 0x00000000);
 			OUT_RING(ring, 0x00000000);
 		}
+
+		for (i = 0; i < v->astc_srgb.count; i++) {
+			static const struct fd4_pipe_sampler_view dummy_view = {};
+			const struct fd4_pipe_sampler_view *view;
+			unsigned idx = v->astc_srgb.orig_idx[i];
+
+			view = tex->textures[idx] ?
+					fd4_pipe_sampler_view(tex->textures[idx]) :
+					&dummy_view;
+
+			debug_assert(view->texconst0 & A4XX_TEX_CONST_0_SRGB);
+
+			OUT_RING(ring, view->texconst0 & ~A4XX_TEX_CONST_0_SRGB);
+			OUT_RING(ring, view->texconst1);
+			OUT_RING(ring, view->texconst2);
+			OUT_RING(ring, view->texconst3);
+			if (view->base.texture) {
+				struct fd_resource *rsc = fd_resource(view->base.texture);
+				OUT_RELOC(ring, rsc->bo, view->offset, view->texconst4, 0);
+			} else {
+				OUT_RING(ring, 0x00000000);
+			}
+			OUT_RING(ring, 0x00000000);
+			OUT_RING(ring, 0x00000000);
+			OUT_RING(ring, 0x00000000);
+		}
+	} else {
+		debug_assert(v->astc_srgb.count == 0);
 	}
 
 	OUT_PKT0(ring, bcolor_reg[sb], 1);
@@ -253,10 +284,6 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 	for (i = 0; i < nr_bufs; i++) {
 		if (bufs[i]) {
 			struct fd_resource *rsc = fd_resource(bufs[i]->texture);
-			/* note: PIPE_BUFFER disallowed for surfaces */
-			unsigned lvl = bufs[i]->u.tex.level;
-			struct fd_resource_slice *slice = fd_resource_slice(rsc, lvl);
-			uint32_t offset = fd_resource_offset(rsc, lvl, bufs[i]->u.tex.first_layer);
 			enum pipe_format format = fd4_gmem_restore_format(bufs[i]->format);
 
 			/* The restore blit_zs shader expects stencil in sampler 0,
@@ -266,6 +293,11 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 				rsc = rsc->stencil;
 				format = fd4_gmem_restore_format(rsc->base.b.format);
 			}
+
+			/* note: PIPE_BUFFER disallowed for surfaces */
+			unsigned lvl = bufs[i]->u.tex.level;
+			struct fd_resource_slice *slice = fd_resource_slice(rsc, lvl);
+			unsigned offset = fd_resource_offset(rsc, lvl, bufs[i]->u.tex.first_layer);
 
 			/* z32 restore is accomplished using depth write.  If there is
 			 * no stencil component (ie. PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
@@ -282,8 +314,8 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 
 			OUT_RING(ring, A4XX_TEX_CONST_0_FMT(fd4_pipe2tex(format)) |
 					A4XX_TEX_CONST_0_TYPE(A4XX_TEX_2D) |
-					fd4_tex_swiz(format,  PIPE_SWIZZLE_RED, PIPE_SWIZZLE_GREEN,
-							PIPE_SWIZZLE_BLUE, PIPE_SWIZZLE_ALPHA));
+					fd4_tex_swiz(format,  PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y,
+							PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W));
 			OUT_RING(ring, A4XX_TEX_CONST_1_WIDTH(bufs[i]->width) |
 					A4XX_TEX_CONST_1_HEIGHT(bufs[i]->height));
 			OUT_RING(ring, A4XX_TEX_CONST_2_PITCH(slice->pitch * rsc->cpp) |
@@ -328,7 +360,7 @@ fd4_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 	int32_t i, j, last = -1;
 	uint32_t total_in = 0;
 	const struct fd_vertex_state *vtx = emit->vtx;
-	struct ir3_shader_variant *vp = fd4_emit_get_vp(emit);
+	const struct ir3_shader_variant *vp = fd4_emit_get_vp(emit);
 	unsigned vertex_regid = regid(63, 0);
 	unsigned instance_regid = regid(63, 0);
 	unsigned vtxcnt_regid = regid(63, 0);
@@ -460,8 +492,8 @@ void
 fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd4_emit *emit)
 {
-	struct ir3_shader_variant *vp = fd4_emit_get_vp(emit);
-	struct ir3_shader_variant *fp = fd4_emit_get_fp(emit);
+	const struct ir3_shader_variant *vp = fd4_emit_get_vp(emit);
+	const struct ir3_shader_variant *fp = fd4_emit_get_fp(emit);
 	uint32_t dirty = emit->dirty;
 
 	emit_marker(ring, 5);
@@ -483,19 +515,6 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				A4XX_RB_RENDER_COMPONENTS_RT5(mrt_comp[5]) |
 				A4XX_RB_RENDER_COMPONENTS_RT6(mrt_comp[6]) |
 				A4XX_RB_RENDER_COMPONENTS_RT7(mrt_comp[7]));
-	}
-
-	if ((dirty & (FD_DIRTY_ZSA | FD_DIRTY_PROG)) && !emit->key.binning_pass) {
-		uint32_t val = fd4_zsa_stateobj(ctx->zsa)->rb_render_control;
-
-		/* I suppose if we needed to (which I don't *think* we need
-		 * to), we could emit this for binning pass too.  But we
-		 * would need to keep a different patch-list for binning
-		 * vs render pass.
-		 */
-
-		OUT_PKT0(ring, REG_A4XX_RB_RENDER_CONTROL, 1);
-		OUT_RINGP(ring, val, &fd4_context(ctx)->rbrc_patches);
 	}
 
 	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_FRAMEBUFFER)) {
@@ -619,15 +638,17 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	if (dirty & (FD_DIRTY_PROG | FD_DIRTY_FRAMEBUFFER)) {
 		struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
-		fd4_program_emit(ring, emit, pfb->nr_cbufs, pfb->cbufs);
+		unsigned n = pfb->nr_cbufs;
+		/* if we have depth/stencil, we need at least on MRT: */
+		if (pfb->zsbuf)
+			n = MAX2(1, n);
+		fd4_program_emit(ring, emit, n, pfb->cbufs);
 	}
 
 	if (emit->prog == &ctx->prog) { /* evil hack to deal sanely with clear path */
-		ir3_emit_consts(vp, ring, emit->info, dirty);
+		ir3_emit_consts(vp, ring, ctx, emit->info, dirty);
 		if (!emit->key.binning_pass)
-			ir3_emit_consts(fp, ring, emit->info, dirty);
-		/* mark clean after emitting consts: */
-		ctx->prog.dirty = 0;
+			ir3_emit_consts(fp, ring, ctx, emit->info, dirty);
 	}
 
 	if ((dirty & FD_DIRTY_BLEND)) {
@@ -666,62 +687,38 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				A4XX_RB_FS_OUTPUT_SAMPLE_MASK(0xffff));
 	}
 
-	if (dirty & (FD_DIRTY_BLEND_COLOR | FD_DIRTY_FRAMEBUFFER)) {
+	if (dirty & FD_DIRTY_BLEND_COLOR) {
 		struct pipe_blend_color *bcolor = &ctx->blend_color;
-		struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
-		float factor = 65535.0;
-		int i;
-
-		for (i = 0; i < pfb->nr_cbufs; i++) {
-			enum pipe_format format = pipe_surface_format(pfb->cbufs[i]);
-			const struct util_format_description *desc =
-				util_format_description(format);
-			int j;
-
-			if (desc->is_mixed)
-				continue;
-
-			j = util_format_get_first_non_void_channel(format);
-			if (j == -1)
-				continue;
-
-			if (desc->channel[j].size > 8 || !desc->channel[j].normalized ||
-				desc->channel[j].pure_integer)
-				continue;
-
-			/* Just use the first unorm8/snorm8 render buffer. Can't keep
-			 * everyone happy.
-			 */
-			if (desc->channel[j].type == UTIL_FORMAT_TYPE_SIGNED)
-				factor = 32767.0;
-			break;
-		}
 
 		OUT_PKT0(ring, REG_A4XX_RB_BLEND_RED, 8);
-		OUT_RING(ring, A4XX_RB_BLEND_RED_UINT(bcolor->color[0] * factor) |
-				A4XX_RB_BLEND_RED_FLOAT(bcolor->color[0]));
+		OUT_RING(ring, A4XX_RB_BLEND_RED_FLOAT(bcolor->color[0]) |
+				A4XX_RB_BLEND_RED_UINT(bcolor->color[0] * 0xff) |
+				A4XX_RB_BLEND_RED_SINT(bcolor->color[0] * 0x7f));
 		OUT_RING(ring, A4XX_RB_BLEND_RED_F32(bcolor->color[0]));
-		OUT_RING(ring, A4XX_RB_BLEND_GREEN_UINT(bcolor->color[1] * factor) |
-				A4XX_RB_BLEND_GREEN_FLOAT(bcolor->color[1]));
-		OUT_RING(ring, A4XX_RB_BLEND_GREEN_F32(bcolor->color[1]));
-		OUT_RING(ring, A4XX_RB_BLEND_BLUE_UINT(bcolor->color[2] * factor) |
-				A4XX_RB_BLEND_BLUE_FLOAT(bcolor->color[2]));
+		OUT_RING(ring, A4XX_RB_BLEND_GREEN_FLOAT(bcolor->color[1]) |
+				A4XX_RB_BLEND_GREEN_UINT(bcolor->color[1] * 0xff) |
+				A4XX_RB_BLEND_GREEN_SINT(bcolor->color[1] * 0x7f));
+		OUT_RING(ring, A4XX_RB_BLEND_RED_F32(bcolor->color[1]));
+		OUT_RING(ring, A4XX_RB_BLEND_BLUE_FLOAT(bcolor->color[2]) |
+				A4XX_RB_BLEND_BLUE_UINT(bcolor->color[2] * 0xff) |
+				A4XX_RB_BLEND_BLUE_SINT(bcolor->color[2] * 0x7f));
 		OUT_RING(ring, A4XX_RB_BLEND_BLUE_F32(bcolor->color[2]));
-		OUT_RING(ring, A4XX_RB_BLEND_ALPHA_UINT(bcolor->color[3] * factor) |
-				A4XX_RB_BLEND_ALPHA_FLOAT(bcolor->color[3]));
+		OUT_RING(ring, A4XX_RB_BLEND_ALPHA_FLOAT(bcolor->color[3]) |
+				A4XX_RB_BLEND_ALPHA_UINT(bcolor->color[3] * 0xff) |
+				A4XX_RB_BLEND_ALPHA_SINT(bcolor->color[3] * 0x7f));
 		OUT_RING(ring, A4XX_RB_BLEND_ALPHA_F32(bcolor->color[3]));
 	}
 
 	if (dirty & FD_DIRTY_VERTTEX) {
 		if (vp->has_samp)
-			emit_textures(ctx, ring, SB_VERT_TEX, &ctx->verttex);
+			emit_textures(ctx, ring, SB_VERT_TEX, &ctx->verttex, vp);
 		else
 			dirty &= ~FD_DIRTY_VERTTEX;
 	}
 
 	if (dirty & FD_DIRTY_FRAGTEX) {
 		if (fp->has_samp)
-			emit_textures(ctx, ring, SB_FRAG_TEX, &ctx->fragtex);
+			emit_textures(ctx, ring, SB_FRAG_TEX, &ctx->fragtex, fp);
 		else
 			dirty &= ~FD_DIRTY_FRAGTEX;
 	}

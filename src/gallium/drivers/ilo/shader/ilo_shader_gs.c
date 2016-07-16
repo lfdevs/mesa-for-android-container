@@ -1375,7 +1375,7 @@ ilo_shader_compile_gs(const struct ilo_shader_state *state,
    toy_tgsi_cleanup(&gcc.tgsi);
    toy_compiler_cleanup(&gcc.tc);
 
-   return gcc.shader;;
+   return gcc.shader;
 }
 
 static bool

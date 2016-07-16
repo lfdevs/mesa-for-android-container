@@ -50,7 +50,7 @@ retry_draw_range_elements( struct svga_context *svga,
                            int index_bias,
                            unsigned min_index,
                            unsigned max_index,
-                           unsigned prim,
+                           enum pipe_prim_type prim,
                            unsigned start,
                            unsigned count,
                            unsigned start_instance,
@@ -101,7 +101,7 @@ retry:
 
 static enum pipe_error
 retry_draw_arrays( struct svga_context *svga,
-                   unsigned prim, unsigned start, unsigned count,
+                   enum pipe_prim_type prim, unsigned start, unsigned count,
                    unsigned start_instance, unsigned instance_count,
                    boolean do_retry )
 {

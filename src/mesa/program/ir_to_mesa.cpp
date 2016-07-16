@@ -105,7 +105,6 @@ public:
       this->file = file;
       this->index = 0;
       this->writemask = writemask;
-      this->cond_mask = COND_TR;
       this->reladdr = NULL;
    }
 
@@ -114,7 +113,6 @@ public:
       this->file = PROGRAM_UNDEFINED;
       this->index = 0;
       this->writemask = 0;
-      this->cond_mask = COND_TR;
       this->reladdr = NULL;
    }
 
@@ -123,7 +121,6 @@ public:
    gl_register_file file; /**< PROGRAM_* from Mesa */
    int index; /**< temporary index, VERT_ATTRIB_*, VARYING_SLOT_*, etc. */
    int writemask; /**< Bitfield of WRITEMASK_[XYZW] */
-   GLuint cond_mask:4;
    /** Register index should be offset by the integer in this reg. */
    src_reg *reladdr;
 };
@@ -144,7 +141,6 @@ dst_reg::dst_reg(src_reg reg)
    this->file = reg.file;
    this->index = reg.index;
    this->writemask = WRITEMASK_XYZW;
-   this->cond_mask = COND_TR;
    this->reladdr = reg.reladdr;
 }
 
@@ -159,7 +155,6 @@ public:
    src_reg src[3];
    /** Pointer to the ir source this tree came from for debugging */
    ir_instruction *ir;
-   GLboolean cond_update;
    bool saturate;
    int sampler; /**< sampler index */
    int tex_target; /**< One of TEXTURE_*_INDEX */
@@ -308,6 +303,22 @@ public:
 				 int mul_operand);
 
    void emit_swz(ir_expression *ir);
+
+   void emit_equality_comparison(ir_expression *ir, enum prog_opcode op,
+                                 dst_reg dst,
+                                 const src_reg &src0, const src_reg &src1);
+
+   inline void emit_sne(ir_expression *ir, dst_reg dst,
+                        const src_reg &src0, const src_reg &src1)
+   {
+      emit_equality_comparison(ir, OPCODE_SLT, dst, src0, src1);
+   }
+
+   inline void emit_seq(ir_expression *ir, dst_reg dst,
+                        const src_reg &src0, const src_reg &src1)
+   {
+      emit_equality_comparison(ir, OPCODE_SGE, dst, src0, src1);
+   }
 
    bool process_move_condition(ir_rvalue *ir);
 
@@ -918,6 +929,46 @@ ir_to_mesa_visitor::emit_swz(ir_expression *ir)
 }
 
 void
+ir_to_mesa_visitor::emit_equality_comparison(ir_expression *ir,
+                                             enum prog_opcode op,
+                                             dst_reg dst,
+                                             const src_reg &src0,
+                                             const src_reg &src1)
+{
+   src_reg difference;
+   src_reg abs_difference = get_temp(glsl_type::vec4_type);
+   const src_reg zero = src_reg_for_float(0.0);
+
+   /* x == y is equivalent to -abs(x-y) >= 0.  Since all of the code that
+    * consumes the generated IR is pretty dumb, take special care when one
+    * of the operands is zero.
+    *
+    * Similarly, x != y is equivalent to -abs(x-y) < 0.
+    */
+   if (src0.file == zero.file &&
+       src0.index == zero.index &&
+       src0.swizzle == zero.swizzle) {
+      difference = src1;
+   } else if (src1.file == zero.file &&
+              src1.index == zero.index &&
+              src1.swizzle == zero.swizzle) {
+      difference = src0;
+   } else {
+      difference = get_temp(glsl_type::vec4_type);
+
+      src_reg tmp_src = src0;
+      tmp_src.negate = ~tmp_src.negate;
+
+      emit(ir, OPCODE_ADD, dst_reg(difference), tmp_src, src1);
+   }
+
+   emit(ir, OPCODE_ABS, dst_reg(abs_difference), difference);
+
+   abs_difference.negate = ~abs_difference.negate;
+   emit(ir, op, dst, abs_difference, zero);
+}
+
+void
 ir_to_mesa_visitor::visit(ir_expression *ir)
 {
    unsigned int operand;
@@ -1072,26 +1123,36 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       emit(ir, OPCODE_SLT, result_dst, op[0], op[1]);
       break;
    case ir_binop_greater:
-      emit(ir, OPCODE_SGT, result_dst, op[0], op[1]);
+      /* Negating the operands (as opposed to switching the order of the
+       * operands) produces the correct result when both are +/-Inf.
+       */
+      op[0].negate = ~op[0].negate;
+      op[1].negate = ~op[1].negate;
+      emit(ir, OPCODE_SLT, result_dst, op[0], op[1]);
       break;
    case ir_binop_lequal:
-      emit(ir, OPCODE_SLE, result_dst, op[0], op[1]);
+      /* Negating the operands (as opposed to switching the order of the
+       * operands) produces the correct result when both are +/-Inf.
+       */
+      op[0].negate = ~op[0].negate;
+      op[1].negate = ~op[1].negate;
+      emit(ir, OPCODE_SGE, result_dst, op[0], op[1]);
       break;
    case ir_binop_gequal:
       emit(ir, OPCODE_SGE, result_dst, op[0], op[1]);
       break;
    case ir_binop_equal:
-      emit(ir, OPCODE_SEQ, result_dst, op[0], op[1]);
+      emit_seq(ir, result_dst, op[0], op[1]);
       break;
    case ir_binop_nequal:
-      emit(ir, OPCODE_SNE, result_dst, op[0], op[1]);
+      emit_sne(ir, result_dst, op[0], op[1]);
       break;
    case ir_binop_all_equal:
       /* "==" operator producing a scalar boolean. */
       if (ir->operands[0]->type->is_vector() ||
 	  ir->operands[1]->type->is_vector()) {
 	 src_reg temp = get_temp(glsl_type::vec4_type);
-	 emit(ir, OPCODE_SNE, dst_reg(temp), op[0], op[1]);
+         emit_sne(ir, dst_reg(temp), op[0], op[1]);
 
 	 /* After the dot-product, the value will be an integer on the
 	  * range [0,4].  Zero becomes 1.0, and positive values become zero.
@@ -1106,7 +1167,7 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
 	 sge_src.negate = ~sge_src.negate;
 	 emit(ir, OPCODE_SGE, result_dst, sge_src, src_reg_for_float(0.0));
       } else {
-	 emit(ir, OPCODE_SEQ, result_dst, op[0], op[1]);
+         emit_seq(ir, result_dst, op[0], op[1]);
       }
       break;
    case ir_binop_any_nequal:
@@ -1119,7 +1180,7 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
              ir->operands[1]->as_constant()->is_zero()) {
             temp = op[0];
          } else {
-            emit(ir, OPCODE_SNE, dst_reg(temp), op[0], op[1]);
+            emit_sne(ir, dst_reg(temp), op[0], op[1]);
          }
 
 	 /* After the dot-product, the value will be an integer on the
@@ -1142,33 +1203,29 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
 	    emit(ir, OPCODE_SLT, result_dst, slt_src, src_reg_for_float(0.0));
 	 }
       } else {
-	 emit(ir, OPCODE_SNE, result_dst, op[0], op[1]);
+         emit_sne(ir, result_dst, op[0], op[1]);
       }
       break;
 
    case ir_binop_logic_xor:
-      emit(ir, OPCODE_SNE, result_dst, op[0], op[1]);
+      emit_sne(ir, result_dst, op[0], op[1]);
       break;
 
    case ir_binop_logic_or: {
-      /* After the addition, the value will be an integer on the
-       * range [0,2].  Zero stays zero, and positive values become 1.0.
-       */
-      ir_to_mesa_instruction *add =
-	 emit(ir, OPCODE_ADD, result_dst, op[0], op[1]);
       if (this->prog->Target == GL_FRAGMENT_PROGRAM_ARB) {
-	 /* The clamping to [0,1] can be done for free in the fragment
-	  * shader with a saturate.
-	  */
+         /* After the addition, the value will be an integer on the
+          * range [0,2].  Zero stays zero, and positive values become 1.0.
+          */
+         ir_to_mesa_instruction *add =
+            emit(ir, OPCODE_ADD, result_dst, op[0], op[1]);
 	 add->saturate = true;
       } else {
-	 /* Negating the result of the addition gives values on the range
-	  * [-2, 0].  Zero stays zero, and negative values become 1.0.  This
-	  * is achieved using SLT.
-	  */
-	 src_reg slt_src = result_src;
-	 slt_src.negate = ~slt_src.negate;
-	 emit(ir, OPCODE_SLT, result_dst, slt_src, src_reg_for_float(0.0));
+         /* The Boolean arguments are stored as float 0.0 and 1.0.  If either
+          * value is 1.0, the result of the logcal-or should be 1.0.  If both
+          * values are 0.0, the result should be 0.0.  This is exactly what
+          * MAX does.
+          */
+         emit(ir, OPCODE_MAX, result_dst, op[0], op[1]);
       }
       break;
    }
@@ -1212,8 +1269,7 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       break;
    case ir_unop_f2b:
    case ir_unop_i2b:
-      emit(ir, OPCODE_SNE, result_dst,
-			  op[0], src_reg_for_float(0.0));
+      emit_sne(ir, result_dst, op[0], src_reg_for_float(0.0));
       break;
    case ir_unop_bitcast_f2i: // Ignore these 4, they can't happen here anyway
    case ir_unop_bitcast_f2u:
@@ -2112,44 +2168,23 @@ ir_to_mesa_visitor::visit(ir_return *ir)
 void
 ir_to_mesa_visitor::visit(ir_discard *ir)
 {
-   if (ir->condition) {
-      ir->condition->accept(this);
-      this->result.negate = ~this->result.negate;
-      emit(ir, OPCODE_KIL, undef_dst, this->result);
-   } else {
-      emit(ir, OPCODE_KIL_NV);
-   }
+   if (!ir->condition)
+      ir->condition = new(mem_ctx) ir_constant(true);
+
+   ir->condition->accept(this);
+   this->result.negate = ~this->result.negate;
+   emit(ir, OPCODE_KIL, undef_dst, this->result);
 }
 
 void
 ir_to_mesa_visitor::visit(ir_if *ir)
 {
-   ir_to_mesa_instruction *cond_inst, *if_inst;
-   ir_to_mesa_instruction *prev_inst;
-
-   prev_inst = (ir_to_mesa_instruction *)this->instructions.get_tail();
+   ir_to_mesa_instruction *if_inst;
 
    ir->condition->accept(this);
    assert(this->result.file != PROGRAM_UNDEFINED);
 
-   if (this->options->EmitCondCodes) {
-      cond_inst = (ir_to_mesa_instruction *)this->instructions.get_tail();
-
-      /* See if we actually generated any instruction for generating
-       * the condition.  If not, then cook up a move to a temp so we
-       * have something to set cond_update on.
-       */
-      if (cond_inst == prev_inst) {
-	 src_reg temp = get_temp(glsl_type::bool_type);
-	 cond_inst = emit(ir->condition, OPCODE_MOV, dst_reg(temp), result);
-      }
-      cond_inst->cond_update = GL_TRUE;
-
-      if_inst = emit(ir->condition, OPCODE_IF);
-      if_inst->dst.cond_mask = COND_NE;
-   } else {
-      if_inst = emit(ir->condition, OPCODE_IF, undef_dst, this->result);
-   }
+   if_inst = emit(ir->condition, OPCODE_IF, undef_dst, this->result);
 
    this->instructions.push_tail(if_inst);
 
@@ -2206,10 +2241,6 @@ mesa_src_reg_from_ir_src_reg(src_reg reg)
    mesa_reg.Swizzle = reg.swizzle;
    mesa_reg.RelAddr = reg.reladdr != NULL;
    mesa_reg.Negate = reg.negate;
-   mesa_reg.Abs = 0;
-   mesa_reg.HasIndex2 = GL_FALSE;
-   mesa_reg.RelAddr2 = 0;
-   mesa_reg.Index2 = 0;
 
    return mesa_reg;
 }
@@ -2386,7 +2417,7 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
       file = PROGRAM_UNIFORM;
    }
 
-   int index = _mesa_lookup_parameter_index(params, -1, name);
+   int index = _mesa_lookup_parameter_index(params, name);
    if (index < 0) {
       index = _mesa_add_parameter(params, file, name, size, type->gl_type,
 				  NULL, NULL);
@@ -2793,12 +2824,10 @@ get_mesa_program(struct gl_context *ctx,
    i = 0;
    foreach_in_list(const ir_to_mesa_instruction, inst, &v.instructions) {
       mesa_inst->Opcode = inst->op;
-      mesa_inst->CondUpdate = inst->cond_update;
       if (inst->saturate)
 	 mesa_inst->Saturate = GL_TRUE;
       mesa_inst->DstReg.File = inst->dst.file;
       mesa_inst->DstReg.Index = inst->dst.index;
-      mesa_inst->DstReg.CondMask = inst->dst.cond_mask;
       mesa_inst->DstReg.WriteMask = inst->dst.writemask;
       mesa_inst->DstReg.RelAddr = inst->dst.reladdr != NULL;
       mesa_inst->SrcReg[0] = mesa_src_reg_from_ir_src_reg(inst->src[0]);
@@ -2998,8 +3027,6 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       if (linked_prog) {
          _mesa_copy_linked_program_data((gl_shader_stage) i, prog, linked_prog);
 
-	 _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
-				 linked_prog);
          if (!ctx->Driver.ProgramStringNotify(ctx,
                                               _mesa_shader_stage_to_program(i),
                                               linked_prog)) {
@@ -3010,7 +3037,7 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       _mesa_reference_program(ctx, &linked_prog, NULL);
    }
 
-   build_program_resource_list(prog);
+   build_program_resource_list(ctx, prog);
    return prog->LinkStatus;
 }
 

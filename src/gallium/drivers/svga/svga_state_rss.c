@@ -47,7 +47,7 @@ struct rs_queue {
 
 #define EMIT_RS(svga, value, token, fail)                       \
 do {                                                            \
-   assert(SVGA3D_RS_##token < Elements(svga->state.hw_draw.rs)); \
+   STATIC_ASSERT(SVGA3D_RS_##token < ARRAY_SIZE(svga->state.hw_draw.rs)); \
    if (svga->state.hw_draw.rs[SVGA3D_RS_##token] != value) {    \
       svga_queue_rs( &queue, SVGA3D_RS_##token, value );        \
       svga->state.hw_draw.rs[SVGA3D_RS_##token] = value;        \
@@ -57,7 +57,7 @@ do {                                                            \
 #define EMIT_RS_FLOAT(svga, fvalue, token, fail)                \
 do {                                                            \
    unsigned value = fui(fvalue);                                \
-   assert(SVGA3D_RS_##token < Elements(svga->state.hw_draw.rs)); \
+   STATIC_ASSERT(SVGA3D_RS_##token < ARRAY_SIZE(svga->state.hw_draw.rs)); \
    if (svga->state.hw_draw.rs[SVGA3D_RS_##token] != value) {    \
       svga_queue_rs( &queue, SVGA3D_RS_##token, value );        \
       svga->state.hw_draw.rs[SVGA3D_RS_##token] = value;        \

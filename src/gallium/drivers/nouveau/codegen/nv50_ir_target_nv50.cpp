@@ -207,6 +207,7 @@ TargetNV50::getFileSize(DataFile file) const
    case FILE_MEMORY_CONST:  return 65536;
    case FILE_SHADER_INPUT:  return 0x200;
    case FILE_SHADER_OUTPUT: return 0x200;
+   case FILE_MEMORY_BUFFER: return 0xffffffff;
    case FILE_MEMORY_GLOBAL: return 0xffffffff;
    case FILE_MEMORY_SHARED: return 16 << 10;
    case FILE_MEMORY_LOCAL:  return 48 << 10;
@@ -406,7 +407,8 @@ TargetNV50::isAccessSupported(DataFile file, DataType ty) const
    if (ty == TYPE_B96 || ty == TYPE_NONE)
       return false;
    if (typeSizeof(ty) > 4)
-      return (file == FILE_MEMORY_LOCAL) || (file == FILE_MEMORY_GLOBAL);
+      return (file == FILE_MEMORY_LOCAL) || (file == FILE_MEMORY_GLOBAL) ||
+             (file == FILE_MEMORY_BUFFER);
    return true;
 }
 
@@ -509,6 +511,7 @@ int TargetNV50::getLatency(const Instruction *i) const
       switch (i->src(0).getFile()) {
       case FILE_MEMORY_LOCAL:
       case FILE_MEMORY_GLOBAL:
+      case FILE_MEMORY_BUFFER:
          return 100; // really 400 to 800
       default:
          return 22;
@@ -589,6 +592,8 @@ TargetNV50::parseDriverInfo(const struct nv50_ir_prog_info *info)
       wposMask = 0x8;
       sysvalLocation[SV_POSITION] = 0;
    }
+
+   Target::parseDriverInfo(info);
 }
 
 } // namespace nv50_ir

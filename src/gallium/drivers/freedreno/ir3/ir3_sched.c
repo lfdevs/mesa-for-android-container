@@ -511,8 +511,7 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 	 * occupied), and move remaining to depth sorted list:
 	 */
 	list_for_each_entry_safe (struct ir3_instruction, instr, &unscheduled_list, node) {
-		if (is_meta(instr) && ((instr->opc == OPC_META_INPUT) ||
-				(instr->opc == OPC_META_PHI))) {
+		if ((instr->opc == OPC_META_INPUT) || (instr->opc == OPC_META_PHI)) {
 			schedule(ctx, instr);
 		} else {
 			ir3_insert_by_depth(instr, &ctx->depth_list);
@@ -627,14 +626,29 @@ static void
 sched_insert_parallel_copies(struct ir3_block *block)
 {
 	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
-		if (is_meta(instr) && (instr->opc == OPC_META_PHI)) {
-			struct ir3_register *reg;
+		if (instr->opc == OPC_META_PHI) {
+			struct ir3_register *reg, *reg2;
 			foreach_src(reg, instr) {
 				struct ir3_instruction *src = reg->instr;
-				struct ir3_instruction *mov =
-					ir3_MOV(src->block, src, TYPE_U32);
-				mov->regs[0]->flags |= IR3_REG_PHI_SRC;
-				mov->regs[0]->instr = instr;
+				struct ir3_instruction *mov = NULL;
+
+				/* after CP we could end up w/ duplicate phi srcs: */
+				foreach_src(reg2, instr) {
+					if (reg == reg2)
+						break;
+					/* reg2 is before reg1 so already an inserted mov: */
+					else if (reg2->instr->regs[1]->instr == src) {
+						mov = reg2->instr;
+						break;
+					}
+				}
+
+				if (!mov) {
+					mov = ir3_MOV(src->block, src, TYPE_U32);
+					mov->regs[0]->flags |= IR3_REG_PHI_SRC;
+					mov->regs[0]->instr = instr;
+				}
+
 				reg->instr = mov;
 			}
 		}

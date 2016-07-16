@@ -315,10 +315,10 @@ graw_util_create_simple_sampler_view(const struct graw_info *info,
    memset(&sv_temp, 0, sizeof(sv_temp));
    sv_temp.format = texture->format;
    sv_temp.texture = texture;
-   sv_temp.swizzle_r = PIPE_SWIZZLE_RED;
-   sv_temp.swizzle_g = PIPE_SWIZZLE_GREEN;
-   sv_temp.swizzle_b = PIPE_SWIZZLE_BLUE;
-   sv_temp.swizzle_a = PIPE_SWIZZLE_ALPHA;
+   sv_temp.swizzle_r = PIPE_SWIZZLE_X;
+   sv_temp.swizzle_g = PIPE_SWIZZLE_Y;
+   sv_temp.swizzle_b = PIPE_SWIZZLE_Z;
+   sv_temp.swizzle_a = PIPE_SWIZZLE_W;
 
    sv = info->ctx->create_sampler_view(info->ctx, texture, &sv_temp);
 

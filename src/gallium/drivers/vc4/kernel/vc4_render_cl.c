@@ -95,7 +95,7 @@ static uint32_t vc4_full_res_offset(struct vc4_exec_info *exec,
 				    uint8_t x, uint8_t y)
 {
 	return bo->paddr + surf->offset + VC4_TILE_BUFFER_SIZE *
-		(DIV_ROUND_UP(exec->args->width, 32) * y + x);
+		(DIV_ROUND_UP(exec->args->width, exec->tile_width) * y + x);
 }
 
 /*
@@ -369,7 +369,8 @@ static int vc4_full_res_bounds_check(struct vc4_exec_info *exec,
 				     struct drm_vc4_submit_rcl_surface *surf)
 {
 	struct drm_vc4_submit_cl *args = exec->args;
-	u32 render_tiles_stride = DIV_ROUND_UP(exec->args->width, 32);
+	u32 render_tiles_stride = DIV_ROUND_UP(exec->args->width,
+					       exec->tile_width);
 
 	if (surf->offset > obj->base.size) {
 		DRM_ERROR("surface offset %d > BO size %zd\n",

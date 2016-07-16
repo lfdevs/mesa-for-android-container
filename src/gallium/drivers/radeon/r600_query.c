@@ -113,7 +113,7 @@ static boolean r600_query_sw_begin(struct r600_common_context *rctx,
 	return TRUE;
 }
 
-static void r600_query_sw_end(struct r600_common_context *rctx,
+static bool r600_query_sw_end(struct r600_common_context *rctx,
 			      struct r600_query *rquery)
 {
 	struct r600_query_sw *query = (struct r600_query_sw *)rquery;
@@ -161,6 +161,8 @@ static void r600_query_sw_end(struct r600_common_context *rctx,
 	default:
 		unreachable("r600_query_sw_end: bad query type");
 	}
+
+	return true;
 }
 
 static boolean r600_query_sw_get_result(struct r600_common_context *rctx,
@@ -260,7 +262,8 @@ void r600_query_hw_destroy(struct r600_common_context *rctx,
 static struct r600_resource *r600_new_query_buffer(struct r600_common_context *ctx,
 						   struct r600_query_hw *query)
 {
-	unsigned buf_size = MAX2(query->result_size, 4096);
+	unsigned buf_size = MAX2(query->result_size,
+				 ctx->screen->info.gart_page_size);
 
 	/* Queries are normally read by the CPU after
 	 * being written by the gpu, hence staging is probably a good
@@ -269,14 +272,20 @@ static struct r600_resource *r600_new_query_buffer(struct r600_common_context *c
 	struct r600_resource *buf = (struct r600_resource*)
 		pipe_buffer_create(ctx->b.screen, PIPE_BIND_CUSTOM,
 				   PIPE_USAGE_STAGING, buf_size);
+	if (!buf)
+		return NULL;
 
-	if (query->flags & R600_QUERY_HW_FLAG_PREDICATE)
-		query->ops->prepare_buffer(ctx, query, buf);
+	if (query->flags & R600_QUERY_HW_FLAG_PREDICATE) {
+		if (!query->ops->prepare_buffer(ctx, query, buf)) {
+			pipe_resource_reference((struct pipe_resource **)&buf, NULL);
+			return NULL;
+		}
+	}
 
 	return buf;
 }
 
-static void r600_query_hw_prepare_buffer(struct r600_common_context *ctx,
+static bool r600_query_hw_prepare_buffer(struct r600_common_context *ctx,
 					 struct r600_query_hw *query,
 					 struct r600_resource *buffer)
 {
@@ -284,6 +293,8 @@ static void r600_query_hw_prepare_buffer(struct r600_common_context *ctx,
 	uint32_t *results = ctx->ws->buffer_map(buffer->buf, NULL,
 						PIPE_TRANSFER_WRITE |
 						PIPE_TRANSFER_UNSYNCHRONIZED);
+	if (!results)
+		return false;
 
 	memset(results, 0, buffer->b.b.width0);
 
@@ -304,6 +315,8 @@ static void r600_query_hw_prepare_buffer(struct r600_common_context *ctx,
 			results += 4 * ctx->max_db;
 		}
 	}
+
+	return true;
 }
 
 static struct r600_query_ops query_hw_ops = {
@@ -369,13 +382,11 @@ static struct pipe_query *r600_query_hw_create(struct r600_common_context *rctx,
 		query->result_size = 16;
 		query->num_cs_dw_begin = 8;
 		query->num_cs_dw_end = 8;
-		query->flags = R600_QUERY_HW_FLAG_TIMER;
 		break;
 	case PIPE_QUERY_TIMESTAMP:
 		query->result_size = 8;
 		query->num_cs_dw_end = 8;
-		query->flags = R600_QUERY_HW_FLAG_TIMER |
-			       R600_QUERY_HW_FLAG_NO_START;
+		query->flags = R600_QUERY_HW_FLAG_NO_START;
 		break;
 	case PIPE_QUERY_PRIMITIVES_EMITTED:
 	case PIPE_QUERY_PRIMITIVES_GENERATED:
@@ -414,14 +425,22 @@ static void r600_update_occlusion_query_state(struct r600_common_context *rctx,
 	if (type == PIPE_QUERY_OCCLUSION_COUNTER ||
 	    type == PIPE_QUERY_OCCLUSION_PREDICATE) {
 		bool old_enable = rctx->num_occlusion_queries != 0;
-		bool enable;
+		bool old_perfect_enable =
+			rctx->num_perfect_occlusion_queries != 0;
+		bool enable, perfect_enable;
 
 		rctx->num_occlusion_queries += diff;
 		assert(rctx->num_occlusion_queries >= 0);
 
-		enable = rctx->num_occlusion_queries != 0;
+		if (type == PIPE_QUERY_OCCLUSION_COUNTER) {
+			rctx->num_perfect_occlusion_queries += diff;
+			assert(rctx->num_perfect_occlusion_queries >= 0);
+		}
 
-		if (enable != old_enable) {
+		enable = rctx->num_occlusion_queries != 0;
+		perfect_enable = rctx->num_perfect_occlusion_queries != 0;
+
+		if (enable != old_enable || perfect_enable != old_perfect_enable) {
 			rctx->set_occlusion_query_state(&rctx->b, enable);
 		}
 	}
@@ -464,7 +483,7 @@ static void r600_query_hw_do_emit_start(struct r600_common_context *ctx,
 		break;
 	case PIPE_QUERY_TIME_ELAPSED:
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE_EOP, 4, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_CACHE_FLUSH_AND_INV_TS_EVENT) | EVENT_INDEX(5));
+		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_BOTTOM_OF_PIPE_TS) | EVENT_INDEX(5));
 		radeon_emit(cs, va);
 		radeon_emit(cs, (3 << 29) | ((va >> 32) & 0xFFFF));
 		radeon_emit(cs, 0);
@@ -488,6 +507,9 @@ static void r600_query_hw_emit_start(struct r600_common_context *ctx,
 {
 	uint64_t va;
 
+	if (!query->buffer.buf)
+		return; // previous buffer allocation failure
+
 	r600_update_occlusion_query_state(ctx, query->b.type, 1);
 	r600_update_prims_generated_query_state(ctx, query->b.type, 1);
 
@@ -498,9 +520,11 @@ static void r600_query_hw_emit_start(struct r600_common_context *ctx,
 	if (query->buffer.results_end + query->result_size > query->buffer.buf->b.b.width0) {
 		struct r600_query_buffer *qbuf = MALLOC_STRUCT(r600_query_buffer);
 		*qbuf = query->buffer;
-		query->buffer.buf = r600_new_query_buffer(ctx, query);
 		query->buffer.results_end = 0;
 		query->buffer.previous = qbuf;
+		query->buffer.buf = r600_new_query_buffer(ctx, query);
+		if (!query->buffer.buf)
+			return;
 	}
 
 	/* emit begin query */
@@ -508,10 +532,7 @@ static void r600_query_hw_emit_start(struct r600_common_context *ctx,
 
 	query->ops->emit_start(ctx, query, query->buffer.buf, va);
 
-	if (query->flags & R600_QUERY_HW_FLAG_TIMER)
-		ctx->num_cs_dw_timer_queries_suspend += query->num_cs_dw_end;
-	else
-		ctx->num_cs_dw_nontimer_queries_suspend += query->num_cs_dw_end;
+	ctx->num_cs_dw_queries_suspend += query->num_cs_dw_end;
 }
 
 static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
@@ -545,7 +566,7 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 		/* fall through */
 	case PIPE_QUERY_TIMESTAMP:
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE_EOP, 4, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_CACHE_FLUSH_AND_INV_TS_EVENT) | EVENT_INDEX(5));
+		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_BOTTOM_OF_PIPE_TS) | EVENT_INDEX(5));
 		radeon_emit(cs, va);
 		radeon_emit(cs, (3 << 29) | ((va >> 32) & 0xFFFF));
 		radeon_emit(cs, 0);
@@ -570,6 +591,9 @@ static void r600_query_hw_emit_stop(struct r600_common_context *ctx,
 {
 	uint64_t va;
 
+	if (!query->buffer.buf)
+		return; // previous buffer allocation failure
+
 	/* The queries which need begin already called this in begin_query. */
 	if (query->flags & R600_QUERY_HW_FLAG_NO_START) {
 		ctx->need_gfx_cs_space(&ctx->b, query->num_cs_dw_end, FALSE);
@@ -582,12 +606,8 @@ static void r600_query_hw_emit_stop(struct r600_common_context *ctx,
 
 	query->buffer.results_end += query->result_size;
 
-	if (!(query->flags & R600_QUERY_HW_FLAG_NO_START)) {
-		if (query->flags & R600_QUERY_HW_FLAG_TIMER)
-			ctx->num_cs_dw_timer_queries_suspend -= query->num_cs_dw_end;
-		else
-			ctx->num_cs_dw_nontimer_queries_suspend -= query->num_cs_dw_end;
-	}
+	if (!(query->flags & R600_QUERY_HW_FLAG_NO_START))
+		ctx->num_cs_dw_queries_suspend -= query->num_cs_dw_end;
 
 	r600_update_occlusion_query_state(ctx, query->b.type, -1);
 	r600_update_prims_generated_query_state(ctx, query->b.type, -1);
@@ -693,6 +713,9 @@ static void r600_query_hw_reset_buffers(struct r600_common_context *rctx,
 		FREE(qbuf);
 	}
 
+	query->buffer.results_end = 0;
+	query->buffer.previous = NULL;
+
 	if (query->flags & R600_QUERY_HW_FLAG_PREDICATE) {
 		/* Obtain a new buffer if the current one can't be mapped without a stall. */
 		if (r600_rings_is_buffer_referenced(rctx, query->buffer.buf->buf, RADEON_USAGE_READWRITE) ||
@@ -700,12 +723,10 @@ static void r600_query_hw_reset_buffers(struct r600_common_context *rctx,
 			pipe_resource_reference((struct pipe_resource**)&query->buffer.buf, NULL);
 			query->buffer.buf = r600_new_query_buffer(rctx, query);
 		} else {
-			query->ops->prepare_buffer(rctx, query, query->buffer.buf);
+			if (!query->ops->prepare_buffer(rctx, query, query->buffer.buf))
+				pipe_resource_reference((struct pipe_resource**)&query->buffer.buf, NULL);
 		}
 	}
-
-	query->buffer.results_end = 0;
-	query->buffer.previous = NULL;
 }
 
 boolean r600_query_hw_begin(struct r600_common_context *rctx,
@@ -721,24 +742,23 @@ boolean r600_query_hw_begin(struct r600_common_context *rctx,
 	r600_query_hw_reset_buffers(rctx, query);
 
 	r600_query_hw_emit_start(rctx, query);
+	if (!query->buffer.buf)
+		return false;
 
-	if (query->flags & R600_QUERY_HW_FLAG_TIMER)
-		LIST_ADDTAIL(&query->list, &rctx->active_timer_queries);
-	else
-		LIST_ADDTAIL(&query->list, &rctx->active_nontimer_queries);
-   return true;
+	LIST_ADDTAIL(&query->list, &rctx->active_queries);
+	return true;
 }
 
-static void r600_end_query(struct pipe_context *ctx, struct pipe_query *query)
+static bool r600_end_query(struct pipe_context *ctx, struct pipe_query *query)
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
 	struct r600_query *rquery = (struct r600_query *)query;
 
-	rquery->ops->end(rctx, rquery);
+	return rquery->ops->end(rctx, rquery);
 }
 
-void r600_query_hw_end(struct r600_common_context *rctx,
-			      struct r600_query *rquery)
+bool r600_query_hw_end(struct r600_common_context *rctx,
+		       struct r600_query *rquery)
 {
 	struct r600_query_hw *query = (struct r600_query_hw *)rquery;
 
@@ -749,6 +769,11 @@ void r600_query_hw_end(struct r600_common_context *rctx,
 
 	if (!(query->flags & R600_QUERY_HW_FLAG_NO_START))
 		LIST_DELINIT(&query->list);
+
+	if (!query->buffer.buf)
+		return false;
+
+	return true;
 }
 
 static unsigned r600_query_read_result(void *map, unsigned start_index, unsigned end_index,
@@ -965,28 +990,14 @@ static void r600_render_condition(struct pipe_context *ctx,
 	rctx->set_atom_dirty(rctx, atom, query != NULL);
 }
 
-static void r600_suspend_queries(struct r600_common_context *ctx,
-				 struct list_head *query_list,
-				 unsigned *num_cs_dw_queries_suspend)
+void r600_suspend_queries(struct r600_common_context *ctx)
 {
 	struct r600_query_hw *query;
 
-	LIST_FOR_EACH_ENTRY(query, query_list, list) {
+	LIST_FOR_EACH_ENTRY(query, &ctx->active_queries, list) {
 		r600_query_hw_emit_stop(ctx, query);
 	}
-	assert(*num_cs_dw_queries_suspend == 0);
-}
-
-void r600_suspend_nontimer_queries(struct r600_common_context *ctx)
-{
-	r600_suspend_queries(ctx, &ctx->active_nontimer_queries,
-			     &ctx->num_cs_dw_nontimer_queries_suspend);
-}
-
-void r600_suspend_timer_queries(struct r600_common_context *ctx)
-{
-	r600_suspend_queries(ctx, &ctx->active_timer_queries,
-			     &ctx->num_cs_dw_timer_queries_suspend);
+	assert(ctx->num_cs_dw_queries_suspend == 0);
 }
 
 static unsigned r600_queries_num_cs_dw_for_resuming(struct r600_common_context *ctx,
@@ -1014,33 +1025,19 @@ static unsigned r600_queries_num_cs_dw_for_resuming(struct r600_common_context *
 	return num_dw;
 }
 
-static void r600_resume_queries(struct r600_common_context *ctx,
-				struct list_head *query_list,
-				unsigned *num_cs_dw_queries_suspend)
+void r600_resume_queries(struct r600_common_context *ctx)
 {
 	struct r600_query_hw *query;
-	unsigned num_cs_dw = r600_queries_num_cs_dw_for_resuming(ctx, query_list);
+	unsigned num_cs_dw = r600_queries_num_cs_dw_for_resuming(ctx, &ctx->active_queries);
 
-	assert(*num_cs_dw_queries_suspend == 0);
+	assert(ctx->num_cs_dw_queries_suspend == 0);
 
 	/* Check CS space here. Resuming must not be interrupted by flushes. */
 	ctx->need_gfx_cs_space(&ctx->b, num_cs_dw, TRUE);
 
-	LIST_FOR_EACH_ENTRY(query, query_list, list) {
+	LIST_FOR_EACH_ENTRY(query, &ctx->active_queries, list) {
 		r600_query_hw_emit_start(ctx, query);
 	}
-}
-
-void r600_resume_nontimer_queries(struct r600_common_context *ctx)
-{
-	r600_resume_queries(ctx, &ctx->active_nontimer_queries,
-			    &ctx->num_cs_dw_nontimer_queries_suspend);
-}
-
-void r600_resume_timer_queries(struct r600_common_context *ctx)
-{
-	r600_resume_queries(ctx, &ctx->active_timer_queries,
-			    &ctx->num_cs_dw_timer_queries_suspend);
 }
 
 /* Get backends mask */
@@ -1066,7 +1063,7 @@ void r600_query_init_backend_mask(struct r600_common_context *ctx)
 			item_mask = 0x3;
 		}
 
-		while(num_tile_pipes--) {
+		while (num_tile_pipes--) {
 			i = backend_map & item_mask;
 			mask |= (1<<i);
 			backend_map >>= item_width;
@@ -1177,11 +1174,11 @@ static struct pipe_driver_query_info r600_driver_query_list[] = {
 static unsigned r600_get_num_queries(struct r600_common_screen *rscreen)
 {
 	if (rscreen->info.drm_major == 2 && rscreen->info.drm_minor >= 42)
-		return Elements(r600_driver_query_list);
+		return ARRAY_SIZE(r600_driver_query_list);
 	else if (rscreen->info.drm_major == 3)
-		return Elements(r600_driver_query_list) - 3;
+		return ARRAY_SIZE(r600_driver_query_list) - 3;
 	else
-		return Elements(r600_driver_query_list) - 4;
+		return ARRAY_SIZE(r600_driver_query_list) - 4;
 }
 
 static int r600_get_driver_query_info(struct pipe_screen *screen,
@@ -1266,8 +1263,7 @@ void r600_query_init(struct r600_common_context *rctx)
 	if (((struct r600_common_screen*)rctx->b.screen)->info.num_render_backends > 0)
 	    rctx->b.render_condition = r600_render_condition;
 
-	LIST_INITHEAD(&rctx->active_nontimer_queries);
-	LIST_INITHEAD(&rctx->active_timer_queries);
+	LIST_INITHEAD(&rctx->active_queries);
 }
 
 void r600_init_screen_query_functions(struct r600_common_screen *rscreen)

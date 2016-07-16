@@ -111,7 +111,8 @@ const struct brw_tracked_state gen8_wm_depth_stencil = {
       .mesa = _NEW_BUFFERS |
               _NEW_DEPTH |
               _NEW_STENCIL,
-      .brw  = BRW_NEW_CONTEXT,
+      .brw  = BRW_NEW_BLORP |
+              BRW_NEW_CONTEXT,
    },
    .emit = gen8_upload_wm_depth_stencil,
 };

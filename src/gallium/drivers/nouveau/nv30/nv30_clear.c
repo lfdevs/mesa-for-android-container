@@ -73,8 +73,13 @@ nv30_clear(struct pipe_context *pipe, unsigned buffers,
       zeta = pack_zeta(fb->zsbuf->format, depth, stencil);
       if (buffers & PIPE_CLEAR_DEPTH)
          mode |= NV30_3D_CLEAR_BUFFERS_DEPTH;
-      if (buffers & PIPE_CLEAR_STENCIL)
+      if (buffers & PIPE_CLEAR_STENCIL) {
          mode |= NV30_3D_CLEAR_BUFFERS_STENCIL;
+         BEGIN_NV04(push, NV30_3D(STENCIL_ENABLE(0)), 2);
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0x000000ff);
+         nv30->dirty |= NV30_NEW_ZSA;
+      }
    }
 
    /*XXX: wtf? fixes clears sometimes not clearing on nv3x... */

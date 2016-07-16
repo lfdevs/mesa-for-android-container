@@ -52,7 +52,7 @@ gen8_upload_hs_state(struct brw_context *brw)
       if (prog_data->base.total_scratch) {
          OUT_RELOC64(stage_state->scratch_bo,
                      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-                     ffs(prog_data->base.total_scratch) - 11);
+                     ffs(stage_state->per_thread_scratch) - 11);
       } else {
          OUT_BATCH(0);
          OUT_BATCH(0);
@@ -82,6 +82,7 @@ const struct brw_tracked_state gen8_hs_state = {
    .dirty = {
       .mesa  = 0,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_TCS_PROG_DATA |
                BRW_NEW_TESS_PROGRAMS,
    },

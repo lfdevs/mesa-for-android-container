@@ -363,11 +363,12 @@ static void emit_declaration(
 					ctx->soa.bld_base.base.elem_type, "");
 			}
 		}
-
-		ctx->output_reg_count = MAX2(ctx->output_reg_count,
-							 decl->Range.Last + 1);
 		break;
 	}
+
+	case TGSI_FILE_MEMORY:
+		ctx->declare_memory_region(ctx, decl);
+		break;
 
 	default:
 		break;
@@ -1340,7 +1341,7 @@ static void emit_lsb(const struct lp_build_tgsi_action * action,
 
 	emit_data->output[emit_data->chan] =
 		lp_build_intrinsic(gallivm->builder, "llvm.cttz.i32",
-				emit_data->dst_type, args, Elements(args),
+				emit_data->dst_type, args, ARRAY_SIZE(args),
 				LLVMReadNoneAttribute);
 }
 
@@ -1359,7 +1360,7 @@ static void emit_umsb(const struct lp_build_tgsi_action * action,
 
 	LLVMValueRef msb =
 		lp_build_intrinsic(builder, "llvm.ctlz.i32",
-				emit_data->dst_type, args, Elements(args),
+				emit_data->dst_type, args, ARRAY_SIZE(args),
 				LLVMReadNoneAttribute);
 
 	/* The HW returns the last bit index from MSB, but TGSI wants
@@ -1535,13 +1536,7 @@ void radeon_llvm_context_init(struct radeon_llvm_context * ctx, const char *trip
 	ctx->gallivm.context = LLVMContextCreate();
 	ctx->gallivm.module = LLVMModuleCreateWithNameInContext("tgsi",
 						ctx->gallivm.context);
-	LLVMSetTarget(ctx->gallivm.module,
-
-#if HAVE_LLVM < 0x0306
-			"r600--");
-#else
-			triple);
-#endif
+	LLVMSetTarget(ctx->gallivm.module, triple);
 	ctx->gallivm.builder = LLVMCreateBuilderInContext(ctx->gallivm.context);
 
 	struct lp_build_tgsi_context * bld_base = &ctx->soa.bld_base;

@@ -458,6 +458,14 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
       ret = svga_rebind_shaders(svga);
       if (ret != PIPE_OK)
          return ret;
+
+      /* Rebind stream output targets */
+      ret = svga_rebind_stream_output_targets(svga);
+      if (ret != PIPE_OK)
+         return ret;
+
+      /* Force rebinding the index buffer when needed */
+      svga->state.hw_draw.ib = NULL;
    }
 
    ret = validate_sampler_resources(svga);
@@ -590,6 +598,16 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
    }
    else {
       /* non-indexed drawing */
+      if (svga->state.hw_draw.ib_format != SVGA3D_FORMAT_INVALID) {
+         /* Unbind previously bound index buffer */
+         ret = SVGA3D_vgpu10_SetIndexBuffer(svga->swc, NULL,
+                                            SVGA3D_FORMAT_INVALID, 0);
+         if (ret != PIPE_OK)
+            return ret;
+         svga->state.hw_draw.ib_format = SVGA3D_FORMAT_INVALID;
+         svga->state.hw_draw.ib = NULL;
+      }
+
       if (instance_count > 1) {
          ret = SVGA3D_vgpu10_DrawInstanced(svga->swc,
                                            vcount,
@@ -751,17 +769,14 @@ check_draw_params(struct svga_hwtnl *hwtnl,
    assert(range->indexWidth == range->indexArray.stride);
 
    if (ib) {
-      unsigned size = ib->width0;
-      unsigned offset = range->indexArray.offset;
-      unsigned stride = range->indexArray.stride;
-      unsigned count;
+      MAYBE_UNUSED unsigned size = ib->width0;
+      MAYBE_UNUSED unsigned offset = range->indexArray.offset;
+      MAYBE_UNUSED unsigned stride = range->indexArray.stride;
+      MAYBE_UNUSED unsigned count;
 
       assert(size);
       assert(offset < size);
       assert(stride);
-      (void) size;
-      (void) offset;
-      (void) stride;
 
       switch (range->primType) {
       case SVGA3D_PRIMITIVE_POINTLIST:

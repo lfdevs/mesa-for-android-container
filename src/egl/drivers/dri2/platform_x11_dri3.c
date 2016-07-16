@@ -96,8 +96,10 @@ static __DRIcontext *
 egl_dri3_get_dri_context(struct loader_dri3_drawable *draw)
 {
    _EGLContext *ctx = _eglGetCurrentContext();
-   struct dri2_egl_context *dri2_ctx = dri2_egl_context(ctx);
-
+   struct dri2_egl_context *dri2_ctx;
+   if (!ctx)
+      return NULL;
+   dri2_ctx = dri2_egl_context(ctx);
    return dri2_ctx->dri_context;
 }
 

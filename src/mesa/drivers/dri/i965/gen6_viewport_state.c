@@ -73,7 +73,8 @@ gen6_upload_clip_vp(struct brw_context *brw)
 const struct brw_tracked_state gen6_clip_vp = {
    .dirty = {
       .mesa = _NEW_VIEWPORT,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP,
    },
    .emit = gen6_upload_clip_vp,
 };
@@ -121,7 +122,8 @@ const struct brw_tracked_state gen6_sf_vp = {
    .dirty = {
       .mesa = _NEW_BUFFERS |
               _NEW_VIEWPORT,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP,
    },
    .emit = gen6_upload_sf_vp,
 };
@@ -143,6 +145,7 @@ const struct brw_tracked_state gen6_viewport_state = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_CC_VP |
              BRW_NEW_CLIP_VP |
              BRW_NEW_SF_VP |

@@ -38,13 +38,13 @@
 #include "vl/vl_video_buffer.h"
 
 /* UVD uses PM4 packet type 0 and 2 */
-#define RUVD_PKT_TYPE_S(x)		(((x) & 0x3) << 30)
+#define RUVD_PKT_TYPE_S(x)		(((unsigned)(x) & 0x3) << 30)
 #define RUVD_PKT_TYPE_G(x)		(((x) >> 30) & 0x3)
 #define RUVD_PKT_TYPE_C			0x3FFFFFFF
-#define RUVD_PKT_COUNT_S(x)		(((x) & 0x3FFF) << 16)
+#define RUVD_PKT_COUNT_S(x)		(((unsigned)(x) & 0x3FFF) << 16)
 #define RUVD_PKT_COUNT_G(x)		(((x) >> 16) & 0x3FFF)
 #define RUVD_PKT_COUNT_C		0xC000FFFF
-#define RUVD_PKT0_BASE_INDEX_S(x)	(((x) & 0xFFFF) << 0)
+#define RUVD_PKT0_BASE_INDEX_S(x)	(((unsigned)(x) & 0xFFFF) << 0)
 #define RUVD_PKT0_BASE_INDEX_G(x)	(((x) >> 0) & 0xFFFF)
 #define RUVD_PKT0_BASE_INDEX_C		0xFFFF0000
 #define RUVD_PKT0(index, count)		(RUVD_PKT_TYPE_S(0) | RUVD_PKT0_BASE_INDEX_S(index) | RUVD_PKT_COUNT_S(count))

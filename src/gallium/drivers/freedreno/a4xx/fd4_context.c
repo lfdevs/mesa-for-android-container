@@ -43,8 +43,6 @@ fd4_context_destroy(struct pipe_context *pctx)
 {
 	struct fd4_context *fd4_ctx = fd4_context(fd_context(pctx));
 
-	util_dynarray_fini(&fd4_ctx->rbrc_patches);
-
 	fd_bo_del(fd4_ctx->vs_pvt_mem);
 	fd_bo_del(fd4_ctx->fs_pvt_mem);
 	fd_bo_del(fd4_ctx->vsc_size_mem);
@@ -126,8 +124,6 @@ fd4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	pctx = fd_context_init(&fd4_ctx->base, pscreen, primtypes, priv);
 	if (!pctx)
 		return NULL;
-
-	util_dynarray_init(&fd4_ctx->rbrc_patches);
 
 	fd4_ctx->vs_pvt_mem = fd_bo_new(screen->dev, 0x2000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);

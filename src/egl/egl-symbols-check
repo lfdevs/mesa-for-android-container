@@ -46,6 +46,8 @@ eglWaitClient
 eglWaitGL
 eglWaitNative
 eglWaitSync
+MesaGLInteropEGLQueryDeviceInfo
+MesaGLInteropEGLExportObject
 _fini
 _init
 EOF

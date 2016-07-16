@@ -7,6 +7,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/winsys \
+	-I$(top_builddir)/src \
 	-I$(srcdir)
 
 if HAVE_CLOVER_ICD

@@ -121,24 +121,36 @@ bblock_end_const(const struct bblock_t *block)
 static inline struct bblock_t *
 bblock_next(struct bblock_t *block)
 {
+   if (exec_node_is_tail_sentinel(block->link.next))
+      return NULL;
+
    return (struct bblock_t *)block->link.next;
 }
 
 static inline const struct bblock_t *
 bblock_next_const(const struct bblock_t *block)
 {
+   if (exec_node_is_tail_sentinel(block->link.next))
+      return NULL;
+
    return (const struct bblock_t *)block->link.next;
 }
 
 static inline struct bblock_t *
 bblock_prev(struct bblock_t *block)
 {
+   if (exec_node_is_head_sentinel(block->link.prev))
+      return NULL;
+
    return (struct bblock_t *)block->link.prev;
 }
 
 static inline const struct bblock_t *
 bblock_prev_const(const struct bblock_t *block)
 {
+   if (exec_node_is_head_sentinel(block->link.prev))
+      return NULL;
+
    return (const struct bblock_t *)block->link.prev;
 }
 

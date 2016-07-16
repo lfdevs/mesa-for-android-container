@@ -99,6 +99,10 @@ bool
 nouveau_user_buffer_upload(struct nouveau_context *, struct nv04_resource *,
                            unsigned base, unsigned size);
 
+void
+nouveau_buffer_invalidate(struct pipe_context *pipe,
+                          struct pipe_resource *resource);
+
 /* Copy data to a scratch buffer and return address & bo the data resides in.
  * Returns 0 on failure.
  */

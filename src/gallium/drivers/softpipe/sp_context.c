@@ -38,6 +38,7 @@
 #include "util/u_pstipple.h"
 #include "util/u_inlines.h"
 #include "tgsi/tgsi_exec.h"
+#include "sp_buffer.h"
 #include "sp_clear.h"
 #include "sp_context.h"
 #include "sp_flush.h"
@@ -50,7 +51,7 @@
 #include "sp_query.h"
 #include "sp_screen.h"
 #include "sp_tex_sample.h"
-
+#include "sp_image.h"
 
 static void
 softpipe_destroy( struct pipe_context *pipe )
@@ -93,15 +94,15 @@ softpipe_destroy( struct pipe_context *pipe )
    sp_destroy_tile_cache(softpipe->zsbuf_cache);
    pipe_surface_reference(&softpipe->framebuffer.zsbuf, NULL);
 
-   for (sh = 0; sh < Elements(softpipe->tex_cache); sh++) {
-      for (i = 0; i < Elements(softpipe->tex_cache[0]); i++) {
+   for (sh = 0; sh < ARRAY_SIZE(softpipe->tex_cache); sh++) {
+      for (i = 0; i < ARRAY_SIZE(softpipe->tex_cache[0]); i++) {
          sp_destroy_tex_tile_cache(softpipe->tex_cache[sh][i]);
          pipe_sampler_view_reference(&softpipe->sampler_views[sh][i], NULL);
       }
    }
 
-   for (sh = 0; sh < Elements(softpipe->constants); sh++) {
-      for (i = 0; i < Elements(softpipe->constants[0]); i++) {
+   for (sh = 0; sh < ARRAY_SIZE(softpipe->constants); sh++) {
+      for (i = 0; i < ARRAY_SIZE(softpipe->constants[0]); i++) {
          if (softpipe->constants[sh][i]) {
             pipe_resource_reference(&softpipe->constants[sh][i], NULL);
          }
@@ -116,6 +117,8 @@ softpipe_destroy( struct pipe_context *pipe )
 
    for (i = 0; i < PIPE_SHADER_TYPES; i++) {
       FREE(softpipe->tgsi.sampler[i]);
+      FREE(softpipe->tgsi.image[i]);
+      FREE(softpipe->tgsi.buffer[i]);
    }
 
    FREE( softpipe );
@@ -156,8 +159,8 @@ softpipe_is_resource_referenced( struct pipe_context *pipe,
    }
    
    /* check if any of the tex_cache textures are this texture */
-   for (sh = 0; sh < Elements(softpipe->tex_cache); sh++) {
-      for (i = 0; i < Elements(softpipe->tex_cache[0]); i++) {
+   for (sh = 0; sh < ARRAY_SIZE(softpipe->tex_cache); sh++) {
+      for (i = 0; i < ARRAY_SIZE(softpipe->tex_cache[0]); i++) {
          if (softpipe->tex_cache[sh][i] &&
              softpipe->tex_cache[sh][i]->texture == texture)
             return SP_REFERENCED_FOR_READ;
@@ -199,8 +202,17 @@ softpipe_create_context(struct pipe_screen *screen,
       softpipe->tgsi.sampler[i] = sp_create_tgsi_sampler();
    }
 
+   for (i = 0; i < PIPE_SHADER_TYPES; i++) {
+      softpipe->tgsi.image[i] = sp_create_tgsi_image();
+   }
+
+   for (i = 0; i < PIPE_SHADER_TYPES; i++) {
+      softpipe->tgsi.buffer[i] = sp_create_tgsi_buffer();
+   }
+
    softpipe->dump_fs = debug_get_bool_option( "SOFTPIPE_DUMP_FS", FALSE );
    softpipe->dump_gs = debug_get_bool_option( "SOFTPIPE_DUMP_GS", FALSE );
+   softpipe->dump_cs = debug_get_bool_option( "SOFTPIPE_DUMP_CS", FALSE );
 
    softpipe->pipe.screen = screen;
    softpipe->pipe.destroy = softpipe_destroy;
@@ -216,14 +228,18 @@ softpipe_create_context(struct pipe_screen *screen,
    softpipe_init_streamout_funcs(&softpipe->pipe);
    softpipe_init_texture_funcs( &softpipe->pipe );
    softpipe_init_vertex_funcs(&softpipe->pipe);
+   softpipe_init_image_funcs(&softpipe->pipe);
 
    softpipe->pipe.set_framebuffer_state = softpipe_set_framebuffer_state;
 
    softpipe->pipe.draw_vbo = softpipe_draw_vbo;
 
+   softpipe->pipe.launch_grid = softpipe_launch_grid;
+
    softpipe->pipe.clear = softpipe_clear;
    softpipe->pipe.flush = softpipe_flush_wrapped;
-
+   softpipe->pipe.texture_barrier = softpipe_texture_barrier;
+   softpipe->pipe.memory_barrier = softpipe_memory_barrier;
    softpipe->pipe.render_condition = softpipe_render_condition;
    
    /*
@@ -235,15 +251,15 @@ softpipe_create_context(struct pipe_screen *screen,
    softpipe->zsbuf_cache = sp_create_tile_cache( &softpipe->pipe );
 
    /* Allocate texture caches */
-   for (sh = 0; sh < Elements(softpipe->tex_cache); sh++) {
-      for (i = 0; i < Elements(softpipe->tex_cache[0]); i++) {
+   for (sh = 0; sh < ARRAY_SIZE(softpipe->tex_cache); sh++) {
+      for (i = 0; i < ARRAY_SIZE(softpipe->tex_cache[0]); i++) {
          softpipe->tex_cache[sh][i] = sp_create_tex_tile_cache(&softpipe->pipe);
          if (!softpipe->tex_cache[sh][i])
             goto fail;
       }
    }
 
-   softpipe->fs_machine = tgsi_exec_machine_create();
+   softpipe->fs_machine = tgsi_exec_machine_create(PIPE_SHADER_FRAGMENT);
 
    /* setup quad rendering stages */
    softpipe->quad.shade = sp_quad_shade_stage(softpipe);
@@ -271,6 +287,26 @@ softpipe_create_context(struct pipe_screen *screen,
                         PIPE_SHADER_GEOMETRY,
                         (struct tgsi_sampler *)
                            softpipe->tgsi.sampler[PIPE_SHADER_GEOMETRY]);
+
+   draw_image(softpipe->draw,
+              PIPE_SHADER_VERTEX,
+              (struct tgsi_image *)
+              softpipe->tgsi.image[PIPE_SHADER_VERTEX]);
+
+   draw_image(softpipe->draw,
+              PIPE_SHADER_GEOMETRY,
+              (struct tgsi_image *)
+              softpipe->tgsi.image[PIPE_SHADER_GEOMETRY]);
+
+   draw_buffer(softpipe->draw,
+              PIPE_SHADER_VERTEX,
+              (struct tgsi_buffer *)
+              softpipe->tgsi.buffer[PIPE_SHADER_VERTEX]);
+
+   draw_buffer(softpipe->draw,
+              PIPE_SHADER_GEOMETRY,
+              (struct tgsi_buffer *)
+              softpipe->tgsi.buffer[PIPE_SHADER_GEOMETRY]);
 
    if (debug_get_bool_option( "SOFTPIPE_NO_RAST", FALSE ))
       softpipe->no_rast = TRUE;

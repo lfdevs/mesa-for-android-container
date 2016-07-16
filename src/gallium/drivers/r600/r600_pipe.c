@@ -43,9 +43,6 @@
 
 static const struct debug_named_value r600_debug_options[] = {
 	/* features */
-#if defined(R600_USE_LLVM)
-	{ "llvm", DBG_LLVM, "Enable the LLVM shader compiler" },
-#endif
 	{ "nocpdma", DBG_NO_CP_DMA, "Disable CP DMA" },
 
 	/* shader backend */
@@ -136,7 +133,6 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 		goto fail;
 
 	rctx->screen = rscreen;
-	rctx->keep_tiling_flags = rscreen->b.info.drm_minor >= 12;
 
 	r600_init_blit_functions(rctx);
 
@@ -188,9 +184,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 	}
 
 	rctx->b.gfx.cs = ws->cs_create(rctx->b.ctx, RING_GFX,
-				       r600_context_gfx_flush, rctx,
-				       rscreen->b.trace_bo ?
-					       rscreen->b.trace_bo->buf : NULL);
+				       r600_context_gfx_flush, rctx);
 	rctx->b.gfx.flush = r600_context_gfx_flush;
 
 	rctx->allocator_fetch_shader = u_suballocator_create(&rctx->b.b, 64 * 1024, 256,
@@ -270,7 +264,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_START_INSTANCE:
 	case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
 	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
-        case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+	case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
 	case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
 	case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
@@ -287,6 +281,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_INVALIDATE_BUFFER:
 	case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
 	case PIPE_CAP_QUERY_MEMORY_INFO:
+	case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
 		return 1;
 
 	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
@@ -370,6 +365,9 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_GENERATE_MIPMAP:
 	case PIPE_CAP_STRING_MARKER:
 	case PIPE_CAP_QUERY_BUFFER_OBJECT:
+	case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+	case PIPE_CAP_CULL_DISTANCE:
+	case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
 		return 0;
 
 	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
@@ -409,7 +407,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 12;
 	case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
 		/* textures support 8192, but layered rendering supports 2048 */
-		return rscreen->b.info.drm_minor >= 9 ? 2048 : 0;
+		return 2048;
 
 	/* Render targets. */
 	case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -440,7 +438,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return PIPE_ENDIAN_LITTLE;
 
 	case PIPE_CAP_VENDOR_ID:
-		return 0x1002;
+		return ATI_VENDOR_ID;
 	case PIPE_CAP_DEVICE_ID:
 		return rscreen->b.info.pci_id;
 	case PIPE_CAP_ACCELERATED:
@@ -451,6 +449,14 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 0;
 	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
 		return rscreen->b.chip_class >= R700;
+	case PIPE_CAP_PCI_GROUP:
+		return rscreen->b.info.pci_domain;
+	case PIPE_CAP_PCI_BUS:
+		return rscreen->b.info.pci_bus;
+	case PIPE_CAP_PCI_DEVICE:
+		return rscreen->b.info.pci_dev;
+	case PIPE_CAP_PCI_FUNCTION:
+		return rscreen->b.info.pci_func;
 	}
 	return 0;
 }
@@ -497,7 +503,7 @@ static int r600_get_shader_param(struct pipe_screen* pscreen, unsigned shader, e
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
 		if (shader == PIPE_SHADER_COMPUTE) {
 			uint64_t max_const_buffer_size;
-			pscreen->get_compute_param(pscreen,
+			pscreen->get_compute_param(pscreen, PIPE_SHADER_IR_TGSI,
 				PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE,
 				&max_const_buffer_size);
 			return max_const_buffer_size;
@@ -615,8 +621,6 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws)
 		rscreen->b.debug_flags |= DBG_FS | DBG_VS | DBG_GS | DBG_PS | DBG_CS | DBG_TCS | DBG_TES;
 	if (!debug_get_bool_option("R600_HYPERZ", TRUE))
 		rscreen->b.debug_flags |= DBG_NO_HYPERZ;
-	if (debug_get_bool_option("R600_LLVM", FALSE))
-		rscreen->b.debug_flags |= DBG_LLVM;
 
 	if (rscreen->b.family == CHIP_UNKNOWN) {
 		fprintf(stderr, "r600: Unknown chipset 0x%04X\n", rscreen->b.info.pci_id);
@@ -704,6 +708,9 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws)
 			printf("\n");
 	}
 #endif
+
+	if (rscreen->b.debug_flags & DBG_TEST_DMA)
+		r600_test_dma(&rscreen->b);
 
 	return &rscreen->b.b;
 }

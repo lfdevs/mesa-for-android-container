@@ -39,6 +39,8 @@
 #include "program/prog_instruction.h"
 #include "main/framebuffer.h"
 
+#include "isl/isl.h"
+
 #include "intel_mipmap_tree.h"
 #include "intel_batchbuffer.h"
 #include "intel_tex.h"
@@ -260,9 +262,9 @@ gen4_emit_buffer_surface_state(struct brw_context *brw,
              surface_format << BRW_SURFACE_FORMAT_SHIFT |
              (brw->gen >= 6 ? BRW_SURFACE_RC_READ_WRITE : 0);
    surf[1] = (bo ? bo->offset64 : 0) + buffer_offset; /* reloc */
-   surf[2] = (buffer_size & 0x7f) << BRW_SURFACE_WIDTH_SHIFT |
-             ((buffer_size >> 7) & 0x1fff) << BRW_SURFACE_HEIGHT_SHIFT;
-   surf[3] = ((buffer_size >> 20) & 0x7f) << BRW_SURFACE_DEPTH_SHIFT |
+   surf[2] = ((buffer_size - 1) & 0x7f) << BRW_SURFACE_WIDTH_SHIFT |
+             (((buffer_size - 1) >> 7) & 0x1fff) << BRW_SURFACE_HEIGHT_SHIFT;
+   surf[3] = (((buffer_size - 1) >> 20) & 0x7f) << BRW_SURFACE_DEPTH_SHIFT |
              (pitch - 1) << BRW_SURFACE_PITCH_SHIFT;
 
    /* Emit relocation to surface contents.  The 965 PRM, Volume 4, section
@@ -314,7 +316,8 @@ static void
 brw_update_texture_surface(struct gl_context *ctx,
                            unsigned unit,
                            uint32_t *surf_offset,
-                           bool for_gather)
+                           bool for_gather,
+                           uint32_t plane)
 {
    struct brw_context *brw = brw_context(ctx);
    struct gl_texture_object *tObj = ctx->Texture.Unit[unit]._Current;
@@ -329,10 +332,17 @@ brw_update_texture_surface(struct gl_context *ctx,
       return;
    }
 
+   if (plane > 0) {
+      if (mt->plane[plane - 1] == NULL)
+         return;
+      mt = mt->plane[plane - 1];
+   }
+
    surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE,
 			  6 * 4, 32, surf_offset);
 
-   uint32_t tex_format = translate_tex_format(brw, mt->format,
+   mesa_format mesa_fmt = plane == 0 ? intelObj->_Format : mt->format;
+   uint32_t tex_format = translate_tex_format(brw, mesa_fmt,
                                               sampler->sRGBDecode);
 
    if (for_gather) {
@@ -379,8 +389,10 @@ brw_update_texture_surface(struct gl_context *ctx,
 	      (mt->logical_depth0 - 1) << BRW_SURFACE_DEPTH_SHIFT |
 	      (mt->pitch - 1) << BRW_SURFACE_PITCH_SHIFT);
 
+   const unsigned min_lod = tObj->MinLevel + tObj->BaseLevel - mt->first_level;
    surf[4] = (brw_get_surface_num_multisamples(mt->num_samples) |
-              SET_FIELD(tObj->BaseLevel - mt->first_level, BRW_SURFACE_MIN_LOD));
+              SET_FIELD(min_lod, BRW_SURFACE_MIN_LOD) |
+              SET_FIELD(tObj->MinLayer, BRW_SURFACE_MIN_ARRAY_ELEMENT));
 
    surf[5] = mt->valign == 4 ? BRW_SURFACE_VERTICAL_ALIGN_ENABLE : 0;
 
@@ -540,6 +552,7 @@ const struct brw_tracked_state brw_wm_pull_constants = {
    .dirty = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_FRAGMENT_PROGRAM |
              BRW_NEW_FS_PROG_DATA,
    },
@@ -804,6 +817,7 @@ const struct brw_tracked_state brw_renderbuffer_surfaces = {
       .mesa = _NEW_BUFFERS |
               _NEW_COLOR,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_FS_PROG_DATA,
    },
    .emit = update_renderbuffer_surfaces,
@@ -812,7 +826,8 @@ const struct brw_tracked_state brw_renderbuffer_surfaces = {
 const struct brw_tracked_state gen6_renderbuffer_surfaces = {
    .dirty = {
       .mesa = _NEW_BUFFERS,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP,
    },
    .emit = update_renderbuffer_surfaces,
 };
@@ -822,7 +837,7 @@ static void
 update_stage_texture_surfaces(struct brw_context *brw,
                               const struct gl_program *prog,
                               struct brw_stage_state *stage_state,
-                              bool for_gather)
+                              bool for_gather, uint32_t plane)
 {
    if (!prog)
       return;
@@ -835,7 +850,7 @@ update_stage_texture_surfaces(struct brw_context *brw,
    if (for_gather)
       surf_offset += stage_state->prog_data->binding_table.gather_texture_start;
    else
-      surf_offset += stage_state->prog_data->binding_table.texture_start;
+      surf_offset += stage_state->prog_data->binding_table.plane_start[plane];
 
    unsigned num_samplers = _mesa_fls(prog->SamplersUsed);
    for (unsigned s = 0; s < num_samplers; s++) {
@@ -846,7 +861,7 @@ update_stage_texture_surfaces(struct brw_context *brw,
 
          /* _NEW_TEXTURE */
          if (ctx->Texture.Unit[unit]._Current) {
-            brw->vtbl.update_texture_surface(ctx, unit, surf_offset + s, for_gather);
+            brw->vtbl.update_texture_surface(ctx, unit, surf_offset + s, for_gather, plane);
          }
       }
    }
@@ -873,26 +888,31 @@ brw_update_texture_surfaces(struct brw_context *brw)
    struct gl_program *fs = (struct gl_program *) brw->fragment_program;
 
    /* _NEW_TEXTURE */
-   update_stage_texture_surfaces(brw, vs, &brw->vs.base, false);
-   update_stage_texture_surfaces(brw, tcs, &brw->tcs.base, false);
-   update_stage_texture_surfaces(brw, tes, &brw->tes.base, false);
-   update_stage_texture_surfaces(brw, gs, &brw->gs.base, false);
-   update_stage_texture_surfaces(brw, fs, &brw->wm.base, false);
+   update_stage_texture_surfaces(brw, vs, &brw->vs.base, false, 0);
+   update_stage_texture_surfaces(brw, tcs, &brw->tcs.base, false, 0);
+   update_stage_texture_surfaces(brw, tes, &brw->tes.base, false, 0);
+   update_stage_texture_surfaces(brw, gs, &brw->gs.base, false, 0);
+   update_stage_texture_surfaces(brw, fs, &brw->wm.base, false, 0);
 
    /* emit alternate set of surface state for gather. this
     * allows the surface format to be overriden for only the
     * gather4 messages. */
    if (brw->gen < 8) {
       if (vs && vs->UsesGather)
-         update_stage_texture_surfaces(brw, vs, &brw->vs.base, true);
+         update_stage_texture_surfaces(brw, vs, &brw->vs.base, true, 0);
       if (tcs && tcs->UsesGather)
-         update_stage_texture_surfaces(brw, tcs, &brw->tcs.base, true);
+         update_stage_texture_surfaces(brw, tcs, &brw->tcs.base, true, 0);
       if (tes && tes->UsesGather)
-         update_stage_texture_surfaces(brw, tes, &brw->tes.base, true);
+         update_stage_texture_surfaces(brw, tes, &brw->tes.base, true, 0);
       if (gs && gs->UsesGather)
-         update_stage_texture_surfaces(brw, gs, &brw->gs.base, true);
+         update_stage_texture_surfaces(brw, gs, &brw->gs.base, true, 0);
       if (fs && fs->UsesGather)
-         update_stage_texture_surfaces(brw, fs, &brw->wm.base, true);
+         update_stage_texture_surfaces(brw, fs, &brw->wm.base, true, 0);
+   }
+
+   if (fs) {
+      update_stage_texture_surfaces(brw, fs, &brw->wm.base, false, 1);
+      update_stage_texture_surfaces(brw, fs, &brw->wm.base, false, 2);
    }
 
    brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
@@ -902,6 +922,7 @@ const struct brw_tracked_state brw_texture_surfaces = {
    .dirty = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_FRAGMENT_PROGRAM |
              BRW_NEW_FS_PROG_DATA |
              BRW_NEW_GEOMETRY_PROGRAM |
@@ -923,7 +944,7 @@ brw_update_cs_texture_surfaces(struct brw_context *brw)
    struct gl_program *cs = (struct gl_program *) brw->compute_program;
 
    /* _NEW_TEXTURE */
-   update_stage_texture_surfaces(brw, cs, &brw->cs.base, false);
+   update_stage_texture_surfaces(brw, cs, &brw->cs.base, false, 0);
 
    /* emit alternate set of surface state for gather. this
     * allows the surface format to be overriden for only the
@@ -931,7 +952,7 @@ brw_update_cs_texture_surfaces(struct brw_context *brw)
     */
    if (brw->gen < 8) {
       if (cs && cs->UsesGather)
-         update_stage_texture_surfaces(brw, cs, &brw->cs.base, true);
+         update_stage_texture_surfaces(brw, cs, &brw->cs.base, true, 0);
    }
 
    brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
@@ -941,6 +962,7 @@ const struct brw_tracked_state brw_cs_texture_surfaces = {
    .dirty = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_COMPUTE_PROGRAM,
    },
    .emit = brw_update_cs_texture_surfaces,
@@ -1031,6 +1053,7 @@ const struct brw_tracked_state brw_wm_ubo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_FS_PROG_DATA |
              BRW_NEW_UNIFORM_BUFFER,
    },
@@ -1057,6 +1080,7 @@ const struct brw_tracked_state brw_cs_ubo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_CS_PROG_DATA |
              BRW_NEW_UNIFORM_BUFFER,
    },
@@ -1109,6 +1133,7 @@ const struct brw_tracked_state brw_wm_abo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_ATOMIC_BUFFER |
+             BRW_NEW_BLORP |
              BRW_NEW_BATCH |
              BRW_NEW_FS_PROG_DATA,
    },
@@ -1134,6 +1159,7 @@ const struct brw_tracked_state brw_cs_abo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_ATOMIC_BUFFER |
+             BRW_NEW_BLORP |
              BRW_NEW_BATCH |
              BRW_NEW_CS_PROG_DATA,
    },
@@ -1159,6 +1185,7 @@ const struct brw_tracked_state brw_cs_image_surfaces = {
    .dirty = {
       .mesa = _NEW_TEXTURE | _NEW_PROGRAM,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_CS_PROG_DATA |
              BRW_NEW_IMAGE_UNITS
    },
@@ -1168,20 +1195,21 @@ const struct brw_tracked_state brw_cs_image_surfaces = {
 static uint32_t
 get_image_format(struct brw_context *brw, mesa_format format, GLenum access)
 {
+   const struct brw_device_info *devinfo = brw->intelScreen->devinfo;
+   uint32_t hw_format = brw_format_for_mesa_format(format);
    if (access == GL_WRITE_ONLY) {
-      return brw_format_for_mesa_format(format);
-   } else {
+      return hw_format;
+   } else if (isl_has_matching_typed_storage_image_format(devinfo, hw_format)) {
       /* Typed surface reads support a very limited subset of the shader
        * image formats.  Translate it into the closest format the
        * hardware supports.
        */
-      if ((_mesa_get_format_bytes(format) >= 16 && brw->gen <= 8) ||
-          (_mesa_get_format_bytes(format) >= 8 &&
-           (brw->gen == 7 && !brw->is_haswell)))
-         return BRW_SURFACEFORMAT_RAW;
-      else
-         return brw_format_for_mesa_format(
-            brw_lower_mesa_image_format(brw->intelScreen->devinfo, format));
+      return isl_lower_storage_image_format(devinfo, hw_format);
+   } else {
+      /* The hardware doesn't actually support a typed format that we can use
+       * so we have to fall back to untyped read/write messages.
+       */
+      return BRW_SURFACEFORMAT_RAW;
    }
 }
 
@@ -1326,13 +1354,14 @@ update_image_surface(struct brw_context *brw,
             const GLenum target = (obj->Target == GL_TEXTURE_CUBE_MAP ||
                                    obj->Target == GL_TEXTURE_CUBE_MAP_ARRAY ?
                                    GL_TEXTURE_2D_ARRAY : obj->Target);
+            const int surf_index = surf_offset - &brw->wm.base.surf_offset[0];
 
             brw->vtbl.emit_texture_surface_state(
                brw, mt, target,
                min_layer, min_layer + num_layers,
                min_level, min_level + 1,
                format, SWIZZLE_XYZW,
-               surf_offset, access != GL_READ_ONLY, false);
+               surf_offset, surf_index, access != GL_READ_ONLY, false);
          }
 
          update_texture_image_param(brw, u, surface_idx, param);
@@ -1390,6 +1419,7 @@ const struct brw_tracked_state brw_wm_image_surfaces = {
    .dirty = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
              BRW_NEW_FRAGMENT_PROGRAM |
              BRW_NEW_FS_PROG_DATA |
              BRW_NEW_IMAGE_UNITS
@@ -1444,7 +1474,8 @@ brw_upload_cs_work_groups_surface(struct brw_context *brw)
 
 const struct brw_tracked_state brw_cs_work_groups_surface = {
    .dirty = {
-      .brw = BRW_NEW_CS_WORK_GROUPS
+      .brw = BRW_NEW_BLORP |
+             BRW_NEW_CS_WORK_GROUPS
    },
    .emit = brw_upload_cs_work_groups_surface,
 };

@@ -51,7 +51,6 @@ temp(struct nvfx_fpc *fpc)
 
    if (idx >= fpc->max_temps) {
       NOUVEAU_ERR("out of temps!!\n");
-      assert(0);
       return nvfx_reg(NVFXSR_TEMP, 0);
    }
 
@@ -474,10 +473,10 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
       switch (fsrc->Register.File) {
       case TGSI_FILE_INPUT:
          if(fpc->fp->info.input_semantic_name[fsrc->Register.Index] == TGSI_SEMANTIC_FOG && (0
-               || fsrc->Register.SwizzleX == PIPE_SWIZZLE_ALPHA
-               || fsrc->Register.SwizzleY == PIPE_SWIZZLE_ALPHA
-               || fsrc->Register.SwizzleZ == PIPE_SWIZZLE_ALPHA
-               || fsrc->Register.SwizzleW == PIPE_SWIZZLE_ALPHA
+               || fsrc->Register.SwizzleX == PIPE_SWIZZLE_W
+               || fsrc->Register.SwizzleY == PIPE_SWIZZLE_W
+               || fsrc->Register.SwizzleZ == PIPE_SWIZZLE_W
+               || fsrc->Register.SwizzleW == PIPE_SWIZZLE_W
                )) {
             /* hardware puts 0 in fogcoord.w, but GL/Gallium want 1 there */
             struct nvfx_src addend = nvfx_src(nvfx_fp_imm(fpc, 0, 0, 0, 1));

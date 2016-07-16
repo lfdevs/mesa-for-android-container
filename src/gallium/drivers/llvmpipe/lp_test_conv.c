@@ -155,6 +155,7 @@ test_one(unsigned verbose,
          struct lp_type src_type,
          struct lp_type dst_type)
 {
+   LLVMContextRef context;
    struct gallivm_state *gallivm;
    LLVMValueRef func = NULL;
    conv_test_ptr_t conv_test_ptr;
@@ -211,7 +212,8 @@ test_one(unsigned verbose,
 
    eps = MAX2(lp_const_eps(src_type), lp_const_eps(dst_type));
 
-   gallivm = gallivm_create("test_module", LLVMGetGlobalContext());
+   context = LLVMContextCreate();
+   gallivm = gallivm_create("test_module", context);
 
    func = add_conv_test(gallivm, src_type, num_srcs, dst_type, num_dsts);
 
@@ -322,6 +324,7 @@ test_one(unsigned verbose,
       write_tsv_row(fp, src_type, dst_type, cycles_avg, success);
 
    gallivm_destroy(gallivm);
+   LLVMContextDispose(context);
 
    return success;
 }

@@ -6,7 +6,7 @@ env.Prepend(LIBS = [mesautil, gallium])
 
 env.Prepend(LIBPATH = [graw.dir])
 env.Prepend(LIBS = ['graw'])
-    
+
 
 if env['platform'] in ('freebsd8', 'sunos'):
     env.Append(LIBS = ['m'])

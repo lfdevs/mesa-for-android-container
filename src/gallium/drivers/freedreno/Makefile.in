@@ -142,8 +142,10 @@ am__objects_5 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler_nir.lo \
 	ir3/ir3_group.lo ir3/ir3_legalize.lo ir3/ir3_nir.lo \
 	ir3/ir3_nir_lower_if_else.lo ir3/ir3_print.lo ir3/ir3_ra.lo \
 	ir3/ir3_sched.lo ir3/ir3_shader.lo
+am__objects_6 = ir3/ir3_nir_trig.lo
 am_libfreedreno_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	$(am__objects_3) $(am__objects_4) $(am__objects_5)
+	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
+	$(am__objects_6)
 libfreedreno_la_OBJECTS = $(am_libfreedreno_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -158,8 +160,10 @@ am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 ir3_compiler_DEPENDENCIES = libfreedreno.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
-	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_2) \
-	$(am__DEPENDENCIES_1)
+	$(top_builddir)/src/compiler/glsl/libstandalone.la \
+	$(top_builddir)/src/util/libmesautil.la \
+	$(top_builddir)/src/mesa/libmesagallium.la \
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -311,6 +315,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -409,6 +415,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -429,6 +437,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -445,6 +456,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -669,6 +681,9 @@ ir3_SOURCES := \
 	ir3/ir3_shader.c \
 	ir3/ir3_shader.h
 
+ir3_GENERATED_FILES := \
+	ir3/ir3_nir_trig.c
+
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
@@ -738,6 +753,7 @@ AM_CFLAGS = \
 	-Wno-packed-bitfield-compat \
 	-I$(top_srcdir)/src/gallium/drivers/freedreno/ir3 \
 	-I$(top_builddir)/src/compiler/nir \
+	-I$(top_srcdir)/src/compiler/nir \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(FREEDRENO_CFLAGS)
 
@@ -747,8 +763,12 @@ libfreedreno_la_SOURCES = \
 	$(a2xx_SOURCES) \
 	$(a3xx_SOURCES) \
 	$(a4xx_SOURCES) \
-	$(ir3_SOURCES)
+	$(ir3_SOURCES) \
+	$(ir3_GENERATED_FILES)
 
+BUILT_SOURCES := $(ir3_GENERATED_FILES)
+CLEANFILES := $(BUILT_SOURCES)
+EXTRA_DIST = ir3/ir3_nir_trig.py
 
 # XXX: Required due to the C++ sources in libnir
 nodist_EXTRA_ir3_compiler_SOURCES = dummy.cpp
@@ -759,11 +779,14 @@ ir3_compiler_LDADD = \
 	libfreedreno.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
+	$(top_builddir)/src/compiler/glsl/libstandalone.la \
 	$(top_builddir)/src/util/libmesautil.la \
+	$(top_builddir)/src/mesa/libmesagallium.la \
 	$(GALLIUM_COMMON_LIB_DEPS) \
 	$(FREEDRENO_LIBS)
 
-all: all-am
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
 .SUFFIXES: .c .cpp .lo .o .obj
@@ -905,6 +928,7 @@ ir3/ir3_print.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_ra.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_sched.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_shader.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_nir_trig.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 
 libfreedreno.la: $(libfreedreno_la_OBJECTS) $(libfreedreno_la_DEPENDENCIES) $(EXTRA_libfreedreno_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libfreedreno_la_OBJECTS) $(libfreedreno_la_LIBADD) $(LIBS)
@@ -1002,6 +1026,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_legalize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir_lower_if_else.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir_trig.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_print.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_ra.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_sched.Plo@am__quote@
@@ -1148,10 +1173,12 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-check: check-am
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-am
 all-am: Makefile $(LTLIBRARIES) $(PROGRAMS)
 installdirs:
-install: install-am
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-am
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -1173,6 +1200,7 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -1189,6 +1217,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
@@ -1260,7 +1289,7 @@ ps-am:
 
 uninstall-am:
 
-.MAKE: install-am install-strip
+.MAKE: all check install install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
 	clean-libtool clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
@@ -1278,6 +1307,10 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
+
+ir3/ir3_nir_trig.c: ir3/ir3_nir_trig.py $(top_srcdir)/src/compiler/nir/nir_algebraic.py
+	$(MKDIR_GEN)
+	$(AM_V_GEN) PYTHONPATH=$(top_srcdir)/src/compiler/nir $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/ir3/ir3_nir_trig.py > $@ || ($(RM) $@; false)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

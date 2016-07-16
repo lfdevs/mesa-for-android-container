@@ -31,6 +31,20 @@
 
 #include <radeon_surface.h>
 
+static unsigned cik_get_macro_tile_index(struct radeon_surf *surf)
+{
+	unsigned index, tileb;
+
+	tileb = 8 * 8 * surf->bpe;
+	tileb = MIN2(surf->tile_split, tileb);
+
+	for (index = 0; tileb > 64; index++)
+		tileb >>= 1;
+
+	assert(index < 16);
+	return index;
+}
+
 static void surf_level_winsys_to_drm(struct radeon_surface_level *level_drm,
                                      const struct radeon_surf_level *level_ws)
 {
@@ -128,6 +142,8 @@ static void surf_drm_to_winsys(struct radeon_surf *surf_ws,
     surf_ws->tile_split = surf_drm->tile_split;
     surf_ws->stencil_tile_split = surf_drm->stencil_tile_split;
     surf_ws->stencil_offset = surf_drm->stencil_offset;
+
+    surf_ws->macro_tile_index = cik_get_macro_tile_index(surf_ws);
 
     for (i = 0; i < RADEON_SURF_MAX_LEVEL; i++) {
         surf_level_drm_to_winsys(&surf_ws->level[i], &surf_drm->level[i]);

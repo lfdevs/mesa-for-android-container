@@ -197,7 +197,7 @@ static void tgsi_gs_prepare(struct draw_geometry_shader *shader,
    if (shader->info.uses_invocationid) {
       unsigned i = machine->SysSemanticToIndex[TGSI_SEMANTIC_INVOCATIONID];
       for (j = 0; j < TGSI_QUAD_SIZE; j++)
-         machine->SystemValue[i].i[j] = shader->invocation_id;
+         machine->SystemValue[i].xyzw[0].i[j] = shader->invocation_id;
    }
 }
 
@@ -206,14 +206,8 @@ static unsigned tgsi_gs_run(struct draw_geometry_shader *shader,
 {
    struct tgsi_exec_machine *machine = shader->machine;
 
-   tgsi_set_exec_mask(machine,
-                      1,
-                      input_primitives > 1,
-                      input_primitives > 2,
-                      input_primitives > 3);
-
    /* run interpreter */
-   tgsi_exec_machine_run(machine);
+   tgsi_exec_machine_run(machine, 0);
 
    return
       machine->Temps[TGSI_EXEC_TEMP_PRIMITIVE_I].xyzw[TGSI_EXEC_TEMP_PRIMITIVE_C].u[0];
@@ -687,7 +681,9 @@ void draw_geometry_shader_prepare(struct draw_geometry_shader *shader,
    if (!use_llvm && shader && shader->machine->Tokens != shader->state.tokens) {
       tgsi_exec_machine_bind_shader(shader->machine,
                                     shader->state.tokens,
-                                    draw->gs.tgsi.sampler);
+                                    draw->gs.tgsi.sampler,
+                                    draw->gs.tgsi.image,
+                                    draw->gs.tgsi.buffer);
    }
 }
 
@@ -696,7 +692,7 @@ boolean
 draw_gs_init( struct draw_context *draw )
 {
    if (!draw->llvm) {
-      draw->gs.tgsi.machine = tgsi_exec_machine_create();
+      draw->gs.tgsi.machine = tgsi_exec_machine_create(PIPE_SHADER_GEOMETRY);
       if (!draw->gs.tgsi.machine)
          return FALSE;
 
@@ -807,12 +803,7 @@ draw_create_geometry_shader(struct draw_context *draw,
       if (gs->info.output_semantic_name[i] == TGSI_SEMANTIC_CLIPDIST) {
          debug_assert(gs->info.output_semantic_index[i] <
                       PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
-         gs->clipdistance_output[gs->info.output_semantic_index[i]] = i;
-      }
-      if (gs->info.output_semantic_name[i] == TGSI_SEMANTIC_CULLDIST) {
-         debug_assert(gs->info.output_semantic_index[i] <
-                      PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
-         gs->culldistance_output[gs->info.output_semantic_index[i]] = i;
+         gs->ccdistance_output[gs->info.output_semantic_index[i]] = i;
       }
    }
 

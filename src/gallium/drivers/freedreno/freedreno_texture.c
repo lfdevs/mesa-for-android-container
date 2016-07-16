@@ -110,49 +110,36 @@ fd_sampler_states_bind(struct pipe_context *pctx,
 	}
 }
 
-
-static void
-fd_fragtex_set_sampler_views(struct pipe_context *pctx, unsigned nr,
-		struct pipe_sampler_view **views)
-{
-	struct fd_context *ctx = fd_context(pctx);
-
-	/* on a2xx, since there is a flat address space for textures/samplers,
-	 * a change in # of fragment textures/samplers will trigger patching and
-	 * re-emitting the vertex shader:
-	 */
-	if (nr != ctx->fragtex.num_textures)
-		ctx->dirty |= FD_DIRTY_TEXSTATE;
-
-	set_sampler_views(&ctx->fragtex, nr, views);
-	ctx->dirty |= FD_DIRTY_FRAGTEX;
-}
-
-static void
-fd_verttex_set_sampler_views(struct pipe_context *pctx, unsigned nr,
-		struct pipe_sampler_view **views)
-{
-	struct fd_context *ctx = fd_context(pctx);
-	set_sampler_views(&ctx->verttex, nr, views);
-	ctx->dirty |= FD_DIRTY_VERTTEX;
-}
-
 void
 fd_set_sampler_views(struct pipe_context *pctx, unsigned shader,
-                     unsigned start, unsigned nr,
-                     struct pipe_sampler_view **views)
+		unsigned start, unsigned nr,
+		struct pipe_sampler_view **views)
 {
-   assert(start == 0);
-   switch (shader) {
-   case PIPE_SHADER_FRAGMENT:
-      fd_fragtex_set_sampler_views(pctx, nr, views);
-      break;
-   case PIPE_SHADER_VERTEX:
-      fd_verttex_set_sampler_views(pctx, nr, views);
-      break;
-   default:
-      ;
-   }
+	struct fd_context *ctx = fd_context(pctx);
+
+	assert(start == 0);
+
+	switch (shader) {
+	case PIPE_SHADER_FRAGMENT:
+		/* on a2xx, since there is a flat address space for textures/samplers,
+		 * a change in # of fragment textures/samplers will trigger patching
+		 * and re-emitting the vertex shader:
+		 *
+		 * (note: later gen's ignore FD_DIRTY_TEXSTATE so fine to set it)
+		 */
+		if (nr != ctx->fragtex.num_textures)
+			ctx->dirty |= FD_DIRTY_TEXSTATE;
+
+		set_sampler_views(&ctx->fragtex, nr, views);
+		ctx->dirty |= FD_DIRTY_FRAGTEX;
+		break;
+	case PIPE_SHADER_VERTEX:
+		set_sampler_views(&ctx->verttex, nr, views);
+		ctx->dirty |= FD_DIRTY_VERTTEX;
+		break;
+	default:
+		break;
+	}
 }
 
 void

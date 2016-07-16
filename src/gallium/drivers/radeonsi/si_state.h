@@ -30,8 +30,17 @@
 #include "si_pm4.h"
 #include "radeon/r600_pipe_common.h"
 
-#define SI_NUM_SHADERS (PIPE_SHADER_TESS_EVAL+1)
-#define SI_MAX_ATTRIBS 16
+#define SI_NUM_GRAPHICS_SHADERS (PIPE_SHADER_TESS_EVAL+1)
+#define SI_NUM_SHADERS (PIPE_SHADER_COMPUTE+1)
+
+#define SI_MAX_ATTRIBS			16
+#define SI_NUM_VERTEX_BUFFERS		SI_MAX_ATTRIBS
+#define SI_NUM_SAMPLERS			32 /* OpenGL textures units per shader */
+#define SI_NUM_CONST_BUFFERS		16
+#define SI_NUM_IMAGES			16
+#define SI_NUM_SHADER_BUFFERS		16
+
+#define SI_TESS_OFFCHIP_BLOCK_SIZE	(8192 * 4)
 
 struct si_screen;
 struct si_shader;
@@ -68,6 +77,7 @@ struct si_state_rasterizer {
 	bool			uses_poly_offset;
 	bool			clamp_fragment_color;
 	bool			rasterizer_discard;
+	bool			scissor_enable;
 };
 
 struct si_dsa_stencil_ref_part {
@@ -144,37 +154,32 @@ struct si_shader_data {
 	uint32_t		sh_base[SI_NUM_SHADERS];
 };
 
-/* User sampler views:   0..15
- * Polygon stipple tex:  16
- */
-#define SI_NUM_USER_SAMPLERS            16 /* AKA OpenGL textures units per shader */
-#define SI_POLY_STIPPLE_SAMPLER         SI_NUM_USER_SAMPLERS
-#define SI_NUM_SAMPLERS                 (SI_POLY_STIPPLE_SAMPLER + 1)
+/* Private read-write buffer slots. */
+enum {
+	SI_HS_RING_TESS_FACTOR,
+	SI_HS_RING_TESS_OFFCHIP,
 
-/* User constant buffers:   0..15
- * Driver state constants:  16
- */
-#define SI_NUM_USER_CONST_BUFFERS	16
-#define SI_DRIVER_STATE_CONST_BUF	SI_NUM_USER_CONST_BUFFERS
-#define SI_NUM_CONST_BUFFERS		(SI_DRIVER_STATE_CONST_BUF + 1)
+	SI_ES_RING_ESGS,
+	SI_GS_RING_ESGS,
 
-/* Read-write buffer slots.
- *
- * Ring buffers:        0..1
- * Streamout buffers:   2..5
- */
-#define SI_RING_TESS_FACTOR	0 /* for HS (TCS)  */
-#define SI_RING_ESGS		0 /* for ES, GS */
-#define SI_RING_GSVS		1 /* for GS, VS */
-#define SI_RING_GSVS_1		2 /* 1, 2, 3 for GS */
-#define SI_RING_GSVS_2		3
-#define SI_RING_GSVS_3		4
-#define SI_NUM_RING_BUFFERS	5
-#define SI_SO_BUF_OFFSET	SI_NUM_RING_BUFFERS
-#define SI_NUM_RW_BUFFERS	(SI_SO_BUF_OFFSET + 4)
+	SI_GS_RING_GSVS0,
+	SI_GS_RING_GSVS1,
+	SI_GS_RING_GSVS2,
+	SI_GS_RING_GSVS3,
+	SI_VS_RING_GSVS,
 
-#define SI_NUM_VERTEX_BUFFERS	SI_MAX_ATTRIBS
+	SI_VS_STREAMOUT_BUF0,
+	SI_VS_STREAMOUT_BUF1,
+	SI_VS_STREAMOUT_BUF2,
+	SI_VS_STREAMOUT_BUF3,
 
+	SI_HS_CONST_DEFAULT_TESS_LEVELS,
+	SI_VS_CONST_CLIP_PLANES,
+	SI_PS_CONST_POLY_STIPPLE,
+	SI_PS_CONST_SAMPLE_POSITIONS,
+
+	SI_NUM_RW_BUFFERS,
+};
 
 /* This represents descriptors in memory, such as buffer resources,
  * image resources, and sampler states.
@@ -186,15 +191,23 @@ struct si_descriptors {
 	unsigned element_dw_size;
 	/* The maximum number of descriptors. */
 	unsigned num_elements;
-	/* Whether the list has been changed and should be re-uploaded. */
-	bool list_dirty;
 
 	/* The buffer where the descriptors have been uploaded. */
 	struct r600_resource *buffer;
 	unsigned buffer_offset;
 
+	/* Offset in CE RAM */
+	unsigned ce_offset;
+
 	/* The i-th bit is set if that element is enabled (non-NULL resource). */
-	uint64_t enabled_mask;
+	unsigned enabled_mask;
+
+	/* elements of the list that are changed and need to be uploaded */
+	unsigned dirty_mask;
+
+	/* Whether the CE ram is dirty and needs to be reinitialized entirely
+	 * before we can do partial updates. */
+	bool ce_ram_dirty;
 
 	/* The shader userdata offset within a shader where the 64-bit pointer to the descriptor
 	 * array will be stored. */
@@ -237,19 +250,28 @@ struct si_buffer_resources {
 	} while(0)
 
 /* si_descriptors.c */
-void si_set_ring_buffer(struct pipe_context *ctx, uint shader, uint slot,
+void si_ce_reinitialize_all_descriptors(struct si_context *sctx);
+void si_ce_enable_loads(struct radeon_winsys_cs *ib);
+void si_set_ring_buffer(struct pipe_context *ctx, uint slot,
 			struct pipe_resource *buffer,
 			unsigned stride, unsigned num_records,
 			bool add_tid, bool swizzle,
 			unsigned element_size, unsigned index_stride, uint64_t offset);
 void si_init_all_descriptors(struct si_context *sctx);
-bool si_upload_shader_descriptors(struct si_context *sctx);
+bool si_upload_graphics_shader_descriptors(struct si_context *sctx);
+bool si_upload_compute_shader_descriptors(struct si_context *sctx);
 void si_release_all_descriptors(struct si_context *sctx);
 void si_all_descriptors_begin_new_cs(struct si_context *sctx);
 void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuffer,
 			    const uint8_t *ptr, unsigned size, uint32_t *const_offset);
 void si_shader_change_notify(struct si_context *sctx);
-void si_emit_shader_userdata(struct si_context *sctx, struct r600_atom *atom);
+void si_update_compressed_colortex_masks(struct si_context *sctx);
+void si_emit_graphics_shader_userdata(struct si_context *sctx,
+                                      struct r600_atom *atom);
+void si_emit_compute_shader_userdata(struct si_context *sctx);
+void si_set_constant_buffer(struct si_context *sctx,
+			    struct si_buffer_resources *buffers,
+			    uint slot, struct pipe_constant_buffer *input);
 
 /* si_state.c */
 struct si_shader_selector;
@@ -263,13 +285,24 @@ boolean si_is_format_supported(struct pipe_screen *screen,
                                unsigned sample_count,
                                unsigned usage);
 void si_init_state_functions(struct si_context *sctx);
-unsigned cik_bank_wh(unsigned bankwh);
-unsigned cik_db_pipe_config(struct si_screen *sscreen, unsigned tile_mode);
-unsigned cik_macro_tile_aspect(unsigned macro_tile_aspect);
-unsigned cik_tile_split(unsigned tile_split);
-unsigned si_array_mode(unsigned mode);
-uint32_t si_num_banks(struct si_screen *sscreen, struct r600_texture *tex);
-unsigned si_tile_mode_index(struct r600_texture *rtex, unsigned level, bool stencil);
+void si_init_screen_state_functions(struct si_screen *sscreen);
+void
+si_make_buffer_descriptor(struct si_screen *screen, struct r600_resource *buf,
+			  enum pipe_format format,
+			  unsigned first_element, unsigned last_element,
+			  uint32_t *state);
+void
+si_make_texture_descriptor(struct si_screen *screen,
+			   struct r600_texture *tex,
+			   bool sampler,
+			   enum pipe_texture_target target,
+			   enum pipe_format pipe_format,
+			   const unsigned char state_swizzle[4],
+			   unsigned base_level, unsigned first_level, unsigned last_level,
+			   unsigned first_layer, unsigned last_layer,
+			   unsigned width, unsigned height, unsigned depth,
+			   uint32_t *state,
+			   uint32_t *fmask_state);
 struct pipe_sampler_view *
 si_create_sampler_view_custom(struct pipe_context *ctx,
 			      struct pipe_resource *texture,
@@ -285,6 +318,8 @@ void si_destroy_shader_cache(struct si_screen *sscreen);
 
 /* si_state_draw.c */
 void si_emit_cache_flush(struct si_context *sctx, struct r600_atom *atom);
+void si_ce_pre_draw_synchronization(struct si_context *sctx);
+void si_ce_post_draw_synchronization(struct si_context *sctx);
 void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *dinfo);
 void si_trace_emit(struct si_context *sctx);
 

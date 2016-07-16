@@ -585,6 +585,7 @@ BuildUtil::split64BitOpPostRA(Function *fn, Instruction *i,
          return NULL;
       srcNr = 2;
       break;
+   case OP_SELP: srcNr = 3; break;
    default:
       // TODO when needed
       return NULL;
@@ -601,7 +602,10 @@ BuildUtil::split64BitOpPostRA(Function *fn, Instruction *i,
 
    for (int s = 0; s < srcNr; ++s) {
       if (lo->getSrc(s)->reg.size < 8) {
-         hi->setSrc(s, zero);
+         if (s == 2)
+            hi->setSrc(s, lo->getSrc(s));
+         else
+            hi->setSrc(s, zero);
       } else {
          if (lo->getSrc(s)->refCount() > 1)
             lo->setSrc(s, cloneShallow(fn, lo->getSrc(s)));

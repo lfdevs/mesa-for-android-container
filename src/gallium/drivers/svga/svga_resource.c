@@ -47,7 +47,8 @@ svga_resource_create(struct pipe_screen *screen,
 static struct pipe_resource *
 svga_resource_from_handle(struct pipe_screen * screen,
                           const struct pipe_resource *template,
-                          struct winsys_handle *whandle)
+                          struct winsys_handle *whandle,
+                          unsigned usage)
 {
    if (template->target == PIPE_BUFFER)
       return NULL;

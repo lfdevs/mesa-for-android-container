@@ -101,6 +101,9 @@ i915_drm_buffer_from_handle(struct i915_winsys *iws,
    if ((whandle->type != DRM_API_HANDLE_TYPE_SHARED) && (whandle->type != DRM_API_HANDLE_TYPE_FD))
       return NULL;
 
+   if (whandle->offset != 0)
+      return NULL;
+
    buf = CALLOC_STRUCT(i915_drm_buffer);
    if (!buf)
       return NULL;

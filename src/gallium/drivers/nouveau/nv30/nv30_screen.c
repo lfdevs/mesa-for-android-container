@@ -188,6 +188,14 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
    case PIPE_CAP_QUERY_MEMORY_INFO:
+   case PIPE_CAP_PCI_GROUP:
+   case PIPE_CAP_PCI_BUS:
+   case PIPE_CAP_PCI_DEVICE:
+   case PIPE_CAP_PCI_FUNCTION:
+   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+   case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+   case PIPE_CAP_CULL_DISTANCE:
+   case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -262,6 +270,10 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
          return (eng3d->oclass >= NV40_3D_CLASS) ? 32 : 13;
+      case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
+         return 32;
+      case PIPE_SHADER_CAP_PREFERRED_IR:
+         return PIPE_SHADER_IR_TGSI;
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return 0;
@@ -282,8 +294,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
          return 0;
-      case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
-         return 32;
       default:
          debug_printf("unknown vertex shader param %d\n", param);
          return 0;
@@ -311,6 +321,10 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return 16;
+      case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
+         return 32;
+      case PIPE_SHADER_CAP_PREFERRED_IR:
+         return PIPE_SHADER_IR_TGSI;
       case PIPE_SHADER_CAP_MAX_PREDS:
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
@@ -319,6 +333,7 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
       case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
       case PIPE_SHADER_CAP_SUBROUTINES:
+      case PIPE_SHADER_CAP_INTEGERS:
       case PIPE_SHADER_CAP_DOUBLES:
       case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
@@ -327,8 +342,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
          return 0;
-      case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
-         return 32;
       default:
          debug_printf("unknown fragment shader param %d\n", param);
          return 0;

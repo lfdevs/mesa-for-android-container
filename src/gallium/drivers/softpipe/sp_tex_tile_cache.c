@@ -55,7 +55,7 @@ sp_create_tex_tile_cache( struct pipe_context *pipe )
    tc = CALLOC_STRUCT( softpipe_tex_tile_cache );
    if (tc) {
       tc->pipe = pipe;
-      for (pos = 0; pos < Elements(tc->entries); pos++) {
+      for (pos = 0; pos < ARRAY_SIZE(tc->entries); pos++) {
          tc->entries[pos].addr.bits.invalid = 1;
       }
       tc->last_tile = &tc->entries[0]; /* any tile */
@@ -70,7 +70,7 @@ sp_destroy_tex_tile_cache(struct softpipe_tex_tile_cache *tc)
    if (tc) {
       uint pos;
 
-      for (pos = 0; pos < Elements(tc->entries); pos++) {
+      for (pos = 0; pos < ARRAY_SIZE(tc->entries); pos++) {
          /*assert(tc->entries[pos].x < 0);*/
       }
       if (tc->transfer) {
@@ -97,7 +97,7 @@ sp_tex_tile_cache_validate_texture(struct softpipe_tex_tile_cache *tc)
    assert(tc);
    assert(tc->texture);
 
-   for (i = 0; i < Elements(tc->entries); i++) {
+   for (i = 0; i < ARRAY_SIZE(tc->entries); i++) {
       tc->entries[i].addr.bits.invalid = 1;
    }
 }
@@ -147,7 +147,7 @@ sp_tex_tile_cache_set_sampler_view(struct softpipe_tex_tile_cache *tc,
 
       /* mark as entries as invalid/empty */
       /* XXX we should try to avoid this when the teximage hasn't changed */
-      for (i = 0; i < Elements(tc->entries); i++) {
+      for (i = 0; i < ARRAY_SIZE(tc->entries); i++) {
          tc->entries[i].addr.bits.invalid = 1;
       }
 
@@ -169,7 +169,7 @@ sp_flush_tex_tile_cache(struct softpipe_tex_tile_cache *tc)
 
    if (tc->texture) {
       /* caching a texture, mark all entries as empty */
-      for (pos = 0; pos < Elements(tc->entries); pos++) {
+      for (pos = 0; pos < ARRAY_SIZE(tc->entries); pos++) {
          tc->entries[pos].addr.bits.invalid = 1;
       }
       tc->tex_z = -1;

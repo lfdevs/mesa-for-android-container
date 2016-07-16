@@ -41,6 +41,7 @@
 #include "util/list.h"
 #include "util/u_time.h"
 #include "util/u_debug_stack.h"
+#include <inttypes.h>
 
 #include "pb_buffer.h"
 #include "pb_bufmgr.h"
@@ -190,7 +191,7 @@ pb_debug_buffer_check(struct pb_debug_buffer *buf)
       underflow = !check_random_pattern(map, buf->underflow_size, 
                                         &min_ofs, &max_ofs);
       if(underflow) {
-         debug_printf("buffer underflow (offset -%u%s to -%u bytes) detected\n",
+         debug_printf("buffer underflow (offset -%"PRIu64"%s to -%"PRIu64" bytes) detected\n",
                       buf->underflow_size - min_ofs,
                       min_ofs == 0 ? "+" : "",
                       buf->underflow_size - max_ofs);
@@ -200,7 +201,7 @@ pb_debug_buffer_check(struct pb_debug_buffer *buf)
                                        buf->overflow_size, 
                                        &min_ofs, &max_ofs);
       if(overflow) {
-         debug_printf("buffer overflow (size %u plus offset %u to %u%s bytes) detected\n",
+         debug_printf("buffer overflow (size %"PRIu64" plus offset %"PRIu64" to %"PRIu64"%s bytes) detected\n",
                       buf->base.size,
                       min_ofs,
                       max_ofs,
@@ -349,7 +350,7 @@ pb_debug_manager_dump_locked(struct pb_debug_manager *mgr)
       buf = LIST_ENTRY(struct pb_debug_buffer, curr, head);
 
       debug_printf("buffer = %p\n", (void *) buf);
-      debug_printf("    .size = 0x%x\n", buf->base.size);
+      debug_printf("    .size = 0x%"PRIx64"\n", buf->base.size);
       debug_backtrace_dump(buf->create_backtrace, PB_DEBUG_CREATE_BACKTRACE);
       
       curr = next; 

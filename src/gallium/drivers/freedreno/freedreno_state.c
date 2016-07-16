@@ -359,7 +359,8 @@ fd_set_stream_output_targets(struct pipe_context *pctx,
 		if (!changed && append)
 			continue;
 
-		so->offsets[i] = 0;
+		if (!append)
+			so->offsets[i] = offsets[i];
 
 		pipe_so_target_reference(&so->targets[i], targets[i]);
 	}

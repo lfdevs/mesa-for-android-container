@@ -1,5 +1,6 @@
 EXPORTS
 	OSMesaCreateContext = OSMesaCreateContext@8
+	OSMesaCreateContextAttribs = OSMesaCreateContextAttribs@8
 	OSMesaCreateContextExt = OSMesaCreateContextExt@20
 	OSMesaDestroyContext = OSMesaDestroyContext@4
 	OSMesaMakeCurrent = OSMesaMakeCurrent@20

@@ -283,7 +283,7 @@ lower_buffer_access::is_dereferenced_thing_row_major(const ir_rvalue *deref)
              * layouts at HIR generation time, but we don't do that for shared
              * variables, which are always column-major
              */
-            ir_variable *var = deref->variable_referenced();
+            MAYBE_UNUSED ir_variable *var = deref->variable_referenced();
             assert((var->is_in_buffer_block() && !matrix) ||
                    var->data.mode == ir_var_shader_shared);
             return false;
@@ -439,6 +439,10 @@ lower_buffer_access::setup_buffer_access(void *mem_ctx,
                field_align = type->std430_base_alignment(field_row_major);
             else
                field_align = type->std140_base_alignment(field_row_major);
+
+            if (struct_type->fields.structure[i].offset != -1) {
+               intra_struct_offset = struct_type->fields.structure[i].offset;
+            }
 
             intra_struct_offset = glsl_align(intra_struct_offset, field_align);
 

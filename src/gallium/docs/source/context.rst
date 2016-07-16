@@ -330,6 +330,9 @@ a resource without synchronizing with the CPU. This write will optionally
 wait for the query to complete, and will optionally write whether the value
 is available instead of the value itself.
 
+``set_active_query_state`` Set whether all current non-driver queries except
+TIME_ELAPSED are active or paused.
+
 The interface currently includes the following types of queries:
 
 ``PIPE_QUERY_OCCLUSION_COUNTER`` counts the number of fragments which

@@ -26,6 +26,11 @@ struct winsys_handle
     */
    unsigned type;
    /**
+    * Input for texture_get_handle, allows to export the offset
+    * of a specific layer of an array texture.
+    */
+   unsigned layer;
+   /**
     * Input to texture_from_handle.
     * Output for texture_get_handle.
     */
@@ -35,6 +40,11 @@ struct winsys_handle
     * Output for texture_get_handle.
     */
    unsigned stride;
+   /**
+    * Input to texture_from_handle.
+    * Output for texture_get_handle.
+    */
+   unsigned offset;
 };
 
 

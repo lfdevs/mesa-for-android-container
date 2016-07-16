@@ -64,7 +64,7 @@ upload_gs_state(struct brw_context *brw)
       if (brw->gs.prog_data->base.base.total_scratch) {
          OUT_RELOC(stage_state->scratch_bo,
                    I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-                   ffs(brw->gs.prog_data->base.base.total_scratch) - 11);
+                   ffs(stage_state->per_thread_scratch) - 11);
       } else {
          OUT_BATCH(0);
       }
@@ -155,6 +155,7 @@ const struct brw_tracked_state gen7_gs_state = {
    .dirty = {
       .mesa  = _NEW_TRANSFORM,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
                BRW_NEW_GEOMETRY_PROGRAM |
                BRW_NEW_GS_PROG_DATA,

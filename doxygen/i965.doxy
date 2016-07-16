@@ -46,5 +46,5 @@ TAGFILES               = glsl.tag=../glsl \
                          swrast_setup.tag=../swrast_setup \
                          tnl.tag=../tnl \
                          tnl_dd.tag=../tnl_dd \
-                         vbo.tag=vbo
+                         vbo.tag=../vbo
 GENERATE_TAGFILE       = i965.tag

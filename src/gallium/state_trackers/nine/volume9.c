@@ -117,6 +117,25 @@ NineVolume9_ctor( struct NineVolume9 *This,
     This->layer_stride = util_format_get_2d_size(This->info.format,
                                                  This->stride, pDesc->Height);
 
+    /* Get true format */
+    This->format_conversion = d3d9_to_pipe_format_checked(This->info.screen,
+                                                         pDesc->Format,
+                                                         This->info.target,
+                                                         This->info.nr_samples,
+                                                         This->info.bind, FALSE,
+                                                         TRUE);
+    if (This->info.format != This->format_conversion) {
+        This->stride_conversion = nine_format_get_stride(This->format_conversion,
+                                                         pDesc->Width);
+        This->layer_stride_conversion = util_format_get_2d_size(This->format_conversion,
+                                                                This->stride_conversion,
+                                                                pDesc->Height);
+        This->data_conversion = align_malloc(This->layer_stride_conversion *
+                                             This->desc.Depth, 32);
+        if (!This->data_conversion)
+            return E_OUTOFMEMORY;
+    }
+
     if (!This->resource) {
         hr = NineVolume9_AllocateData(This);
         if (FAILED(hr))
@@ -134,7 +153,9 @@ NineVolume9_dtor( struct NineVolume9 *This )
         NineVolume9_UnlockBox(This);
 
     if (This->data)
-           align_free(This->data);
+        align_free(This->data);
+    if (This->data_conversion)
+        align_free(This->data_conversion);
 
     pipe_resource_reference(&This->resource, NULL);
 
@@ -279,7 +300,14 @@ NineVolume9_LockBox( struct NineVolume9 *This,
                  &box);
     }
 
-    if (This->data) {
+    if (This->data_conversion) {
+        /* For now we only have uncompressed formats here */
+        pLockedVolume->RowPitch = This->stride_conversion;
+        pLockedVolume->SlicePitch = This->layer_stride_conversion;
+        pLockedVolume->pBits = This->data_conversion + box.z * This->layer_stride_conversion +
+                               box.y * This->stride_conversion +
+                               util_format_get_stride(This->format_conversion, box.x);
+    } else if (This->data) {
         pLockedVolume->RowPitch = This->stride;
         pLockedVolume->SlicePitch = This->layer_stride;
         pLockedVolume->pBits =
@@ -316,22 +344,59 @@ NineVolume9_UnlockBox( struct NineVolume9 *This )
         This->transfer = NULL;
     }
     --This->lock_count;
+
+    if (This->data_conversion) {
+        struct pipe_transfer *transfer;
+        uint8_t *dst = This->data;
+        struct pipe_box box;
+
+        u_box_3d(0, 0, 0, This->desc.Width, This->desc.Height, This->desc.Depth,
+                 &box);
+
+        if (!dst) {
+            dst = This->pipe->transfer_map(This->pipe,
+                                           This->resource,
+                                           This->level,
+                                           PIPE_TRANSFER_WRITE |
+                                           PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE,
+                                           &box, &transfer);
+            if (!dst)
+                return D3D_OK;
+        }
+
+        (void) util_format_translate_3d(This->info.format,
+                                        dst, This->data ? This->stride : transfer->stride,
+                                        This->data ? This->layer_stride : transfer->layer_stride,
+                                        0, 0, 0,
+                                        This->format_conversion,
+                                        This->data_conversion,
+                                        This->stride_conversion,
+                                        This->layer_stride_conversion,
+                                        0, 0, 0,
+                                        This->desc.Width, This->desc.Height,
+                                        This->desc.Height);
+
+        if (!This->data)
+            pipe_transfer_unmap(This->pipe, transfer);
+    }
+
     return D3D_OK;
 }
 
 /* When this function is called, we have already checked
  * The copy regions fit the volumes */
-HRESULT
+void
 NineVolume9_CopyMemToDefault( struct NineVolume9 *This,
                               struct NineVolume9 *From,
                               unsigned dstx, unsigned dsty, unsigned dstz,
                               struct pipe_box *pSrcBox )
 {
     struct pipe_context *pipe = This->pipe;
+    struct pipe_transfer *transfer = NULL;
     struct pipe_resource *r_dst = This->resource;
     struct pipe_box src_box;
     struct pipe_box dst_box;
-    const uint8_t *p_src;
+    uint8_t *map = NULL;
 
     DBG("This=%p From=%p dstx=%u dsty=%u dstz=%u pSrcBox=%p\n",
         This, From, dstx, dsty, dstz, pSrcBox);
@@ -358,17 +423,49 @@ NineVolume9_CopyMemToDefault( struct NineVolume9 *This,
     dst_box.height = src_box.height;
     dst_box.depth = src_box.depth;
 
-    p_src = NineVolume9_GetSystemMemPointer(From,
-         src_box.x, src_box.y, src_box.z);
+    map = pipe->transfer_map(pipe,
+                             r_dst,
+                             This->level,
+                             PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_RANGE,
+                             &dst_box, &transfer);
+    if (!map)
+        return;
 
-    pipe->transfer_inline_write(pipe, r_dst, This->level,
-                                0, /* WRITE|DISCARD are implicit */
-                                &dst_box, p_src,
-                                From->stride, From->layer_stride);
+    /* Note: if formats are the sames, it will revert
+     * to normal memcpy */
+    (void) util_format_translate_3d(r_dst->format,
+                                    map, transfer->stride,
+                                    transfer->layer_stride,
+                                    0, 0, 0,
+                                    From->info.format,
+                                    From->data, From->stride,
+                                    From->layer_stride,
+                                    src_box.x, src_box.y,
+                                    src_box.z,
+                                    src_box.width,
+                                    src_box.height,
+                                    src_box.depth);
+
+    pipe_transfer_unmap(pipe, transfer);
+
+    if (This->data_conversion)
+        (void) util_format_translate_3d(This->format_conversion,
+                                        This->data_conversion,
+                                        This->stride_conversion,
+                                        This->layer_stride_conversion,
+                                        dstx, dsty, dstz,
+                                        From->info.format,
+                                        From->data, From->stride,
+                                        From->layer_stride,
+                                        src_box.x, src_box.y,
+                                        src_box.z,
+                                        src_box.width,
+                                        src_box.height,
+                                        src_box.depth);
 
     NineVolume9_MarkContainerDirty(This);
 
-    return D3D_OK;
+    return;
 }
 
 HRESULT

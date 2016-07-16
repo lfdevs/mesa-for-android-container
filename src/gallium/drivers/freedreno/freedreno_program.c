@@ -37,8 +37,7 @@ fd_fp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	ctx->prog.fp = hwcso;
-	ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
-	ctx->dirty |= FD_DIRTY_PROG;
+	ctx->dirty |= FD_SHADER_DIRTY_FP;
 }
 
 static void
@@ -46,8 +45,7 @@ fd_vp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	ctx->prog.vp = hwcso;
-	ctx->prog.dirty |= FD_SHADER_DIRTY_VP;
-	ctx->dirty |= FD_DIRTY_PROG;
+	ctx->dirty |= FD_SHADER_DIRTY_VP;
 }
 
 static const char *solid_fp =
@@ -100,7 +98,7 @@ fd_prog_blit(struct pipe_context *pctx, int rts, bool depth)
 
 	debug_assert(rts <= MAX_RENDER_TARGETS);
 
-	ureg = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+	ureg = ureg_create(PIPE_SHADER_FRAGMENT);
 	if (!ureg)
 		return NULL;
 

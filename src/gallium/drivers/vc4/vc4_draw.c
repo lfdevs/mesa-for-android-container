@@ -32,12 +32,19 @@
 #include "vc4_resource.h"
 
 static void
-vc4_get_draw_cl_space(struct vc4_context *vc4)
+vc4_get_draw_cl_space(struct vc4_context *vc4, int vert_count)
 {
+        /* The SW-5891 workaround may cause us to emit multiple shader recs
+         * and draw packets.
+         */
+        int num_draws = DIV_ROUND_UP(vert_count, 65535) + 1;
+
         /* Binner gets our packet state -- vc4_emit.c contents,
          * and the primitive itself.
          */
-        cl_ensure_space(&vc4->bcl, 256);
+        cl_ensure_space(&vc4->bcl,
+                        256 + (VC4_PACKET_GL_ARRAY_PRIMITIVE_SIZE +
+                               VC4_PACKET_GL_SHADER_STATE_SIZE) * num_draws);
 
         /* Nothing for rcl -- that's covered by vc4_context.c */
 
@@ -45,7 +52,8 @@ vc4_get_draw_cl_space(struct vc4_context *vc4)
          * sized shader_rec (104 bytes base for 8 vattrs plus 32 bytes of
          * vattr stride).
          */
-        cl_ensure_space(&vc4->shader_rec, 12 * sizeof(uint32_t) + 104 + 8 * 32);
+        cl_ensure_space(&vc4->shader_rec,
+                        (12 * sizeof(uint32_t) + 104 + 8 * 32) * num_draws);
 
         /* Uniforms are covered by vc4_write_uniforms(). */
 
@@ -61,12 +69,12 @@ vc4_get_draw_cl_space(struct vc4_context *vc4)
  * Does the initial bining command list setup for drawing to a given FBO.
  */
 static void
-vc4_start_draw(struct vc4_context *vc4)
+vc4_start_draw(struct vc4_context *vc4, int vert_count)
 {
         if (vc4->needs_flush)
                 return;
 
-        vc4_get_draw_cl_space(vc4);
+        vc4_get_draw_cl_space(vc4, 0);
 
         struct vc4_cl_out *bcl = cl_start(&vc4->bcl);
         //   Tile state data is 48 bytes per tile, I think it can be thrown away
@@ -119,7 +127,8 @@ vc4_update_shadow_textures(struct pipe_context *pctx,
 }
 
 static void
-vc4_emit_gl_shader_state(struct vc4_context *vc4, const struct pipe_draw_info *info)
+vc4_emit_gl_shader_state(struct vc4_context *vc4, const struct pipe_draw_info *info,
+                         uint32_t extra_index_bias)
 {
         /* VC4_DIRTY_VTXSTATE */
         struct vc4_vertex_stateobj *vtx = vc4->vtx;
@@ -170,7 +179,8 @@ vc4_emit_gl_shader_state(struct vc4_context *vc4, const struct pipe_draw_info *i
                 /* not vc4->dirty tracked: vc4->last_index_bias */
                 uint32_t offset = (vb->buffer_offset +
                                    elem->src_offset +
-                                   vb->stride * info->index_bias);
+                                   vb->stride * (info->index_bias +
+                                                 extra_index_bias));
                 uint32_t vb_size = rsc->bo->size - offset;
                 uint32_t elem_size =
                         util_format_get_blocksize(elem->src_format);
@@ -219,8 +229,9 @@ vc4_emit_gl_shader_state(struct vc4_context *vc4, const struct pipe_draw_info *i
                            &vc4->constbuf[PIPE_SHADER_VERTEX],
                            &vc4->verttex);
 
-        vc4->last_index_bias = info->index_bias;
+        vc4->last_index_bias = info->index_bias + extra_index_bias;
         vc4->max_index = max_index;
+        vc4->shader_rec_count++;
 }
 
 /**
@@ -275,16 +286,17 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
         vc4_hw_2116_workaround(pctx);
 
-        vc4_get_draw_cl_space(vc4);
+        vc4_get_draw_cl_space(vc4, info->count);
 
         if (vc4->prim_mode != info->mode) {
                 vc4->prim_mode = info->mode;
                 vc4->dirty |= VC4_DIRTY_PRIM_MODE;
         }
 
-        vc4_start_draw(vc4);
+        vc4_start_draw(vc4, info->count);
         vc4_update_compiled_shaders(vc4, info->mode);
 
+        uint32_t start_draw_calls_queued = vc4->draw_calls_queued;
         vc4_emit_state(pctx);
 
         if ((vc4->dirty & (VC4_DIRTY_VTXBUF |
@@ -298,7 +310,7 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                            vc4->prog.vs->uniform_dirty_bits |
                            vc4->prog.fs->uniform_dirty_bits)) ||
             vc4->last_index_bias != info->index_bias) {
-                vc4_emit_gl_shader_state(vc4, info);
+                vc4_emit_gl_shader_state(vc4, info, 0);
         }
 
         vc4->dirty = 0;
@@ -342,12 +354,83 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 if (vc4->indexbuf.index_size == 4 || vc4->indexbuf.user_buffer)
                         pipe_resource_reference(&prsc, NULL);
         } else {
-                cl_u8(&bcl, VC4_PACKET_GL_ARRAY_PRIMITIVE);
-                cl_u8(&bcl, info->mode);
-                cl_u32(&bcl, info->count);
-                cl_u32(&bcl, info->start);
+                uint32_t count = info->count;
+                uint32_t start = info->start;
+                uint32_t extra_index_bias = 0;
+
+                while (count) {
+                        uint32_t this_count = count;
+                        uint32_t step = count;
+                        static const uint32_t max_verts = 65535;
+
+                        /* GFXH-515 / SW-5891: The binner emits 16 bit indices
+                         * for drawarrays, which means that if start + count >
+                         * 64k it would truncate the top bits.  Work around
+                         * this by emitting a limited number of primitives at
+                         * a time and reemitting the shader state pointing
+                         * farther down the vertex attribute arrays.
+                         *
+                         * To do this properly for line loops or trifans, we'd
+                         * need to make a new VB containing the first vertex
+                         * plus whatever remainder.
+                         */
+                        if (extra_index_bias) {
+                                cl_end(&vc4->bcl, bcl);
+                                vc4_emit_gl_shader_state(vc4, info,
+                                                         extra_index_bias);
+                                bcl = cl_start(&vc4->bcl);
+                        }
+
+                        if (start + count > max_verts) {
+                                switch (info->mode) {
+                                case PIPE_PRIM_POINTS:
+                                        this_count = step = max_verts;
+                                        break;
+                                case PIPE_PRIM_LINES:
+                                        this_count = step = max_verts - (max_verts % 2);
+                                        break;
+                                case PIPE_PRIM_LINE_STRIP:
+                                        this_count = max_verts;
+                                        step = max_verts - 1;
+                                        break;
+                                case PIPE_PRIM_LINE_LOOP:
+                                        this_count = max_verts;
+                                        step = max_verts - 1;
+                                        debug_warn_once("unhandled line loop "
+                                                        "looping behavior with "
+                                                        ">65535 verts\n");
+                                        break;
+                                case PIPE_PRIM_TRIANGLES:
+                                        this_count = step = max_verts - (max_verts % 3);
+                                        break;
+                                case PIPE_PRIM_TRIANGLE_STRIP:
+                                        this_count = max_verts;
+                                        step = max_verts - 2;
+                                        break;
+                                default:
+                                        debug_warn_once("unhandled primitive "
+                                                        "max vert count, truncating\n");
+                                        this_count = step = max_verts;
+                                }
+                        }
+
+                        cl_u8(&bcl, VC4_PACKET_GL_ARRAY_PRIMITIVE);
+                        cl_u8(&bcl, info->mode);
+                        cl_u32(&bcl, this_count);
+                        cl_u32(&bcl, start);
+
+                        count -= step;
+                        extra_index_bias += start + step;
+                        start = 0;
+                }
         }
         cl_end(&vc4->bcl, bcl);
+
+        /* No flushes of the job should have happened between when we started
+         * emitting state for our draw and when we just emitted our draw's
+         * primitives.
+         */
+        assert(start_draw_calls_queued == vc4->draw_calls_queued);
 
         if (vc4->zsa && vc4->zsa->base.depth.enabled) {
                 vc4->resolve |= PIPE_CLEAR_DEPTH;
@@ -355,8 +438,6 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         if (vc4->zsa && vc4->zsa->base.stencil[0].enabled)
                 vc4->resolve |= PIPE_CLEAR_STENCIL;
         vc4->resolve |= PIPE_CLEAR_COLOR0;
-
-        vc4->shader_rec_count++;
 
         if (vc4_debug & VC4_DEBUG_ALWAYS_FLUSH)
                 vc4_flush(pctx);
@@ -410,7 +491,7 @@ vc4_clear(struct pipe_context *pctx, unsigned buffers,
         vc4->cleared |= buffers;
         vc4->resolve |= buffers;
 
-        vc4_start_draw(vc4);
+        vc4_start_draw(vc4, 0);
 }
 
 static void

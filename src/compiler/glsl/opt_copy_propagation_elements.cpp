@@ -493,6 +493,9 @@ ir_copy_propagation_elements_visitor::add_copy(ir_assignment *ir)
       }
    }
 
+   if (lhs->var->data.precise != rhs->var->data.precise)
+      return;
+
    entry = new(this->mem_ctx) acp_entry(lhs->var, rhs->var, write_mask,
 					swizzle);
    this->acp->push_tail(entry);

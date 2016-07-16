@@ -139,7 +139,16 @@ fail:
 int
 vc4_cl_validate(struct drm_device *dev, struct vc4_exec_info *exec)
 {
+	struct drm_vc4_submit_cl *args = exec->args;
 	int ret = 0;
+
+	if (args->color_write.bits & VC4_RENDER_CONFIG_MS_MODE_4X) {
+		exec->tile_width = 32;
+		exec->tile_height = 32;
+	} else {
+		exec->tile_width = 64;
+		exec->tile_height = 64;
+	}
 
 	if (exec->args->bin_cl_size != 0) {
 		ret = vc4_get_bcl(dev, exec);

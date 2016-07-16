@@ -305,9 +305,11 @@ create_shader(struct gl_context *ctx, GLenum type)
       return 0;
    }
 
+   _mesa_HashLockMutex(ctx->Shared->ShaderObjects);
    name = _mesa_HashFindFreeKeyBlock(ctx->Shared->ShaderObjects, 1);
    sh = ctx->Driver.NewShader(ctx, name, type);
-   _mesa_HashInsert(ctx->Shared->ShaderObjects, name, sh);
+   _mesa_HashInsertLocked(ctx->Shared->ShaderObjects, name, sh);
+   _mesa_HashUnlockMutex(ctx->Shared->ShaderObjects);
 
    return name;
 }
@@ -319,13 +321,17 @@ create_shader_program(struct gl_context *ctx)
    GLuint name;
    struct gl_shader_program *shProg;
 
+   _mesa_HashLockMutex(ctx->Shared->ShaderObjects);
+
    name = _mesa_HashFindFreeKeyBlock(ctx->Shared->ShaderObjects, 1);
 
    shProg = _mesa_new_shader_program(name);
 
-   _mesa_HashInsert(ctx->Shared->ShaderObjects, name, shProg);
+   _mesa_HashInsertLocked(ctx->Shared->ShaderObjects, name, shProg);
 
    assert(shProg->RefCount == 1);
+
+   _mesa_HashUnlockMutex(ctx->Shared->ShaderObjects);
 
    return name;
 }
@@ -727,7 +733,7 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname,
       for (i = 0; i < shProg->NumUniformBlocks; i++) {
 	 /* Add one for the terminating NUL character.
 	  */
-	 const GLint len = strlen(shProg->UniformBlocks[i]->Name) + 1;
+	 const GLint len = strlen(shProg->UniformBlocks[i].Name) + 1;
 
 	 if (len > max_len)
 	    max_len = len;
@@ -949,7 +955,6 @@ shader_source(struct gl_shader *sh, const GLchar *source)
    /* free old shader source string and install new one */
    free((void *)sh->Source);
    sh->Source = source;
-   sh->CompileStatus = GL_FALSE;
 #ifdef DEBUG
    sh->SourceChecksum = _mesa_str_checksum(sh->Source);
 #endif
@@ -959,12 +964,9 @@ shader_source(struct gl_shader *sh, const GLchar *source)
 /**
  * Compile a shader.
  */
-static void
-compile_shader(struct gl_context *ctx, GLuint shaderObj)
+void
+_mesa_compile_shader(struct gl_context *ctx, struct gl_shader *sh)
 {
-   struct gl_shader *sh;
-
-   sh = _mesa_lookup_shader_err(ctx, shaderObj, "glCompileShader");
    if (!sh)
       return;
 
@@ -1023,12 +1025,9 @@ compile_shader(struct gl_context *ctx, GLuint shaderObj)
 /**
  * Link a program's shaders.
  */
-static void
-link_program(struct gl_context *ctx, GLuint program)
+void
+_mesa_link_program(struct gl_context *ctx, struct gl_shader_program *shProg)
 {
-   struct gl_shader_program *shProg;
-
-   shProg = _mesa_lookup_shader_program_err(ctx, program, "glLinkProgram");
    if (!shProg)
       return;
 
@@ -1133,6 +1132,9 @@ use_shader_program(struct gl_context *ctx, gl_shader_stage stage,
    if ((shProg != NULL) && (shProg->_LinkedShaders[stage] == NULL))
       shProg = NULL;
 
+   if (shProg)
+      _mesa_shader_program_init_subroutine_defaults(shProg);
+
    if (*target != shProg) {
       /* Program is current, flush it */
       if (shTarget == ctx->_Shader) {
@@ -1177,7 +1179,6 @@ _mesa_use_program(struct gl_context *ctx, struct gl_shader_program *shProg)
       use_shader_program(ctx, i, shProg, &ctx->Shader);
    _mesa_active_program(ctx, shProg, "glUseProgram");
 
-   _mesa_shader_program_init_subroutine_defaults(shProg);
    if (ctx->Driver.UseProgram)
       ctx->Driver.UseProgram(ctx, shProg);
 }
@@ -1270,7 +1271,8 @@ _mesa_CompileShader(GLuint shaderObj)
    GET_CURRENT_CONTEXT(ctx);
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glCompileShader %u\n", shaderObj);
-   compile_shader(ctx, shaderObj);
+   _mesa_compile_shader(ctx, _mesa_lookup_shader_err(ctx, shaderObj,
+                                                     "glCompileShader"));
 }
 
 
@@ -1517,7 +1519,8 @@ _mesa_LinkProgram(GLuint programObj)
    GET_CURRENT_CONTEXT(ctx);
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glLinkProgram %u\n", programObj);
-   link_program(ctx, programObj);
+   _mesa_link_program(ctx, _mesa_lookup_shader_program_err(ctx, programObj,
+                                                           "glLinkProgram"));
 }
 
 #if defined(HAVE_SHA1)
@@ -2085,6 +2088,7 @@ _mesa_copy_linked_program_data(gl_shader_stage type,
    switch (type) {
    case MESA_SHADER_VERTEX:
       dst->ClipDistanceArraySize = src->Vert.ClipDistanceArraySize;
+      dst->CullDistanceArraySize = src->Vert.CullDistanceArraySize;
       break;
    case MESA_SHADER_TESS_CTRL: {
       struct gl_tess_ctrl_program *dst_tcp =
@@ -2100,6 +2104,7 @@ _mesa_copy_linked_program_data(gl_shader_stage type,
       dst_tep->VertexOrder = src->TessEval.VertexOrder;
       dst_tep->PointMode = src->TessEval.PointMode;
       dst->ClipDistanceArraySize = src->TessEval.ClipDistanceArraySize;
+      dst->CullDistanceArraySize = src->TessEval.CullDistanceArraySize;
       break;
    }
    case MESA_SHADER_GEOMETRY: {
@@ -2110,6 +2115,7 @@ _mesa_copy_linked_program_data(gl_shader_stage type,
       dst_gp->InputType = src->Geom.InputType;
       dst_gp->OutputType = src->Geom.OutputType;
       dst->ClipDistanceArraySize = src->Geom.ClipDistanceArraySize;
+      dst->CullDistanceArraySize = src->Geom.CullDistanceArraySize;
       dst_gp->UsesEndPrimitive = src->Geom.UsesEndPrimitive;
       dst_gp->UsesStreams = src->Geom.UsesStreams;
       break;
@@ -2154,25 +2160,24 @@ _mesa_CreateShaderProgramv(GLenum type, GLsizei count,
    }
 
    if (shader) {
-      _mesa_ShaderSource(shader, count, strings, NULL);
+      struct gl_shader *sh = _mesa_lookup_shader(ctx, shader);
 
-      compile_shader(ctx, shader);
+      _mesa_ShaderSource(shader, count, strings, NULL);
+      _mesa_compile_shader(ctx, sh);
 
       program = create_shader_program(ctx);
       if (program) {
 	 struct gl_shader_program *shProg;
-	 struct gl_shader *sh;
 	 GLint compiled = GL_FALSE;
 
 	 shProg = _mesa_lookup_shader_program(ctx, program);
-	 sh = _mesa_lookup_shader(ctx, shader);
 
 	 shProg->SeparateShader = GL_TRUE;
 
 	 get_shaderiv(ctx, shader, GL_COMPILE_STATUS, &compiled);
 	 if (compiled) {
 	    attach_shader(ctx, program, shader);
-	    link_program(ctx, program);
+	    _mesa_link_program(ctx, shProg);
 	    detach_shader(ctx, program, shader);
 
 #if 0
@@ -2321,7 +2326,6 @@ _mesa_GetSubroutineIndex(GLuint program, GLenum shadertype,
    resource_type = _mesa_shader_stage_to_subroutine(stage);
    res = _mesa_program_resource_find_name(shProg, resource_type, name, NULL);
    if (!res) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "%s", api_name);
      return -1;
    }
 
@@ -2366,6 +2370,11 @@ _mesa_GetActiveSubroutineUniformiv(GLuint program, GLenum shadertype,
       return;
    }
 
+   if (index >= sh->NumSubroutineUniforms) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s: invalid index greater than GL_ACTIVE_SUBROUTINE_UNIFORMS", api_name);
+      return;
+   }
+
    switch (pname) {
    case GL_NUM_COMPATIBLE_SUBROUTINES: {
       res = _mesa_program_resource_find_index(shProg, resource_type, index);
@@ -2403,7 +2412,7 @@ _mesa_GetActiveSubroutineUniformiv(GLuint program, GLenum shadertype,
       res = _mesa_program_resource_find_index(shProg, resource_type, index);
       if (res) {
          values[0] = strlen(_mesa_program_resource_name(res)) + 1
-            + ((_mesa_program_resource_array_size(res) != 0) ? 3 : 0);;
+            + ((_mesa_program_resource_array_size(res) != 0) ? 3 : 0);
       }
       break;
    default:
@@ -2537,16 +2546,24 @@ _mesa_UniformSubroutinesuiv(GLenum shadertype, GLsizei count,
       }
 
       int uni_count = uni->array_elements ? uni->array_elements : 1;
-      int j, k;
+      int j, k, f;
 
       for (j = i; j < i + uni_count; j++) {
-         struct gl_subroutine_function *subfn;
-         if (indices[j] >= sh->NumSubroutineFunctions) {
+         struct gl_subroutine_function *subfn = NULL;
+         if (indices[j] > sh->MaxSubroutineFunctionIndex) {
             _mesa_error(ctx, GL_INVALID_VALUE, "%s", api_name);
             return;
          }
 
-         subfn = &sh->SubroutineFunctions[indices[j]];
+         for (f = 0; f < sh->NumSubroutineFunctions; f++) {
+            if (sh->SubroutineFunctions[f].index == indices[j])
+               subfn = &sh->SubroutineFunctions[f];
+         }
+
+         if (!subfn) {
+            continue;
+         }
+
          for (k = 0; k < subfn->num_compat_types; k++) {
             if (subfn->types[k] == uni->type)
                break;
@@ -2573,7 +2590,6 @@ _mesa_UniformSubroutinesuiv(GLenum shadertype, GLsizei count,
       memcpy(&uni->storage[0], &indices[i],
              sizeof(GLuint) * uni_count);
 
-      uni->initialized = true;
       _mesa_propagate_uniforms_to_driver_storage(uni, 0, uni_count);
       i += uni_count;
    } while(i < count);
@@ -2666,7 +2682,7 @@ _mesa_GetProgramStageiv(GLuint program, GLenum shadertype,
       values[0] = sh->NumSubroutineUniformRemapTable;
       break;
    case GL_ACTIVE_SUBROUTINE_UNIFORMS:
-      values[0] = sh->NumSubroutineUniformTypes;
+      values[0] = sh->NumSubroutineUniforms;
       break;
    case GL_ACTIVE_SUBROUTINE_MAX_LENGTH:
    {
@@ -2747,7 +2763,7 @@ _mesa_shader_init_subroutine_defaults(struct gl_shader *sh)
 
       for (j = 0; j < uni_count; j++)
          memcpy(&uni->storage[j], &val, sizeof(int));
-      uni->initialized = true;
+
       _mesa_propagate_uniforms_to_driver_storage(uni, 0, uni_count);
    }
 }

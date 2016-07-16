@@ -107,10 +107,12 @@ static void* ftab_winsys[1] =
    &vlVdpPresentationQueueTargetCreateX11  /* VDP_FUNC_ID_PRESENTATION_QUEUE_TARGET_CREATE_X11 */
 };
 
-static void* ftab_driver[2] =
+static void* ftab_driver[4] =
 {
    &vlVdpVideoSurfaceGallium, /* VDP_FUNC_ID_SURFACE_GALLIUM */
-   &vlVdpOutputSurfaceGallium /* VDP_FUNC_ID_OUTPUT_SURFACE_GALLIUM */
+   &vlVdpOutputSurfaceGallium, /* VDP_FUNC_ID_OUTPUT_SURFACE_GALLIUM */
+   &vlVdpVideoSurfaceDMABuf, /* VDP_FUNC_ID_VIDEO_SURFACE_DMA_BUF */
+   &vlVdpOutputSurfaceDMABuf /* VDP_FUNC_ID_OUTPUT_SURFACE_DMA_BUF */
 };
 
 boolean vlGetFuncFTAB(VdpFuncId function_id, void **func)
@@ -119,17 +121,17 @@ boolean vlGetFuncFTAB(VdpFuncId function_id, void **func)
    *func = NULL;
 
    if (function_id < VDP_FUNC_ID_BASE_WINSYS) {
-      if (function_id < Elements(ftab))
+      if (function_id < ARRAY_SIZE(ftab))
          *func = ftab[function_id];
 
    } else if (function_id < VDP_FUNC_ID_BASE_DRIVER) {
       function_id -= VDP_FUNC_ID_BASE_WINSYS;
-      if (function_id < Elements(ftab_winsys))
+      if (function_id < ARRAY_SIZE(ftab_winsys))
          *func = ftab_winsys[function_id];
 
    } else {
       function_id -= VDP_FUNC_ID_BASE_DRIVER;
-      if (function_id < Elements(ftab_driver))
+      if (function_id < ARRAY_SIZE(ftab_driver))
          *func = ftab_driver[function_id];
    }
 

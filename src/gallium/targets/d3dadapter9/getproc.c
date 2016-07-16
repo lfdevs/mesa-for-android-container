@@ -38,7 +38,7 @@ PUBLIC const void * WINAPI
 D3DAdapter9GetProc( const char *name )
 {
     int i;
-    for (i = 0; i < Elements(drivers); ++i) {
+    for (i = 0; i < ARRAY_SIZE(drivers); ++i) {
         if (strcmp(name, drivers[i].name) == 0) {
             return drivers[i].desc;
         }

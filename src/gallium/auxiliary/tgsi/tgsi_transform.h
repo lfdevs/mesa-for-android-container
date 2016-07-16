@@ -302,6 +302,40 @@ tgsi_transform_op2_inst(struct tgsi_transform_context *ctx,
 
 
 static inline void
+tgsi_transform_op3_inst(struct tgsi_transform_context *ctx,
+                        unsigned opcode,
+                        unsigned dst_file,
+                        unsigned dst_index,
+                        unsigned dst_writemask,
+                        unsigned src0_file,
+                        unsigned src0_index,
+                        unsigned src1_file,
+                        unsigned src1_index,
+                        unsigned src2_file,
+                        unsigned src2_index)
+{
+   struct tgsi_full_instruction inst;
+
+   inst = tgsi_default_full_instruction();
+   inst.Instruction.Opcode = opcode;
+   inst.Instruction.NumDstRegs = 1;
+   inst.Dst[0].Register.File = dst_file,
+   inst.Dst[0].Register.Index = dst_index;
+   inst.Dst[0].Register.WriteMask = dst_writemask;
+   inst.Instruction.NumSrcRegs = 3;
+   inst.Src[0].Register.File = src0_file;
+   inst.Src[0].Register.Index = src0_index;
+   inst.Src[1].Register.File = src1_file;
+   inst.Src[1].Register.Index = src1_index;
+   inst.Src[2].Register.File = src2_file;
+   inst.Src[2].Register.Index = src2_index;
+
+   ctx->emit_instruction(ctx, &inst);
+}
+
+
+
+static inline void
 tgsi_transform_op1_swz_inst(struct tgsi_transform_context *ctx,
                             unsigned opcode,
                             unsigned dst_file,
@@ -482,14 +516,17 @@ tgsi_transform_kill_inst(struct tgsi_transform_context *ctx,
 
 
 static inline void
-tgsi_transform_tex_2d_inst(struct tgsi_transform_context *ctx,
-                           unsigned dst_file,
-                           unsigned dst_index,
-                           unsigned src_file,
-                           unsigned src_index,
-                           unsigned sampler_index)
+tgsi_transform_tex_inst(struct tgsi_transform_context *ctx,
+                        unsigned dst_file,
+                        unsigned dst_index,
+                        unsigned src_file,
+                        unsigned src_index,
+                        unsigned tex_target,
+                        unsigned sampler_index)
 {
    struct tgsi_full_instruction inst;
+
+   assert(tex_target < TGSI_TEXTURE_COUNT);
 
    inst = tgsi_default_full_instruction();
    inst.Instruction.Opcode = TGSI_OPCODE_TEX;
@@ -498,7 +535,7 @@ tgsi_transform_tex_2d_inst(struct tgsi_transform_context *ctx,
    inst.Dst[0].Register.Index = dst_index;
    inst.Instruction.NumSrcRegs = 2;
    inst.Instruction.Texture = TRUE;
-   inst.Texture.Texture = TGSI_TEXTURE_2D;
+   inst.Texture.Texture = tex_target;
    inst.Src[0].Register.File = src_file;
    inst.Src[0].Register.Index = src_index;
    inst.Src[1].Register.File = TGSI_FILE_SAMPLER;

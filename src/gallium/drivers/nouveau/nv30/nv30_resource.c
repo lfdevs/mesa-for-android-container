@@ -66,7 +66,8 @@ nv30_resource_create(struct pipe_screen *pscreen,
 static struct pipe_resource *
 nv30_resource_from_handle(struct pipe_screen *pscreen,
                           const struct pipe_resource *tmpl,
-                          struct winsys_handle *handle)
+                          struct winsys_handle *handle,
+                          unsigned usage)
 {
    if (tmpl->target == PIPE_BUFFER)
       return NULL;

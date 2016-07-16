@@ -20,6 +20,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
+#include "main/context.h"
+
 #include "brw_context.h"
 
 /**
@@ -72,4 +75,21 @@ brw_get_graphics_reset_status(struct gl_context *ctx)
    }
 
    return GL_NO_ERROR;
+}
+
+void
+brw_check_for_reset(struct brw_context *brw)
+{
+   uint32_t reset_count;
+   uint32_t active;
+   uint32_t pending;
+   int err;
+
+   err = drm_intel_get_reset_stats(brw->hw_ctx, &reset_count, &active,
+                                   &pending);
+   if (err)
+      return;
+
+   if (active > 0 || pending > 0)
+      _mesa_set_context_lost_dispatch(&brw->ctx);
 }

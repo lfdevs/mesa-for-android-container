@@ -44,33 +44,6 @@ void nine_convert_sampler_state(struct cso_context *, int idx, const DWORD *);
 
 void nine_pipe_context_clear(struct NineDevice9 *);
 
-static inline unsigned d3dlock_buffer_to_pipe_transfer_usage(DWORD Flags)
-{
-    unsigned usage;
-
-    if (Flags & D3DLOCK_DISCARD)
-        usage = PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
-    else
-    if (Flags & D3DLOCK_READONLY)
-        usage = PIPE_TRANSFER_READ;
-    else
-        usage = PIPE_TRANSFER_READ_WRITE;
-
-    if (Flags & D3DLOCK_NOOVERWRITE)
-        usage = (PIPE_TRANSFER_UNSYNCHRONIZED |
-                 PIPE_TRANSFER_DISCARD_RANGE | usage) & ~PIPE_TRANSFER_READ;
-    else
-    if (Flags & D3DLOCK_DONOTWAIT)
-        usage |= PIPE_TRANSFER_DONTBLOCK;
-
-    /*
-    if (Flags & D3DLOCK_NO_DIRTY_UPDATE)
-        usage |= PIPE_TRANSFER_FLUSH_EXPLICIT;
-    */
-
-    return usage;
-}
-
 static inline void
 rect_to_pipe_box(struct pipe_box *dst, const RECT *src)
 {
@@ -338,7 +311,8 @@ d3d9_to_pipe_format_checked(struct pipe_screen *screen,
 
     /* bypass_check: Used for D3DPOOL_SCRATCH, which
      * isn't limited to the formats supported by the
-     * device. */
+     * device, and to check we are not using a format
+     * fallback. */
     if (bypass_check || format_check_internal(result))
         return result;
 
@@ -357,6 +331,15 @@ d3d9_to_pipe_format_checked(struct pipe_screen *screen,
         case D3DFMT_D24X8:
             if (format_check_internal(PIPE_FORMAT_Z24X8_UNORM))
                 return PIPE_FORMAT_Z24X8_UNORM;
+        /* Support for X8L8V8U8 bumpenvmap format with lighting bits.
+         * X8L8V8U8 is commonly supported among dx9 cards.
+         * To avoid precision loss, we use PIPE_FORMAT_R32G32B32X32_FLOAT,
+         * however using PIPE_FORMAT_R8G8B8A8_SNORM should be ok */
+        case D3DFMT_X8L8V8U8:
+            if (bindings & PIPE_BIND_RENDER_TARGET)
+                return PIPE_FORMAT_NONE;
+            if (format_check_internal(PIPE_FORMAT_R32G32B32X32_FLOAT))
+                return PIPE_FORMAT_R32G32B32X32_FLOAT;
         default:
             break;
     }
@@ -440,6 +423,7 @@ d3dformat_to_string(D3DFORMAT fmt)
     case D3DFMT_NVDB: return "D3DFMT_NVDB";
     case D3DFMT_RESZ: return "D3DFMT_RESZ";
     case D3DFMT_NULL: return "D3DFMT_NULL";
+    case D3DFMT_ATOC: return "D3DFMT_ATOC";
     default:
         break;
     }

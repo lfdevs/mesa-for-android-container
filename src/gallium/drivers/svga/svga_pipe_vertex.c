@@ -275,7 +275,7 @@ svga_create_vertex_elements_state(struct pipe_context *pipe,
       }
    }
 
-   svga->hud.num_state_objects++;
+   svga->hud.num_vertexelement_objects++;
 
    return velems;
 }
@@ -318,7 +318,7 @@ svga_delete_vertex_elements_state(struct pipe_context *pipe, void *state)
    }
 
    FREE(velems);
-   svga->hud.num_state_objects--;
+   svga->hud.num_vertexelement_objects--;
 }
 
 void svga_cleanup_vertex_state( struct svga_context *svga )

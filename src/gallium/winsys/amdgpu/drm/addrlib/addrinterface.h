@@ -33,12 +33,12 @@
 #ifndef __ADDR_INTERFACE_H__
 #define __ADDR_INTERFACE_H__
 
+#include "addrtypes.h"
+
 #if defined(__cplusplus)
 extern "C"
 {
 #endif
-
-#include "addrtypes.h"
 
 #define ADDRLIB_VERSION_MAJOR 5
 #define ADDRLIB_VERSION_MINOR 25

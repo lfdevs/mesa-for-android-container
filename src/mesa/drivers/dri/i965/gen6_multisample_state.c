@@ -171,7 +171,7 @@ gen6_determine_sample_mask(struct brw_context *brw)
    /* BRW_NEW_NUM_SAMPLES */
    unsigned num_samples = brw->num_samples;
 
-   if (ctx->Multisample._Enabled) {
+   if (_mesa_is_multisample_enabled(ctx)) {
       if (ctx->Multisample.SampleCoverage) {
          coverage = ctx->Multisample.SampleCoverageValue;
          coverage_invert = ctx->Multisample.SampleCoverageInvert;
@@ -215,7 +215,8 @@ upload_multisample_state(struct brw_context *brw)
 const struct brw_tracked_state gen6_multisample_state = {
    .dirty = {
       .mesa = _NEW_MULTISAMPLE,
-      .brw = BRW_NEW_CONTEXT |
+      .brw = BRW_NEW_BLORP |
+             BRW_NEW_CONTEXT |
              BRW_NEW_NUM_SAMPLES,
    },
    .emit = upload_multisample_state

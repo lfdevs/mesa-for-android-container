@@ -117,8 +117,7 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libradeonwinsys_la_LIBADD =
 am__objects_1 = radeon_drm_bo.lo radeon_drm_cs.lo \
-	radeon_drm_cs_dump.lo radeon_drm_surface.lo \
-	radeon_drm_winsys.lo
+	radeon_drm_surface.lo radeon_drm_winsys.lo
 am_libradeonwinsys_la_OBJECTS = $(am__objects_1)
 libradeonwinsys_la_OBJECTS = $(am_libradeonwinsys_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -257,6 +256,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -355,6 +356,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -375,6 +378,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -391,6 +397,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -480,15 +487,11 @@ C_SOURCES := \
 	radeon_drm_bo.c \
 	radeon_drm_bo.h \
 	radeon_drm_cs.c \
-	radeon_drm_cs_dump.c \
 	radeon_drm_cs.h \
 	radeon_drm_public.h \
 	radeon_drm_surface.c \
 	radeon_drm_winsys.c \
 	radeon_drm_winsys.h
-
-TOOLS_HDR := \
-	radeon_ctx.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -561,7 +564,6 @@ AM_CFLAGS = \
 
 noinst_LTLIBRARIES = libradeonwinsys.la
 libradeonwinsys_la_SOURCES = $(C_SOURCES)
-EXTRA_DIST = $(TOOLS_HDR)
 all: all-am
 
 .SUFFIXES:
@@ -619,7 +621,6 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_drm_bo.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_drm_cs.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_drm_cs_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_drm_surface.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_drm_winsys.Plo@am__quote@
 

@@ -196,6 +196,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.ARB_half_float_vertex = true;
    ctx->Extensions.ARB_instanced_arrays = true;
    ctx->Extensions.ARB_internalformat_query = true;
+   ctx->Extensions.ARB_internalformat_query2 = true;
    ctx->Extensions.ARB_map_buffer_range = true;
    ctx->Extensions.ARB_occlusion_query = true;
    ctx->Extensions.ARB_occlusion_query2 = true;
@@ -245,6 +246,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.EXT_texture_sRGB_decode = true;
    ctx->Extensions.EXT_texture_swizzle = true;
    ctx->Extensions.EXT_vertex_array_bgra = true;
+   ctx->Extensions.KHR_robustness = true;
    ctx->Extensions.AMD_seamless_cubemap_per_texture = true;
    ctx->Extensions.APPLE_object_purgeable = true;
    ctx->Extensions.ATI_separate_stencil = true;
@@ -266,7 +268,9 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.OES_texture_half_float = true;
    ctx->Extensions.OES_texture_half_float_linear = true;
 
-   if (brw->gen >= 6)
+   if (brw->gen >= 8)
+      ctx->Const.GLSLVersion = 430;
+   else if (brw->gen >= 6)
       ctx->Const.GLSLVersion = 330;
    else
       ctx->Const.GLSLVersion = 120;
@@ -288,6 +292,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_blend_func_extended =
          !driQueryOptionb(&brw->optionCache, "disable_blend_func_extended");
       ctx->Extensions.ARB_conditional_render_inverted = true;
+      ctx->Extensions.ARB_cull_distance = true;
       ctx->Extensions.ARB_draw_buffers_blend = true;
       ctx->Extensions.ARB_ES3_compatibility = true;
       ctx->Extensions.ARB_fragment_layer_viewport = true;
@@ -307,6 +312,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.EXT_framebuffer_multisample_blit_scaled = true;
       ctx->Extensions.EXT_transform_feedback = true;
       ctx->Extensions.OES_depth_texture_cube_map = true;
+      ctx->Extensions.OES_sample_variables = true;
 
       ctx->Extensions.ARB_timer_query = brw->intelScreen->hw_has_timestamp;
 
@@ -339,6 +345,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_texture_view = true;
       ctx->Extensions.ARB_shader_storage_buffer_object = true;
       ctx->Extensions.EXT_shader_samples_identical = true;
+      ctx->Extensions.OES_texture_buffer = true;
 
       if (brw->can_do_pipelined_register_writes) {
          ctx->Extensions.ARB_draw_indirect = true;
@@ -364,13 +371,33 @@ intelInitExtensions(struct gl_context *ctx)
       }
    }
 
+   if (brw->gen >= 8 || brw->is_haswell || brw->is_baytrail) {
+      ctx->Extensions.ARB_robust_buffer_access_behavior = true;
+   }
+
+   if (brw->intelScreen->has_mi_math_and_lrr) {
+      ctx->Extensions.ARB_query_buffer_object = true;
+   }
+
+   if (brw->gen >= 8 || brw->is_baytrail) {
+      /* For now, we only enable OES_copy_image on platforms that support
+       * ETC2 natively in hardware.  We would need more hacks to support it
+       * elsewhere.
+       */
+      ctx->Extensions.OES_copy_image = true;
+   }
+
    if (brw->gen >= 8) {
+      ctx->Extensions.ARB_shader_precision = true;
       ctx->Extensions.ARB_stencil_texturing = true;
+      ctx->Extensions.ARB_texture_stencil8 = true;
+      ctx->Extensions.ARB_gpu_shader_fp64 = true;
+      ctx->Extensions.ARB_vertex_attrib_64bit = true;
+      ctx->Extensions.OES_shader_io_blocks = true;
    }
 
    if (brw->gen >= 9) {
       ctx->Extensions.KHR_texture_compression_astc_ldr = true;
-      ctx->Extensions.KHR_texture_compression_astc_hdr = true;
       ctx->Extensions.ARB_shader_stencil_export = true;
    }
 

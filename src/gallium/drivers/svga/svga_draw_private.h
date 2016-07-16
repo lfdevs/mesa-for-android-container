@@ -29,6 +29,8 @@
 #include "pipe/p_compiler.h"
 #include "pipe/p_defines.h"
 #include "indices/u_indices.h"
+#include "util/u_prim.h"
+#include "svga_context.h"
 #include "svga_hw_reg.h"
 #include "svga3d_shaderdefs.h"
 
@@ -157,13 +159,17 @@ struct svga_hwtnl {
     * This is compensated for in the offset associated with all
     * vertex buffers.
     */
-
    int index_bias;
    
-   /* Flatshade information:
+   /* Provoking vertex information (for flat shading). */
+   unsigned api_pv;  /**< app-requested PV mode (PV_FIRST or PV_LAST) */
+   unsigned hw_pv;   /**< device-supported PV mode (PV_FIRST or PV_LAST) */
+
+   /* The triangle fillmode for the device (one of PIPE_POLYGON_MODE_{FILL,
+    * LINE,POINT}).  If the polygon front mode matches the back mode,
+    * api_fillmode will be that mode.  Otherwise, api_fillmode will be
+    * PIPE_POLYGON_MODE_FILL.
     */
-   unsigned api_pv;
-   unsigned hw_pv;
    unsigned api_fillmode;
 
    /* Cache the results of running a particular generate func on each
@@ -178,9 +184,42 @@ struct svga_hwtnl {
 
 
 
-/***********************************************************************
- * Internal functions
+/**
+ * Do we need to use the gallium 'indices' helper to render unfilled
+ * triangles?
  */
+static inline boolean
+svga_need_unfilled_fallback(const struct svga_hwtnl *hwtnl,
+                            enum pipe_prim_type prim)
+{
+   const struct svga_context *svga = hwtnl->svga;
+
+   if (u_reduced_prim(prim) != PIPE_PRIM_TRIANGLES) {
+      /* if we're drawing points or lines, no fallback needed */
+      return FALSE;
+   }
+
+   if (svga_have_vgpu10(svga)) {
+      /* vgpu10 supports polygon fill and line modes */
+      if ((prim == PIPE_PRIM_QUADS ||
+           prim == PIPE_PRIM_QUAD_STRIP ||
+           prim == PIPE_PRIM_POLYGON) &&
+          hwtnl->api_fillmode == PIPE_POLYGON_MODE_LINE) {
+         /* VGPU10 doesn't directly render quads or polygons.  They're
+          * converted to triangles.  If we let the device draw the triangle
+          * outlines we'll get an extra, stray lines in the interiors.
+          * So, to draw unfilled quads correctly, we need the fallback.
+          */
+         return true;
+      }
+      return hwtnl->api_fillmode == PIPE_POLYGON_MODE_POINT;
+   } else {
+      /* vgpu9 doesn't support line or point fill modes */
+      return hwtnl->api_fillmode != PIPE_POLYGON_MODE_FILL;
+   }
+}
+
+
 enum pipe_error 
 svga_hwtnl_prim( struct svga_hwtnl *hwtnl,
                  const SVGA3dPrimitiveRange *range,
@@ -197,7 +236,7 @@ svga_hwtnl_simple_draw_range_elements( struct svga_hwtnl *hwtnl,
                                        int index_bias,
                                        unsigned min_index,
                                        unsigned max_index,
-                                       unsigned prim, 
+                                       enum pipe_prim_type prim,
                                        unsigned start,
                                        unsigned count,
                                        unsigned start_instance,

@@ -47,6 +47,7 @@ void fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring,
 
 /* grouped together emit-state for prog/vertex/state emit: */
 struct fd4_emit {
+	struct pipe_debug_callback *debug;
 	const struct fd_vertex_state *vtx;
 	const struct fd_program_stateobj *prog;
 	const struct pipe_draw_info *info;
@@ -59,7 +60,7 @@ struct fd4_emit {
 	bool no_decode_srgb;
 
 	/* cached to avoid repeated lookups of same variants: */
-	struct ir3_shader_variant *vp, *fp;
+	const struct ir3_shader_variant *vp, *fp;
 	/* TODO: other shader stages.. */
 };
 
@@ -70,22 +71,28 @@ static inline enum a4xx_color_fmt fd4_emit_format(struct pipe_surface *surf)
 	return fd4_pipe2color(surf->format);
 }
 
-static inline struct ir3_shader_variant *
+static inline const struct ir3_shader_variant *
 fd4_emit_get_vp(struct fd4_emit *emit)
 {
 	if (!emit->vp) {
 		struct fd4_shader_stateobj *so = emit->prog->vp;
-		emit->vp = ir3_shader_variant(so->shader, emit->key);
+		emit->vp = ir3_shader_variant(so->shader, emit->key, emit->debug);
 	}
 	return emit->vp;
 }
 
-static inline struct ir3_shader_variant *
+static inline const struct ir3_shader_variant *
 fd4_emit_get_fp(struct fd4_emit *emit)
 {
 	if (!emit->fp) {
-		struct fd4_shader_stateobj *so = emit->prog->fp;
-		emit->fp = ir3_shader_variant(so->shader, emit->key);
+		if (emit->key.binning_pass) {
+			/* use dummy stateobj to simplify binning vs non-binning: */
+			static const struct ir3_shader_variant binning_fp = {};
+			emit->fp = &binning_fp;
+		} else {
+			struct fd4_shader_stateobj *so = emit->prog->fp;
+			emit->fp = ir3_shader_variant(so->shader, emit->key, emit->debug);
+		}
 	}
 	return emit->fp;
 }

@@ -28,11 +28,11 @@
 #ifndef TGSI_TEXT_H
 #define TGSI_TEXT_H
 
+#include "pipe/p_compiler.h"
+
 #if defined __cplusplus
 extern "C" {
 #endif
-
-#include "pipe/p_compiler.h"
 
 struct tgsi_token;
 

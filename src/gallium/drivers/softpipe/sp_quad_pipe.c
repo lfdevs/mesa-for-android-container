@@ -43,15 +43,17 @@ void
 sp_build_quad_pipeline(struct softpipe_context *sp)
 {
    boolean early_depth_test =
-      sp->depth_stencil->depth.enabled &&
+      (sp->depth_stencil->depth.enabled &&
       sp->framebuffer.zsbuf &&
       !sp->depth_stencil->alpha.enabled &&
       !sp->fs_variant->info.uses_kill &&
       !sp->fs_variant->info.writes_z &&
-      !sp->fs_variant->info.writes_stencil;
+       !sp->fs_variant->info.writes_stencil) ||
+      sp->fs_variant->info.properties[TGSI_PROPERTY_FS_EARLY_DEPTH_STENCIL];
 
    sp->quad.first = sp->quad.blend;
 
+   sp->early_depth = early_depth_test;
    if (early_depth_test) {
       insert_stage_at_head( sp, sp->quad.shade );
       insert_stage_at_head( sp, sp->quad.depth_test );

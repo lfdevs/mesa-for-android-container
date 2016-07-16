@@ -175,6 +175,7 @@ trace_screen_get_paramf(struct pipe_screen *_screen,
 
 static int
 trace_screen_get_compute_param(struct pipe_screen *_screen,
+                               enum pipe_shader_ir ir_type,
                                enum pipe_compute_cap param, void *data)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
@@ -184,10 +185,11 @@ trace_screen_get_compute_param(struct pipe_screen *_screen,
    trace_dump_call_begin("pipe_screen", "get_compute_param");
 
    trace_dump_arg(ptr, screen);
+   trace_dump_arg(int, ir_type);
    trace_dump_arg(int, param);
    trace_dump_arg(ptr, data);
 
-   result = screen->get_compute_param(screen, param, data);
+   result = screen->get_compute_param(screen, ir_type, param, data);
 
    trace_dump_ret(int, result);
 
@@ -313,7 +315,8 @@ trace_screen_resource_create(struct pipe_screen *_screen,
 static struct pipe_resource *
 trace_screen_resource_from_handle(struct pipe_screen *_screen,
                                  const struct pipe_resource *templ,
-                                 struct winsys_handle *handle)
+                                 struct winsys_handle *handle,
+                                  unsigned usage)
 {
    struct trace_screen *tr_screen = trace_screen(_screen);
    struct pipe_screen *screen = tr_screen->screen;
@@ -321,7 +324,7 @@ trace_screen_resource_from_handle(struct pipe_screen *_screen,
 
    /* TODO trace call */
 
-   result = screen->resource_from_handle(screen, templ, handle);
+   result = screen->resource_from_handle(screen, templ, handle, usage);
 
    result = trace_resource_create(trace_screen(_screen), result);
 
@@ -331,7 +334,8 @@ trace_screen_resource_from_handle(struct pipe_screen *_screen,
 static boolean
 trace_screen_resource_get_handle(struct pipe_screen *_screen,
                                 struct pipe_resource *_resource,
-                                struct winsys_handle *handle)
+                                struct winsys_handle *handle,
+                                 unsigned usage)
 {
    struct trace_screen *tr_screen = trace_screen(_screen);
    struct trace_resource *tr_resource = trace_resource(_resource);
@@ -340,7 +344,7 @@ trace_screen_resource_get_handle(struct pipe_screen *_screen,
 
    /* TODO trace call */
 
-   return screen->resource_get_handle(screen, resource, handle);
+   return screen->resource_get_handle(screen, resource, handle, usage);
 }
 
 

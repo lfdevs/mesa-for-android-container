@@ -81,6 +81,8 @@ struct vc4_exec_info {
 	struct drm_gem_cma_object *tile_bo;
 	uint32_t tile_alloc_offset;
 
+	uint32_t tile_width, tile_height;
+
 	/**
 	 * Computed addresses pointing into exec_bo where we start the
 	 * bin thread (ct0) and render thread (ct1).

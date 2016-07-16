@@ -167,7 +167,7 @@ compile_init(struct fd2_compile_context *ctx, struct fd_program_stateobj *prog,
 				ctx->output_export_idx[decl->Range.First] =
 						semantic_idx(&decl->Semantic);
 
-				if (ctx->type == TGSI_PROCESSOR_VERTEX) {
+				if (ctx->type == PIPE_SHADER_VERTEX) {
 					switch (name) {
 					case TGSI_SEMANTIC_POSITION:
 						ctx->position = ctx->num_regs[TGSI_FILE_OUTPUT];
@@ -307,7 +307,7 @@ static unsigned
 get_temp_gpr(struct fd2_compile_context *ctx, int idx)
 {
 	unsigned num = idx + ctx->num_regs[TGSI_FILE_INPUT];
-	if (ctx->type == TGSI_PROCESSOR_VERTEX)
+	if (ctx->type == PIPE_SHADER_VERTEX)
 		num++;
 	return num;
 }
@@ -322,7 +322,7 @@ add_dst_reg(struct fd2_compile_context *ctx, struct ir2_instruction *alu,
 	switch (dst->File) {
 	case TGSI_FILE_OUTPUT:
 		flags |= IR2_REG_EXPORT;
-		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
+		if (ctx->type == PIPE_SHADER_VERTEX) {
 			if (dst->Index == ctx->position) {
 				num = 62;
 			} else if (dst->Index == ctx->psize) {
@@ -370,7 +370,7 @@ add_src_reg(struct fd2_compile_context *ctx, struct ir2_instruction *alu,
 		flags |= IR2_REG_CONST;
 		break;
 	case TGSI_FILE_INPUT:
-		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
+		if (ctx->type == PIPE_SHADER_VERTEX) {
 			num = src->Index + 1;
 		} else {
 			num = export_linkage(ctx,
@@ -1162,9 +1162,9 @@ fd2_compile_shader(struct fd_program_stateobj *prog,
 	if (compile_init(&ctx, prog, so) != TGSI_PARSE_OK)
 		return -1;
 
-	if (ctx.type == TGSI_PROCESSOR_VERTEX) {
+	if (ctx.type == PIPE_SHADER_VERTEX) {
 		compile_vtx_fetch(&ctx);
-	} else if (ctx.type == TGSI_PROCESSOR_FRAGMENT) {
+	} else if (ctx.type == PIPE_SHADER_FRAGMENT) {
 		prog->num_exports = 0;
 		memset(prog->export_linkage, 0xff,
 				sizeof(prog->export_linkage));

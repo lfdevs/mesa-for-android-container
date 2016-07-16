@@ -1,0 +1,2 @@
+package-name-doesnt-match-sonames libvulkan-intel
+shlib-without-versioned-soname usr/lib/*/libvulkan_intel.so libvulkan_intel.so

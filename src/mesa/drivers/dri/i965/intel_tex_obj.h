@@ -58,6 +58,8 @@ struct intel_texture_object
     * since the mt is shared across views with differing formats.
     */
    mesa_format _Format;
+
+   const struct intel_image_format *planar_format;
 };
 
 

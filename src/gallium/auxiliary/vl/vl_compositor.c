@@ -62,7 +62,7 @@ create_vert_shader(struct vl_compositor *c)
    struct ureg_dst o_vpos, o_vtex, o_color;
    struct ureg_dst o_vtop, o_vbottom;
 
-   shader = ureg_create(TGSI_PROCESSOR_VERTEX);
+   shader = ureg_create(PIPE_SHADER_VERTEX);
    if (!shader)
       return false;
 
@@ -136,7 +136,7 @@ create_frag_shader_video_buffer(struct vl_compositor *c)
    struct ureg_dst fragment;
    unsigned i;
 
-   shader = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+   shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader)
       return false;
 
@@ -180,7 +180,7 @@ create_frag_shader_weave(struct vl_compositor *c)
    struct ureg_dst o_fragment;
    unsigned i, j;
 
-   shader = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+   shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader)
       return false;
 
@@ -274,7 +274,7 @@ create_frag_shader_palette(struct vl_compositor *c, bool include_cc)
    struct ureg_dst fragment;
    unsigned i;
 
-   shader = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+   shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader)
       return false;
 
@@ -318,7 +318,7 @@ create_frag_shader_rgba(struct vl_compositor *c)
    struct ureg_src tc, color, sampler;
    struct ureg_dst texel, fragment;
 
-   shader = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+   shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader)
       return false;
 

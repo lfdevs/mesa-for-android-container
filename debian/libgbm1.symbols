@@ -11,7 +11,9 @@ libgbm.so.1 libgbm1 #MINVER#
  gbm_bo_get_user_data@Base 8.1~0
  gbm_bo_get_width@Base 7.11~1
  gbm_bo_import@Base 8.1~0
+ gbm_bo_map@Base 12.0.0~0
  gbm_bo_set_user_data@Base 8.1~0
+ gbm_bo_unmap@Base 12.0.0~0
  gbm_bo_write@Base 8.1~0
  gbm_create_device@Base 7.11~1
  gbm_device_destroy@Base 7.11~1

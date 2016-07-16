@@ -188,7 +188,7 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
       return 0;
    case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
-      return 1024;
+      return 256;
    case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
       return 16384;
    case PIPE_CAP_TEXTURE_QUERY_LOD:
@@ -232,6 +232,17 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_GENERATE_MIPMAP:
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
+   case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
+   case PIPE_CAP_STRING_MARKER:
+   case PIPE_CAP_QUERY_MEMORY_INFO:
+   case PIPE_CAP_PCI_GROUP:
+   case PIPE_CAP_PCI_BUS:
+   case PIPE_CAP_PCI_DEVICE:
+   case PIPE_CAP_PCI_FUNCTION:
+   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+   case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+   case PIPE_CAP_CULL_DISTANCE:
+   case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
       return 0;
    case PIPE_CAP_VENDOR_ID:
       return 0x1af4;
@@ -270,9 +281,10 @@ virgl_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_sh
       case PIPE_SHADER_CAP_MAX_INPUTS:
          if (vscreen->caps.caps.v1.glsl_level < 150)
             return 16;
-         return shader == PIPE_SHADER_VERTEX ? 16 : 32;
+         return (shader == PIPE_SHADER_VERTEX ||
+                 shader == PIPE_SHADER_GEOMETRY) ? 16 : 32;
       case PIPE_SHADER_CAP_MAX_OUTPUTS:
-         return 128;
+         return 32;
      // case PIPE_SHADER_CAP_MAX_CONSTS:
      //    return 4096;
       case PIPE_SHADER_CAP_MAX_TEMPS:

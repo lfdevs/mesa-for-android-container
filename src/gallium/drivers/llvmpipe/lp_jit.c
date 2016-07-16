@@ -56,7 +56,7 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
       elem_types[LP_JIT_VIEWPORT_MAX_DEPTH] = LLVMFloatTypeInContext(lc);
 
       viewport_type = LLVMStructTypeInContext(lc, elem_types,
-                                              Elements(elem_types), 0);
+                                              ARRAY_SIZE(elem_types), 0);
 
       LP_CHECK_MEMBER_OFFSET(struct lp_jit_viewport, min_depth,
                              gallivm->target, viewport_type,
@@ -84,7 +84,7 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
          LLVMArrayType(LLVMInt32TypeInContext(lc), LP_MAX_TEXTURE_LEVELS);
 
       texture_type = LLVMStructTypeInContext(lc, elem_types,
-                                             Elements(elem_types), 0);
+                                             ARRAY_SIZE(elem_types), 0);
 
       LP_CHECK_MEMBER_OFFSET(struct lp_jit_texture, width,
                              gallivm->target, texture_type,
@@ -127,7 +127,7 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
          LLVMArrayType(LLVMFloatTypeInContext(lc), 4);
 
       sampler_type = LLVMStructTypeInContext(lc, elem_types,
-                                             Elements(elem_types), 0);
+                                             ARRAY_SIZE(elem_types), 0);
 
       LP_CHECK_MEMBER_OFFSET(struct lp_jit_sampler, min_lod,
                              gallivm->target, sampler_type,
@@ -166,7 +166,7 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
                                                       PIPE_MAX_SAMPLERS);
 
       context_type = LLVMStructTypeInContext(lc, elem_types,
-                                             Elements(elem_types), 0);
+                                             ARRAY_SIZE(elem_types), 0);
 
       LP_CHECK_MEMBER_OFFSET(struct lp_jit_context, constants,
                              gallivm->target, context_type,
@@ -216,7 +216,7 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
             LLVMInt32TypeInContext(lc);
 
       thread_data_type = LLVMStructTypeInContext(lc, elem_types,
-                                                 Elements(elem_types), 0);
+                                                 ARRAY_SIZE(elem_types), 0);
 
       lp->jit_thread_data_ptr_type = LLVMPointerType(thread_data_type, 0);
    }

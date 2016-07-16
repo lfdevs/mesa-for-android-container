@@ -40,11 +40,10 @@ SKIP_FUNCTION_MACROS   = YES
 #---------------------------------------------------------------------------
 # Configuration::addtions related to external references   
 #---------------------------------------------------------------------------
-TAGFILES               = tnl_dd.tag=../tnl \
-                         main.tag=../core \
+TAGFILES               = tnl_dd.tag=../tnl_dd \
+                         main.tag=../main \
                          math.tag=../math \
-                         shader.tag=../shader \
                          swrast.tag=../swrast \
-                         swrast_setup.tag=swrast_setup \
-                         vbo.tag=vbo
+                         swrast_setup.tag=../swrast_setup \
+                         vbo.tag=../vbo
 GENERATE_TAGFILE       = tnl.tag

@@ -59,6 +59,7 @@ const struct brw_tracked_state gen6_wm_push_constants = {
    .dirty = {
       .mesa  = _NEW_PROGRAM_CONSTANTS,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_FRAGMENT_PROGRAM |
                BRW_NEW_FS_PROG_DATA |
                BRW_NEW_PUSH_CONSTANT_ALLOCATION,
@@ -68,10 +69,9 @@ const struct brw_tracked_state gen6_wm_push_constants = {
 
 void
 gen6_upload_wm_state(struct brw_context *brw,
-                     const struct brw_fragment_program *fp,
                      const struct brw_wm_prog_data *prog_data,
                      const struct brw_stage_state *stage_state,
-                     bool multisampled_fbo, int min_inv_per_frag,
+                     bool multisampled_fbo,
                      bool dual_source_blend_enable, bool kill_enable,
                      bool color_buffer_write_enable, bool msaa_enabled,
                      bool line_stipple_enable, bool polygon_stipple_enable,
@@ -129,31 +129,19 @@ gen6_upload_wm_state(struct brw_context *brw,
 
    dw5 |= (brw->max_wm_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT;
 
-   assert(min_inv_per_frag >= 1);
+   if (prog_data->dispatch_8)
+      dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
 
-   if (prog_data->prog_offset_16 || prog_data->no_8) {
+   if (prog_data->dispatch_16)
       dw5 |= GEN6_WM_16_DISPATCH_ENABLE;
 
-      if (!prog_data->no_8 && min_inv_per_frag == 1) {
-         dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
-         dw4 |= (prog_data->base.dispatch_grf_start_reg <<
-                 GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
-         dw4 |= (prog_data->dispatch_grf_start_reg_16 <<
-                 GEN6_WM_DISPATCH_START_GRF_SHIFT_2);
-         ksp0 = stage_state->prog_offset;
-         ksp2 = stage_state->prog_offset + prog_data->prog_offset_16;
-      } else {
-         dw4 |= (prog_data->dispatch_grf_start_reg_16 <<
-                GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
-         ksp0 = stage_state->prog_offset + prog_data->prog_offset_16;
-      }
-   }
-   else {
-      dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
-      dw4 |= (prog_data->base.dispatch_grf_start_reg <<
-              GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
-      ksp0 = stage_state->prog_offset;
-   }
+   dw4 |= prog_data->base.dispatch_grf_start_reg <<
+          GEN6_WM_DISPATCH_START_GRF_SHIFT_0;
+   dw4 |= prog_data->dispatch_grf_start_reg_2 <<
+          GEN6_WM_DISPATCH_START_GRF_SHIFT_2;
+
+   ksp0 = stage_state->prog_offset;
+   ksp2 = stage_state->prog_offset + prog_data->prog_offset_2;
 
    if (dual_source_blend_enable)
       dw5 |= GEN6_WM_DUAL_SOURCE_BLEND_ENABLE;
@@ -164,10 +152,11 @@ gen6_upload_wm_state(struct brw_context *brw,
    if (polygon_stipple_enable)
       dw5 |= GEN6_WM_POLYGON_STIPPLE_ENABLE;
 
-   /* BRW_NEW_FRAGMENT_PROGRAM */
-   if (fp->program.Base.InputsRead & VARYING_BIT_POS)
-      dw5 |= GEN6_WM_USES_SOURCE_DEPTH | GEN6_WM_USES_SOURCE_W;
-   if (fp->program.Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
+   if (prog_data->uses_src_depth)
+      dw5 |= GEN6_WM_USES_SOURCE_DEPTH;
+   if (prog_data->uses_src_w)
+      dw5 |= GEN6_WM_USES_SOURCE_W;
+   if (prog_data->computed_depth_mode != BRW_PSCDEPTH_OFF)
       dw5 |= GEN6_WM_COMPUTED_DEPTH;
    dw6 |= prog_data->barycentric_interp_modes <<
       GEN6_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT;
@@ -197,41 +186,10 @@ gen6_upload_wm_state(struct brw_context *brw,
       else
          dw6 |= GEN6_WM_MSRAST_OFF_PIXEL;
 
-      if (min_inv_per_frag > 1)
+      if (prog_data->persample_dispatch)
          dw6 |= GEN6_WM_MSDISPMODE_PERSAMPLE;
       else {
          dw6 |= GEN6_WM_MSDISPMODE_PERPIXEL;
-
-         /* From the Sandy Bridge PRM, Vol 2 part 1, 7.7.1 ("Pixel Grouping
-          * (Dispatch Size) Control"), p.334:
-          *
-          *     Note: in the table below, the Valid column indicates which
-          *     products that combination is supported on. Combinations of
-          *     dispatch enables not listed in the table are not available on
-          *     any product.
-          *
-          *     A: Valid on all products
-          *
-          *     B: Not valid on [DevSNB] if 4x PERPIXEL mode with pixel shader
-          *     computed depth.
-          *
-          *     D: Valid on all products, except when in non-1x PERSAMPLE mode
-          *     (applies to [DevSNB+] only). Not valid on [DevSNB] if 4x
-          *     PERPIXEL mode with pixel shader computed depth.
-          *
-          *     E: Not valid on [DevSNB] if 4x PERPIXEL mode with pixel shader
-          *     computed depth.
-          *
-          *     F: Valid on all products, except not valid on [DevSNB] if 4x
-          *     PERPIXEL mode with pixel shader computed depth.
-          *
-          * In the table that follows, the only entry with "A" in the Valid
-          * column is the entry where only 8 pixel dispatch is enabled.
-          * Therefore, when we are in PERPIXEL mode with pixel shader computed
-          * depth, we need to disable SIMD16 dispatch.
-          */
-         if (dw5 & GEN6_WM_COMPUTED_DEPTH)
-            dw5 &= ~GEN6_WM_16_DISPATCH_ENABLE;
       }
    } else {
       dw6 |= GEN6_WM_MSRAST_OFF_PIXEL;
@@ -262,7 +220,7 @@ gen6_upload_wm_state(struct brw_context *brw,
    if (prog_data->base.total_scratch) {
       OUT_RELOC(stage_state->scratch_bo,
                 I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		ffs(prog_data->base.total_scratch) - 11);
+		ffs(stage_state->per_thread_scratch) - 11);
    } else {
       OUT_BATCH(0);
    }
@@ -278,22 +236,11 @@ static void
 upload_wm_state(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   /* BRW_NEW_FRAGMENT_PROGRAM */
-   const struct brw_fragment_program *fp =
-      brw_fragment_program_const(brw->fragment_program);
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
 
    /* _NEW_BUFFERS */
    const bool multisampled_fbo = _mesa_geometric_samples(ctx->DrawBuffer) > 1;
-
-   /* In case of non 1x per sample shading, only one of SIMD8 and SIMD16
-    * should be enabled. We do 'SIMD16 only' dispatch if a SIMD16 shader
-    * is successfully compiled. In majority of the cases that bring us
-    * better performance than 'SIMD8 only' dispatch.
-    */
-   const int min_inv_per_frag = _mesa_get_min_invocations_per_fragment(
-                                   ctx, brw->fragment_program, false);
 
    /* BRW_NEW_FS_PROG_DATA | _NEW_COLOR */
    const bool dual_src_blend_enable = prog_data->dual_src_blend &&
@@ -311,8 +258,8 @@ upload_wm_state(struct brw_context *brw)
    /* _NEW_LINE | _NEW_POLYGON | _NEW_BUFFERS | _NEW_COLOR |
     * _NEW_MULTISAMPLE
     */
-   gen6_upload_wm_state(brw, fp, prog_data, &brw->wm.base,
-                        multisampled_fbo, min_inv_per_frag,
+   gen6_upload_wm_state(brw, prog_data, &brw->wm.base,
+                        multisampled_fbo,
                         dual_src_blend_enable, kill_enable,
                         brw_color_buffer_write_enabled(brw),
                         ctx->Multisample.Enabled,
@@ -329,7 +276,7 @@ const struct brw_tracked_state gen6_wm_state = {
                _NEW_POLYGON |
                _NEW_PROGRAM_CONSTANTS,
       .brw   = BRW_NEW_BATCH |
-               BRW_NEW_FRAGMENT_PROGRAM |
+               BRW_NEW_BLORP |
                BRW_NEW_FS_PROG_DATA |
                BRW_NEW_PUSH_CONSTANT_ALLOCATION,
    },

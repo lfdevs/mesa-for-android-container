@@ -32,8 +32,8 @@
 /* Look for and eliminate dead control flow:
  *
  *   - if/endif
- *   . else in else/endif
- *   - if/else/endif
+ *   - else in else/endif
+ *   - then in if/else/endif
  */
 bool
 dead_control_flow_eliminate(backend_shader *s)
@@ -41,61 +41,46 @@ dead_control_flow_eliminate(backend_shader *s)
    bool progress = false;
 
    foreach_block_safe (block, s->cfg) {
-      bblock_t *if_block = NULL, *else_block = NULL, *endif_block = block;
-      bool found = false;
+      bblock_t *prev_block = block->prev();
+
+      if (!prev_block)
+         continue;
+
+      backend_instruction *const inst = block->start();
+      backend_instruction *const prev_inst = prev_block->end();
 
       /* ENDIF instructions, by definition, can only be found at the start of
        * basic blocks.
        */
-      backend_instruction *endif_inst = endif_block->start();
-      if (endif_inst->opcode != BRW_OPCODE_ENDIF)
-         continue;
+      if (inst->opcode == BRW_OPCODE_ENDIF &&
+          prev_inst->opcode == BRW_OPCODE_ELSE) {
+         bblock_t *const else_block = prev_block;
+         backend_instruction *const else_inst = prev_inst;
 
-      backend_instruction *if_inst = NULL, *else_inst = NULL;
-      backend_instruction *prev_inst = endif_block->prev()->end();
-      if (prev_inst->opcode == BRW_OPCODE_ELSE) {
-         else_inst = prev_inst;
-         else_block = endif_block->prev();
-         found = true;
+         else_inst->remove(else_block);
+         progress = true;
+      } else if (inst->opcode == BRW_OPCODE_ENDIF &&
+                 prev_inst->opcode == BRW_OPCODE_IF) {
+         bblock_t *const endif_block = block;
+         bblock_t *const if_block = prev_block;
+         backend_instruction *const endif_inst = inst;
+         backend_instruction *const if_inst = prev_inst;
 
-         if (else_block->start_ip == else_block->end_ip)
-            prev_inst = else_block->prev()->end();
-      }
-
-      if (prev_inst->opcode == BRW_OPCODE_IF) {
-         if_inst = prev_inst;
-         if_block = else_block != NULL ? else_block->prev()
-                                       : endif_block->prev();
-         found = true;
-      } else {
-         /* Don't remove the ENDIF if we didn't find a dead IF. */
-         endif_inst = NULL;
-      }
-
-      if (found) {
          bblock_t *earlier_block = NULL, *later_block = NULL;
 
-         if (if_inst) {
-            if (if_block->start_ip == if_block->end_ip) {
-               earlier_block = if_block->prev();
-            } else {
-               earlier_block = if_block;
-            }
-            if_inst->remove(if_block);
+         if (if_block->start_ip == if_block->end_ip) {
+            earlier_block = if_block->prev();
+         } else {
+            earlier_block = if_block;
          }
+         if_inst->remove(if_block);
 
-         if (else_inst) {
-            else_inst->remove(else_block);
+         if (endif_block->start_ip == endif_block->end_ip) {
+            later_block = endif_block->next();
+         } else {
+            later_block = endif_block;
          }
-
-         if (endif_inst) {
-            if (endif_block->start_ip == endif_block->end_ip) {
-               later_block = endif_block->next();
-            } else {
-               later_block = endif_block;
-            }
-            endif_inst->remove(endif_block);
-         }
+         endif_inst->remove(endif_block);
 
          assert((earlier_block == NULL) == (later_block == NULL));
          if (earlier_block && earlier_block->can_combine_with(later_block)) {
@@ -109,6 +94,19 @@ dead_control_flow_eliminate(backend_shader *s)
                __next = earlier_block->next();
             }
          }
+
+         progress = true;
+      } else if (inst->opcode == BRW_OPCODE_ELSE &&
+                 prev_inst->opcode == BRW_OPCODE_IF) {
+         bblock_t *const else_block = block;
+         backend_instruction *const if_inst = prev_inst;
+         backend_instruction *const else_inst = inst;
+
+         /* Since the else-branch is becoming the new then-branch, the
+          * condition has to be inverted.
+          */
+         if_inst->predicate_inverse = !if_inst->predicate_inverse;
+         else_inst->remove(else_block);
 
          progress = true;
       }

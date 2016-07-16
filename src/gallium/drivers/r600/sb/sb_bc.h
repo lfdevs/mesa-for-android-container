@@ -793,7 +793,6 @@ public: \
 
 // CLAMP macro defined elsewhere interferes with bytecode field name
 #undef CLAMP
-#undef ARRAY_SIZE
 #include "sb_bc_fmt_def.inc"
 
 #undef BC_FORMAT_BEGIN

@@ -35,7 +35,7 @@ struct nine_lconstf;
 struct NinePixelShader9
 {
     struct NineUnknown base;
-    struct nine_shader_variant64 variant;
+    struct nine_shader_variant variant;
 
     struct {
         const DWORD *tokens;

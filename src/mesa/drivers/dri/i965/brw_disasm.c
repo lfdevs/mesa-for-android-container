@@ -28,80 +28,7 @@
 #include "brw_defines.h"
 #include "brw_reg.h"
 #include "brw_inst.h"
-
-const struct opcode_desc opcode_descs[128] = {
-   [BRW_OPCODE_MOV]      = { .name = "mov",     .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_MOVI]     = { .name = "movi",    .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_FRC]      = { .name = "frc",     .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_RNDU]     = { .name = "rndu",    .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_RNDD]     = { .name = "rndd",    .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_RNDE]     = { .name = "rnde",    .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_RNDZ]     = { .name = "rndz",    .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_NOT]      = { .name = "not",     .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_LZD]      = { .name = "lzd",     .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_F32TO16]  = { .name = "f32to16", .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_F16TO32]  = { .name = "f16to32", .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_BFREV]    = { .name = "bfrev",   .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_FBH]      = { .name = "fbh",     .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_FBL]      = { .name = "fbl",     .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_CBIT]     = { .name = "cbit",    .nsrc = 1, .ndst = 1 },
-
-   [BRW_OPCODE_MUL]      = { .name = "mul",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_MAC]      = { .name = "mac",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_MACH]     = { .name = "mach",    .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_LINE]     = { .name = "line",    .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_PLN]      = { .name = "pln",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_MAD]      = { .name = "mad",     .nsrc = 3, .ndst = 1 },
-   [BRW_OPCODE_LRP]      = { .name = "lrp",     .nsrc = 3, .ndst = 1 },
-   [BRW_OPCODE_SAD2]     = { .name = "sad2",    .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_SADA2]    = { .name = "sada2",   .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_DP4]      = { .name = "dp4",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_DPH]      = { .name = "dph",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_DP3]      = { .name = "dp3",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_DP2]      = { .name = "dp2",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_MATH]     = { .name = "math",    .nsrc = 2, .ndst = 1 },
-
-   [BRW_OPCODE_AVG]      = { .name = "avg",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_ADD]      = { .name = "add",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_SEL]      = { .name = "sel",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_AND]      = { .name = "and",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_OR]       = { .name = "or",      .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_XOR]      = { .name = "xor",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_SHR]      = { .name = "shr",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_SHL]      = { .name = "shl",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_ASR]      = { .name = "asr",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_CMP]      = { .name = "cmp",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_CMPN]     = { .name = "cmpn",    .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_CSEL]     = { .name = "csel",    .nsrc = 3, .ndst = 1 },
-   [BRW_OPCODE_BFE]      = { .name = "bfe",     .nsrc = 3, .ndst = 1 },
-   [BRW_OPCODE_BFI1]     = { .name = "bfi1",    .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_BFI2]     = { .name = "bfi2",    .nsrc = 3, .ndst = 1 },
-   [BRW_OPCODE_ADDC]     = { .name = "addc",    .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_SUBB]     = { .name = "subb",    .nsrc = 2, .ndst = 1 },
-
-   [BRW_OPCODE_SEND]     = { .name = "send",    .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_SENDC]    = { .name = "sendc",   .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_SENDS]    = { .name = "sends",   .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_SENDSC]   = { .name = "sendsc",  .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_ILLEGAL]  = { .name = "illegal", .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_NOP]      = { .name = "nop",     .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_NENOP]    = { .name = "nenop",   .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_JMPI]     = { .name = "jmpi",    .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_IF]       = { .name = "if",      .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_IFF]      = { .name = "iff",     .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_WHILE]    = { .name = "while",   .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_ELSE]     = { .name = "else",    .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_BREAK]    = { .name = "break",   .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_CONTINUE] = { .name = "cont",    .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_HALT]     = { .name = "halt",    .nsrc = 0, .ndst = 0 },
-   // [BRW_OPCODE_MSAVE]    = { .name = "msave",   .nsrc = 1, .ndst = 1 },
-   // [BRW_OPCODE_PUSH]     = { .name = "push",    .nsrc = 1, .ndst = 1 },
-   // [BRW_OPCODE_MREST]    = { .name = "mrest",   .nsrc = 1, .ndst = 1 },
-   // [BRW_OPCODE_POP]      = { .name = "pop",     .nsrc = 2, .ndst = 0 },
-   [BRW_OPCODE_WAIT]     = { .name = "wait",    .nsrc = 1, .ndst = 0 },
-   [BRW_OPCODE_DO]       = { .name = "do",      .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_ENDIF]    = { .name = "endif",   .nsrc = 0, .ndst = 0 },
-};
+#include "brw_eu.h"
 
 static bool
 has_jip(const struct brw_device_info *devinfo, enum opcode opcode)
@@ -327,6 +254,7 @@ static const char *const three_source_reg_encoding[] = {
    [BRW_3SRC_TYPE_F]  = "F",
    [BRW_3SRC_TYPE_D]  = "D",
    [BRW_3SRC_TYPE_UD] = "UD",
+   [BRW_3SRC_TYPE_DF] = "DF",
 };
 
 const int reg_type_size[] = {
@@ -623,6 +551,9 @@ static const char *const gen5_sampler_msg_type[] = {
    [GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO]   = "gather4_po",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C] = "gather4_po_c",
    [HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE] = "sample_d_c",
+   [GEN9_SAMPLER_MESSAGE_SAMPLE_LZ]           = "sample_lz",
+   [GEN9_SAMPLER_MESSAGE_SAMPLE_C_LZ]         = "sample_c_lz",
+   [GEN9_SAMPLER_MESSAGE_SAMPLE_LD_LZ]        = "ld_lz",
    [GEN9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W]     = "ld2dms_w",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS]       = "ld_mcs",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS]       = "ld2dms",
@@ -705,13 +636,15 @@ control(FILE *file, const char *name, const char *const ctrl[],
 }
 
 static int
-print_opcode(FILE *file, int id)
+print_opcode(FILE *file, const struct brw_device_info *devinfo,
+             enum opcode id)
 {
-   if (!opcode_descs[id].name) {
+   const struct opcode_desc *desc = brw_opcode_desc(devinfo, id);
+   if (!desc) {
       format(file, "*** invalid opcode value %d ", id);
       return 1;
    }
-   string(file, opcode_descs[id].name);
+   string(file, desc->name);
    return 0;
 }
 
@@ -1106,7 +1039,7 @@ imm(FILE *file, const struct brw_device_info *devinfo, unsigned type, brw_inst *
       format(file, "%-gF", brw_inst_imm_f(devinfo, inst));
       break;
    case GEN8_HW_REG_IMM_TYPE_DF:
-      string(file, "Double IMM");
+      format(file, "%-gDF", brw_inst_imm_df(devinfo, inst));
       break;
    case GEN8_HW_REG_IMM_TYPE_HF:
       string(file, "Half Float IMM");
@@ -1277,6 +1210,7 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
    int space = 0;
 
    const enum opcode opcode = brw_inst_opcode(devinfo, inst);
+   const struct opcode_desc *desc = brw_opcode_desc(devinfo, opcode);
 
    if (brw_inst_pred_control(devinfo, inst)) {
       string(file, "(");
@@ -1295,7 +1229,7 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
       string(file, ") ");
    }
 
-   err |= print_opcode(file, opcode);
+   err |= print_opcode(file, devinfo, opcode);
    err |= control(file, "saturate", saturate, brw_inst_saturate(devinfo, inst),
                   NULL);
 
@@ -1366,7 +1300,7 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
    } else if (opcode == BRW_OPCODE_JMPI) {
       pad(file, 16);
       err |= src1(file, devinfo, inst);
-   } else if (opcode_descs[opcode].nsrc == 3) {
+   } else if (desc && desc->nsrc == 3) {
       pad(file, 16);
       err |= dest_3src(file, devinfo, inst);
 
@@ -1378,18 +1312,18 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
 
       pad(file, 64);
       err |= src2_3src(file, devinfo, inst);
-   } else {
-      if (opcode_descs[opcode].ndst > 0) {
+   } else if (desc) {
+      if (desc->ndst > 0) {
          pad(file, 16);
          err |= dest(file, devinfo, inst);
       }
 
-      if (opcode_descs[opcode].nsrc > 0) {
+      if (desc->nsrc > 0) {
          pad(file, 32);
          err |= src0(file, devinfo, inst);
       }
 
-      if (opcode_descs[opcode].nsrc > 1) {
+      if (desc->nsrc > 1) {
          pad(file, 48);
          err |= src1(file, devinfo, inst);
       }
@@ -1505,19 +1439,33 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
             break;
          }
 
-         case BRW_SFID_URB:
+         case BRW_SFID_URB: {
+            unsigned opcode = brw_inst_urb_opcode(devinfo, inst);
+
             format(file, " %ld", brw_inst_urb_global_offset(devinfo, inst));
 
             space = 1;
-            if (devinfo->gen >= 7) {
-               err |= control(file, "urb opcode", gen7_urb_opcode,
-                              brw_inst_urb_opcode(devinfo, inst), &space);
-            } else if (devinfo->gen >= 5) {
-               err |= control(file, "urb opcode", gen5_urb_opcode,
-                              brw_inst_urb_opcode(devinfo, inst), &space);
+
+            err |= control(file, "urb opcode",
+                           devinfo->gen >= 7 ? gen7_urb_opcode
+                                             : gen5_urb_opcode,
+                           opcode, &space);
+
+            if (devinfo->gen >= 7 &&
+                brw_inst_urb_per_slot_offset(devinfo, inst)) {
+               string(file, " per-slot");
             }
-            err |= control(file, "urb swizzle", urb_swizzle,
-                           brw_inst_urb_swizzle_control(devinfo, inst), &space);
+
+            if (opcode == GEN8_URB_OPCODE_SIMD8_WRITE ||
+                opcode == GEN8_URB_OPCODE_SIMD8_READ) {
+               if (brw_inst_urb_channel_mask_present(devinfo, inst))
+                  string(file, " masked");
+            } else {
+               err |= control(file, "urb swizzle", urb_swizzle,
+                              brw_inst_urb_swizzle_control(devinfo, inst),
+                              &space);
+            }
+
             if (devinfo->gen < 7) {
                err |= control(file, "urb allocate", urb_allocate,
                               brw_inst_urb_allocate(devinfo, inst), &space);
@@ -1529,6 +1477,7 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
                               brw_inst_urb_complete(devinfo, inst), &space);
             }
             break;
+         }
          case BRW_SFID_THREAD_SPAWNER:
             break;
 
@@ -1644,7 +1593,7 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
          err |= qtr_ctrl(file, devinfo, inst);
       else {
          if (brw_inst_qtr_control(devinfo, inst) == BRW_COMPRESSION_COMPRESSED &&
-             opcode_descs[opcode].ndst > 0 &&
+             desc && desc->ndst > 0 &&
              brw_inst_dst_reg_file(devinfo, inst) == BRW_MESSAGE_REGISTER_FILE &&
              brw_inst_dst_da_reg_nr(devinfo, inst) & BRW_MRF_COMPR4) {
             format(file, " compr4");

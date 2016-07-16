@@ -55,6 +55,8 @@ static void translate_memcpy_uint( const void *in,
  * - Translate from first provoking vertex to last provoking vertex and
  *   vice versa.
  *
+ * Note that this function is used for indexed primitives.
+ *
  * \param hw_mask  mask of (1 << PIPE_PRIM_x) flags indicating which types
  *                 of primitives are supported by the hardware.
  * \param prim  incoming PIPE_PRIM_x
@@ -70,13 +72,13 @@ static void translate_memcpy_uint( const void *in,
  */
 enum indices_mode
 u_index_translator(unsigned hw_mask,
-                   unsigned prim,
+                   enum pipe_prim_type prim,
                    unsigned in_index_size,
                    unsigned nr,
                    unsigned in_pv,
                    unsigned out_pv,
                    unsigned prim_restart,
-                   unsigned *out_prim,
+                   enum pipe_prim_type *out_prim,
                    unsigned *out_index_size,
                    unsigned *out_nr,
                    u_translate_func *out_translate)
@@ -111,70 +113,81 @@ u_index_translator(unsigned hw_mask,
       return U_TRANSLATE_MEMCPY;
    }
    else {
+      *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
+
       switch (prim) {
       case PIPE_PRIM_POINTS:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_POINTS;
          *out_nr = nr;
          break;
 
       case PIPE_PRIM_LINES:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = nr;
          break;
 
       case PIPE_PRIM_LINE_STRIP:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = (nr - 1) * 2;
          break;
 
       case PIPE_PRIM_LINE_LOOP:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = nr * 2;
          break;
 
       case PIPE_PRIM_TRIANGLES:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = nr;
          break;
 
       case PIPE_PRIM_TRIANGLE_STRIP:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          break;
 
       case PIPE_PRIM_TRIANGLE_FAN:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          break;
 
       case PIPE_PRIM_QUADS:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr / 4) * 6;
          break;
 
       case PIPE_PRIM_QUAD_STRIP:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          break;
 
       case PIPE_PRIM_POLYGON:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          break;
 
+      case PIPE_PRIM_LINES_ADJACENCY:
+         *out_prim = PIPE_PRIM_LINES_ADJACENCY;
+         *out_nr = nr;
+         break;
+
+      case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+         *out_prim = PIPE_PRIM_LINES_ADJACENCY;
+         *out_nr = (nr - 3) * 4;
+         break;
+
+      case PIPE_PRIM_TRIANGLES_ADJACENCY:
+         *out_prim = PIPE_PRIM_TRIANGLES_ADJACENCY;
+         *out_nr = nr;
+         break;
+
+      case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+         *out_prim = PIPE_PRIM_TRIANGLES_ADJACENCY;
+         *out_nr = ((nr - 4) / 2) * 6;
+         break;
+
       default:
          assert(0);
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_POINTS;
          *out_nr = nr;
          return U_TRANSLATE_ERROR;
@@ -193,6 +206,8 @@ u_index_translator(unsigned hw_mask,
  * The generator functions generates a number of ushort or uint indexes
  * for drawing the new type of primitive.
  *
+ * Note that this function is used for non-indexed primitives.
+ *
  * \param hw_mask  a bitmask of (1 << PIPE_PRIM_x) values that indicates
  *                 kind of primitives are supported by the driver.
  * \param prim  the PIPE_PRIM_x that the user wants to draw
@@ -207,12 +222,12 @@ u_index_translator(unsigned hw_mask,
  */
 enum indices_mode
 u_index_generator(unsigned hw_mask,
-                  unsigned prim,
+                  enum pipe_prim_type prim,
                   unsigned start,
                   unsigned nr,
                   unsigned in_pv,
                   unsigned out_pv,
-                  unsigned *out_prim,
+                  enum pipe_prim_type *out_prim,
                   unsigned *out_index_size,
                   unsigned *out_nr,
                   u_generate_func *out_generate)
@@ -233,65 +248,77 @@ u_index_generator(unsigned hw_mask,
       return U_GENERATE_LINEAR;
    }
    else {
+      *out_generate = generate[out_idx][in_pv][out_pv][prim];
+
       switch (prim) {
       case PIPE_PRIM_POINTS:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_POINTS;
          *out_nr = nr;
          return U_GENERATE_REUSABLE;
 
       case PIPE_PRIM_LINES:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = nr;
          return U_GENERATE_REUSABLE;
 
       case PIPE_PRIM_LINE_STRIP:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = (nr - 1) * 2;
          return U_GENERATE_REUSABLE;
 
       case PIPE_PRIM_LINE_LOOP:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = nr * 2;
          return U_GENERATE_ONE_OFF;
 
       case PIPE_PRIM_TRIANGLES:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = nr;
          return U_GENERATE_REUSABLE;
 
       case PIPE_PRIM_TRIANGLE_STRIP:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          return U_GENERATE_REUSABLE;
 
       case PIPE_PRIM_TRIANGLE_FAN:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          return U_GENERATE_REUSABLE;
 
       case PIPE_PRIM_QUADS:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr / 4) * 6;
          return U_GENERATE_REUSABLE;
 
       case PIPE_PRIM_QUAD_STRIP:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          return U_GENERATE_REUSABLE;
 
       case PIPE_PRIM_POLYGON:
-         *out_generate = generate[out_idx][in_pv][out_pv][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
+         return U_GENERATE_REUSABLE;
+
+      case PIPE_PRIM_LINES_ADJACENCY:
+         *out_prim = PIPE_PRIM_LINES_ADJACENCY;
+         *out_nr = nr;
+         return U_GENERATE_REUSABLE;
+
+      case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+         *out_prim = PIPE_PRIM_LINES_ADJACENCY;
+         *out_nr = (nr - 3) * 4;
+         return U_GENERATE_REUSABLE;
+
+      case PIPE_PRIM_TRIANGLES_ADJACENCY:
+         *out_prim = PIPE_PRIM_TRIANGLES_ADJACENCY;
+         *out_nr = nr;
+         return U_GENERATE_REUSABLE;
+
+      case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+         *out_prim = PIPE_PRIM_TRIANGLES_ADJACENCY;
+         *out_nr = ((nr - 4) / 2) * 6;
          return U_GENERATE_REUSABLE;
 
       default:

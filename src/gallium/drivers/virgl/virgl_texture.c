@@ -304,7 +304,7 @@ static const struct u_resource_vtbl virgl_texture_vtbl =
    virgl_texture_transfer_map,          /* transfer_map */
    NULL,                                /* transfer_flush_region */
    virgl_texture_transfer_unmap,        /* transfer_unmap */
-   NULL                                 /* transfer_inline_write */
+   u_default_transfer_inline_write      /* transfer_inline_write */
 };
 
 struct pipe_resource *

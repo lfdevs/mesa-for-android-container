@@ -162,7 +162,7 @@ ilo_blit_resolve_framebuffer(struct ilo_context *ilo)
    unsigned sh, i;
 
    /* Not all bound views are sampled by the shaders.  How do we tell? */
-   for (sh = 0; sh < Elements(vec->view); sh++) {
+   for (sh = 0; sh < ARRAY_SIZE(vec->view); sh++) {
       for (i = 0; i < vec->view[sh].count; i++) {
          if (vec->view[sh].states[i])
             ilo_blit_resolve_view(ilo, vec->view[sh].states[i]);

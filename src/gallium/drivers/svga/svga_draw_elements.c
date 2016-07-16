@@ -39,7 +39,7 @@
 
 static enum pipe_error
 translate_indices(struct svga_hwtnl *hwtnl, struct pipe_resource *src,
-                  unsigned offset, unsigned prim, unsigned nr,
+                  unsigned offset, enum pipe_prim_type prim, unsigned nr,
                   unsigned index_size,
                   u_translate_func translate, struct pipe_resource **out_buf)
 {
@@ -98,7 +98,7 @@ svga_hwtnl_simple_draw_range_elements(struct svga_hwtnl *hwtnl,
                                       struct pipe_resource *index_buffer,
                                       unsigned index_size, int index_bias,
                                       unsigned min_index, unsigned max_index,
-                                      unsigned prim, unsigned start,
+                                      enum pipe_prim_type prim, unsigned start,
                                       unsigned count,
                                       unsigned start_instance,
                                       unsigned instance_count)
@@ -130,16 +130,16 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
                                struct pipe_resource *index_buffer,
                                unsigned index_size, int index_bias,
                                unsigned min_index, unsigned max_index,
-                               unsigned prim, unsigned start, unsigned count,
+                               enum pipe_prim_type prim, unsigned start, unsigned count,
                                unsigned start_instance, unsigned instance_count)
 {
-   unsigned gen_prim, gen_size, gen_nr;
+   enum pipe_prim_type gen_prim;
+   unsigned gen_size, gen_nr;
    enum indices_mode gen_type;
    u_translate_func gen_func;
    enum pipe_error ret = PIPE_OK;
 
-   if (hwtnl->api_fillmode != PIPE_POLYGON_MODE_FILL &&
-       prim >= PIPE_PRIM_TRIANGLES) {
+   if (svga_need_unfilled_fallback(hwtnl, prim)) {
       gen_type = u_unfilled_translator(prim,
                                        index_size,
                                        count,

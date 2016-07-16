@@ -224,7 +224,7 @@ vlVdpOutputSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
    if (!pscreen)
       return VDP_STATUS_RESOURCES;
 
-   format = FormatRGBAToPipe(surface_rgba_format);
+   format = VdpFormatRGBAToPipe(surface_rgba_format);
    if (format == PIPE_FORMAT_NONE || format == PIPE_FORMAT_A8_UNORM)
       return VDP_STATUS_INVALID_RGBA_FORMAT;
 
@@ -276,7 +276,7 @@ vlVdpOutputSurfaceQueryGetPutBitsNativeCapabilities(VdpDevice device, VdpRGBAFor
    if (!pscreen)
       return VDP_STATUS_ERROR;
 
-   format = FormatRGBAToPipe(surface_rgba_format);
+   format = VdpFormatRGBAToPipe(surface_rgba_format);
    if (format == PIPE_FORMAT_NONE || format == PIPE_FORMAT_A8_UNORM)
       return VDP_STATUS_INVALID_RGBA_FORMAT;
 
@@ -317,7 +317,7 @@ vlVdpOutputSurfaceQueryPutBitsIndexedCapabilities(VdpDevice device,
    if (!pscreen)
       return VDP_STATUS_ERROR;
 
-   rgba_format = FormatRGBAToPipe(surface_rgba_format);
+   rgba_format = VdpFormatRGBAToPipe(surface_rgba_format);
    if (rgba_format == PIPE_FORMAT_NONE || rgba_format == PIPE_FORMAT_A8_UNORM)
       return VDP_STATUS_INVALID_RGBA_FORMAT;
 
@@ -376,7 +376,7 @@ vlVdpOutputSurfaceQueryPutBitsYCbCrCapabilities(VdpDevice device, VdpRGBAFormat 
    if (!pscreen)
       return VDP_STATUS_ERROR;
 
-   rgba_format = FormatRGBAToPipe(surface_rgba_format);
+   rgba_format = VdpFormatRGBAToPipe(surface_rgba_format);
    if (rgba_format == PIPE_FORMAT_NONE || rgba_format == PIPE_FORMAT_A8_UNORM)
       return VDP_STATUS_INVALID_RGBA_FORMAT;
 
@@ -424,7 +424,7 @@ vlVdpBitmapSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
    if (!pscreen)
       return VDP_STATUS_RESOURCES;
 
-   format = FormatRGBAToPipe(surface_rgba_format);
+   format = VdpFormatRGBAToPipe(surface_rgba_format);
    if (format == PIPE_FORMAT_NONE)
       return VDP_STATUS_INVALID_RGBA_FORMAT;
 

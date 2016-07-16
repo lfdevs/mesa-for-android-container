@@ -186,8 +186,8 @@ gen6_emit_draw_dynamic_samplers(struct ilo_render *r,
    if (skip)
       return;
 
-   assert(sampler_count <= Elements(vec->view[shader_type].states) &&
-          sampler_count <= Elements(vec->sampler[shader_type].cso));
+   assert(sampler_count <= ARRAY_SIZE(vec->view[shader_type].states) &&
+          sampler_count <= ARRAY_SIZE(vec->sampler[shader_type].cso));
 
    if (emit_border_color) {
       for (i = 0; i < sampler_count; i++) {
@@ -482,8 +482,8 @@ gen6_emit_launch_grid_dynamic_samplers(struct ilo_render *r,
 
    sampler_count = ilo_shader_get_kernel_param(cs, ILO_KERNEL_SAMPLER_COUNT);
 
-   assert(sampler_count <= Elements(vec->view[shader_type].states) &&
-          sampler_count <= Elements(vec->sampler[shader_type].cso));
+   assert(sampler_count <= ARRAY_SIZE(vec->view[shader_type].states) &&
+          sampler_count <= ARRAY_SIZE(vec->sampler[shader_type].cso));
 
    for (i = 0; i < sampler_count; i++) {
       const struct ilo_sampler_cso *cso = vec->sampler[shader_type].cso[i];

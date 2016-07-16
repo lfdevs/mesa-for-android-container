@@ -77,12 +77,6 @@ struct dri2_display
    const __DRIextension *loader_extensions[4];
 };
 
-struct dri2_context
-{
-   struct glx_context base;
-   __DRIcontext *driContext;
-};
-
 struct dri2_drawable
 {
    __GLXDRIdrawable base;
@@ -405,7 +399,7 @@ dri2CreateDrawable(struct glx_screen *base, XID xDrawable,
    }
 
    DRI2CreateDrawable(psc->base.dpy, xDrawable);
-   pdp = (struct dri2_display *)dpyPriv->dri2Display;;
+   pdp = (struct dri2_display *)dpyPriv->dri2Display;
    /* Create a new drawable */
    pdraw->driDrawable =
       (*psc->dri2->createNewDrawable) (psc->driScreen,
@@ -1061,6 +1055,8 @@ static const struct glx_context_vtable dri2_context_vtable = {
    .bind_tex_image      = dri2_bind_tex_image,
    .release_tex_image   = dri2_release_tex_image,
    .get_proc_address    = NULL,
+   .interop_query_device_info = dri2_interop_query_device_info,
+   .interop_export_object = dri2_interop_export_object
 };
 
 static void
@@ -1145,6 +1141,9 @@ dri2BindExtensions(struct dri2_screen *psc, struct glx_display * priv,
          psc->rendererQuery = (__DRI2rendererQueryExtension *) extensions[i];
          __glXEnableDirectExtension(&psc->base, "GLX_MESA_query_renderer");
       }
+
+      if (strcmp(extensions[i]->name, __DRI2_INTEROP) == 0)
+	 psc->interop = (__DRI2interopExtension*)extensions[i];
    }
 }
 

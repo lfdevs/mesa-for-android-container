@@ -64,45 +64,6 @@ lp_check_alignment(const void *ptr, unsigned alignment)
    return ((uintptr_t)ptr & (alignment - 1)) == 0;
 }
 
-#if (defined(PIPE_OS_WINDOWS) && !defined(PIPE_CC_MSVC)) || defined(PIPE_OS_EMBEDDED)
-
-class raw_debug_ostream :
-   public llvm::raw_ostream
-{
-private:
-   uint64_t pos;
-
-public:
-   raw_debug_ostream() : pos(0) { }
-
-   void write_impl(const char *Ptr, size_t Size);
-
-   uint64_t current_pos() const { return pos; }
-   size_t preferred_buffer_size() const { return 512; }
-};
-
-
-void
-raw_debug_ostream::write_impl(const char *Ptr, size_t Size)
-{
-   if (Size > 0) {
-      char *lastPtr = (char *)&Ptr[Size];
-      char last = *lastPtr;
-      *lastPtr = 0;
-      _debug_printf("%*s", Size, Ptr);
-      *lastPtr = last;
-      pos += Size;
-   }
-}
-
-#endif
-
-extern "C" const char *
-lp_get_module_id(LLVMModuleRef module)
-{
-   return llvm::unwrap(module)->getModuleIdentifier().c_str();
-}
-
 
 /**
  * Same as LLVMDumpValue, but through our debugging channels.
@@ -110,10 +71,17 @@ lp_get_module_id(LLVMModuleRef module)
 extern "C" void
 lp_debug_dump_value(LLVMValueRef value)
 {
-#if (defined(PIPE_OS_WINDOWS) && !defined(PIPE_CC_MSVC)) || defined(PIPE_OS_EMBEDDED)
-   raw_debug_ostream os;
+#if HAVE_LLVM >= 0x0304
+   char *str = LLVMPrintValueToString(value);
+   if (str) {
+      os_log_message(str);
+      LLVMDisposeMessage(str);
+   }
+#elif defined(PIPE_OS_WINDOWS) || defined(PIPE_OS_EMBEDDED)
+   std::string str;
+   llvm::raw_string_ostream os(str);
    llvm::unwrap(value)->print(os);
-   os.flush();
+   os_log_message(str.c_str());
 #else
    LLVMDumpValue(value);
 #endif
@@ -128,7 +96,7 @@ lp_debug_dump_value(LLVMValueRef value)
  * - http://blog.llvm.org/2010/04/intro-to-llvm-mc-project.html
  */
 static size_t
-disassemble(const void* func, std::stringstream &buffer)
+disassemble(const void* func, std::ostream &buffer)
 {
    const uint8_t *bytes = (const uint8_t *)func;
 
@@ -141,13 +109,13 @@ disassemble(const void* func, std::stringstream &buffer)
     * Initialize all used objects.
     */
 
-   std::string Triple = llvm::sys::getProcessTriple();
-   LLVMDisasmContextRef D = LLVMCreateDisasm(Triple.c_str(), NULL, 0, NULL, NULL);
+   const char *triple = LLVM_HOST_TRIPLE;
+   LLVMDisasmContextRef D = LLVMCreateDisasm(triple, NULL, 0, NULL, NULL);
    char outline[1024];
 
    if (!D) {
       buffer << "error: could not create disassembler for triple "
-             << Triple.c_str() << '\n';
+             << triple << '\n';
       return 0;
    }
 
@@ -235,15 +203,16 @@ disassemble(const void* func, std::stringstream &buffer)
 
 
 extern "C" void
-lp_disassemble(LLVMValueRef func, const void *code) {
-   std::stringstream buffer;
+lp_disassemble(LLVMValueRef func, const void *code)
+{
+   std::ostringstream buffer;
    std::string s;
 
    buffer << LLVMGetValueName(func) << ":\n";
    disassemble(code, buffer);
    s = buffer.str();
-   _debug_printf("%s", s.c_str());
-   _debug_printf("\n");
+   os_log_message(s.c_str());
+   os_log_message("\n");
 }
 
 
@@ -259,7 +228,6 @@ extern "C" void
 lp_profile(LLVMValueRef func, const void *code)
 {
 #if defined(__linux__) && defined(PROFILE)
-   std::stringstream buffer;
    static std::ofstream perf_asm_file;
    static boolean first_time = TRUE;
    static FILE *perf_map_file = NULL;
@@ -283,9 +251,9 @@ lp_profile(LLVMValueRef func, const void *code)
    if (perf_map_file) {
       const char *symbol = LLVMGetValueName(func);
       unsigned long addr = (uintptr_t)code;
-      buffer << symbol << ":\n";
-      unsigned long size = disassemble(code, buffer);
-      perf_asm_file << buffer.rdbuf() << std::flush;
+      perf_asm_file << symbol << ":\n";
+      unsigned long size = disassemble(code, perf_asm_file);
+      perf_asm_file.flush();
       fprintf(perf_map_file, "%lx %lx %s\n", addr, size, symbol);
       fflush(perf_map_file);
    }

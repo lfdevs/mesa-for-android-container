@@ -146,7 +146,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		 * clever if we were aware of this during scheduling, but
 		 * this should be a pretty rare case:
 		 */
-		if ((n->flags & IR3_INSTR_SS) && (n->category >= 5)) {
+		if ((n->flags & IR3_INSTR_SS) && (opc_cat(n->opc) >= 5)) {
 			struct ir3_instruction *nop;
 			nop = ir3_NOP(block);
 			nop->flags |= IR3_INSTR_SS;
@@ -154,7 +154,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		}
 
 		/* need to be able to set (ss) on first instruction: */
-		if (list_empty(&block->instr_list) && (n->category >= 5))
+		if (list_empty(&block->instr_list) && (opc_cat(n->opc) >= 5))
 			ir3_NOP(block);
 
 		if (is_nop(n) && !list_empty(&block->instr_list)) {
@@ -183,7 +183,13 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 			ctx->has_samp = true;
 			regmask_set(&needs_sy, n->regs[0]);
 		} else if (is_load(n)) {
-			regmask_set(&needs_sy, n->regs[0]);
+			/* seems like ldlv needs (ss) bit instead??  which is odd but
+			 * makes a bunch of flat-varying tests start working on a4xx.
+			 */
+			if (n->opc == OPC_LDLV)
+				regmask_set(&needs_ss, n->regs[0]);
+			else
+				regmask_set(&needs_sy, n->regs[0]);
 		}
 
 		/* both tex/sfu appear to not always immediately consume
@@ -209,7 +215,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 			struct ir3_instruction *baryf;
 
 			/* (ss)bary.f (ei)r63.x, 0, r0.x */
-			baryf = ir3_instr_create(block, 2, OPC_BARY_F);
+			baryf = ir3_instr_create(block, OPC_BARY_F);
 			baryf->flags |= IR3_INSTR_SS;
 			ir3_reg_create(baryf, regid(63, 0), 0);
 			ir3_reg_create(baryf, 0, IR3_REG_IMMED)->iim_val = 0;
@@ -286,7 +292,7 @@ resolve_dest_block(struct ir3_block *block)
 		} else if (list_length(&block->instr_list) == 1) {
 			struct ir3_instruction *instr = list_first_entry(
 					&block->instr_list, struct ir3_instruction, node);
-			if (is_flow(instr) && (instr->opc == OPC_JUMP))
+			if (instr->opc == OPC_JUMP)
 				return block->successors[0];
 		}
 	}

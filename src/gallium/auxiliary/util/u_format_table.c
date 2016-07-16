@@ -32688,10 +32688,10 @@ util_format_none_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_none_unpack_rgba_8unorm,
@@ -32742,17 +32742,17 @@ util_format_b8g8r8a8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -32804,17 +32804,17 @@ util_format_b8g8r8x8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -32866,17 +32866,17 @@ util_format_a8r8g8b8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -32928,17 +32928,17 @@ util_format_x8r8g8b8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -32990,17 +32990,17 @@ util_format_a8b8g8r8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33052,17 +33052,17 @@ util_format_x8b8g8r8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33114,17 +33114,17 @@ util_format_r8g8b8x8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33176,17 +33176,17 @@ util_format_b5g5r5x1_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33238,17 +33238,17 @@ util_format_b5g5r5a1_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33300,17 +33300,17 @@ util_format_b4g4r4a4_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33362,17 +33362,17 @@ util_format_b4g4r4x4_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33424,17 +33424,17 @@ util_format_b5g6r5_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33486,17 +33486,17 @@ util_format_r10g10b10a2_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33548,17 +33548,17 @@ util_format_b10g10r10a2_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33610,17 +33610,17 @@ util_format_b2g3r3_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33662,10 +33662,10 @@ util_format_l8_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_l8_unorm_unpack_rgba_8unorm,
@@ -33706,10 +33706,10 @@ util_format_a8_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_a8_unorm_unpack_rgba_8unorm,
@@ -33750,10 +33750,10 @@ util_format_i8_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_i8_unorm_unpack_rgba_8unorm,
@@ -33804,17 +33804,17 @@ util_format_l4a4_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33866,17 +33866,17 @@ util_format_l8a8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -33918,10 +33918,10 @@ util_format_l16_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_l16_unorm_unpack_rgba_8unorm,
@@ -33962,10 +33962,10 @@ util_format_a16_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_a16_unorm_unpack_rgba_8unorm,
@@ -34006,10 +34006,10 @@ util_format_i16_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_i16_unorm_unpack_rgba_8unorm,
@@ -34060,17 +34060,17 @@ util_format_l16a16_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -34112,10 +34112,10 @@ util_format_a8_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_a8_snorm_unpack_rgba_8unorm,
@@ -34156,10 +34156,10 @@ util_format_l8_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_l8_snorm_unpack_rgba_8unorm,
@@ -34210,17 +34210,17 @@ util_format_l8a8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -34262,10 +34262,10 @@ util_format_i8_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_i8_snorm_unpack_rgba_8unorm,
@@ -34306,10 +34306,10 @@ util_format_a16_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_a16_snorm_unpack_rgba_8unorm,
@@ -34350,10 +34350,10 @@ util_format_l16_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_l16_snorm_unpack_rgba_8unorm,
@@ -34404,17 +34404,17 @@ util_format_l16a16_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -34456,10 +34456,10 @@ util_format_i16_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_i16_snorm_unpack_rgba_8unorm,
@@ -34500,10 +34500,10 @@ util_format_a16_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_a16_float_unpack_rgba_8unorm,
@@ -34544,10 +34544,10 @@ util_format_l16_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_l16_float_unpack_rgba_8unorm,
@@ -34598,17 +34598,17 @@ util_format_l16a16_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -34650,10 +34650,10 @@ util_format_i16_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_i16_float_unpack_rgba_8unorm,
@@ -34694,10 +34694,10 @@ util_format_a32_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_a32_float_unpack_rgba_8unorm,
@@ -34738,10 +34738,10 @@ util_format_l32_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_l32_float_unpack_rgba_8unorm,
@@ -34792,17 +34792,17 @@ util_format_l32a32_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -34844,10 +34844,10 @@ util_format_i32_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_i32_float_unpack_rgba_8unorm,
@@ -34888,10 +34888,10 @@ util_format_l8_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_X,	/* sg */
-      UTIL_FORMAT_SWIZZLE_X,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_X,	/* sg */
+      PIPE_SWIZZLE_X,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    &util_format_l8_srgb_unpack_rgba_8unorm,
@@ -34942,17 +34942,17 @@ util_format_l8a8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_X,	/* sg */
-      UTIL_FORMAT_SWIZZLE_X,	/* sb */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_X,	/* sg */
+      PIPE_SWIZZLE_X,	/* sb */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_X,	/* sg */
-      UTIL_FORMAT_SWIZZLE_X,	/* sb */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_X,	/* sg */
+      PIPE_SWIZZLE_X,	/* sb */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35004,17 +35004,17 @@ util_format_r8g8b8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35066,17 +35066,17 @@ util_format_r8g8b8a8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35128,17 +35128,17 @@ util_format_a8b8g8r8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sb */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* sr */
+      PIPE_SWIZZLE_Z,	/* sg */
+      PIPE_SWIZZLE_Y,	/* sb */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sb */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* sr */
+      PIPE_SWIZZLE_Z,	/* sg */
+      PIPE_SWIZZLE_Y,	/* sb */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35190,17 +35190,17 @@ util_format_x8b8g8r8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_W,	/* sr */
+      PIPE_SWIZZLE_Z,	/* sg */
+      PIPE_SWIZZLE_Y,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_W,	/* sr */
+      PIPE_SWIZZLE_Z,	/* sg */
+      PIPE_SWIZZLE_Y,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35252,17 +35252,17 @@ util_format_b8g8r8a8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_X,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_X,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_X,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_X,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35314,17 +35314,17 @@ util_format_b8g8r8x8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_X,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_X,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_X,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_X,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35376,17 +35376,17 @@ util_format_a8r8g8b8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sg */
-      UTIL_FORMAT_SWIZZLE_W,	/* sb */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* sr */
+      PIPE_SWIZZLE_Z,	/* sg */
+      PIPE_SWIZZLE_W,	/* sb */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sg */
-      UTIL_FORMAT_SWIZZLE_W,	/* sb */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* sr */
+      PIPE_SWIZZLE_Z,	/* sg */
+      PIPE_SWIZZLE_W,	/* sb */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35438,17 +35438,17 @@ util_format_x8r8g8b8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sg */
-      UTIL_FORMAT_SWIZZLE_W,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* sr */
+      PIPE_SWIZZLE_Z,	/* sg */
+      PIPE_SWIZZLE_W,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sg */
-      UTIL_FORMAT_SWIZZLE_W,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* sr */
+      PIPE_SWIZZLE_Z,	/* sg */
+      PIPE_SWIZZLE_W,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -35500,17 +35500,17 @@ util_format_r8sg8sb8ux8u_norm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -35562,17 +35562,17 @@ util_format_r10sg10sb10sa2u_norm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -35624,17 +35624,17 @@ util_format_r5sg5sb6u_norm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -35676,10 +35676,10 @@ util_format_s8_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_NONE,	/* z */
-      UTIL_FORMAT_SWIZZLE_X,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_NONE,	/* z */
+      PIPE_SWIZZLE_X,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
    UTIL_FORMAT_COLORSPACE_ZS,
    NULL, /* unpack_rgba_8unorm */
@@ -35720,10 +35720,10 @@ util_format_z16_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_NONE,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
    UTIL_FORMAT_COLORSPACE_ZS,
    NULL, /* unpack_rgba_8unorm */
@@ -35764,10 +35764,10 @@ util_format_z32_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_NONE,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
    UTIL_FORMAT_COLORSPACE_ZS,
    NULL, /* unpack_rgba_8unorm */
@@ -35808,10 +35808,10 @@ util_format_z32_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_NONE,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
    UTIL_FORMAT_COLORSPACE_ZS,
    NULL, /* unpack_rgba_8unorm */
@@ -35862,17 +35862,17 @@ util_format_z24_unorm_s8_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* z */
-      UTIL_FORMAT_SWIZZLE_X,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_Y,	/* z */
+      PIPE_SWIZZLE_X,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_Y,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_Y,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_ZS,
@@ -35924,17 +35924,17 @@ util_format_s8_uint_z24_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_Y,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_Y,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* z */
-      UTIL_FORMAT_SWIZZLE_X,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_Y,	/* z */
+      PIPE_SWIZZLE_X,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_ZS,
@@ -35986,17 +35986,17 @@ util_format_x24s8_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_NONE,	/* z */
-      UTIL_FORMAT_SWIZZLE_X,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_NONE,	/* z */
+      PIPE_SWIZZLE_X,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_NONE,	/* z */
-      UTIL_FORMAT_SWIZZLE_Y,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_NONE,	/* z */
+      PIPE_SWIZZLE_Y,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_ZS,
@@ -36048,17 +36048,17 @@ util_format_s8x24_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_NONE,	/* z */
-      UTIL_FORMAT_SWIZZLE_Y,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_NONE,	/* z */
+      PIPE_SWIZZLE_Y,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_NONE,	/* z */
-      UTIL_FORMAT_SWIZZLE_X,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_NONE,	/* z */
+      PIPE_SWIZZLE_X,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_ZS,
@@ -36110,17 +36110,17 @@ util_format_z24x8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* z */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_Y,	/* z */
+      PIPE_SWIZZLE_NONE,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_NONE,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_ZS,
@@ -36172,17 +36172,17 @@ util_format_x8z24_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_NONE,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* z */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_Y,	/* z */
+      PIPE_SWIZZLE_NONE,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_ZS,
@@ -36234,17 +36234,17 @@ util_format_z32_float_s8x24_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_Z,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_Z,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* z */
-      UTIL_FORMAT_SWIZZLE_Y,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_X,	/* z */
+      PIPE_SWIZZLE_Y,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_ZS,
@@ -36296,17 +36296,17 @@ util_format_x32_s8x24_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_NONE,	/* z */
-      UTIL_FORMAT_SWIZZLE_Z,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_NONE,	/* z */
+      PIPE_SWIZZLE_Z,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_NONE,	/* z */
-      UTIL_FORMAT_SWIZZLE_Y,	/* s */
-      UTIL_FORMAT_SWIZZLE_NONE,	/* ignored */
-      UTIL_FORMAT_SWIZZLE_NONE	/* ignored */
+      PIPE_SWIZZLE_NONE,	/* z */
+      PIPE_SWIZZLE_Y,	/* s */
+      PIPE_SWIZZLE_NONE,	/* ignored */
+      PIPE_SWIZZLE_NONE	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_ZS,
@@ -36348,10 +36348,10 @@ util_format_uyvy_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_1	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_1	/* ignored */
    },
    UTIL_FORMAT_COLORSPACE_YUV,
    &util_format_uyvy_unpack_rgba_8unorm,
@@ -36392,10 +36392,10 @@ util_format_yuyv_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_1	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_1	/* ignored */
    },
    UTIL_FORMAT_COLORSPACE_YUV,
    &util_format_yuyv_unpack_rgba_8unorm,
@@ -36436,10 +36436,10 @@ util_format_r8g8_b8g8_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r8g8_b8g8_unorm_unpack_rgba_8unorm,
@@ -36480,10 +36480,10 @@ util_format_g8r8_g8b8_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_g8r8_g8b8_unorm_unpack_rgba_8unorm,
@@ -36524,10 +36524,10 @@ util_format_g8r8_b8r8_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_g8r8_b8r8_unorm_unpack_rgba_8unorm,
@@ -36568,10 +36568,10 @@ util_format_r8g8_r8b8_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r8g8_r8b8_unorm_unpack_rgba_8unorm,
@@ -36612,10 +36612,10 @@ util_format_r11g11b10_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r11g11b10_float_unpack_rgba_8unorm,
@@ -36656,10 +36656,10 @@ util_format_r9g9b9e5_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r9g9b9e5_float_unpack_rgba_8unorm,
@@ -36700,10 +36700,10 @@ util_format_r1_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r1_unorm_unpack_rgba_8unorm,
@@ -36754,17 +36754,17 @@ util_format_r8g8bx_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -36806,10 +36806,10 @@ util_format_dxt1_rgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_dxt1_rgb_unpack_rgba_8unorm,
@@ -36850,10 +36850,10 @@ util_format_dxt1_rgba_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_dxt1_rgba_unpack_rgba_8unorm,
@@ -36894,10 +36894,10 @@ util_format_dxt3_rgba_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_dxt3_rgba_unpack_rgba_8unorm,
@@ -36938,10 +36938,10 @@ util_format_dxt5_rgba_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_dxt5_rgba_unpack_rgba_8unorm,
@@ -36982,10 +36982,10 @@ util_format_dxt1_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    &util_format_dxt1_srgb_unpack_rgba_8unorm,
@@ -37026,10 +37026,10 @@ util_format_dxt1_srgba_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    &util_format_dxt1_srgba_unpack_rgba_8unorm,
@@ -37070,10 +37070,10 @@ util_format_dxt3_srgba_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    &util_format_dxt3_srgba_unpack_rgba_8unorm,
@@ -37114,10 +37114,10 @@ util_format_dxt5_srgba_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    &util_format_dxt5_srgba_unpack_rgba_8unorm,
@@ -37158,10 +37158,10 @@ util_format_rgtc1_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_rgtc1_unorm_unpack_rgba_8unorm,
@@ -37202,10 +37202,10 @@ util_format_rgtc1_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_rgtc1_snorm_unpack_rgba_8unorm,
@@ -37246,10 +37246,10 @@ util_format_rgtc2_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_rgtc2_unorm_unpack_rgba_8unorm,
@@ -37290,10 +37290,10 @@ util_format_rgtc2_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_rgtc2_snorm_unpack_rgba_8unorm,
@@ -37334,10 +37334,10 @@ util_format_latc1_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_latc1_unorm_unpack_rgba_8unorm,
@@ -37378,10 +37378,10 @@ util_format_latc1_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_latc1_snorm_unpack_rgba_8unorm,
@@ -37422,10 +37422,10 @@ util_format_latc2_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_latc2_unorm_unpack_rgba_8unorm,
@@ -37466,10 +37466,10 @@ util_format_latc2_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_latc2_snorm_unpack_rgba_8unorm,
@@ -37510,10 +37510,10 @@ util_format_etc1_rgb8_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_etc1_rgb8_unpack_rgba_8unorm,
@@ -37554,10 +37554,10 @@ util_format_etc2_rgb8_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37598,10 +37598,10 @@ util_format_etc2_srgb8_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37642,10 +37642,10 @@ util_format_etc2_rgb8a1_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37686,10 +37686,10 @@ util_format_etc2_srgb8a1_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37730,10 +37730,10 @@ util_format_etc2_rgba8_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37774,10 +37774,10 @@ util_format_etc2_srgba8_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37818,10 +37818,10 @@ util_format_etc2_r11_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37862,10 +37862,10 @@ util_format_etc2_r11_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37906,10 +37906,10 @@ util_format_etc2_rg11_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37950,10 +37950,10 @@ util_format_etc2_rg11_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -37994,10 +37994,10 @@ util_format_bptc_rgba_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38038,10 +38038,10 @@ util_format_bptc_srgba_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38082,10 +38082,10 @@ util_format_bptc_rgb_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38126,10 +38126,10 @@ util_format_bptc_rgb_ufloat_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38170,10 +38170,10 @@ util_format_astc_4x4_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38214,10 +38214,10 @@ util_format_astc_5x4_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38258,10 +38258,10 @@ util_format_astc_5x5_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38302,10 +38302,10 @@ util_format_astc_6x5_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38346,10 +38346,10 @@ util_format_astc_6x6_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38390,10 +38390,10 @@ util_format_astc_8x5_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38434,10 +38434,10 @@ util_format_astc_8x6_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38478,10 +38478,10 @@ util_format_astc_8x8_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38522,10 +38522,10 @@ util_format_astc_10x5_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38566,10 +38566,10 @@ util_format_astc_10x6_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38610,10 +38610,10 @@ util_format_astc_10x8_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38654,10 +38654,10 @@ util_format_astc_10x10_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38698,10 +38698,10 @@ util_format_astc_12x10_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38742,10 +38742,10 @@ util_format_astc_12x12_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38786,10 +38786,10 @@ util_format_astc_4x4_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38830,10 +38830,10 @@ util_format_astc_5x4_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38874,10 +38874,10 @@ util_format_astc_5x5_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38918,10 +38918,10 @@ util_format_astc_6x5_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -38962,10 +38962,10 @@ util_format_astc_6x6_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39006,10 +39006,10 @@ util_format_astc_8x5_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39050,10 +39050,10 @@ util_format_astc_8x6_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39094,10 +39094,10 @@ util_format_astc_8x8_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39138,10 +39138,10 @@ util_format_astc_10x5_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39182,10 +39182,10 @@ util_format_astc_10x6_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39226,10 +39226,10 @@ util_format_astc_10x8_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39270,10 +39270,10 @@ util_format_astc_10x10_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39314,10 +39314,10 @@ util_format_astc_12x10_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39358,10 +39358,10 @@ util_format_astc_12x12_srgb_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
    NULL, /* unpack_rgba_8unorm */
@@ -39402,10 +39402,10 @@ util_format_r64_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r64_float_unpack_rgba_8unorm,
@@ -39456,17 +39456,17 @@ util_format_r64g64_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -39518,17 +39518,17 @@ util_format_r64g64b64_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -39580,17 +39580,17 @@ util_format_r64g64b64a64_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -39632,10 +39632,10 @@ util_format_r32_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r32_float_unpack_rgba_8unorm,
@@ -39686,17 +39686,17 @@ util_format_r32g32_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -39748,17 +39748,17 @@ util_format_r32g32b32_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -39810,17 +39810,17 @@ util_format_r32g32b32a32_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -39862,10 +39862,10 @@ util_format_r32_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r32_unorm_unpack_rgba_8unorm,
@@ -39916,17 +39916,17 @@ util_format_r32g32_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -39978,17 +39978,17 @@ util_format_r32g32b32_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40040,17 +40040,17 @@ util_format_r32g32b32a32_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40092,10 +40092,10 @@ util_format_r32_uscaled_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r32_uscaled_unpack_rgba_8unorm,
@@ -40146,17 +40146,17 @@ util_format_r32g32_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40208,17 +40208,17 @@ util_format_r32g32b32_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40270,17 +40270,17 @@ util_format_r32g32b32a32_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40322,10 +40322,10 @@ util_format_r32_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r32_snorm_unpack_rgba_8unorm,
@@ -40376,17 +40376,17 @@ util_format_r32g32_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40438,17 +40438,17 @@ util_format_r32g32b32_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40500,17 +40500,17 @@ util_format_r32g32b32a32_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40552,10 +40552,10 @@ util_format_r32_sscaled_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r32_sscaled_unpack_rgba_8unorm,
@@ -40606,17 +40606,17 @@ util_format_r32g32_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40668,17 +40668,17 @@ util_format_r32g32b32_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40730,17 +40730,17 @@ util_format_r32g32b32a32_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40782,10 +40782,10 @@ util_format_r16_float_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r16_float_unpack_rgba_8unorm,
@@ -40836,17 +40836,17 @@ util_format_r16g16_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40898,17 +40898,17 @@ util_format_r16g16b16_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -40960,17 +40960,17 @@ util_format_r16g16b16a16_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41012,10 +41012,10 @@ util_format_r16_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r16_unorm_unpack_rgba_8unorm,
@@ -41066,17 +41066,17 @@ util_format_r16g16_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41128,17 +41128,17 @@ util_format_r16g16b16_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41190,17 +41190,17 @@ util_format_r16g16b16a16_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41242,10 +41242,10 @@ util_format_r16_uscaled_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r16_uscaled_unpack_rgba_8unorm,
@@ -41296,17 +41296,17 @@ util_format_r16g16_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41358,17 +41358,17 @@ util_format_r16g16b16_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41420,17 +41420,17 @@ util_format_r16g16b16a16_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41472,10 +41472,10 @@ util_format_r16_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r16_snorm_unpack_rgba_8unorm,
@@ -41526,17 +41526,17 @@ util_format_r16g16_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41588,17 +41588,17 @@ util_format_r16g16b16_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41650,17 +41650,17 @@ util_format_r16g16b16a16_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41702,10 +41702,10 @@ util_format_r16_sscaled_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r16_sscaled_unpack_rgba_8unorm,
@@ -41756,17 +41756,17 @@ util_format_r16g16_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41818,17 +41818,17 @@ util_format_r16g16b16_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41880,17 +41880,17 @@ util_format_r16g16b16a16_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -41932,10 +41932,10 @@ util_format_r8_unorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r8_unorm_unpack_rgba_8unorm,
@@ -41986,17 +41986,17 @@ util_format_r8g8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42048,17 +42048,17 @@ util_format_r8g8b8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42110,17 +42110,17 @@ util_format_r8g8b8a8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42162,10 +42162,10 @@ util_format_r8_uscaled_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r8_uscaled_unpack_rgba_8unorm,
@@ -42216,17 +42216,17 @@ util_format_r8g8_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42278,17 +42278,17 @@ util_format_r8g8b8_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42340,17 +42340,17 @@ util_format_r8g8b8a8_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42392,10 +42392,10 @@ util_format_r8_snorm_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r8_snorm_unpack_rgba_8unorm,
@@ -42446,17 +42446,17 @@ util_format_r8g8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42508,17 +42508,17 @@ util_format_r8g8b8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42570,17 +42570,17 @@ util_format_r8g8b8a8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42622,10 +42622,10 @@ util_format_r8_sscaled_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r8_sscaled_unpack_rgba_8unorm,
@@ -42676,17 +42676,17 @@ util_format_r8g8_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42738,17 +42738,17 @@ util_format_r8g8b8_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42800,17 +42800,17 @@ util_format_r8g8b8a8_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42852,10 +42852,10 @@ util_format_r32_fixed_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    &util_format_r32_fixed_unpack_rgba_8unorm,
@@ -42906,17 +42906,17 @@ util_format_r32g32_fixed_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -42968,17 +42968,17 @@ util_format_r32g32b32_fixed_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43030,17 +43030,17 @@ util_format_r32g32b32a32_fixed_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43092,17 +43092,17 @@ util_format_r10g10b10x2_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43154,17 +43154,17 @@ util_format_r10g10b10x2_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43216,17 +43216,17 @@ util_format_yv12_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_YUV,
@@ -43278,17 +43278,17 @@ util_format_yv16_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_YUV,
@@ -43340,17 +43340,17 @@ util_format_iyuv_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_YUV,
@@ -43402,17 +43402,17 @@ util_format_nv12_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_YUV,
@@ -43464,17 +43464,17 @@ util_format_nv21_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* y */
-      UTIL_FORMAT_SWIZZLE_Y,	/* u */
-      UTIL_FORMAT_SWIZZLE_Z,	/* v */
-      UTIL_FORMAT_SWIZZLE_W	/* ignored */
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_YUV,
@@ -43526,17 +43526,17 @@ util_format_a4r4_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43588,17 +43588,17 @@ util_format_r4a4_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43650,17 +43650,17 @@ util_format_r8a8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43712,17 +43712,17 @@ util_format_a8r8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43774,17 +43774,17 @@ util_format_r10g10b10a2_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43836,17 +43836,17 @@ util_format_r10g10b10a2_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43898,17 +43898,17 @@ util_format_r10g10b10a2_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -43960,17 +43960,17 @@ util_format_b10g10r10a2_uscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44022,17 +44022,17 @@ util_format_b10g10r10a2_sscaled_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44084,17 +44084,17 @@ util_format_b10g10r10a2_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44136,10 +44136,10 @@ util_format_r8_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -44190,17 +44190,17 @@ util_format_r8g8_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44252,17 +44252,17 @@ util_format_r8g8b8_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44314,17 +44314,17 @@ util_format_r8g8b8a8_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44366,10 +44366,10 @@ util_format_r8_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -44420,17 +44420,17 @@ util_format_r8g8_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44482,17 +44482,17 @@ util_format_r8g8b8_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44544,17 +44544,17 @@ util_format_r8g8b8a8_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44596,10 +44596,10 @@ util_format_r16_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -44650,17 +44650,17 @@ util_format_r16g16_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44712,17 +44712,17 @@ util_format_r16g16b16_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44774,17 +44774,17 @@ util_format_r16g16b16a16_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44826,10 +44826,10 @@ util_format_r16_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -44880,17 +44880,17 @@ util_format_r16g16_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -44942,17 +44942,17 @@ util_format_r16g16b16_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45004,17 +45004,17 @@ util_format_r16g16b16a16_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45056,10 +45056,10 @@ util_format_r32_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45110,17 +45110,17 @@ util_format_r32g32_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45172,17 +45172,17 @@ util_format_r32g32b32_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45234,17 +45234,17 @@ util_format_r32g32b32a32_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45286,10 +45286,10 @@ util_format_r32_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45340,17 +45340,17 @@ util_format_r32g32_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45402,17 +45402,17 @@ util_format_r32g32b32_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45464,17 +45464,17 @@ util_format_r32g32b32a32_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45516,10 +45516,10 @@ util_format_a8_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45560,10 +45560,10 @@ util_format_i8_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45604,10 +45604,10 @@ util_format_l8_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45658,17 +45658,17 @@ util_format_l8a8_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45710,10 +45710,10 @@ util_format_a8_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45754,10 +45754,10 @@ util_format_i8_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45798,10 +45798,10 @@ util_format_l8_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45852,17 +45852,17 @@ util_format_l8a8_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -45904,10 +45904,10 @@ util_format_a16_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45948,10 +45948,10 @@ util_format_i16_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -45992,10 +45992,10 @@ util_format_l16_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46046,17 +46046,17 @@ util_format_l16a16_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -46098,10 +46098,10 @@ util_format_a16_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46142,10 +46142,10 @@ util_format_i16_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46186,10 +46186,10 @@ util_format_l16_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46240,17 +46240,17 @@ util_format_l16a16_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -46292,10 +46292,10 @@ util_format_a32_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46336,10 +46336,10 @@ util_format_i32_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46380,10 +46380,10 @@ util_format_l32_uint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46434,17 +46434,17 @@ util_format_l32a32_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -46486,10 +46486,10 @@ util_format_a32_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_0,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_0,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46530,10 +46530,10 @@ util_format_i32_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46574,10 +46574,10 @@ util_format_l32_sint_description = {
       {0, 0, 0, 0, 0}
    },
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
    NULL, /* unpack_rgba_8unorm */
@@ -46628,17 +46628,17 @@ util_format_l32a32_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -46690,17 +46690,17 @@ util_format_b10g10r10a2_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -46752,17 +46752,17 @@ util_format_r8g8b8x8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -46814,17 +46814,17 @@ util_format_r8g8b8x8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -46876,17 +46876,17 @@ util_format_r8g8b8x8_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -46938,17 +46938,17 @@ util_format_r8g8b8x8_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47000,17 +47000,17 @@ util_format_b10g10r10x2_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_W,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_W,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_X,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_X,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47062,17 +47062,17 @@ util_format_r16g16b16x16_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47124,17 +47124,17 @@ util_format_r16g16b16x16_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47186,17 +47186,17 @@ util_format_r16g16b16x16_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47248,17 +47248,17 @@ util_format_r16g16b16x16_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47310,17 +47310,17 @@ util_format_r16g16b16x16_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47372,17 +47372,17 @@ util_format_r32g32b32x32_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47434,17 +47434,17 @@ util_format_r32g32b32x32_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47496,17 +47496,17 @@ util_format_r32g32b32x32_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47558,17 +47558,17 @@ util_format_r8a8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47620,17 +47620,17 @@ util_format_r16a16_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47682,17 +47682,17 @@ util_format_r16a16_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47744,17 +47744,17 @@ util_format_r16a16_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47806,17 +47806,17 @@ util_format_r32a32_float_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47868,17 +47868,17 @@ util_format_r8a8_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47930,17 +47930,17 @@ util_format_r8a8_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -47992,17 +47992,17 @@ util_format_r16a16_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48054,17 +48054,17 @@ util_format_r16a16_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48116,17 +48116,17 @@ util_format_r32a32_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48178,17 +48178,17 @@ util_format_r32a32_sint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_0,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_Y	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_0,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_Y	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48240,17 +48240,17 @@ util_format_r10g10b10a2_uint_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Z,	/* b */
-      UTIL_FORMAT_SWIZZLE_W	/* a */
+      PIPE_SWIZZLE_X,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Z,	/* b */
+      PIPE_SWIZZLE_W	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48302,17 +48302,17 @@ util_format_b5g6r5_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_X,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Z,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Z,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_X,	/* sb */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Z,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_X,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -48364,17 +48364,17 @@ util_format_a8l8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48426,17 +48426,17 @@ util_format_a8l8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48488,17 +48488,17 @@ util_format_a8l8_srgb_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sb */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Y,	/* sb */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* sr */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
-      UTIL_FORMAT_SWIZZLE_Y,	/* sb */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* sr */
+      PIPE_SWIZZLE_Y,	/* sg */
+      PIPE_SWIZZLE_Y,	/* sb */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_SRGB,
@@ -48550,17 +48550,17 @@ util_format_a16l16_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_Y,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48612,17 +48612,17 @@ util_format_g8r8_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48674,17 +48674,17 @@ util_format_g8r8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48736,17 +48736,17 @@ util_format_g16r16_unorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48798,17 +48798,17 @@ util_format_g16r16_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_Y,	/* r */
-      UTIL_FORMAT_SWIZZLE_X,	/* g */
-      UTIL_FORMAT_SWIZZLE_0,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48860,17 +48860,17 @@ util_format_a8b8g8r8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_X	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,
@@ -48922,17 +48922,17 @@ util_format_x8b8g8r8_snorm_description = {
 #endif
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #else
    {
-      UTIL_FORMAT_SWIZZLE_W,	/* r */
-      UTIL_FORMAT_SWIZZLE_Z,	/* g */
-      UTIL_FORMAT_SWIZZLE_Y,	/* b */
-      UTIL_FORMAT_SWIZZLE_1	/* a */
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_1	/* a */
    },
 #endif
    UTIL_FORMAT_COLORSPACE_RGB,

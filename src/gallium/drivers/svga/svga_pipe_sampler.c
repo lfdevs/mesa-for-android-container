@@ -43,52 +43,55 @@ static inline unsigned
 translate_wrap_mode(unsigned wrap)
 {
    switch (wrap) {
-   case PIPE_TEX_WRAP_REPEAT: 
+   case PIPE_TEX_WRAP_REPEAT:
       return SVGA3D_TEX_ADDRESS_WRAP;
-
-   case PIPE_TEX_WRAP_CLAMP: 
+   case PIPE_TEX_WRAP_CLAMP:
       return SVGA3D_TEX_ADDRESS_CLAMP;
-
-   case PIPE_TEX_WRAP_CLAMP_TO_EDGE: 
+   case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
       /* Unfortunately SVGA3D_TEX_ADDRESS_EDGE not respected by
        * hardware.
        */
       return SVGA3D_TEX_ADDRESS_CLAMP;
-
-   case PIPE_TEX_WRAP_CLAMP_TO_BORDER: 
+   case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
       return SVGA3D_TEX_ADDRESS_BORDER;
-
-   case PIPE_TEX_WRAP_MIRROR_REPEAT: 
+   case PIPE_TEX_WRAP_MIRROR_REPEAT:
       return SVGA3D_TEX_ADDRESS_MIRROR;
-
-   case PIPE_TEX_WRAP_MIRROR_CLAMP:  
-   case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:   
-   case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER: 
+   case PIPE_TEX_WRAP_MIRROR_CLAMP:
+   case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
+   case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER:
       return SVGA3D_TEX_ADDRESS_MIRRORONCE;
-
    default:
       assert(0);
       return SVGA3D_TEX_ADDRESS_WRAP;
    }
 }
 
-static inline unsigned translate_img_filter( unsigned filter )
+
+static inline unsigned
+translate_img_filter(unsigned filter)
 {
    switch (filter) {
-   case PIPE_TEX_FILTER_NEAREST: return SVGA3D_TEX_FILTER_NEAREST;
-   case PIPE_TEX_FILTER_LINEAR:  return SVGA3D_TEX_FILTER_LINEAR;
+   case PIPE_TEX_FILTER_NEAREST:
+      return SVGA3D_TEX_FILTER_NEAREST;
+   case PIPE_TEX_FILTER_LINEAR:
+      return SVGA3D_TEX_FILTER_LINEAR;
    default:
       assert(0);
       return SVGA3D_TEX_FILTER_NEAREST;
    }
 }
 
-static inline unsigned translate_mip_filter( unsigned filter )
+
+static inline unsigned
+translate_mip_filter(unsigned filter)
 {
    switch (filter) {
-   case PIPE_TEX_MIPFILTER_NONE:    return SVGA3D_TEX_FILTER_NONE;
-   case PIPE_TEX_MIPFILTER_NEAREST: return SVGA3D_TEX_FILTER_NEAREST;
-   case PIPE_TEX_MIPFILTER_LINEAR:  return SVGA3D_TEX_FILTER_LINEAR;
+   case PIPE_TEX_MIPFILTER_NONE:
+      return SVGA3D_TEX_FILTER_NONE;
+   case PIPE_TEX_MIPFILTER_NEAREST:
+      return SVGA3D_TEX_FILTER_NEAREST;
+   case PIPE_TEX_MIPFILTER_LINEAR:
+      return SVGA3D_TEX_FILTER_LINEAR;
    default:
       assert(0);
       return SVGA3D_TEX_FILTER_NONE;
@@ -221,7 +224,7 @@ svga_create_sampler_state(struct pipe_context *pipe,
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_sampler_state *cso = CALLOC_STRUCT( svga_sampler_state );
-   
+
    if (!cso)
       return NULL;
 
@@ -229,7 +232,7 @@ svga_create_sampler_state(struct pipe_context *pipe,
    cso->magfilter = translate_img_filter( sampler->mag_img_filter );
    cso->minfilter = translate_img_filter( sampler->min_img_filter );
    cso->aniso_level = MAX2( sampler->max_anisotropy, 1 );
-   if(sampler->max_anisotropy)
+   if (sampler->max_anisotropy)
       cso->magfilter = cso->minfilter = SVGA3D_TEX_FILTER_ANISOTROPIC;
    cso->lod_bias = sampler->lod_bias;
    cso->addressu = translate_wrap_mode(sampler->wrap_s);
@@ -273,10 +276,11 @@ svga_create_sampler_state(struct pipe_context *pipe,
             cso->min_lod, cso->view_min_lod, cso->view_max_lod,
             cso->mipfilter == SVGA3D_TEX_FILTER_NONE ? "SVGA3D_TEX_FILTER_NONE" : "SOMETHING");
 
-   svga->hud.num_state_objects++;
+   svga->hud.num_sampler_objects++;
 
    return cso;
 }
+
 
 static void
 svga_bind_sampler_states(struct pipe_context *pipe,
@@ -318,8 +322,8 @@ svga_bind_sampler_states(struct pipe_context *pipe,
 }
 
 
-static void svga_delete_sampler_state(struct pipe_context *pipe,
-                                      void *sampler)
+static void
+svga_delete_sampler_state(struct pipe_context *pipe, void *sampler)
 {
    struct svga_sampler_state *ss = (struct svga_sampler_state *) sampler;
    struct svga_context *svga = svga_context(pipe);
@@ -338,7 +342,7 @@ static void svga_delete_sampler_state(struct pipe_context *pipe,
    }
 
    FREE(sampler);
-   svga->hud.num_state_objects--;
+   svga->hud.num_sampler_objects--;
 }
 
 
@@ -347,6 +351,7 @@ svga_create_sampler_view(struct pipe_context *pipe,
                          struct pipe_resource *texture,
                          const struct pipe_sampler_view *templ)
 {
+   struct svga_context *svga = svga_context(pipe);
    struct svga_pipe_sampler_view *sv = CALLOC_STRUCT(svga_pipe_sampler_view);
 
    if (!sv) {
@@ -360,6 +365,8 @@ svga_create_sampler_view(struct pipe_context *pipe,
 
    sv->base.context = pipe;
    sv->id = SVGA3D_INVALID_ID;
+
+   svga->hud.num_samplerview_objects++;
 
    return &sv->base;
 }
@@ -400,7 +407,9 @@ svga_sampler_view_destroy(struct pipe_context *pipe,
    pipe_resource_reference(&sv->base.texture, NULL);
 
    FREE(sv);
+   svga->hud.num_samplerview_objects--;
 }
+
 
 static void
 svga_set_sampler_views(struct pipe_context *pipe,
@@ -412,17 +421,33 @@ svga_set_sampler_views(struct pipe_context *pipe,
    struct svga_context *svga = svga_context(pipe);
    unsigned flag_1d = 0;
    unsigned flag_srgb = 0;
+   unsigned flag_rect = 0;
+   unsigned flag_buf = 0;
    uint i;
    boolean any_change = FALSE;
 
    assert(shader < PIPE_SHADER_TYPES);
-   assert(start + num <= Elements(svga->curr.sampler_views[shader]));
+   assert(start + num <= ARRAY_SIZE(svga->curr.sampler_views[shader]));
 
    /* Pre-VGPU10 only supports FS textures */
    if (!svga_have_vgpu10(svga) && shader != PIPE_SHADER_FRAGMENT)
       return;
 
+   /* This bit of code works around a quirk in the CSO module.
+    * If start=num=0 it means all sampler views should be released.
+    * Note that the CSO module treats sampler views for fragment shaders
+    * differently than other shader types.
+    */
+   if (start == 0 && num == 0 && svga->curr.num_sampler_views[shader] > 0) {
+      for (i = 0; i < svga->curr.num_sampler_views[shader]; i++) {
+         pipe_sampler_view_release(pipe, &svga->curr.sampler_views[shader][i]);
+      }
+      any_change = TRUE;
+   }
+
    for (i = 0; i < num; i++) {
+      enum pipe_texture_target target;
+
       if (svga->curr.sampler_views[shader][start + i] != views[i]) {
          /* Note: we're using pipe_sampler_view_release() here to work around
           * a possible crash when the old view belongs to another context that
@@ -440,8 +465,13 @@ svga_set_sampler_views(struct pipe_context *pipe,
       if (util_format_is_srgb(views[i]->format))
          flag_srgb |= 1 << (start + i);
 
-      if (views[i]->texture->target == PIPE_TEXTURE_1D)
+      target = views[i]->texture->target;
+      if (target == PIPE_TEXTURE_1D)
          flag_1d |= 1 << (start + i);
+      else if (target == PIPE_TEXTURE_RECT)
+         flag_rect |= 1 << (start + i);
+      else if (target == PIPE_BUFFER)
+         flag_buf |= 1 << (start + i);
    }
 
    if (!any_change) {
@@ -459,11 +489,19 @@ svga_set_sampler_views(struct pipe_context *pipe,
    svga->dirty |= SVGA_NEW_TEXTURE_BINDING;
 
    if (flag_srgb != svga->curr.tex_flags.flag_srgb ||
-       flag_1d != svga->curr.tex_flags.flag_1d) 
-   {
+       flag_1d != svga->curr.tex_flags.flag_1d) {
       svga->dirty |= SVGA_NEW_TEXTURE_FLAGS;
       svga->curr.tex_flags.flag_1d = flag_1d;
       svga->curr.tex_flags.flag_srgb = flag_srgb;
+   }
+
+   if (flag_rect != svga->curr.tex_flags.flag_rect ||
+       flag_buf != svga->curr.tex_flags.flag_buf)
+   {
+      /* Need to re-emit texture constants */
+      svga->dirty |= SVGA_NEW_TEXTURE_CONSTS;
+      svga->curr.tex_flags.flag_rect = flag_rect;
+      svga->curr.tex_flags.flag_buf = flag_buf;
    }
 
    /* Check if any of the sampler view resources collide with the framebuffer
@@ -492,7 +530,8 @@ svga_set_sampler_views(struct pipe_context *pipe,
 }
 
 
-void svga_init_sampler_functions( struct svga_context *svga )
+void
+svga_init_sampler_functions( struct svga_context *svga )
 {
    svga->pipe.create_sampler_state = svga_create_sampler_state;
    svga->pipe.bind_sampler_states = svga_bind_sampler_states;
@@ -501,6 +540,3 @@ void svga_init_sampler_functions( struct svga_context *svga )
    svga->pipe.create_sampler_view = svga_create_sampler_view;
    svga->pipe.sampler_view_destroy = svga_sampler_view_destroy;
 }
-
-
-

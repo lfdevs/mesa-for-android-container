@@ -247,7 +247,7 @@ static void scaling_list(struct vl_rbsp *rbsp, uint8_t *scalingList, unsigned si
 static struct pipe_h264_sps *seq_parameter_set_id(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp)
 {
    unsigned id = vl_rbsp_ue(rbsp);
-   if (id >= Elements(priv->codec_data.h264.sps))
+   if (id >= ARRAY_SIZE(priv->codec_data.h264.sps))
       return NULL; /* invalid seq_parameter_set_id */
 
    return &priv->codec_data.h264.sps[id];
@@ -395,7 +395,7 @@ static void seq_parameter_set(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp)
 static struct pipe_h264_pps *pic_parameter_set_id(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp)
 {
    unsigned id = vl_rbsp_ue(rbsp);
-   if (id >= Elements(priv->codec_data.h264.pps))
+   if (id >= ARRAY_SIZE(priv->codec_data.h264.pps))
       return NULL; /* invalid pic_parameter_set_id */
 
    return &priv->codec_data.h264.pps[id];

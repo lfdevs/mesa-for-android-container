@@ -51,7 +51,7 @@ pipe_loader_probe(struct pipe_loader_device **devs, int ndev)
 {
    int i, n = 0;
 
-   for (i = 0; i < Elements(backends); i++)
+   for (i = 0; i < ARRAY_SIZE(backends); i++)
       n += backends[i](&devs[n], MAX2(0, ndev - n));
 
    return n;

@@ -133,7 +133,8 @@ vc4_pipe_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
  * This helps avoid flushing the command buffers when unnecessary.
  */
 bool
-vc4_cl_references_bo(struct pipe_context *pctx, struct vc4_bo *bo)
+vc4_cl_references_bo(struct pipe_context *pctx, struct vc4_bo *bo,
+                     bool include_reads)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
 
@@ -143,10 +144,12 @@ vc4_cl_references_bo(struct pipe_context *pctx, struct vc4_bo *bo)
         /* Walk all the referenced BOs in the drawing command list to see if
          * they match.
          */
-        struct vc4_bo **referenced_bos = vc4->bo_pointers.base;
-        for (int i = 0; i < cl_offset(&vc4->bo_handles) / 4; i++) {
-                if (referenced_bos[i] == bo) {
-                        return true;
+        if (include_reads) {
+                struct vc4_bo **referenced_bos = vc4->bo_pointers.base;
+                for (int i = 0; i < cl_offset(&vc4->bo_handles) / 4; i++) {
+                        if (referenced_bos[i] == bo) {
+                                return true;
+                        }
                 }
         }
 

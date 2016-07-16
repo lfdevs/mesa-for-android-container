@@ -598,26 +598,6 @@ upload_program(struct i915_fragment_program *p)
                          0, src0, T0_TEXKILL);
          break;
 
-      case OPCODE_KIL_NV:
-	 if (inst->DstReg.CondMask == COND_TR) {
-	    tmp = i915_get_utemp(p);
-
-	    /* The KIL instruction discards the fragment if any component of
-	     * the source is < 0.  Emit an immediate operand of {-1}.xywz.
-	     */
-	    i915_emit_texld(p, get_live_regs(p, inst),
-			    tmp, A0_DEST_CHANNEL_ALL,
-			    0, /* use a dummy dest reg */
-			    negate(swizzle(tmp, ONE, ONE, ONE, ONE),
-				   1, 1, 1, 1),
-			    T0_TEXKILL);
-	 } else {
-	    p->error = 1;
-	    i915_program_error(p, "Unsupported KIL_NV condition code: %d",
-			       inst->DstReg.CondMask);
-	 }
-	 break;
-
       case OPCODE_LG2:
          src0 = src_vector(p, &inst->SrcReg[0], program);
 
@@ -809,68 +789,6 @@ upload_program(struct i915_fragment_program *p)
          }
          break;
 
-      case OPCODE_SEQ:
-	 tmp = i915_get_utemp(p);
-	 flags = get_result_flags(inst);
-	 dst = get_result_vector(p, inst);
-
-         /* If both operands are uniforms or constants, we get 5 instructions
-          * like:
-          *
-          *     U[1] = MOV CONST[1]
-          *     U[0].xyz = SGE CONST[0].xxxx, U[1]
-          *     U[1] = MOV CONST[1].-x-y-z-w
-          *     R[0].xyz = SGE CONST[0].-x-x-x-x, U[1]
-          *     R[0].xyz = MUL R[0], U[0]
-          *
-          * This code is stupid.  Instead of having the individual calls to
-          * i915_emit_arith generate the moves to utemps, do it in the caller.
-          * This results in code like:
-          *
-          *     U[1] = MOV CONST[1]
-          *     U[0].xyz = SGE CONST[0].xxxx, U[1]
-          *     R[0].xyz = SGE CONST[0].-x-x-x-x, U[1].-x-y-z-w
-          *     R[0].xyz = MUL R[0], U[0]
-          */
-         src0 = src_vector(p, &inst->SrcReg[0], program);
-         src1 = src_vector(p, &inst->SrcReg[1], program);
-
-         if (GET_UREG_TYPE(src0) == REG_TYPE_CONST
-             && GET_UREG_TYPE(src1) == REG_TYPE_CONST) {
-            unsigned tmp = i915_get_utemp(p);
-
-            i915_emit_arith(p, A0_MOV, tmp, A0_DEST_CHANNEL_ALL, 0,
-                            src1, 0, 0);
-
-            src1 = tmp;
-         }
-
-	 /* tmp = src1 >= src2 */
-	 i915_emit_arith(p,
-			 A0_SGE,
-			 tmp,
-			 flags, 0,
-			 src0,
-			 src1,
-			 0);
-	 /* dst = src1 <= src2 */
-	 i915_emit_arith(p,
-			 A0_SGE,
-			 dst,
-			 flags, 0,
-			 negate(src0, 1, 1, 1, 1),
-			 negate(src1, 1, 1, 1, 1),
-			 0);
-	 /* dst = tmp && dst */
-	 i915_emit_arith(p,
-			 A0_MUL,
-			 dst,
-			 flags, 0,
-			 dst,
-			 tmp,
-			 0);
-	 break;
-
       case OPCODE_SIN:
          src0 = src_vector(p, &inst->SrcReg[0], program);
          tmp = i915_get_utemp(p);
@@ -959,94 +877,8 @@ upload_program(struct i915_fragment_program *p)
 	 EMIT_2ARG_ARITH(A0_SGE);
 	 break;
 
-      case OPCODE_SGT:
-	 i915_emit_arith(p,
-			 A0_SLT,
-			 get_result_vector( p, inst ),
-			 get_result_flags( inst ), 0,
-			 negate(src_vector( p, &inst->SrcReg[0], program),
-				1, 1, 1, 1),
-			 negate(src_vector( p, &inst->SrcReg[1], program),
-				1, 1, 1, 1),
-			 0);
-         break;
-
-      case OPCODE_SLE:
-	 i915_emit_arith(p,
-			 A0_SGE,
-			 get_result_vector( p, inst ),
-			 get_result_flags( inst ), 0,
-			 negate(src_vector( p, &inst->SrcReg[0], program),
-				1, 1, 1, 1),
-			 negate(src_vector( p, &inst->SrcReg[1], program),
-				1, 1, 1, 1),
-			 0);
-         break;
-
       case OPCODE_SLT:
          EMIT_2ARG_ARITH(A0_SLT);
-         break;
-
-      case OPCODE_SNE:
-	 tmp = i915_get_utemp(p);
-	 flags = get_result_flags(inst);
-	 dst = get_result_vector(p, inst);
-
-         /* If both operands are uniforms or constants, we get 5 instructions
-          * like:
-          *
-          *     U[1] = MOV CONST[1]
-          *     U[0].xyz = SLT CONST[0].xxxx, U[1]
-          *     U[1] = MOV CONST[1].-x-y-z-w
-          *     R[0].xyz = SLT CONST[0].-x-x-x-x, U[1]
-          *     R[0].xyz = MUL R[0], U[0]
-          *
-          * This code is stupid.  Instead of having the individual calls to
-          * i915_emit_arith generate the moves to utemps, do it in the caller.
-          * This results in code like:
-          *
-          *     U[1] = MOV CONST[1]
-          *     U[0].xyz = SLT CONST[0].xxxx, U[1]
-          *     R[0].xyz = SLT CONST[0].-x-x-x-x, U[1].-x-y-z-w
-          *     R[0].xyz = MUL R[0], U[0]
-          */
-         src0 = src_vector(p, &inst->SrcReg[0], program);
-         src1 = src_vector(p, &inst->SrcReg[1], program);
-
-         if (GET_UREG_TYPE(src0) == REG_TYPE_CONST
-             && GET_UREG_TYPE(src1) == REG_TYPE_CONST) {
-            unsigned tmp = i915_get_utemp(p);
-
-            i915_emit_arith(p, A0_MOV, tmp, A0_DEST_CHANNEL_ALL, 0,
-                            src1, 0, 0);
-
-            src1 = tmp;
-         }
-
-	 /* tmp = src1 < src2 */
-	 i915_emit_arith(p,
-			 A0_SLT,
-			 tmp,
-			 flags, 0,
-			 src0,
-			 src1,
-			 0);
-	 /* dst = src1 > src2 */
-	 i915_emit_arith(p,
-			 A0_SLT,
-			 dst,
-			 flags, 0,
-			 negate(src0, 1, 1, 1, 1),
-			 negate(src1, 1, 1, 1, 1),
-			 0);
-	 /* dst = tmp || dst */
-	 i915_emit_arith(p,
-			 A0_ADD,
-			 dst,
-			 flags | A0_DEST_SATURATE, 0,
-			 dst,
-			 tmp,
-			 0);
          break;
 
       case OPCODE_SSG:

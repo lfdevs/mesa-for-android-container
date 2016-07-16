@@ -89,6 +89,7 @@ static void set_fragment_shader(void)
       "DCL IN[0], GENERIC[0], PERSPECTIVE\n"
       "DCL OUT[0], COLOR\n"
       "DCL SAMP[0]\n"
+      "DCL SVIEW[0], 2D, FLOAT\n"
       "  0: TXP OUT[0], IN[0], SAMP[0], 2D\n"
       "  2: END\n";
 
@@ -181,19 +182,19 @@ char_to_swizzle(char c)
 {
    switch (c) {
    case 'r':
-      return PIPE_SWIZZLE_RED;
+      return PIPE_SWIZZLE_X;
    case 'g':
-      return PIPE_SWIZZLE_GREEN;
+      return PIPE_SWIZZLE_Y;
    case 'b':
-      return PIPE_SWIZZLE_BLUE;
+      return PIPE_SWIZZLE_Z;
    case 'a':
-      return PIPE_SWIZZLE_ALPHA;
+      return PIPE_SWIZZLE_W;
    case '0':
-      return PIPE_SWIZZLE_ZERO;
+      return PIPE_SWIZZLE_0;
    case '1':
-      return PIPE_SWIZZLE_ONE;
+      return PIPE_SWIZZLE_1;
    default:
-      return PIPE_SWIZZLE_RED;
+      return PIPE_SWIZZLE_X;
    }
 }
 
@@ -204,10 +205,10 @@ int main(int argc, char *argv[])
    uint swizzle[4];
    int i;
 
-   swizzle[0] = PIPE_SWIZZLE_RED;
-   swizzle[1] = PIPE_SWIZZLE_GREEN;
-   swizzle[2] = PIPE_SWIZZLE_BLUE;
-   swizzle[3] = PIPE_SWIZZLE_ALPHA;
+   swizzle[0] = PIPE_SWIZZLE_X;
+   swizzle[1] = PIPE_SWIZZLE_Y;
+   swizzle[2] = PIPE_SWIZZLE_Z;
+   swizzle[3] = PIPE_SWIZZLE_W;
 
    for (i = 1; i < argc; i++) {
       swizzle[i-1] = char_to_swizzle(argv[i][0]);

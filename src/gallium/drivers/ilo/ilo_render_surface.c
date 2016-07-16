@@ -530,9 +530,9 @@ gen6_emit_launch_grid_surface_global(struct ilo_render *r,
    if (!count)
       return;
 
-   if (base + count > Elements(r->state.cs.SURFACE_STATE)) {
+   if (base + count > ARRAY_SIZE(r->state.cs.SURFACE_STATE)) {
       ilo_warn("too many global bindings\n");
-      count = Elements(r->state.cs.SURFACE_STATE) - base;
+      count = ARRAY_SIZE(r->state.cs.SURFACE_STATE) - base;
    }
 
    /* SURFACE_STATEs for global bindings */

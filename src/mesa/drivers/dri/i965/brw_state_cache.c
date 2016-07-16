@@ -199,6 +199,7 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
     * that depend on it (state base address on gen5+, or unit state before).
     */
    brw->ctx.NewDriverState |= BRW_NEW_PROGRAM_CACHE;
+   brw->batch.state_base_address_emitted = false;
 }
 
 /**

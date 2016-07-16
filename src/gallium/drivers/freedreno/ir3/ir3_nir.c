@@ -35,18 +35,33 @@
 
 #include "nir/tgsi_to_nir.h"
 
+static const nir_shader_compiler_options options = {
+		.lower_fpow = true,
+		.lower_fsat = true,
+		.lower_scmp = true,
+		.lower_flrp32 = true,
+		.lower_flrp64 = true,
+		.lower_ffract = true,
+		.lower_fmod32 = true,
+		.lower_fmod64 = true,
+		.lower_fdiv = true,
+		.fuse_ffma = true,
+		.native_integers = true,
+		.vertex_id_zero_based = true,
+		.lower_extract_byte = true,
+		.lower_extract_word = true,
+};
+
 struct nir_shader *
 ir3_tgsi_to_nir(const struct tgsi_token *tokens)
 {
-	static const nir_shader_compiler_options options = {
-			.lower_fpow = true,
-			.lower_fsat = true,
-			.lower_scmp = true,
-			.lower_flrp = true,
-			.lower_ffract = true,
-			.native_integers = true,
-	};
 	return tgsi_to_nir(tokens, &options);
+}
+
+const nir_shader_compiler_options *
+ir3_get_compiler_options(void)
+{
+	return &options;
 }
 
 /* for given shader key, are any steps handled in nir? */
@@ -55,7 +70,8 @@ ir3_key_lowers_nir(const struct ir3_shader_key *key)
 {
 	return key->fsaturate_s | key->fsaturate_t | key->fsaturate_r |
 			key->vsaturate_s | key->vsaturate_t | key->vsaturate_r |
-			key->ucp_enables | key->color_two_side;
+			key->ucp_enables | key->color_two_side |
+			key->fclamp_color | key->vclamp_color;
 }
 
 #define OPT(nir, pass, ...) ({                             \
@@ -111,12 +127,21 @@ ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
 	if (key) {
 		if (s->stage == MESA_SHADER_VERTEX) {
 			OPT_V(s, nir_lower_clip_vs, key->ucp_enables);
+			if (key->vclamp_color)
+				OPT_V(s, nir_lower_clamp_color_outputs);
 		} else if (s->stage == MESA_SHADER_FRAGMENT) {
 			OPT_V(s, nir_lower_clip_fs, key->ucp_enables);
+			if (key->fclamp_color)
+				OPT_V(s, nir_lower_clamp_color_outputs);
 		}
 		if (key->color_two_side) {
 			OPT_V(s, nir_lower_two_sided_color);
 		}
+	} else {
+		/* only want to do this the first time (when key is null)
+		 * and not again on any potential 2nd variant lowering pass:
+		 */
+		OPT_V(s, ir3_nir_apply_trig_workarounds);
 	}
 
 	OPT_V(s, nir_lower_tex, &tex_options);
@@ -139,7 +164,7 @@ ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
 
 	} while (progress);
 
-	OPT_V(s, nir_remove_dead_variables);
+	OPT_V(s, nir_remove_dead_variables, nir_var_local);
 
 	if (fd_mesa_debug & FD_DBG_DISASM) {
 		debug_printf("----------------------\n");

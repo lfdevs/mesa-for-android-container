@@ -1319,6 +1319,9 @@ static struct name_address_pair GLX_functions[] = {
    { "glXBindTexImageEXT", (__GLXextFuncPtr) glXBindTexImageEXT },
    { "glXReleaseTexImageEXT", (__GLXextFuncPtr) glXReleaseTexImageEXT },
 
+   /*** GLX_ARB_create_context ***/
+   { "glXCreateContextAttribsARB", (__GLXextFuncPtr) glXCreateContextAttribsARB },
+
    { NULL, NULL }   /* end of list */
 };
 
@@ -1369,4 +1372,21 @@ void PUBLIC
 (*glXGetProcAddress(const GLubyte *procName))()
 {
    return glXGetProcAddressARB(procName);
+}
+
+
+/**
+ * Added in GLX_ARB_create_context.
+ */
+GLXContext PUBLIC
+glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
+                           GLXContext share_context, Bool direct,
+                           const int *attrib_list)
+{
+   struct _glxapi_table *t;
+   GET_DISPATCH(dpy, t);
+   if (!t)
+      return 0;
+   return (t->CreateContextAttribs)(dpy, config, share_context, direct,
+                                    attrib_list);
 }

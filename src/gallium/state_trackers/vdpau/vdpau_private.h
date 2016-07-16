@@ -37,6 +37,8 @@
 #include "pipe/p_video_codec.h"
 
 #include "state_tracker/vdpau_interop.h"
+#include "state_tracker/vdpau_dmabuf.h"
+#include "state_tracker/vdpau_funcs.h"
 
 #include "util/u_debug.h"
 #include "util/u_rect.h"
@@ -159,27 +161,6 @@ PipeToFormatYCBCR(enum pipe_format p_format)
    }
 
    return -1;
-}
-
-static inline enum pipe_format
-FormatRGBAToPipe(VdpRGBAFormat vdpau_format)
-{
-   switch (vdpau_format) {
-      case VDP_RGBA_FORMAT_A8:
-         return PIPE_FORMAT_A8_UNORM;
-      case VDP_RGBA_FORMAT_B10G10R10A2:
-         return PIPE_FORMAT_B10G10R10A2_UNORM;
-      case VDP_RGBA_FORMAT_B8G8R8A8:
-         return PIPE_FORMAT_B8G8R8A8_UNORM;
-      case VDP_RGBA_FORMAT_R10G10B10A2:
-         return PIPE_FORMAT_R10G10B10A2_UNORM;
-      case VDP_RGBA_FORMAT_R8G8B8A8:
-         return PIPE_FORMAT_R8G8B8A8_UNORM;
-      default:
-         assert(0);
-   }
-
-   return PIPE_FORMAT_NONE;
 }
 
 static inline VdpRGBAFormat
@@ -542,6 +523,8 @@ VdpPresentationQueueTargetCreateX11 vlVdpPresentationQueueTargetCreateX11;
 /* interop to mesa state tracker */
 VdpVideoSurfaceGallium vlVdpVideoSurfaceGallium;
 VdpOutputSurfaceGallium vlVdpOutputSurfaceGallium;
+VdpVideoSurfaceDMABuf vlVdpVideoSurfaceDMABuf;
+VdpOutputSurfaceDMABuf vlVdpOutputSurfaceDMABuf;
 
 #define VDPAU_OUT   0
 #define VDPAU_ERR   1

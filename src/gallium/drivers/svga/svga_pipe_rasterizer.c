@@ -38,8 +38,8 @@
 
 /* Hardware frontwinding is always set up as SVGA3D_FRONTWINDING_CW.
  */
-static SVGA3dFace svga_translate_cullmode( unsigned mode,
-                                           unsigned front_ccw )
+static SVGA3dFace
+svga_translate_cullmode(unsigned mode, unsigned front_ccw)
 {
    const int hw_front_ccw = 0;  /* hardware is always CW */
    switch (mode) {
@@ -57,7 +57,8 @@ static SVGA3dFace svga_translate_cullmode( unsigned mode,
    }
 }
 
-static SVGA3dShadeMode svga_translate_flatshade( unsigned mode )
+static SVGA3dShadeMode
+svga_translate_flatshade(unsigned mode)
 {
    return mode ? SVGA3D_SHADEMODE_FLAT : SVGA3D_SHADEMODE_SMOOTH;
 }
@@ -158,8 +159,11 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
                              const struct pipe_rasterizer_state *templ)
 {
    struct svga_context *svga = svga_context(pipe);
-   struct svga_rasterizer_state *rast = CALLOC_STRUCT( svga_rasterizer_state );
+   struct svga_rasterizer_state *rast = CALLOC_STRUCT(svga_rasterizer_state);
    struct svga_screen *screen = svga_screen(pipe->screen);
+
+   if (!rast)
+      return NULL;
 
    /* need this for draw module. */
    rast->templ = *templ;
@@ -176,9 +180,8 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
    /* line_width             - draw module */
    /* fill_cw, fill_ccw      - draw module or index translation */
 
-   rast->shademode = svga_translate_flatshade( templ->flatshade );
-   rast->cullmode = svga_translate_cullmode( templ->cull_face, 
-                                             templ->front_ccw );
+   rast->shademode = svga_translate_flatshade(templ->flatshade);
+   rast->cullmode = svga_translate_cullmode(templ->cull_face, templ->front_ccw);
    rast->scissortestenable = templ->scissor;
    rast->multisampleantialias = templ->multisample;
    rast->antialiasedlineenable = templ->line_smooth;
@@ -357,13 +360,14 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
                          "GL_POLYGON_SMOOTH not supported");
    }
 
-   svga->hud.num_state_objects++;
+   svga->hud.num_rasterizer_objects++;
 
    return rast;
 }
 
-static void svga_bind_rasterizer_state( struct pipe_context *pipe,
-                                        void *state )
+
+static void
+svga_bind_rasterizer_state(struct pipe_context *pipe, void *state)
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_rasterizer_state *raster = (struct svga_rasterizer_state *)state;
@@ -379,6 +383,7 @@ static void svga_bind_rasterizer_state( struct pipe_context *pipe,
 
    svga->dirty |= SVGA_NEW_RAST;
 }
+
 
 static void
 svga_delete_rasterizer_state(struct pipe_context *pipe, void *state)
@@ -402,19 +407,14 @@ svga_delete_rasterizer_state(struct pipe_context *pipe, void *state)
    }
 
    FREE(state);
-   svga->hud.num_state_objects--;
+   svga->hud.num_rasterizer_objects--;
 }
 
 
-void svga_init_rasterizer_functions( struct svga_context *svga )
+void
+svga_init_rasterizer_functions(struct svga_context *svga)
 {
    svga->pipe.create_rasterizer_state = svga_create_rasterizer_state;
    svga->pipe.bind_rasterizer_state = svga_bind_rasterizer_state;
    svga->pipe.delete_rasterizer_state = svga_delete_rasterizer_state;
 }
-
-
-/***********************************************************************
- * Hardware state update
- */
-

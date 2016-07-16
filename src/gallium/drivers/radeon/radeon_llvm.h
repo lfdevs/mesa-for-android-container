@@ -51,23 +51,7 @@ struct radeon_llvm_loop {
 };
 
 struct radeon_llvm_context {
-
 	struct lp_build_tgsi_soa_context soa;
-
-	unsigned chip_class;
-	unsigned type;
-	unsigned face_gpr;
-	unsigned two_side;
-	unsigned inputs_count;
-	struct r600_shader_io * r600_inputs;
-	struct r600_shader_io * r600_outputs;
-	struct pipe_stream_output_info *stream_outputs;
-	unsigned color_buffer_count;
-	unsigned fs_color_all;
-	unsigned alpha_to_one;
-	unsigned has_txq_cube_array_z_comp;
-	unsigned uses_tex_buffers;
-	unsigned has_compressed_msaa_texturing;
 
 	/*=== Front end configuration ===*/
 
@@ -84,13 +68,15 @@ struct radeon_llvm_context {
 			unsigned index,
 			const struct tgsi_full_declaration *decl);
 
+	void (*declare_memory_region)(struct radeon_llvm_context *,
+			const struct tgsi_full_declaration *decl);
+
 	/** This array contains the input values for the shader.  Typically these
 	  * values will be in the form of a target intrinsic that will inform the
 	  * backend how to load the actual inputs to the shader. 
 	  */
 	LLVMValueRef inputs[RADEON_LLVM_MAX_INPUTS];
 	LLVMValueRef outputs[RADEON_LLVM_MAX_OUTPUTS][TGSI_NUM_CHANNELS];
-	unsigned output_reg_count;
 
 	/** This pointer is used to contain the temporary values.
 	  * The amount of temporary used in tgsi can't be bound to a max value and

@@ -69,9 +69,8 @@ temp(struct nvfx_vpc *vpc)
 {
    int idx = ffs(~vpc->r_temps) - 1;
 
-   if (idx < 0) {
+   if (idx < 0 || (!vpc->is_nv4x && idx >= 16)) {
       NOUVEAU_ERR("out of temps!!\n");
-      assert(0);
       return nvfx_reg(NVFXSR_TEMP, 0);
    }
 

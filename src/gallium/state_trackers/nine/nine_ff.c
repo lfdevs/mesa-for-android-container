@@ -126,7 +126,7 @@ static unsigned nine_ff_vs_key_hash(void *key)
     struct nine_ff_vs_key *vs = key;
     unsigned i;
     uint32_t hash = vs->value32[0];
-    for (i = 1; i < Elements(vs->value32); ++i)
+    for (i = 1; i < ARRAY_SIZE(vs->value32); ++i)
         hash ^= vs->value32[i];
     return hash;
 }
@@ -142,7 +142,7 @@ static unsigned nine_ff_ps_key_hash(void *key)
     struct nine_ff_ps_key *ps = key;
     unsigned i;
     uint32_t hash = ps->value32[0];
-    for (i = 1; i < Elements(ps->value32); ++i)
+    for (i = 1; i < ARRAY_SIZE(ps->value32); ++i)
         hash ^= ps->value32[i];
     return hash;
 }
@@ -251,6 +251,7 @@ static void nine_ureg_tgsi_dump(struct ureg_program *ureg, boolean override)
  * CONST[100].x___ Viewport 2/width
  * CONST[100]._y__ Viewport 2/height
  * CONST[100].__z_ Viewport 1/(zmax - zmin)
+ * CONST[100].___w Viewport width
  * CONST[101].x___ Viewport x0
  * CONST[101]._y__ Viewport y0
  * CONST[101].__z_ Viewport z0
@@ -328,7 +329,7 @@ static void *
 nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
 {
     const struct nine_ff_vs_key *key = vs->key;
-    struct ureg_program *ureg = ureg_create(TGSI_PROCESSOR_VERTEX);
+    struct ureg_program *ureg = ureg_create(PIPE_SHADER_VERTEX);
     struct ureg_dst oPos, oCol[2], oPsz, oFog;
     struct ureg_dst rVtx, rNrm;
     struct ureg_dst r[8];
@@ -337,8 +338,8 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
     unsigned i, c;
     unsigned label[32], l = 0;
     unsigned num_r = 8;
-    boolean need_rNrm = key->lighting || key->pointscale || key->passthrough & (1 << NINE_DECLUSAGE_NORMAL);
-    boolean need_rVtx = key->lighting || key->fog_mode;
+    boolean need_rNrm = key->lighting || key->passthrough & (1 << NINE_DECLUSAGE_NORMAL);
+    boolean need_rVtx = key->lighting || key->fog_mode || key->pointscale;
     const unsigned texcoord_sn = get_texcoord_sn(device->screen);
 
     vs->ureg = ureg;
@@ -543,9 +544,14 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
      */
     if (key->vertexpointsize) {
         struct ureg_src cPsz1 = ureg_DECL_constant(ureg, 26);
-        ureg_MAX(ureg, tmp_x, _XXXX(vs->aPsz), _XXXX(cPsz1));
-        ureg_MIN(ureg, oPsz, _X(tmp), _YYYY(cPsz1));
+        ureg_MAX(ureg, tmp_z, _XXXX(vs->aPsz), _XXXX(cPsz1));
+        ureg_MIN(ureg, tmp_z, _Z(tmp), _YYYY(cPsz1));
     } else if (key->pointscale) {
+        struct ureg_src cPsz1 = ureg_DECL_constant(ureg, 26);
+        ureg_MOV(ureg, tmp_z, _ZZZZ(cPsz1));
+    }
+
+    if (key->pointscale) {
         struct ureg_src cPsz1 = ureg_DECL_constant(ureg, 26);
         struct ureg_src cPsz2 = ureg_DECL_constant(ureg, 27);
 
@@ -555,11 +561,14 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
         ureg_CMP(ureg, tmp_y, ureg_negate(_Y(tmp)), _Y(tmp), ureg_imm1f(ureg, 0.0f));
         ureg_MAD(ureg, tmp_x, _Y(tmp), _YYYY(cPsz2), _XXXX(cPsz2));
         ureg_MAD(ureg, tmp_x, _Y(tmp), _X(tmp), _WWWW(cPsz1));
-        ureg_RCP(ureg, tmp_x, ureg_src(tmp));
-        ureg_MUL(ureg, tmp_x, ureg_src(tmp), _ZZZZ(cPsz1));
+        ureg_RSQ(ureg, tmp_x, _X(tmp));
+        ureg_MUL(ureg, tmp_x, _X(tmp), _Z(tmp));
+        ureg_MUL(ureg, tmp_x, _X(tmp), _WWWW(_CONST(100)));
         ureg_MAX(ureg, tmp_x, _X(tmp), _XXXX(cPsz1));
-        ureg_MIN(ureg, oPsz, _X(tmp), _YYYY(cPsz1));
+        ureg_MIN(ureg, tmp_z, _X(tmp), _YYYY(cPsz1));
     }
+    if (key->vertexpointsize || key->pointscale)
+        ureg_MOV(ureg, oPsz, _Z(tmp));
 
     for (i = 0; i < 8; ++i) {
         struct ureg_dst oTex, input_coord, transformed, t;
@@ -1213,7 +1222,7 @@ static void *
 nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
 {
     struct ps_build_ctx ps;
-    struct ureg_program *ureg = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+    struct ureg_program *ureg = ureg_create(PIPE_SHADER_FRAGMENT);
     struct ureg_dst oCol;
     unsigned i, s;
     const unsigned texcoord_sn = get_texcoord_sn(device->screen);
@@ -1225,7 +1234,7 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
     ps.vC[0] = ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_COLOR, 0, TGSI_INTERPOLATE_COLOR);
 
     /* Declare all TEMPs we might need, serious drivers have a register allocator. */
-    for (i = 0; i < Elements(ps.r); ++i)
+    for (i = 0; i < ARRAY_SIZE(ps.r); ++i)
         ps.r[i] = ureg_DECL_local_temporary(ureg);
     ps.rCur = ps.r[0];
     ps.rTmp = ps.r[1];
@@ -1300,6 +1309,8 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
 
         if (!ureg_src_is_undef(ps.s[s])) {
             unsigned target;
+            struct ureg_src texture_coord = ps.vT[s];
+            struct ureg_dst delta;
             switch (key->ts[s].textarget) {
             case 0: target = TGSI_TEXTURE_1D; break;
             case 1: target = TGSI_TEXTURE_2D; break;
@@ -1308,43 +1319,71 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
             /* this is a 2 bit bitfield, do I really need a default case ? */
             }
 
-            /* sample the texture */
-            if (key->ts[s].colorop == D3DTOP_BUMPENVMAP ||
-                key->ts[s].colorop == D3DTOP_BUMPENVMAPLUMINANCE) {
+            /* Modify coordinates */
+            if (s >= 1 &&
+                (key->ts[s-1].colorop == D3DTOP_BUMPENVMAP ||
+                 key->ts[s-1].colorop == D3DTOP_BUMPENVMAPLUMINANCE)) {
+                delta = ureg_DECL_temporary(ureg);
+                /* Du' = D3DTSS_BUMPENVMAT00(stage s-1)*t(s-1)R + D3DTSS_BUMPENVMAT10(stage s-1)*t(s-1)G */
+                ureg_MUL(ureg, ureg_writemask(delta, TGSI_WRITEMASK_X), _X(ps.rTex), _XXXX(_CONST(8 + s - 1)));
+                ureg_MAD(ureg, ureg_writemask(delta, TGSI_WRITEMASK_X), _Y(ps.rTex), _ZZZZ(_CONST(8 + s - 1)), ureg_src(delta));
+                /* Dv' = D3DTSS_BUMPENVMAT01(stage s-1)*t(s-1)R + D3DTSS_BUMPENVMAT11(stage s-1)*t(s-1)G */
+                ureg_MUL(ureg, ureg_writemask(delta, TGSI_WRITEMASK_Y), _X(ps.rTex), _YYYY(_CONST(8 + s - 1)));
+                ureg_MAD(ureg, ureg_writemask(delta, TGSI_WRITEMASK_Y), _Y(ps.rTex), _WWWW(_CONST(8 + s - 1)), ureg_src(delta));
+                texture_coord = ureg_src(ureg_DECL_temporary(ureg));
+                ureg_MOV(ureg, ureg_writemask(ureg_dst(texture_coord), ureg_dst(ps.vT[s]).WriteMask), ps.vT[s]);
+                ureg_ADD(ureg, ureg_writemask(ureg_dst(texture_coord), TGSI_WRITEMASK_XY), texture_coord, ureg_src(delta));
+                /* Prepare luminance multiplier
+                 * t(s)RGBA = t(s)RGBA * clamp[(t(s-1)B * D3DTSS_BUMPENVLSCALE(stage s-1)) + D3DTSS_BUMPENVLOFFSET(stage s-1)] */
+                if (key->ts[s-1].colorop == D3DTOP_BUMPENVMAPLUMINANCE) {
+                    struct ureg_src bumpenvlscale = ((s-1) & 1) ? _ZZZZ(_CONST(16 + (s-1) / 2)) : _XXXX(_CONST(16 + (s-1) / 2));
+                    struct ureg_src bumpenvloffset = ((s-1) & 1) ? _WWWW(_CONST(16 + (s-1) / 2)) : _YYYY(_CONST(16 + (s-1) / 2));
+
+                    ureg_MAD(ureg, ureg_saturate(ureg_writemask(delta, TGSI_WRITEMASK_X)), _Z(ps.rTex), bumpenvlscale, bumpenvloffset);
+                }
             }
             if (key->projected & (3 << (s *2))) {
                 unsigned dim = 1 + ((key->projected >> (2 * s)) & 3);
                 if (dim == 4)
-                    ureg_TXP(ureg, ps.rTex, target, ps.vT[s], ps.s[s]);
+                    ureg_TXP(ureg, ps.rTex, target, texture_coord, ps.s[s]);
                 else {
-                    ureg_RCP(ureg, ureg_writemask(ps.rTmp, TGSI_WRITEMASK_X), ureg_scalar(ps.vT[s], dim-1));
-                    ureg_MUL(ureg, ps.rTmp, _XXXX(ps.rTmpSrc), ps.vT[s]);
+                    ureg_RCP(ureg, ureg_writemask(ps.rTmp, TGSI_WRITEMASK_X), ureg_scalar(texture_coord, dim-1));
+                    ureg_MUL(ureg, ps.rTmp, _XXXX(ps.rTmpSrc), texture_coord);
                     ureg_TEX(ureg, ps.rTex, target, ps.rTmpSrc, ps.s[s]);
                 }
             } else {
-                ureg_TEX(ureg, ps.rTex, target, ps.vT[s], ps.s[s]);
+                ureg_TEX(ureg, ps.rTex, target, texture_coord, ps.s[s]);
             }
+            if (s >= 1 && key->ts[s-1].colorop == D3DTOP_BUMPENVMAPLUMINANCE)
+                ureg_MUL(ureg, ps.rTex, ureg_src(ps.rTex), _X(delta));
         }
 
-        if (s == 0 &&
-            (key->ts[0].resultarg != 0 /* not current */ ||
-             key->ts[0].colorop == D3DTOP_DISABLE ||
-             key->ts[0].alphaop == D3DTOP_DISABLE ||
-             key->ts[0].colorop == D3DTOP_BLENDCURRENTALPHA ||
-             key->ts[0].alphaop == D3DTOP_BLENDCURRENTALPHA ||
-             key->ts[0].colorarg0 == D3DTA_CURRENT ||
-             key->ts[0].colorarg1 == D3DTA_CURRENT ||
-             key->ts[0].colorarg2 == D3DTA_CURRENT ||
-             key->ts[0].alphaarg0 == D3DTA_CURRENT ||
-             key->ts[0].alphaarg1 == D3DTA_CURRENT ||
-             key->ts[0].alphaarg2 == D3DTA_CURRENT)
-           ) {
+        if (((s == 0 && key->ts[0].colorop != D3DTOP_BUMPENVMAP &&
+              key->ts[0].colorop != D3DTOP_BUMPENVMAPLUMINANCE) ||
+             (s == 1 &&
+              (key->ts[0].colorop == D3DTOP_BUMPENVMAP ||
+               key->ts[0].colorop == D3DTOP_BUMPENVMAPLUMINANCE)))&&
+            (key->ts[s].resultarg != 0 /* not current */ ||
+             key->ts[s].colorop == D3DTOP_DISABLE ||
+             key->ts[s].alphaop == D3DTOP_DISABLE ||
+             key->ts[s].colorop == D3DTOP_BLENDCURRENTALPHA ||
+             key->ts[s].alphaop == D3DTOP_BLENDCURRENTALPHA ||
+             key->ts[s].colorarg0 == D3DTA_CURRENT ||
+             key->ts[s].colorarg1 == D3DTA_CURRENT ||
+             key->ts[s].colorarg2 == D3DTA_CURRENT ||
+             key->ts[s].alphaarg0 == D3DTA_CURRENT ||
+             key->ts[s].alphaarg1 == D3DTA_CURRENT ||
+             key->ts[s].alphaarg2 == D3DTA_CURRENT)) {
             /* Initialize D3DTA_CURRENT.
              * (Yes we can do this before the loop but not until
              *  NVE4 has an instruction scheduling pass.)
              */
             ureg_MOV(ureg, ps.rCur, ps.vC[0]);
         }
+
+        if (key->ts[s].colorop == D3DTOP_BUMPENVMAP ||
+            key->ts[s].colorop == D3DTOP_BUMPENVMAPLUMINANCE)
+            continue;
 
         dst = ps_get_ts_dst(&ps, key->ts[s].resultarg ? D3DTA_TEMP : D3DTA_CURRENT);
 
@@ -1480,8 +1519,7 @@ nine_ff_get_vs(struct NineDevice9 *device)
     key.passthrough &= ~((1 << NINE_DECLUSAGE_POSITION) | (1 << NINE_DECLUSAGE_PSIZE) |
                          (1 << NINE_DECLUSAGE_TEXCOORD) | (1 << NINE_DECLUSAGE_POSITIONT) |
                          (1 << NINE_DECLUSAGE_TESSFACTOR) | (1 << NINE_DECLUSAGE_SAMPLE));
-    if (!key.vertexpointsize)
-        key.pointscale = !!state->rs[D3DRS_POINTSCALEENABLE];
+    key.pointscale = !!state->rs[D3DRS_POINTSCALEENABLE];
 
     key.lighting = !!state->rs[D3DRS_LIGHTING] &&  state->ff.num_lights_active;
     key.darkness = !!state->rs[D3DRS_LIGHTING] && !state->ff.num_lights_active;
@@ -1808,11 +1846,11 @@ nine_ff_load_ps_params(struct NineDevice9 *device)
         dst[8 + s].z = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVMAT10]);
         dst[8 + s].w = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVMAT11]);
         if (s & 1) {
-            dst[8 + s / 2].z = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLSCALE]);
-            dst[8 + s / 2].w = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLOFFSET]);
+            dst[16 + s / 2].z = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLSCALE]);
+            dst[16 + s / 2].w = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLOFFSET]);
         } else {
-            dst[8 + s / 2].x = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLSCALE]);
-            dst[8 + s / 2].y = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLOFFSET]);
+            dst[16 + s / 2].x = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLSCALE]);
+            dst[16 + s / 2].y = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLOFFSET]);
         }
     }
 
@@ -1836,6 +1874,7 @@ nine_ff_load_viewport_info(struct NineDevice9 *device)
     dst[100].x = 2.0f / (float)(viewport->Width);
     dst[100].y = 2.0f / (float)(viewport->Height);
     dst[100].z = (diffZ == 0.0f) ? 0.0f : (1.0f / diffZ);
+    dst[100].w = (float)(viewport->Width);
     dst[101].x = (float)(viewport->X);
     dst[101].y = (float)(viewport->Y);
     dst[101].z = (float)(viewport->MinZ);

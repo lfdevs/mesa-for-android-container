@@ -160,13 +160,14 @@ rbug_screen_resource_create(struct pipe_screen *_screen,
 static struct pipe_resource *
 rbug_screen_resource_from_handle(struct pipe_screen *_screen,
                                  const struct pipe_resource *templ,
-                                 struct winsys_handle *handle)
+                                 struct winsys_handle *handle,
+                                 unsigned usage)
 {
    struct rbug_screen *rb_screen = rbug_screen(_screen);
    struct pipe_screen *screen = rb_screen->screen;
    struct pipe_resource *result;
 
-   result = screen->resource_from_handle(screen, templ, handle);
+   result = screen->resource_from_handle(screen, templ, handle, usage);
 
    result = rbug_resource_create(rbug_screen(_screen), result);
 
@@ -176,14 +177,15 @@ rbug_screen_resource_from_handle(struct pipe_screen *_screen,
 static boolean
 rbug_screen_resource_get_handle(struct pipe_screen *_screen,
                                 struct pipe_resource *_resource,
-                                struct winsys_handle *handle)
+                                struct winsys_handle *handle,
+                                unsigned usage)
 {
    struct rbug_screen *rb_screen = rbug_screen(_screen);
    struct rbug_resource *rb_resource = rbug_resource(_resource);
    struct pipe_screen *screen = rb_screen->screen;
    struct pipe_resource *resource = rb_resource->resource;
 
-   return screen->resource_get_handle(screen, resource, handle);
+   return screen->resource_get_handle(screen, resource, handle, usage);
 }
 
 

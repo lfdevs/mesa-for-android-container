@@ -74,6 +74,7 @@ const __DRIconfigOptionsExtension gallium_config_options = {
 
       DRI_CONF_SECTION_MISCELLANEOUS
          DRI_CONF_ALWAYS_HAVE_DEPTH_BUFFER("false")
+         DRI_CONF_GLSL_ZERO_INIT("false")
       DRI_CONF_SECTION_END
    DRI_CONF_END
 };
@@ -98,6 +99,7 @@ dri_fill_st_options(struct st_config_options *options,
       driQueryOptionb(optionCache, "force_s3tc_enable");
    options->allow_glsl_extension_directive_midshader =
       driQueryOptionb(optionCache, "allow_glsl_extension_directive_midshader");
+   options->glsl_zero_init = driQueryOptionb(optionCache, "glsl_zero_init");
 }
 
 static const __DRIconfig **

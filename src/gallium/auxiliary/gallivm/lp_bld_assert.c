@@ -77,7 +77,7 @@ lp_build_assert(struct gallivm_state *gallivm,
 
    function = lp_build_const_func_pointer(gallivm,
                                           func_to_pointer((func_pointer)lp_assert),
-                                          ret_type, arg_types, Elements(arg_types),
+                                          ret_type, arg_types, ARRAY_SIZE(arg_types),
                                           "assert");
 
    /* build function call param list */
@@ -88,5 +88,5 @@ lp_build_assert(struct gallivm_state *gallivm,
    assert(LLVMTypeOf(args[0]) == arg_types[0]);
    assert(LLVMTypeOf(args[1]) == arg_types[1]);
 
-   LLVMBuildCall(builder, function, args, Elements(args), "");
+   LLVMBuildCall(builder, function, args, ARRAY_SIZE(args), "");
 }

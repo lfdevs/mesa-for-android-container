@@ -84,8 +84,8 @@ struct r600_pc_group {
 
 struct r600_pc_counter {
 	unsigned base;
-	unsigned dwords;
-	unsigned stride;
+	unsigned qwords;
+	unsigned stride; /* in uint64s */
 };
 
 #define R600_PC_SHADERS_WINDOWING (1 << 31)
@@ -172,7 +172,7 @@ static void r600_pc_query_emit_stop(struct r600_common_context *ctx,
 				pc->emit_read(ctx, block,
 					      group->num_counters, group->selectors,
 					      buffer, va);
-				va += 4 * group->num_counters;
+				va += sizeof(uint64_t) * group->num_counters;
 			} while (group->instance < 0 && ++instance < block->num_instances);
 		} while (++se < se_end);
 	}
@@ -194,15 +194,15 @@ static void r600_pc_query_add_result(struct r600_common_context *ctx,
 				     union pipe_query_result *result)
 {
 	struct r600_query_pc *query = (struct r600_query_pc *)hwquery;
-	uint32_t *results = buffer;
+	uint64_t *results = buffer;
 	unsigned i, j;
 
 	for (i = 0; i < query->num_counters; ++i) {
 		struct r600_pc_counter *counter = &query->counters[i];
 
-		for (j = 0; j < counter->dwords; ++j) {
+		for (j = 0; j < counter->qwords; ++j) {
 			uint32_t value = results[counter->base + j * counter->stride];
-			result->batch[i].u32 += value;
+			result->batch[i].u64 += value;
 		}
 	}
 }
@@ -310,7 +310,6 @@ struct pipe_query *r600_create_batch_query(struct pipe_context *ctx,
 
 	query->b.b.ops = &batch_query_ops;
 	query->b.ops = &batch_query_hw_ops;
-	query->b.flags = R600_QUERY_HW_FLAG_TIMER;
 
 	query->num_counters = num_queries;
 
@@ -362,7 +361,7 @@ struct pipe_query *r600_create_batch_query(struct pipe_context *ctx,
 			instances *= block->num_instances;
 
 		group->result_base = i;
-		query->b.result_size += 4 * instances * group->num_counters;
+		query->b.result_size += sizeof(uint64_t) * instances * group->num_counters;
 		i += instances * group->num_counters;
 
 		pc->get_size(block, group->num_counters, group->selectors,
@@ -402,11 +401,11 @@ struct pipe_query *r600_create_batch_query(struct pipe_context *ctx,
 		counter->base = group->result_base + j;
 		counter->stride = group->num_counters;
 
-		counter->dwords = 1;
+		counter->qwords = 1;
 		if ((block->flags & R600_PC_BLOCK_SE) && group->se < 0)
-			counter->dwords = screen->info.max_se;
+			counter->qwords = screen->info.max_se;
 		if (group->instance < 0)
-			counter->dwords *= block->num_instances;
+			counter->qwords *= block->num_instances;
 	}
 
 	if (!r600_query_hw_init(rctx, &query->b))
@@ -536,7 +535,7 @@ int r600_get_perfcounter_info(struct r600_common_screen *screen,
 	info->name = block->selector_names + sub * block->selector_name_stride;
 	info->query_type = R600_QUERY_FIRST_PERFCOUNTER + index;
 	info->max_value.u64 = 0;
-	info->type = PIPE_DRIVER_QUERY_TYPE_UINT;
+	info->type = PIPE_DRIVER_QUERY_TYPE_UINT64;
 	info->result_type = PIPE_DRIVER_QUERY_RESULT_TYPE_CUMULATIVE;
 	info->group_id = base_gid + sub / block->num_selectors;
 	info->flags = PIPE_DRIVER_QUERY_FLAG_BATCH;

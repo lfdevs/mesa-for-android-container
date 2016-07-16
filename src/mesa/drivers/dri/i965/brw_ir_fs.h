@@ -58,8 +58,6 @@ public:
     */
    int subreg_offset;
 
-   fs_reg *reladdr;
-
    /** Register region horizontal stride */
    uint8_t stride;
 };
@@ -87,23 +85,35 @@ byte_offset(fs_reg reg, unsigned delta)
       break;
    case VGRF:
    case ATTR:
-      reg.reg_offset += delta / 32;
+   case UNIFORM: {
+      const unsigned reg_size = (reg.file == UNIFORM ? 4 : REG_SIZE);
+      const unsigned suboffset = reg.subreg_offset + delta;
+      reg.reg_offset += suboffset / reg_size;
+      reg.subreg_offset = suboffset % reg_size;
       break;
-   case MRF:
-      reg.nr += delta / 32;
+   }
+   case MRF: {
+      const unsigned suboffset = reg.subreg_offset + delta;
+      reg.nr += suboffset / REG_SIZE;
+      reg.subreg_offset = suboffset % REG_SIZE;
       break;
+   }
    case ARF:
-   case FIXED_GRF:
+   case FIXED_GRF: {
+      const unsigned suboffset = reg.subnr + delta;
+      reg.nr += suboffset / REG_SIZE;
+      reg.subnr = suboffset % REG_SIZE;
+      break;
+   }
    case IMM:
-   case UNIFORM:
+   default:
       assert(delta == 0);
    }
-   reg.subreg_offset += delta % 32;
    return reg;
 }
 
 static inline fs_reg
-horiz_offset(fs_reg reg, unsigned delta)
+horiz_offset(const fs_reg &reg, unsigned delta)
 {
    switch (reg.file) {
    case BAD_FILE:
@@ -111,61 +121,180 @@ horiz_offset(fs_reg reg, unsigned delta)
    case IMM:
       /* These only have a single component that is implicitly splatted.  A
        * horizontal offset should be a harmless no-op.
+       * XXX - Handle vector immediates correctly.
        */
-      break;
+      return reg;
    case VGRF:
    case MRF:
    case ATTR:
       return byte_offset(reg, delta * reg.stride * type_sz(reg.type));
    case ARF:
    case FIXED_GRF:
+      if (reg.is_null()) {
+         return reg;
+      } else {
+         const unsigned stride = reg.hstride ? 1 << (reg.hstride - 1) : 0;
+         return byte_offset(reg, delta * stride * type_sz(reg.type));
+      }
+   }
+   unreachable("Invalid register file");
+}
+
+static inline fs_reg
+offset(fs_reg reg, unsigned width, unsigned delta)
+{
+   switch (reg.file) {
+   case BAD_FILE:
+      break;
+   case ARF:
+   case FIXED_GRF:
+   case MRF:
+   case VGRF:
+   case ATTR:
+   case UNIFORM:
+      return byte_offset(reg, delta * reg.component_size(width));
+   case IMM:
       assert(delta == 0);
    }
    return reg;
 }
 
+/**
+ * Get the scalar channel of \p reg given by \p idx and replicate it to all
+ * channels of the result.
+ */
 static inline fs_reg
 component(fs_reg reg, unsigned idx)
 {
-   assert(reg.subreg_offset == 0);
-   reg.subreg_offset = idx * type_sz(reg.type);
+   reg = horiz_offset(reg, idx);
    reg.stride = 0;
    return reg;
+}
+
+/**
+ * Return an integer identifying the discrete address space a register is
+ * contained in.  A register is by definition fully contained in the single
+ * reg_space it belongs to, so two registers with different reg_space ids are
+ * guaranteed not to overlap.  Most register files are a single reg_space of
+ * its own, only the VGRF file is composed of multiple discrete address
+ * spaces, one for each VGRF allocation.
+ */
+static inline uint32_t
+reg_space(const fs_reg &r)
+{
+   return r.file << 16 | (r.file == VGRF ? r.nr : 0);
+}
+
+/**
+ * Return the base offset in bytes of a register relative to the start of its
+ * reg_space().
+ */
+static inline unsigned
+reg_offset(const fs_reg &r)
+{
+   return ((r.file == VGRF || r.file == IMM ? 0 : r.nr) + r.reg_offset) *
+          (r.file == UNIFORM ? 4 : REG_SIZE) + r.subreg_offset;
+}
+
+/**
+ * Return whether the register region starting at \p r and spanning \p dr
+ * bytes could potentially overlap the register region starting at \p s and
+ * spanning \p ds bytes.
+ */
+static inline bool
+regions_overlap(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
+{
+   if (r.file == MRF && (r.nr & BRW_MRF_COMPR4)) {
+      fs_reg t = r;
+      t.nr &= ~BRW_MRF_COMPR4;
+      /* COMPR4 regions are translated by the hardware during decompression
+       * into two separate half-regions 4 MRFs apart from each other.
+       */
+      return regions_overlap(t, dr / 2, s, ds) ||
+             regions_overlap(byte_offset(t, 4 * REG_SIZE), dr / 2, s, ds);
+
+   } else if (s.file == MRF && (s.nr & BRW_MRF_COMPR4)) {
+      return regions_overlap(s, ds, r, dr);
+
+   } else {
+      return reg_space(r) == reg_space(s) &&
+             !(reg_offset(r) + dr <= reg_offset(s) ||
+               reg_offset(s) + ds <= reg_offset(r));
+   }
+}
+
+/**
+ * Return whether the given register region is n-periodic, i.e. whether the
+ * original region remains invariant after shifting it by \p n scalar
+ * channels.
+ */
+static inline bool
+is_periodic(const fs_reg &reg, unsigned n)
+{
+   if (reg.file == BAD_FILE || reg.is_null()) {
+      return true;
+
+   } else if (reg.file == IMM) {
+      const unsigned period = (reg.type == BRW_REGISTER_TYPE_UV ||
+                               reg.type == BRW_REGISTER_TYPE_V ? 8 :
+                               reg.type == BRW_REGISTER_TYPE_VF ? 4 :
+                               1);
+      return n % period == 0;
+
+   } else if (reg.file == ARF || reg.file == FIXED_GRF) {
+      const unsigned period = (reg.hstride == 0 && reg.vstride == 0 ? 1 :
+                               reg.vstride == 0 ? 1 << reg.width :
+                               ~0);
+      return n % period == 0;
+
+   } else {
+      return reg.stride == 0;
+   }
 }
 
 static inline bool
 is_uniform(const fs_reg &reg)
 {
-   return (reg.stride == 0 || reg.is_null()) &&
-          (!reg.reladdr || is_uniform(*reg.reladdr));
+   return is_periodic(reg, 1);
 }
 
 /**
- * Get either of the 8-component halves of a 16-component register.
- *
- * Note: this also works if \c reg represents a SIMD16 pair of registers.
+ * Get the specified 8-component quarter of a register.
+ * XXX - Maybe come up with a less misleading name for this (e.g. quarter())?
  */
 static inline fs_reg
-half(fs_reg reg, unsigned idx)
+half(const fs_reg &reg, unsigned idx)
 {
    assert(idx < 2);
+   return horiz_offset(reg, 8 * idx);
+}
 
-   switch (reg.file) {
-   case BAD_FILE:
-   case UNIFORM:
-   case IMM:
-      return reg;
+/**
+ * Reinterpret each channel of register \p reg as a vector of values of the
+ * given smaller type and take the i-th subcomponent from each.
+ */
+static inline fs_reg
+subscript(fs_reg reg, brw_reg_type type, unsigned i)
+{
+   assert((i + 1) * type_sz(type) <= type_sz(reg.type));
 
-   case VGRF:
-   case MRF:
-      return horiz_offset(reg, 8 * idx);
+   if (reg.file == ARF || reg.file == FIXED_GRF) {
+      /* The stride is encoded inconsistently for fixed GRF and ARF registers
+       * as the log2 of the actual vertical and horizontal strides.
+       */
+      const int delta = _mesa_logbase2(type_sz(reg.type)) -
+                        _mesa_logbase2(type_sz(type));
+      reg.hstride += (reg.hstride ? delta : 0);
+      reg.vstride += (reg.vstride ? delta : 0);
 
-   case ARF:
-   case FIXED_GRF:
-   case ATTR:
-      unreachable("Cannot take half of this register type");
+   } else if (reg.file == IMM) {
+      assert(reg.type == type);
+
+   } else {
+      reg.stride *= type_sz(reg.type) / type_sz(type);
    }
-   return reg;
+
+   return byte_offset(retype(reg, type), i * type_sz(type));
 }
 
 static const fs_reg reg_undef;
@@ -207,8 +336,17 @@ public:
    bool has_side_effects() const;
    bool has_source_and_destination_hazard() const;
 
-   bool reads_flag() const;
-   bool writes_flag() const;
+   /**
+    * Return the subset of flag registers read by the instruction as a bitset
+    * with byte granularity.
+    */
+   unsigned flags_read(const brw_device_info *devinfo) const;
+
+   /**
+    * Return the subset of flag registers updated by the instruction (either
+    * partially or fully) as a bitset with byte granularity.
+    */
+   unsigned flags_written() const;
 
    fs_reg dst;
    fs_reg *src;
@@ -222,20 +360,18 @@ public:
     */
    uint8_t exec_size;
 
+   /**
+    * Channel group from the hardware execution and predication mask that
+    * should be applied to the instruction.  The subset of channel enable
+    * signals (calculated from the EU control flow and predication state)
+    * given by [group, group + exec_size) will be used to mask GRF writes and
+    * any other side effects of the instruction.
+    */
+   uint8_t group;
+
    bool eot:1;
-   bool force_sechalf:1;
    bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
 };
-
-/**
- * Set second-half quarter control on \p inst.
- */
-static inline fs_inst *
-set_sechalf(fs_inst *inst)
-{
-   inst->force_sechalf = true;
-   return inst;
-}
 
 /**
  * Make the execution of \p inst dependent on the evaluation of a possibly

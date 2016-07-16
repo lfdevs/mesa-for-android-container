@@ -262,7 +262,7 @@ ffsll(long long int val)
 {
    int bit;
 
-   assert(sizeof(val) == 8);
+   STATIC_ASSERT(sizeof(val) == 8);
 
    bit = ffs((int) val);
    if (bit != 0)

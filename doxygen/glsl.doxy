@@ -9,11 +9,12 @@ PROJECT_NAME           = "Mesa GLSL module"
 #---------------------------------------------------------------------------
 # configuration options related to the input files
 #---------------------------------------------------------------------------
-INPUT                  = ../src/glsl/
+INPUT                  = ../src/compiler/glsl/
+FILE_PATTERNS          = *.c *.cpp *.h
 RECURSIVE              = NO
-EXCLUDE                = ../src/glsl/glsl_lexer.cpp \
-                         ../src/glsl/glsl_parser.cpp \
-                         ../src/glsl/glsl_parser.h
+EXCLUDE                = ../src/compiler/glsl/glsl_lexer.cpp \
+                         ../src/compiler/glsl/glsl_parser.cpp \
+                         ../src/compiler/glsl/glsl_parser.h
 EXCLUDE_PATTERNS       =
 #---------------------------------------------------------------------------
 # configuration options related to the HTML output

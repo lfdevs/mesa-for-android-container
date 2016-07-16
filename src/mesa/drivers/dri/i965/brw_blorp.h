@@ -29,6 +29,7 @@
 #include "intel_mipmap_tree.h"
 
 struct brw_context;
+struct brw_wm_prog_key;
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,7 +39,7 @@ void
 brw_blorp_blit_miptrees(struct brw_context *brw,
                         struct intel_mipmap_tree *src_mt,
                         unsigned src_level, unsigned src_layer,
-                        mesa_format src_format,
+                        mesa_format src_format, int src_swizzle,
                         struct intel_mipmap_tree *dst_mt,
                         unsigned dst_level, unsigned dst_layer,
                         mesa_format dst_format,
@@ -46,29 +47,28 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
                         float src_x1, float src_y1,
                         float dst_x0, float dst_y0,
                         float dst_x1, float dst_y1,
-                        GLenum filter, bool mirror_x, bool mirror_y);
+                        GLenum filter, bool mirror_x, bool mirror_y,
+                        bool decode_srgb, bool encode_srgb);
 
-#ifdef __cplusplus
-} /* end extern "C" */
+bool
+brw_blorp_clear_color(struct brw_context *brw, struct gl_framebuffer *fb,
+                      GLbitfield mask, bool partial_clear, bool encode_srgb);
+
+void
+brw_blorp_resolve_color(struct brw_context *brw,
+                        struct intel_mipmap_tree *mt);
 
 /**
  * Binding table indices used by BLORP.
  */
 enum {
-   BRW_BLORP_TEXTURE_BINDING_TABLE_INDEX,
    BRW_BLORP_RENDERBUFFER_BINDING_TABLE_INDEX,
+   BRW_BLORP_TEXTURE_BINDING_TABLE_INDEX,
    BRW_BLORP_NUM_BINDING_TABLE_ENTRIES
 };
 
-
-class brw_blorp_mip_info
+struct brw_blorp_surface_info
 {
-public:
-   brw_blorp_mip_info();
-
-   void set(struct intel_mipmap_tree *mt,
-            unsigned int level, unsigned int layer);
-
    struct intel_mipmap_tree *mt;
 
    /**
@@ -112,19 +112,6 @@ public:
     * pixels.
     */
    uint32_t y_offset;
-};
-
-class brw_blorp_surface_info : public brw_blorp_mip_info
-{
-public:
-   brw_blorp_surface_info();
-
-   void set(struct brw_context *brw,
-            struct intel_mipmap_tree *mt,
-            unsigned int level, unsigned int layer,
-            mesa_format format, bool is_render_target);
-
-   uint32_t compute_tile_offsets(uint32_t *tile_x, uint32_t *tile_y) const;
 
    /* Setting this flag indicates that the buffer's contents are W-tiled
     * stencil data, but the surface state should be set up for Y tiled
@@ -162,19 +149,35 @@ public:
     * For MSAA surfaces, MSAA layout that should be used when setting up the
     * surface state for this surface.
     */
-   intel_msaa_layout msaa_layout;
+   enum intel_msaa_layout msaa_layout;
+
+   /**
+    * In order to support cases where RGBA format is backing client requested
+    * RGB, one needs to have means to force alpha channel to one when user
+    * requested RGB surface is used as blit source. This is possible by
+    * setting source swizzle for the texture surface.
+    */
+   int swizzle;
 };
 
+void
+brw_blorp_surface_info_init(struct brw_context *brw,
+                            struct brw_blorp_surface_info *info,
+                            struct intel_mipmap_tree *mt,
+                            unsigned int level, unsigned int layer,
+                            mesa_format format, bool is_render_target);
 
-struct brw_blorp_coord_transform_params
+uint32_t
+brw_blorp_compute_tile_offsets(const struct brw_blorp_surface_info *info,
+                               uint32_t *tile_x, uint32_t *tile_y);
+
+
+
+struct brw_blorp_coord_transform
 {
-   void setup(GLfloat src0, GLfloat src1, GLfloat dst0, GLfloat dst1,
-              bool mirror);
-
    float multiplier;
    float offset;
 };
-
 
 struct brw_blorp_wm_push_constants
 {
@@ -185,85 +188,94 @@ struct brw_blorp_wm_push_constants
    /* Top right coordinates of the rectangular grid used for scaled blitting */
    float rect_grid_x1;
    float rect_grid_y1;
-   brw_blorp_coord_transform_params x_transform;
-   brw_blorp_coord_transform_params y_transform;
+   struct brw_blorp_coord_transform x_transform;
+   struct brw_blorp_coord_transform y_transform;
+
+   /* Minimum layer setting works for all the textures types but texture_3d
+    * for which the setting has no effect. Use the z-coordinate instead.
+    */
+   uint32_t src_z;
+
    /* Pad out to an integral number of registers */
-   uint32_t pad[6];
+   uint32_t pad[5];
 };
 
+#define BRW_BLORP_NUM_PUSH_CONSTANT_DWORDS \
+   (sizeof(struct brw_blorp_wm_push_constants) / 4)
+
 /* Every 32 bytes of push constant data constitutes one GEN register. */
-const unsigned int BRW_BLORP_NUM_PUSH_CONST_REGS =
-   sizeof(brw_blorp_wm_push_constants) / 32;
+static const unsigned int BRW_BLORP_NUM_PUSH_CONST_REGS =
+   sizeof(struct brw_blorp_wm_push_constants) / 32;
 
 struct brw_blorp_prog_data
 {
-   unsigned int first_curbe_grf;
+   bool dispatch_8;
+   bool dispatch_16;
+
+   uint8_t first_curbe_grf_0;
+   uint8_t first_curbe_grf_2;
+
+   uint32_t ksp_offset_2;
 
    /**
     * True if the WM program should be run in MSDISPMODE_PERSAMPLE with more
     * than one sample per pixel.
     */
    bool persample_msaa_dispatch;
+
+   /* The compiler will re-arrange push constants and store the upload order
+    * here. Given an index 'i' in the final upload buffer, param[i] gives the
+    * index in the uniform store. In other words, the value to be uploaded can
+    * be found by brw_blorp_params::wm_push_consts[param[i]].
+    */
+   uint8_t nr_params;
+   uint8_t param[BRW_BLORP_NUM_PUSH_CONSTANT_DWORDS];
 };
 
-
-class brw_blorp_params
+struct brw_blorp_params
 {
-public:
-   brw_blorp_params(unsigned num_varyings = 0,
-                    unsigned num_draw_buffers = 1,
-                    unsigned num_layers = 1);
-
-   virtual uint32_t get_wm_prog(struct brw_context *brw,
-                                brw_blorp_prog_data **prog_data) const = 0;
-
    uint32_t x0;
    uint32_t y0;
    uint32_t x1;
    uint32_t y1;
-   brw_blorp_mip_info depth;
+   struct brw_blorp_surface_info depth;
    uint32_t depth_format;
-   brw_blorp_surface_info src;
-   brw_blorp_surface_info dst;
+   struct brw_blorp_surface_info src;
+   struct brw_blorp_surface_info dst;
    enum gen6_hiz_op hiz_op;
-   bool use_wm_prog;
-   brw_blorp_wm_push_constants wm_push_consts;
-   const unsigned num_varyings;
-   const unsigned num_draw_buffers;
-   const unsigned num_layers;
+   union {
+      unsigned fast_clear_op;
+      unsigned resolve_type;
+   };
+   bool color_write_disable[4];
+   struct brw_blorp_wm_push_constants wm_push_consts;
+   unsigned num_varyings;
+   unsigned num_draw_buffers;
+   unsigned num_layers;
+   uint32_t wm_prog_kernel;
+   struct brw_blorp_prog_data *wm_prog_data;
 };
 
+void
+brw_blorp_params_init(struct brw_blorp_params *params);
 
 void
-brw_blorp_exec(struct brw_context *brw, const brw_blorp_params *params);
+brw_blorp_exec(struct brw_context *brw, const struct brw_blorp_params *params);
+
+void
+gen6_blorp_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
+                    unsigned level, unsigned layer, enum gen6_hiz_op op);
 
 void
 gen6_blorp_exec(struct brw_context *brw,
-                const brw_blorp_params *params);
+                const struct brw_blorp_params *params);
 
 void
 gen7_blorp_exec(struct brw_context *brw,
-                const brw_blorp_params *params);
+                const struct brw_blorp_params *params);
 
-/**
- * Parameters for a HiZ or depth resolve operation.
- *
- * For an overview of HiZ ops, see the following sections of the Sandy Bridge
- * PRM, Volume 1, Part 2:
- *   - 7.5.3.1 Depth Buffer Clear
- *   - 7.5.3.2 Depth Buffer Resolve
- *   - 7.5.3.3 Hierarchical Depth Buffer Resolve
- */
-class brw_hiz_op_params : public brw_blorp_params
-{
-public:
-   brw_hiz_op_params(struct intel_mipmap_tree *mt,
-                     unsigned int level, unsigned int layer,
-                     gen6_hiz_op op);
-
-   virtual uint32_t get_wm_prog(struct brw_context *brw,
-                                brw_blorp_prog_data **prog_data) const;
-};
+void
+gen8_blorp_exec(struct brw_context *brw, const struct brw_blorp_params *params);
 
 struct brw_blorp_blit_prog_key
 {
@@ -275,13 +287,13 @@ struct brw_blorp_blit_prog_key
    /* MSAA layout that has been configured in the surface state for texturing
     * from.
     */
-   intel_msaa_layout tex_layout;
+   enum intel_msaa_layout tex_layout;
 
    /* Actual number of samples per pixel in the source image. */
    unsigned src_samples;
 
    /* Actual MSAA layout used by the source image. */
-   intel_msaa_layout src_layout;
+   enum intel_msaa_layout src_layout;
 
    /* Number of samples per pixel that have been configured in the render
     * target.
@@ -289,13 +301,13 @@ struct brw_blorp_blit_prog_key
    unsigned rt_samples;
 
    /* MSAA layout that has been configured in the render target. */
-   intel_msaa_layout rt_layout;
+   enum intel_msaa_layout rt_layout;
 
    /* Actual number of samples per pixel in the destination image. */
    unsigned dst_samples;
 
    /* Actual MSAA layout used by the destination image. */
-   intel_msaa_layout dst_layout;
+   enum intel_msaa_layout dst_layout;
 
    /* Type of the data to be read from the texture (one of
     * BRW_REGISTER_TYPE_{UD,D,F}).
@@ -344,29 +356,6 @@ struct brw_blorp_blit_prog_key
    bool bilinear_filter;
 };
 
-class brw_blorp_blit_params : public brw_blorp_params
-{
-public:
-   brw_blorp_blit_params(struct brw_context *brw,
-                         struct intel_mipmap_tree *src_mt,
-                         unsigned src_level, unsigned src_layer,
-                         mesa_format src_format,
-                         struct intel_mipmap_tree *dst_mt,
-                         unsigned dst_level, unsigned dst_layer,
-                         mesa_format dst_format,
-                         GLfloat src_x0, GLfloat src_y0,
-                         GLfloat src_x1, GLfloat src_y1,
-                         GLfloat dst_x0, GLfloat dst_y0,
-                         GLfloat dst_x1, GLfloat dst_y1,
-                         GLenum filter, bool mirror_x, bool mirror_y);
-
-   virtual uint32_t get_wm_prog(struct brw_context *brw,
-                                brw_blorp_prog_data **prog_data) const;
-
-private:
-   brw_blorp_blit_prog_key wm_prog_key;
-};
-
 /**
  * \name BLORP internals
  * \{
@@ -374,31 +363,36 @@ private:
  * Used internally by gen6_blorp_exec() and gen7_blorp_exec().
  */
 
+void brw_blorp_init_wm_prog_key(struct brw_wm_prog_key *wm_key);
+
+const unsigned *
+brw_blorp_compile_nir_shader(struct brw_context *brw, struct nir_shader *nir,
+                             const struct brw_wm_prog_key *wm_key,
+                             bool use_repclear,
+                             struct brw_blorp_prog_data *prog_data,
+                             unsigned *program_size);
+
 void
 gen6_blorp_init(struct brw_context *brw);
 
 void
-gen6_blorp_emit_state_base_address(struct brw_context *brw,
-                                   const brw_blorp_params *params);
-
-void
 gen6_blorp_emit_vertices(struct brw_context *brw,
-                         const brw_blorp_params *params);
+                         const struct brw_blorp_params *params);
 
 uint32_t
 gen6_blorp_emit_blend_state(struct brw_context *brw,
-                            const brw_blorp_params *params);
+                            const struct brw_blorp_params *params);
 
 uint32_t
 gen6_blorp_emit_cc_state(struct brw_context *brw);
 
 uint32_t
 gen6_blorp_emit_wm_constants(struct brw_context *brw,
-                             const brw_blorp_params *params);
+                             const struct brw_blorp_params *params);
 
 void
 gen6_blorp_emit_vs_disable(struct brw_context *brw,
-                           const brw_blorp_params *params);
+                           const struct brw_blorp_params *params);
 
 uint32_t
 gen6_blorp_emit_binding_table(struct brw_context *brw,
@@ -407,24 +401,65 @@ gen6_blorp_emit_binding_table(struct brw_context *brw,
 
 uint32_t
 gen6_blorp_emit_depth_stencil_state(struct brw_context *brw,
-                                    const brw_blorp_params *params);
+                                    const struct brw_blorp_params *params);
 
 void
 gen6_blorp_emit_gs_disable(struct brw_context *brw,
-                           const brw_blorp_params *params);
+                           const struct brw_blorp_params *params);
 
 void
 gen6_blorp_emit_clip_disable(struct brw_context *brw);
 
 void
 gen6_blorp_emit_drawing_rectangle(struct brw_context *brw,
-                                  const brw_blorp_params *params);
+                                  const struct brw_blorp_params *params);
 
 uint32_t
 gen6_blorp_emit_sampler_state(struct brw_context *brw,
                               unsigned tex_filter, unsigned max_lod,
                               bool non_normalized_coords);
+void
+gen7_blorp_emit_urb_config(struct brw_context *brw);
+
+void
+gen7_blorp_emit_blend_state_pointer(struct brw_context *brw,
+                                    uint32_t cc_blend_state_offset);
+
+void
+gen7_blorp_emit_cc_state_pointer(struct brw_context *brw,
+                                 uint32_t cc_state_offset);
+
+void
+gen7_blorp_emit_cc_viewport(struct brw_context *brw);
+
+void
+gen7_blorp_emit_te_disable(struct brw_context *brw);
+
+void
+gen7_blorp_emit_binding_table_pointers_ps(struct brw_context *brw,
+                                          uint32_t wm_bind_bo_offset);
+
+void
+gen7_blorp_emit_sampler_state_pointers_ps(struct brw_context *brw,
+                                          uint32_t sampler_offset);
+
+void
+gen7_blorp_emit_clear_params(struct brw_context *brw,
+                             const struct brw_blorp_params *params);
+
+void
+gen7_blorp_emit_constant_ps(struct brw_context *brw,
+                            uint32_t wm_push_const_offset);
+
+void
+gen7_blorp_emit_constant_ps_disable(struct brw_context *brw);
+
+void
+gen7_blorp_emit_primitive(struct brw_context *brw,
+                          const struct brw_blorp_params *params);
 
 /** \} */
 
+#ifdef __cplusplus
+} /* end extern "C" */
 #endif /* __cplusplus */

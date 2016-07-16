@@ -334,7 +334,7 @@ int bc_builder::build_cf_mem(cf_node* n) {
 
 	if (!ctx.is_egcm())
 		bb << CF_ALLOC_EXPORT_WORD1_BUF_R6R7()
-				.ARRAY_SIZE(bc.array_size)
+				.ARR_SIZE(bc.array_size)
 				.BARRIER(bc.barrier)
 				.BURST_COUNT(bc.burst_count)
 				.CF_INST(ctx.cf_opcode(bc.op))
@@ -345,7 +345,7 @@ int bc_builder::build_cf_mem(cf_node* n) {
 
 	else if (ctx.is_evergreen())
 		bb << CF_ALLOC_EXPORT_WORD1_BUF_EG()
-				.ARRAY_SIZE(bc.array_size)
+				.ARR_SIZE(bc.array_size)
 				.BARRIER(bc.barrier)
 				.BURST_COUNT(bc.burst_count)
 				.CF_INST(ctx.cf_opcode(bc.op))
@@ -356,7 +356,7 @@ int bc_builder::build_cf_mem(cf_node* n) {
 
 	else // cayman
 		bb << CF_ALLOC_EXPORT_WORD1_BUF_CM()
-		.ARRAY_SIZE(bc.array_size)
+		.ARR_SIZE(bc.array_size)
 		.BARRIER(bc.barrier)
 		.BURST_COUNT(bc.burst_count)
 		.CF_INST(ctx.cf_opcode(bc.op))

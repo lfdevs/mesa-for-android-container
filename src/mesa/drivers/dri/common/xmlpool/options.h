@@ -774,7 +774,16 @@ DRI_CONF_OPT_BEGIN_B(always_have_depth_buffer, def) \
         DRI_CONF_DESC(sv,"Create all visuals with a depth buffer") \
 DRI_CONF_OPT_END
 
-
+#define DRI_CONF_GLSL_ZERO_INIT(def) \
+DRI_CONF_OPT_BEGIN_B(glsl_zero_init, def) \
+        DRI_CONF_DESC(en,"Force uninitialized variables to default to zero") \
+        DRI_CONF_DESC(ca,"Force uninitialized variables to default to zero") \
+        DRI_CONF_DESC(de,"Force uninitialized variables to default to zero") \
+        DRI_CONF_DESC(es,"Force uninitialized variables to default to zero") \
+        DRI_CONF_DESC(nl,"Force uninitialized variables to default to zero") \
+        DRI_CONF_DESC(fr,"Force uninitialized variables to default to zero") \
+        DRI_CONF_DESC(sv,"Force uninitialized variables to default to zero") \
+DRI_CONF_OPT_END
 
 /**
  * \brief Initialization configuration options

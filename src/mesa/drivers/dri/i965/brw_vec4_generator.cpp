@@ -295,7 +295,7 @@ generate_tex(struct brw_codegen *p,
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_set_default_access_mode(p, BRW_ALIGN_1);
 
-      if (memcmp(&surface_reg, &sampler_reg, sizeof(surface_reg)) == 0) {
+      if (brw_regs_equal(&surface_reg, &sampler_reg)) {
          brw_MUL(p, addr, sampler_reg, brw_imm_uw(0x101));
       } else {
          brw_SHL(p, addr, sampler_reg, brw_imm_ud(8));
@@ -485,10 +485,13 @@ generate_gs_svb_write(struct brw_codegen *p,
    bool final_write = inst->sol_final_write;
 
    brw_push_insn_state(p);
+   brw_set_default_exec_size(p, BRW_EXECUTE_4);
    /* Copy Vertex data into M0.x */
    brw_MOV(p, stride(dst, 4, 4, 1),
            stride(retype(src0, BRW_REGISTER_TYPE_UD), 4, 4, 1));
+   brw_pop_insn_state(p);
 
+   brw_push_insn_state(p);
    /* Send SVB Write */
    brw_svb_write(p,
                  final_write ? src1 : brw_null_reg(), /* dest == src1 */
@@ -702,8 +705,10 @@ generate_gs_ff_sync(struct brw_codegen *p,
    brw_MOV(p, get_element_ud(header, 0), get_element_ud(dst, 0));
 
    /* src1 is not an immediate when we use transform feedback */
-   if (src1.file != BRW_IMMEDIATE_VALUE)
+   if (src1.file != BRW_IMMEDIATE_VALUE) {
+      brw_set_default_exec_size(p, BRW_EXECUTE_4);
       brw_MOV(p, brw_vec4_grf(src1.nr, 0), brw_vec4_grf(dst.nr, 1));
+   }
 
    brw_pop_insn_state(p);
 }
@@ -1394,6 +1399,69 @@ generate_set_simd4x2_header_gen9(struct brw_codegen *p,
 }
 
 static void
+generate_mov_indirect(struct brw_codegen *p,
+                      vec4_instruction *inst,
+                      struct brw_reg dst, struct brw_reg reg,
+                      struct brw_reg indirect, struct brw_reg length)
+{
+   assert(indirect.type == BRW_REGISTER_TYPE_UD);
+   assert(p->devinfo->gen >= 6);
+
+   unsigned imm_byte_offset = reg.nr * REG_SIZE + reg.subnr * (REG_SIZE / 2);
+
+   /* This instruction acts in align1 mode */
+   assert(dst.writemask == WRITEMASK_XYZW);
+
+   if (indirect.file == BRW_IMMEDIATE_VALUE) {
+      imm_byte_offset += indirect.ud;
+
+      reg.nr = imm_byte_offset / REG_SIZE;
+      reg.subnr = (imm_byte_offset / (REG_SIZE / 2)) % 2;
+      unsigned shift = (imm_byte_offset / 4) % 4;
+      reg.swizzle += BRW_SWIZZLE4(shift, shift, shift, shift);
+
+      brw_MOV(p, dst, reg);
+   } else {
+      brw_push_insn_state(p);
+      brw_set_default_access_mode(p, BRW_ALIGN_1);
+      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+
+      struct brw_reg addr = vec8(brw_address_reg(0));
+
+      /* We need to move the indirect value into the address register.  In
+       * order to make things make some sense, we want to respect at least the
+       * X component of the swizzle.  In order to do that, we need to convert
+       * the subnr (probably 0) to an align1 subnr and add in the swizzle.
+       */
+      assert(brw_is_single_value_swizzle(indirect.swizzle));
+      indirect.subnr = (indirect.subnr * 4 + BRW_GET_SWZ(indirect.swizzle, 0));
+
+      /* We then use a region of <8,4,0>:uw to pick off the first 2 bytes of
+       * the indirect and splat it out to all four channels of the given half
+       * of a0.
+       */
+      indirect.subnr *= 2;
+      indirect = stride(retype(indirect, BRW_REGISTER_TYPE_UW), 8, 4, 0);
+      brw_ADD(p, addr, indirect, brw_imm_uw(imm_byte_offset));
+
+      /* Now we need to incorporate the swizzle from the source register */
+      if (reg.swizzle != BRW_SWIZZLE_XXXX) {
+         uint32_t uv_swiz = BRW_GET_SWZ(reg.swizzle, 0) << 2 |
+                            BRW_GET_SWZ(reg.swizzle, 1) << 6 |
+                            BRW_GET_SWZ(reg.swizzle, 2) << 10 |
+                            BRW_GET_SWZ(reg.swizzle, 3) << 14;
+         uv_swiz |= uv_swiz << 16;
+
+         brw_ADD(p, addr, addr, brw_imm_uv(uv_swiz));
+      }
+
+      brw_MOV(p, dst, retype(brw_VxH_indirect(0, 0), reg.type));
+
+      brw_pop_insn_state(p);
+   }
+}
+
+static void
 generate_code(struct brw_codegen *p,
               const struct brw_compiler *compiler,
               void *log_data,
@@ -1431,6 +1499,7 @@ generate_code(struct brw_codegen *p,
       assert(inst->mlen <= BRW_MAX_MSG_LENGTH);
 
       unsigned pre_emit_nr_insn = p->nr_insn;
+      bool fix_exec_size = false;
 
       if (dst.width == BRW_WIDTH_4) {
          /* This happens in attribute fixups for "dual instanced" geometry
@@ -1455,6 +1524,8 @@ generate_code(struct brw_codegen *p,
             if (src[i].file == BRW_GENERAL_REGISTER_FILE)
                src[i] = stride(src[i], 4, 4, 1);
          }
+         brw_set_default_exec_size(p, BRW_EXECUTE_4);
+         fix_exec_size = true;
       }
 
       switch (inst->opcode) {
@@ -1815,6 +1886,7 @@ generate_code(struct brw_codegen *p,
          break;
 
       case SHADER_OPCODE_BROADCAST:
+         assert(inst->force_writemask_all);
          brw_broadcast(p, dst, src[0], src[1]);
          break;
 
@@ -1923,7 +1995,6 @@ generate_code(struct brw_codegen *p,
       case TCS_OPCODE_SRC0_010_IS_ZERO:
          /* If src_reg had stride like fs_reg, we wouldn't need this. */
          brw_MOV(p, brw_null_reg(), stride(src[0], 0, 1, 0));
-         brw_inst_set_cond_modifier(devinfo, brw_last_inst, BRW_CONDITIONAL_Z);
          break;
 
       case TCS_OPCODE_RELEASE_INPUT:
@@ -1939,9 +2010,16 @@ generate_code(struct brw_codegen *p,
          brw_WAIT(p);
          break;
 
+      case SHADER_OPCODE_MOV_INDIRECT:
+         generate_mov_indirect(p, inst, dst, src[0], src[1], src[2]);
+         break;
+
       default:
          unreachable("Unsupported opcode");
       }
+
+      if (fix_exec_size)
+         brw_set_default_exec_size(p, BRW_EXECUTE_8);
 
       if (inst->opcode == VEC4_OPCODE_PACK_BYTES) {
          /* Handled dependency hints in the generator. */

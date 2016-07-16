@@ -28,6 +28,8 @@
 #include "main/mtypes.h"
 #include "intel_batchbuffer.h"
 
+#include "isl/isl.h"
+
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_eu.h"
@@ -217,7 +219,7 @@ static void dump_surface_state(struct brw_context *brw, uint32_t offset)
 
    batch_out(brw, name, offset, 0, "%s %s\n",
 	     get_965_surfacetype(GET_FIELD(surf[0], BRW_SURFACE_TYPE)),
-             brw_surface_format_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)));
+             isl_format_get_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)));
    batch_out(brw, name, offset, 1, "offset\n");
    batch_out(brw, name, offset, 2, "%dx%d size, %d mips\n",
 	     GET_FIELD(surf[2], BRW_SURFACE_WIDTH) + 1,
@@ -241,7 +243,7 @@ static void dump_gen7_surface_state(struct brw_context *brw, uint32_t offset)
 
    batch_out(brw, name, offset, 0, "%s %s %s\n",
              get_965_surfacetype(GET_FIELD(surf[0], BRW_SURFACE_TYPE)),
-             brw_surface_format_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)),
+             isl_format_get_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)),
              (surf[0] & GEN7_SURFACE_IS_ARRAY) ? "array" : "");
    batch_out(brw, name, offset, 1, "offset\n");
    batch_out(brw, name, offset, 2, "%dx%d size, %d mips, %d slices\n",
@@ -298,7 +300,7 @@ dump_gen8_surface_state(struct brw_context *brw, uint32_t offset, int index)
    name = ralloc_asprintf(NULL, "SURF%03d", index);
    batch_out(brw, name, offset, 0, "%s %s %s VALIGN%d HALIGN%d %s\n",
              get_965_surfacetype(GET_FIELD(surf[0], BRW_SURFACE_TYPE)),
-             brw_surface_format_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)),
+             isl_format_get_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)),
              (surf[0] & GEN7_SURFACE_IS_ARRAY) ? "array" : "",
              1 << (GET_BITS(surf[0], 17, 16) + 1), /* VALIGN */
              1 << (GET_BITS(surf[0], 15, 14) + 1), /* HALIGN */
@@ -423,11 +425,12 @@ static void gen7_dump_sampler_state(struct brw_context *brw,
                 GET_BITS(samp[1], 15, 8)
                );
       batch_out(brw, name, offset, i+2, "Border Color\n"); /* FINISHME: gen8+ */
-      batch_out(brw, name, offset, i+3, "Max aniso: RATIO %d:1, TC[XYZ] Address Control: %s|%s|%s\n",
+      batch_out(brw, name, offset, i+3, "Max aniso: RATIO %d:1, TC[XYZ] Address Control: %s|%s|%s, %snormalized coords\n",
                 (GET_FIELD(samp[3], BRW_SAMPLER_MAX_ANISOTROPY) + 1) * 2,
                 sampler_addr_mode[GET_FIELD(samp[3], BRW_SAMPLER_TCX_WRAP_MODE)],
                 sampler_addr_mode[GET_FIELD(samp[3], BRW_SAMPLER_TCY_WRAP_MODE)],
-                sampler_addr_mode[GET_FIELD(samp[3], BRW_SAMPLER_TCZ_WRAP_MODE)]
+                sampler_addr_mode[GET_FIELD(samp[3], BRW_SAMPLER_TCZ_WRAP_MODE)],
+                (samp[3] & GEN7_SAMPLER_NON_NORMALIZED_COORDINATES) ? "non-" : ""
                );
 
       samp += 4;

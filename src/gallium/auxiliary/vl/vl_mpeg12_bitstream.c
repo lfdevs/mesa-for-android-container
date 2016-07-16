@@ -597,18 +597,18 @@ init_dct_coeff_table(struct dct_coeff *dst, const struct dct_coeff_compressed *s
 static inline void
 init_tables()
 {
-   vl_vlc_init_table(tbl_B1, Elements(tbl_B1), macroblock_address_increment, Elements(macroblock_address_increment));
-   vl_vlc_init_table(tbl_B2, Elements(tbl_B2), macroblock_type_i, Elements(macroblock_type_i));
-   vl_vlc_init_table(tbl_B3, Elements(tbl_B3), macroblock_type_p, Elements(macroblock_type_p));
-   vl_vlc_init_table(tbl_B4, Elements(tbl_B4), macroblock_type_b, Elements(macroblock_type_b));
-   vl_vlc_init_table(tbl_B9, Elements(tbl_B9), coded_block_pattern, Elements(coded_block_pattern));
-   vl_vlc_init_table(tbl_B10, Elements(tbl_B10), motion_code, Elements(motion_code));
-   vl_vlc_init_table(tbl_B11, Elements(tbl_B11), dmvector, Elements(dmvector));
-   vl_vlc_init_table(tbl_B12, Elements(tbl_B12), dct_dc_size_luminance, Elements(dct_dc_size_luminance));
-   vl_vlc_init_table(tbl_B13, Elements(tbl_B13), dct_dc_size_chrominance, Elements(dct_dc_size_chrominance));
-   init_dct_coeff_table(tbl_B14_DC, dct_coeff_tbl_zero, Elements(dct_coeff_tbl_zero), true);
-   init_dct_coeff_table(tbl_B14_AC, dct_coeff_tbl_zero, Elements(dct_coeff_tbl_zero), false);
-   init_dct_coeff_table(tbl_B15, dct_coeff_tbl_one, Elements(dct_coeff_tbl_one), false);
+   vl_vlc_init_table(tbl_B1, ARRAY_SIZE(tbl_B1), macroblock_address_increment, ARRAY_SIZE(macroblock_address_increment));
+   vl_vlc_init_table(tbl_B2, ARRAY_SIZE(tbl_B2), macroblock_type_i, ARRAY_SIZE(macroblock_type_i));
+   vl_vlc_init_table(tbl_B3, ARRAY_SIZE(tbl_B3), macroblock_type_p, ARRAY_SIZE(macroblock_type_p));
+   vl_vlc_init_table(tbl_B4, ARRAY_SIZE(tbl_B4), macroblock_type_b, ARRAY_SIZE(macroblock_type_b));
+   vl_vlc_init_table(tbl_B9, ARRAY_SIZE(tbl_B9), coded_block_pattern, ARRAY_SIZE(coded_block_pattern));
+   vl_vlc_init_table(tbl_B10, ARRAY_SIZE(tbl_B10), motion_code, ARRAY_SIZE(motion_code));
+   vl_vlc_init_table(tbl_B11, ARRAY_SIZE(tbl_B11), dmvector, ARRAY_SIZE(dmvector));
+   vl_vlc_init_table(tbl_B12, ARRAY_SIZE(tbl_B12), dct_dc_size_luminance, ARRAY_SIZE(dct_dc_size_luminance));
+   vl_vlc_init_table(tbl_B13, ARRAY_SIZE(tbl_B13), dct_dc_size_chrominance, ARRAY_SIZE(dct_dc_size_chrominance));
+   init_dct_coeff_table(tbl_B14_DC, dct_coeff_tbl_zero, ARRAY_SIZE(dct_coeff_tbl_zero), true);
+   init_dct_coeff_table(tbl_B14_AC, dct_coeff_tbl_zero, ARRAY_SIZE(dct_coeff_tbl_zero), false);
+   init_dct_coeff_table(tbl_B15, dct_coeff_tbl_one, ARRAY_SIZE(dct_coeff_tbl_one), false);
 }
 
 static inline int

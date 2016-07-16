@@ -193,10 +193,10 @@ struct i915_tracked_state i915_hw_samplers = {
 static uint translate_texture_format(enum pipe_format pipeFormat,
                                      const struct pipe_sampler_view* view)
 {
-   if ( (view->swizzle_r != PIPE_SWIZZLE_RED ||
-         view->swizzle_g != PIPE_SWIZZLE_GREEN ||
-         view->swizzle_b != PIPE_SWIZZLE_BLUE ||
-         view->swizzle_a != PIPE_SWIZZLE_ALPHA ) &&
+   if ( (view->swizzle_r != PIPE_SWIZZLE_X ||
+         view->swizzle_g != PIPE_SWIZZLE_Y ||
+         view->swizzle_b != PIPE_SWIZZLE_Z ||
+         view->swizzle_a != PIPE_SWIZZLE_W ) &&
          pipeFormat != PIPE_FORMAT_Z24_UNORM_S8_UINT &&
          pipeFormat != PIPE_FORMAT_Z24X8_UNORM )
       debug_printf("i915: unsupported texture swizzle for format %d\n", pipeFormat);
@@ -248,20 +248,20 @@ static uint translate_texture_format(enum pipe_format pipeFormat,
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
    case PIPE_FORMAT_Z24X8_UNORM:
       {
-         if ( view->swizzle_r == PIPE_SWIZZLE_RED &&
-              view->swizzle_g == PIPE_SWIZZLE_RED &&
-              view->swizzle_b == PIPE_SWIZZLE_RED &&
-              view->swizzle_a == PIPE_SWIZZLE_ONE)
+         if ( view->swizzle_r == PIPE_SWIZZLE_X &&
+              view->swizzle_g == PIPE_SWIZZLE_X &&
+              view->swizzle_b == PIPE_SWIZZLE_X &&
+              view->swizzle_a == PIPE_SWIZZLE_1)
             return (MAPSURF_32BIT | MT_32BIT_xA824);
-         if ( view->swizzle_r == PIPE_SWIZZLE_RED &&
-              view->swizzle_g == PIPE_SWIZZLE_RED &&
-              view->swizzle_b == PIPE_SWIZZLE_RED &&
-              view->swizzle_a == PIPE_SWIZZLE_RED)
+         if ( view->swizzle_r == PIPE_SWIZZLE_X &&
+              view->swizzle_g == PIPE_SWIZZLE_X &&
+              view->swizzle_b == PIPE_SWIZZLE_X &&
+              view->swizzle_a == PIPE_SWIZZLE_X)
             return (MAPSURF_32BIT | MT_32BIT_xI824);
-         if ( view->swizzle_r == PIPE_SWIZZLE_ZERO &&
-              view->swizzle_g == PIPE_SWIZZLE_ZERO &&
-              view->swizzle_b == PIPE_SWIZZLE_ZERO &&
-              view->swizzle_a == PIPE_SWIZZLE_RED)
+         if ( view->swizzle_r == PIPE_SWIZZLE_0 &&
+              view->swizzle_g == PIPE_SWIZZLE_0 &&
+              view->swizzle_b == PIPE_SWIZZLE_0 &&
+              view->swizzle_a == PIPE_SWIZZLE_X)
             return (MAPSURF_32BIT | MT_32BIT_xL824);
          debug_printf("i915: unsupported depth swizzle %d %d %d %d\n",
                       view->swizzle_r,

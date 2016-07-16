@@ -31,6 +31,7 @@
 #include "util/u_memory.h"
 #include "util/u_bitmask.h"
 #include "util/u_upload_mgr.h"
+#include "os/os_time.h"
 
 #include "svga_context.h"
 #include "svga_screen.h"
@@ -60,7 +61,7 @@ static void svga_destroy( struct pipe_context *pipe )
    unsigned shader, i;
 
    /* free any alternate rasterizer states used for point sprite */
-   for (i = 0; i < Elements(svga->rasterizer_no_cull); i++) {
+   for (i = 0; i < ARRAY_SIZE(svga->rasterizer_no_cull); i++) {
       if (svga->rasterizer_no_cull[i]) {
          pipe->delete_rasterizer_state(pipe, svga->rasterizer_no_cull[i]);
       }
@@ -77,7 +78,7 @@ static void svga_destroy( struct pipe_context *pipe )
    pipe_resource_reference(&svga->polygon_stipple.texture, NULL);
 
    /* free HW constant buffers */
-   for (shader = 0; shader < Elements(svga->state.hw_draw.constbuf); shader++) {
+   for (shader = 0; shader < ARRAY_SIZE(svga->state.hw_draw.constbuf); shader++) {
       pipe_resource_reference(&svga->state.hw_draw.constbuf[shader], NULL);
    }
 
@@ -115,7 +116,7 @@ static void svga_destroy( struct pipe_context *pipe )
 
    /* free user's constant buffers */
    for (shader = 0; shader < PIPE_SHADER_TYPES; ++shader) {
-      for (i = 0; i < Elements(svga->curr.constbufs[shader]); ++i) {
+      for (i = 0; i < ARRAY_SIZE(svga->curr.constbufs[shader]); ++i) {
          pipe_resource_reference(&svga->curr.constbufs[shader][i].buffer, NULL);
       }
    }
@@ -246,6 +247,7 @@ struct pipe_context *svga_context_create(struct pipe_screen *screen,
           sizeof(svga->state.hw_draw.default_constbuf_size));
    memset(svga->state.hw_draw.enabled_constbufs, 0,
           sizeof(svga->state.hw_draw.enabled_constbufs));
+   svga->state.hw_draw.ib = NULL;
 
    /* Create a no-operation blend state which we will bind whenever the
     * requested blend state is impossible (e.g. due to having an integer
@@ -299,6 +301,7 @@ void svga_context_flush( struct svga_context *svga,
 {
    struct svga_screen *svgascreen = svga_screen(svga->pipe.screen);
    struct pipe_fence_handle *fence = NULL;
+   uint64_t t0;
 
    svga->curr.nr_fbs = 0;
 
@@ -307,9 +310,14 @@ void svga_context_flush( struct svga_context *svga,
     */
    svga_context_flush_buffers(svga);
 
+   svga->hud.command_buffer_size +=
+      svga->swc->get_command_buffer_size(svga->swc);
+
    /* Flush pending commands to hardware:
     */
+   t0 = os_time_get();
    svga->swc->flush(svga->swc, &fence);
+   svga->hud.flush_time += (os_time_get() - t0);
 
    svga->hud.num_flushes++;
 

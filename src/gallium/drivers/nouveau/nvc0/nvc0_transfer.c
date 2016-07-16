@@ -390,14 +390,21 @@ nvc0_miptree_transfer_map(struct pipe_context *pctx,
    }
    tx->nlayers = box->depth;
 
+   if (usage & PIPE_TRANSFER_MAP_DIRECTLY) {
+      tx->base.stride = mt->level[level].pitch;
+      tx->base.layer_stride = mt->layer_stride;
+      uint32_t offset = box->y * tx->base.stride +
+         util_format_get_stride(res->format, box->x);
+      if (!mt->layout_3d)
+         offset += mt->layer_stride * box->z;
+      else
+         offset += nvc0_mt_zslice_offset(mt, level, box->z);
+      *ptransfer = &tx->base;
+      return mt->base.bo->map + mt->base.offset + offset;
+   }
+
    tx->base.stride = tx->nblocksx * util_format_get_blocksize(res->format);
    tx->base.layer_stride = tx->nblocksy * tx->base.stride;
-
-   if (usage & PIPE_TRANSFER_MAP_DIRECTLY) {
-      tx->base.stride = align(tx->base.stride, 128);
-      *ptransfer = &tx->base;
-      return mt->base.bo->map + mt->base.offset;
-   }
 
    nv50_m2mf_rect_setup(&tx->rect[0], res, level, box->x, box->y, box->z);
 

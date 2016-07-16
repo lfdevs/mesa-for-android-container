@@ -39,10 +39,10 @@ SKIP_FUNCTION_MACROS   = YES
 #---------------------------------------------------------------------------
 # Configuration::addtions related to external references   
 #---------------------------------------------------------------------------
-TAGFILES               = main.tag=../core \
+TAGFILES               = main.tag=../main \
                          math.tag=../math \
                          tnl_dd.tag=../tnl_dd \
-                         swrast_setup.tag=../gbm_setup \
+                         swrast_setup.tag=../swrast_setup \
                          tnl.tag=../tnl \
-                         vbo.tag=vbo
+                         vbo.tag=../vbo
 GENERATE_TAGFILE       = gbm.tag

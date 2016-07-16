@@ -61,6 +61,7 @@ const struct brw_tracked_state gen6_vs_push_constants = {
       .mesa  = _NEW_PROGRAM_CONSTANTS |
                _NEW_TRANSFORM,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_PUSH_CONSTANT_ALLOCATION |
                BRW_NEW_VERTEX_PROGRAM |
                BRW_NEW_VS_PROG_DATA,
@@ -125,7 +126,7 @@ upload_vs_state(struct brw_context *brw)
    if (brw->vs.prog_data->base.base.total_scratch) {
       OUT_RELOC(stage_state->scratch_bo,
 		I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		ffs(brw->vs.prog_data->base.base.total_scratch) - 11);
+		ffs(stage_state->per_thread_scratch) - 11);
    } else {
       OUT_BATCH(0);
    }
@@ -168,6 +169,7 @@ const struct brw_tracked_state gen6_vs_state = {
       .mesa  = _NEW_PROGRAM_CONSTANTS |
                _NEW_TRANSFORM,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
                BRW_NEW_PUSH_CONSTANT_ALLOCATION |
                BRW_NEW_VERTEX_PROGRAM |

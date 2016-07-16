@@ -174,9 +174,9 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     /* Get DRM version. */
     version = drmGetVersion(ws->fd);
     if (version->version_major != 2 ||
-        version->version_minor < 3) {
+        version->version_minor < 12) {
         fprintf(stderr, "%s: DRM version is %d.%d.%d but this driver is "
-                "only compatible with 2.3.x (kernel 2.6.34) or later.\n",
+                "only compatible with 2.12.0 (kernel 3.2) or later.\n",
                 __FUNCTION__,
                 version->version_major,
                 version->version_minor,
@@ -297,6 +297,30 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
         break;
     }
 
+    /* Set which chips don't have dedicated VRAM. */
+    switch (ws->info.family) {
+    case CHIP_RS400:
+    case CHIP_RC410:
+    case CHIP_RS480:
+    case CHIP_RS600:
+    case CHIP_RS690:
+    case CHIP_RS740:
+    case CHIP_RS780:
+    case CHIP_RS880:
+    case CHIP_PALM:
+    case CHIP_SUMO:
+    case CHIP_SUMO2:
+    case CHIP_ARUBA:
+    case CHIP_KAVERI:
+    case CHIP_KABINI:
+    case CHIP_MULLINS:
+       ws->info.has_dedicated_vram = false;
+       break;
+
+    default:
+       ws->info.has_dedicated_vram = true;
+    }
+
     /* Check for dma */
     ws->info.has_sdma = FALSE;
     /* DMA is disabled on R700. There is IB corruption and hangs. */
@@ -374,8 +398,7 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     else if (ws->gen >= DRV_R600) {
         uint32_t tiling_config = 0;
 
-        if (ws->info.drm_minor >= 9 &&
-            !radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_BACKENDS,
+        if (!radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_BACKENDS,
                                   "num backends",
                                   &ws->info.num_render_backends))
             return FALSE;
@@ -401,27 +424,20 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
             ws->info.pipe_interleave_bytes =
                 ws->info.chip_class >= EVERGREEN ? 512 : 256;
 
-        if (ws->info.drm_minor >= 11) {
-            radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_TILE_PIPES, NULL,
-                                 &ws->info.num_tile_pipes);
+        radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_TILE_PIPES, NULL,
+                             &ws->info.num_tile_pipes);
 
-            /* "num_tiles_pipes" must be equal to the number of pipes (Px) in the
-             * pipe config field of the GB_TILE_MODE array. Only one card (Tahiti)
-             * reports a different value (12). Fix it by setting what's in the
-             * GB_TILE_MODE array (8).
-             */
-            if (ws->gen == DRV_SI && ws->info.num_tile_pipes == 12)
-                ws->info.num_tile_pipes = 8;
+        /* "num_tiles_pipes" must be equal to the number of pipes (Px) in the
+         * pipe config field of the GB_TILE_MODE array. Only one card (Tahiti)
+         * reports a different value (12). Fix it by setting what's in the
+         * GB_TILE_MODE array (8).
+         */
+        if (ws->gen == DRV_SI && ws->info.num_tile_pipes == 12)
+            ws->info.num_tile_pipes = 8;
 
-            if (radeon_get_drm_value(ws->fd, RADEON_INFO_BACKEND_MAP, NULL,
-                                      &ws->info.r600_gb_backend_map))
-                ws->info.r600_gb_backend_map_valid = TRUE;
-        } else {
-            ws->info.num_tile_pipes =
-                ws->info.chip_class >= EVERGREEN ?
-                    1 << (tiling_config & 0xf) :
-                    1 << ((tiling_config & 0xe) >> 1);
-        }
+        if (radeon_get_drm_value(ws->fd, RADEON_INFO_BACKEND_MAP, NULL,
+                                  &ws->info.r600_gb_backend_map))
+            ws->info.r600_gb_backend_map_valid = TRUE;
 
         ws->info.has_virtual_memory = FALSE;
         if (ws->info.drm_minor >= 13) {
@@ -488,14 +504,20 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
         return FALSE;
     }
 
-    if (radeon_get_drm_value(ws->fd, RADEON_INFO_SI_TILE_MODE_ARRAY, NULL,
-                             ws->info.si_tile_mode_array)) {
-        ws->info.si_tile_mode_array_valid = TRUE;
+    if (ws->info.chip_class == CIK) {
+        if (!radeon_get_drm_value(ws->fd, RADEON_INFO_CIK_MACROTILE_MODE_ARRAY, NULL,
+                                  ws->info.cik_macrotile_mode_array)) {
+            fprintf(stderr, "radeon: Kernel 3.13 is required for CIK support.\n");
+            return FALSE;
+        }
     }
 
-    if (radeon_get_drm_value(ws->fd, RADEON_INFO_CIK_MACROTILE_MODE_ARRAY, NULL,
-                             ws->info.cik_macrotile_mode_array)) {
-        ws->info.cik_macrotile_mode_array_valid = TRUE;
+    if (ws->info.chip_class >= SI) {
+        if (!radeon_get_drm_value(ws->fd, RADEON_INFO_SI_TILE_MODE_ARRAY, NULL,
+                                  ws->info.si_tile_mode_array)) {
+            fprintf(stderr, "radeon: Kernel 3.10 is required for SI support.\n");
+            return FALSE;
+        }
     }
 
     /* Hawaii with old firmware needs type2 nop packet.
@@ -812,7 +834,7 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
     list_inithead(&ws->va_holes);
 
     /* TTM aligns the BO size to the CPU page size */
-    ws->size_align = sysconf(_SC_PAGESIZE);
+    ws->info.gart_page_size = sysconf(_SC_PAGESIZE);
 
     ws->ncs = 0;
     pipe_semaphore_init(&ws->cs_queued, 0);

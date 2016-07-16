@@ -865,10 +865,10 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
                     /* X24x8 is sampled as Y16X16 on r3xx-r4xx.
                      * The depth here is at the Y component. */
                     for (j = 0; j < 4; j++)
-                        depth_swizzle[j] = UTIL_FORMAT_SWIZZLE_Y;
+                        depth_swizzle[j] = PIPE_SWIZZLE_Y;
                 } else {
                     for (j = 0; j < 4; j++)
-                        depth_swizzle[j] = UTIL_FORMAT_SWIZZLE_X;
+                        depth_swizzle[j] = PIPE_SWIZZLE_X;
                 }
 
                 /* If compare mode is disabled, sampler view swizzles

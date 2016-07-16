@@ -2,6 +2,7 @@
 	global:
 		OSMesaColorClamp;
 		OSMesaCreateContext;
+		OSMesaCreateContextAttribs;
 		OSMesaCreateContextExt;
 		OSMesaDestroyContext;
 		OSMesaGetColorBuffer;

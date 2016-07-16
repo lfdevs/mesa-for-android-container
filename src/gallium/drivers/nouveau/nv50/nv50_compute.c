@@ -67,120 +67,92 @@ nv50_screen_compute_setup(struct nv50_screen *screen,
    if (ret)
       return ret;
 
-   BEGIN_NV04(push, SUBC_COMPUTE(NV01_SUBCHAN_OBJECT), 1);
+   BEGIN_NV04(push, SUBC_CP(NV01_SUBCHAN_OBJECT), 1);
    PUSH_DATA (push, screen->compute->handle);
 
-   BEGIN_NV04(push, NV50_COMPUTE(UNK02A0), 1);
+   BEGIN_NV04(push, NV50_CP(UNK02A0), 1);
    PUSH_DATA (push, 1);
-   BEGIN_NV04(push, NV50_COMPUTE(DMA_STACK), 1);
+   BEGIN_NV04(push, NV50_CP(DMA_STACK), 1);
    PUSH_DATA (push, fifo->vram);
-   BEGIN_NV04(push, NV50_COMPUTE(STACK_ADDRESS_HIGH), 2);
+   BEGIN_NV04(push, NV50_CP(STACK_ADDRESS_HIGH), 2);
    PUSH_DATAh(push, screen->stack_bo->offset);
    PUSH_DATA (push, screen->stack_bo->offset);
-   BEGIN_NV04(push, NV50_COMPUTE(STACK_SIZE_LOG), 1);
+   BEGIN_NV04(push, NV50_CP(STACK_SIZE_LOG), 1);
    PUSH_DATA (push, 4);
 
-   BEGIN_NV04(push, NV50_COMPUTE(UNK0290), 1);
+   BEGIN_NV04(push, NV50_CP(UNK0290), 1);
    PUSH_DATA (push, 1);
-   BEGIN_NV04(push, NV50_COMPUTE(LANES32_ENABLE), 1);
+   BEGIN_NV04(push, NV50_CP(LANES32_ENABLE), 1);
    PUSH_DATA (push, 1);
-   BEGIN_NV04(push, NV50_COMPUTE(REG_MODE), 1);
+   BEGIN_NV04(push, NV50_CP(REG_MODE), 1);
    PUSH_DATA (push, NV50_COMPUTE_REG_MODE_STRIPED);
-   BEGIN_NV04(push, NV50_COMPUTE(UNK0384), 1);
+   BEGIN_NV04(push, NV50_CP(UNK0384), 1);
    PUSH_DATA (push, 0x100);
-   BEGIN_NV04(push, NV50_COMPUTE(DMA_GLOBAL), 1);
+   BEGIN_NV04(push, NV50_CP(DMA_GLOBAL), 1);
    PUSH_DATA (push, fifo->vram);
 
    for (i = 0; i < 15; i++) {
-      BEGIN_NV04(push, NV50_COMPUTE(GLOBAL_ADDRESS_HIGH(i)), 2);
+      BEGIN_NV04(push, NV50_CP(GLOBAL_ADDRESS_HIGH(i)), 2);
       PUSH_DATA (push, 0);
       PUSH_DATA (push, 0);
-      BEGIN_NV04(push, NV50_COMPUTE(GLOBAL_LIMIT(i)), 1);
+      BEGIN_NV04(push, NV50_CP(GLOBAL_LIMIT(i)), 1);
       PUSH_DATA (push, 0);
-      BEGIN_NV04(push, NV50_COMPUTE(GLOBAL_MODE(i)), 1);
+      BEGIN_NV04(push, NV50_CP(GLOBAL_MODE(i)), 1);
       PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
    }
 
-   BEGIN_NV04(push, NV50_COMPUTE(GLOBAL_ADDRESS_HIGH(15)), 2);
+   BEGIN_NV04(push, NV50_CP(GLOBAL_ADDRESS_HIGH(15)), 2);
    PUSH_DATA (push, 0);
    PUSH_DATA (push, 0);
-   BEGIN_NV04(push, NV50_COMPUTE(GLOBAL_LIMIT(15)), 1);
+   BEGIN_NV04(push, NV50_CP(GLOBAL_LIMIT(15)), 1);
    PUSH_DATA (push, ~0);
-   BEGIN_NV04(push, NV50_COMPUTE(GLOBAL_MODE(15)), 1);
+   BEGIN_NV04(push, NV50_CP(GLOBAL_MODE(15)), 1);
    PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
 
-   BEGIN_NV04(push, NV50_COMPUTE(LOCAL_WARPS_LOG_ALLOC), 1);
+   BEGIN_NV04(push, NV50_CP(LOCAL_WARPS_LOG_ALLOC), 1);
    PUSH_DATA (push, 7);
-   BEGIN_NV04(push, NV50_COMPUTE(LOCAL_WARPS_NO_CLAMP), 1);
+   BEGIN_NV04(push, NV50_CP(LOCAL_WARPS_NO_CLAMP), 1);
    PUSH_DATA (push, 1);
-   BEGIN_NV04(push, NV50_COMPUTE(STACK_WARPS_LOG_ALLOC), 1);
+   BEGIN_NV04(push, NV50_CP(STACK_WARPS_LOG_ALLOC), 1);
    PUSH_DATA (push, 7);
-   BEGIN_NV04(push, NV50_COMPUTE(STACK_WARPS_NO_CLAMP), 1);
+   BEGIN_NV04(push, NV50_CP(STACK_WARPS_NO_CLAMP), 1);
    PUSH_DATA (push, 1);
-   BEGIN_NV04(push, NV50_COMPUTE(USER_PARAM_COUNT), 1);
+   BEGIN_NV04(push, NV50_CP(USER_PARAM_COUNT), 1);
    PUSH_DATA (push, 0);
 
-   BEGIN_NV04(push, NV50_COMPUTE(DMA_TEXTURE), 1);
+   BEGIN_NV04(push, NV50_CP(DMA_TEXTURE), 1);
    PUSH_DATA (push, fifo->vram);
-   BEGIN_NV04(push, NV50_COMPUTE(TEX_LIMITS), 1);
+   BEGIN_NV04(push, NV50_CP(TEX_LIMITS), 1);
    PUSH_DATA (push, 0x54);
-   BEGIN_NV04(push, NV50_COMPUTE(LINKED_TSC), 1);
+   BEGIN_NV04(push, NV50_CP(LINKED_TSC), 1);
    PUSH_DATA (push, 0);
 
-   BEGIN_NV04(push, NV50_COMPUTE(DMA_TIC), 1);
+   BEGIN_NV04(push, NV50_CP(DMA_TIC), 1);
    PUSH_DATA (push, fifo->vram);
-   BEGIN_NV04(push, NV50_COMPUTE(TIC_ADDRESS_HIGH), 3);
+   BEGIN_NV04(push, NV50_CP(TIC_ADDRESS_HIGH), 3);
    PUSH_DATAh(push, screen->txc->offset);
    PUSH_DATA (push, screen->txc->offset);
    PUSH_DATA (push, NV50_TIC_MAX_ENTRIES - 1);
 
-   BEGIN_NV04(push, NV50_COMPUTE(DMA_TSC), 1);
+   BEGIN_NV04(push, NV50_CP(DMA_TSC), 1);
    PUSH_DATA (push, fifo->vram);
-   BEGIN_NV04(push, NV50_COMPUTE(TSC_ADDRESS_HIGH), 3);
+   BEGIN_NV04(push, NV50_CP(TSC_ADDRESS_HIGH), 3);
    PUSH_DATAh(push, screen->txc->offset + 65536);
    PUSH_DATA (push, screen->txc->offset + 65536);
    PUSH_DATA (push, NV50_TSC_MAX_ENTRIES - 1);
 
-   BEGIN_NV04(push, NV50_COMPUTE(DMA_CODE_CB), 1);
+   BEGIN_NV04(push, NV50_CP(DMA_CODE_CB), 1);
    PUSH_DATA (push, fifo->vram);
 
-   BEGIN_NV04(push, NV50_COMPUTE(DMA_LOCAL), 1);
+   BEGIN_NV04(push, NV50_CP(DMA_LOCAL), 1);
    PUSH_DATA (push, fifo->vram);
-   BEGIN_NV04(push, NV50_COMPUTE(LOCAL_ADDRESS_HIGH), 2);
+   BEGIN_NV04(push, NV50_CP(LOCAL_ADDRESS_HIGH), 2);
    PUSH_DATAh(push, screen->tls_bo->offset + 65536);
    PUSH_DATA (push, screen->tls_bo->offset + 65536);
-   BEGIN_NV04(push, NV50_COMPUTE(LOCAL_SIZE_LOG), 1);
+   BEGIN_NV04(push, NV50_CP(LOCAL_SIZE_LOG), 1);
    PUSH_DATA (push, util_logbase2((screen->max_tls_space / ONE_TEMP_SIZE) * 2));
 
    return 0;
-}
-
-static bool
-nv50_compute_validate_program(struct nv50_context *nv50)
-{
-   struct nv50_program *prog = nv50->compprog;
-
-   if (prog->mem)
-      return true;
-
-   if (!prog->translated) {
-      prog->translated = nv50_program_translate(
-         prog, nv50->screen->base.device->chipset, &nv50->base.debug);
-      if (!prog->translated)
-         return false;
-   }
-   if (unlikely(!prog->code_size))
-      return false;
-
-   if (likely(prog->code_size)) {
-      if (nv50_program_upload_code(nv50, prog)) {
-         struct nouveau_pushbuf *push = nv50->base.pushbuf;
-         BEGIN_NV04(push, NV50_COMPUTE(CODE_CB_FLUSH), 1);
-         PUSH_DATA (push, 0);
-         return true;
-      }
-   }
-   return false;
 }
 
 static void
@@ -198,26 +170,25 @@ nv50_compute_validate_globals(struct nv50_context *nv50)
    }
 }
 
-static bool
-nv50_compute_state_validate(struct nv50_context *nv50)
-{
-   if (!nv50_compute_validate_program(nv50))
-      return false;
+static struct nv50_state_validate
+validate_list_cp[] = {
+   { nv50_compprog_validate,              NV50_NEW_CP_PROGRAM     },
+   { nv50_compute_validate_globals,       NV50_NEW_CP_GLOBALS     },
+};
 
-   if (nv50->dirty_cp & NV50_NEW_CP_GLOBALS)
-      nv50_compute_validate_globals(nv50);
+static bool
+nv50_state_validate_cp(struct nv50_context *nv50, uint32_t mask)
+{
+   bool ret;
 
    /* TODO: validate textures, samplers, surfaces */
+   ret = nv50_state_validate(nv50, mask, validate_list_cp,
+                             ARRAY_SIZE(validate_list_cp), &nv50->dirty_cp,
+                             nv50->bufctx_cp);
 
-   nv50_bufctx_fence(nv50->bufctx_cp, false);
-
-   nouveau_pushbuf_bufctx(nv50->base.pushbuf, nv50->bufctx_cp);
-   if (unlikely(nouveau_pushbuf_validate(nv50->base.pushbuf)))
-      return false;
    if (unlikely(nv50->state.flushed))
       nv50_bufctx_fence(nv50->bufctx_cp, true);
-
-   return true;
+   return ret;
 }
 
 static void
@@ -227,7 +198,7 @@ nv50_compute_upload_input(struct nv50_context *nv50, const uint32_t *input)
    struct nouveau_pushbuf *push = screen->base.pushbuf;
    unsigned size = align(nv50->compprog->parm_size, 0x4);
 
-   BEGIN_NV04(push, NV50_COMPUTE(USER_PARAM_COUNT), 1);
+   BEGIN_NV04(push, NV50_CP(USER_PARAM_COUNT), 1);
    PUSH_DATA (push, (size / 4) << 8);
 
    if (size) {
@@ -245,7 +216,7 @@ nv50_compute_upload_input(struct nv50_context *nv50, const uint32_t *input)
       nouveau_pushbuf_bufctx(push, nv50->bufctx);
       nouveau_pushbuf_validate(push);
 
-      BEGIN_NV04(push, NV50_COMPUTE(USER_PARAM(0)), size / 4);
+      BEGIN_NV04(push, NV50_CP(USER_PARAM(0)), size / 4);
       nouveau_pushbuf_data(push, bo, offset, size);
 
       nouveau_fence_work(screen->base.fence.current, nouveau_mm_free_work, mm);
@@ -278,7 +249,7 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    struct nv50_program *cp = nv50->compprog;
    bool ret;
 
-   ret = !nv50_compute_state_validate(nv50);
+   ret = !nv50_state_validate_cp(nv50, ~0);
    if (ret) {
       NOUVEAU_ERR("Failed to launch grid !\n");
       return;
@@ -286,33 +257,33 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 
    nv50_compute_upload_input(nv50, info->input);
 
-   BEGIN_NV04(push, NV50_COMPUTE(CP_START_ID), 1);
+   BEGIN_NV04(push, NV50_CP(CP_START_ID), 1);
    PUSH_DATA (push, nv50_compute_find_symbol(nv50, info->pc));
 
-   BEGIN_NV04(push, NV50_COMPUTE(SHARED_SIZE), 1);
+   BEGIN_NV04(push, NV50_CP(SHARED_SIZE), 1);
    PUSH_DATA (push, align(cp->cp.smem_size + cp->parm_size + 0x10, 0x40));
-   BEGIN_NV04(push, NV50_COMPUTE(CP_REG_ALLOC_TEMP), 1);
+   BEGIN_NV04(push, NV50_CP(CP_REG_ALLOC_TEMP), 1);
    PUSH_DATA (push, cp->max_gpr);
 
    /* grid/block setup */
-   BEGIN_NV04(push, NV50_COMPUTE(BLOCKDIM_XY), 2);
+   BEGIN_NV04(push, NV50_CP(BLOCKDIM_XY), 2);
    PUSH_DATA (push, info->block[1] << 16 | info->block[0]);
    PUSH_DATA (push, info->block[2]);
-   BEGIN_NV04(push, NV50_COMPUTE(BLOCK_ALLOC), 1);
+   BEGIN_NV04(push, NV50_CP(BLOCK_ALLOC), 1);
    PUSH_DATA (push, 1 << 16 | block_size);
-   BEGIN_NV04(push, NV50_COMPUTE(BLOCKDIM_LATCH), 1);
+   BEGIN_NV04(push, NV50_CP(BLOCKDIM_LATCH), 1);
    PUSH_DATA (push, 1);
-   BEGIN_NV04(push, NV50_COMPUTE(GRIDDIM), 1);
+   BEGIN_NV04(push, NV50_CP(GRIDDIM), 1);
    PUSH_DATA (push, info->grid[1] << 16 | info->grid[0]);
-   BEGIN_NV04(push, NV50_COMPUTE(GRIDID), 1);
+   BEGIN_NV04(push, NV50_CP(GRIDID), 1);
    PUSH_DATA (push, 1);
 
    /* kernel launching */
-   BEGIN_NV04(push, NV50_COMPUTE(LAUNCH), 1);
+   BEGIN_NV04(push, NV50_CP(LAUNCH), 1);
    PUSH_DATA (push, 0);
-   BEGIN_NV04(push, SUBC_COMPUTE(NV50_GRAPH_SERIALIZE), 1);
+   BEGIN_NV04(push, SUBC_CP(NV50_GRAPH_SERIALIZE), 1);
    PUSH_DATA (push, 0);
 
    /* bind a compute shader clobbers fragment shader state */
-   nv50->dirty |= NV50_NEW_FRAGPROG;
+   nv50->dirty_3d |= NV50_NEW_3D_FRAGPROG;
 }

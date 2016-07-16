@@ -54,11 +54,12 @@ nv50_begin_query(struct pipe_context *pipe, struct pipe_query *pq)
    return q->funcs->begin_query(nv50_context(pipe), q);
 }
 
-static void
+static bool
 nv50_end_query(struct pipe_context *pipe, struct pipe_query *pq)
 {
    struct nv50_query *q = nv50_query(pq);
    q->funcs->end_query(nv50_context(pipe), q);
+   return true;
 }
 
 static boolean
@@ -143,6 +144,11 @@ nv50_render_condition(struct pipe_context *pipe,
    PUSH_DATA (push, hq->bo->offset + hq->offset);
 }
 
+static void
+nv50_set_active_query_state(struct pipe_context *pipe, boolean enable)
+{
+}
+
 void
 nv50_init_query_functions(struct nv50_context *nv50)
 {
@@ -153,6 +159,7 @@ nv50_init_query_functions(struct nv50_context *nv50)
    pipe->begin_query = nv50_begin_query;
    pipe->end_query = nv50_end_query;
    pipe->get_query_result = nv50_get_query_result;
+   pipe->set_active_query_state = nv50_set_active_query_state;
    pipe->render_condition = nv50_render_condition;
    nv50->cond_condmode = NV50_3D_COND_MODE_ALWAYS;
 }

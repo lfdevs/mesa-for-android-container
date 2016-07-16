@@ -556,7 +556,7 @@ draw_alloc_extra_vertex_attrib(struct draw_context *draw,
    num_outputs = draw_current_shader_outputs(draw);
    n = draw->extra_shader_outputs.num;
 
-   assert(n < Elements(draw->extra_shader_outputs.semantic_name));
+   assert(n < ARRAY_SIZE(draw->extra_shader_outputs.semantic_name));
 
    draw->extra_shader_outputs.semantic_name[n] = semantic_name;
    draw->extra_shader_outputs.semantic_index[n] = semantic_index;
@@ -731,7 +731,41 @@ draw_texture_sampler(struct draw_context *draw,
    }
 }
 
+/**
+ * Provide TGSI image objects for vertex/geometry shaders that use
+ * texture fetches.  This state only needs to be set once per context.
+ * This might only be used by software drivers for the time being.
+ */
+void
+draw_image(struct draw_context *draw,
+           uint shader,
+           struct tgsi_image *image)
+{
+   if (shader == PIPE_SHADER_VERTEX) {
+      draw->vs.tgsi.image = image;
+   } else {
+      debug_assert(shader == PIPE_SHADER_GEOMETRY);
+      draw->gs.tgsi.image = image;
+   }
+}
 
+/**
+ * Provide TGSI buffer objects for vertex/geometry shaders that use
+ * load/store/atomic ops.  This state only needs to be set once per context.
+ * This might only be used by software drivers for the time being.
+ */
+void
+draw_buffer(struct draw_context *draw,
+            uint shader,
+            struct tgsi_buffer *buffer)
+{
+   if (shader == PIPE_SHADER_VERTEX) {
+      draw->vs.tgsi.buffer = buffer;
+   } else {
+      debug_assert(shader == PIPE_SHADER_GEOMETRY);
+      draw->gs.tgsi.buffer = buffer;
+   }
+}
 
 
 void draw_set_render( struct draw_context *draw, 
@@ -853,12 +887,12 @@ draw_current_shader_clipvertex_output(const struct draw_context *draw)
 }
 
 uint
-draw_current_shader_clipdistance_output(const struct draw_context *draw, int index)
+draw_current_shader_ccdistance_output(const struct draw_context *draw, int index)
 {
    debug_assert(index < PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
    if (draw->gs.geometry_shader)
-      return draw->gs.geometry_shader->clipdistance_output[index];
-   return draw->vs.clipdistance_output[index];
+      return draw->gs.geometry_shader->ccdistance_output[index];
+   return draw->vs.ccdistance_output[index];
 }
 
 
@@ -868,16 +902,6 @@ draw_current_shader_num_written_clipdistances(const struct draw_context *draw)
    if (draw->gs.geometry_shader)
       return draw->gs.geometry_shader->info.num_written_clipdistance;
    return draw->vs.vertex_shader->info.num_written_clipdistance;
-}
-
-
-uint
-draw_current_shader_culldistance_output(const struct draw_context *draw, int index)
-{
-   debug_assert(index < PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
-   if (draw->gs.geometry_shader)
-      return draw->gs.geometry_shader->culldistance_output[index];
-   return draw->vs.vertex_shader->culldistance_output[index];
 }
 
 uint

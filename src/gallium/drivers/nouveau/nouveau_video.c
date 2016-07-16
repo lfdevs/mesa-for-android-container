@@ -657,7 +657,7 @@ nouveau_video_buffer_sampler_view_planes(struct pipe_video_buffer *buffer)
          u_sampler_view_default_template(&sv_templ, buf->resources[i], buf->resources[i]->format);
 
          if (util_format_get_nr_components(buf->resources[i]->format) == 1)
-            sv_templ.swizzle_r = sv_templ.swizzle_g = sv_templ.swizzle_b = sv_templ.swizzle_a = PIPE_SWIZZLE_RED;
+            sv_templ.swizzle_r = sv_templ.swizzle_g = sv_templ.swizzle_b = sv_templ.swizzle_a = PIPE_SWIZZLE_X;
 
          buf->sampler_view_planes[i] = pipe->create_sampler_view(pipe, buf->resources[i], &sv_templ);
          if (!buf->sampler_view_planes[i])
@@ -695,8 +695,8 @@ nouveau_video_buffer_sampler_view_components(struct pipe_video_buffer *buffer)
          if (!buf->sampler_view_components[component]) {
             memset(&sv_templ, 0, sizeof(sv_templ));
             u_sampler_view_default_template(&sv_templ, buf->resources[i], buf->resources[i]->format);
-            sv_templ.swizzle_r = sv_templ.swizzle_g = sv_templ.swizzle_b = PIPE_SWIZZLE_RED + j;
-            sv_templ.swizzle_a = PIPE_SWIZZLE_ONE;
+            sv_templ.swizzle_r = sv_templ.swizzle_g = sv_templ.swizzle_b = PIPE_SWIZZLE_X + j;
+            sv_templ.swizzle_a = PIPE_SWIZZLE_1;
             buf->sampler_view_components[component] = pipe->create_sampler_view(pipe, buf->resources[i], &sv_templ);
             if (!buf->sampler_view_components[component])
                goto error;

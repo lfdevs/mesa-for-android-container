@@ -124,7 +124,8 @@ const struct brw_tracked_state brw_sf_vp = {
       .mesa  = _NEW_BUFFERS |
                _NEW_SCISSOR |
                _NEW_VIEWPORT,
-      .brw   = BRW_NEW_BATCH,
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP,
    },
    .emit = upload_sf_vp
 };
@@ -312,6 +313,7 @@ const struct brw_tracked_state brw_sf_unit = {
                _NEW_PROGRAM |
                _NEW_SCISSOR,
       .brw   = BRW_NEW_BATCH |
+               BRW_NEW_BLORP |
                BRW_NEW_PROGRAM_CACHE |
                BRW_NEW_SF_PROG_DATA |
                BRW_NEW_SF_VP |

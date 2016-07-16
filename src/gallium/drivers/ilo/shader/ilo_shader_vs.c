@@ -329,7 +329,7 @@ vs_add_sampler_params(struct toy_compiler *tc, int msg_type, int base_mrf,
    assert(num_coords <= 4);
    assert(num_derivs <= 3 && num_derivs <= num_coords);
 
-   for (i = 0; i < Elements(m); i++)
+   for (i = 0; i < ARRAY_SIZE(m); i++)
       m[i] = tdst(TOY_FILE_MRF, base_mrf + i, 0);
 
    switch (msg_type) {
@@ -407,7 +407,8 @@ vs_prepare_tgsi_sampling(struct vs_compile_context *vcc,
    num_derivs = 0;
    sampler_src = 1;
 
-   num_coords = tgsi_util_get_texture_coord_dim(inst->tex.target, &ref_pos);
+   num_coords = tgsi_util_get_texture_coord_dim(inst->tex.target);
+   ref_pos = tgsi_util_get_shadow_ref_src_index(inst->tex.target);
 
    /* extract the parameters */
    switch (inst->opcode) {
@@ -609,10 +610,10 @@ vs_lower_opcode_tgsi_sampling(struct vs_compile_context *vcc,
       swizzles[3] = vcc->variant->sampler_view_swizzles[sampler_index].a;
    }
    else {
-      swizzles[0] = PIPE_SWIZZLE_RED;
-      swizzles[1] = PIPE_SWIZZLE_GREEN;
-      swizzles[2] = PIPE_SWIZZLE_BLUE;
-      swizzles[3] = PIPE_SWIZZLE_ALPHA;
+      swizzles[0] = PIPE_SWIZZLE_X;
+      swizzles[1] = PIPE_SWIZZLE_Y;
+      swizzles[2] = PIPE_SWIZZLE_Z;
+      swizzles[3] = PIPE_SWIZZLE_W;
    }
 
    swizzle_zero_mask = 0;
@@ -620,11 +621,11 @@ vs_lower_opcode_tgsi_sampling(struct vs_compile_context *vcc,
    swizzle_normal_mask = 0;
    for (i = 0; i < 4; i++) {
       switch (swizzles[i]) {
-      case PIPE_SWIZZLE_ZERO:
+      case PIPE_SWIZZLE_0:
          swizzle_zero_mask |= 1 << i;
          swizzles[i] = i;
          break;
-      case PIPE_SWIZZLE_ONE:
+      case PIPE_SWIZZLE_1:
          swizzle_one_mask |= 1 << i;
          swizzles[i] = i;
          break;

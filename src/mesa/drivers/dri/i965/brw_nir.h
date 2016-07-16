@@ -25,11 +25,24 @@
 
 #include "brw_context.h"
 #include "brw_reg.h"
+#include "brw_shader.h"
 #include "compiler/nir/nir.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+static inline int
+type_size_scalar_bytes(const struct glsl_type *type)
+{
+   return type_size_scalar(type) * 4;
+}
+
+static inline int
+type_size_vec4_bytes(const struct glsl_type *type)
+{
+   return type_size_vec4(type) * 16;
+}
 
 /* Flags set in the instr->pass_flags field by i965 analysis passes */
 enum {
@@ -75,18 +88,25 @@ enum {
 
 void brw_nir_analyze_boolean_resolves(nir_shader *nir);
 
-nir_shader *brw_create_nir(struct brw_context *brw,
-                           const struct gl_shader_program *shader_prog,
-                           const struct gl_program *prog,
-                           gl_shader_stage stage,
-                           bool is_scalar);
+nir_shader *brw_preprocess_nir(const struct brw_compiler *compiler,
+                               nir_shader *nir);
 
-nir_shader *brw_preprocess_nir(nir_shader *nir, bool is_scalar);
-nir_shader *brw_nir_lower_io(nir_shader *nir,
-                            const struct brw_device_info *devinfo,
-                            bool is_scalar,
-                            bool use_legacy_snorm_formula,
-                            const uint8_t *vs_attrib_wa_flags);
+bool brw_nir_lower_intrinsics(nir_shader *nir,
+                              struct brw_stage_prog_data *prog_data);
+void brw_nir_lower_vs_inputs(nir_shader *nir,
+                             const struct brw_device_info *devinfo,
+                             bool is_scalar,
+                             bool use_legacy_snorm_formula,
+                             const uint8_t *vs_attrib_wa_flags);
+void brw_nir_lower_vue_inputs(nir_shader *nir, bool is_scalar,
+                              const struct brw_vue_map *vue_map);
+void brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue);
+void brw_nir_lower_fs_inputs(nir_shader *nir);
+void brw_nir_lower_vue_outputs(nir_shader *nir, bool is_scalar);
+void brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue);
+void brw_nir_lower_fs_outputs(nir_shader *nir);
+void brw_nir_lower_cs_shared(nir_shader *nir);
+
 nir_shader *brw_postprocess_nir(nir_shader *nir,
                                 const struct brw_device_info *devinfo,
                                 bool is_scalar);
@@ -94,6 +114,8 @@ nir_shader *brw_postprocess_nir(nir_shader *nir,
 bool brw_nir_apply_attribute_workarounds(nir_shader *nir,
                                          bool use_legacy_snorm_formula,
                                          const uint8_t *attrib_wa_flags);
+
+bool brw_nir_apply_trig_workarounds(nir_shader *nir);
 
 nir_shader *brw_nir_apply_sampler_key(nir_shader *nir,
                                       const struct brw_device_info *devinfo,

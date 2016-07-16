@@ -26,6 +26,10 @@
 #define EVERGREEN_COMPUTE_INTERNAL_H
 
 #include "r600_asm.h"
+#ifdef HAVE_OPENCL
+#include "radeon/radeon_llvm.h"
+#include <llvm-c/Core.h>
+#endif
 
 struct r600_pipe_compute {
 	struct r600_context *ctx;

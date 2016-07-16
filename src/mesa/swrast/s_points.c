@@ -22,7 +22,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-
+#include "main/framebuffer.h"
 #include "main/glheader.h"
 #include "main/macros.h"
 #include "s_context.h"
@@ -257,7 +257,7 @@ smooth_point(struct gl_context *ctx, const SWvertex *vert)
    size = get_size(ctx, vert, GL_TRUE);
 
    /* alpha attenuation / fade factor */
-   if (ctx->Multisample._Enabled) {
+   if (_mesa_is_multisample_enabled(ctx)) {
       if (vert->pointSize >= ctx->Point.Threshold) {
          alphaAtten = 1.0F;
       }

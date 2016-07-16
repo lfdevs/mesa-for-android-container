@@ -115,8 +115,6 @@ public:
     */
    dst_reg output_reg[BRW_VARYING_SLOT_COUNT];
    const char *output_reg_annotation[BRW_VARYING_SLOT_COUNT];
-   int *uniform_size;
-   int uniform_array_size; /*< Size of the uniform_size array */
    int uniforms;
 
    src_reg shader_start_time;
@@ -276,17 +274,8 @@ public:
    void emit_shader_time_end();
    void emit_shader_time_write(int shader_time_subindex, src_reg value);
 
-   void emit_untyped_atomic(unsigned atomic_op, unsigned surf_index,
-                            dst_reg dst, src_reg offset, src_reg src0,
-                            src_reg src1);
-
-   void emit_untyped_surface_read(unsigned surf_index, dst_reg dst,
-                                  src_reg offset);
-
    src_reg get_scratch_offset(bblock_t *block, vec4_instruction *inst,
 			      src_reg *reladdr, int reg_offset);
-   src_reg get_pull_constant_offset(bblock_t *block, vec4_instruction *inst,
-				    src_reg *reladdr, int reg_offset);
    void emit_scratch_read(bblock_t *block, vec4_instruction *inst,
 			  dst_reg dst,
 			  src_reg orig_src,
@@ -296,7 +285,8 @@ public:
    void emit_pull_constant_load(bblock_t *block, vec4_instruction *inst,
 				dst_reg dst,
 				src_reg orig_src,
-				int base_offset);
+                                int base_offset,
+                                src_reg indirect);
    void emit_pull_constant_load_reg(dst_reg dst,
                                     src_reg surf_index,
                                     src_reg offset,
@@ -336,19 +326,18 @@ public:
    virtual void nir_emit_undef(nir_ssa_undef_instr *instr);
    virtual void nir_emit_ssbo_atomic(int op, nir_intrinsic_instr *instr);
 
-   dst_reg get_nir_dest(nir_dest dest, enum brw_reg_type type);
-   dst_reg get_nir_dest(nir_dest dest, nir_alu_type type);
-   dst_reg get_nir_dest(nir_dest dest);
-   src_reg get_nir_src(nir_src src, enum brw_reg_type type,
+   dst_reg get_nir_dest(const nir_dest &dest, enum brw_reg_type type);
+   dst_reg get_nir_dest(const nir_dest &dest, nir_alu_type type);
+   dst_reg get_nir_dest(const nir_dest &dest);
+   src_reg get_nir_src(const nir_src &src, enum brw_reg_type type,
                        unsigned num_components = 4);
-   src_reg get_nir_src(nir_src src, nir_alu_type type,
+   src_reg get_nir_src(const nir_src &src, nir_alu_type type,
                        unsigned num_components = 4);
-   src_reg get_nir_src(nir_src src,
+   src_reg get_nir_src(const nir_src &src,
                        unsigned num_components = 4);
    src_reg get_indirect_offset(nir_intrinsic_instr *instr);
 
-   virtual dst_reg *make_reg_for_system_value(int location,
-                                              const glsl_type *type) = 0;
+   virtual dst_reg *make_reg_for_system_value(int location) = 0;
 
    dst_reg *nir_locals;
    dst_reg *nir_ssa_values;

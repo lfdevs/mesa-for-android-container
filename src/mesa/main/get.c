@@ -384,6 +384,13 @@ static const int extra_ARB_shader_storage_buffer_object_and_geometry_shader[] = 
    EXTRA_END
 };
 
+static const int extra_ARB_shader_image_load_store_shader_storage_buffer_object_es31[] = {
+   EXT(ARB_shader_image_load_store),
+   EXT(ARB_shader_storage_buffer_object),
+   EXTRA_API_ES31,
+   EXTRA_END
+};
+
 static const int extra_ARB_framebuffer_no_attachments_and_geometry_shader[] = {
    EXTRA_EXT_FB_NO_ATTACH_GS,
    EXTRA_END
@@ -399,6 +406,11 @@ static const int extra_ARB_gpu_shader5_or_oes_geometry_shader[] = {
    EXT(ARB_gpu_shader5),
    EXTRA_EXT_ES_GS,
    EXTRA_END
+};
+
+static const int extra_ARB_gpu_shader5_or_OES_sample_variables[] = {
+   EXT(ARB_gpu_shader5),
+   EXT(OES_sample_variables),
 };
 
 EXTRA_EXT(ARB_texture_cube_map);
@@ -438,8 +450,6 @@ EXTRA_EXT(ARB_shader_atomic_counters);
 EXTRA_EXT(ARB_draw_indirect);
 EXTRA_EXT(ARB_shader_image_load_store);
 EXTRA_EXT(ARB_viewport_array);
-EXTRA_EXT(ARB_compute_shader);
-EXTRA_EXT(ARB_gpu_shader5);
 EXTRA_EXT(ARB_query_buffer_object);
 EXTRA_EXT2(ARB_transform_feedback3, ARB_gpu_shader5);
 EXTRA_EXT(INTEL_performance_query);
@@ -453,6 +463,7 @@ EXTRA_EXT(ARB_shader_storage_buffer_object);
 EXTRA_EXT(ARB_indirect_parameters);
 EXTRA_EXT(ATI_meminfo);
 EXTRA_EXT(NVX_gpu_memory_info);
+EXTRA_EXT(ARB_cull_distance);
 
 static const int
 extra_ARB_color_buffer_float_or_glcore[] = {
@@ -470,7 +481,6 @@ extra_NV_primitive_restart[] = {
 static const int extra_version_30[] = { EXTRA_VERSION_30, EXTRA_END };
 static const int extra_version_31[] = { EXTRA_VERSION_31, EXTRA_END };
 static const int extra_version_32[] = { EXTRA_VERSION_32, EXTRA_END };
-static const int extra_version_40[] = { EXTRA_VERSION_40, EXTRA_END };
 
 static const int extra_gl30_es3[] = {
     EXTRA_VERSION_30,
@@ -1717,19 +1727,19 @@ _mesa_GetInteger64v(GLenum pname, GLint64 *params)
       break;
 
    case TYPE_FLOATN_4:
-      params[3] = FLOAT_TO_INT64(((GLfloat *) p)[3]);
+      params[3] = FLOAT_TO_INT(((GLfloat *) p)[3]);
    case TYPE_FLOATN_3:
-      params[2] = FLOAT_TO_INT64(((GLfloat *) p)[2]);
+      params[2] = FLOAT_TO_INT(((GLfloat *) p)[2]);
    case TYPE_FLOATN_2:
-      params[1] = FLOAT_TO_INT64(((GLfloat *) p)[1]);
+      params[1] = FLOAT_TO_INT(((GLfloat *) p)[1]);
    case TYPE_FLOATN:
-      params[0] = FLOAT_TO_INT64(((GLfloat *) p)[0]);
+      params[0] = FLOAT_TO_INT(((GLfloat *) p)[0]);
       break;
 
    case TYPE_DOUBLEN_2:
-      params[1] = FLOAT_TO_INT64(((GLdouble *) p)[1]);
+      params[1] = FLOAT_TO_INT(((GLdouble *) p)[1]);
    case TYPE_DOUBLEN:
-      params[0] = FLOAT_TO_INT64(((GLdouble *) p)[0]);
+      params[0] = FLOAT_TO_INT(((GLdouble *) p)[0]);
       break;
 
    case TYPE_INT_4:
@@ -1900,8 +1910,8 @@ tex_binding_to_index(const struct gl_context *ctx, GLenum binding)
          || _mesa_is_gles3(ctx)
          ? TEXTURE_2D_ARRAY_INDEX : -1;
    case GL_TEXTURE_BINDING_BUFFER:
-      return ctx->API == API_OPENGL_CORE &&
-             ctx->Extensions.ARB_texture_buffer_object ?
+      return (_mesa_has_ARB_texture_buffer_object(ctx) ||
+              _mesa_has_OES_texture_buffer(ctx)) ?
              TEXTURE_BUFFER_INDEX : -1;
    case GL_TEXTURE_BINDING_CUBE_MAP_ARRAY:
       return _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_texture_cube_map_array

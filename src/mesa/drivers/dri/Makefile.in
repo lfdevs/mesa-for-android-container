@@ -161,7 +161,7 @@ LTLIBRARIES = $(dri_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 mesa_dri_drivers_la_DEPENDENCIES = ../../libmesa.la \
 	common/libmegadriver_stub.la common/libdricommon.la \
-	common/libxmlconfig.la $(MEGADRIVERS_DEPS) \
+	common/libxmlconfig.la $(SHARED_GLAPI_LIB) $(MEGADRIVERS_DEPS) \
 	$(am__DEPENDENCIES_1)
 am_mesa_dri_drivers_la_OBJECTS =
 mesa_dri_drivers_la_OBJECTS = $(am_mesa_dri_drivers_la_OBJECTS)
@@ -350,6 +350,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -448,6 +450,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -468,6 +472,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -484,6 +491,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -576,6 +584,9 @@ MEGADRIVERS = $(am__append_3) $(am__append_6) $(am__append_9) \
 	$(am__append_12) $(am__append_15) $(am__append_18)
 MEGADRIVERS_DEPS = $(am__append_2) $(am__append_5) $(am__append_8) \
 	$(am__append_11) $(am__append_14) $(am__append_17)
+
+# On Android, we need to explicitly link to libglapi.so.
+@HAVE_ANDROID_TRUE@@HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = dri.pc
 driincludedir = $(includedir)/GL/internal
@@ -595,6 +606,7 @@ mesa_dri_drivers_la_LIBADD = \
         common/libmegadriver_stub.la \
         common/libdricommon.la \
         common/libxmlconfig.la \
+        $(SHARED_GLAPI_LIB) \
         $(MEGADRIVERS_DEPS) \
         $(DRI_LIB_DEPS) \
         $()

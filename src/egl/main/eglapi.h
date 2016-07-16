@@ -41,153 +41,162 @@ extern "C" {
  */
 typedef void (*_EGLProc)(void);
 
-
-/**
- * Typedefs for all EGL API entrypoint functions.
- */
-
-/* driver funcs */
-typedef EGLBoolean (*Initialize_t)(_EGLDriver *, _EGLDisplay *dpy);
-typedef EGLBoolean (*Terminate_t)(_EGLDriver *, _EGLDisplay *dpy);
-
-/* config funcs */
-typedef EGLBoolean (*GetConfigs_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLConfig *configs, EGLint config_size, EGLint *num_config);
-typedef EGLBoolean (*ChooseConfig_t)(_EGLDriver *drv, _EGLDisplay *dpy, const EGLint *attrib_list, EGLConfig *configs, EGLint config_size, EGLint *num_config);
-typedef EGLBoolean (*GetConfigAttrib_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *config, EGLint attribute, EGLint *value);
-
-/* context funcs */
-typedef _EGLContext *(*CreateContext_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *config, _EGLContext *share_list, const EGLint *attrib_list);
-typedef EGLBoolean (*DestroyContext_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx);
-/* this is the only function (other than Initialize) that may be called with an uninitialized display */
-typedef EGLBoolean (*MakeCurrent_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *draw, _EGLSurface *read, _EGLContext *ctx);
-typedef EGLBoolean (*QueryContext_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx, EGLint attribute, EGLint *value);
-
-/* surface funcs */
-typedef _EGLSurface *(*CreateWindowSurface_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *config, void *native_window, const EGLint *attrib_list);
-typedef _EGLSurface *(*CreatePixmapSurface_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *config, void *native_pixmap, const EGLint *attrib_list);
-typedef _EGLSurface *(*CreatePbufferSurface_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *config, const EGLint *attrib_list);
-typedef EGLBoolean (*DestroySurface_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface);
-typedef EGLBoolean (*QuerySurface_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface, EGLint attribute, EGLint *value);
-typedef EGLBoolean (*SurfaceAttrib_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface, EGLint attribute, EGLint value);
-typedef EGLBoolean (*BindTexImage_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface, EGLint buffer);
-typedef EGLBoolean (*ReleaseTexImage_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface, EGLint buffer);
-typedef EGLBoolean (*SwapInterval_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint interval);
-typedef EGLBoolean (*SwapBuffers_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *draw);
-typedef EGLBoolean (*CopyBuffers_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface, void *native_pixmap_target);
-
-/* misc funcs */
-typedef EGLBoolean (*WaitClient_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx);
-typedef EGLBoolean (*WaitNative_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLint engine);
-
-/* this function may be called from multiple threads at the same time */
-typedef _EGLProc (*GetProcAddress_t)(_EGLDriver *drv, const char *procname);
-
-
-
-typedef _EGLSurface *(*CreatePbufferFromClientBuffer_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLenum buftype, EGLClientBuffer buffer, _EGLConfig *config, const EGLint *attrib_list);
-
-
-typedef _EGLImage *(*CreateImageKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx, EGLenum target, EGLClientBuffer buffer, const EGLint *attr_list);
-typedef EGLBoolean (*DestroyImageKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLImage *image);
-
-
-typedef _EGLSync *(*CreateSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLenum type, const EGLint *attrib_list, const EGLAttrib *attrib_list64);
-typedef EGLBoolean (*DestroySyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync);
-typedef EGLint (*ClientWaitSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync, EGLint flags, EGLTime timeout);
-typedef EGLint (*WaitSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync);
-typedef EGLBoolean (*SignalSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync, EGLenum mode);
-typedef EGLBoolean (*GetSyncAttrib_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync, EGLint attribute, EGLAttrib *value);
-
-
-typedef EGLBoolean (*SwapBuffersRegionNOK_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint numRects, const EGLint *rects);
-
-typedef _EGLImage *(*CreateDRMImageMESA_t)(_EGLDriver *drv, _EGLDisplay *disp, const EGLint *attr_list);
-typedef EGLBoolean (*ExportDRMImageMESA_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img, EGLint *name, EGLint *handle, EGLint *stride);
-
 struct wl_display;
-typedef EGLBoolean (*BindWaylandDisplayWL_t)(_EGLDriver *drv, _EGLDisplay *disp, struct wl_display *display);
-typedef EGLBoolean (*UnbindWaylandDisplayWL_t)(_EGLDriver *drv, _EGLDisplay *disp, struct wl_display *display);
-typedef EGLBoolean (*QueryWaylandBufferWL_t)(_EGLDriver *drv, _EGLDisplay *displ, struct wl_resource *buffer, EGLint attribute, EGLint *value);
-
-typedef struct wl_buffer * (*CreateWaylandBufferFromImageWL_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img);
-
-typedef EGLBoolean (*PostSubBufferNV_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface, EGLint x, EGLint y, EGLint width, EGLint height);
-
-typedef EGLint (*QueryBufferAge_t)(_EGLDriver *drv,
-                                   _EGLDisplay *dpy, _EGLSurface *surface);
-
-typedef EGLBoolean (*SwapBuffersWithDamageEXT_t) (_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface, const EGLint *rects, EGLint n_rects);
-
-typedef EGLBoolean (*GetSyncValuesCHROMIUM_t) (_EGLDisplay *dpy, _EGLSurface *surface, EGLuint64KHR *ust, EGLuint64KHR *msc, EGLuint64KHR *sbc);
-
-typedef EGLBoolean (*ExportDMABUFImageQueryMESA_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img, EGLint *fourcc, EGLint *nplanes, EGLuint64KHR *modifiers);
-typedef EGLBoolean (*ExportDMABUFImageMESA_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img, EGLint *fds, EGLint *strides, EGLint *offsets);
+struct mesa_glinterop_device_info;
+struct mesa_glinterop_export_in;
+struct mesa_glinterop_export_out;
 
 /**
  * The API dispatcher jumps through these functions
  */
 struct _egl_api
 {
-   Initialize_t Initialize;
-   Terminate_t Terminate;
+   /* driver funcs */
+   EGLBoolean (*Initialize)(_EGLDriver *, _EGLDisplay *dpy);
+   EGLBoolean (*Terminate)(_EGLDriver *, _EGLDisplay *dpy);
 
-   GetConfigs_t GetConfigs;
-   ChooseConfig_t ChooseConfig;
-   GetConfigAttrib_t GetConfigAttrib;
+   /* config funcs */
+   EGLBoolean (*GetConfigs)(_EGLDriver *drv, _EGLDisplay *dpy,
+                            EGLConfig *configs, EGLint config_size,
+                            EGLint *num_config);
+   EGLBoolean (*ChooseConfig)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              const EGLint *attrib_list, EGLConfig *configs,
+                              EGLint config_size, EGLint *num_config);
+   EGLBoolean (*GetConfigAttrib)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                 _EGLConfig *config, EGLint attribute,
+                                 EGLint *value);
 
-   CreateContext_t CreateContext;
-   DestroyContext_t DestroyContext;
-   MakeCurrent_t MakeCurrent;
-   QueryContext_t QueryContext;
+   /* context funcs */
+   _EGLContext *(*CreateContext)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                 _EGLConfig *config, _EGLContext *share_list,
+                                 const EGLint *attrib_list);
+   EGLBoolean (*DestroyContext)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                _EGLContext *ctx);
+   /* this is the only function (other than Initialize) that may be called
+    * with an uninitialized display
+    */
+   EGLBoolean (*MakeCurrent)(_EGLDriver *drv, _EGLDisplay *dpy,
+                             _EGLSurface *draw, _EGLSurface *read,
+                             _EGLContext *ctx);
+   EGLBoolean (*QueryContext)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLContext *ctx, EGLint attribute,
+                              EGLint *value);
 
-   CreateWindowSurface_t CreateWindowSurface;
-   CreatePixmapSurface_t CreatePixmapSurface;
-   CreatePbufferSurface_t CreatePbufferSurface;
-   DestroySurface_t DestroySurface;
-   QuerySurface_t QuerySurface;
-   SurfaceAttrib_t SurfaceAttrib;
-   BindTexImage_t BindTexImage;
-   ReleaseTexImage_t ReleaseTexImage;
-   SwapInterval_t SwapInterval;
-   SwapBuffers_t SwapBuffers;
-   CopyBuffers_t CopyBuffers;
+   /* surface funcs */
+   _EGLSurface *(*CreateWindowSurface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                       _EGLConfig *config, void *native_window,
+                                       const EGLint *attrib_list);
+   _EGLSurface *(*CreatePixmapSurface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                       _EGLConfig *config, void *native_pixmap,
+                                       const EGLint *attrib_list);
+   _EGLSurface *(*CreatePbufferSurface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                        _EGLConfig *config,
+                                        const EGLint *attrib_list);
+   EGLBoolean (*DestroySurface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                _EGLSurface *surface);
+   EGLBoolean (*QuerySurface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLSurface *surface, EGLint attribute,
+                              EGLint *value);
+   EGLBoolean (*SurfaceAttrib)(_EGLDriver *drv, _EGLDisplay *dpy,
+                               _EGLSurface *surface, EGLint attribute,
+                               EGLint value);
+   EGLBoolean (*BindTexImage)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLSurface *surface, EGLint buffer);
+   EGLBoolean (*ReleaseTexImage)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                 _EGLSurface *surface, EGLint buffer);
+   EGLBoolean (*SwapInterval)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLSurface *surf, EGLint interval);
+   EGLBoolean (*SwapBuffers)(_EGLDriver *drv, _EGLDisplay *dpy,
+                             _EGLSurface *draw);
+   EGLBoolean (*CopyBuffers)(_EGLDriver *drv, _EGLDisplay *dpy,
+                             _EGLSurface *surface, void *native_pixmap_target);
 
-   WaitClient_t WaitClient;
-   WaitNative_t WaitNative;
-   GetProcAddress_t GetProcAddress;
+   /* misc functions */
+   EGLBoolean (*WaitClient)(_EGLDriver *drv, _EGLDisplay *dpy,
+                            _EGLContext *ctx);
+   EGLBoolean (*WaitNative)(_EGLDriver *drv, _EGLDisplay *dpy,
+                            EGLint engine);
 
-   CreatePbufferFromClientBuffer_t CreatePbufferFromClientBuffer;
+   /* this function may be called from multiple threads at the same time */
+   _EGLProc (*GetProcAddress)(_EGLDriver *drv, const char *procname);
 
-   CreateImageKHR_t CreateImageKHR;
-   DestroyImageKHR_t DestroyImageKHR;
+   _EGLSurface *(*CreatePbufferFromClientBuffer)(_EGLDriver *drv,
+                                                 _EGLDisplay *dpy,
+                                                 EGLenum buftype,
+                                                 EGLClientBuffer buffer,
+                                                 _EGLConfig *config,
+                                                 const EGLint *attrib_list);
 
-   CreateSyncKHR_t CreateSyncKHR;
-   DestroySyncKHR_t DestroySyncKHR;
-   ClientWaitSyncKHR_t ClientWaitSyncKHR;
-   WaitSyncKHR_t WaitSyncKHR;
-   SignalSyncKHR_t SignalSyncKHR;
-   GetSyncAttrib_t GetSyncAttrib;
+   _EGLImage *(*CreateImageKHR)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                _EGLContext *ctx, EGLenum target,
+                                EGLClientBuffer buffer,
+                                const EGLint *attr_list);
+   EGLBoolean (*DestroyImageKHR)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                 _EGLImage *image);
 
-   SwapBuffersRegionNOK_t SwapBuffersRegionNOK;
+   _EGLSync *(*CreateSyncKHR)(_EGLDriver *drv, _EGLDisplay *dpy, EGLenum type,
+                              const EGLint *attrib_list,
+                              const EGLAttrib *attrib_list64);
+   EGLBoolean (*DestroySyncKHR)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                _EGLSync *sync);
+   EGLint (*ClientWaitSyncKHR)(_EGLDriver *drv, _EGLDisplay *dpy,
+                               _EGLSync *sync, EGLint flags, EGLTime timeout);
+   EGLint (*WaitSyncKHR)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync);
+   EGLBoolean (*SignalSyncKHR)(_EGLDriver *drv, _EGLDisplay *dpy,
+                               _EGLSync *sync, EGLenum mode);
+   EGLBoolean (*GetSyncAttrib)(_EGLDriver *drv, _EGLDisplay *dpy,
+                               _EGLSync *sync, EGLint attribute,
+                               EGLAttrib *value);
 
-   CreateDRMImageMESA_t CreateDRMImageMESA;
-   ExportDRMImageMESA_t ExportDRMImageMESA;
+   EGLBoolean (*SwapBuffersRegionNOK)(_EGLDriver *drv, _EGLDisplay *disp,
+                                      _EGLSurface *surf, EGLint numRects,
+                                      const EGLint *rects);
 
-   BindWaylandDisplayWL_t BindWaylandDisplayWL;
-   UnbindWaylandDisplayWL_t UnbindWaylandDisplayWL;
-   QueryWaylandBufferWL_t QueryWaylandBufferWL;
+   _EGLImage *(*CreateDRMImageMESA)(_EGLDriver *drv, _EGLDisplay *disp,
+                                    const EGLint *attr_list);
+   EGLBoolean (*ExportDRMImageMESA)(_EGLDriver *drv, _EGLDisplay *disp,
+                                    _EGLImage *img, EGLint *name,
+                                    EGLint *handle, EGLint *stride);
 
-   CreateWaylandBufferFromImageWL_t CreateWaylandBufferFromImageWL;
+   EGLBoolean (*BindWaylandDisplayWL)(_EGLDriver *drv, _EGLDisplay *disp,
+                                      struct wl_display *display);
+   EGLBoolean (*UnbindWaylandDisplayWL)(_EGLDriver *drv, _EGLDisplay *disp,
+                                        struct wl_display *display);
+   EGLBoolean (*QueryWaylandBufferWL)(_EGLDriver *drv, _EGLDisplay *displ,
+                                      struct wl_resource *buffer,
+                                      EGLint attribute, EGLint *value);
 
-   SwapBuffersWithDamageEXT_t SwapBuffersWithDamageEXT;
+   struct wl_buffer *(*CreateWaylandBufferFromImageWL)(_EGLDriver *drv,
+                                                       _EGLDisplay *disp,
+                                                       _EGLImage *img);
 
-   PostSubBufferNV_t PostSubBufferNV;
+   EGLBoolean (*SwapBuffersWithDamageEXT)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                          _EGLSurface *surface,
+                                          const EGLint *rects, EGLint n_rects);
 
-   QueryBufferAge_t QueryBufferAge;
-   GetSyncValuesCHROMIUM_t GetSyncValuesCHROMIUM;
+   EGLBoolean (*PostSubBufferNV)(_EGLDriver *drv, _EGLDisplay *disp,
+                                 _EGLSurface *surface, EGLint x, EGLint y,
+                                 EGLint width, EGLint height);
 
-   ExportDMABUFImageQueryMESA_t ExportDMABUFImageQueryMESA;
-   ExportDMABUFImageMESA_t ExportDMABUFImageMESA;
+   EGLint (*QueryBufferAge)(_EGLDriver *drv,
+                            _EGLDisplay *dpy, _EGLSurface *surface);
+   EGLBoolean (*GetSyncValuesCHROMIUM)(_EGLDisplay *dpy, _EGLSurface *surface,
+                                       EGLuint64KHR *ust, EGLuint64KHR *msc,
+                                       EGLuint64KHR *sbc);
+
+   EGLBoolean (*ExportDMABUFImageQueryMESA)(_EGLDriver *drv, _EGLDisplay *disp,
+                                            _EGLImage *img, EGLint *fourcc,
+                                            EGLint *nplanes,
+                                            EGLuint64KHR *modifiers);
+   EGLBoolean (*ExportDMABUFImageMESA)(_EGLDriver *drv, _EGLDisplay *disp,
+                                       _EGLImage *img, EGLint *fds,
+                                       EGLint *strides, EGLint *offsets);
+
+   int (*GLInteropQueryDeviceInfo)(_EGLDisplay *dpy, _EGLContext *ctx,
+                                   struct mesa_glinterop_device_info *out);
+   int (*GLInteropExportObject)(_EGLDisplay *dpy, _EGLContext *ctx,
+                                struct mesa_glinterop_export_in *in,
+                                struct mesa_glinterop_export_out *out);
 };
 
 

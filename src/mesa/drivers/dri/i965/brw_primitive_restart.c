@@ -212,7 +212,8 @@ haswell_upload_cut_index(struct brw_context *brw)
 const struct brw_tracked_state haswell_cut_index = {
    .dirty = {
       .mesa  = _NEW_TRANSFORM,
-      .brw   = BRW_NEW_INDEX_BUFFER,
+      .brw   = BRW_NEW_BLORP |
+               BRW_NEW_INDEX_BUFFER,
    },
    .emit = haswell_upload_cut_index,
 };

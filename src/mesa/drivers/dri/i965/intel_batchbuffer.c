@@ -73,6 +73,7 @@ intel_batchbuffer_reset(struct brw_context *brw)
    brw->batch.reserved_space = BATCH_RESERVED;
    brw->batch.state_batch_offset = brw->batch.bo->size;
    brw->batch.needs_sol_reset = false;
+   brw->batch.state_base_address_emitted = false;
 
    /* We don't know what ring the new batch will be sent to until we see the
     * first BEGIN_BATCH or BEGIN_BATCH_BLT.  Mark it as unknown.
@@ -104,6 +105,32 @@ intel_batchbuffer_free(struct brw_context *brw)
    free(brw->batch.cpu_map);
    drm_intel_bo_unreference(brw->batch.last_bo);
    drm_intel_bo_unreference(brw->batch.bo);
+}
+
+void
+intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz,
+                                enum brw_gpu_ring ring)
+{
+   /* If we're switching rings, implicitly flush the batch. */
+   if (unlikely(ring != brw->batch.ring) && brw->batch.ring != UNKNOWN_RING &&
+       brw->gen >= 6) {
+      intel_batchbuffer_flush(brw);
+   }
+
+#ifdef DEBUG
+   assert(sz < BATCH_SZ - BATCH_RESERVED);
+#endif
+   if (intel_batchbuffer_space(brw) < sz)
+      intel_batchbuffer_flush(brw);
+
+   enum brw_gpu_ring prev_ring = brw->batch.ring;
+   /* The intel_batchbuffer_flush() calls above might have changed
+    * brw->batch.ring to UNKNOWN_RING, so we need to set it here at the end.
+    */
+   brw->batch.ring = ring;
+
+   if (unlikely(prev_ring == UNKNOWN_RING && ring == RENDER_RING))
+      intel_batchbuffer_emit_render_ring_prelude(brw);
 }
 
 static void
@@ -341,6 +368,9 @@ do_flush_locked(struct brw_context *brw)
    if (unlikely(INTEL_DEBUG & DEBUG_BATCH))
       do_batch_dump(brw);
 
+   if (brw->ctx.Const.ResetStrategy == GL_LOSE_CONTEXT_ON_RESET_ARB)
+      brw_check_for_reset(brw);
+
    if (ret != 0) {
       fprintf(stderr, "intel_do_flush_locked failed: %s\n", strerror(-ret));
       exit(1);
@@ -510,4 +540,179 @@ brw_load_register_mem64(struct brw_context *brw,
                         uint32_t offset)
 {
    load_sized_register_mem(brw, reg, bo, read_domains, write_domain, offset, 2);
+}
+
+/*
+ * Write an arbitrary 32-bit register to a buffer via MI_STORE_REGISTER_MEM.
+ */
+void
+brw_store_register_mem32(struct brw_context *brw,
+                         drm_intel_bo *bo, uint32_t reg, uint32_t offset)
+{
+   assert(brw->gen >= 6);
+
+   if (brw->gen >= 8) {
+      BEGIN_BATCH(4);
+      OUT_BATCH(MI_STORE_REGISTER_MEM | (4 - 2));
+      OUT_BATCH(reg);
+      OUT_RELOC64(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                  offset);
+      ADVANCE_BATCH();
+   } else {
+      BEGIN_BATCH(3);
+      OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
+      OUT_BATCH(reg);
+      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                offset);
+      ADVANCE_BATCH();
+   }
+}
+
+/*
+ * Write an arbitrary 64-bit register to a buffer via MI_STORE_REGISTER_MEM.
+ */
+void
+brw_store_register_mem64(struct brw_context *brw,
+                         drm_intel_bo *bo, uint32_t reg, uint32_t offset)
+{
+   assert(brw->gen >= 6);
+
+   /* MI_STORE_REGISTER_MEM only stores a single 32-bit value, so to
+    * read a full 64-bit register, we need to do two of them.
+    */
+   if (brw->gen >= 8) {
+      BEGIN_BATCH(8);
+      OUT_BATCH(MI_STORE_REGISTER_MEM | (4 - 2));
+      OUT_BATCH(reg);
+      OUT_RELOC64(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                  offset);
+      OUT_BATCH(MI_STORE_REGISTER_MEM | (4 - 2));
+      OUT_BATCH(reg + sizeof(uint32_t));
+      OUT_RELOC64(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                  offset + sizeof(uint32_t));
+      ADVANCE_BATCH();
+   } else {
+      BEGIN_BATCH(6);
+      OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
+      OUT_BATCH(reg);
+      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                offset);
+      OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
+      OUT_BATCH(reg + sizeof(uint32_t));
+      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                offset + sizeof(uint32_t));
+      ADVANCE_BATCH();
+   }
+}
+
+/*
+ * Write a 32-bit register using immediate data.
+ */
+void
+brw_load_register_imm32(struct brw_context *brw, uint32_t reg, uint32_t imm)
+{
+   assert(brw->gen >= 6);
+
+   BEGIN_BATCH(3);
+   OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+   OUT_BATCH(reg);
+   OUT_BATCH(imm);
+   ADVANCE_BATCH();
+}
+
+/*
+ * Write a 64-bit register using immediate data.
+ */
+void
+brw_load_register_imm64(struct brw_context *brw, uint32_t reg, uint64_t imm)
+{
+   assert(brw->gen >= 6);
+
+   BEGIN_BATCH(5);
+   OUT_BATCH(MI_LOAD_REGISTER_IMM | (5 - 2));
+   OUT_BATCH(reg);
+   OUT_BATCH(imm & 0xffffffff);
+   OUT_BATCH(reg + 4);
+   OUT_BATCH(imm >> 32);
+   ADVANCE_BATCH();
+}
+
+/*
+ * Copies a 32-bit register.
+ */
+void
+brw_load_register_reg(struct brw_context *brw, uint32_t src, uint32_t dest)
+{
+   assert(brw->gen >= 8 || brw->is_haswell);
+
+   BEGIN_BATCH(3);
+   OUT_BATCH(MI_LOAD_REGISTER_REG | (3 - 2));
+   OUT_BATCH(src);
+   OUT_BATCH(dest);
+   ADVANCE_BATCH();
+}
+
+/*
+ * Copies a 64-bit register.
+ */
+void
+brw_load_register_reg64(struct brw_context *brw, uint32_t src, uint32_t dest)
+{
+   assert(brw->gen >= 8 || brw->is_haswell);
+
+   BEGIN_BATCH(6);
+   OUT_BATCH(MI_LOAD_REGISTER_REG | (3 - 2));
+   OUT_BATCH(src);
+   OUT_BATCH(dest);
+   OUT_BATCH(MI_LOAD_REGISTER_REG | (3 - 2));
+   OUT_BATCH(src + sizeof(uint32_t));
+   OUT_BATCH(dest + sizeof(uint32_t));
+   ADVANCE_BATCH();
+}
+
+/*
+ * Write 32-bits of immediate data to a GPU memory buffer.
+ */
+void
+brw_store_data_imm32(struct brw_context *brw, drm_intel_bo *bo,
+                     uint32_t offset, uint32_t imm)
+{
+   assert(brw->gen >= 6);
+
+   BEGIN_BATCH(4);
+   OUT_BATCH(MI_STORE_DATA_IMM | (4 - 2));
+   if (brw->gen >= 8)
+      OUT_RELOC64(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                  offset);
+   else {
+      OUT_BATCH(0); /* MBZ */
+      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                offset);
+   }
+   OUT_BATCH(imm);
+   ADVANCE_BATCH();
+}
+
+/*
+ * Write 64-bits of immediate data to a GPU memory buffer.
+ */
+void
+brw_store_data_imm64(struct brw_context *brw, drm_intel_bo *bo,
+                     uint32_t offset, uint64_t imm)
+{
+   assert(brw->gen >= 6);
+
+   BEGIN_BATCH(5);
+   OUT_BATCH(MI_STORE_DATA_IMM | (5 - 2));
+   if (brw->gen >= 8)
+      OUT_RELOC64(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                  offset);
+   else {
+      OUT_BATCH(0); /* MBZ */
+      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                offset);
+   }
+   OUT_BATCH(imm & 0xffffffffu);
+   OUT_BATCH(imm >> 32);
+   ADVANCE_BATCH();
 }

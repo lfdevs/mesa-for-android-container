@@ -287,7 +287,7 @@ ilo_render_emit_query(struct ilo_render *render,
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
       regs = pipeline_statistics_regs;
-      reg_count = Elements(pipeline_statistics_regs);
+      reg_count = ARRAY_SIZE(pipeline_statistics_regs);
       break;
    default:
       break;

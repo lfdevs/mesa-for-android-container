@@ -54,7 +54,7 @@ lp_build_struct_get_ptr(struct gallivm_state *gallivm,
    assert(LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(ptr))) == LLVMStructTypeKind);
    indices[0] = lp_build_const_int32(gallivm, 0);
    indices[1] = lp_build_const_int32(gallivm, member);
-   member_ptr = LLVMBuildGEP(gallivm->builder, ptr, indices, Elements(indices), "");
+   member_ptr = LLVMBuildGEP(gallivm->builder, ptr, indices, ARRAY_SIZE(indices), "");
    lp_build_name(member_ptr, "%s.%s_ptr", LLVMGetValueName(ptr), name);
    return member_ptr;
 }
@@ -88,7 +88,7 @@ lp_build_array_get_ptr(struct gallivm_state *gallivm,
    assert(LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(ptr))) == LLVMArrayTypeKind);
    indices[0] = lp_build_const_int32(gallivm, 0);
    indices[1] = index;
-   element_ptr = LLVMBuildGEP(gallivm->builder, ptr, indices, Elements(indices), "");
+   element_ptr = LLVMBuildGEP(gallivm->builder, ptr, indices, ARRAY_SIZE(indices), "");
 #ifdef DEBUG
    lp_build_name(element_ptr, "&%s[%s]",
                  LLVMGetValueName(ptr), LLVMGetValueName(index));
@@ -157,7 +157,7 @@ lp_build_pointer_get_unaligned(LLVMBuilderRef builder,
    assert(LLVMGetTypeKind(LLVMTypeOf(ptr)) == LLVMPointerTypeKind);
    element_ptr = LLVMBuildGEP(builder, ptr, &index, 1, "");
    res = LLVMBuildLoad(builder, element_ptr, "");
-   lp_set_load_alignment(res, alignment);
+   LLVMSetAlignment(res, alignment);
 #ifdef DEBUG
    lp_build_name(res, "%s[%s]", LLVMGetValueName(ptr), LLVMGetValueName(index));
 #endif
@@ -188,5 +188,5 @@ lp_build_pointer_set_unaligned(LLVMBuilderRef builder,
    LLVMValueRef instr;
    element_ptr = LLVMBuildGEP(builder, ptr, &index, 1, "");
    instr = LLVMBuildStore(builder, value, element_ptr);
-   lp_set_store_alignment(instr, alignment);
+   LLVMSetAlignment(instr, alignment);
 }

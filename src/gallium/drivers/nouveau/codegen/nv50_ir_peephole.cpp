@@ -1635,11 +1635,10 @@ AlgebraicOpt::tryADDToMADOrSAD(Instruction *add, operation toOp)
    if (src->getUniqueInsn() && src->getUniqueInsn()->bb != add->bb)
       return false;
 
-   if (src->getInsn()->saturate)
+   if (src->getInsn()->saturate || src->getInsn()->postFactor ||
+       src->getInsn()->dnz)
       return false;
 
-   if (src->getInsn()->postFactor)
-      return false;
    if (toOp == OP_SAD) {
       ImmediateValue imm;
       if (!src->getInsn()->src(2).getImmediate(imm))
@@ -2204,6 +2203,9 @@ MemoryOpt::combineLd(Record *rec, Instruction *ld)
    if (((size == 0x8) && (MIN2(offLd, offRc) & 0x7)) ||
        ((size == 0xc) && (MIN2(offLd, offRc) & 0xf)))
       return false;
+   // for compute indirect loads are not guaranteed to be aligned
+   if (prog->getType() == Program::TYPE_COMPUTE && rec->rel[0])
+      return false;
 
    assert(sizeRc + sizeLd <= 16 && offRc != offLd);
 
@@ -2256,7 +2258,11 @@ MemoryOpt::combineSt(Record *rec, Instruction *st)
    if (!prog->getTarget()->
        isAccessSupported(st->getSrc(0)->reg.file, typeOfSize(size)))
       return false;
+   // no unaligned stores
    if (size == 8 && MIN2(offRc, offSt) & 0x7)
+      return false;
+   // for compute indirect stores are not guaranteed to be aligned
+   if (prog->getType() == Program::TYPE_COMPUTE && rec->rel[0])
       return false;
 
    st->takeExtraSources(0, extra); // save predicate and indirect address
@@ -2466,7 +2472,7 @@ MemoryOpt::replaceStFromSt(Instruction *restrict st, Record *rec)
       // get non-replaced sources after values covered by st
       for (; offR < endR; offR += ri->getSrc(s)->reg.size, ++s)
          vals[k++] = ri->getSrc(s);
-      assert((unsigned int)k <= Elements(vals));
+      assert((unsigned int)k <= ARRAY_SIZE(vals));
       for (s = 0; s < k; ++s)
          st->setSrc(s + 1, vals[s]);
       st->setSrc(0, ri->getSrc(0));
@@ -3259,14 +3265,20 @@ DeadCodeElim::visit(BasicBlock *bb)
          ++deadCount;
          delete_Instruction(prog, i);
       } else
-      if (i->defExists(1) && (i->op == OP_VFETCH || i->op == OP_LOAD)) {
+      if (i->defExists(1) &&
+          i->subOp == 0 &&
+          (i->op == OP_VFETCH || i->op == OP_LOAD)) {
          checkSplitLoad(i);
       } else
       if (i->defExists(0) && !i->getDef(0)->refCount()) {
          if (i->op == OP_ATOM ||
              i->op == OP_SUREDP ||
-             i->op == OP_SUREDB)
+             i->op == OP_SUREDB) {
             i->setDef(0, NULL);
+         } else if (i->op == OP_LOAD && i->subOp == NV50_IR_SUBOP_LOAD_LOCKED) {
+            i->setDef(0, i->getDef(1));
+            i->setDef(1, NULL);
+         }
       }
    }
    return true;

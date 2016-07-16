@@ -1,3 +1,18 @@
+mesa (12.0.1-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * symbols: Updated.
+  * mesa-common-dev: Add mesa_glinterop.h.
+  * Enable building intel vulkan driver on linux & kfreebsd, add
+    libgcrypt20-dev and libvulkan-dev to build-depends.
+  * rules: Tidy up override_dh_clean.
+  * rules: Use package version for MESA_GIT_SHA1.
+  * rules: Fix install of va drivers.
+  * gallivm-disable-avx512-features.diff: Removed, included upstream.
+  * control, rules: Enable llvm/opencl on arm64. (LP: #1585942)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sat, 16 Jul 2016 13:03:04 +0300
+
 mesa (11.2.2-1) unstable; urgency=medium
 
   * New upstream release.

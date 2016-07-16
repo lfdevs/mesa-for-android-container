@@ -71,6 +71,7 @@ struct softpipe_context {
    struct sp_geometry_shader *gs;
    struct sp_velems_state *velems;
    struct sp_so_state *so;
+   struct sp_compute_shader *cs;
 
    /** Other rendering state */
    struct pipe_blend_color blend_color;
@@ -83,6 +84,8 @@ struct softpipe_context {
    struct pipe_scissor_state scissors[PIPE_MAX_VIEWPORTS];
    struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
+   struct pipe_image_view images[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];
+   struct pipe_shader_buffer buffers[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
    struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
    struct pipe_index_buffer index_buffer;
@@ -172,9 +175,13 @@ struct softpipe_context {
    /** TGSI exec things */
    struct {
       struct sp_tgsi_sampler *sampler[PIPE_SHADER_TYPES];
+      struct sp_tgsi_image *image[PIPE_SHADER_TYPES];
+      struct sp_tgsi_buffer *buffer[PIPE_SHADER_TYPES];
    } tgsi;
 
    struct tgsi_exec_machine *fs_machine;
+   /** whether early depth testing is enabled */
+   bool early_depth;
 
    /** The primitive drawing context */
    struct draw_context *draw;
@@ -199,10 +206,11 @@ struct softpipe_context {
     * XXX wouldn't it make more sense for the tile cache to just be part
     * of sp_sampler_view?
     */
-   struct softpipe_tex_tile_cache *tex_cache[PIPE_SHADER_GEOMETRY+1][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   struct softpipe_tex_tile_cache *tex_cache[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    unsigned dump_fs : 1;
    unsigned dump_gs : 1;
+   unsigned dump_cs : 1;
    unsigned no_rast : 1;
 };
 

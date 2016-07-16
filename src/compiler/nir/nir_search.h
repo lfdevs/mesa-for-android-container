@@ -40,6 +40,8 @@ typedef enum {
 
 typedef struct {
    nir_search_value_type type;
+
+   unsigned bit_size;
 } nir_search_value;
 
 typedef struct {
@@ -50,7 +52,7 @@ typedef struct {
 
    /** Indicates that the given variable must be a constant
     *
-    * This is only alloed in search expressions and indicates that the
+    * This is only allowed in search expressions and indicates that the
     * given variable is only allowed to match constant values.
     */
    bool is_constant;
@@ -71,15 +73,23 @@ typedef struct {
 typedef struct {
    nir_search_value value;
 
+   nir_alu_type type;
+
    union {
-      uint32_t u;
-      int32_t i;
-      float f;
+      uint64_t u;
+      int64_t i;
+      double d;
    } data;
 } nir_search_constant;
 
 typedef struct {
    nir_search_value value;
+
+   /* When set on a search expression, the expression will only match an SSA
+    * value that does *not* have the exact bit set.  If unset, the exact bit
+    * on the SSA value is ignored.
+    */
+   bool inexact;
 
    nir_op opcode;
    const nir_search_value *srcs[4];

@@ -378,6 +378,55 @@ softpipe_set_constant_buffer(struct pipe_context *pipe,
    }
 }
 
+static void *
+softpipe_create_compute_state(struct pipe_context *pipe,
+                              const struct pipe_compute_state *templ)
+{
+   struct softpipe_context *softpipe = softpipe_context(pipe);
+   const struct tgsi_token *tokens;
+   struct sp_compute_shader *state;
+   if (templ->ir_type != PIPE_SHADER_IR_TGSI)
+      return NULL;
+
+   tokens = templ->prog;
+   /* debug */
+   if (softpipe->dump_cs)
+      tgsi_dump(tokens, 0);
+
+   state = CALLOC_STRUCT(sp_compute_shader);
+
+   state->shader = *templ;
+   state->tokens = tgsi_dup_tokens(tokens);
+   tgsi_scan_shader(state->tokens, &state->info);
+
+   state->max_sampler = state->info.file_max[TGSI_FILE_SAMPLER];
+
+   return state;
+}
+
+static void
+softpipe_bind_compute_state(struct pipe_context *pipe,
+                            void *cs)
+{
+   struct softpipe_context *softpipe = softpipe_context(pipe);
+   struct sp_compute_shader *state = (struct sp_compute_shader *)cs;
+   if (softpipe->cs == state)
+      return;
+
+   softpipe->cs = state;
+}
+
+static void
+softpipe_delete_compute_state(struct pipe_context *pipe,
+                              void *cs)
+{
+   struct softpipe_context *softpipe = softpipe_context(pipe);
+   struct sp_compute_shader *state = (struct sp_compute_shader *)cs;
+
+   assert(softpipe->cs != state);
+   tgsi_free_tokens(state->tokens);
+   FREE(state);
+}
 
 void
 softpipe_init_shader_funcs(struct pipe_context *pipe)
@@ -395,4 +444,8 @@ softpipe_init_shader_funcs(struct pipe_context *pipe)
    pipe->delete_gs_state = softpipe_delete_gs_state;
 
    pipe->set_constant_buffer = softpipe_set_constant_buffer;
+
+   pipe->create_compute_state = softpipe_create_compute_state;
+   pipe->bind_compute_state = softpipe_bind_compute_state;
+   pipe->delete_compute_state = softpipe_delete_compute_state;
 }

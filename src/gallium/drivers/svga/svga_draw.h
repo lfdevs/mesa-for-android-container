@@ -59,7 +59,7 @@ svga_hwtnl_vertex_buffers(struct svga_hwtnl *hwtnl,
 
 enum pipe_error
 svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
-                       unsigned prim, unsigned start, unsigned count,
+                       enum pipe_prim_type prim, unsigned start, unsigned count,
                        unsigned start_instance, unsigned instance_count);
 
 enum pipe_error
@@ -69,7 +69,7 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
                                int index_bias,
                                unsigned min_index,
                                unsigned max_index,
-                               unsigned prim, unsigned start, unsigned count,
+                               enum pipe_prim_type prim, unsigned start, unsigned count,
                                unsigned start_instance, unsigned instance_count);
 
 boolean

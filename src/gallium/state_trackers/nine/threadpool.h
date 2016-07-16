@@ -24,13 +24,18 @@
 #ifndef _THREADPOOL_H_
 #define _THREADPOOL_H_
 
+#include <pthread.h>
+
+struct NineSwapChain9;
+
 #define MAXTHREADS 1
 
 struct threadpool {
     pthread_mutex_t m;
     pthread_cond_t new_work;
 
-    pthread_t thread;
+    HANDLE wthread;
+    pthread_t pthread;
     struct threadpool_task *workqueue;
     BOOL shutdown;
 };
@@ -45,8 +50,8 @@ struct threadpool_task {
     BOOL finished;
 };
 
-struct threadpool *_mesa_threadpool_create(void);
-void _mesa_threadpool_destroy(struct threadpool *pool);
+struct threadpool *_mesa_threadpool_create(struct NineSwapChain9 *swapchain);
+void _mesa_threadpool_destroy(struct NineSwapChain9 *swapchain, struct threadpool *pool);
 struct threadpool_task *_mesa_threadpool_queue_task(struct threadpool *pool,
                                                     threadpool_task_func func,
                                                     void *data);

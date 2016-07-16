@@ -67,14 +67,14 @@ analyse_src(struct analysis_context *ctx,
    if (!src->Indirect && !src->Absolute && !src->Negate) {
       unsigned swizzle = tgsi_util_get_src_register_swizzle(src, chan);
       if (src->File == TGSI_FILE_TEMPORARY) {
-         if (src->Index < Elements(ctx->temp)) {
+         if (src->Index < ARRAY_SIZE(ctx->temp)) {
             *chan_info = ctx->temp[src->Index][swizzle];
          }
       } else {
          chan_info->file = src->File;
          if (src->File == TGSI_FILE_IMMEDIATE) {
-            assert(src->Index < Elements(ctx->imm));
-            if (src->Index < Elements(ctx->imm)) {
+            assert(src->Index < ARRAY_SIZE(ctx->imm));
+            if (src->Index < ARRAY_SIZE(ctx->imm)) {
                chan_info->u.value = ctx->imm[src->Index][swizzle];
             }
          } else {
@@ -110,7 +110,7 @@ analyse_tex(struct analysis_context *ctx,
    struct lp_tgsi_info *info = ctx->info;
    unsigned chan;
 
-   if (info->num_texs < Elements(info->tex)) {
+   if (info->num_texs < ARRAY_SIZE(info->tex)) {
       struct lp_tgsi_texture_info *tex_info = &info->tex[info->num_texs];
       boolean indirect = FALSE;
       unsigned readmask = 0;
@@ -206,7 +206,7 @@ analyse_sample(struct analysis_context *ctx,
    struct lp_tgsi_info *info = ctx->info;
    unsigned chan;
 
-   if (info->num_texs < Elements(info->tex)) {
+   if (info->num_texs < ARRAY_SIZE(info->tex)) {
       struct lp_tgsi_texture_info *tex_info = &info->tex[info->num_texs];
       unsigned target = ctx->sample_target[inst->Src[1].Register.Index];
       boolean indirect = FALSE;
@@ -301,10 +301,10 @@ analyse_instruction(struct analysis_context *ctx,
 
       if (dst->File == TGSI_FILE_TEMPORARY) {
          regs = ctx->temp;
-         max_regs = Elements(ctx->temp);
+         max_regs = ARRAY_SIZE(ctx->temp);
       } else if (dst->File == TGSI_FILE_OUTPUT) {
          regs = info->output;
-         max_regs = Elements(info->output);
+         max_regs = ARRAY_SIZE(info->output);
       } else if (dst->File == TGSI_FILE_ADDRESS ||
                  dst->File == TGSI_FILE_PREDICATE) {
          continue;
@@ -580,7 +580,7 @@ lp_build_tgsi_info(const struct tgsi_token *tokens,
             const unsigned size =
                   parse.FullToken.FullImmediate.Immediate.NrTokens - 1;
             assert(size <= 4);
-            if (ctx->num_imms < Elements(ctx->imm)) {
+            if (ctx->num_imms < ARRAY_SIZE(ctx->imm)) {
                for (chan = 0; chan < size; ++chan) {
                   float value = parse.FullToken.FullImmediate.u[chan].Float;
                   ctx->imm[ctx->num_imms][chan] = value;

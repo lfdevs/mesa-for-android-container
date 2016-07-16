@@ -38,6 +38,6 @@
 #define OUT_COUNT     2
 
 
-#define PRIM_COUNT   (PIPE_PRIM_POLYGON + 1)
+#define PRIM_COUNT   (PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY + 1)
 
 #endif

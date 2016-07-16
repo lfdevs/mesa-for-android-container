@@ -135,7 +135,8 @@ const struct brw_tracked_state gen8_sf_clip_viewport = {
    .dirty = {
       .mesa = _NEW_BUFFERS |
               _NEW_VIEWPORT,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP,
    },
    .emit = gen8_upload_sf_clip_viewport,
 };

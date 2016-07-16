@@ -160,6 +160,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
 
       /* Emit hiz buffer. */
       if (hiz) {
+         assert(depth_mt);
          struct intel_mipmap_tree *hiz_mt = depth_mt->hiz_buf->mt;
          uint32_t offset = 0;
 

@@ -39,6 +39,22 @@
 
 #define DBG_CHANNEL DBG_DEVICE
 
+/* Check if some states need to be set dirty */
+
+static inline DWORD
+check_multisample(struct NineDevice9 *device)
+{
+    DWORD *rs = device->state.rs;
+    DWORD new_value = (rs[D3DRS_ZENABLE] || rs[D3DRS_STENCILENABLE]) &&
+                      device->state.rt[0]->desc.MultiSampleType >= 1 &&
+                      rs[D3DRS_MULTISAMPLEANTIALIAS];
+    if (rs[NINED3DRS_MULTISAMPLE] != new_value) {
+        rs[NINED3DRS_MULTISAMPLE] = new_value;
+        return NINE_STATE_RASTERIZER;
+    }
+    return 0;
+}
+
 /* State preparation only */
 
 static inline void
@@ -894,7 +910,8 @@ commit_ps(struct NineDevice9 *device)
 #define NINE_STATE_SHADER_CHANGE_VS \
    (NINE_STATE_VS |         \
     NINE_STATE_TEXTURE |    \
-    NINE_STATE_FOG_SHADER)
+    NINE_STATE_FOG_SHADER | \
+    NINE_STATE_POINTSIZE_SHADER)
 
 #define NINE_STATE_SHADER_CHANGE_PS \
    (NINE_STATE_PS |         \
@@ -907,7 +924,8 @@ commit_ps(struct NineDevice9 *device)
     NINE_STATE_TEXTURE |    \
     NINE_STATE_SAMPLER |    \
     NINE_STATE_VS_CONST |   \
-    NINE_STATE_PS_CONST)
+    NINE_STATE_PS_CONST |   \
+    NINE_STATE_MULTISAMPLE)
 
 #define NINE_STATE_COMMON \
    (NINE_STATE_FB |       \
@@ -1003,6 +1021,8 @@ nine_update_state(struct NineDevice9 *device)
     }
 
     if (likely(group & (NINE_STATE_FREQUENT | NINE_STATE_VS | NINE_STATE_PS))) {
+        if (group & NINE_STATE_MULTISAMPLE)
+            group |= check_multisample(device);
         if (group & NINE_STATE_RASTERIZER)
             prepare_rasterizer(device);
         if (group & (NINE_STATE_TEXTURE | NINE_STATE_SAMPLER))
@@ -1187,7 +1207,8 @@ static const DWORD nine_render_state_defaults[NINED3DRS_LAST + 1] =
     [D3DRS_BLENDOPALPHA] = D3DBLENDOP_ADD,
     [NINED3DRS_VSPOINTSIZE] = FALSE,
     [NINED3DRS_RTMASK] = 0xf,
-    [NINED3DRS_ALPHACOVERAGE] = FALSE
+    [NINED3DRS_ALPHACOVERAGE] = FALSE,
+    [NINED3DRS_MULTISAMPLE] = FALSE
 };
 static const DWORD nine_tex_stage_state_defaults[NINED3DTSS_LAST + 1] =
 {
@@ -1250,7 +1271,7 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
      */
     memcpy(state->rs, nine_render_state_defaults, sizeof(state->rs));
 
-    for (s = 0; s < Elements(state->ff.tex_stage); ++s) {
+    for (s = 0; s < ARRAY_SIZE(state->ff.tex_stage); ++s) {
         memcpy(&state->ff.tex_stage[s], nine_tex_stage_state_defaults,
                sizeof(state->ff.tex_stage[s]));
         state->ff.tex_stage[s][D3DTSS_TEXCOORDINDEX] = s;
@@ -1259,7 +1280,7 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
     state->ff.tex_stage[0][D3DTSS_ALPHAOP] = D3DTOP_SELECTARG1;
     memset(&state->bumpmap_vars, 0, sizeof(state->bumpmap_vars));
 
-    for (s = 0; s < Elements(state->samp); ++s) {
+    for (s = 0; s < ARRAY_SIZE(state->samp); ++s) {
         memcpy(&state->samp[s], nine_samp_state_defaults,
                sizeof(state->samp[s]));
     }
@@ -1290,7 +1311,7 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
         state->viewport.MaxZ = 1.0f;
     }
 
-    for (s = 0; s < Elements(state->changed.sampler); ++s)
+    for (s = 0; s < ARRAY_SIZE(state->changed.sampler); ++s)
         state->changed.sampler[s] = ~0;
 
     if (!is_reset) {
@@ -1321,7 +1342,7 @@ nine_state_clear(struct nine_state *state, const boolean device)
 {
     unsigned i;
 
-    for (i = 0; i < Elements(state->rt); ++i)
+    for (i = 0; i < ARRAY_SIZE(state->rt); ++i)
        nine_bind(&state->rt[i], NULL);
     nine_bind(&state->ds, NULL);
     nine_bind(&state->vs, NULL);
@@ -1471,7 +1492,7 @@ const uint32_t nine_render_states_vertex[(NINED3DRS_LAST + 31) / 32] =
 /* TODO: put in the right values */
 const uint32_t nine_render_state_group[NINED3DRS_LAST + 1] =
 {
-    [D3DRS_ZENABLE] = NINE_STATE_DSA,
+    [D3DRS_ZENABLE] = NINE_STATE_DSA | NINE_STATE_MULTISAMPLE,
     [D3DRS_FILLMODE] = NINE_STATE_RASTERIZER,
     [D3DRS_SHADEMODE] = NINE_STATE_RASTERIZER,
     [D3DRS_ZWRITEENABLE] = NINE_STATE_DSA,
@@ -1493,7 +1514,7 @@ const uint32_t nine_render_state_group[NINED3DRS_LAST + 1] =
     [D3DRS_FOGEND] = NINE_STATE_FF_OTHER | NINE_STATE_PS_CONST,
     [D3DRS_FOGDENSITY] = NINE_STATE_FF_OTHER | NINE_STATE_PS_CONST,
     [D3DRS_RANGEFOGENABLE] = NINE_STATE_FF_OTHER,
-    [D3DRS_STENCILENABLE] = NINE_STATE_DSA,
+    [D3DRS_STENCILENABLE] = NINE_STATE_DSA | NINE_STATE_MULTISAMPLE,
     [D3DRS_STENCILFAIL] = NINE_STATE_DSA,
     [D3DRS_STENCILZFAIL] = NINE_STATE_DSA,
     [D3DRS_STENCILPASS] = NINE_STATE_DSA,
@@ -1524,17 +1545,17 @@ const uint32_t nine_render_state_group[NINED3DRS_LAST + 1] =
     [D3DRS_VERTEXBLEND] = NINE_STATE_FF_OTHER,
     [D3DRS_CLIPPLANEENABLE] = NINE_STATE_RASTERIZER,
     [D3DRS_POINTSIZE] = NINE_STATE_RASTERIZER,
-    [D3DRS_POINTSIZE_MIN] = NINE_STATE_RASTERIZER,
+    [D3DRS_POINTSIZE_MIN] = NINE_STATE_RASTERIZER | NINE_STATE_POINTSIZE_SHADER,
     [D3DRS_POINTSPRITEENABLE] = NINE_STATE_RASTERIZER,
     [D3DRS_POINTSCALEENABLE] = NINE_STATE_FF_OTHER,
     [D3DRS_POINTSCALE_A] = NINE_STATE_FF_OTHER,
     [D3DRS_POINTSCALE_B] = NINE_STATE_FF_OTHER,
     [D3DRS_POINTSCALE_C] = NINE_STATE_FF_OTHER,
-    [D3DRS_MULTISAMPLEANTIALIAS] = NINE_STATE_RASTERIZER,
+    [D3DRS_MULTISAMPLEANTIALIAS] = NINE_STATE_MULTISAMPLE,
     [D3DRS_MULTISAMPLEMASK] = NINE_STATE_SAMPLE_MASK,
     [D3DRS_PATCHEDGESTYLE] = NINE_STATE_UNHANDLED,
     [D3DRS_DEBUGMONITORTOKEN] = NINE_STATE_UNHANDLED,
-    [D3DRS_POINTSIZE_MAX] = NINE_STATE_RASTERIZER,
+    [D3DRS_POINTSIZE_MAX] = NINE_STATE_RASTERIZER | NINE_STATE_POINTSIZE_SHADER,
     [D3DRS_INDEXEDVERTEXBLENDENABLE] = NINE_STATE_FF_OTHER,
     [D3DRS_COLORWRITEENABLE] = NINE_STATE_BLEND,
     [D3DRS_TWEENFACTOR] = NINE_STATE_FF_OTHER,

@@ -576,6 +576,18 @@ brw_inst_imm_f(const struct brw_device_info *devinfo, const brw_inst *insn)
    return ft.f;
 }
 
+static inline double
+brw_inst_imm_df(const struct brw_device_info *devinfo, const brw_inst *insn)
+{
+   union {
+      double d;
+      uint64_t u;
+   } dt;
+   (void) devinfo;
+   dt.u = brw_inst_bits(insn, 127, 64);
+   return dt.d;
+}
+
 static inline void
 brw_inst_set_imm_d(const struct brw_device_info *devinfo,
                    brw_inst *insn, int value)
@@ -600,6 +612,19 @@ brw_inst_set_imm_f(const struct brw_device_info *devinfo,
    (void) devinfo;
    ft.f = value;
    brw_inst_set_bits(insn, 127, 96, ft.u);
+}
+
+static inline void
+brw_inst_set_imm_df(const struct brw_device_info *devinfo,
+                    brw_inst *insn, double value)
+{
+   union {
+      double d;
+      uint64_t u;
+   } dt;
+   (void) devinfo;
+   dt.d = value;
+   brw_inst_set_bits(insn, 127, 64, dt.u);
 }
 
 /** @} */

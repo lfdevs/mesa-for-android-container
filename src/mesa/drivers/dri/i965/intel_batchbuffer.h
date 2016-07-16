@@ -44,6 +44,8 @@ void intel_batchbuffer_init(struct brw_context *brw);
 void intel_batchbuffer_free(struct brw_context *brw);
 void intel_batchbuffer_save_state(struct brw_context *brw);
 void intel_batchbuffer_reset_to_saved(struct brw_context *brw);
+void intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz,
+                                     enum brw_gpu_ring ring);
 
 int _intel_batchbuffer_flush(struct brw_context *brw,
 			     const char *file, int line);
@@ -114,32 +116,6 @@ static inline void
 intel_batchbuffer_emit_float(struct brw_context *brw, float f)
 {
    intel_batchbuffer_emit_dword(brw, float_as_int(f));
-}
-
-static inline void
-intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz,
-                                enum brw_gpu_ring ring)
-{
-   /* If we're switching rings, implicitly flush the batch. */
-   if (unlikely(ring != brw->batch.ring) && brw->batch.ring != UNKNOWN_RING &&
-       brw->gen >= 6) {
-      intel_batchbuffer_flush(brw);
-   }
-
-#ifdef DEBUG
-   assert(sz < BATCH_SZ - BATCH_RESERVED);
-#endif
-   if (intel_batchbuffer_space(brw) < sz)
-      intel_batchbuffer_flush(brw);
-
-   enum brw_gpu_ring prev_ring = brw->batch.ring;
-   /* The intel_batchbuffer_flush() calls above might have changed
-    * brw->batch.ring to UNKNOWN_RING, so we need to set it here at the end.
-    */
-   brw->batch.ring = ring;
-
-   if (unlikely(prev_ring == UNKNOWN_RING && ring == RENDER_RING))
-      intel_batchbuffer_emit_render_ring_prelude(brw);
 }
 
 static inline void

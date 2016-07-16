@@ -226,6 +226,8 @@ NineTexture9_dtor( struct NineTexture9 *This )
 {
     unsigned l;
 
+    DBG("This=%p\n", This);
+
     if (This->surfaces) {
         /* The surfaces should have 0 references and be unbound now. */
         for (l = 0; l <= This->base.base.info.last_level; ++l)

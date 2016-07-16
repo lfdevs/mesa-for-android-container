@@ -63,7 +63,7 @@ get_dummy_fragment_shader(void)
    struct ureg_dst dst;
    unsigned num_tokens;
 
-   ureg = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+   ureg = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!ureg)
       return NULL;
 

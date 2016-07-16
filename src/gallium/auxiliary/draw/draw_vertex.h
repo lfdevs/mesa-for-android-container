@@ -122,7 +122,7 @@ draw_emit_vertex_attr(struct vertex_info *vinfo,
       src_index = DRAW_ATTR_NONEXIST;
    }
 
-   assert(n < Elements(vinfo->attrib));
+   assert(n < ARRAY_SIZE(vinfo->attrib));
    vinfo->attrib[n].emit = emit;
    vinfo->attrib[n].src_index = src_index;
    vinfo->num_attribs++;

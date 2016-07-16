@@ -50,6 +50,10 @@
 #include <strings.h> /* for ffs */
 #endif
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -357,8 +361,6 @@ util_half_inf_sign(int16_t x)
 #define FFS_DEFINED 1
 
 #if defined(_MSC_VER) && (_M_IX86 || _M_AMD64 || _M_IA64)
-unsigned char _BitScanForward(unsigned long* Index, unsigned long Mask);
-#pragma intrinsic(_BitScanForward)
 static inline
 unsigned long ffs( unsigned long u )
 {
@@ -489,7 +491,7 @@ static inline int
 u_bit_scan(unsigned *mask)
 {
    int i = ffs(*mask) - 1;
-   *mask &= ~(1 << i);
+   *mask &= ~(1u << i);
    return i;
 }
 
@@ -518,9 +520,41 @@ u_bit_scan64(uint64_t *mask)
 static inline void
 u_bit_scan_consecutive_range(unsigned *mask, int *start, int *count)
 {
+   if (*mask == 0xffffffff) {
+      *start = 0;
+      *count = 32;
+      *mask = 0;
+      return;
+   }
    *start = ffs(*mask) - 1;
    *count = ffs(~(*mask >> *start)) - 1;
-   *mask &= ~(((1 << *count) - 1) << *start);
+   *mask &= ~(((1u << *count) - 1) << *start);
+}
+
+static inline void
+u_bit_scan_consecutive_range64(uint64_t *mask, int *start, int *count)
+{
+   if (*mask == ~0llu) {
+      *start = 0;
+      *count = 64;
+      *mask = 0;
+      return;
+   }
+   *start = ffsll(*mask) - 1;
+   *count = ffsll(~(*mask >> *start)) - 1;
+   *mask &= ~(((1llu << *count) - 1) << *start);
+}
+
+/* Returns a bitfield in which the first count bits starting at start are
+ * set.
+ */
+static inline unsigned
+u_bit_consecutive(unsigned start, unsigned count)
+{
+   assert(start + count <= 32);
+   if (count == 32)
+      return ~0;
+   return ((1u << count) - 1) << start;
 }
 
 /**
@@ -788,6 +822,12 @@ util_memcpy_cpu_to_le32(void * restrict dest, const void * restrict src, size_t 
  */
 static inline int
 align(int value, int alignment)
+{
+   return (value + alignment - 1) & ~(alignment - 1);
+}
+
+static inline uint64_t
+align64(uint64_t value, unsigned alignment)
 {
    return (value + alignment - 1) & ~(alignment - 1);
 }

@@ -49,8 +49,8 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
    int num_written_clipdistance =
       draw_current_shader_num_written_clipdistances(pvs->draw);
 
-   cd[0] = draw_current_shader_clipdistance_output(pvs->draw, 0);
-   cd[1] = draw_current_shader_clipdistance_output(pvs->draw, 1);
+   cd[0] = draw_current_shader_ccdistance_output(pvs->draw, 0);
+   cd[1] = draw_current_shader_ccdistance_output(pvs->draw, 1);
 
    if (cd[0] != pos || cd[1] != pos)
       have_cd = true;

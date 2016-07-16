@@ -582,8 +582,8 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    consts->MaxLights = MAX_LIGHTS;
    consts->MaxShininess = 128.0;
    consts->MaxSpotExponent = 128.0;
-   consts->MaxViewportWidth = MAX_VIEWPORT_WIDTH;
-   consts->MaxViewportHeight = MAX_VIEWPORT_HEIGHT;
+   consts->MaxViewportWidth = 16384;
+   consts->MaxViewportHeight = 16384;
    consts->MinMapBufferAlignment = 64;
 
    /* Driver must override these values if ARB_viewport_array is supported. */
@@ -708,7 +708,8 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    consts->MaxComputeWorkGroupSize[0] = 1024;
    consts->MaxComputeWorkGroupSize[1] = 1024;
    consts->MaxComputeWorkGroupSize[2] = 64;
-   consts->MaxComputeWorkGroupInvocations = 1024;
+   /* Enables compute support for GLES 3.1 if >= 128 */
+   consts->MaxComputeWorkGroupInvocations = 0;
 
    /** GL_ARB_gpu_shader5 */
    consts->MinFragmentInterpolationOffset = MIN_FRAGMENT_INTERPOLATION_OFFSET;
@@ -724,6 +725,7 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    consts->Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits = MAX_TEXTURE_IMAGE_UNITS;
    consts->MaxTessPatchComponents = MAX_TESS_PATCH_COMPONENTS;
    consts->MaxTessControlTotalOutputComponents = MAX_TESS_CONTROL_TOTAL_OUTPUT_COMPONENTS;
+   consts->PrimitiveRestartForPatches = false;
 }
 
 
@@ -1365,6 +1367,7 @@ _mesa_free_context_data( struct gl_context *ctx )
    free(ctx->BeginEnd);
    free(ctx->OutsideBeginEnd);
    free(ctx->Save);
+   free(ctx->ContextLost);
 
    /* Shared context state (display lists, textures, etc) */
    _mesa_reference_shared_state(ctx, &ctx->Shared, NULL);
@@ -1525,10 +1528,6 @@ _mesa_copy_context( const struct gl_context *src, struct gl_context *dst,
  * Check if the given context can render into the given framebuffer
  * by checking visual attributes.
  *
- * Most of these tests could go away because Mesa is now pretty flexible
- * in terms of mixing rendering contexts with framebuffers.  As long
- * as RGB vs. CI mode agree, we're probably good.
- *
  * \return GL_TRUE if compatible, GL_FALSE otherwise.
  */
 static GLboolean 
@@ -1541,32 +1540,18 @@ check_compatible(const struct gl_context *ctx,
    if (buffer == _mesa_get_incomplete_framebuffer())
       return GL_TRUE;
 
-#if 0
-   /* disabling this fixes the fgl_glxgears pbuffer demo */
-   if (ctxvis->doubleBufferMode && !bufvis->doubleBufferMode)
-      return GL_FALSE;
-#endif
-   if (ctxvis->stereoMode && !bufvis->stereoMode)
-      return GL_FALSE;
-   if (ctxvis->haveAccumBuffer && !bufvis->haveAccumBuffer)
-      return GL_FALSE;
-   if (ctxvis->haveDepthBuffer && !bufvis->haveDepthBuffer)
-      return GL_FALSE;
-   if (ctxvis->haveStencilBuffer && !bufvis->haveStencilBuffer)
-      return GL_FALSE;
-   if (ctxvis->redMask && ctxvis->redMask != bufvis->redMask)
-      return GL_FALSE;
-   if (ctxvis->greenMask && ctxvis->greenMask != bufvis->greenMask)
-      return GL_FALSE;
-   if (ctxvis->blueMask && ctxvis->blueMask != bufvis->blueMask)
-      return GL_FALSE;
-#if 0
-   /* disabled (see bug 11161) */
-   if (ctxvis->depthBits && ctxvis->depthBits != bufvis->depthBits)
-      return GL_FALSE;
-#endif
-   if (ctxvis->stencilBits && ctxvis->stencilBits != bufvis->stencilBits)
-      return GL_FALSE;
+#define check_component(foo)           \
+   if (ctxvis->foo && bufvis->foo &&   \
+       ctxvis->foo != bufvis->foo)     \
+      return GL_FALSE
+
+   check_component(redMask);
+   check_component(greenMask);
+   check_component(blueMask);
+   check_component(depthBits);
+   check_component(stencilBits);
+
+#undef check_component
 
    return GL_TRUE;
 }
@@ -1600,9 +1585,6 @@ _mesa_check_init_viewport(struct gl_context *ctx, GLuint width, GLuint height)
 static void
 handle_first_current(struct gl_context *ctx)
 {
-   GLenum buffer;
-   GLint bufferIndex;
-
    if (ctx->Version == 0) {
       /* probably in the process of tearing down the context */
       return;
@@ -1617,6 +1599,8 @@ handle_first_current(struct gl_context *ctx)
     * For GLES it is always GL_BACK which has a magic interpretation */
    if (!ctx->HasConfig && _mesa_is_desktop_gl(ctx)) {
       if (ctx->DrawBuffer != _mesa_get_incomplete_framebuffer()) {
+         GLenum buffer;
+
          if (ctx->DrawBuffer->Visual.doubleBufferMode)
             buffer = GL_BACK;
          else
@@ -1627,6 +1611,9 @@ handle_first_current(struct gl_context *ctx)
       }
 
       if (ctx->ReadBuffer != _mesa_get_incomplete_framebuffer()) {
+         gl_buffer_index bufferIndex;
+         GLenum buffer;
+
          if (ctx->ReadBuffer->Visual.doubleBufferMode) {
             buffer = GL_BACK;
             bufferIndex = BUFFER_BACK_LEFT;

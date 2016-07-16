@@ -229,4 +229,7 @@ vc4_qpu_disasm_unpack(FILE *out, uint32_t pack);
 void
 vc4_qpu_validate(uint64_t *insts, uint32_t num_inst);
 
+void
+vc4_qpu_disasm_cond(FILE *out, uint32_t cond);
+
 #endif /* VC4_QPU_H */

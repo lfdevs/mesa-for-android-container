@@ -71,7 +71,7 @@ vlVdpBitmapSurfaceCreate(VdpDevice device,
 
    memset(&res_tmpl, 0, sizeof(res_tmpl));
    res_tmpl.target = PIPE_TEXTURE_2D;
-   res_tmpl.format = FormatRGBAToPipe(rgba_format);
+   res_tmpl.format = VdpFormatRGBAToPipe(rgba_format);
    res_tmpl.width0 = width;
    res_tmpl.height0 = height;
    res_tmpl.depth0 = 1;

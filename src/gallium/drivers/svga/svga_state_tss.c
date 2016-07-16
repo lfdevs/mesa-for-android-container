@@ -44,7 +44,7 @@ void svga_cleanup_tss_binding(struct svga_context *svga)
    const unsigned shader = PIPE_SHADER_FRAGMENT;
    unsigned i;
 
-   for (i = 0; i < Elements(svga->state.hw_draw.views); i++) {
+   for (i = 0; i < ARRAY_SIZE(svga->state.hw_draw.views); i++) {
       struct svga_hw_view_state *view = &svga->state.hw_draw.views[i];
       if (view) {
          svga_sampler_view_reference(&view->v, NULL);
@@ -326,8 +326,8 @@ svga_queue_tss( struct ts_queue *q,
 
 #define EMIT_TS(svga, unit, val, token)                                 \
 do {                                                                    \
-   assert(unit < Elements(svga->state.hw_draw.ts));                     \
-   assert(SVGA3D_TS_##token < Elements(svga->state.hw_draw.ts[unit]));  \
+   assert(unit < ARRAY_SIZE(svga->state.hw_draw.ts));                     \
+   STATIC_ASSERT(SVGA3D_TS_##token < ARRAY_SIZE(svga->state.hw_draw.ts[unit])); \
    if (svga->state.hw_draw.ts[unit][SVGA3D_TS_##token] != val) {        \
       svga_queue_tss( queue, unit, SVGA3D_TS_##token, val );            \
       svga->state.hw_draw.ts[unit][SVGA3D_TS_##token] = val;            \
@@ -337,8 +337,8 @@ do {                                                                    \
 #define EMIT_TS_FLOAT(svga, unit, fvalue, token)                        \
 do {                                                                    \
    unsigned val = fui(fvalue);                                          \
-   assert(unit < Elements(svga->state.hw_draw.ts));                     \
-   assert(SVGA3D_TS_##token < Elements(svga->state.hw_draw.ts[unit]));  \
+   assert(unit < ARRAY_SIZE(svga->state.hw_draw.ts));                     \
+   STATIC_ASSERT(SVGA3D_TS_##token < ARRAY_SIZE(svga->state.hw_draw.ts[unit])); \
    if (svga->state.hw_draw.ts[unit][SVGA3D_TS_##token] != val) {        \
       svga_queue_tss( queue, unit, SVGA3D_TS_##token, val );            \
       svga->state.hw_draw.ts[unit][SVGA3D_TS_##token] = val;            \

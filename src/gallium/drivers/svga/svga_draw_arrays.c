@@ -90,7 +90,7 @@ compare(unsigned cached_nr, unsigned nr, unsigned type)
 
 static enum pipe_error
 retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
-                             unsigned prim,
+                             enum pipe_prim_type prim,
                              unsigned gen_type,
                              unsigned gen_nr,
                              unsigned gen_size,
@@ -170,7 +170,7 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
 
 static enum pipe_error
 simple_draw_arrays(struct svga_hwtnl *hwtnl,
-                   unsigned prim, unsigned start, unsigned count,
+                   enum pipe_prim_type prim, unsigned start, unsigned count,
                    unsigned start_instance, unsigned instance_count)
 {
    SVGA3dPrimitiveRange range;
@@ -202,15 +202,21 @@ simple_draw_arrays(struct svga_hwtnl *hwtnl,
 
 enum pipe_error
 svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
-                       unsigned prim, unsigned start, unsigned count,
+                       enum pipe_prim_type prim, unsigned start, unsigned count,
                        unsigned start_instance, unsigned instance_count)
 {
-   unsigned gen_prim, gen_size, gen_nr;
+   enum pipe_prim_type gen_prim;
+   unsigned gen_size, gen_nr;
    enum indices_mode gen_type;
    u_generate_func gen_func;
    enum pipe_error ret = PIPE_OK;
    unsigned api_pv = hwtnl->api_pv;
    struct svga_context *svga = hwtnl->svga;
+
+   if (svga->curr.rast->templ.fill_front !=
+       svga->curr.rast->templ.fill_back) {
+      assert(hwtnl->api_fillmode == PIPE_POLYGON_MODE_FILL);
+   }
 
    if (svga->curr.rast->templ.flatshade &&
        svga->state.hw_draw.fs->constant_color_output) {
@@ -236,8 +242,7 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
       }
    }
 
-   if (hwtnl->api_fillmode != PIPE_POLYGON_MODE_FILL &&
-       prim >= PIPE_PRIM_TRIANGLES) {
+   if (svga_need_unfilled_fallback(hwtnl, prim)) {
       /* Convert unfilled polygons into points, lines, triangles */
       gen_type = u_unfilled_generator(prim,
                                       start,

@@ -9,7 +9,7 @@ PROJECT_NAME           = "Mesa GL API dispatcher"
 #---------------------------------------------------------------------------
 # configuration options related to the input files
 #---------------------------------------------------------------------------
-INPUT                  = ../src/mesa/glapi/
+INPUT                  = ../src/mapi/glapi/
 FILE_PATTERNS          = *.c *.h
 RECURSIVE              = NO
 EXCLUDE                = 
@@ -39,11 +39,11 @@ SKIP_FUNCTION_MACROS   = YES
 #---------------------------------------------------------------------------
 # Configuration::addtions related to external references   
 #---------------------------------------------------------------------------
-TAGFILES               = main.tag=../core \
+TAGFILES               = main.tag=../main \
                          math.tag=../math \
                          tnl_dd.tag=../tnl_dd \
                          swrast.tag=../swrast \
                          swrast_setup.tag=../swrast_setup \
                          tnl.tag=../tnl \
-                         vbo.tag=vbo
-GENERATE_TAGFILE       = swrast.tag
+                         vbo.tag=../vbo
+GENERATE_TAGFILE       = glapi.tag

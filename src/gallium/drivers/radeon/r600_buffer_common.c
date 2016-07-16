@@ -37,7 +37,7 @@ boolean r600_rings_is_buffer_referenced(struct r600_common_context *ctx,
 	if (ctx->ws->cs_is_buffer_referenced(ctx->gfx.cs, buf, usage)) {
 		return TRUE;
 	}
-	if (ctx->dma.cs && ctx->dma.cs->cdw &&
+	if (radeon_emitted(ctx->dma.cs, 0) &&
 	    ctx->ws->cs_is_buffer_referenced(ctx->dma.cs, buf, usage)) {
 		return TRUE;
 	}
@@ -60,7 +60,7 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 		rusage = RADEON_USAGE_WRITE;
 	}
 
-	if (ctx->gfx.cs->cdw != ctx->initial_gfx_cs_size &&
+	if (radeon_emitted(ctx->gfx.cs, ctx->initial_gfx_cs_size) &&
 	    ctx->ws->cs_is_buffer_referenced(ctx->gfx.cs,
 					     resource->buf, rusage)) {
 		if (usage & PIPE_TRANSFER_DONTBLOCK) {
@@ -71,8 +71,7 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 			busy = true;
 		}
 	}
-	if (ctx->dma.cs &&
-	    ctx->dma.cs->cdw &&
+	if (radeon_emitted(ctx->dma.cs, 0) &&
 	    ctx->ws->cs_is_buffer_referenced(ctx->dma.cs,
 					     resource->buf, rusage)) {
 		if (usage & PIPE_TRANSFER_DONTBLOCK) {
@@ -102,8 +101,7 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 
 bool r600_init_resource(struct r600_common_screen *rscreen,
 			struct r600_resource *res,
-			unsigned size, unsigned alignment,
-			bool use_reusable_pool)
+			uint64_t size, unsigned alignment)
 {
 	struct r600_texture *rtex = (struct r600_texture*)res;
 	struct pb_buffer *old_buf, *new_buf;
@@ -160,15 +158,23 @@ bool r600_init_resource(struct r600_common_screen *rscreen,
 	    rtex->surface.level[0].mode >= RADEON_SURF_MODE_1D) {
 		res->domains = RADEON_DOMAIN_VRAM;
 		flags &= ~RADEON_FLAG_CPU_ACCESS;
-		flags |= RADEON_FLAG_NO_CPU_ACCESS;
+		flags |= RADEON_FLAG_NO_CPU_ACCESS |
+			 RADEON_FLAG_GTT_WC;
 	}
+
+	/* If VRAM is just stolen system memory, allow both VRAM and GTT,
+	 * whichever has free space. If a buffer is evicted from VRAM to GTT,
+	 * it will stay there.
+	 */
+	if (!rscreen->info.has_dedicated_vram &&
+	    res->domains == RADEON_DOMAIN_VRAM)
+		res->domains = RADEON_DOMAIN_VRAM_GTT;
 
 	if (rscreen->debug_flags & DBG_NO_WC)
 		flags &= ~RADEON_FLAG_GTT_WC;
 
 	/* Allocate a new resource. */
 	new_buf = rscreen->ws->buffer_create(rscreen->ws, size, alignment,
-					     use_reusable_pool,
 					     res->domains, flags);
 	if (!new_buf) {
 		return false;
@@ -192,7 +198,7 @@ bool r600_init_resource(struct r600_common_screen *rscreen,
 	res->TC_L2_dirty = false;
 
 	if (rscreen->debug_flags & DBG_VM && res->b.b.target == PIPE_BUFFER) {
-		fprintf(stderr, "VM start=0x%"PRIX64"  end=0x%"PRIX64" | Buffer %u bytes\n",
+		fprintf(stderr, "VM start=0x%"PRIX64"  end=0x%"PRIX64" | Buffer %"PRIu64" bytes\n",
 			res->gpu_address, res->gpu_address + res->buf->size,
 			res->buf->size);
 	}
@@ -213,6 +219,10 @@ static bool
 r600_invalidate_buffer(struct r600_common_context *rctx,
 		       struct r600_resource *rbuffer)
 {
+	/* Shared buffers can't be reallocated. */
+	if (rbuffer->is_shared)
+		return false;
+
 	/* In AMD_pinned_memory, the user pointer association only gets
 	 * broken when the buffer is explicitly re-allocated.
 	 */
@@ -294,6 +304,7 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 	 * in which case it can be mapped unsynchronized. */
 	if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED) &&
 	    usage & PIPE_TRANSFER_WRITE &&
+	    !rbuffer->is_shared &&
 	    !util_ranges_intersect(&rbuffer->valid_buffer_range, box->x, box->x + box->width)) {
 		usage |= PIPE_TRANSFER_UNSYNCHRONIZED;
 	}
@@ -311,13 +322,17 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 		if (r600_invalidate_buffer(rctx, rbuffer)) {
 			/* At this point, the buffer is always idle. */
 			usage |= PIPE_TRANSFER_UNSYNCHRONIZED;
+		} else {
+			/* Fall back to a temporary buffer. */
+			usage |= PIPE_TRANSFER_DISCARD_RANGE;
 		}
 	}
-	else if ((usage & PIPE_TRANSFER_DISCARD_RANGE) &&
-		 !(usage & (PIPE_TRANSFER_UNSYNCHRONIZED |
-			    PIPE_TRANSFER_PERSISTENT)) &&
-		 !(rscreen->debug_flags & DBG_NO_DISCARD_RANGE) &&
-		 r600_can_dma_copy_buffer(rctx, box->x, 0, box->width)) {
+
+	if ((usage & PIPE_TRANSFER_DISCARD_RANGE) &&
+	    !(usage & (PIPE_TRANSFER_UNSYNCHRONIZED |
+		       PIPE_TRANSFER_PERSISTENT)) &&
+	    !(rscreen->debug_flags & DBG_NO_DISCARD_RANGE) &&
+	    r600_can_dma_copy_buffer(rctx, box->x, 0, box->width)) {
 		assert(usage & PIPE_TRANSFER_WRITE);
 
 		/* Check if mapping this buffer would cause waiting for the GPU. */
@@ -344,7 +359,7 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 	else if ((usage & PIPE_TRANSFER_READ) &&
 		 !(usage & (PIPE_TRANSFER_WRITE |
 			    PIPE_TRANSFER_PERSISTENT)) &&
-		 rbuffer->domains == RADEON_DOMAIN_VRAM &&
+		 rbuffer->domains & RADEON_DOMAIN_VRAM &&
 		 r600_can_dma_copy_buffer(rctx, 0, box->x, box->width)) {
 		struct r600_resource *staging;
 
@@ -459,6 +474,7 @@ r600_alloc_buffer_struct(struct pipe_screen *screen,
 	rbuffer->b.vtbl = &r600_buffer_vtbl;
 	rbuffer->buf = NULL;
 	rbuffer->TC_L2_dirty = false;
+	rbuffer->is_shared = false;
 	util_range_init(&rbuffer->valid_buffer_range);
 	return rbuffer;
 }
@@ -470,7 +486,7 @@ struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 	struct r600_resource *rbuffer = r600_alloc_buffer_struct(screen, templ);
 
-	if (!r600_init_resource(rscreen, rbuffer, templ->width0, alignment, TRUE)) {
+	if (!r600_init_resource(rscreen, rbuffer, templ->width0, alignment)) {
 		FREE(rbuffer);
 		return NULL;
 	}

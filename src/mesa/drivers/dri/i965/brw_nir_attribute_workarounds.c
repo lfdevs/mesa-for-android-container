@@ -39,12 +39,11 @@ struct attr_wa_state {
 };
 
 static bool
-apply_attr_wa_block(nir_block *block, void *void_state)
+apply_attr_wa_block(nir_block *block, struct attr_wa_state *state)
 {
-   struct attr_wa_state *state = void_state;
    nir_builder *b = &state->builder;
 
-   nir_foreach_instr_safe(block, instr) {
+   nir_foreach_instr_safe(instr, block) {
       if (instr->type != nir_instr_type_intrinsic)
          continue;
 
@@ -156,14 +155,16 @@ brw_nir_apply_attribute_workarounds(nir_shader *shader,
       .wa_flags = attrib_wa_flags,
    };
 
-   nir_foreach_function(shader, func) {
+   nir_foreach_function(func, shader) {
       if (!func->impl)
          continue;
 
       nir_builder_init(&state.builder, func->impl);
       state.impl_progress = false;
 
-      nir_foreach_block(func->impl, apply_attr_wa_block, &state);
+      nir_foreach_block(block, func->impl) {
+         apply_attr_wa_block(block, &state);
+      }
 
       if (state.impl_progress) {
          nir_metadata_preserve(func->impl, nir_metadata_block_index |

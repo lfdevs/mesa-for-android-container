@@ -164,7 +164,7 @@ lp_build_extract_range(struct gallivm_state *gallivm,
    LLVMValueRef elems[LP_MAX_VECTOR_LENGTH];
    unsigned i;
 
-   assert(size <= Elements(elems));
+   assert(size <= ARRAY_SIZE(elems));
 
    for (i = 0; i < size; ++i)
       elems[i] = lp_build_const_int32(gallivm, i + start);
@@ -193,7 +193,7 @@ lp_build_concat(struct gallivm_state *gallivm,
    LLVMValueRef tmp[LP_MAX_VECTOR_LENGTH/2];
    LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
 
-   assert(src_type.length * num_vectors <= Elements(shuffles));
+   assert(src_type.length * num_vectors <= ARRAY_SIZE(shuffles));
    assert(util_is_power_of_two(num_vectors));
 
    new_length = src_type.length;
@@ -881,7 +881,7 @@ lp_build_pad_vector(struct gallivm_state *gallivm,
    undef      = LLVMGetUndef(type);
    src_length = LLVMGetVectorSize(type);
 
-   assert(dst_length <= Elements(elems));
+   assert(dst_length <= ARRAY_SIZE(elems));
    assert(dst_length >= src_length);
 
    if (src_length == dst_length)

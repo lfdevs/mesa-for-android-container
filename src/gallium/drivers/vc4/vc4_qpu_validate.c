@@ -1,3 +1,4 @@
+
 /*
  * Copyright © 2014 Broadcom
  *
@@ -23,12 +24,14 @@
 
 #include "vc4_qpu.h"
 
-#ifdef NDEBUG
-/* Since most of our code is used in assert()s, don't warn about dead code. */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#pragma GCC diagnostic ignored "-Wunused-function"
-#endif
+static void
+fail_instr(uint64_t inst, const char *msg)
+{
+        fprintf(stderr, "vc4_qpu_validate: %s: ", msg);
+        vc4_qpu_disasm(&inst, 1);
+        fprintf(stderr, "\n");
+        abort();
+}
 
 static bool
 writes_reg(uint64_t inst, uint32_t w)
@@ -101,6 +104,14 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
 {
         bool scoreboard_locked = false;
 
+        /* We don't want to do validation in release builds, but we want to
+         * keep compiling the validation code to make sure it doesn't get
+         * broken.
+         */
+#ifndef DEBUG
+        return;
+#endif
+
         for (int i = 0; i < num_inst; i++) {
                 uint64_t inst = insts[i];
 
@@ -114,13 +125,16 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
                 /* "The Thread End instruction must not write to either physical
                  *  regfile A or B."
                  */
-                assert(QPU_GET_FIELD(inst, QPU_WADDR_ADD) >= 32);
-                assert(QPU_GET_FIELD(inst, QPU_WADDR_MUL) >= 32);
+                if (QPU_GET_FIELD(inst, QPU_WADDR_ADD) < 32 ||
+                    QPU_GET_FIELD(inst, QPU_WADDR_MUL) < 32) {
+                        fail_instr(inst, "write to phys reg in thread end");
+                }
 
                 /* Can't trigger an implicit wait on scoreboard in the program
                  * end instruction.
                  */
-                assert(!qpu_inst_is_tlb(inst) || scoreboard_locked);
+                if (qpu_inst_is_tlb(inst) && !scoreboard_locked)
+                        fail_instr(inst, "implicit sb wait in program end");
 
                 /* Two delay slots will be executed. */
                 assert(i + 2 <= num_inst);
@@ -132,24 +146,32 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
                           *  read or any kind of VPM, VDR, or VDW read or
                           *  write."
                           */
-                         assert(!writes_reg(insts[j], QPU_W_VPM));
-                         assert(!reads_reg(insts[j], QPU_R_VARY));
-                         assert(!reads_reg(insts[j], QPU_R_UNIF));
-                         assert(!reads_reg(insts[j], QPU_R_VPM));
+                         if (writes_reg(insts[j], QPU_W_VPM) ||
+                             reads_reg(insts[j], QPU_R_VARY) ||
+                             reads_reg(insts[j], QPU_R_UNIF) ||
+                             reads_reg(insts[j], QPU_R_VPM)) {
+                                 fail_instr(insts[j], "last 3 instructions "
+                                            "using fixed functions");
+                         }
 
                          /* "The Thread End instruction and the following two
                           *  delay slot instructions must not write or read
                           *  address 14 in either regfile A or B."
                           */
-                         assert(!writes_reg(insts[j], 14));
-                         assert(!reads_reg(insts[j], 14));
-
+                         if (writes_reg(insts[j], 14) ||
+                             reads_reg(insts[j], 14)) {
+                                 fail_instr(insts[j], "last 3 instructions "
+                                            "must not use r14");
+                         }
                  }
 
                  /* "The final program instruction (the second delay slot
                   *  instruction) must not do a TLB Z write."
                   */
-                 assert(!writes_reg(insts[i + 2], QPU_W_TLB_Z));
+                 if (writes_reg(insts[i + 2], QPU_W_TLB_Z)) {
+                         fail_instr(insts[i + 2], "final instruction doing "
+                                    "Z write");
+                 }
         }
 
         /* "A scoreboard wait must not occur in the first two instructions of
@@ -160,7 +182,8 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
         for (int i = 0; i < 2; i++) {
                 uint64_t inst = insts[i];
 
-                assert(!qpu_inst_is_tlb(inst));
+                if (qpu_inst_is_tlb(inst))
+                        fail_instr(inst, "sb wait in first two insts");
         }
 
         /* "If TMU_NOSWAP is written, the write must be three instructions
@@ -172,9 +195,11 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
         for (int i = 0; i < num_inst; i++) {
                 uint64_t inst = insts[i];
 
-                assert((i - last_tmu_noswap) > 3 ||
-                       (!writes_reg(inst, QPU_W_TMU0_S) &&
-                        !writes_reg(inst, QPU_W_TMU1_S)));
+                if ((i - last_tmu_noswap) <= 3 &&
+                    (writes_reg(inst, QPU_W_TMU0_S) ||
+                     writes_reg(inst, QPU_W_TMU1_S))) {
+                        fail_instr(inst, "TMU write too soon after TMU_NOSWAP");
+                }
 
                 if (writes_reg(inst, QPU_W_TMU_NOSWAP))
                     last_tmu_noswap = i;
@@ -197,8 +222,11 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
                         waddr_b = mul_waddr;
                 }
 
-                assert(waddr_a >= 32 || !reads_a_reg(insts[i + 1], waddr_a));
-                assert(waddr_b >= 32 || !reads_b_reg(insts[i + 1], waddr_b));
+                if ((waddr_a < 32 && reads_a_reg(insts[i + 1], waddr_a)) ||
+                    (waddr_b < 32 && reads_b_reg(insts[i + 1], waddr_b))) {
+                        fail_instr(insts[i + 1],
+                                   "Reads physical reg too soon after write");
+                }
         }
 
         /* "After an SFU lookup instruction, accumulator r4 must not be read
@@ -212,11 +240,13 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
                 uint64_t inst = insts[i];
                 uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
 
-                assert(i - last_sfu_inst > 2 ||
-                       (!writes_sfu(inst) &&
-                        sig != QPU_SIG_LOAD_TMU0 &&
-                        sig != QPU_SIG_LOAD_TMU1 &&
-                        sig != QPU_SIG_COLOR_LOAD));
+                if (i - last_sfu_inst <= 2 &&
+                    (writes_sfu(inst) ||
+                     sig == QPU_SIG_LOAD_TMU0 ||
+                     sig == QPU_SIG_LOAD_TMU1 ||
+                     sig == QPU_SIG_COLOR_LOAD)) {
+                        fail_instr(inst, "R4 write too soon after SFU write");
+                }
 
                 if (writes_sfu(inst))
                         last_sfu_inst = i;
@@ -229,9 +259,13 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
                 /* "An instruction that does a vector rotate by r5 must not
                  *  immediately follow an instruction that writes to r5."
                  */
-                assert(last_r5_write != i - 1 ||
-                       QPU_GET_FIELD(inst, QPU_SIG) != QPU_SIG_SMALL_IMM ||
-                       QPU_GET_FIELD(inst, QPU_SMALL_IMM) != 48);
+                if (last_r5_write == i - 1 &&
+                    QPU_GET_FIELD(inst, QPU_SIG) == QPU_SIG_SMALL_IMM &&
+                    QPU_GET_FIELD(inst, QPU_SMALL_IMM) == 48) {
+                        fail_instr(inst,
+                                   "vector rotate by r5 immediately "
+                                   "after r5 write");
+                }
         }
 
         /* "An instruction that does a vector rotate must not immediately
@@ -248,9 +282,10 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
          */
         for (int i = 0; i < num_inst - 1; i++) {
                 uint64_t inst = insts[i];
-                if (writes_reg(inst, QPU_W_TLB_Z)) {
-                        assert(!reads_a_reg(insts[i + 1], QPU_R_MS_REV_FLAGS));
-                        assert(!reads_a_reg(insts[i + 2], QPU_R_MS_REV_FLAGS));
+                if (writes_reg(inst, QPU_W_TLB_Z) &&
+                    (reads_a_reg(insts[i + 1], QPU_R_MS_REV_FLAGS) ||
+                     reads_a_reg(insts[i + 2], QPU_R_MS_REV_FLAGS))) {
+                        fail_instr(inst, "TLB Z write followed by MS mask read");
                 }
         }
 
@@ -264,6 +299,7 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
         for (int i = 0; i < num_inst - 1; i++) {
                 uint64_t inst = insts[i];
 
-                assert(qpu_num_sf_accesses(inst) <= 1);
+                if (qpu_num_sf_accesses(inst) > 1)
+                        fail_instr(inst, "Single instruction writes SFU twice");
         }
 }

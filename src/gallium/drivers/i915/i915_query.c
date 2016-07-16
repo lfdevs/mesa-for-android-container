@@ -60,8 +60,9 @@ static boolean i915_begin_query(struct pipe_context *ctx,
    return true;
 }
 
-static void i915_end_query(struct pipe_context *ctx, struct pipe_query *query)
+static bool i915_end_query(struct pipe_context *ctx, struct pipe_query *query)
 {
+   return true;
 }
 
 static boolean i915_get_query_result(struct pipe_context *ctx,
@@ -76,6 +77,11 @@ static boolean i915_get_query_result(struct pipe_context *ctx,
    return TRUE;
 }
 
+static void
+i915_set_active_query_state(struct pipe_context *pipe, boolean enable)
+{
+}
+
 void
 i915_init_query_functions(struct i915_context *i915)
 {
@@ -84,5 +90,6 @@ i915_init_query_functions(struct i915_context *i915)
    i915->base.begin_query = i915_begin_query;
    i915->base.end_query = i915_end_query;
    i915->base.get_query_result = i915_get_query_result;
+   i915->base.set_active_query_state = i915_set_active_query_state;
 }
 

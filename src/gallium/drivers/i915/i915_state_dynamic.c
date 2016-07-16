@@ -307,7 +307,7 @@ static void update_dynamic(struct i915_context *i915)
 {
    int i;
 
-   for (i = 0; i < Elements(atoms); i++)
+   for (i = 0; i < ARRAY_SIZE(atoms); i++)
       if (i915->dirty & atoms[i]->dirty)
          atoms[i]->update(i915);
 }

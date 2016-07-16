@@ -110,12 +110,15 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@NEED_OPENGL_COMMON_TRUE@am__append_1 = mesa
-@HAVE_DRI_GLX_TRUE@am__append_2 = glx
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_3 = egl/wayland/wayland-egl egl/wayland/wayland-drm
-@HAVE_GBM_TRUE@am__append_4 = gbm
-@HAVE_EGL_TRUE@am__append_5 = egl
-@HAVE_GALLIUM_TRUE@am__append_6 = gallium
+@HAVE_INTEL_DRIVERS_TRUE@am__append_1 = intel
+@NEED_OPENGL_COMMON_TRUE@am__append_2 = mesa
+@HAVE_DRI_GLX_TRUE@am__append_3 = glx
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = egl/wayland/wayland-drm
+@HAVE_GBM_TRUE@am__append_5 = gbm
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = egl/wayland/wayland-egl
+@HAVE_EGL_TRUE@am__append_7 = egl
+@HAVE_INTEL_VULKAN_TRUE@am__append_8 = intel/vulkan
+@HAVE_GALLIUM_TRUE@am__append_9 = gallium
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -221,9 +224,9 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = . gtest util mapi/glapi/gen mapi compiler mesa loader \
-	glx egl/wayland/wayland-egl egl/wayland/wayland-drm gbm egl \
-	gallium
+DIST_SUBDIRS = . gtest util mapi/glapi/gen mapi compiler intel mesa \
+	loader glx egl/wayland/wayland-drm gbm egl/wayland/wayland-egl \
+	egl intel/vulkan gallium
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/bin/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -319,6 +322,8 @@ GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
+GLVND_CFLAGS = @GLVND_CFLAGS@
+GLVND_LIBS = @GLVND_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
@@ -417,6 +422,8 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
 PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
 PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
+PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
+PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
@@ -437,6 +444,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+TIMESTAMP_CMD = @TIMESTAMP_CMD@
+VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
 VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
@@ -453,6 +463,7 @@ VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
+VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
@@ -538,11 +549,14 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+BUILT_SOURCES = git_sha1.h
+CLEANFILES = $(BUILT_SOURCES)
 
 # include only conditionally ?
 SUBDIRS = . gtest util mapi/glapi/gen mapi compiler $(am__append_1) \
-	loader $(am__append_2) $(am__append_3) $(am__append_4) \
-	$(am__append_5) $(am__append_6)
+	$(am__append_2) loader $(am__append_3) $(am__append_4) \
+	$(am__append_5) $(am__append_6) $(am__append_7) \
+	$(am__append_8) $(am__append_9)
 EXTRA_DIST = \
 	getopt hgl SConscript
 
@@ -561,7 +575,8 @@ libglsl_util_la_SOURCES = \
 	mesa/program/symbol_table.c \
 	mesa/program/dummy_errors.c
 
-all: all-recursive
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
 .SUFFIXES:
 .SUFFIXES: .c .lo .o .obj
@@ -831,11 +846,13 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-check: check-recursive
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-recursive
 all-am: Makefile $(LTLIBRARIES)
 installdirs: installdirs-recursive
 installdirs-am:
-install: install-recursive
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-recursive
 install-exec: install-exec-recursive
 install-data: install-data-recursive
 uninstall: uninstall-recursive
@@ -857,6 +874,7 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -869,6 +887,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-recursive
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
@@ -940,7 +959,8 @@ ps-am:
 
 uninstall-am:
 
-.MAKE: $(am__recursive_targets) install-am install-strip
+.MAKE: $(am__recursive_targets) all check install install-am \
+	install-strip
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am check \
 	check-am clean clean-generic clean-libtool \
@@ -959,6 +979,29 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
+
+.PHONY: git_sha1.h.tmp
+git_sha1.h.tmp:
+	@# Don't assume that $(top_srcdir)/.git is a directory. It may be
+	@# a gitlink file if $(top_srcdir) is a submodule checkout or a linked
+	@# worktree.
+	@# If we are building from a release tarball copy the bundled header.
+	@touch git_sha1.h.tmp
+	@if test -e $(top_srcdir)/.git; then \
+		if which git > /dev/null; then \
+		    git --git-dir=$(top_srcdir)/.git log -n 1 --oneline | \
+			sed 's/^\([^ ]*\) .*/#define MESA_GIT_SHA1 "git-\1"/' \
+			> git_sha1.h.tmp ; \
+		fi \
+	fi
+
+git_sha1.h: git_sha1.h.tmp
+	@echo "updating git_sha1.h"
+	@if ! cmp -s git_sha1.h.tmp git_sha1.h; then \
+		mv git_sha1.h.tmp git_sha1.h ;\
+	else \
+		rm git_sha1.h.tmp ;\
+	fi
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

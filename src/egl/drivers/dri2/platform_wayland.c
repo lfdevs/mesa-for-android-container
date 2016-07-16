@@ -305,7 +305,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
 {
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
-   int i;
+   int i, use_flags;
    unsigned int dri_image_format;
 
    /* currently supports three WL DRM formats,
@@ -352,6 +352,8 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
    if (dri2_surf->back == NULL)
       return -1;
 
+   use_flags = __DRI_IMAGE_USE_SHARE | __DRI_IMAGE_USE_BACKBUFFER;
+
    if (dri2_dpy->is_different_gpu &&
        dri2_surf->back->linear_copy == NULL) {
        dri2_surf->back->linear_copy =
@@ -359,7 +361,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
                                       dri2_surf->base.Width,
                                       dri2_surf->base.Height,
                                       dri_image_format,
-                                      __DRI_IMAGE_USE_SHARE |
+                                      use_flags |
                                       __DRI_IMAGE_USE_LINEAR,
                                       NULL);
       if (dri2_surf->back->linear_copy == NULL)
@@ -373,7 +375,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
                                       dri2_surf->base.Height,
                                       dri_image_format,
                                       dri2_dpy->is_different_gpu ?
-                                         0 : __DRI_IMAGE_USE_SHARE,
+                                         0 : use_flags,
                                       NULL);
       dri2_surf->back->age = 0;
    }

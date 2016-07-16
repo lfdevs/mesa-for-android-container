@@ -77,7 +77,7 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
 {
    const struct brw_device_info *devinfo = compiler->devinfo;
    int base_reg_count = BRW_MAX_GRF;
-   int index = (dispatch_width / 8) - 1;
+   const int index = _mesa_logbase2(dispatch_width / 8);
 
    if (dispatch_width > 8 && devinfo->gen >= 7) {
       /* For IVB+, we don't need the PLN hacks or the even-reg alignment in
@@ -102,26 +102,11 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
     * Additionally, on gen5 we need aligned pairs of registers for the PLN
     * instruction, and on gen4 we need 8 contiguous regs for workaround simd16
     * texturing.
-    *
-    * So we have a need for classes for 1, 2, 4, and 8 registers currently,
-    * and we add in '3' to make indexing the array easier for the common case
-    * (since we'll probably want it for texturing later).
-    *
-    * And, on gen7 and newer, we do texturing SEND messages from GRFs, which
-    * means that we may need any size up to the sampler message size limit (11
-    * regs).
     */
-   int class_count;
+   const int class_count = MAX_VGRF_SIZE;
    int class_sizes[MAX_VGRF_SIZE];
-
-   if (devinfo->gen >= 7) {
-      for (class_count = 0; class_count < MAX_VGRF_SIZE; class_count++)
-         class_sizes[class_count] = class_count + 1;
-   } else {
-      for (class_count = 0; class_count < 4; class_count++)
-         class_sizes[class_count] = class_count + 1;
-      class_sizes[class_count++] = 8;
-   }
+   for (unsigned i = 0; i < MAX_VGRF_SIZE; i++)
+      class_sizes[i] = i + 1;
 
    memset(compiler->fs_reg_sets[index].class_to_ra_reg_range, 0,
           sizeof(compiler->fs_reg_sets[index].class_to_ra_reg_range));
@@ -130,7 +115,7 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
    /* Compute the total number of registers across all classes. */
    int ra_reg_count = 0;
    for (int i = 0; i < class_count; i++) {
-      if (devinfo->gen <= 5 && dispatch_width == 16) {
+      if (devinfo->gen <= 5 && dispatch_width >= 16) {
          /* From the G45 PRM:
           *
           * In order to reduce the hardware complexity, the following
@@ -177,7 +162,7 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
    int pairs_reg_count = 0;
    for (int i = 0; i < class_count; i++) {
       int class_reg_count;
-      if (devinfo->gen <= 5 && dispatch_width == 16) {
+      if (devinfo->gen <= 5 && dispatch_width >= 16) {
          class_reg_count = (base_reg_count - (class_sizes[i] - 1)) / 2;
 
          /* See comment below.  The only difference here is that we are
@@ -223,7 +208,7 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
          pairs_reg_count = class_reg_count;
       }
 
-      if (devinfo->gen <= 5 && dispatch_width == 16) {
+      if (devinfo->gen <= 5 && dispatch_width >= 16) {
          for (int j = 0; j < class_reg_count; j++) {
             ra_class_add_reg(regs, classes[i], reg);
 
@@ -304,6 +289,7 @@ brw_fs_alloc_reg_sets(struct brw_compiler *compiler)
 {
    brw_alloc_reg_set(compiler, 8);
    brw_alloc_reg_set(compiler, 16);
+   brw_alloc_reg_set(compiler, 32);
 }
 
 static int
@@ -458,7 +444,7 @@ fs_visitor::setup_payload_interference(struct ra_graph *g,
        * The alternative would be to have per-physical-register classes, which
        * would just be silly.
        */
-      if (devinfo->gen <= 5 && dispatch_width == 16) {
+      if (devinfo->gen <= 5 && dispatch_width >= 16) {
          /* We have to divide by 2 here because we only have even numbered
           * registers.  Some of the payload registers will be odd, but
           * that's ok because their physical register numbers have already
@@ -542,7 +528,7 @@ setup_mrf_hack_interference(fs_visitor *v, struct ra_graph *g,
 }
 
 bool
-fs_visitor::assign_regs(bool allow_spilling)
+fs_visitor::assign_regs(bool allow_spilling, bool spill_all)
 {
    /* Most of this allocation was written for a reg_width of 1
     * (dispatch_width == 8).  In extending to SIMD16, the code was
@@ -553,7 +539,7 @@ fs_visitor::assign_regs(bool allow_spilling)
    int reg_width = dispatch_width / 8;
    unsigned hw_reg_mapping[this->alloc.count];
    int payload_node_count = ALIGN(this->first_non_payload_grf, reg_width);
-   int rsi = reg_width - 1; /* Which compiler->fs_reg_sets[] to use */
+   int rsi = _mesa_logbase2(reg_width); /* Which compiler->fs_reg_sets[] to use */
    calculate_live_intervals();
 
    int node_count = this->alloc.count;
@@ -668,7 +654,7 @@ fs_visitor::assign_regs(bool allow_spilling)
    }
 
    /* Debug of register spilling: Go spill everything. */
-   if (unlikely(INTEL_DEBUG & DEBUG_SPILL_FS)) {
+   if (unlikely(spill_all)) {
       int reg = choose_spill_reg(g);
 
       if (reg != -1) {
@@ -723,19 +709,57 @@ fs_visitor::assign_regs(bool allow_spilling)
    return true;
 }
 
-void
-fs_visitor::emit_unspill(bblock_t *block, fs_inst *inst, fs_reg dst,
-                         uint32_t spill_offset, int count)
+namespace {
+   /**
+    * Maximum spill block size we expect to encounter in 32B units.
+    *
+    * This is somewhat arbitrary and doesn't necessarily limit the maximum
+    * variable size that can be spilled -- A higher value will allow a
+    * variable of a given size to be spilled more efficiently with a smaller
+    * number of scratch messages, but will increase the likelihood of a
+    * collision between the MRFs reserved for spilling and other MRFs used by
+    * the program (and possibly increase GRF register pressure on platforms
+    * without hardware MRFs), what could cause register allocation to fail.
+    *
+    * For the moment reserve just enough space so a register of 32 bit
+    * component type and natural region width can be spilled without splitting
+    * into multiple (force_writemask_all) scratch messages.
+    */
+   unsigned
+   spill_max_size(const backend_shader *s)
+   {
+      /* FINISHME - On Gen7+ it should be possible to avoid this limit
+       *            altogether by spilling directly from the temporary GRF
+       *            allocated to hold the result of the instruction (and the
+       *            scratch write header).
+       */
+      /* FINISHME - The shader's dispatch width probably belongs in
+       *            backend_shader (or some nonexistent fs_shader class?)
+       *            rather than in the visitor class.
+       */
+      return static_cast<const fs_visitor *>(s)->dispatch_width / 8;
+   }
+
+   /**
+    * First MRF register available for spilling.
+    */
+   unsigned
+   spill_base_mrf(const backend_shader *s)
+   {
+      return BRW_MAX_MRF(s->devinfo->gen) - spill_max_size(s) - 1;
+   }
+}
+
+static void
+emit_unspill(const fs_builder &bld, fs_reg dst,
+             uint32_t spill_offset, unsigned count)
 {
-   int reg_size = 1;
-   if (dispatch_width == 16 && count % 2 == 0)
-      reg_size = 2;
+   const brw_device_info *devinfo = bld.shader->devinfo;
+   const unsigned reg_size = dst.component_size(bld.dispatch_width()) /
+                             REG_SIZE;
+   assert(count % reg_size == 0);
 
-   const fs_builder ibld = bld.annotate(inst->annotation, inst->ir)
-                              .group(reg_size * 8, 0)
-                              .at(block, inst);
-
-   for (int i = 0; i < count / reg_size; i++) {
+   for (unsigned i = 0; i < count / reg_size; i++) {
       /* The Gen7 descriptor-based offset is 12 bits of HWORD units.  Because
        * the Gen7-style scratch block read is hardwired to BTI 255, on Gen9+
        * it would cause the DC to do an IA-coherent read, what largely
@@ -745,15 +769,14 @@ fs_visitor::emit_unspill(bblock_t *block, fs_inst *inst, fs_reg dst,
        */
       bool gen7_read = (devinfo->gen >= 7 && devinfo->gen < 9 &&
                         spill_offset < (1 << 12) * REG_SIZE);
-      fs_inst *unspill_inst = ibld.emit(gen7_read ?
-                                        SHADER_OPCODE_GEN7_SCRATCH_READ :
-                                        SHADER_OPCODE_GEN4_SCRATCH_READ,
-                                        dst);
+      fs_inst *unspill_inst = bld.emit(gen7_read ?
+                                       SHADER_OPCODE_GEN7_SCRATCH_READ :
+                                       SHADER_OPCODE_GEN4_SCRATCH_READ,
+                                       dst);
       unspill_inst->offset = spill_offset;
-      unspill_inst->regs_written = reg_size;
 
       if (!gen7_read) {
-         unspill_inst->base_mrf = FIRST_SPILL_MRF(devinfo->gen) + 1;
+         unspill_inst->base_mrf = spill_base_mrf(bld.shader);
          unspill_inst->mlen = 1; /* header contains offset */
       }
 
@@ -762,28 +785,21 @@ fs_visitor::emit_unspill(bblock_t *block, fs_inst *inst, fs_reg dst,
    }
 }
 
-void
-fs_visitor::emit_spill(bblock_t *block, fs_inst *inst, fs_reg src,
-                       uint32_t spill_offset, int count)
+static void
+emit_spill(const fs_builder &bld, fs_reg src,
+           uint32_t spill_offset, unsigned count)
 {
-   int reg_size = 1;
-   int spill_base_mrf = FIRST_SPILL_MRF(devinfo->gen) + 1;
-   if (dispatch_width == 16 && count % 2 == 0) {
-      spill_base_mrf = FIRST_SPILL_MRF(devinfo->gen);
-      reg_size = 2;
-   }
+   const unsigned reg_size = src.component_size(bld.dispatch_width()) /
+                             REG_SIZE;
+   assert(count % reg_size == 0);
 
-   const fs_builder ibld = bld.annotate(inst->annotation, inst->ir)
-                              .group(reg_size * 8, 0)
-                              .at(block, inst->next);
-
-   for (int i = 0; i < count / reg_size; i++) {
+   for (unsigned i = 0; i < count / reg_size; i++) {
       fs_inst *spill_inst =
-         ibld.emit(SHADER_OPCODE_GEN4_SCRATCH_WRITE, ibld.null_reg_f(), src);
+         bld.emit(SHADER_OPCODE_GEN4_SCRATCH_WRITE, bld.null_reg_f(), src);
       src.reg_offset += reg_size;
       spill_inst->offset = spill_offset + i * reg_size * REG_SIZE;
       spill_inst->mlen = 1 + reg_size; /* header, value */
-      spill_inst->base_mrf = spill_base_mrf;
+      spill_inst->base_mrf = spill_base_mrf(bld.shader);
    }
 }
 
@@ -805,29 +821,12 @@ fs_visitor::choose_spill_reg(struct ra_graph *g)
     */
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       for (unsigned int i = 0; i < inst->sources; i++) {
-	 if (inst->src[i].file == VGRF) {
+	 if (inst->src[i].file == VGRF)
             spill_costs[inst->src[i].nr] += loop_scale;
-
-            /* Register spilling logic assumes full-width registers; smeared
-             * registers have a width of 1 so if we try to spill them we'll
-             * generate invalid assembly.  This shouldn't be a problem because
-             * smeared registers are only used as short-term temporaries when
-             * loading pull constants, so spilling them is unlikely to reduce
-             * register pressure anyhow.
-             */
-            if (!inst->src[i].is_contiguous()) {
-               no_spill[inst->src[i].nr] = true;
-            }
-	 }
       }
 
-      if (inst->dst.file == VGRF) {
+      if (inst->dst.file == VGRF)
          spill_costs[inst->dst.nr] += inst->regs_written * loop_scale;
-
-         if (!inst->dst.is_contiguous()) {
-            no_spill[inst->dst.nr] = true;
-         }
-      }
 
       switch (inst->opcode) {
 
@@ -869,8 +868,6 @@ fs_visitor::spill_reg(int spill_reg)
    int size = alloc.sizes[spill_reg];
    unsigned int spill_offset = last_scratch;
    assert(ALIGN(spill_offset, 16) == spill_offset); /* oword read/write req. */
-   int spill_base_mrf = dispatch_width > 8 ? FIRST_SPILL_MRF(devinfo->gen) :
-                                             FIRST_SPILL_MRF(devinfo->gen) + 1;
 
    /* Spills may use MRFs 13-15 in the SIMD16 case.  Our texturing is done
     * using up to 11 MRFs starting from either m1 or m2, and fb writes can use
@@ -883,7 +880,7 @@ fs_visitor::spill_reg(int spill_reg)
       bool mrf_used[BRW_MAX_MRF(devinfo->gen)];
       get_used_mrfs(this, mrf_used);
 
-      for (int i = spill_base_mrf; i < BRW_MAX_MRF(devinfo->gen); i++) {
+      for (int i = spill_base_mrf(this); i < BRW_MAX_MRF(devinfo->gen); i++) {
          if (mrf_used[i]) {
             fail("Register spilling not supported with m%d used", i);
           return;
@@ -901,6 +898,8 @@ fs_visitor::spill_reg(int spill_reg)
     * could just spill/unspill the GRF being accessed.
     */
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
+      const fs_builder ibld = fs_builder(this, block, inst);
+
       for (unsigned int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == VGRF &&
              inst->src[i].nr == spill_reg) {
@@ -912,8 +911,22 @@ fs_visitor::spill_reg(int spill_reg)
             inst->src[i].nr = unspill_dst.nr;
             inst->src[i].reg_offset = 0;
 
-            emit_unspill(block, inst, unspill_dst, subset_spill_offset,
-                         regs_read);
+            /* We read the largest power-of-two divisor of the register count
+             * (because only POT scratch read blocks are allowed by the
+             * hardware) up to the maximum supported block size.
+             */
+            const unsigned width =
+               MIN2(32, 1u << (ffs(MAX2(1, regs_read) * 8) - 1));
+
+            /* Set exec_all() on unspill messages under the (rather
+             * pessimistic) assumption that there is no one-to-one
+             * correspondence between channels of the spilled variable in
+             * scratch space and the scratch read message, which operates on
+             * 32 bit channels.  It shouldn't hurt in any case because the
+             * unspill destination is a block-local temporary.
+             */
+            emit_unspill(ibld.exec_all().group(width, 0),
+                         unspill_dst, subset_spill_offset, regs_read);
 	 }
       }
 
@@ -934,16 +947,43 @@ fs_visitor::spill_reg(int spill_reg)
          inst->no_dd_clear = false;
          inst->no_dd_check = false;
 
+         /* Calculate the execution width of the scratch messages (which work
+          * in terms of 32 bit components so we have a fixed number of eight
+          * channels per spilled register).  We attempt to write one
+          * exec_size-wide component of the variable at a time without
+          * exceeding the maximum number of (fake) MRF registers reserved for
+          * spills.
+          */
+         const unsigned width = 8 * MIN2(
+            DIV_ROUND_UP(inst->dst.component_size(inst->exec_size), REG_SIZE),
+            spill_max_size(this));
+
+         /* Spills should only write data initialized by the instruction for
+          * whichever channels are enabled in the excution mask.  If that's
+          * not possible we'll have to emit a matching unspill before the
+          * instruction and set force_writemask_all on the spill.
+          */
+         const bool per_channel =
+            inst->dst.is_contiguous() && type_sz(inst->dst.type) == 4 &&
+            inst->exec_size == width;
+
+         /* Builder used to emit the scratch messages. */
+         const fs_builder ubld = ibld.exec_all(!per_channel).group(width, 0);
+
 	 /* If our write is going to affect just part of the
           * inst->regs_written(), then we need to unspill the destination
-          * since we write back out all of the regs_written().
+          * since we write back out all of the regs_written().  If the
+          * original instruction had force_writemask_all set and is not a
+          * partial write, there should be no need for the unspill since the
+          * instruction will be overwriting the whole destination in any case.
 	  */
-	 if (inst->is_partial_write())
-            emit_unspill(block, inst, spill_src, subset_spill_offset,
+         if (inst->is_partial_write() ||
+             (!inst->force_writemask_all && !per_channel))
+            emit_unspill(ubld, spill_src, subset_spill_offset,
                          inst->regs_written);
 
-         emit_spill(block, inst, spill_src, subset_spill_offset,
-                    inst->regs_written);
+         emit_spill(ubld.at(block, inst->next), spill_src,
+                    subset_spill_offset, inst->regs_written);
       }
    }
 

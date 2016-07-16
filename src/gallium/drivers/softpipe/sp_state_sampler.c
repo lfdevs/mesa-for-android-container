@@ -58,7 +58,7 @@ softpipe_bind_sampler_states(struct pipe_context *pipe,
    unsigned i;
 
    assert(shader < PIPE_SHADER_TYPES);
-   assert(start + num <= Elements(softpipe->samplers[shader]));
+   assert(start + num <= ARRAY_SIZE(softpipe->samplers[shader]));
 
    draw_flush(softpipe->draw);
 
@@ -106,7 +106,7 @@ softpipe_set_sampler_views(struct pipe_context *pipe,
    uint i;
 
    assert(shader < PIPE_SHADER_TYPES);
-   assert(start + num <= Elements(softpipe->sampler_views[shader]));
+   assert(start + num <= ARRAY_SIZE(softpipe->sampler_views[shader]));
 
    draw_flush(softpipe->draw);
 
@@ -199,7 +199,7 @@ prepare_shader_sampling(
 
          if (!sp_tex->dt) {
             /* regular texture - setup array of mipmap level offsets */
-            struct pipe_resource *res = view->texture;
+            MAYBE_UNUSED struct pipe_resource *res = view->texture;
             int j;
 
             if (view->target != PIPE_BUFFER) {
@@ -289,7 +289,7 @@ void
 softpipe_cleanup_vertex_sampling(struct softpipe_context *ctx)
 {
    unsigned i;
-   for (i = 0; i < Elements(ctx->mapped_vs_tex); i++) {
+   for (i = 0; i < ARRAY_SIZE(ctx->mapped_vs_tex); i++) {
       pipe_resource_reference(&ctx->mapped_vs_tex[i], NULL);
    }
 }
@@ -311,7 +311,7 @@ void
 softpipe_cleanup_geometry_sampling(struct softpipe_context *ctx)
 {
    unsigned i;
-   for (i = 0; i < Elements(ctx->mapped_gs_tex); i++) {
+   for (i = 0; i < ARRAY_SIZE(ctx->mapped_gs_tex); i++) {
       pipe_resource_reference(&ctx->mapped_gs_tex[i], NULL);
    }
 }
