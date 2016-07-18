@@ -21,7 +21,7 @@ Build-Depends:
  libxext-dev,
  libva-dev (>= 1.6.0) [linux-any kfreebsd-any],
  libvdpau-dev (>= 1.1.1) [linux-any kfreebsd-any],
- libvulkan-dev [!hurd-any],
+ libvulkan-dev [linux-amd64 linux-i386 linux-x32],
  autoconf,
  automake,
  libtool,
@@ -467,7 +467,7 @@ Description: Mesa VDPAU video acceleration drivers
 
 Package: mesa-vulkan-drivers
 Section: libs
-Architecture: linux-any kfreebsd-any
+Architecture: linux-amd64 linux-i386 linux-x32
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libvulkan1,

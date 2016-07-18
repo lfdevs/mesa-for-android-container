@@ -1,3 +1,19 @@
+mesa (12.0.1-3) experimental; urgency=medium
+
+  * rules, control: Build mesa-vulkan-drivers only on linux-
+    {amd64,i386,x32}.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 18 Jul 2016 16:31:00 +0300
+
+mesa (12.0.1-2) experimental; urgency=medium
+
+  * rules: Drop MESA_GIT_SHA1 hack because upstream uses build timestamp
+    instead.
+  * rules, not-installed: Handle removing unwanted vulkan headers in
+    rules instead.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 18 Jul 2016 11:45:01 +0300
+
 mesa (12.0.1-1) experimental; urgency=medium
 
   * New upstream release candidate.

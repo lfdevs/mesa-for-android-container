@@ -5,8 +5,6 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-PKG_VERSION = $(shell dpkg-parsechangelog | awk '/^Version:/ {print $$2}')
-
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
@@ -67,6 +65,9 @@ else
     ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
 	DRI_DRIVERS += nouveau
     endif
+    ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
+	VULKAN_DRIVERS += intel
+    endif
   endif
 
 	EGL_DISPLAYS += drm
@@ -74,7 +75,6 @@ else
   # Build intel drivers on archs where libdrm-intel is installed
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32))
 	DRI_DRIVERS += i915 i965
-	VULKAN_DRIVERS += intel
   endif
 
   ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
@@ -145,8 +145,6 @@ override_dh_auto_configure:
 		--disable-silent-rules \
 		$(confflags)
 
-	echo "#define MESA_GIT_SHA1 \"$(PKG_VERSION)\"" > build/src/git_sha1.h.tmp
-
 override_dh_auto_install:
 	dh_auto_install
 	for file in debian/*.in; \
@@ -176,6 +174,14 @@ override_dh_install:
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
 	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so \
 	   debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
+
+  # Remove vulkan headers only where they get installed in tmp
+  ifeq ($(DEB_HOST_ARCH_OS), linux)
+    ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 x32))
+	set -e; for file in vk_platform.h vulkan.h vulkan_intel.h; do rm debian/tmp/usr/include/vulkan/$$file; done
+	rmdir debian/tmp/usr/include/vulkan
+    endif
+  endif
 
   ifneq ($(DEB_HOST_ARCH_OS), hurd)
 	# Copy the hardlinked vdpau drivers correctly.
