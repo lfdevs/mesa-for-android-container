@@ -345,7 +345,8 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    AddrSurfInfoIn.flags.dccCompatible = !(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
                                         !(surf->flags & RADEON_SURF_SCANOUT) &&
                                         !(surf->flags & RADEON_SURF_DISABLE_DCC) &&
-                                        !compressed && AddrDccIn.numSamples <= 1;
+                                        !compressed && AddrDccIn.numSamples <= 1 &&
+                                        surf->last_level == 0;
 
    /* This disables incorrect calculations (hacks) in addrlib. */
    AddrSurfInfoIn.flags.noStencil = 1;

@@ -1682,7 +1682,7 @@ CodeEmitterGM107::emitNOT()
 void
 CodeEmitterGM107::emitIADD()
 {
-   if (!longIMMD(insn->src(1))) {
+   if (insn->src(1).getFile() != FILE_IMMEDIATE) {
       switch (insn->src(1).getFile()) {
       case FILE_GPR:
          emitInsn(0x5c100000);
@@ -1707,6 +1707,7 @@ CodeEmitterGM107::emitIADD()
       emitX  (0x2b);
    } else {
       emitInsn(0x1c000000);
+      emitNEG (0x38, insn->src(0));
       emitSAT (0x36);
       emitX   (0x35);
       emitCC  (0x34);

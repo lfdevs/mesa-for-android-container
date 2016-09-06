@@ -31,6 +31,7 @@
 #include "util/u_memory.h"
 #include "util/u_helpers.h"
 #include "util/u_format.h"
+#include "util/u_viewport.h"
 
 #include "freedreno_resource.h"
 #include "freedreno_query_hw.h"
@@ -544,12 +545,14 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				A4XX_RB_STENCILREFMASK_BF_STENCILREF(sr->ref_value[1]));
 	}
 
-	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_PROG)) {
+	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_RASTERIZER | FD_DIRTY_PROG)) {
 		struct fd4_zsa_stateobj *zsa = fd4_zsa_stateobj(ctx->zsa);
 		bool fragz = fp->has_kill | fp->writes_pos;
+		bool clamp = !ctx->rasterizer->depth_clip;
 
 		OUT_PKT0(ring, REG_A4XX_RB_DEPTH_CONTROL, 1);
 		OUT_RING(ring, zsa->rb_depth_control |
+				COND(clamp, A4XX_RB_DEPTH_CONTROL_Z_CLAMP_ENABLE) |
 				COND(fragz, A4XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE) |
 				COND(fragz && fp->frag_coord, A4XX_RB_DEPTH_CONTROL_FORCE_FRAGZ_TO_FS));
 
@@ -634,6 +637,30 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_RING(ring, A4XX_GRAS_CL_VPORT_YSCALE_0(ctx->viewport.scale[1]));
 		OUT_RING(ring, A4XX_GRAS_CL_VPORT_ZOFFSET_0(ctx->viewport.translate[2]));
 		OUT_RING(ring, A4XX_GRAS_CL_VPORT_ZSCALE_0(ctx->viewport.scale[2]));
+	}
+
+	if (dirty & (FD_DIRTY_VIEWPORT | FD_DIRTY_RASTERIZER | FD_DIRTY_FRAMEBUFFER)) {
+		float zmin, zmax;
+		int depth = 24;
+		if (ctx->framebuffer.zsbuf) {
+			depth = util_format_get_component_bits(
+					pipe_surface_format(ctx->framebuffer.zsbuf),
+					UTIL_FORMAT_COLORSPACE_ZS, 0);
+		}
+		util_viewport_zmin_zmax(&ctx->viewport, ctx->rasterizer->clip_halfz,
+								&zmin, &zmax);
+
+		OUT_PKT0(ring, REG_A4XX_RB_VPORT_Z_CLAMP(0), 2);
+		if (depth == 32) {
+			OUT_RING(ring, fui(zmin));
+			OUT_RING(ring, fui(zmax));
+		} else if (depth == 16) {
+			OUT_RING(ring, (uint32_t)(zmin * 0xffff));
+			OUT_RING(ring, (uint32_t)(zmax * 0xffff));
+		} else {
+			OUT_RING(ring, (uint32_t)(zmin * 0xffffff));
+			OUT_RING(ring, (uint32_t)(zmax * 0xffffff));
+		}
 	}
 
 	if (dirty & (FD_DIRTY_PROG | FD_DIRTY_FRAMEBUFFER)) {

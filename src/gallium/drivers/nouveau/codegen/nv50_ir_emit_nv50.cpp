@@ -2112,7 +2112,7 @@ makeInstructionLong(Instruction *insn)
    insn->encSize = 8;
 
    for (int i = fn->bbCount - 1; i >= 0 && fn->bbArray[i] != insn->bb; --i) {
-      fn->bbArray[i]->binPos += 4;
+      fn->bbArray[i]->binPos += adj;
    }
    fn->binSize += adj;
    insn->bb->binSize += adj;
@@ -2164,9 +2164,16 @@ replaceExitWithModifier(Function *func)
             return;
       }
    }
-   epilogue->binSize -= 8;
-   func->binSize -= 8;
+
+   int adj = epilogue->getExit()->encSize;
+   epilogue->binSize -= adj;
+   func->binSize -= adj;
    delete_Instruction(func->getProgram(), epilogue->getExit());
+
+   // There may be BB's that are laid out after the exit block
+   for (int i = func->bbCount - 1; i >= 0 && func->bbArray[i] != epilogue; --i) {
+      func->bbArray[i]->binPos -= adj;
+   }
 }
 
 void

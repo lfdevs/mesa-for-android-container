@@ -161,7 +161,7 @@ const struct nv50_format nv50_format_table[PIPE_FORMAT_COUNT] =
    F3(A, R11G11B10_FLOAT, R11G11B10_FLOAT, R, G, B, xx, FLOAT, BF10GF11RF11, IB),
 
    F3(A, L8_UNORM, R8_UNORM, R, R, R, xx, UNORM, R8, TB),
-   F3(A, L8_SRGB, R8_UNORM, R, R, R, xx, UNORM, R8, TB),
+   F3(A, L8_SRGB, NONE, R, R, R, xx, UNORM, R8, T),
    F3(A, L8_SNORM, R8_SNORM, R, R, R, xx, SNORM, R8, TC),
    I3(A, L8_SINT, R8_SINT, R, R, R, xx, SINT, R8, TR),
    I3(A, L8_UINT, R8_UINT, R, R, R, xx, UINT, R8, TR),
@@ -203,7 +203,7 @@ const struct nv50_format nv50_format_table[PIPE_FORMAT_COUNT] =
    C4(A, L4A4_UNORM, NONE, R, R, R, G, UNORM, G4R4, T),
    C4(A, L8A8_UNORM, RG8_UNORM, R, R, R, G, UNORM, G8R8, T),
    C4(A, L8A8_SNORM, RG8_SNORM, R, R, R, G, SNORM, G8R8, T),
-   C4(A, L8A8_SRGB, RG8_UNORM, R, R, R, G, UNORM, G8R8, T),
+   C4(A, L8A8_SRGB, NONE, R, R, R, G, UNORM, G8R8, T),
    C4(A, L8A8_SINT, RG8_SINT, R, R, R, G, SINT, G8R8, T),
    C4(A, L8A8_UINT, RG8_UINT, R, R, R, G, UINT, G8R8, T),
    C4(A, L16A16_UNORM, RG16_UNORM, R, R, R, G, UNORM, R16_G16, T),

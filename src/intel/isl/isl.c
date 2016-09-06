@@ -490,27 +490,27 @@ isl_calc_phys_level0_extent_sa(const struct isl_device *dev,
 
       case ISL_MSAA_LAYOUT_ARRAY:
          assert(info->depth == 1);
-         assert(info->array_len == 1);
+         assert(info->levels == 1);
          assert(!isl_format_is_compressed(info->format));
 
          *phys_level0_sa = (struct isl_extent4d) {
             .w = info->width,
             .h = info->height,
             .d = 1,
-            .a = info->samples,
+            .a = info->array_len * info->samples,
          };
          break;
 
       case ISL_MSAA_LAYOUT_INTERLEAVED:
          assert(info->depth == 1);
-         assert(info->array_len == 1);
+         assert(info->levels == 1);
          assert(!isl_format_is_compressed(info->format));
 
          *phys_level0_sa = (struct isl_extent4d) {
             .w = info->width,
             .h = info->height,
             .d = 1,
-            .a = 1,
+            .a = info->array_len,
          };
 
          isl_msaa_interleaved_scale_px_to_sa(info->samples,

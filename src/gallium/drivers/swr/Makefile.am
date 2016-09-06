@@ -22,7 +22,7 @@
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
-AM_CXXFLAGS = $(GALLIUM_DRIVER_CFLAGS) -std=c++11
+AM_CXXFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(SWR_CXX11_CXXFLAGS)
 
 noinst_LTLIBRARIES = libmesaswr.la
 
@@ -31,7 +31,7 @@ libmesaswr_la_SOURCES = $(LOADER_SOURCES)
 COMMON_CXXFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(LLVM_CXXFLAGS) \
-	-std=c++11 \
+	$(SWR_CXX11_CXXFLAGS) \
 	-I$(builddir)/rasterizer/scripts \
 	-I$(builddir)/rasterizer/jitter \
 	-I$(srcdir)/rasterizer \
@@ -148,7 +148,7 @@ distclean-local:
 lib_LTLIBRARIES = libswrAVX.la libswrAVX2.la
 
 libswrAVX_la_CXXFLAGS = \
-	-march=core-avx-i \
+	$(SWR_AVX_CXXFLAGS) \
 	-DKNOB_ARCH=KNOB_ARCH_AVX \
 	$(COMMON_CXXFLAGS)
 
@@ -171,7 +171,7 @@ libswrAVX_la_LDFLAGS = \
 	$(COMMON_LDFLAGS)
 
 libswrAVX2_la_CXXFLAGS = \
-	-march=core-avx2 \
+	$(SWR_AVX2_CXXFLAGS) \
 	-DKNOB_ARCH=KNOB_ARCH_AVX2 \
 	$(COMMON_CXXFLAGS)
 

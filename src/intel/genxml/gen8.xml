@@ -1115,15 +1115,16 @@
     <field name="User Clip Distance Cull Test Enable Bitmask" start="32" end="39" type="uint"/>
     <field name="Clip Enable" start="95" end="95" type="bool"/>
     <field name="API Mode" start="94" end="94" type="uint">
-      <value name="OGL" value="0"/>
+      <value name="APIMODE_OGL" value="0"/>
+      <value name="APIMODE_D3D" value="1"/>
     </field>
     <field name="Viewport XY Clip Test Enable" start="92" end="92" type="bool"/>
     <field name="Guardband Clip Test Enable" start="90" end="90" type="bool"/>
     <field name="User Clip Distance Clip Test Enable Bitmask" start="80" end="87" type="uint"/>
     <field name="Clip Mode" start="77" end="79" type="uint">
-      <value name="NORMAL" value="0"/>
-      <value name="REJECT_ALL" value="3"/>
-      <value name="ACCEPT_ALL" value="4"/>
+      <value name="CLIPMODE_NORMAL" value="0"/>
+      <value name="CLIPMODE_REJECT_ALL" value="3"/>
+      <value name="CLIPMODE_ACCEPT_ALL" value="4"/>
     </field>
     <field name="Perspective Divide Disable" start="73" end="73" type="bool"/>
     <field name="Non-Perspective Barycentric Enable" start="72" end="72" type="bool"/>
@@ -2035,7 +2036,7 @@
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="30"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
     <field name="SO Function Enable" start="63" end="63" type="uint"/>
-    <field name="API Rendering Disable" start="62" end="62" type="uint"/>
+    <field name="Rendering Disable" start="62" end="62" type="uint"/>
     <field name="Render Stream Select" start="59" end="60" type="uint"/>
     <field name="Reorder Mode" start="58" end="58" type="uint">
       <value name="LEADING" value="0"/>

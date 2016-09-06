@@ -278,6 +278,7 @@ struct pipe_context *nvc0_create(struct pipe_screen *, void *, unsigned flags);
 void nvc0_bufctx_fence(struct nvc0_context *, struct nouveau_bufctx *,
                        bool on_flush);
 void nvc0_default_kick_notify(struct nouveau_pushbuf *);
+const void *nvc0_get_sample_locations(unsigned);
 
 /* nvc0_draw.c */
 extern struct draw_stage *nvc0_draw_render_stage(struct nvc0_context *);

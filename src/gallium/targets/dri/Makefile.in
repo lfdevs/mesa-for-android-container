@@ -316,9 +316,10 @@ gallium_dri_la_DEPENDENCIES =  \
 	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
+	$(SHARED_GLAPI_LIB) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
-	$(am__DEPENDENCIES_15) $(am__append_46) $(am__DEPENDENCIES_16)
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_15) $(am__append_46) \
+	$(am__DEPENDENCIES_16)
 am__gallium_dri_la_SOURCES_DIST = target.c
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__objects_1 =  \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	gallium_dri_la-target.lo
@@ -617,6 +618,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
+SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
+SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
@@ -787,6 +791,7 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
+@HAVE_ANDROID_TRUE@@HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 AM_CFLAGS = \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
@@ -819,9 +824,9 @@ gallium_dri_la_LIBADD = $(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
-	$(SELINUX_LIBS) $(EXPAT_LIBS) $(LIBDRM_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_45) $(am__append_46) \
-	$(am__append_47)
+	$(SHARED_GLAPI_LIB) $(SELINUX_LIBS) $(EXPAT_LIBS) \
+	$(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_45) \
+	$(am__append_46) $(am__append_47)
 EXTRA_gallium_dri_la_DEPENDENCIES = \
 	dri.sym \
 	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn

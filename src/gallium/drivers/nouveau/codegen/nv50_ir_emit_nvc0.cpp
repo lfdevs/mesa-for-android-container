@@ -1356,15 +1356,12 @@ CodeEmitterNVC0::emitTXQ(const TexInstruction *i)
 void
 CodeEmitterNVC0::emitQUADOP(const Instruction *i, uint8_t qOp, uint8_t laneMask)
 {
-   code[0] = 0x00000000 | (laneMask << 6);
+   code[0] = 0x00000200 | (laneMask << 6); // dall
    code[1] = 0x48000000 | qOp;
 
    defId(i->def(0), 14);
    srcId(i->src(0), 20);
    srcId((i->srcExists(1) && i->predSrc != 1) ? i->src(1) : i->src(0), 26);
-
-   if (i->op == OP_QUADOP && progType != Program::TYPE_FRAGMENT)
-      code[0] |= 1 << 9; // dall
 
    emitPredicate(i);
 }

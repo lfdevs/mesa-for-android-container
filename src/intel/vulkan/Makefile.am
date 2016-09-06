@@ -61,7 +61,9 @@ AM_CPPFLAGS = \
 	-I$(top_builddir)/src/intel \
 	-I$(top_srcdir)/src/intel
 
-AM_CFLAGS = -Wno-override-init -msse2
+AM_CFLAGS = \
+	$(VISIBILITY_CFLAGS) \
+	-Wno-override-init -msse2
 
 libanv_gen7_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=70
 libanv_gen7_la_SOURCES = $(GEN7_FILES)
@@ -159,6 +161,7 @@ libvulkan_intel_la_LDFLAGS = \
 	-module \
 	-no-undefined \
 	-avoid-version \
+	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 

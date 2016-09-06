@@ -1231,6 +1231,7 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
       xcb_disconnect(dri2_dpy->conn);
  cleanup_dpy:
    free(dri2_dpy);
+   disp->DriverData = NULL;
 
    return EGL_FALSE;
 }
@@ -1370,6 +1371,7 @@ dri2_initialize_x11_dri3(_EGLDriver *drv, _EGLDisplay *disp)
       xcb_disconnect(dri2_dpy->conn);
  cleanup_dpy:
    free(dri2_dpy);
+   disp->DriverData = NULL;
 
    return EGL_FALSE;
 }
@@ -1467,6 +1469,7 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
       xcb_disconnect(dri2_dpy->conn);
  cleanup_dpy:
    free(dri2_dpy);
+   disp->DriverData = NULL;
 
    return EGL_FALSE;
 }

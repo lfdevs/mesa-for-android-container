@@ -1784,8 +1784,10 @@ type_qualifier:
        * variables. As only outputs can be declared as invariant, an invariant
        * output from one shader stage will still match an input of a subsequent
        * stage without the input being declared as invariant."
+       *
+       * On the desktop side, this text first appears in GLSL 4.30.
        */
-      if (state->es_shader && state->language_version >= 300 && $$.flags.q.in)
+      if (state->is_version(430, 300) && $$.flags.q.in)
          _mesa_glsl_error(&@1, state, "invariant qualifiers cannot be used with shader inputs");
    }
    | interpolation_qualifier type_qualifier

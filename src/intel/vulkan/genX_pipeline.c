@@ -63,8 +63,7 @@ genX(compute_pipeline_create)(
    /* When we free the pipeline, we detect stages based on the NULL status
     * of various prog_data pointers.  Make them NULL by default.
     */
-   memset(pipeline->prog_data, 0, sizeof(pipeline->prog_data));
-   memset(pipeline->bindings, 0, sizeof(pipeline->bindings));
+   memset(pipeline->shaders, 0, sizeof(pipeline->shaders));
 
    pipeline->vs_simd8 = NO_KERNEL;
    pipeline->vs_vec4 = NO_KERNEL;
@@ -76,9 +75,13 @@ genX(compute_pipeline_create)(
 
    assert(pCreateInfo->stage.stage == VK_SHADER_STAGE_COMPUTE_BIT);
    ANV_FROM_HANDLE(anv_shader_module, module,  pCreateInfo->stage.module);
-   anv_pipeline_compile_cs(pipeline, cache, pCreateInfo, module,
-                           pCreateInfo->stage.pName,
-                           pCreateInfo->stage.pSpecializationInfo);
+   result = anv_pipeline_compile_cs(pipeline, cache, pCreateInfo, module,
+                                    pCreateInfo->stage.pName,
+                                    pCreateInfo->stage.pSpecializationInfo);
+   if (result != VK_SUCCESS) {
+      anv_free2(&device->alloc, pAllocator, pipeline);
+      return result;
+   }
 
    pipeline->use_repclear = false;
 

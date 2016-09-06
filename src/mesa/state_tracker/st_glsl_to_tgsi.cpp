@@ -1136,7 +1136,7 @@ glsl_to_tgsi_visitor::st_src_reg_for_double(double val)
    uval[0].u = *(uint32_t *)&val;
    uval[1].u = *(((uint32_t *)&val) + 1);
    src.index = add_constant(src.file, uval, 1, GL_DOUBLE, &src.swizzle);
-
+   src.swizzle = MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_Y, SWIZZLE_X, SWIZZLE_Y);
    return src;
 }
 
@@ -1958,12 +1958,14 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
          emit_asm(ir, TGSI_OPCODE_TRUNC, result_dst, op[0]);
       break;
    case ir_unop_bitcast_f2i:
-      result_src = op[0];
-      result_src.type = GLSL_TYPE_INT;
-      break;
    case ir_unop_bitcast_f2u:
-      result_src = op[0];
-      result_src.type = GLSL_TYPE_UINT;
+      /* Make sure we don't propagate the negate modifier to integer opcodes. */
+      if (op[0].negate)
+         emit_asm(ir, TGSI_OPCODE_MOV, result_dst, op[0]);
+      else
+         result_src = op[0];
+      result_src.type = ir->operation == ir_unop_bitcast_f2i ? GLSL_TYPE_INT :
+                                                               GLSL_TYPE_UINT;
       break;
    case ir_unop_bitcast_i2f:
    case ir_unop_bitcast_u2f:
@@ -6045,7 +6047,11 @@ st_translate_program(
                               inputSemanticName[i], inputSemanticIndex[i],
                               interpMode[i], 0, interpLocation[i],
                               array_id, array_size);
-            i += array_size - 1;
+
+            GLuint base_attr = inputSlotToAttr[i];
+            while (i + 1 < numInputs &&
+                   inputSlotToAttr[i + 1] < base_attr + array_size)
+               ++i;
          }
          else {
             t->inputs[i] = ureg_DECL_fs_input_cyl_centroid(ureg,

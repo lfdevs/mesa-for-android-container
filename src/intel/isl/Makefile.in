@@ -172,15 +172,11 @@ libisl_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 am__DEPENDENCIES_1 = libisl-gen7.la libisl-gen75.la libisl-gen8.la \
 	libisl-gen9.la
 libisl_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
-am__objects_5 = libisl_la-isl.lo libisl_la-isl_format.lo \
-	libisl_la-isl_gen4.lo libisl_la-isl_gen6.lo \
-	libisl_la-isl_storage_image.lo
-am__objects_6 = libisl_la-isl_format_layout.lo
+am__objects_5 = isl.lo isl_format.lo isl_gen4.lo isl_gen6.lo \
+	isl_storage_image.lo
+am__objects_6 = isl_format_layout.lo
 am_libisl_la_OBJECTS = $(am__objects_5) $(am__objects_6)
 libisl_la_OBJECTS = $(am_libisl_la_OBJECTS)
-libisl_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(libisl_la_CFLAGS) \
-	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 tests_isl_surf_get_image_offset_test_SOURCES =  \
 	tests/isl_surf_get_image_offset_test.c
 am__dirstamp = $(am__leading_dot)dirstamp
@@ -649,6 +645,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
+SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
+SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
@@ -811,17 +810,20 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/include
 
-libisl_la_CFLAGS = $(CFLAGS) -Wno-override-init
+AM_CFLAGS = \
+	$(VISIBILITY_CFLAGS) \
+	-Wno-override-init
+
 libisl_la_LIBADD = $(ISL_GEN_LIBS)
 libisl_la_SOURCES = $(ISL_FILES) $(ISL_GENERATED_FILES)
 libisl_gen7_la_SOURCES = $(ISL_GEN7_FILES)
-libisl_gen7_la_CFLAGS = $(libisl_la_CFLAGS) -DGEN_VERSIONx10=70
+libisl_gen7_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=70
 libisl_gen75_la_SOURCES = $(ISL_GEN75_FILES)
-libisl_gen75_la_CFLAGS = $(libisl_la_CFLAGS) -DGEN_VERSIONx10=75
+libisl_gen75_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=75
 libisl_gen8_la_SOURCES = $(ISL_GEN8_FILES)
-libisl_gen8_la_CFLAGS = $(libisl_la_CFLAGS) -DGEN_VERSIONx10=80
+libisl_gen8_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=80
 libisl_gen9_la_SOURCES = $(ISL_GEN9_FILES)
-libisl_gen9_la_CFLAGS = $(libisl_la_CFLAGS) -DGEN_VERSIONx10=90
+libisl_gen9_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=90
 BUILT_SOURCES = $(ISL_GENERATED_FILES)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 TESTS = $(check_PROGRAMS)
@@ -897,7 +899,7 @@ libisl-gen9.la: $(libisl_gen9_la_OBJECTS) $(libisl_gen9_la_DEPENDENCIES) $(EXTRA
 	$(AM_V_CCLD)$(libisl_gen9_la_LINK)  $(libisl_gen9_la_OBJECTS) $(libisl_gen9_la_LIBADD) $(LIBS)
 
 libisl.la: $(libisl_la_OBJECTS) $(libisl_la_DEPENDENCIES) $(EXTRA_libisl_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(libisl_la_LINK)  $(libisl_la_OBJECTS) $(libisl_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(LINK)  $(libisl_la_OBJECTS) $(libisl_la_LIBADD) $(LIBS)
 
 clean-checkPROGRAMS:
 	@list='$(check_PROGRAMS)'; test -n "$$list" || exit 0; \
@@ -927,6 +929,12 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/isl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/isl_format.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/isl_format_layout.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/isl_gen4.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/isl_gen6.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/isl_storage_image.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_gen75_la-isl_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_gen7_la-isl_gen7.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_gen7_la-isl_surface_state.Plo@am__quote@
@@ -934,12 +942,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_gen8_la-isl_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_gen9_la-isl_gen9.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_gen9_la-isl_surface_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_la-isl.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_la-isl_format.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_la-isl_format_layout.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_la-isl_gen4.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_la-isl_gen6.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libisl_la-isl_storage_image.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/isl_surf_get_image_offset_test.Po@am__quote@
 
 .c.o:
@@ -1014,48 +1016,6 @@ libisl_gen9_la-isl_surface_state.lo: isl_surface_state.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl_surface_state.c' object='libisl_gen9_la-isl_surface_state.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_gen9_la_CFLAGS) $(CFLAGS) -c -o libisl_gen9_la-isl_surface_state.lo `test -f 'isl_surface_state.c' || echo '$(srcdir)/'`isl_surface_state.c
-
-libisl_la-isl.lo: isl.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -MT libisl_la-isl.lo -MD -MP -MF $(DEPDIR)/libisl_la-isl.Tpo -c -o libisl_la-isl.lo `test -f 'isl.c' || echo '$(srcdir)/'`isl.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libisl_la-isl.Tpo $(DEPDIR)/libisl_la-isl.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl.c' object='libisl_la-isl.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -c -o libisl_la-isl.lo `test -f 'isl.c' || echo '$(srcdir)/'`isl.c
-
-libisl_la-isl_format.lo: isl_format.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -MT libisl_la-isl_format.lo -MD -MP -MF $(DEPDIR)/libisl_la-isl_format.Tpo -c -o libisl_la-isl_format.lo `test -f 'isl_format.c' || echo '$(srcdir)/'`isl_format.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libisl_la-isl_format.Tpo $(DEPDIR)/libisl_la-isl_format.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl_format.c' object='libisl_la-isl_format.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -c -o libisl_la-isl_format.lo `test -f 'isl_format.c' || echo '$(srcdir)/'`isl_format.c
-
-libisl_la-isl_gen4.lo: isl_gen4.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -MT libisl_la-isl_gen4.lo -MD -MP -MF $(DEPDIR)/libisl_la-isl_gen4.Tpo -c -o libisl_la-isl_gen4.lo `test -f 'isl_gen4.c' || echo '$(srcdir)/'`isl_gen4.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libisl_la-isl_gen4.Tpo $(DEPDIR)/libisl_la-isl_gen4.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl_gen4.c' object='libisl_la-isl_gen4.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -c -o libisl_la-isl_gen4.lo `test -f 'isl_gen4.c' || echo '$(srcdir)/'`isl_gen4.c
-
-libisl_la-isl_gen6.lo: isl_gen6.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -MT libisl_la-isl_gen6.lo -MD -MP -MF $(DEPDIR)/libisl_la-isl_gen6.Tpo -c -o libisl_la-isl_gen6.lo `test -f 'isl_gen6.c' || echo '$(srcdir)/'`isl_gen6.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libisl_la-isl_gen6.Tpo $(DEPDIR)/libisl_la-isl_gen6.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl_gen6.c' object='libisl_la-isl_gen6.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -c -o libisl_la-isl_gen6.lo `test -f 'isl_gen6.c' || echo '$(srcdir)/'`isl_gen6.c
-
-libisl_la-isl_storage_image.lo: isl_storage_image.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -MT libisl_la-isl_storage_image.lo -MD -MP -MF $(DEPDIR)/libisl_la-isl_storage_image.Tpo -c -o libisl_la-isl_storage_image.lo `test -f 'isl_storage_image.c' || echo '$(srcdir)/'`isl_storage_image.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libisl_la-isl_storage_image.Tpo $(DEPDIR)/libisl_la-isl_storage_image.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl_storage_image.c' object='libisl_la-isl_storage_image.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -c -o libisl_la-isl_storage_image.lo `test -f 'isl_storage_image.c' || echo '$(srcdir)/'`isl_storage_image.c
-
-libisl_la-isl_format_layout.lo: isl_format_layout.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -MT libisl_la-isl_format_layout.lo -MD -MP -MF $(DEPDIR)/libisl_la-isl_format_layout.Tpo -c -o libisl_la-isl_format_layout.lo `test -f 'isl_format_layout.c' || echo '$(srcdir)/'`isl_format_layout.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libisl_la-isl_format_layout.Tpo $(DEPDIR)/libisl_la-isl_format_layout.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl_format_layout.c' object='libisl_la-isl_format_layout.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libisl_la_CFLAGS) $(CFLAGS) -c -o libisl_la-isl_format_layout.lo `test -f 'isl_format_layout.c' || echo '$(srcdir)/'`isl_format_layout.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

@@ -1,3 +1,0 @@
-etc/OpenCL/vendors/mesa.icd
-usr/lib/${DEB_HOST_MULTIARCH}/gallium-pipe/*.so
-usr/lib/${DEB_HOST_MULTIARCH}/libMesaOpenCL*

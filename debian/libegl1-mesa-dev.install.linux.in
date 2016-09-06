@@ -1,9 +1,0 @@
-# OS-independent part (from libegl1-mesa-dev.install.in):
-usr/lib/${DEB_HOST_MULTIARCH}/libEGL.so
-usr/include/EGL
-usr/include/KHR
-usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/egl.pc
-
-# Wayland support, only on Linux:
-usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so
-usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/wayland-egl.pc

@@ -278,10 +278,34 @@ control_line_success:
 	HASH_TOKEN DEFINE_TOKEN define
 |	HASH_TOKEN UNDEF IDENTIFIER NEWLINE {
 		macro_t *macro;
-		if (strcmp("__LINE__", $3) == 0
-		    || strcmp("__FILE__", $3) == 0
-		    || strcmp("__VERSION__", $3) == 0
-		    || strncmp("GL_", $3, 3) == 0)
+
+                /* Section 3.4 (Preprocessor) of the GLSL ES 3.00 spec says:
+                 *
+                 *    It is an error to undefine or to redefine a built-in
+                 *    (pre-defined) macro name.
+                 *
+                 * The GLSL ES 1.00 spec does not contain this text.
+                 *
+                 * Section 3.3 (Preprocessor) of the GLSL 1.30 spec says:
+                 *
+                 *    #define and #undef functionality are defined as is
+                 *    standard for C++ preprocessors for macro definitions
+                 *    both with and without macro parameters.
+                 *
+                 * At least as far as I can tell GCC allow '#undef __FILE__'.
+                 * Furthermore, there are desktop OpenGL conformance tests
+                 * that expect '#undef __VERSION__' and '#undef
+                 * GL_core_profile' to work.
+                 *
+                 * Only disallow #undef of pre-defined macros on GLSL ES >=
+                 * 3.00 shaders.
+                 */
+		if (parser->is_gles &&
+                    parser->version >= 300 &&
+                    (strcmp("__LINE__", $3) == 0
+                     || strcmp("__FILE__", $3) == 0
+                     || strcmp("__VERSION__", $3) == 0
+                     || strncmp("GL_", $3, 3) == 0))
 			glcpp_error(& @1, parser, "Built-in (pre-defined)"
 				    " macro names cannot be undefined.");
 
@@ -396,13 +420,13 @@ control_line_success:
 		_glcpp_parser_skip_stack_pop (parser, & @1);
 	} NEWLINE
 |	HASH_TOKEN VERSION_TOKEN integer_constant NEWLINE {
-		if (parser->version_resolved) {
+		if (parser->version != 0) {
 			glcpp_error(& @1, parser, "#version must appear on the first line");
 		}
 		_glcpp_parser_handle_version_declaration(parser, $3, NULL, true);
 	}
 |	HASH_TOKEN VERSION_TOKEN integer_constant IDENTIFIER NEWLINE {
-		if (parser->version_resolved) {
+		if (parser->version != 0) {
 			glcpp_error(& @1, parser, "#version must appear on the first line");
 		}
 		_glcpp_parser_handle_version_declaration(parser, $3, $4, true);
@@ -1345,7 +1369,7 @@ glcpp_parser_create(const struct gl_extensions *extensions, gl_api api)
 
    parser->extensions = extensions;
    parser->api = api;
-   parser->version_resolved = false;
+   parser->version = 0;
 
    parser->has_new_line_number = 0;
    parser->new_line_number = 1;
@@ -2281,10 +2305,10 @@ _glcpp_parser_handle_version_declaration(glcpp_parser_t *parser, intmax_t versio
 {
    const struct gl_extensions *extensions = parser->extensions;
 
-   if (parser->version_resolved)
+   if (parser->version != 0)
       return;
 
-   parser->version_resolved = true;
+   parser->version = version;
 
    add_builtin_define (parser, "__VERSION__", version);
 

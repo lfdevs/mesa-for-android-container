@@ -2,6 +2,7 @@
 #include "util/u_format.h"
 #include "util/u_framebuffer.h"
 #include "util/u_math.h"
+#include "util/u_viewport.h"
 
 #include "nvc0/nvc0_context.h"
 
@@ -211,6 +212,19 @@ nvc0_validate_fb(struct nvc0_context *nvc0)
        PUSH_DATAf(push, xy[1]);
     }
 
+   if (screen->base.class_3d >= GM200_3D_CLASS) {
+      const uint8_t (*ptr)[2] = nvc0_get_sample_locations(ms);
+      uint32_t val[4] = {};
+
+      for (i = 0; i < 16; i++) {
+         val[i / 4] |= ptr[i % ms][0] << (((i % 4) * 8) + 0);
+         val[i / 4] |= ptr[i % ms][1] << (((i % 4) * 8) + 4);
+      }
+
+      BEGIN_NVC0(push, SUBC_3D(0x11e0), 4);
+      PUSH_DATAp(push, val, 4);
+   }
+
     if (serialize)
        IMMED_NVC0(push, NVC0_3D(SERIALIZE), 0);
 
@@ -316,8 +330,12 @@ nvc0_validate_viewport(struct nvc0_context *nvc0)
       PUSH_DATA (push, (w << 16) | x);
       PUSH_DATA (push, (h << 16) | y);
 
-      zmin = vp->translate[2] - fabsf(vp->scale[2]);
-      zmax = vp->translate[2] + fabsf(vp->scale[2]);
+      /* If the halfz setting ever changes, the viewports will also get
+       * updated. The rast will get updated before the validate function has a
+       * chance to hit, so we can just use it directly without an atom
+       * dependency.
+       */
+      util_viewport_zmin_zmax(vp, nvc0->rast->pipe.clip_halfz, &zmin, &zmax);
 
       BEGIN_NVC0(push, NVC0_3D(DEPTH_RANGE_NEAR(i)), 2);
       PUSH_DATAf(push, zmin);

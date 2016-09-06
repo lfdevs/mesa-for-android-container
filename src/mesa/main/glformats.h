@@ -61,6 +61,9 @@ extern GLboolean
 _mesa_is_astc_format(GLenum internalFormat);
 
 extern GLboolean
+_mesa_is_etc2_format(GLenum internalFormat);
+
+extern GLboolean
 _mesa_is_type_unsigned(GLenum type);
 
 extern GLboolean

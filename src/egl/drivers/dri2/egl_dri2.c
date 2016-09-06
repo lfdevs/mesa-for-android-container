@@ -757,64 +757,99 @@ dri2_create_screen(_EGLDisplay *disp)
 
 /**
  * Called via eglInitialize(), GLX_drv->API.Initialize().
+ *
+ * This must be guaranteed to be called exactly once, even if eglInitialize is
+ * called many times (without a eglTerminate in between).
  */
 static EGLBoolean
 dri2_initialize(_EGLDriver *drv, _EGLDisplay *disp)
 {
+   EGLBoolean ret = EGL_FALSE;
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+
+   /* In the case where the application calls eglMakeCurrent(context1),
+    * eglTerminate, then eglInitialize again (without a call to eglReleaseThread
+    * or eglMakeCurrent(NULL) before that), dri2_dpy structure is still
+    * initialized, as we need it to be able to free context1 correctly.
+    *
+    * It would probably be safest to forcibly release the display with
+    * dri2_display_release, to make sure the display is reinitialized correctly.
+    * However, the EGL spec states that we need to keep a reference to the
+    * current context (so we cannot call dri2_make_current(NULL)), and therefore
+    * we would leak context1 as we would be missing the old display connection
+    * to free it up correctly.
+    */
+   if (dri2_dpy) {
+      dri2_dpy->ref_count++;
+      return EGL_TRUE;
+   }
+
    /* not until swrast_dri is supported */
    if (disp->Options.UseFallback)
       return EGL_FALSE;
 
+   /* Nothing to initialize for a test only display */
+   if (disp->Options.TestOnly)
+      return EGL_TRUE;
+
    switch (disp->Platform) {
 #ifdef HAVE_SURFACELESS_PLATFORM
    case _EGL_PLATFORM_SURFACELESS:
-      if (disp->Options.TestOnly)
-         return EGL_TRUE;
-      return dri2_initialize_surfaceless(drv, disp);
+      ret = dri2_initialize_surfaceless(drv, disp);
+      break;
 #endif
-
 #ifdef HAVE_X11_PLATFORM
    case _EGL_PLATFORM_X11:
-      if (disp->Options.TestOnly)
-         return EGL_TRUE;
-      return dri2_initialize_x11(drv, disp);
+      ret = dri2_initialize_x11(drv, disp);
+      break;
 #endif
-
 #ifdef HAVE_DRM_PLATFORM
    case _EGL_PLATFORM_DRM:
-      if (disp->Options.TestOnly)
-         return EGL_TRUE;
-      return dri2_initialize_drm(drv, disp);
+      ret = dri2_initialize_drm(drv, disp);
+      break;
 #endif
 #ifdef HAVE_WAYLAND_PLATFORM
    case _EGL_PLATFORM_WAYLAND:
-      if (disp->Options.TestOnly)
-         return EGL_TRUE;
-      return dri2_initialize_wayland(drv, disp);
+      ret = dri2_initialize_wayland(drv, disp);
+      break;
 #endif
 #ifdef HAVE_ANDROID_PLATFORM
    case _EGL_PLATFORM_ANDROID:
-      if (disp->Options.TestOnly)
-         return EGL_TRUE;
-      return dri2_initialize_android(drv, disp);
+      ret = dri2_initialize_android(drv, disp);
+      break;
 #endif
-
    default:
       _eglLog(_EGL_WARNING, "No EGL platform enabled.");
       return EGL_FALSE;
    }
+
+   if (ret) {
+      dri2_dpy = dri2_egl_display(disp);
+
+      if (!dri2_dpy) {
+         return EGL_FALSE;
+      }
+
+      dri2_dpy->ref_count++;
+   }
+
+   return ret;
 }
 
 /**
- * Called via eglTerminate(), drv->API.Terminate().
+ * Decrement display reference count, and free up display if necessary.
  */
-static EGLBoolean
-dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
-{
+static void
+dri2_display_release(_EGLDisplay *disp) {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    unsigned i;
 
-   _eglReleaseDisplayResources(drv, disp);
+   assert(dri2_dpy->ref_count > 0);
+   dri2_dpy->ref_count--;
+
+   if (dri2_dpy->ref_count > 0)
+      return;
+
    _eglCleanupDisplay(disp);
 
    if (dri2_dpy->own_dri_screen)
@@ -869,6 +904,21 @@ dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
    }
    free(dri2_dpy);
    disp->DriverData = NULL;
+}
+
+/**
+ * Called via eglTerminate(), drv->API.Terminate().
+ *
+ * This must be guaranteed to be called exactly once, even if eglTerminate is
+ * called many times (without a eglInitialize in between).
+ */
+static EGLBoolean
+dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
+{
+   /* Release all non-current Context/Surfaces. */
+   _eglReleaseDisplayResources(drv, disp);
+
+   dri2_display_release(disp);
 
    return EGL_TRUE;
 }
@@ -1188,10 +1238,16 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
    _EGLSurface *tmp_dsurf, *tmp_rsurf;
    __DRIdrawable *ddraw, *rdraw;
    __DRIcontext *cctx;
+   EGLBoolean unbind;
+
+   if (!dri2_dpy)
+      return _eglError(EGL_NOT_INITIALIZED, "eglMakeCurrent");
 
    /* make new bindings */
-   if (!_eglBindContext(ctx, dsurf, rsurf, &old_ctx, &old_dsurf, &old_rsurf))
+   if (!_eglBindContext(ctx, dsurf, rsurf, &old_ctx, &old_dsurf, &old_rsurf)) {
+      /* _eglBindContext already sets the EGL error (in _eglCheckMakeCurrent) */
       return EGL_FALSE;
+   }
 
    /* flush before context switch */
    if (old_ctx && dri2_drv->glFlush)
@@ -1206,14 +1262,21 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
       dri2_dpy->core->unbindContext(old_cctx);
    }
 
-   if ((cctx == NULL && ddraw == NULL && rdraw == NULL) ||
-       dri2_dpy->core->bindContext(cctx, ddraw, rdraw)) {
+   unbind = (cctx == NULL && ddraw == NULL && rdraw == NULL);
+
+   if (unbind || dri2_dpy->core->bindContext(cctx, ddraw, rdraw)) {
       if (old_dsurf)
          drv->API.DestroySurface(drv, disp, old_dsurf);
       if (old_rsurf)
          drv->API.DestroySurface(drv, disp, old_rsurf);
-      if (old_ctx)
+
+      if (!unbind)
+         dri2_dpy->ref_count++;
+      if (old_ctx) {
+         EGLDisplay old_disp = _eglGetDisplayHandle(old_ctx->Resource.Display);
          drv->API.DestroyContext(drv, disp, old_ctx);
+         dri2_display_release(old_disp);
+      }
 
       return EGL_TRUE;
    } else {
@@ -1231,7 +1294,11 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
       _eglPutSurface(old_rsurf);
       _eglPutContext(old_ctx);
 
-      return EGL_FALSE;
+      /* dri2_dpy->core->bindContext failed. We cannot tell for sure why, but
+       * setting the error to EGL_BAD_MATCH is surely better than leaving it
+       * as EGL_SUCCESS.
+       */
+      return _eglError(EGL_BAD_MATCH, "eglMakeCurrent");
    }
 }
 

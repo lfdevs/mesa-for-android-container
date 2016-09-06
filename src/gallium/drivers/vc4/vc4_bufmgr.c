@@ -28,6 +28,7 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
+#include "util/u_hash_table.h"
 #include "util/u_memory.h"
 #include "util/ralloc.h"
 
@@ -329,10 +330,19 @@ vc4_bo_open_handle(struct vc4_screen *screen,
                    uint32_t winsys_stride,
                    uint32_t handle, uint32_t size)
 {
-        struct vc4_bo *bo = CALLOC_STRUCT(vc4_bo);
+        struct vc4_bo *bo;
 
         assert(size);
 
+        pipe_mutex_lock(screen->bo_handles_mutex);
+
+        bo = util_hash_table_get(screen->bo_handles, (void*)(uintptr_t)handle);
+        if (bo) {
+                pipe_reference(NULL, &bo->reference);
+                goto done;
+        }
+
+        bo = CALLOC_STRUCT(vc4_bo);
         pipe_reference_init(&bo->reference, 1);
         bo->screen = screen;
         bo->handle = handle;
@@ -347,6 +357,10 @@ vc4_bo_open_handle(struct vc4_screen *screen,
         bo->map = malloc(bo->size);
 #endif
 
+        util_hash_table_set(screen->bo_handles, (void *)(uintptr_t)handle, bo);
+
+done:
+        pipe_mutex_unlock(screen->bo_handles_mutex);
         return bo;
 }
 
@@ -399,7 +413,11 @@ vc4_bo_get_dmabuf(struct vc4_bo *bo)
                         bo->handle);
                 return -1;
         }
+
+        pipe_mutex_lock(bo->screen->bo_handles_mutex);
         bo->private = false;
+        util_hash_table_set(bo->screen->bo_handles, (void *)(uintptr_t)bo->handle, bo);
+        pipe_mutex_unlock(bo->screen->bo_handles_mutex);
 
         return fd;
 }

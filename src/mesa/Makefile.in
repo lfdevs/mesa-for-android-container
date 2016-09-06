@@ -1035,6 +1035,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
+SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
+SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
@@ -1790,12 +1793,12 @@ INCLUDE_DIRS = \
 	-I$(top_builddir)/src \
 	-I$(top_srcdir)/src \
 	-I$(top_builddir)/src/compiler/nir \
-	-I$(top_srcdir)/src/mesa \
 	-I$(top_builddir)/src/mesa \
-	-I$(top_srcdir)/src/mesa/main \
+	-I$(top_srcdir)/src/mesa \
 	-I$(top_builddir)/src/mesa/main \
-	-I$(top_srcdir)/src/mapi \
+	-I$(top_srcdir)/src/mesa/main \
 	-I$(top_builddir)/src/mapi \
+	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary
 

@@ -1,5 +1,0 @@
-usr/lib/${DEB_HOST_MULTIARCH}/libxatracker.so
-usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/xatracker.pc
-usr/include/xa_composite.h
-usr/include/xa_context.h
-usr/include/xa_tracker.h

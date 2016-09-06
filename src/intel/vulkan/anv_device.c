@@ -372,7 +372,7 @@ void anv_GetPhysicalDeviceFeatures(
       .robustBufferAccess                       = true,
       .fullDrawIndexUint32                      = true,
       .imageCubeArray                           = false,
-      .independentBlend                         = pdevice->info->gen >= 8,
+      .independentBlend                         = true,
       .geometryShader                           = true,
       .tessellationShader                       = false,
       .sampleRateShading                        = false,
@@ -438,6 +438,10 @@ void anv_GetPhysicalDeviceProperties(
 
    const float time_stamp_base = devinfo->gen >= 9 ? 83.333 : 80.0;
 
+   /* See assertions made when programming the buffer surface state. */
+   const uint32_t max_raw_buffer_sz = devinfo->gen >= 7 ?
+                                      (1ul << 30) : (1ul << 27);
+
    VkSampleCountFlags sample_counts =
       isl_device_get_sample_counts(&pdevice->isl_dev);
 
@@ -448,8 +452,8 @@ void anv_GetPhysicalDeviceProperties(
       .maxImageDimensionCube                    = (1 << 14),
       .maxImageArrayLayers                      = (1 << 11),
       .maxTexelBufferElements                   = 128 * 1024 * 1024,
-      .maxUniformBufferRange                    = UINT32_MAX,
-      .maxStorageBufferRange                    = UINT32_MAX,
+      .maxUniformBufferRange                    = (1ul << 27),
+      .maxStorageBufferRange                    = max_raw_buffer_sz,
       .maxPushConstantsSize                     = MAX_PUSH_CONSTANTS_SIZE,
       .maxMemoryAllocationCount                 = UINT32_MAX,
       .maxSamplerAllocationCount                = 64 * 1024,
@@ -649,13 +653,15 @@ PFN_vkVoidFunction anv_GetInstanceProcAddr(
    return anv_lookup_entrypoint(pName);
 }
 
-/* The loader wants us to expose a second GetInstanceProcAddr function
- * to work around certain LD_PRELOAD issues seen in apps.
+/* With version 1+ of the loader interface the ICD should expose
+ * vk_icdGetInstanceProcAddr to work around certain LD_PRELOAD issues seen in apps.
  */
+PUBLIC
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(
     VkInstance                                  instance,
     const char*                                 pName);
 
+PUBLIC
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(
     VkInstance                                  instance,
     const char*                                 pName)
@@ -869,7 +875,8 @@ VkResult anv_CreateDevice(
                        &device->dynamic_state_block_pool);
 
    anv_block_pool_init(&device->instruction_block_pool, device, 128 * 1024);
-   anv_pipeline_cache_init(&device->default_pipeline_cache, device);
+   anv_state_pool_init(&device->instruction_state_pool,
+                       &device->instruction_block_pool);
 
    anv_block_pool_init(&device->surface_state_block_pool, device, 4096);
 
@@ -944,6 +951,7 @@ void anv_DestroyDevice(
    anv_bo_pool_finish(&device->batch_bo_pool);
    anv_state_pool_finish(&device->dynamic_state_pool);
    anv_block_pool_finish(&device->dynamic_state_block_pool);
+   anv_state_pool_finish(&device->instruction_state_pool);
    anv_block_pool_finish(&device->instruction_block_pool);
    anv_state_pool_finish(&device->surface_state_pool);
    anv_block_pool_finish(&device->surface_state_block_pool);
@@ -1785,24 +1793,4 @@ void anv_DestroyFramebuffer(
    ANV_FROM_HANDLE(anv_framebuffer, fb, _fb);
 
    anv_free2(&device->alloc, pAllocator, fb);
-}
-
-void vkCmdDbgMarkerBegin(
-    VkCommandBuffer                              commandBuffer,
-    const char*                                 pMarker)
-   __attribute__ ((visibility ("default")));
-
-void vkCmdDbgMarkerEnd(
-   VkCommandBuffer                              commandBuffer)
-   __attribute__ ((visibility ("default")));
-
-void vkCmdDbgMarkerBegin(
-    VkCommandBuffer                              commandBuffer,
-    const char*                                 pMarker)
-{
-}
-
-void vkCmdDbgMarkerEnd(
-    VkCommandBuffer                              commandBuffer)
-{
 }

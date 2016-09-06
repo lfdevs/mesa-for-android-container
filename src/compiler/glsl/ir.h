@@ -586,6 +586,13 @@ public:
       return this->u.state_slots;
    }
 
+   inline bool is_interpolation_flat() const
+   {
+      return this->data.interpolation == INTERP_QUALIFIER_FLAT ||
+             this->type->contains_integer() ||
+             this->type->contains_double();
+   }
+
    inline bool is_name_ralloced() const
    {
       return this->name != ir_variable::tmp_name;

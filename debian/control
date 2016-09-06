@@ -15,7 +15,7 @@ Build-Depends:
  libxxf86vm-dev,
  libexpat1-dev,
  dpkg-dev (>= 1.16.1),
- libgcrypt20-dev [!hurd-any],
+ libgcrypt20-dev [linux-amd64 linux-i386 linux-x32],
  libxfixes-dev,
  libxdamage-dev,
  libxext-dev,

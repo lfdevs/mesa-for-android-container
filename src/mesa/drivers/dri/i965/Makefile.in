@@ -150,17 +150,18 @@ am__objects_1 = brw_cfg.lo brw_compiler.lo brw_dead_control_flow.lo \
 	brw_fs_validate.lo brw_fs_visitor.lo brw_interpolation_map.lo \
 	brw_nir.lo brw_nir_analyze_boolean_resolves.lo \
 	brw_nir_attribute_workarounds.lo brw_nir_intrinsics.lo \
-	brw_nir_opt_peephole_ffma.lo brw_packed_float.lo \
-	brw_predicated_break.lo brw_schedule_instructions.lo \
-	brw_shader.lo brw_util.lo brw_vec4_cmod_propagation.lo \
-	brw_vec4_copy_propagation.lo brw_vec4.lo brw_vec4_cse.lo \
-	brw_vec4_dead_code_eliminate.lo brw_vec4_generator.lo \
-	brw_vec4_gs_visitor.lo brw_vec4_live_variables.lo \
-	brw_vec4_nir.lo brw_vec4_gs_nir.lo brw_vec4_reg_allocate.lo \
-	brw_vec4_surface_builder.lo brw_vec4_tcs.lo brw_vec4_tes.lo \
-	brw_vec4_visitor.lo brw_vec4_vs_visitor.lo brw_vue_map.lo \
-	brw_wm_iz.lo gen6_gs_visitor.lo intel_asm_annotation.lo \
-	intel_debug.lo intel_resolve_map.lo
+	brw_nir_opt_peephole_ffma.lo brw_nir_tcs_workarounds.lo \
+	brw_packed_float.lo brw_predicated_break.lo \
+	brw_schedule_instructions.lo brw_shader.lo brw_util.lo \
+	brw_vec4_cmod_propagation.lo brw_vec4_copy_propagation.lo \
+	brw_vec4.lo brw_vec4_cse.lo brw_vec4_dead_code_eliminate.lo \
+	brw_vec4_generator.lo brw_vec4_gs_visitor.lo \
+	brw_vec4_live_variables.lo brw_vec4_nir.lo brw_vec4_gs_nir.lo \
+	brw_vec4_reg_allocate.lo brw_vec4_surface_builder.lo \
+	brw_vec4_tcs.lo brw_vec4_tes.lo brw_vec4_visitor.lo \
+	brw_vec4_vs_visitor.lo brw_vue_map.lo brw_wm_iz.lo \
+	gen6_gs_visitor.lo intel_asm_annotation.lo intel_debug.lo \
+	intel_resolve_map.lo
 am__objects_2 = brw_nir_trig_workarounds.lo
 am_libi965_compiler_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libi965_compiler_la_OBJECTS = $(am_libi965_compiler_la_OBJECTS)
@@ -760,6 +761,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
+SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
+SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
@@ -915,6 +919,7 @@ i965_compiler_FILES = \
 	brw_nir_attribute_workarounds.c \
 	brw_nir_intrinsics.c \
 	brw_nir_opt_peephole_ffma.c \
+	brw_nir_tcs_workarounds.c \
 	brw_packed_float.c \
 	brw_predicated_break.cpp \
 	brw_reg.h \
@@ -1382,6 +1387,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_attribute_workarounds.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_intrinsics.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_opt_peephole_ffma.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_tcs_workarounds.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_trig_workarounds.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_object_purgeable.Plo@am__quote@

@@ -6567,6 +6567,41 @@ int si_compile_tgsi_shader(struct si_screen *sscreen,
 
 	radeon_llvm_dispose(&ctx.radeon_bld);
 
+	/* Validate SGPR and VGPR usage for compute to detect compiler bugs.
+	 * LLVM 3.9svn has this bug.
+	 */
+	if (sel->type == PIPE_SHADER_COMPUTE) {
+		unsigned *props = sel->info.properties;
+		unsigned wave_size = 64;
+		unsigned max_vgprs = 256;
+		unsigned max_sgprs = sscreen->b.chip_class >= VI ? 800 : 512;
+		unsigned max_sgprs_per_wave = 128;
+		unsigned min_waves_per_cu =
+			DIV_ROUND_UP(props[TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH] *
+				     props[TGSI_PROPERTY_CS_FIXED_BLOCK_HEIGHT] *
+				     props[TGSI_PROPERTY_CS_FIXED_BLOCK_DEPTH],
+				     wave_size);
+		unsigned min_waves_per_simd = DIV_ROUND_UP(min_waves_per_cu, 4);
+
+		max_vgprs = max_vgprs / min_waves_per_simd;
+		max_sgprs = MIN2(max_sgprs / min_waves_per_simd, max_sgprs_per_wave);
+
+		if (shader->config.num_sgprs > max_sgprs ||
+		    shader->config.num_vgprs > max_vgprs) {
+			fprintf(stderr, "LLVM failed to compile a shader correctly: "
+				"SGPR:VGPR usage is %u:%u, but the hw limit is %u:%u\n",
+				shader->config.num_sgprs, shader->config.num_vgprs,
+				max_sgprs, max_vgprs);
+
+			/* Just terminate the process, because dependent
+			 * shaders can hang due to bad input data, but use
+			 * the env var to allow shader-db to work.
+			 */
+			if (!debug_get_bool_option("SI_PASS_BAD_SHADERS", false))
+				abort();
+		}
+	}
+
 	/* Add the scratch offset to input SGPRs. */
 	if (shader->config.scratch_bytes_per_wave)
 		shader->info.num_input_sgprs += 1; /* scratch byte offset */

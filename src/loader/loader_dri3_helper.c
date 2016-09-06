@@ -785,6 +785,7 @@ loader_dri3_open(xcb_connection_t *conn,
    }
 
    fd = xcb_dri3_open_reply_fds(conn, reply)[0];
+   free(reply);
    fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
 
    return fd;

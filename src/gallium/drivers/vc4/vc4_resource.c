@@ -534,8 +534,8 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
         struct vc4_resource *rsc = vc4_resource_setup(pscreen, tmpl);
         struct pipe_resource *prsc = &rsc->base.b;
         struct vc4_resource_slice *slice = &rsc->slices[0];
-        uint32_t expected_stride = align(prsc->width0 / rsc->cpp,
-                                         vc4_utile_width(rsc->cpp));
+        uint32_t expected_stride =
+            align(prsc->width0, vc4_utile_width(rsc->cpp)) * rsc->cpp;
 
         if (!rsc)
                 return NULL;

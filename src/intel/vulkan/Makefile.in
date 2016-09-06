@@ -793,6 +793,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
+SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
+SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
@@ -1009,7 +1012,10 @@ AM_CPPFLAGS = $(INTEL_CFLAGS) $(VALGRIND_CFLAGS) $(DEFINES) \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_builddir)/src/intel -I$(top_srcdir)/src/intel \
 	$(am__append_1) $(am__append_4)
-AM_CFLAGS = -Wno-override-init -msse2
+AM_CFLAGS = \
+	$(VISIBILITY_CFLAGS) \
+	-Wno-override-init -msse2
+
 libanv_gen7_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=70
 libanv_gen7_la_SOURCES = $(GEN7_FILES)
 libanv_gen75_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=75
@@ -1049,6 +1055,7 @@ libvulkan_intel_la_LDFLAGS = \
 	-module \
 	-no-undefined \
 	-avoid-version \
+	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 

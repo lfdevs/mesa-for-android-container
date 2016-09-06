@@ -140,6 +140,8 @@ intel_alloc_texture_storage(struct gl_context *ctx,
        !intel_miptree_match_image(intel_texobj->mt, first_image) ||
        intel_texobj->mt->last_level != levels - 1) {
       intel_miptree_release(&intel_texobj->mt);
+
+      intel_get_image_dims(first_image, &width, &height, &depth);
       intel_texobj->mt = intel_miptree_create(brw, texobj->Target,
                                               first_image->TexFormat,
                                               0, levels - 1,

@@ -686,12 +686,12 @@ stop_oa_counters(struct brw_context *brw)
  * The amount of batch space it takes to emit an MI_REPORT_PERF_COUNT snapshot,
  * including the required PIPE_CONTROL flushes.
  *
- * Sandybridge is the worst case scenario: brw_emit_mi_flush
- * expands to three PIPE_CONTROLs which are 4 DWords each.  We have to flush
- * before and after MI_REPORT_PERF_COUNT, so multiply by two.  Finally, add
- * the 3 DWords for MI_REPORT_PERF_COUNT itself.
+ * Sandybridge is the worst case scenario: brw_emit_mi_flush expands to four
+ * PIPE_CONTROLs which are 5 DWords each.  We have to flush before and after
+ * MI_REPORT_PERF_COUNT, so multiply by two.  Finally, add the 3 DWords for
+ * MI_REPORT_PERF_COUNT itself.
  */
-#define MI_REPORT_PERF_COUNT_BATCH_DWORDS (2 * (3 * 4) + 3)
+#define MI_REPORT_PERF_COUNT_BATCH_DWORDS (2 * (4 * 5) + 3)
 
 /**
  * Emit an MI_REPORT_PERF_COUNT command packet.

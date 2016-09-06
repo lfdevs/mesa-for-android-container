@@ -31,7 +31,12 @@
 #include "util/u_memory.h"
 #include "pipe/p_compiler.h"
 #include "util/u_hash_table.h"
-#include <sys/types.h>
+#ifdef MAJOR_IN_MKDEV
+#include <sys/mkdev.h>
+#endif
+#ifdef MAJOR_IN_SYSMACROS
+#include <sys/sysmacros.h>
+#endif
 #include <sys/stat.h>
 #include <unistd.h>
 

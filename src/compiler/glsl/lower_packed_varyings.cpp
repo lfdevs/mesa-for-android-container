@@ -273,11 +273,11 @@ lower_packed_varyings_visitor::run(struct gl_shader *shader)
          continue;
 
       /* This lowering pass is only capable of packing floats and ints
-       * together when their interpolation mode is "flat".  Therefore, to be
-       * safe, caller should ensure that integral varyings always use flat
-       * interpolation, even when this is not required by GLSL.
+       * together when their interpolation mode is "flat".  Treat integers as
+       * being flat when the interpolation mode is none.
        */
       assert(var->data.interpolation == INTERP_QUALIFIER_FLAT ||
+             var->data.interpolation == INTERP_QUALIFIER_NONE ||
              !var->type->contains_integer());
 
       /* Clone the variable for program resource list before
@@ -607,7 +607,7 @@ lower_packed_varyings_visitor::get_packed_varying_deref(
    if (this->packed_varyings[slot] == NULL) {
       char *packed_name = ralloc_asprintf(this->mem_ctx, "packed:%s", name);
       const glsl_type *packed_type;
-      if (unpacked_var->data.interpolation == INTERP_QUALIFIER_FLAT)
+      if (unpacked_var->is_interpolation_flat())
          packed_type = glsl_type::ivec4_type;
       else
          packed_type = glsl_type::vec4_type;
@@ -627,7 +627,8 @@ lower_packed_varyings_visitor::get_packed_varying_deref(
       packed_var->data.centroid = unpacked_var->data.centroid;
       packed_var->data.sample = unpacked_var->data.sample;
       packed_var->data.patch = unpacked_var->data.patch;
-      packed_var->data.interpolation = unpacked_var->data.interpolation;
+      packed_var->data.interpolation = packed_type == glsl_type::ivec4_type
+         ? unsigned(INTERP_QUALIFIER_FLAT) : unpacked_var->data.interpolation;
       packed_var->data.location = location;
       packed_var->data.precision = unpacked_var->data.precision;
       packed_var->data.always_active_io = unpacked_var->data.always_active_io;

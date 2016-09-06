@@ -155,10 +155,10 @@ override_dh_auto_install:
 
 override_dh_auto_test:
 
-allpkg = $(shell dh_listpackages -s)
+allpkg = $(shell dh_listpackages -a)
 
 override_dh_installchangelogs:
-	dh_installchangelogs -s
+	dh_installchangelogs -a
 	dh_installchangelogs -pmesa-common-dev
 
 override_dh_install:
@@ -195,7 +195,7 @@ override_dh_install:
 	   debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
   endif
 
-	dh_install -s --fail-missing
+	dh_install -a --fail-missing
 
 	# Install bug control and script:
 	set -e; for p in $(allpkg); do \
@@ -204,8 +204,8 @@ override_dh_install:
 		install -m 755 debian/local/script  debian/$$p/usr/share/bug/$$p; \
 	done
 
-override_dh_builddeb:
-	dh_builddeb -s -- -Zxz
+override_dh_makeshlibs:
+	dh_makeshlibs -a -- -c4
 
 %:
 	dh $@ --with quilt,autoreconf \

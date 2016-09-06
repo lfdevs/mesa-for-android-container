@@ -96,9 +96,37 @@ gen7_cs_stall_every_four_pipe_controls(struct brw_context *brw, uint32_t flags)
 void
 brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags)
 {
+   if (brw->gen >= 6 &&
+       (flags & PIPE_CONTROL_CACHE_FLUSH_BITS) &&
+       (flags & PIPE_CONTROL_CACHE_INVALIDATE_BITS)) {
+      /* A pipe control command with flush and invalidate bits set
+       * simultaneously is an inherently racy operation on Gen6+ if the
+       * contents of the flushed caches were intended to become visible from
+       * any of the invalidated caches.  Split it in two PIPE_CONTROLs, the
+       * first one should stall the pipeline to make sure that the flushed R/W
+       * caches are coherent with memory once the specified R/O caches are
+       * invalidated.  On pre-Gen6 hardware the (implicit) R/O cache
+       * invalidation seems to happen at the bottom of the pipeline together
+       * with any write cache flush, so this shouldn't be a concern.
+       */
+      brw_emit_pipe_control_flush(brw, (flags & PIPE_CONTROL_CACHE_FLUSH_BITS) |
+                                       PIPE_CONTROL_CS_STALL);
+      flags &= ~(PIPE_CONTROL_CACHE_FLUSH_BITS | PIPE_CONTROL_CS_STALL);
+   }
+
    if (brw->gen >= 8) {
       if (brw->gen == 8)
          gen8_add_cs_stall_workaround_bits(&flags);
+
+      if (brw->gen == 9 &&
+          (flags & PIPE_CONTROL_VF_CACHE_INVALIDATE)) {
+         /* Hardware workaround: SKL
+          *
+          * Emit Pipe Control with all bits set to zero before emitting
+          * a Pipe Control with VF Cache Invalidate set.
+          */
+         brw_emit_pipe_control_flush(brw, 0);
+      }
 
       BEGIN_BATCH(6);
       OUT_BATCH(_3DSTATE_PIPE_CONTROL | (6 - 2));
@@ -311,15 +339,6 @@ brw_emit_mi_flush(struct brw_context *brw)
    } else {
       int flags = PIPE_CONTROL_NO_WRITE | PIPE_CONTROL_RENDER_TARGET_FLUSH;
       if (brw->gen >= 6) {
-         if (brw->gen == 9) {
-            /* Hardware workaround: SKL
-             *
-             * Emit Pipe Control with all bits set to zero before emitting
-             * a Pipe Control with VF Cache Invalidate set.
-             */
-            brw_emit_pipe_control_flush(brw, 0);
-         }
-
          flags |= PIPE_CONTROL_INSTRUCTION_INVALIDATE |
                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
                   PIPE_CONTROL_VF_CACHE_INVALIDATE |

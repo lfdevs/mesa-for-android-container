@@ -143,6 +143,8 @@ struct vc4_compiled_shader {
         /** bitmask of which inputs are color inputs, for flat shade handling. */
         uint32_t color_inputs;
 
+        bool disable_early_z;
+
         uint8_t num_inputs;
 
         /* Byte offsets for the start of the vertex attributes 0-7, and the

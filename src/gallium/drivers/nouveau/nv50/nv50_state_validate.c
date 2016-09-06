@@ -1,5 +1,6 @@
 
 #include "util/u_format.h"
+#include "util/u_viewport.h"
 
 #include "nv50/nv50_context.h"
 
@@ -265,8 +266,12 @@ nv50_validate_viewport(struct nv50_context *nv50)
       PUSH_DATAf(push, vpt->scale[1]);
       PUSH_DATAf(push, vpt->scale[2]);
 
-      zmin = vpt->translate[2] - fabsf(vpt->scale[2]);
-      zmax = vpt->translate[2] + fabsf(vpt->scale[2]);
+      /* If the halfz setting ever changes, the viewports will also get
+       * updated. The rast will get updated before the validate function has a
+       * chance to hit, so we can just use it directly without an atom
+       * dependency.
+       */
+      util_viewport_zmin_zmax(vpt, nv50->rast->pipe.clip_halfz, &zmin, &zmax);
 
 #ifdef NV50_SCISSORS_CLIPPING
       BEGIN_NV04(push, NV50_3D(DEPTH_RANGE_NEAR(i)), 2);

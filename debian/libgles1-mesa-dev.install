@@ -1,0 +1,3 @@
+usr/lib/*/libGLESv1_CM.so
+usr/include/GLES
+usr/lib/*/pkgconfig/glesv1_cm.pc

@@ -67,5 +67,5 @@ nv20_emit_frag(struct gl_context *ctx, int emit)
 	PUSH_DATA (push, in >> 32);
 
 	BEGIN_NV04(push, NV20_3D(RC_ENABLE), 1);
-	PUSH_DATA (push, n);
+	PUSH_DATA (push, MAX2(1, n));
 }

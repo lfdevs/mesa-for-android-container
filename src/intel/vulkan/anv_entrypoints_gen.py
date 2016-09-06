@@ -134,7 +134,6 @@ if opt_header:
         print "%s gen75_%s%s;" % (type, name, args)
         print "%s gen8_%s%s;" % (type, name, args)
         print "%s gen9_%s%s;" % (type, name, args)
-        print "%s anv_validate_%s%s;" % (type, name, args)
         print_guard_end(name)
     exit()
 
@@ -185,23 +184,24 @@ for type, name, args, num, h in entrypoints:
     print "   \"vk%s\\0\"" % name
     offsets.append(i)
     i += 2 + len(name) + 1
-print """   ;
+print "   ;"
 
-/* Weak aliases for all potential validate functions. These will resolve to
- * NULL if they're not defined, which lets the resolve_entrypoint() function
- * either pick a validate wrapper if available or just plug in the actual
- * entry point.
- */
-"""
-
-# Now generate the table of all entry points and their validation functions
+# Now generate the table of all entry points
 
 print "\nstatic const struct anv_entrypoint entrypoints[] = {"
 for type, name, args, num, h in entrypoints:
     print "   { %5d, 0x%08x }," % (offsets[num], h)
 print "};\n"
 
-for layer in [ "anv", "validate", "gen7", "gen75", "gen8", "gen9" ]:
+print """
+
+/* Weak aliases for all potential implementations. These will resolve to
+ * NULL if they're not defined, which lets the resolve_entrypoint() function
+ * either pick the correct entry point.
+ */
+"""
+
+for layer in [ "anv", "gen7", "gen75", "gen8", "gen9" ]:
     for type, name, args, num, h in entrypoints:
         print_guard_start(name)
         print "%s %s_%s%s __attribute__ ((weak));" % (type, layer, name, args)
@@ -214,27 +214,6 @@ for layer in [ "anv", "validate", "gen7", "gen75", "gen8", "gen9" ]:
     print "};\n"
 
 print """
-#ifdef DEBUG
-static bool enable_validate = true;
-#else
-static bool enable_validate = false;
-#endif
-
-/* We can't use symbols that need resolving (like, oh, getenv) in the resolve
- * function. This means that we have to determine whether or not to use the
- * validation layer sometime before that. The constructor function attribute asks
- * the dynamic linker to invoke determine_validate() at dlopen() time which
- * works.
- */
-static void __attribute__ ((constructor))
-determine_validate(void)
-{
-   const char *s = getenv("ANV_VALIDATE");
-
-   if (s)
-      enable_validate = atoi(s);
-}
-
 static const struct brw_device_info *dispatch_devinfo;
 
 void
@@ -246,9 +225,6 @@ anv_set_dispatch_devinfo(const struct brw_device_info *devinfo)
 void * __attribute__ ((noinline))
 anv_resolve_entrypoint(uint32_t index)
 {
-   if (enable_validate && validate_layer.entrypoints[index])
-      return validate_layer.entrypoints[index];
-
    if (dispatch_devinfo == NULL) {
       return anv_layer.entrypoints[index];
    }
@@ -276,17 +252,6 @@ anv_resolve_entrypoint(uint32_t index)
    }
 }
 """
-
-# Now output ifuncs and their resolve helpers for all entry points. The
-# resolve helper calls resolve_entrypoint() with the entry point index, which
-# lets the resolver look it up in the table.
-
-for type, name, args, num, h in entrypoints:
-    print_guard_start(name)
-    print "static void *resolve_%s(void) { return anv_resolve_entrypoint(%d); }" % (name, num)
-    print "%s vk%s%s\n   __attribute__ ((ifunc (\"resolve_%s\"), visibility (\"default\")));\n" % (type, name, args, name)
-    print_guard_end(name)
-
 
 # Now generate the hash table used for entry point look up.  This is a
 # uint16_t table of entry point indices. We use 0xffff to indicate an entry

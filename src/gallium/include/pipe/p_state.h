@@ -318,17 +318,7 @@ struct pipe_blend_state
 
 struct pipe_blend_color
 {
-   /**
-    * Making the color array explicitly 16-byte aligned provides a hint to
-    * compilers to make more efficient auto-vectorization optimizations.
-    * The actual performance gains from vectorizing the blend color array are
-    * fairly minimal, if any, but the alignment is necessary to work around
-    * buggy vectorization in some compilers which fail to generate the correct
-    * unaligned accessors resulting in a segfault.  Specifically several
-    * versions of the Intel compiler are known to be affected but it's likely
-    * others are as well.
-    */
-   PIPE_ALIGN_VAR(16) float color[4];
+   float color[4];
 };
 
 

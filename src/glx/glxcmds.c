@@ -524,7 +524,7 @@ glXWaitGL(void)
 {
    struct glx_context *gc = __glXGetCurrentContext();
 
-   if (gc && gc->vtable->wait_gl)
+   if (gc != &dummyContext && gc->vtable->wait_gl)
       gc->vtable->wait_gl(gc);
 }
 
@@ -537,7 +537,7 @@ glXWaitX(void)
 {
    struct glx_context *gc = __glXGetCurrentContext();
 
-   if (gc && gc->vtable->wait_x)
+   if (gc != &dummyContext && gc->vtable->wait_x)
       gc->vtable->wait_x(gc);
 }
 
@@ -546,7 +546,7 @@ glXUseXFont(Font font, int first, int count, int listBase)
 {
    struct glx_context *gc = __glXGetCurrentContext();
 
-   if (gc && gc->vtable->use_x_font)
+   if (gc != &dummyContext && gc->vtable->use_x_font)
       gc->vtable->use_x_font(gc, font, first, count, listBase);
 }
 
@@ -838,7 +838,7 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
       __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable);
 
       if (pdraw != NULL) {
-         Bool flush = gc && drawable == gc->currentDrawable;
+         Bool flush = gc != &dummyContext && drawable == gc->currentDrawable;
 
          (*pdraw->psc->driScreen->swapBuffers)(pdraw, 0, 0, 0, flush);
          return;
@@ -855,7 +855,7 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
     ** The calling thread may or may not have a current context.  If it
     ** does, send the context tag so the server can do a flush.
     */
-   if ((gc != NULL) && (dpy == gc->currentDpy) &&
+   if ((gc != &dummyContext) && (dpy == gc->currentDpy) &&
        ((drawable == gc->currentDrawable)
         || (drawable == gc->currentReadable))) {
       tag = gc->currentContextTag;
@@ -1388,7 +1388,7 @@ _GLX_PUBLIC Display *
 glXGetCurrentDisplay(void)
 {
    struct glx_context *gc = __glXGetCurrentContext();
-   if (NULL == gc)
+   if (gc == &dummyContext)
       return NULL;
    return gc->currentDpy;
 }
@@ -1751,7 +1751,7 @@ __glXSwapIntervalSGI(int interval)
    CARD32 *interval_ptr;
    CARD8 opcode;
 
-   if (gc == NULL) {
+   if (gc == &dummyContext) {
       return GLX_BAD_CONTEXT;
    }
 
@@ -1805,7 +1805,7 @@ __glXSwapIntervalMESA(unsigned int interval)
 #ifdef GLX_DIRECT_RENDERING
    struct glx_context *gc = __glXGetCurrentContext();
 
-   if (gc != NULL && gc->isDirect) {
+   if (gc != &dummyContext && gc->isDirect) {
       struct glx_screen *psc;
 
       psc = GetGLXScreenConfigs( gc->currentDpy, gc->screen);
@@ -1827,7 +1827,7 @@ __glXGetSwapIntervalMESA(void)
 #ifdef GLX_DIRECT_RENDERING
    struct glx_context *gc = __glXGetCurrentContext();
 
-   if (gc != NULL && gc->isDirect) {
+   if (gc != &dummyContext && gc->isDirect) {
       struct glx_screen *psc;
 
       psc = GetGLXScreenConfigs( gc->currentDpy, gc->screen);
@@ -1857,7 +1857,7 @@ __glXGetVideoSyncSGI(unsigned int *count)
    __GLXDRIdrawable *pdraw;
 #endif
 
-   if (!gc)
+   if (gc == &dummyContext)
       return GLX_BAD_CONTEXT;
 
 #ifdef GLX_DIRECT_RENDERING
@@ -1899,7 +1899,7 @@ __glXWaitVideoSyncSGI(int divisor, int remainder, unsigned int *count)
    if (divisor <= 0 || remainder < 0)
       return GLX_BAD_VALUE;
 
-   if (!gc)
+   if (gc == &dummyContext)
       return GLX_BAD_CONTEXT;
 
 #ifdef GLX_DIRECT_RENDERING
@@ -2212,7 +2212,7 @@ __glXSwapBuffersMscOML(Display * dpy, GLXDrawable drawable,
    struct glx_screen *psc = pdraw ? pdraw->psc : NULL;
 #endif
 
-   if (!gc) /* no GLX for this */
+   if (gc == &dummyContext) /* no GLX for this */
       return -1;
 
 #ifdef GLX_DIRECT_RENDERING
@@ -2392,7 +2392,7 @@ __glXCopySubBufferMESA(Display * dpy, GLXDrawable drawable,
     ** does, send the context tag so the server can do a flush.
     */
    gc = __glXGetCurrentContext();
-   if ((gc != NULL) && (dpy == gc->currentDpy) &&
+   if ((gc != &dummyContext) && (dpy == gc->currentDpy) &&
        ((drawable == gc->currentDrawable) ||
         (drawable == gc->currentReadable))) {
       tag = gc->currentContextTag;
@@ -2431,7 +2431,7 @@ __glXBindTexImageEXT(Display * dpy,
 {
    struct glx_context *gc = __glXGetCurrentContext();
 
-   if (gc == NULL || gc->vtable->bind_tex_image == NULL)
+   if (gc == &dummyContext || gc->vtable->bind_tex_image == NULL)
       return;
 
    gc->vtable->bind_tex_image(dpy, drawable, buffer, attrib_list);
@@ -2442,7 +2442,7 @@ __glXReleaseTexImageEXT(Display * dpy, GLXDrawable drawable, int buffer)
 {
    struct glx_context *gc = __glXGetCurrentContext();
 
-   if (gc == NULL || gc->vtable->release_tex_image == NULL)
+   if (gc == &dummyContext || gc->vtable->release_tex_image == NULL)
       return;
 
    gc->vtable->release_tex_image(dpy, drawable, buffer);

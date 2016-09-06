@@ -1,0 +1,3 @@
+etc/OpenCL/vendors/mesa.icd
+usr/lib/*/gallium-pipe/*.so
+usr/lib/*/libMesaOpenCL*

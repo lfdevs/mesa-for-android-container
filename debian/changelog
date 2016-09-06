@@ -1,3 +1,22 @@
+mesa (12.0.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * rules: Pass -c4 to dpkg-gensymbols through dh_makeshlibs, got
+    dropped with the migration to dh.
+  * rules: Replace deprecated debhelper option -s with -a.
+  * copyright: Sync with docs/license.html.
+  * Replace almost all dynamic debhelper config files with static files.
+  * rules: Drop unneeded override_dh_builddeb, xz is the default
+    compression type for dpkg-deb nowadays.
+  * Replace mesa-vulkan-drivers.post{inst,rm} with mesa-vulkan-
+    drivers.triggers.
+  * control: Only build-dep on libgcrypt20-dev on architectures where we
+    build mesa-vulkan-drivers.
+  * source/local-options: Add more files to extend-diff-ignore option.
+    Fixes 87 patch-system-but-direct-changes-in-diff lintian warnings.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 06 Sep 2016 10:37:23 +0200
+
 mesa (12.0.1-3) experimental; urgency=medium
 
   * rules, control: Build mesa-vulkan-drivers only on linux-

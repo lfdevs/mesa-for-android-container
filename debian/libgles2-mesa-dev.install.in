@@ -1,4 +1,0 @@
-usr/lib/${DEB_HOST_MULTIARCH}/libGLESv2.so
-usr/include/GLES2
-usr/include/GLES3
-usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/glesv2.pc

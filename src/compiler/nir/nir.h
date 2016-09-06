@@ -1923,6 +1923,10 @@ nir_deref_struct *nir_deref_struct_create(void *mem_ctx, unsigned field_index);
 
 nir_deref *nir_copy_deref(void *mem_ctx, nir_deref *deref);
 
+typedef bool (*nir_deref_foreach_leaf_cb)(nir_deref_var *deref, void *state);
+bool nir_deref_foreach_leaf(nir_deref_var *deref,
+                            nir_deref_foreach_leaf_cb cb, void *state);
+
 nir_load_const_instr *
 nir_deref_get_const_initializer_load(nir_shader *shader, nir_deref_var *deref);
 

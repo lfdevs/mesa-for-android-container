@@ -71,7 +71,9 @@ vc4_emit_state(struct pipe_context *pctx)
                 vc4->draw_max_y = MAX2(vc4->draw_max_y, maxy);
         }
 
-        if (vc4->dirty & (VC4_DIRTY_RASTERIZER | VC4_DIRTY_ZSA)) {
+        if (vc4->dirty & (VC4_DIRTY_RASTERIZER |
+                          VC4_DIRTY_ZSA |
+                          VC4_DIRTY_COMPILED_FS)) {
                 uint8_t ez_enable_mask_out = ~0;
 
                 /* HW-2905: If the RCL ends up doing a full-res load when
@@ -83,7 +85,7 @@ vc4_emit_state(struct pipe_context *pctx)
                  * was seeing bad rendering on glxgears -samples 4 even in
                  * that case.
                  */
-                if (vc4->msaa)
+                if (vc4->msaa || vc4->prog.fs->disable_early_z)
                         ez_enable_mask_out &= ~VC4_CONFIG_BITS_EARLY_Z;
 
                 cl_u8(&bcl, VC4_PACKET_CONFIGURATION_BITS);

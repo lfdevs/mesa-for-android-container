@@ -211,7 +211,29 @@ kms_sw_displaytarget_map(struct sw_winsys *ws,
 }
 
 static struct kms_sw_displaytarget *
-kms_sw_displaytarget_add_from_prime(struct kms_sw_winsys *kms_sw, int fd)
+kms_sw_displaytarget_find_and_ref(struct kms_sw_winsys *kms_sw,
+                                  unsigned int kms_handle)
+{
+   struct kms_sw_displaytarget *kms_sw_dt;
+
+   LIST_FOR_EACH_ENTRY(kms_sw_dt, &kms_sw->bo_list, link) {
+      if (kms_sw_dt->handle == kms_handle) {
+         kms_sw_dt->ref_count++;
+
+         DEBUG_PRINT("KMS-DEBUG: imported buffer %u (size %u)\n",
+                     kms_sw_dt->handle, kms_sw_dt->size);
+
+         return kms_sw_dt;
+      }
+   }
+
+   return NULL;
+}
+
+static struct kms_sw_displaytarget *
+kms_sw_displaytarget_add_from_prime(struct kms_sw_winsys *kms_sw, int fd,
+                                    unsigned width, unsigned height,
+                                    unsigned stride)
 {
    uint32_t handle = -1;
    struct kms_sw_displaytarget * kms_sw_dt;
@@ -222,6 +244,10 @@ kms_sw_displaytarget_add_from_prime(struct kms_sw_winsys *kms_sw, int fd)
    if (ret)
       return NULL;
 
+   kms_sw_dt = kms_sw_displaytarget_find_and_ref(kms_sw, handle);
+   if (kms_sw_dt)
+      return kms_sw_dt;
+
    kms_sw_dt = CALLOC_STRUCT(kms_sw_displaytarget);
    if (!kms_sw_dt)
       return NULL;
@@ -229,6 +255,9 @@ kms_sw_displaytarget_add_from_prime(struct kms_sw_winsys *kms_sw, int fd)
    kms_sw_dt->ref_count = 1;
    kms_sw_dt->handle = handle;
    kms_sw_dt->size = lseek(fd, 0, SEEK_END);
+   kms_sw_dt->width = width;
+   kms_sw_dt->height = height;
+   kms_sw_dt->stride = stride;
 
    if (kms_sw_dt->size == (off_t)-1) {
       FREE(kms_sw_dt);
@@ -274,25 +303,18 @@ kms_sw_displaytarget_from_handle(struct sw_winsys *ws,
 
    switch(whandle->type) {
    case DRM_API_HANDLE_TYPE_FD:
-      kms_sw_dt = kms_sw_displaytarget_add_from_prime(kms_sw, whandle->handle);
-      if (kms_sw_dt) {
-         kms_sw_dt->ref_count++;
-         kms_sw_dt->width = templ->width0;
-         kms_sw_dt->height = templ->height0;
-         kms_sw_dt->stride = whandle->stride;
+      kms_sw_dt = kms_sw_displaytarget_add_from_prime(kms_sw, whandle->handle,
+                                                      templ->width0,
+                                                      templ->height0,
+                                                      whandle->stride);
+      if (kms_sw_dt)
          *stride = kms_sw_dt->stride;
-      }
       return (struct sw_displaytarget *)kms_sw_dt;
    case DRM_API_HANDLE_TYPE_KMS:
-      LIST_FOR_EACH_ENTRY(kms_sw_dt, &kms_sw->bo_list, link) {
-         if (kms_sw_dt->handle == whandle->handle) {
-            kms_sw_dt->ref_count++;
-
-            DEBUG_PRINT("KMS-DEBUG: imported buffer %u (size %u)\n", kms_sw_dt->handle, kms_sw_dt->size);
-
-            *stride = kms_sw_dt->stride;
-            return (struct sw_displaytarget *)kms_sw_dt;
-         }
+      kms_sw_dt = kms_sw_displaytarget_find_and_ref(kms_sw, whandle->handle);
+      if (kms_sw_dt) {
+         *stride = kms_sw_dt->stride;
+         return (struct sw_displaytarget *)kms_sw_dt;
       }
       /* fallthrough */
    default:

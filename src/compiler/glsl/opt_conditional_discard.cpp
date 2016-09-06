@@ -72,7 +72,14 @@ opt_conditional_discard_visitor::visit_leave(ir_if *ir)
 
    /* Move the condition and replace the ir_if with the ir_discard. */
    ir_discard *discard = (ir_discard *) ir->then_instructions.head;
-   discard->condition = ir->condition;
+   if (!discard->condition)
+      discard->condition = ir->condition;
+   else {
+      void *ctx = ralloc_parent(ir);
+      discard->condition = new(ctx) ir_expression(ir_binop_logic_and,
+                                                  ir->condition,
+                                                  discard->condition);
+   }
    ir->replace_with(discard);
 
    progress = true;

@@ -379,8 +379,9 @@ nv30_set_framebuffer_state(struct pipe_context *pipe,
        struct nv30_miptree *zeta_mt = nv30_miptree(fb->zsbuf->texture);
 
        if (color_mt->swizzled != zeta_mt->swizzled ||
-           (util_format_get_blocksize(fb->zsbuf->format) > 2) !=
-           (util_format_get_blocksize(fb->cbufs[0]->format) > 2)) {
+           (color_mt->swizzled &&
+            (util_format_get_blocksize(fb->zsbuf->format) > 2) !=
+            (util_format_get_blocksize(fb->cbufs[0]->format) > 2))) {
           nv30->framebuffer.zsbuf = NULL;
           debug_printf("Mismatched color and zeta formats, ignoring zeta.\n");
        }

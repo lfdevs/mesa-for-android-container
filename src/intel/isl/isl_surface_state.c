@@ -430,8 +430,15 @@ isl_genX(buffer_fill_state_s)(void *state,
    uint32_t num_elements = info->size / info->stride;
 
    if (GEN_GEN >= 7) {
+      /* From the IVB PRM, SURFACE_STATE::Height,
+       *
+       *    For typed buffer and structured buffer surfaces, the number
+       *    of entries in the buffer ranges from 1 to 2^27. For raw buffer
+       *    surfaces, the number of entries in the buffer is the number of bytes
+       *    which can range from 1 to 2^30.
+       */
       if (info->format == ISL_FORMAT_RAW) {
-         assert(num_elements <= (1ull << 31));
+         assert(num_elements <= (1ull << 30));
          assert((num_elements & 3) == 0);
       } else {
          assert(num_elements <= (1ull << 27));

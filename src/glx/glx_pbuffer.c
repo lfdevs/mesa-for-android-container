@@ -328,7 +328,7 @@ GetDrawableAttribute(Display * dpy, GLXDrawable drawable,
        *   the calling thread's current context a GLXBadDrawable error is
        *   generated."
        */
-      if (pdraw == NULL || gc == NULL || gc->currentDpy != dpy ||
+      if (pdraw == NULL || gc == &dummyContext || gc->currentDpy != dpy ||
          (gc->currentDrawable != drawable &&
          gc->currentReadable != drawable)) {
          __glXSendError(dpy, GLXBadDrawable, drawable,

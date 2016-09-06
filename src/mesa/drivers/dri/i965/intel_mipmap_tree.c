@@ -366,25 +366,8 @@ intel_miptree_create_layout(struct brw_context *brw,
        _mesa_get_format_name(format),
        first_level, last_level, depth0, mt);
 
-   if (target == GL_TEXTURE_1D_ARRAY) {
-      /* For a 1D Array texture the OpenGL API will treat the height0
-       * parameter as the number of array slices. For Intel hardware, we treat
-       * the 1D array as a 2D Array with a height of 1.
-       *
-       * So, when we first come through this path to create a 1D Array
-       * texture, height0 stores the number of slices, and depth0 is 1. In
-       * this case, we want to swap height0 and depth0.
-       *
-       * Since some miptrees will be created based on the base miptree, we may
-       * come through this path and see height0 as 1 and depth0 being the
-       * number of slices. In this case we don't need to do the swap.
-       */
-      assert(height0 == 1 || depth0 == 1);
-      if (height0 > 1) {
-         depth0 = height0;
-         height0 = 1;
-      }
-   }
+   if (target == GL_TEXTURE_1D_ARRAY)
+      assert(height0 == 1);
 
    mt->target = target;
    mt->format = format;
@@ -1050,6 +1033,7 @@ intel_get_image_dims(struct gl_texture_image *image,
        * as a 2D Array with a height of 1. So, here we want to swap image
        * height and depth.
        */
+      assert(image->Depth == 1);
       *width = image->Width;
       *height = 1;
       *depth = image->Height;
@@ -1805,14 +1789,8 @@ intel_gen7_hiz_buf_create(struct brw_context *brw,
       hz_height = DIV_ROUND_UP(hz_height, 2);
    } else {
       const unsigned hz_qpitch = h0 + h1 + (12 * vertical_align);
-      if (mt->target == GL_TEXTURE_CUBE_MAP_ARRAY ||
-          mt->target == GL_TEXTURE_CUBE_MAP) {
-         /* HZ_Height (rows) = Ceiling ( ( Q_pitch * Z_depth * 6/2) /8 ) * 8 */
-         hz_height = DIV_ROUND_UP(hz_qpitch * Z0 * 6, 2 * 8) * 8;
-      } else {
-         /* HZ_Height (rows) = Ceiling ( ( Q_pitch * Z_depth/2) /8 ) * 8 */
-         hz_height = DIV_ROUND_UP(hz_qpitch * Z0, 2 * 8) * 8;
-      }
+      /* HZ_Height (rows) = Ceiling ( ( Q_pitch * Z_depth/2) /8 ) * 8 */
+      hz_height = DIV_ROUND_UP(hz_qpitch * Z0, 2 * 8) * 8;
    }
 
    unsigned long pitch;
@@ -1909,15 +1887,6 @@ intel_gen8_hiz_buf_create(struct brw_context *brw,
    } else {
       /* HZ_Height (rows) = ceiling( (HZ_QPitch/2)/8) *8 * Z_Depth */
       hz_height = DIV_ROUND_UP(buf->qpitch, 2 * 8) * 8 * Z0;
-      if (mt->target == GL_TEXTURE_CUBE_MAP_ARRAY ||
-          mt->target == GL_TEXTURE_CUBE_MAP) {
-         /* HZ_Height (rows) = ceiling( (HZ_QPitch/2)/8) *8 * 6 * Z_Depth
-          *
-          * We can can just take our hz_height calculation from above, and
-          * multiply by 6 for the cube map and cube map array types.
-          */
-         hz_height *= 6;
-      }
    }
 
    unsigned long pitch;

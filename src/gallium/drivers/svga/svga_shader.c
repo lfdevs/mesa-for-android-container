@@ -173,10 +173,16 @@ svga_init_shader_key_common(const struct svga_context *svga, unsigned shader,
 
    assert(shader < ARRAY_SIZE(svga->curr.num_sampler_views));
 
-   for (i = 0; i < svga->curr.num_sampler_views[shader]; i++) {
+   /* In case the number of samplers and sampler_views doesn't match,
+    * loop over the lower of the two counts.
+    */
+   key->num_textures = MIN2(svga->curr.num_sampler_views[shader],
+                            svga->curr.num_samplers[shader]);
+
+   for (i = 0; i < key->num_textures; i++) {
       struct pipe_sampler_view *view = svga->curr.sampler_views[shader][i];
-      if (view) {
-         assert(svga->curr.sampler[shader][i]);
+      const struct svga_sampler_state *sampler = svga->curr.sampler[shader][i];
+      if (view && sampler) {
          assert(view->texture);
          assert(view->texture->target < (1 << 4)); /* texture_target:4 */
 
@@ -195,7 +201,7 @@ svga_init_shader_key_common(const struct svga_context *svga, unsigned shader,
             }
          }
 
-         if (!svga->curr.sampler[shader][i]->normalized_coords) {
+         if (!sampler->normalized_coords) {
             assert(idx < (1 << 5));  /* width_height_idx:5 bitfield */
             key->tex[i].width_height_idx = idx++;
             key->tex[i].unnormalized = TRUE;
@@ -208,7 +214,6 @@ svga_init_shader_key_common(const struct svga_context *svga, unsigned shader,
          key->tex[i].swizzle_a = view->swizzle_a;
       }
    }
-   key->num_textures = svga->curr.num_sampler_views[shader];
 }
 
 

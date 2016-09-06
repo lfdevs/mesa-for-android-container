@@ -2322,23 +2322,23 @@ fs_visitor::nir_emit_tcs_intrinsic(const fs_builder &bld,
          break;
 
       fs_reg m0 = bld.vgrf(BRW_REGISTER_TYPE_UD, 1);
-      fs_reg m0_2 = byte_offset(m0, 2 * sizeof(uint32_t));
+      fs_reg m0_2 = component(m0, 2);
 
-      const fs_builder fwa_bld = bld.exec_all();
+      const fs_builder chanbld = bld.exec_all().group(1, 0);
 
       /* Zero the message header */
-      fwa_bld.MOV(m0, brw_imm_ud(0u));
+      bld.exec_all().MOV(m0, brw_imm_ud(0u));
 
       /* Copy "Barrier ID" from r0.2, bits 16:13 */
-      fwa_bld.AND(m0_2, retype(brw_vec1_grf(0, 2), BRW_REGISTER_TYPE_UD),
+      chanbld.AND(m0_2, retype(brw_vec1_grf(0, 2), BRW_REGISTER_TYPE_UD),
                   brw_imm_ud(INTEL_MASK(16, 13)));
 
       /* Shift it up to bits 27:24. */
-      fwa_bld.SHL(m0_2, m0_2, brw_imm_ud(11));
+      chanbld.SHL(m0_2, m0_2, brw_imm_ud(11));
 
       /* Set the Barrier Count and the enable bit */
-      fwa_bld.OR(m0_2, m0_2,
-                 brw_imm_ud(tcs_prog_data->instances << 8 | (1 << 15)));
+      chanbld.OR(m0_2, m0_2,
+                 brw_imm_ud(tcs_prog_data->instances << 9 | (1 << 15)));
 
       bld.emit(SHADER_OPCODE_BARRIER, bld.null_reg_ud(), m0);
       break;
@@ -4060,11 +4060,22 @@ fs_visitor::nir_emit_shared_atomic(const fs_builder &bld,
       dest = get_nir_dest(instr->dest);
 
    fs_reg surface = brw_imm_ud(GEN7_BTI_SLM);
-   fs_reg offset = get_nir_src(instr->src[0]);
+   fs_reg offset;
    fs_reg data1 = get_nir_src(instr->src[1]);
    fs_reg data2;
    if (op == BRW_AOP_CMPWR)
       data2 = get_nir_src(instr->src[2]);
+
+   /* Get the offset */
+   nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
+   if (const_offset) {
+      offset = brw_imm_ud(instr->const_index[0] + const_offset->u32[0]);
+   } else {
+      offset = vgrf(glsl_type::uint_type);
+      bld.ADD(offset,
+	      retype(get_nir_src(instr->src[0]), BRW_REGISTER_TYPE_UD),
+	      brw_imm_ud(instr->const_index[0]));
+   }
 
    /* Emit the actual atomic operation operation */
 

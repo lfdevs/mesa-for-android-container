@@ -354,94 +354,96 @@ vec4_visitor::opt_vector_float()
 {
    bool progress = false;
 
-   int last_reg = -1, last_reg_offset = -1;
-   enum brw_reg_file last_reg_file = BAD_FILE;
+   foreach_block(block, cfg) {
+      int last_reg = -1, last_reg_offset = -1;
+      enum brw_reg_file last_reg_file = BAD_FILE;
 
-   uint8_t imm[4] = { 0 };
-   int inst_count = 0;
-   vec4_instruction *imm_inst[4];
-   unsigned writemask = 0;
-   enum brw_reg_type dest_type = BRW_REGISTER_TYPE_F;
+      uint8_t imm[4] = { 0 };
+      int inst_count = 0;
+      vec4_instruction *imm_inst[4];
+      unsigned writemask = 0;
+      enum brw_reg_type dest_type = BRW_REGISTER_TYPE_F;
 
-   foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
-      int vf = -1;
-      enum brw_reg_type need_type;
+      foreach_inst_in_block_safe(vec4_instruction, inst, block) {
+         int vf = -1;
+         enum brw_reg_type need_type;
 
-      /* Look for unconditional MOVs from an immediate with a partial
-       * writemask.  Skip type-conversion MOVs other than integer 0,
-       * where the type doesn't matter.  See if the immediate can be
-       * represented as a VF.
-       */
-      if (inst->opcode == BRW_OPCODE_MOV &&
-          inst->src[0].file == IMM &&
-          inst->predicate == BRW_PREDICATE_NONE &&
-          inst->dst.writemask != WRITEMASK_XYZW &&
-          (inst->src[0].type == inst->dst.type || inst->src[0].d == 0)) {
+         /* Look for unconditional MOVs from an immediate with a partial
+          * writemask.  Skip type-conversion MOVs other than integer 0,
+          * where the type doesn't matter.  See if the immediate can be
+          * represented as a VF.
+          */
+         if (inst->opcode == BRW_OPCODE_MOV &&
+             inst->src[0].file == IMM &&
+             inst->predicate == BRW_PREDICATE_NONE &&
+             inst->dst.writemask != WRITEMASK_XYZW &&
+             (inst->src[0].type == inst->dst.type || inst->src[0].d == 0)) {
 
-         vf = brw_float_to_vf(inst->src[0].d);
-         need_type = BRW_REGISTER_TYPE_D;
+            vf = brw_float_to_vf(inst->src[0].d);
+            need_type = BRW_REGISTER_TYPE_D;
 
-         if (vf == -1) {
-            vf = brw_float_to_vf(inst->src[0].f);
-            need_type = BRW_REGISTER_TYPE_F;
+            if (vf == -1) {
+               vf = brw_float_to_vf(inst->src[0].f);
+               need_type = BRW_REGISTER_TYPE_F;
+            }
+         } else {
+            last_reg = -1;
          }
-      } else {
-         last_reg = -1;
-      }
 
-      /* If this wasn't a MOV, or the destination register doesn't match,
-       * or we have to switch destination types, then this breaks our
-       * sequence.  Combine anything we've accumulated so far.
-       */
-      if (last_reg != inst->dst.nr ||
-          last_reg_offset != inst->dst.reg_offset ||
-          last_reg_file != inst->dst.file ||
-          (vf > 0 && dest_type != need_type)) {
+         /* If this wasn't a MOV, or the destination register doesn't match,
+          * or we have to switch destination types, then this breaks our
+          * sequence.  Combine anything we've accumulated so far.
+          */
+         if (last_reg != inst->dst.nr ||
+             last_reg_offset != inst->dst.reg_offset ||
+             last_reg_file != inst->dst.file ||
+             (vf > 0 && dest_type != need_type)) {
 
-         if (inst_count > 1) {
-            unsigned vf;
-            memcpy(&vf, imm, sizeof(vf));
-            vec4_instruction *mov = MOV(imm_inst[0]->dst, brw_imm_vf(vf));
-            mov->dst.type = dest_type;
-            mov->dst.writemask = writemask;
-            inst->insert_before(block, mov);
+            if (inst_count > 1) {
+               unsigned vf;
+               memcpy(&vf, imm, sizeof(vf));
+               vec4_instruction *mov = MOV(imm_inst[0]->dst, brw_imm_vf(vf));
+               mov->dst.type = dest_type;
+               mov->dst.writemask = writemask;
+               inst->insert_before(block, mov);
 
-            for (int i = 0; i < inst_count; i++) {
-               imm_inst[i]->remove(block);
+               for (int i = 0; i < inst_count; i++) {
+                  imm_inst[i]->remove(block);
+               }
+
+               progress = true;
             }
 
-            progress = true;
+            inst_count = 0;
+            last_reg = -1;
+            writemask = 0;
+            dest_type = BRW_REGISTER_TYPE_F;
+
+            for (int i = 0; i < 4; i++) {
+               imm[i] = 0;
+            }
          }
 
-         inst_count = 0;
-         last_reg = -1;
-         writemask = 0;
-         dest_type = BRW_REGISTER_TYPE_F;
+         /* Record this instruction's value (if it was representable). */
+         if (vf != -1) {
+            if ((inst->dst.writemask & WRITEMASK_X) != 0)
+               imm[0] = vf;
+            if ((inst->dst.writemask & WRITEMASK_Y) != 0)
+               imm[1] = vf;
+            if ((inst->dst.writemask & WRITEMASK_Z) != 0)
+               imm[2] = vf;
+            if ((inst->dst.writemask & WRITEMASK_W) != 0)
+               imm[3] = vf;
 
-         for (int i = 0; i < 4; i++) {
-            imm[i] = 0;
+            writemask |= inst->dst.writemask;
+            imm_inst[inst_count++] = inst;
+
+            last_reg = inst->dst.nr;
+            last_reg_offset = inst->dst.reg_offset;
+            last_reg_file = inst->dst.file;
+            if (vf > 0)
+               dest_type = need_type;
          }
-      }
-
-      /* Record this instruction's value (if it was representable). */
-      if (vf != -1) {
-         if ((inst->dst.writemask & WRITEMASK_X) != 0)
-            imm[0] = vf;
-         if ((inst->dst.writemask & WRITEMASK_Y) != 0)
-            imm[1] = vf;
-         if ((inst->dst.writemask & WRITEMASK_Z) != 0)
-            imm[2] = vf;
-         if ((inst->dst.writemask & WRITEMASK_W) != 0)
-            imm[3] = vf;
-
-         writemask |= inst->dst.writemask;
-         imm_inst[inst_count++] = inst;
-
-         last_reg = inst->dst.nr;
-         last_reg_offset = inst->dst.reg_offset;
-         last_reg_file = inst->dst.file;
-         if (vf > 0)
-            dest_type = need_type;
       }
    }
 
@@ -1109,7 +1111,7 @@ vec4_visitor::opt_register_coalesce()
       /* Can't coalesce this GRF if someone else was going to
        * read it later.
        */
-      if (var_range_end(var_from_reg(alloc, inst->src[0]), 4) > ip)
+      if (var_range_end(var_from_reg(alloc, dst_reg(inst->src[0])), 4) > ip)
 	 continue;
 
       /* We need to check interference with the final destination between this

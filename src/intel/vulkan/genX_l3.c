@@ -315,10 +315,14 @@ get_pipeline_state_l3_weights(const struct anv_pipeline *pipeline)
    bool needs_dc = false, needs_slm = false;
 
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
-      const struct brw_stage_prog_data *prog_data = pipeline->prog_data[i];
+      if (!anv_pipeline_has_stage(pipeline, i))
+         continue;
+
+      const struct brw_stage_prog_data *prog_data =
+         anv_shader_bin_get_prog_data(pipeline->shaders[i]);
 
       needs_dc |= pipeline->needs_data_cache;
-      needs_slm |= prog_data && prog_data->total_shared;
+      needs_slm |= prog_data->total_shared;
    }
 
    return get_default_l3_weights(&pipeline->device->info,

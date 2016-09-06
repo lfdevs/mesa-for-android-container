@@ -143,6 +143,13 @@ void cayman_init_msaa(struct pipe_context *ctx)
 void cayman_emit_msaa_sample_locs(struct radeon_winsys_cs *cs, int nr_samples)
 {
 	switch (nr_samples) {
+	default:
+	case 1:
+		radeon_set_context_reg(cs, CM_R_028BF8_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0, 0);
+		radeon_set_context_reg(cs, CM_R_028C08_PA_SC_AA_SAMPLE_LOCS_PIXEL_X1Y0_0, 0);
+		radeon_set_context_reg(cs, CM_R_028C18_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y1_0, 0);
+		radeon_set_context_reg(cs, CM_R_028C28_PA_SC_AA_SAMPLE_LOCS_PIXEL_X1Y1_0, 0);
+		break;
 	case 2:
 		radeon_set_context_reg(cs, CM_R_028BF8_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0, eg_sample_locs_2x[0]);
 		radeon_set_context_reg(cs, CM_R_028C08_PA_SC_AA_SAMPLE_LOCS_PIXEL_X1Y0_0, eg_sample_locs_2x[1]);

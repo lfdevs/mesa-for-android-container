@@ -814,6 +814,7 @@ vbo_validated_drawrangeelements(struct gl_context *ctx, GLenum mode,
    prim[0].basevertex = basevertex;
    prim[0].num_instances = numInstances;
    prim[0].base_instance = baseInstance;
+   prim[0].draw_id = 0;
 
    /* Need to give special consideration to rendering a range of
     * indices starting somewhere above zero.  Typically the

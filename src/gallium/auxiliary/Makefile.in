@@ -248,8 +248,8 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_tests.h util/u_texture.c util/u_texture.h util/u_tile.c \
 	util/u_tile.h util/u_time.h util/u_transfer.c \
 	util/u_transfer.h util/u_upload_mgr.c util/u_upload_mgr.h \
-	util/u_vbuf.c util/u_vbuf.h util/u_video.h nir/tgsi_to_nir.c \
-	nir/tgsi_to_nir.h indices/u_indices_gen.c \
+	util/u_vbuf.c util/u_vbuf.h util/u_video.h util/u_viewport.h \
+	nir/tgsi_to_nir.c nir/tgsi_to_nir.h indices/u_indices_gen.c \
 	indices/u_unfilled_gen.c util/u_format_table.c \
 	gallivm/lp_bld_arit.c gallivm/lp_bld_arit.h \
 	gallivm/lp_bld_arit_overflow.c gallivm/lp_bld_arit_overflow.h \
@@ -702,6 +702,9 @@ SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
+SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
+SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
@@ -1119,7 +1122,8 @@ C_SOURCES := \
 	util/u_upload_mgr.h \
 	util/u_vbuf.c \
 	util/u_vbuf.h \
-	util/u_video.h
+	util/u_video.h \
+	util/u_viewport.h
 
 NIR_SOURCES := \
 	nir/tgsi_to_nir.c \

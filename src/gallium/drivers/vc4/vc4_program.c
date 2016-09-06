@@ -2032,6 +2032,11 @@ vc4_get_compiled_shader(struct vc4_context *vc4, enum qstage stage,
                         shader->input_slots[shader->num_inputs] = *slot;
                         shader->num_inputs++;
                 }
+
+                /* Note: the temporary clone in c->s has been freed. */
+                nir_shader *orig_shader = key->shader_state->base.ir.nir;
+                if (orig_shader->info.outputs_written & (1 << FRAG_RESULT_DEPTH))
+                        shader->disable_early_z = true;
         } else {
                 shader->num_inputs = c->num_inputs;
 

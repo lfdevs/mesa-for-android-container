@@ -499,10 +499,8 @@ nvc0_bufctx_fence(struct nvc0_context *nvc0, struct nouveau_bufctx *bufctx,
    NOUVEAU_DRV_STAT(&nvc0->screen->base, resource_validate_count, count);
 }
 
-static void
-nvc0_context_get_sample_position(struct pipe_context *pipe,
-                                 unsigned sample_count, unsigned sample_index,
-                                 float *xy)
+const void *
+nvc0_get_sample_locations(unsigned sample_count)
 {
    static const uint8_t ms1[1][2] = { { 0x8, 0x8 } };
    static const uint8_t ms2[2][2] = {
@@ -534,8 +532,22 @@ nvc0_context_get_sample_position(struct pipe_context *pipe,
    case 8: ptr = ms8; break;
    default:
       assert(0);
-      return; /* bad sample count -> undefined locations */
+      return NULL; /* bad sample count -> undefined locations */
    }
+   return ptr;
+}
+
+static void
+nvc0_context_get_sample_position(struct pipe_context *pipe,
+                                 unsigned sample_count, unsigned sample_index,
+                                 float *xy)
+{
+   const uint8_t (*ptr)[2];
+
+   ptr = nvc0_get_sample_locations(sample_count);
+   if (!ptr)
+      return;
+
    xy[0] = ptr[sample_index][0] * 0.0625f;
    xy[1] = ptr[sample_index][1] * 0.0625f;
 }

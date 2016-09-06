@@ -460,6 +460,10 @@ static void *si_create_blend_state_mode(struct pipe_context *ctx,
 			S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) |
 			S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
 
+		/* Only set dual source blending for MRT0 to avoid a hang. */
+		if (i >= 1 && blend->dual_src_blend)
+			continue;
+
 		if (!state->rt[j].colormask)
 			continue;
 
@@ -620,8 +624,7 @@ static void si_set_clip_state(struct pipe_context *ctx,
 	cb.user_buffer = state->ucp;
 	cb.buffer_offset = 0;
 	cb.buffer_size = 4*4*8;
-	si_set_constant_buffer(sctx, &sctx->rw_buffers,
-			       SI_VS_CONST_CLIP_PLANES, &cb);
+	si_set_rw_buffer(sctx, SI_VS_CONST_CLIP_PLANES, &cb);
 	pipe_resource_reference(&cb.buffer, NULL);
 }
 
@@ -847,8 +850,12 @@ static void si_bind_rs_state(struct pipe_context *ctx, void *state)
 		return;
 
 	if (sctx->framebuffer.nr_samples > 1 &&
-	    (!old_rs || old_rs->multisample_enable != rs->multisample_enable))
+	    (!old_rs || old_rs->multisample_enable != rs->multisample_enable)) {
 		si_mark_atom_dirty(sctx, &sctx->db_render_state);
+
+		if (sctx->b.family >= CHIP_POLARIS10)
+			si_mark_atom_dirty(sctx, &sctx->msaa_sample_locs.atom);
+	}
 
 	r600_set_scissor_enable(&sctx->b, rs->scissor_enable);
 
@@ -2395,21 +2402,9 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 			assert(0);
 		}
 		constbuf.buffer_size = sctx->framebuffer.nr_samples * 2 * 4;
-		si_set_constant_buffer(sctx, &sctx->rw_buffers,
-				       SI_PS_CONST_SAMPLE_POSITIONS, &constbuf);
+		si_set_rw_buffer(sctx, SI_PS_CONST_SAMPLE_POSITIONS, &constbuf);
 
-		/* Smoothing (only possible with nr_samples == 1) uses the same
-		 * sample locations as the MSAA it simulates.
-		 *
-		 * Therefore, don't update the sample locations when
-		 * transitioning from no AA to smoothing-equivalent AA, and
-		 * vice versa.
-		 */
-		if ((sctx->framebuffer.nr_samples != 1 ||
-		     old_nr_samples != SI_NUM_SMOOTH_AA_SAMPLES) &&
-		    (sctx->framebuffer.nr_samples != SI_NUM_SMOOTH_AA_SAMPLES ||
-		     old_nr_samples != 1))
-			si_mark_atom_dirty(sctx, &sctx->msaa_sample_locs);
+		si_mark_atom_dirty(sctx, &sctx->msaa_sample_locs.atom);
 	}
 }
 
@@ -2536,8 +2531,37 @@ static void si_emit_msaa_sample_locs(struct si_context *sctx,
 	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
 	unsigned nr_samples = sctx->framebuffer.nr_samples;
 
-	cayman_emit_msaa_sample_locs(cs, nr_samples > 1 ? nr_samples :
-						SI_NUM_SMOOTH_AA_SAMPLES);
+	/* Smoothing (only possible with nr_samples == 1) uses the same
+	 * sample locations as the MSAA it simulates.
+	 */
+	if (nr_samples <= 1 && sctx->smoothing_enabled)
+		nr_samples = SI_NUM_SMOOTH_AA_SAMPLES;
+
+	/* On Polaris, the small primitive filter uses the sample locations
+	 * even when MSAA is off, so we need to make sure they're set to 0.
+	 */
+	if ((nr_samples > 1 || sctx->b.family >= CHIP_POLARIS10) &&
+	    (nr_samples != sctx->msaa_sample_locs.nr_samples)) {
+		sctx->msaa_sample_locs.nr_samples = nr_samples;
+		cayman_emit_msaa_sample_locs(cs, nr_samples);
+	}
+
+	if (sctx->b.family >= CHIP_POLARIS10) {
+		struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
+		unsigned small_prim_filter_cntl =
+			S_028830_SMALL_PRIM_FILTER_ENABLE(1) |
+			S_028830_LINE_FILTER_DISABLE(1); /* line bug */
+
+		/* The alternative of setting sample locations to 0 would
+		 * require a DB flush to avoid Z errors, see
+		 * https://bugs.freedesktop.org/show_bug.cgi?id=96908
+		 */
+		if (sctx->framebuffer.nr_samples > 1 && rs && !rs->multisample_enable)
+			small_prim_filter_cntl &= C_028830_SMALL_PRIM_FILTER_ENABLE;
+
+		radeon_set_context_reg(cs, R_028830_PA_SU_SMALL_PRIM_FILTER_CNTL,
+				       small_prim_filter_cntl);
+	}
 }
 
 static void si_emit_msaa_config(struct si_context *sctx, struct r600_atom *atom)
@@ -3246,8 +3270,7 @@ static void si_set_tess_state(struct pipe_context *ctx,
 			       (void*)array, sizeof(array),
 			       &cb.buffer_offset);
 
-	si_set_constant_buffer(sctx, &sctx->rw_buffers,
-			       SI_HS_CONST_DEFAULT_TESS_LEVELS, &cb);
+	si_set_rw_buffer(sctx, SI_HS_CONST_DEFAULT_TESS_LEVELS, &cb);
 	pipe_resource_reference(&cb.buffer, NULL);
 }
 
@@ -3337,7 +3360,7 @@ void si_init_state_functions(struct si_context *sctx)
 
 	si_init_atom(sctx, &sctx->cache_flush, &sctx->atoms.s.cache_flush, si_emit_cache_flush);
 	si_init_atom(sctx, &sctx->framebuffer.atom, &sctx->atoms.s.framebuffer, si_emit_framebuffer_state);
-	si_init_atom(sctx, &sctx->msaa_sample_locs, &sctx->atoms.s.msaa_sample_locs, si_emit_msaa_sample_locs);
+	si_init_atom(sctx, &sctx->msaa_sample_locs.atom, &sctx->atoms.s.msaa_sample_locs, si_emit_msaa_sample_locs);
 	si_init_atom(sctx, &sctx->db_render_state, &sctx->atoms.s.db_render_state, si_emit_db_render_state);
 	si_init_atom(sctx, &sctx->msaa_config, &sctx->atoms.s.msaa_config, si_emit_msaa_config);
 	si_init_atom(sctx, &sctx->sample_mask.atom, &sctx->atoms.s.sample_mask, si_emit_sample_mask);
@@ -3809,11 +3832,6 @@ static void si_init_config(struct si_context *sctx)
 
 	if (sctx->b.family == CHIP_STONEY)
 		si_pm4_set_reg(pm4, R_028C40_PA_SC_SHADER_CONTROL, 0);
-
-	if (sctx->b.family >= CHIP_POLARIS10)
-		si_pm4_set_reg(pm4, R_028830_PA_SU_SMALL_PRIM_FILTER_CNTL,
-			       S_028830_SMALL_PRIM_FILTER_ENABLE(1) |
-			       S_028830_LINE_FILTER_DISABLE(1)); /* line bug */
 
 	si_pm4_set_reg(pm4, R_028080_TA_BC_BASE_ADDR, border_color_va >> 8);
 	if (sctx->b.chip_class >= CIK)

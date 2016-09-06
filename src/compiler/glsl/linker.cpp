@@ -3687,6 +3687,18 @@ create_shader_variable(struct gl_shader_program *shProg,
    if (in->data.mode == ir_var_system_value &&
        in->data.location == SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) {
       out->name = ralloc_strdup(shProg, "gl_VertexID");
+   } else if ((in->data.mode == ir_var_shader_out &&
+               in->data.location == VARYING_SLOT_TESS_LEVEL_OUTER) ||
+              (in->data.mode == ir_var_system_value &&
+               in->data.location == SYSTEM_VALUE_TESS_LEVEL_OUTER)) {
+      out->name = ralloc_strdup(shProg, "gl_TessLevelOuter");
+      type = glsl_type::get_array_instance(glsl_type::float_type, 4);
+   } else if ((in->data.mode == ir_var_shader_out &&
+               in->data.location == VARYING_SLOT_TESS_LEVEL_INNER) ||
+              (in->data.mode == ir_var_system_value &&
+               in->data.location == SYSTEM_VALUE_TESS_LEVEL_INNER)) {
+      out->name = ralloc_strdup(shProg, "gl_TessLevelInner");
+      type = glsl_type::get_array_instance(glsl_type::float_type, 2);
    } else {
       out->name = ralloc_strdup(shProg, name);
    }
@@ -3838,6 +3850,9 @@ add_interface_variables(struct gl_shader_program *shProg,
       default:
          continue;
       };
+
+      if (var->data.patch)
+         loc_bias = int(VARYING_SLOT_PATCH0);
 
       /* Skip packed varyings, packed varyings are handled separately
        * by add_packed_varyings.

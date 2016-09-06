@@ -322,81 +322,6 @@ void anv_GetImageSubresourceLayout(
    }
 }
 
-VkResult
-anv_validate_CreateImageView(VkDevice _device,
-                             const VkImageViewCreateInfo *pCreateInfo,
-                             const VkAllocationCallbacks *pAllocator,
-                             VkImageView *pView)
-{
-   ANV_FROM_HANDLE(anv_image, image, pCreateInfo->image);
-   const VkImageSubresourceRange *subresource;
-
-   /* Validate structure type before dereferencing it. */
-   assert(pCreateInfo);
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
-   subresource = &pCreateInfo->subresourceRange;
-
-   /* Validate viewType is in range before using it. */
-   assert(pCreateInfo->viewType >= VK_IMAGE_VIEW_TYPE_BEGIN_RANGE);
-   assert(pCreateInfo->viewType <= VK_IMAGE_VIEW_TYPE_END_RANGE);
-
-   /* Validate format is in range before using it. */
-   assert(pCreateInfo->format >= VK_FORMAT_BEGIN_RANGE);
-   assert(pCreateInfo->format <= VK_FORMAT_END_RANGE);
-
-   /* Validate channel swizzles. */
-   assert(pCreateInfo->components.r >= VK_COMPONENT_SWIZZLE_BEGIN_RANGE);
-   assert(pCreateInfo->components.r <= VK_COMPONENT_SWIZZLE_END_RANGE);
-   assert(pCreateInfo->components.g >= VK_COMPONENT_SWIZZLE_BEGIN_RANGE);
-   assert(pCreateInfo->components.g <= VK_COMPONENT_SWIZZLE_END_RANGE);
-   assert(pCreateInfo->components.b >= VK_COMPONENT_SWIZZLE_BEGIN_RANGE);
-   assert(pCreateInfo->components.b <= VK_COMPONENT_SWIZZLE_END_RANGE);
-   assert(pCreateInfo->components.a >= VK_COMPONENT_SWIZZLE_BEGIN_RANGE);
-   assert(pCreateInfo->components.a <= VK_COMPONENT_SWIZZLE_END_RANGE);
-
-   /* Validate subresource. */
-   assert(subresource->aspectMask != 0);
-   assert(subresource->levelCount > 0);
-   assert(subresource->layerCount > 0);
-   assert(subresource->baseMipLevel < image->levels);
-   assert(subresource->baseMipLevel + anv_get_levelCount(image, subresource) <= image->levels);
-   assert(subresource->baseArrayLayer < image->array_size);
-   assert(subresource->baseArrayLayer + anv_get_layerCount(image, subresource) <= image->array_size);
-   assert(pView);
-
-   MAYBE_UNUSED const VkImageAspectFlags view_format_aspects =
-      vk_format_aspects(pCreateInfo->format);
-
-   const VkImageAspectFlags ds_flags = VK_IMAGE_ASPECT_DEPTH_BIT
-                                     | VK_IMAGE_ASPECT_STENCIL_BIT;
-
-   /* Validate format. */
-   if (subresource->aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) {
-      assert(subresource->aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
-      assert(image->aspects == VK_IMAGE_ASPECT_COLOR_BIT);
-      assert(view_format_aspects == VK_IMAGE_ASPECT_COLOR_BIT);
-   } else if (subresource->aspectMask & ds_flags) {
-      assert((subresource->aspectMask & ~ds_flags) == 0);
-
-      assert(pCreateInfo->format == image->vk_format);
-
-      if (subresource->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
-         assert(image->aspects & VK_IMAGE_ASPECT_DEPTH_BIT);
-         assert(view_format_aspects & VK_IMAGE_ASPECT_DEPTH_BIT);
-      }
-
-      if (subresource->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
-         /* FINISHME: Is it legal to have an R8 view of S8? */
-         assert(image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT);
-         assert(view_format_aspects & VK_IMAGE_ASPECT_STENCIL_BIT);
-      }
-   } else {
-      assert(!"bad VkImageSubresourceRange::aspectFlags");
-   }
-
-   return anv_CreateImageView(_device, pCreateInfo, pAllocator, pView);
-}
-
 static struct anv_state
 alloc_surface_state(struct anv_device *device,
                     struct anv_cmd_buffer *cmd_buffer)
@@ -628,18 +553,19 @@ void anv_buffer_view_init(struct anv_buffer_view *view,
    view->format = anv_get_isl_format(&device->info, pCreateInfo->format,
                                      VK_IMAGE_ASPECT_COLOR_BIT,
                                      VK_IMAGE_TILING_LINEAR);
+   const uint32_t format_bs = isl_format_get_layout(view->format)->bs;
    view->bo = buffer->bo;
    view->offset = buffer->offset + pCreateInfo->offset;
    view->range = pCreateInfo->range == VK_WHOLE_SIZE ?
-                 buffer->size - view->offset : pCreateInfo->range;
+                 buffer->size - pCreateInfo->offset : pCreateInfo->range;
+   view->range = align_down_npot_u32(view->range, format_bs);
 
    if (buffer->usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT) {
       view->surface_state = alloc_surface_state(device, cmd_buffer);
 
       anv_fill_buffer_surface_state(device, view->surface_state,
                                     view->format,
-                                    view->offset, view->range,
-                                    isl_format_get_layout(view->format)->bs);
+                                    view->offset, view->range, format_bs);
    } else {
       view->surface_state = (struct anv_state){ 0 };
    }

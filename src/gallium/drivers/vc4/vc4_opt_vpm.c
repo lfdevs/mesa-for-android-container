@@ -110,11 +110,12 @@ qir_opt_vpm(struct vc4_compile *c)
                          * sources are independent of previous instructions
                          */
                         if (temps == 1) {
-                                list_del(&inst->link);
                                 inst->src[j] = mov->src[0];
-                                list_replace(&mov->link, &inst->link);
-                                c->defs[temp] = NULL;
-                                free(mov);
+
+                                list_del(&inst->link);
+                                list_addtail(&inst->link, &mov->link);
+                                qir_remove_instruction(c, mov);
+
                                 progress = true;
                                 break;
                         }

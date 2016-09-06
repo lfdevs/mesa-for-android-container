@@ -1,0 +1,3 @@
+usr/include/GL/osmesa.h
+usr/lib/*/libOSMesa.so
+usr/lib/*/pkgconfig/osmesa.pc

@@ -30,6 +30,7 @@
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/u_format.h"
+#include "util/u_hash_table.h"
 #include "util/ralloc.h"
 
 #include "vc4_screen.h"
@@ -82,7 +83,11 @@ vc4_screen_get_vendor(struct pipe_screen *pscreen)
 static void
 vc4_screen_destroy(struct pipe_screen *pscreen)
 {
+        struct vc4_screen *screen = vc4_screen(pscreen);
+
+        util_hash_table_destroy(screen->bo_handles);
         vc4_bufmgr_destroy(pscreen);
+        close(screen->fd);
         ralloc_free(pscreen);
 }
 
@@ -488,6 +493,18 @@ vc4_screen_is_format_supported(struct pipe_screen *pscreen,
         return retval == usage;
 }
 
+#define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
+
+static unsigned handle_hash(void *key)
+{
+    return PTR_TO_UINT(key);
+}
+
+static int handle_compare(void *key1, void *key2)
+{
+    return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
+}
+
 struct pipe_screen *
 vc4_screen_create(int fd)
 {
@@ -505,6 +522,8 @@ vc4_screen_create(int fd)
 
         screen->fd = fd;
         list_inithead(&screen->bo_cache.time_list);
+        pipe_mutex_init(screen->bo_handles_mutex);
+        screen->bo_handles = util_hash_table_create(handle_hash, handle_compare);
 
         vc4_fence_init(screen);
 

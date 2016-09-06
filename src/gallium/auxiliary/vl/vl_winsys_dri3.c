@@ -89,6 +89,7 @@ dri3_free_front_buffer(struct vl_dri3_screen *scrn,
 {
    xcb_sync_destroy_fence(scrn->conn, buffer->sync_fence);
    xshmfence_unmap_shm(buffer->shm_fence);
+   pipe_resource_reference(&buffer->texture, NULL);
    FREE(buffer);
 }
 

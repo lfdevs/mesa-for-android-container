@@ -1,0 +1,9 @@
+# OS-independent part (from libegl1-mesa-dev.install):
+usr/lib/*/libEGL.so
+usr/include/EGL
+usr/include/KHR
+usr/lib/*/pkgconfig/egl.pc
+
+# Wayland support, only on Linux:
+usr/lib/*/libwayland-egl.so
+usr/lib/*/pkgconfig/wayland-egl.pc

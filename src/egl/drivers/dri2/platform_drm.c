@@ -726,5 +726,6 @@ cleanup:
       close(fd);
 
    free(dri2_dpy);
+   disp->DriverData = NULL;
    return EGL_FALSE;
 }

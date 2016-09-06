@@ -266,16 +266,16 @@ INTRINSIC(ssbo_atomic_comp_swap, 4, ARR(1, 1, 1, 1), true, 1, 0, 0, xx, xx, xx, 
  *    in shared_atomic_add, etc).
  * 2: For CompSwap only: the second data parameter.
  */
-INTRINSIC(shared_atomic_add, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_imin, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_umin, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_imax, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_umax, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_and, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_or, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_xor, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_exchange, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx, 0)
-INTRINSIC(shared_atomic_comp_swap, 3, ARR(1, 1, 1), true, 1, 0, 0, xx, xx, xx, 0)
+INTRINSIC(shared_atomic_add, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_imin, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_umin, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_imax, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_umax, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_and, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_or, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_xor, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_exchange, 2, ARR(1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
+INTRINSIC(shared_atomic_comp_swap, 3, ARR(1, 1, 1), true, 1, 0, 1, BASE, xx, xx, 0)
 
 #define SYSTEM_VALUE(name, components, num_indices, idx0, idx1, idx2) \
    INTRINSIC(load_##name, 0, ARR(0), true, components, 0, num_indices, \

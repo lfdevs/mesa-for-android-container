@@ -21,13 +21,13 @@ extern "C" {
  *   - Gen4-5 record ending occlusion query values (4 * 4 = 16 bytes)
  *   - Disabling OA counters on Gen6+ (3 DWords = 12 bytes)
  *   - Ending MI_REPORT_PERF_COUNT on Gen5+, plus associated PIPE_CONTROLs:
- *     - Two sets of PIPE_CONTROLs, which become 3 PIPE_CONTROLs each on SNB,
- *       which are 5 DWords each ==> 2 * 3 * 5 * 4 = 120 bytes
+ *     - Two sets of PIPE_CONTROLs, which become 4 PIPE_CONTROLs each on SNB,
+ *       which are 5 DWords each ==> 2 * 4 * 5 * 4 = 160 bytes
  *     - 3 DWords for MI_REPORT_PERF_COUNT itself on Gen6+.  ==> 12 bytes.
  *       On Ironlake, it's 6 DWords, but we have some slack due to the lack of
  *       Sandybridge PIPE_CONTROL madness.
- *   - CC_STATE workaround on HSW (12 * 4 = 48 bytes)
- *     - 5 dwords for initial mi_flush
+ *   - CC_STATE workaround on HSW (17 * 4 = 68 bytes)
+ *     - 10 dwords for initial mi_flush
  *     - 2 dwords for CC state setup
  *     - 5 dwords for the required pipe control at the end
  *   - Restoring L3 configuration: (24 dwords = 96 bytes)
@@ -35,7 +35,7 @@ extern "C" {
  *     - 7 dwords for L3 configuration set-up.
  *     - 5 dwords for L3 atomic set-up (on HSW).
  */
-#define BATCH_RESERVED 248
+#define BATCH_RESERVED 308
 
 struct intel_batchbuffer;
 

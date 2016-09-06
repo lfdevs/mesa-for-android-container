@@ -1,3 +1,0 @@
-usr/lib/${DEB_HOST_MULTIARCH}/libgbm.so
-usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/gbm.pc
-usr/include/gbm.h

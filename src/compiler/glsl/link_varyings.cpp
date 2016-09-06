@@ -308,7 +308,25 @@ cross_validate_types_and_qualifiers(struct gl_shader_program *prog,
       return;
    }
 
-   if (!prog->IsES && input->data.invariant != output->data.invariant) {
+   /* The GLSL 4.30 and GLSL ES 3.00 specifications say:
+    *
+    *    "As only outputs need be declared with invariant, an output from
+    *     one shader stage will still match an input of a subsequent stage
+    *     without the input being declared as invariant."
+    *
+    * while GLSL 4.20 says:
+    *
+    *    "For variables leaving one shader and coming into another shader,
+    *     the invariant keyword has to be used in both shaders, or a link
+    *     error will result."
+    *
+    * and GLSL ES 1.00 section 4.6.4 "Invariance and Linking" says:
+    *
+    *    "The invariance of varyings that are declared in both the vertex
+    *     and fragment shaders must match."
+    */
+   if (input->data.invariant != output->data.invariant &&
+       prog->Version < (prog->IsES ? 300 : 430)) {
       linker_error(prog,
                    "%s shader output `%s' %s invariant qualifier, "
                    "but %s shader input %s invariant qualifier\n",
@@ -1610,7 +1628,8 @@ varying_matches::compute_packing_class(const ir_variable *var)
    unsigned packing_class = var->data.centroid | (var->data.sample << 1) |
                             (var->data.patch << 2);
    packing_class *= 4;
-   packing_class += var->data.interpolation;
+   packing_class += var->is_interpolation_flat()
+      ? unsigned(INTERP_QUALIFIER_FLAT) : var->data.interpolation;
    return packing_class;
 }
 

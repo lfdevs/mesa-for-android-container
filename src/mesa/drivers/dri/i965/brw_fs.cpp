@@ -5681,7 +5681,7 @@ fs_visitor::setup_gs_payload()
     * have to multiply by VerticesIn to obtain the total storage requirement.
     */
    if (8 * vue_prog_data->urb_read_length * nir->info.gs.vertices_in >
-       max_push_components) {
+       max_push_components || gs_prog_data->invocations > 1) {
       gs_prog_data->base.include_vue_handles = true;
 
       /* R3..RN: ICP Handles for each incoming vertex (when using pull model) */

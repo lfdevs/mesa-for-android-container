@@ -46,23 +46,25 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/include
 
-libisl_la_CFLAGS = $(CFLAGS) -Wno-override-init
+AM_CFLAGS = \
+	$(VISIBILITY_CFLAGS) \
+	-Wno-override-init
 
 libisl_la_LIBADD = $(ISL_GEN_LIBS)
 
 libisl_la_SOURCES = $(ISL_FILES) $(ISL_GENERATED_FILES)
 
 libisl_gen7_la_SOURCES = $(ISL_GEN7_FILES)
-libisl_gen7_la_CFLAGS = $(libisl_la_CFLAGS) -DGEN_VERSIONx10=70
+libisl_gen7_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=70
 
 libisl_gen75_la_SOURCES = $(ISL_GEN75_FILES)
-libisl_gen75_la_CFLAGS = $(libisl_la_CFLAGS) -DGEN_VERSIONx10=75
+libisl_gen75_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=75
 
 libisl_gen8_la_SOURCES = $(ISL_GEN8_FILES)
-libisl_gen8_la_CFLAGS = $(libisl_la_CFLAGS) -DGEN_VERSIONx10=80
+libisl_gen8_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=80
 
 libisl_gen9_la_SOURCES = $(ISL_GEN9_FILES)
-libisl_gen9_la_CFLAGS = $(libisl_la_CFLAGS) -DGEN_VERSIONx10=90
+libisl_gen9_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=90
 
 BUILT_SOURCES = $(ISL_GENERATED_FILES)
 

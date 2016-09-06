@@ -7209,6 +7209,7 @@
 /*     */
 #define R_028830_PA_SU_SMALL_PRIM_FILTER_CNTL                           0x028830 /* Polaris */
 #define   S_028830_SMALL_PRIM_FILTER_ENABLE(x)                        (((x) & 0x1) << 0)
+#define   C_028830_SMALL_PRIM_FILTER_ENABLE                           0xFFFFFFFE
 #define   S_028830_TRIANGLE_FILTER_DISABLE(x)                         (((x) & 0x1) << 1)
 #define   S_028830_LINE_FILTER_DISABLE(x)                             (((x) & 0x1) << 2)
 #define   S_028830_POINT_FILTER_DISABLE(x)                            (((x) & 0x1) << 3)

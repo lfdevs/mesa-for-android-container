@@ -196,7 +196,7 @@ struct glcpp_parser {
 	int error;
 	const struct gl_extensions *extensions;
 	gl_api api;
-	bool version_resolved;
+	unsigned version;
 	bool has_new_line_number;
 	int new_line_number;
 	bool has_new_source_number;

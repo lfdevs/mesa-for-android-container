@@ -2052,6 +2052,9 @@ bool si_update_shaders(struct si_context *sctx)
 
 			if (sctx->b.chip_class == SI)
 				si_mark_atom_dirty(sctx, &sctx->db_render_state);
+
+			if (sctx->framebuffer.nr_samples <= 1)
+				si_mark_atom_dirty(sctx, &sctx->msaa_sample_locs.atom);
 		}
 	}
 

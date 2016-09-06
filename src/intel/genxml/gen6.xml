@@ -79,7 +79,7 @@
     </group>
   </struct>
 
-  <struct name="BLEND_STATE" length="2">
+  <struct name="BLEND_STATE_ENTRY" length="2">
     <field name="Color Buffer Blend Enable" start="31" end="31" type="bool"/>
     <field name="Independent Alpha Blend Enable" start="30" end="30" type="bool"/>
     <field name="Alpha Blend Function" start="26" end="28" type="uint">
@@ -167,6 +167,12 @@
     </field>
     <field name="Pre-Blend Color Clamp Enable" start="33" end="33" type="bool"/>
     <field name="Post-Blend Color Clamp Enable" start="32" end="32" type="bool"/>
+  </struct>
+
+  <struct name="BLEND_STATE" length="16">
+    <group count="8" start="0" size="64">
+      <field name="Entry" start="0" end="63" type="BLEND_STATE_ENTRY"/>
+    </group>
   </struct>
 
   <struct name="CC_VIEWPORT" length="2">
@@ -781,6 +787,7 @@
     <field name="CLIP Enable" start="95" end="95" type="bool"/>
     <field name="API Mode" start="94" end="94" type="uint">
       <value name="APIMODE_OGL" value="0"/>
+      <value name="APIMODE_D3D" value="1"/>
     </field>
     <field name="Viewport XY ClipTest Enable" start="92" end="92" type="bool"/>
     <field name="Viewport Z ClipTest Enable" start="91" end="91" type="bool"/>

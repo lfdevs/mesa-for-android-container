@@ -98,7 +98,8 @@ fd4_rasterizer_state_create(struct pipe_context *pctx,
 		so->gras_su_mode_control |= A4XX_GRAS_SU_MODE_CONTROL_POLY_OFFSET;
 
 	if (!cso->depth_clip)
-		so->gras_cl_clip_cntl |= A4XX_GRAS_CL_CLIP_CNTL_CLIP_DISABLE;
+		so->gras_cl_clip_cntl |= A4XX_GRAS_CL_CLIP_CNTL_ZNEAR_CLIP_DISABLE |
+			A4XX_GRAS_CL_CLIP_CNTL_ZFAR_CLIP_DISABLE;
 	if (cso->clip_halfz)
 		so->gras_cl_clip_cntl |= A4XX_GRAS_CL_CLIP_CNTL_ZERO_GB_SCALE_Z;
 

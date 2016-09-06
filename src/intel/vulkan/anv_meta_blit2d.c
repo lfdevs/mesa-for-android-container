@@ -92,6 +92,21 @@ vk_format_for_size(int bs)
    }
 }
 
+/* This function returns the format corresponding to a single component of the
+ * RGB format for the given size returned by vk_format_for_size().
+ */
+static VkFormat
+vk_single_component_format_for_rgb_size(int bs)
+{
+   switch (bs) {
+   case 3: return VK_FORMAT_R8_UNORM;
+   case 6: return VK_FORMAT_R16_UNORM;
+   case 12: return VK_FORMAT_R32_UINT;
+   default:
+      unreachable("Invalid format block size");
+   }
+}
+
 static void
 create_iview(struct anv_cmd_buffer *cmd_buffer,
              struct anv_meta_blit2d_surf *surf,
@@ -99,13 +114,14 @@ create_iview(struct anv_cmd_buffer *cmd_buffer,
              VkImageUsageFlags usage,
              uint32_t width,
              uint32_t height,
+             VkFormat format,
              VkImage *img,
              struct anv_image_view *iview)
 {
    const VkImageCreateInfo image_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
-      .format = vk_format_for_size(surf->bs),
+      .format = format,
       .extent = {
          .width = width,
          .height = height,
@@ -179,6 +195,7 @@ blit2d_bind_src(struct anv_cmd_buffer *cmd_buffer,
 
       create_iview(cmd_buffer, src, offset, VK_IMAGE_USAGE_SAMPLED_BIT,
                    rect->src_x + rect->width, rect->src_y + rect->height,
+                   vk_format_for_size(src->bs),
                    &tmp->image, &tmp->iview);
 
       anv_CreateDescriptorPool(vk_device,
@@ -328,10 +345,11 @@ blit2d_bind_dst(struct anv_cmd_buffer *cmd_buffer,
                 uint64_t offset,
                 uint32_t width,
                 uint32_t height,
+                VkFormat format,
                 struct blit2d_dst_temps *tmp)
 {
    create_iview(cmd_buffer, dst, offset, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                width, height, &tmp->image, &tmp->iview);
+                width, height, format, &tmp->image, &tmp->iview);
 
    anv_CreateFramebuffer(anv_device_to_handle(cmd_buffer->device),
       &(VkFramebufferCreateInfo) {
@@ -406,7 +424,8 @@ anv_meta_blit2d_normal_dst(struct anv_cmd_buffer *cmd_buffer,
 
       struct blit2d_dst_temps dst_temps;
       blit2d_bind_dst(cmd_buffer, dst, offset, rects[r].dst_x + rects[r].width,
-                      rects[r].dst_y + rects[r].height, &dst_temps);
+                      rects[r].dst_y + rects[r].height,
+                      vk_format_for_size(dst->bs), &dst_temps);
 
       struct blit_vb_data {
          float pos[2];
@@ -544,7 +563,8 @@ anv_meta_blit2d_w_tiled_dst(struct anv_cmd_buffer *cmd_buffer,
       };
 
       struct blit2d_dst_temps dst_temps;
-      blit2d_bind_dst(cmd_buffer, &dst_Y, offset, xmax_Y, ymax_Y, &dst_temps);
+      blit2d_bind_dst(cmd_buffer, &dst_Y, offset, xmax_Y, ymax_Y,
+                      VK_FORMAT_R8_UINT, &dst_temps);
 
       struct blit_vb_header {
          struct anv_vue_header vue;
@@ -647,6 +667,141 @@ anv_meta_blit2d_w_tiled_dst(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
+static void
+anv_meta_blit2d_rgb_dst(struct anv_cmd_buffer *cmd_buffer,
+                        struct anv_meta_blit2d_surf *src,
+                        enum blit2d_src_type src_type,
+                        struct anv_meta_blit2d_surf *dst,
+                        unsigned num_rects,
+                        struct anv_meta_blit2d_rect *rects)
+{
+   struct anv_device *device = cmd_buffer->device;
+
+   for (unsigned r = 0; r < num_rects; ++r) {
+      struct blit2d_src_temps src_temps;
+      blit2d_bind_src(cmd_buffer, src, src_type, &rects[r], &src_temps);
+
+      assert(dst->bs % 3 == 0);
+      assert(dst->tiling == ISL_TILING_LINEAR);
+
+      uint32_t offset;
+      isl_tiling_get_intratile_offset_el(&cmd_buffer->device->isl_dev,
+                                         dst->tiling, 1, dst->pitch,
+                                         rects[r].dst_x, rects[r].dst_y,
+                                         &offset,
+                                         &rects[r].dst_x, &rects[r].dst_y);
+
+      /* A red surface three times as wide as the actual RGB destination */
+      struct anv_meta_blit2d_surf dst_R = {
+         .bo = dst->bo,
+         .tiling = dst->tiling,
+         .base_offset = dst->base_offset,
+         .bs = dst->bs / 3,
+         .pitch = dst->pitch,
+      };
+
+      struct blit2d_dst_temps dst_temps;
+      blit2d_bind_dst(cmd_buffer, &dst_R, offset,
+                      (rects[r].dst_x + rects[r].width) * 3,
+                      rects[r].dst_y + rects[r].height,
+                      vk_single_component_format_for_rgb_size(dst->bs),
+                      &dst_temps);
+
+      struct blit_vb_data {
+         float pos[2];
+         float tex_coord[3];
+      } *vb_data;
+
+      unsigned vb_size = sizeof(struct anv_vue_header) + 3 * sizeof(*vb_data);
+
+      struct anv_state vb_state =
+         anv_cmd_buffer_alloc_dynamic_state(cmd_buffer, vb_size, 16);
+      memset(vb_state.map, 0, sizeof(struct anv_vue_header));
+      vb_data = vb_state.map + sizeof(struct anv_vue_header);
+
+      vb_data[0] = (struct blit_vb_data) {
+         .pos = {
+            (rects[r].dst_x + rects[r].width) * 3,
+            rects[r].dst_y + rects[r].height,
+         },
+         .tex_coord = {
+            rects[r].src_x + rects[r].width,
+            rects[r].src_y + rects[r].height,
+            src->pitch,
+         },
+      };
+
+      vb_data[1] = (struct blit_vb_data) {
+         .pos = {
+            rects[r].dst_x * 3,
+            rects[r].dst_y + rects[r].height,
+         },
+         .tex_coord = {
+            rects[r].src_x,
+            rects[r].src_y + rects[r].height,
+            src->pitch,
+         },
+      };
+
+      vb_data[2] = (struct blit_vb_data) {
+         .pos = {
+            rects[r].dst_x * 3,
+            rects[r].dst_y,
+         },
+         .tex_coord = {
+            rects[r].src_x,
+            rects[r].src_y,
+            src->pitch,
+         },
+      };
+
+      if (!device->info.has_llc)
+         anv_state_clflush(vb_state);
+
+      struct anv_buffer vertex_buffer = {
+         .device = device,
+         .size = vb_size,
+         .bo = &device->dynamic_state_block_pool.bo,
+         .offset = vb_state.offset,
+      };
+
+      anv_CmdBindVertexBuffers(anv_cmd_buffer_to_handle(cmd_buffer), 0, 2,
+         (VkBuffer[]) {
+            anv_buffer_to_handle(&vertex_buffer),
+            anv_buffer_to_handle(&vertex_buffer)
+         },
+         (VkDeviceSize[]) {
+            0,
+            sizeof(struct anv_vue_header),
+         });
+
+      ANV_CALL(CmdBeginRenderPass)(anv_cmd_buffer_to_handle(cmd_buffer),
+         &(VkRenderPassBeginInfo) {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = device->meta_state.blit2d.render_pass,
+            .framebuffer = dst_temps.fb,
+            .renderArea = {
+               .offset = { rects[r].dst_x, rects[r].dst_y, },
+               .extent = { rects[r].width, rects[r].height },
+            },
+            .clearValueCount = 0,
+            .pClearValues = NULL,
+         }, VK_SUBPASS_CONTENTS_INLINE);
+
+      bind_pipeline(cmd_buffer, src_type, BLIT2D_DST_TYPE_RGB);
+
+      ANV_CALL(CmdDraw)(anv_cmd_buffer_to_handle(cmd_buffer), 3, 1, 0, 0);
+
+      ANV_CALL(CmdEndRenderPass)(anv_cmd_buffer_to_handle(cmd_buffer));
+
+      /* At the point where we emit the draw call, all data from the
+       * descriptor sets, etc. has been used.  We are free to delete it.
+       */
+      blit2d_unbind_src(cmd_buffer, src_type, &src_temps);
+      blit2d_unbind_dst(cmd_buffer, &dst_temps);
+   }
+}
+
 void
 anv_meta_blit2d(struct anv_cmd_buffer *cmd_buffer,
                 struct anv_meta_blit2d_surf *src,
@@ -666,7 +821,8 @@ anv_meta_blit2d(struct anv_cmd_buffer *cmd_buffer,
                                   num_rects, rects);
       return;
    } else if (dst->bs % 3 == 0) {
-      anv_finishme("Blitting to RGB destinations not yet supported");
+      anv_meta_blit2d_rgb_dst(cmd_buffer, src, src_type, dst,
+                              num_rects, rects);
       return;
    } else {
       assert(util_is_power_of_two(dst->bs));
@@ -892,6 +1048,61 @@ build_nir_copy_fragment_shader(struct anv_device *device,
    return b.shader;
 }
 
+/* RGB copies have the same interface as normal copies */
+#define rgb_vi_create_info normal_vi_create_info
+
+static nir_shader *
+build_nir_rgb_fragment_shader(struct anv_device *device,
+                              texel_fetch_build_func txf_func)
+{
+   const struct glsl_type *vec4 = glsl_vec4_type();
+   const struct glsl_type *vec3 = glsl_vector_type(GLSL_TYPE_FLOAT, 3);
+   nir_builder b;
+
+   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
+   b.shader->info.name = ralloc_strdup(b.shader, "meta_blit2d_fs");
+
+   nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in,
+                                                  vec3, "v_tex_pos");
+   tex_pos_in->data.location = VARYING_SLOT_VAR0;
+
+   nir_variable *color_out = nir_variable_create(b.shader, nir_var_shader_out,
+                                                 vec4, "f_color");
+   color_out->data.location = FRAG_RESULT_DATA0;
+
+   /* We need gl_FragCoord so we know our position */
+   nir_variable *frag_coord_in = nir_variable_create(b.shader,
+                                                     nir_var_shader_in,
+                                                     vec4, "gl_FragCoord");
+   frag_coord_in->data.location = VARYING_SLOT_POS;
+   frag_coord_in->data.origin_upper_left = true;
+
+   nir_ssa_def *pos_int = nir_f2i(&b, nir_load_var(&b, tex_pos_in));
+   unsigned swiz[4] = { 0, 1 };
+   nir_ssa_def *tex_pos = nir_swizzle(&b, pos_int, swiz, 2, false);
+   nir_ssa_def *tex_pitch = nir_channel(&b, pos_int, 2);
+
+   nir_ssa_def *color = txf_func(&b, device, tex_pos, tex_pitch);
+
+   /* We figure out which component we are by the x component of FragCoord */
+   nir_ssa_def *frag_coord_int = nir_f2i(&b, nir_load_var(&b, frag_coord_in));
+   nir_ssa_def *comp = nir_umod(&b, nir_channel(&b, frag_coord_int, 0),
+                                    nir_imm_int(&b, 3));
+
+   /* Select the given channel from the texelFetch result */
+   nir_ssa_def *color_channel =
+      nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 0)),
+                    nir_channel(&b, color, 0),
+                    nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 1)),
+                                  nir_channel(&b, color, 1),
+                                  nir_channel(&b, color, 2)));
+
+   nir_ssa_def *u = nir_ssa_undef(&b, 1, 32);
+   nir_store_var(&b, color_out, nir_vec4(&b, color_channel, u, u, u), 0x1);
+
+   return b.shader;
+}
+
 static const VkPipelineVertexInputStateCreateInfo w_tiled_vi_create_info = {
    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
    .vertexBindingDescriptionCount = 2,
@@ -1095,7 +1306,13 @@ blit2d_init_pipeline(struct anv_device *device,
       vi_create_info = &w_tiled_vi_create_info;
       break;
    case BLIT2D_DST_TYPE_RGB:
-      /* Not yet supported */
+      /* RGB destinations and W-detiling don't mix */
+      if (src_type != BLIT2D_SRC_TYPE_NORMAL)
+         return VK_SUCCESS;
+
+      fs.nir = build_nir_rgb_fragment_shader(device, src_func);
+      vi_create_info = &rgb_vi_create_info;
+      break;
    default:
       return VK_SUCCESS;
    }

@@ -1,2 +1,0 @@
-# The offending commit that this patch (part) reverts isn't in 12.0
-be32a2132785fbc119f17e62070e007ee7d17af7 i965/compiler: Bring back the INTEL_PRECISE_TRIG environment variable

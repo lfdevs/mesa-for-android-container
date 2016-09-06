@@ -963,6 +963,11 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 		r600_resource(ib.buffer)->TC_L2_dirty = false;
 	}
 
+	if (info->indirect && r600_resource(info->indirect)->TC_L2_dirty) {
+		sctx->b.flags |= SI_CONTEXT_INV_GLOBAL_L2;
+		r600_resource(info->indirect)->TC_L2_dirty = false;
+	}
+
 	/* Check flush flags. */
 	if (sctx->b.flags)
 		si_mark_atom_dirty(sctx, sctx->atoms.s.cache_flush);

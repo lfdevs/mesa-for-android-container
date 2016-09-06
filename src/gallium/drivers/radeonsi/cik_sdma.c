@@ -519,6 +519,12 @@ static void cik_sdma_copy(struct pipe_context *ctx,
 		return;
 	}
 
+	/* Carrizo SDMA texture copying is very broken for some users.
+	 * https://bugs.freedesktop.org/show_bug.cgi?id=97029
+	 */
+	if (sctx->b.family == CHIP_CARRIZO)
+		goto fallback;
+
 	if (cik_sdma_copy_texture(sctx, dst, dst_level, dstx, dsty, dstz,
 				  src, src_level, src_box))
 		return;

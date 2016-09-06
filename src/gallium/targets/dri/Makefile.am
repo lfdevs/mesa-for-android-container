@@ -1,5 +1,11 @@
 include $(top_srcdir)/src/gallium/Automake.inc
 
+if HAVE_ANDROID
+if HAVE_SHARED_GLAPI
+SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
+endif
+endif
+
 AM_CFLAGS = \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
@@ -49,6 +55,7 @@ gallium_dri_la_LIBADD = \
 	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
+	$(SHARED_GLAPI_LIB) \
 	$(SELINUX_LIBS) \
 	$(EXPAT_LIBS) \
 	$(LIBDRM_LIBS) \

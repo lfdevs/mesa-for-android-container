@@ -220,6 +220,8 @@ struct brw_tcs_prog_key
    /** A bitfield of per-vertex outputs written. */
    uint64_t outputs_written;
 
+   bool quads_workaround;
+
    struct brw_sampler_prog_key_data tex;
 };
 

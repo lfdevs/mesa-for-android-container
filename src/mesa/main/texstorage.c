@@ -179,9 +179,7 @@ clear_texture_fields(struct gl_context *ctx,
             return;
 	 }
 
-         _mesa_init_teximage_fields(ctx, texImage,
-                                    0, 0, 0, 0, /* w, h, d, border */
-                                    GL_NONE, MESA_FORMAT_NONE);
+         _mesa_clear_texture_image(ctx, texImage);
       }
    }
 }

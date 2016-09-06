@@ -25,6 +25,7 @@
 #define VC4_BUFMGR_H
 
 #include <stdint.h>
+#include "util/u_hash_table.h"
 #include "util/u_inlines.h"
 #include "vc4_qir.h"
 
@@ -87,11 +88,27 @@ vc4_bo_reference(struct vc4_bo *bo)
 static inline void
 vc4_bo_unreference(struct vc4_bo **bo)
 {
+        struct vc4_screen *screen;
         if (!*bo)
                 return;
 
-        if (pipe_reference(&(*bo)->reference, NULL))
-                vc4_bo_last_unreference(*bo);
+        if ((*bo)->private) {
+                /* Avoid the mutex for private BOs */
+                if (pipe_reference(&(*bo)->reference, NULL))
+                        vc4_bo_last_unreference(*bo);
+        } else {
+                screen = (*bo)->screen;
+                pipe_mutex_lock(screen->bo_handles_mutex);
+
+                if (pipe_reference(&(*bo)->reference, NULL)) {
+                        util_hash_table_remove(screen->bo_handles,
+                                               (void *)(uintptr_t)(*bo)->handle);
+                        vc4_bo_last_unreference(*bo);
+                }
+
+                pipe_mutex_unlock(screen->bo_handles_mutex);
+        }
+
         *bo = NULL;
 }
 

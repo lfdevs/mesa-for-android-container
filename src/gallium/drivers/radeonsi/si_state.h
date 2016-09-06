@@ -269,9 +269,8 @@ void si_update_compressed_colortex_masks(struct si_context *sctx);
 void si_emit_graphics_shader_userdata(struct si_context *sctx,
                                       struct r600_atom *atom);
 void si_emit_compute_shader_userdata(struct si_context *sctx);
-void si_set_constant_buffer(struct si_context *sctx,
-			    struct si_buffer_resources *buffers,
-			    uint slot, struct pipe_constant_buffer *input);
+void si_set_rw_buffer(struct si_context *sctx,
+		      uint slot, struct pipe_constant_buffer *input);
 
 /* si_state.c */
 struct si_shader_selector;

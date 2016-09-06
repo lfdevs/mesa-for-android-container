@@ -1,5 +1,0 @@
-# This file gets tweaked in an os-specific fashion (see libegl1-mesa-dev.install.linux.in)
-usr/lib/${DEB_HOST_MULTIARCH}/libEGL.so
-usr/include/EGL
-usr/include/KHR
-usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/egl.pc

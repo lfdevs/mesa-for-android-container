@@ -1,0 +1,2 @@
+usr/lib/*/libGL.so
+usr/lib/*/pkgconfig/gl.pc

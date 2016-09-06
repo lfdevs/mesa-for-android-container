@@ -287,7 +287,10 @@ private:
 
       bb.push(node);
 
-      while (bb.getSize()) {
+      while (bb.getSize() || cross.getSize()) {
+         if (bb.getSize() == 0)
+            cross.moveTo(bb);
+
          node = reinterpret_cast<Graph::Node *>(bb.pop().u.p);
          assert(node);
          if (!node->visit(sequence))
@@ -314,9 +317,6 @@ private:
             }
          }
          nodes[count++] = node;
-
-         if (bb.getSize() == 0)
-            cross.moveTo(bb);
       }
    }
 

@@ -1173,7 +1173,7 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
       case SpvStorageClassPushConstant:
          var->mode = vtn_variable_mode_push_constant;
          assert(b->shader->num_uniforms == 0);
-         b->shader->num_uniforms = vtn_type_block_size(var->type) * 4;
+         b->shader->num_uniforms = vtn_type_block_size(var->type);
          break;
       case SpvStorageClassInput:
          var->mode = vtn_variable_mode_input;

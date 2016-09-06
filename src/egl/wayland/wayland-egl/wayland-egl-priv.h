@@ -27,6 +27,7 @@ struct wl_egl_window {
 
 	void *private;
 	void (*resize_callback)(struct wl_egl_window *, void *);
+	void (*destroy_window_callback)(void *);
 };
 
 #ifdef  __cplusplus

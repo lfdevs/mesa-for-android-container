@@ -168,6 +168,11 @@ struct si_clip_state {
 	struct pipe_clip_state		state;
 };
 
+struct si_sample_locs {
+	struct r600_atom	atom;
+	unsigned		nr_samples;
+};
+
 struct si_sample_mask {
 	struct r600_atom	atom;
 	uint16_t		sample_mask;
@@ -212,7 +217,7 @@ struct si_context {
 	/* Atom declarations. */
 	struct r600_atom		cache_flush;
 	struct si_framebuffer		framebuffer;
-	struct r600_atom		msaa_sample_locs;
+	struct si_sample_locs		msaa_sample_locs;
 	struct r600_atom		db_render_state;
 	struct r600_atom		msaa_config;
 	struct si_sample_mask		sample_mask;

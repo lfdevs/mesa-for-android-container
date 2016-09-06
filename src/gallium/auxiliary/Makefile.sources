@@ -310,7 +310,8 @@ C_SOURCES := \
 	util/u_upload_mgr.h \
 	util/u_vbuf.c \
 	util/u_vbuf.h \
-	util/u_video.h
+	util/u_video.h \
+	util/u_viewport.h
 
 NIR_SOURCES := \
 	nir/tgsi_to_nir.c \

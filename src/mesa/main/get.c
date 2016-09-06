@@ -411,6 +411,7 @@ static const int extra_ARB_gpu_shader5_or_oes_geometry_shader[] = {
 static const int extra_ARB_gpu_shader5_or_OES_sample_variables[] = {
    EXT(ARB_gpu_shader5),
    EXT(OES_sample_variables),
+   EXTRA_END
 };
 
 EXTRA_EXT(ARB_texture_cube_map);

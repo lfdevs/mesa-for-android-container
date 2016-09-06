@@ -45,9 +45,11 @@
 #include "intel_reg.h"
 
 struct brw_fence {
+   struct brw_context *brw;
    /** The fence waits for completion of this batch. */
    drm_intel_bo *batch_bo;
 
+   mtx_t mutex;
    bool signalled;
 };
 
@@ -76,7 +78,7 @@ brw_fence_insert(struct brw_context *brw, struct brw_fence *fence)
 }
 
 static bool
-brw_fence_has_completed(struct brw_fence *fence)
+brw_fence_has_completed_locked(struct brw_fence *fence)
 {
    if (fence->signalled)
       return true;
@@ -91,13 +93,21 @@ brw_fence_has_completed(struct brw_fence *fence)
    return false;
 }
 
-/**
- * Return true if the function successfully signals or has already signalled.
- * (This matches the behavior expected from __DRI2fence::client_wait_sync).
- */
 static bool
-brw_fence_client_wait(struct brw_context *brw, struct brw_fence *fence,
-                      uint64_t timeout)
+brw_fence_has_completed(struct brw_fence *fence)
+{
+   bool ret;
+
+   mtx_lock(&fence->mutex);
+   ret = brw_fence_has_completed_locked(fence);
+   mtx_unlock(&fence->mutex);
+
+   return ret;
+}
+
+static bool
+brw_fence_client_wait_locked(struct brw_context *brw, struct brw_fence *fence,
+                             uint64_t timeout)
 {
    if (fence->signalled)
       return true;
@@ -120,6 +130,23 @@ brw_fence_client_wait(struct brw_context *brw, struct brw_fence *fence,
    fence->batch_bo = NULL;
 
    return true;
+}
+
+/**
+ * Return true if the function successfully signals or has already signalled.
+ * (This matches the behavior expected from __DRI2fence::client_wait_sync).
+ */
+static bool
+brw_fence_client_wait(struct brw_context *brw, struct brw_fence *fence,
+                      uint64_t timeout)
+{
+   bool ret;
+
+   mtx_lock(&fence->mutex);
+   ret = brw_fence_client_wait_locked(brw, fence, timeout);
+   mtx_unlock(&fence->mutex);
+
+   return ret;
 }
 
 static void
@@ -214,6 +241,8 @@ intel_dri_create_fence(__DRIcontext *ctx)
    if (!fence)
       return NULL;
 
+   mtx_init(&fence->mutex, mtx_plain);
+   fence->brw = brw;
    brw_fence_insert(brw, fence);
 
    return fence;
@@ -232,19 +261,23 @@ static GLboolean
 intel_dri_client_wait_sync(__DRIcontext *ctx, void *driver_fence, unsigned flags,
                            uint64_t timeout)
 {
-   struct brw_context *brw = ctx->driverPrivate;
    struct brw_fence *fence = driver_fence;
 
-   return brw_fence_client_wait(brw, fence, timeout);
+   return brw_fence_client_wait(fence->brw, fence, timeout);
 }
 
 static void
 intel_dri_server_wait_sync(__DRIcontext *ctx, void *driver_fence, unsigned flags)
 {
-   struct brw_context *brw = ctx->driverPrivate;
    struct brw_fence *fence = driver_fence;
 
-   brw_fence_server_wait(brw, fence);
+   /* We might be called here with a NULL fence as a result of WaitSyncKHR
+    * on a EGL_KHR_reusable_sync fence. Nothing to do here in such case.
+    */
+   if (!fence)
+      return;
+
+   brw_fence_server_wait(fence->brw, fence);
 }
 
 const __DRI2fenceExtension intelFenceExtension = {

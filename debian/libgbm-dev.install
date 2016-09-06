@@ -1,0 +1,3 @@
+usr/lib/*/libgbm.so
+usr/lib/*/pkgconfig/gbm.pc
+usr/include/gbm.h

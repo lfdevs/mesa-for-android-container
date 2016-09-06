@@ -1079,7 +1079,7 @@ function_key_compare(const void *a, const void *b)
    const glsl_type *const key2 = (glsl_type *) b;
 
    if (key1->length != key2->length)
-      return 1;
+      return false;
 
    return memcmp(key1->fields.parameters, key2->fields.parameters,
                  (key1->length + 1) * sizeof(*key1->fields.parameters)) == 0;
@@ -1090,20 +1090,8 @@ static uint32_t
 function_key_hash(const void *a)
 {
    const glsl_type *const key = (glsl_type *) a;
-   char hash_key[128];
-   unsigned size = 0;
-
-   size = snprintf(hash_key, sizeof(hash_key), "%08x", key->length);
-
-   for (unsigned i = 0; i < key->length; i++) {
-      if (size >= sizeof(hash_key))
-	 break;
-
-      size += snprintf(& hash_key[size], sizeof(hash_key) - size,
-		       "%p", (void *) key->fields.structure[i].type);
-   }
-
-   return _mesa_hash_string(hash_key);
+   return _mesa_hash_data(key->fields.parameters,
+                          (key->length + 1) * sizeof(*key->fields.parameters));
 }
 
 const glsl_type *

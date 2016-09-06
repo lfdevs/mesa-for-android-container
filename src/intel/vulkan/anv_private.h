@@ -83,6 +83,12 @@ extern "C" {
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 static inline uint32_t
+align_down_npot_u32(uint32_t v, uint32_t a)
+{
+   return v - (v % a);
+}
+
+static inline uint32_t
 align_u32(uint32_t v, uint32_t a)
 {
    assert(a != 0 && a == (a & -a));
@@ -394,9 +400,9 @@ struct anv_fixed_size_state_pool {
 };
 
 #define ANV_MIN_STATE_SIZE_LOG2 6
-#define ANV_MAX_STATE_SIZE_LOG2 10
+#define ANV_MAX_STATE_SIZE_LOG2 17
 
-#define ANV_STATE_BUCKETS (ANV_MAX_STATE_SIZE_LOG2 - ANV_MIN_STATE_SIZE_LOG2)
+#define ANV_STATE_BUCKETS (ANV_MAX_STATE_SIZE_LOG2 - ANV_MIN_STATE_SIZE_LOG2 + 1)
 
 struct anv_state_pool {
    struct anv_block_pool *block_pool;
@@ -652,31 +658,27 @@ struct anv_queue {
 
 struct anv_pipeline_cache {
    struct anv_device *                          device;
-   struct anv_state_stream                      program_stream;
    pthread_mutex_t                              mutex;
 
-   uint32_t                                     total_size;
-   uint32_t                                     table_size;
-   uint32_t                                     kernel_count;
-   uint32_t *                                   hash_table;
+   struct hash_table *                          cache;
 };
 
 struct anv_pipeline_bind_map;
 
 void anv_pipeline_cache_init(struct anv_pipeline_cache *cache,
-                             struct anv_device *device);
+                             struct anv_device *device,
+                             bool cache_enabled);
 void anv_pipeline_cache_finish(struct anv_pipeline_cache *cache);
-uint32_t anv_pipeline_cache_search(struct anv_pipeline_cache *cache,
-                                   const unsigned char *sha1,
-                                   const struct brw_stage_prog_data **prog_data,
-                                   struct anv_pipeline_bind_map *map);
-uint32_t anv_pipeline_cache_upload_kernel(struct anv_pipeline_cache *cache,
-                                          const unsigned char *sha1,
-                                          const void *kernel,
-                                          size_t kernel_size,
-                                          const struct brw_stage_prog_data **prog_data,
-                                          size_t prog_data_size,
-                                          struct anv_pipeline_bind_map *map);
+
+struct anv_shader_bin *
+anv_pipeline_cache_search(struct anv_pipeline_cache *cache,
+                          const void *key, uint32_t key_size);
+struct anv_shader_bin *
+anv_pipeline_cache_upload_kernel(struct anv_pipeline_cache *cache,
+                                 const void *key_data, uint32_t key_size,
+                                 const void *kernel_data, uint32_t kernel_size,
+                                 const void *prog_data, uint32_t prog_data_size,
+                                 const struct anv_pipeline_bind_map *bind_map);
 
 struct anv_device {
     VK_LOADER_DATA                              _loader_data;
@@ -698,7 +700,7 @@ struct anv_device {
     struct anv_state_pool                       dynamic_state_pool;
 
     struct anv_block_pool                       instruction_block_pool;
-    struct anv_pipeline_cache                   default_pipeline_cache;
+    struct anv_state_pool                       instruction_state_pool;
 
     struct anv_block_pool                       surface_state_block_pool;
     struct anv_state_pool                       surface_state_pool;
@@ -1057,6 +1059,8 @@ struct anv_pipeline_layout {
    struct {
       bool has_dynamic_offsets;
    } stage[MESA_SHADER_STAGES];
+
+   unsigned char sha1[20];
 };
 
 struct anv_buffer {
@@ -1422,6 +1426,7 @@ struct anv_shader_module {
 void anv_hash_shader(unsigned char *hash, const void *key, size_t key_size,
                      struct anv_shader_module *module,
                      const char *entrypoint,
+                     const struct anv_pipeline_layout *pipeline_layout,
                      const VkSpecializationInfo *spec_info);
 
 static inline gl_shader_stage
@@ -1449,12 +1454,56 @@ struct anv_pipeline_bind_map {
    uint32_t surface_count;
    uint32_t sampler_count;
    uint32_t image_count;
-   uint32_t attachment_count;
 
    struct anv_pipeline_binding *                surface_to_descriptor;
    struct anv_pipeline_binding *                sampler_to_descriptor;
-   uint32_t *                                   surface_to_attachment;
 };
+
+struct anv_shader_bin {
+   uint32_t ref_cnt;
+
+   struct anv_state kernel;
+   uint32_t kernel_size;
+
+   struct anv_pipeline_bind_map bind_map;
+
+   uint32_t prog_data_size;
+
+   /* Prog data follows, then the key, both aligned to 8-bytes */
+};
+
+struct anv_shader_bin *
+anv_shader_bin_create(struct anv_device *device,
+                      const void *key, uint32_t key_size,
+                      const void *kernel, uint32_t kernel_size,
+                      const void *prog_data, uint32_t prog_data_size,
+                      const struct anv_pipeline_bind_map *bind_map);
+
+void
+anv_shader_bin_destroy(struct anv_device *device, struct anv_shader_bin *shader);
+
+static inline void
+anv_shader_bin_ref(struct anv_shader_bin *shader)
+{
+   assert(shader->ref_cnt >= 1);
+   __sync_fetch_and_add(&shader->ref_cnt, 1);
+}
+
+static inline void
+anv_shader_bin_unref(struct anv_device *device, struct anv_shader_bin *shader)
+{
+   assert(shader->ref_cnt >= 1);
+   if (__sync_fetch_and_add(&shader->ref_cnt, -1) == 1)
+      anv_shader_bin_destroy(device, shader);
+}
+
+static inline const struct brw_stage_prog_data *
+anv_shader_bin_get_prog_data(const struct anv_shader_bin *shader)
+{
+   const void *data = shader;
+   data += align_u32(sizeof(struct anv_shader_bin), 8);
+   return data;
+}
 
 struct anv_pipeline {
    struct anv_device *                          device;
@@ -1465,12 +1514,12 @@ struct anv_pipeline {
    struct anv_dynamic_state                     dynamic_state;
 
    struct anv_pipeline_layout *                 layout;
-   struct anv_pipeline_bind_map                 bindings[MESA_SHADER_STAGES];
 
    bool                                         use_repclear;
    bool                                         needs_data_cache;
 
-   const struct brw_stage_prog_data *           prog_data[MESA_SHADER_STAGES];
+   struct anv_shader_bin *                      shaders[MESA_SHADER_STAGES];
+
    struct {
       uint32_t                                  start[MESA_SHADER_GEOMETRY + 1];
       uint32_t                                  size[MESA_SHADER_GEOMETRY + 1];
@@ -1513,29 +1562,29 @@ struct anv_pipeline {
    } gen9;
 };
 
-static inline const struct brw_vs_prog_data *
-get_vs_prog_data(struct anv_pipeline *pipeline)
+static inline bool
+anv_pipeline_has_stage(const struct anv_pipeline *pipeline,
+                       gl_shader_stage stage)
 {
-   return (const struct brw_vs_prog_data *) pipeline->prog_data[MESA_SHADER_VERTEX];
+   return (pipeline->active_stages & mesa_to_vk_shader_stage(stage)) != 0;
 }
 
-static inline const struct brw_gs_prog_data *
-get_gs_prog_data(struct anv_pipeline *pipeline)
-{
-   return (const struct brw_gs_prog_data *) pipeline->prog_data[MESA_SHADER_GEOMETRY];
+#define ANV_DECL_GET_PROG_DATA_FUNC(prefix, stage)                   \
+static inline const struct brw_##prefix##_prog_data *                \
+get_##prefix##_prog_data(struct anv_pipeline *pipeline)              \
+{                                                                    \
+   if (anv_pipeline_has_stage(pipeline, stage)) {                    \
+      return (const struct brw_##prefix##_prog_data *)               \
+             anv_shader_bin_get_prog_data(pipeline->shaders[stage]); \
+   } else {                                                          \
+      return NULL;                                                   \
+   }                                                                 \
 }
 
-static inline const struct brw_wm_prog_data *
-get_wm_prog_data(struct anv_pipeline *pipeline)
-{
-   return (const struct brw_wm_prog_data *) pipeline->prog_data[MESA_SHADER_FRAGMENT];
-}
-
-static inline const struct brw_cs_prog_data *
-get_cs_prog_data(struct anv_pipeline *pipeline)
-{
-   return (const struct brw_cs_prog_data *) pipeline->prog_data[MESA_SHADER_COMPUTE];
-}
+ANV_DECL_GET_PROG_DATA_FUNC(vs, MESA_SHADER_VERTEX)
+ANV_DECL_GET_PROG_DATA_FUNC(gs, MESA_SHADER_GEOMETRY)
+ANV_DECL_GET_PROG_DATA_FUNC(wm, MESA_SHADER_FRAGMENT)
+ANV_DECL_GET_PROG_DATA_FUNC(cs, MESA_SHADER_COMPUTE)
 
 struct anv_graphics_pipeline_create_info {
    /**

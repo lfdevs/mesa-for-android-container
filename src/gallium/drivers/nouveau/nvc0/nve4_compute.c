@@ -237,7 +237,13 @@ nve4_compute_validate_samplers(struct nvc0_context *nvc0)
       BEGIN_NVC0(nvc0->base.pushbuf, NVE4_CP(TSC_FLUSH), 1);
       PUSH_DATA (nvc0->base.pushbuf, 0);
    }
+
+   /* Invalidate all 3D samplers because they are aliased. */
+   for (int s = 0; s < 5; s++)
+      nvc0->samplers_dirty[s] = ~0;
+   nvc0->dirty_3d |= NVC0_NEW_3D_SAMPLERS;
 }
+
 /* (Code duplicated at bottom for various non-convincing reasons.
  *  E.g. we might want to use the COMPUTE subchannel to upload TIC/TSC
  *  entries to avoid a subchannel switch.
@@ -686,6 +692,14 @@ nve4_compute_validate_textures(struct nvc0_context *nvc0)
    }
 
    nvc0->state.num_textures[s] = nvc0->num_textures[s];
+
+   /* Invalidate all 3D textures because they are aliased. */
+   for (int s = 0; s < 5; s++) {
+      for (int i = 0; i < nvc0->num_textures[s]; i++)
+         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_TEX(s, i));
+      nvc0->textures_dirty[s] = ~0;
+   }
+   nvc0->dirty_3d |= NVC0_NEW_3D_TEXTURES;
 }
 
 

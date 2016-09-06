@@ -291,6 +291,11 @@ emit_3dstate_sbe(struct anv_pipeline *pipeline)
       if (input_index < 0)
          continue;
 
+      if (attr == VARYING_SLOT_PNTC) {
+         sbe.PointSpriteTextureCoordinateEnable = 1 << input_index;
+         continue;
+      }
+
       const int slot = fs_input_map->varying_to_slot[attr];
 
       if (input_index >= 16)
@@ -511,4 +516,178 @@ emit_ds_state(struct anv_pipeline *pipeline,
 #else
    GENX(3DSTATE_WM_DEPTH_STENCIL_pack)(NULL, depth_stencil_dw, &depth_stencil);
 #endif
+}
+
+static void
+emit_cb_state(struct anv_pipeline *pipeline,
+              const VkPipelineColorBlendStateCreateInfo *info,
+              const VkPipelineMultisampleStateCreateInfo *ms_info)
+{
+   struct anv_device *device = pipeline->device;
+
+   const uint32_t num_dwords = GENX(BLEND_STATE_length);
+   pipeline->blend_state =
+      anv_state_pool_alloc(&device->dynamic_state_pool, num_dwords * 4, 64);
+
+   struct GENX(BLEND_STATE) blend_state = {
+#if GEN_GEN >= 8
+      .AlphaToCoverageEnable = ms_info && ms_info->alphaToCoverageEnable,
+      .AlphaToOneEnable = ms_info && ms_info->alphaToOneEnable,
+#else
+      /* Make sure it gets zeroed */
+      .Entry = { { 0, }, },
+#endif
+   };
+
+   /* Default everything to disabled */
+   for (uint32_t i = 0; i < 8; i++) {
+      blend_state.Entry[i].WriteDisableAlpha = true;
+      blend_state.Entry[i].WriteDisableRed = true;
+      blend_state.Entry[i].WriteDisableGreen = true;
+      blend_state.Entry[i].WriteDisableBlue = true;
+   }
+
+   uint32_t surface_count = 0;
+   struct anv_pipeline_bind_map *map;
+   if (anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT)) {
+      map = &pipeline->shaders[MESA_SHADER_FRAGMENT]->bind_map;
+      surface_count = map->surface_count;
+   }
+
+   bool has_writeable_rt = false;
+   for (unsigned i = 0; i < surface_count; i++) {
+      struct anv_pipeline_binding *binding = &map->surface_to_descriptor[i];
+
+      /* All color attachments are at the beginning of the binding table */
+      if (binding->set != ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS)
+         break;
+
+      /* We can have at most 8 attachments */
+      assert(i < 8);
+
+      if (binding->index >= info->attachmentCount)
+         continue;
+
+      assert(binding->binding == 0);
+      const VkPipelineColorBlendAttachmentState *a =
+         &info->pAttachments[binding->index];
+
+      blend_state.Entry[i] = (struct GENX(BLEND_STATE_ENTRY)) {
+#if GEN_GEN < 8
+         .AlphaToCoverageEnable = ms_info && ms_info->alphaToCoverageEnable,
+         .AlphaToOneEnable = ms_info && ms_info->alphaToOneEnable,
+#endif
+         .LogicOpEnable = info->logicOpEnable,
+         .LogicOpFunction = vk_to_gen_logic_op[info->logicOp],
+         .ColorBufferBlendEnable = a->blendEnable,
+         .ColorClampRange = COLORCLAMP_RTFORMAT,
+         .PreBlendColorClampEnable = true,
+         .PostBlendColorClampEnable = true,
+         .SourceBlendFactor = vk_to_gen_blend[a->srcColorBlendFactor],
+         .DestinationBlendFactor = vk_to_gen_blend[a->dstColorBlendFactor],
+         .ColorBlendFunction = vk_to_gen_blend_op[a->colorBlendOp],
+         .SourceAlphaBlendFactor = vk_to_gen_blend[a->srcAlphaBlendFactor],
+         .DestinationAlphaBlendFactor = vk_to_gen_blend[a->dstAlphaBlendFactor],
+         .AlphaBlendFunction = vk_to_gen_blend_op[a->alphaBlendOp],
+         .WriteDisableAlpha = !(a->colorWriteMask & VK_COLOR_COMPONENT_A_BIT),
+         .WriteDisableRed = !(a->colorWriteMask & VK_COLOR_COMPONENT_R_BIT),
+         .WriteDisableGreen = !(a->colorWriteMask & VK_COLOR_COMPONENT_G_BIT),
+         .WriteDisableBlue = !(a->colorWriteMask & VK_COLOR_COMPONENT_B_BIT),
+      };
+
+      if (a->srcColorBlendFactor != a->srcAlphaBlendFactor ||
+          a->dstColorBlendFactor != a->dstAlphaBlendFactor ||
+          a->colorBlendOp != a->alphaBlendOp) {
+#if GEN_GEN >= 8
+         blend_state.IndependentAlphaBlendEnable = true;
+#else
+         blend_state.Entry[i].IndependentAlphaBlendEnable = true;
+#endif
+      }
+
+      if (a->colorWriteMask != 0)
+         has_writeable_rt = true;
+
+      /* Our hardware applies the blend factor prior to the blend function
+       * regardless of what function is used.  Technically, this means the
+       * hardware can do MORE than GL or Vulkan specify.  However, it also
+       * means that, for MIN and MAX, we have to stomp the blend factor to
+       * ONE to make it a no-op.
+       */
+      if (a->colorBlendOp == VK_BLEND_OP_MIN ||
+          a->colorBlendOp == VK_BLEND_OP_MAX) {
+         blend_state.Entry[i].SourceBlendFactor = BLENDFACTOR_ONE;
+         blend_state.Entry[i].DestinationBlendFactor = BLENDFACTOR_ONE;
+      }
+      if (a->alphaBlendOp == VK_BLEND_OP_MIN ||
+          a->alphaBlendOp == VK_BLEND_OP_MAX) {
+         blend_state.Entry[i].SourceAlphaBlendFactor = BLENDFACTOR_ONE;
+         blend_state.Entry[i].DestinationAlphaBlendFactor = BLENDFACTOR_ONE;
+      }
+   }
+
+#if GEN_GEN >= 8
+   struct GENX(BLEND_STATE_ENTRY) *bs0 = &blend_state.Entry[0];
+   anv_batch_emit(&pipeline->batch, GENX(3DSTATE_PS_BLEND), blend) {
+      blend.AlphaToCoverageEnable         = blend_state.AlphaToCoverageEnable;
+      blend.HasWriteableRT                = has_writeable_rt;
+      blend.ColorBufferBlendEnable        = bs0->ColorBufferBlendEnable;
+      blend.SourceAlphaBlendFactor        = bs0->SourceAlphaBlendFactor;
+      blend.DestinationAlphaBlendFactor   = bs0->DestinationAlphaBlendFactor;
+      blend.SourceBlendFactor             = bs0->SourceBlendFactor;
+      blend.DestinationBlendFactor        = bs0->DestinationBlendFactor;
+      blend.AlphaTestEnable               = false;
+      blend.IndependentAlphaBlendEnable   =
+         blend_state.IndependentAlphaBlendEnable;
+   }
+#else
+   (void)has_writeable_rt;
+#endif
+
+   GENX(BLEND_STATE_pack)(NULL, pipeline->blend_state.map, &blend_state);
+   if (!device->info.has_llc)
+      anv_state_clflush(pipeline->blend_state);
+
+   anv_batch_emit(&pipeline->batch, GENX(3DSTATE_BLEND_STATE_POINTERS), bsp) {
+      bsp.BlendStatePointer      = pipeline->blend_state.offset;
+#if GEN_GEN >= 8
+      bsp.BlendStatePointerValid = true;
+#endif
+   }
+}
+
+static void
+emit_3dstate_clip(struct anv_pipeline *pipeline,
+                  const VkPipelineViewportStateCreateInfo *vp_info,
+                  const VkPipelineRasterizationStateCreateInfo *rs_info,
+                  const struct anv_graphics_pipeline_create_info *extra)
+{
+   const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
+   (void) wm_prog_data;
+   anv_batch_emit(&pipeline->batch, GENX(3DSTATE_CLIP), clip) {
+      clip.ClipEnable               = !(extra && extra->use_rectlist);
+      clip.EarlyCullEnable          = true;
+      clip.APIMode                  = APIMODE_D3D,
+      clip.ViewportXYClipTestEnable = true;
+
+      clip.ClipMode = rs_info->rasterizerDiscardEnable ?
+         CLIPMODE_REJECT_ALL : CLIPMODE_NORMAL;
+
+      clip.TriangleStripListProvokingVertexSelect = 0;
+      clip.LineStripListProvokingVertexSelect     = 0;
+      clip.TriangleFanProvokingVertexSelect       = 1;
+
+      clip.MinimumPointWidth = 0.125;
+      clip.MaximumPointWidth = 255.875;
+      clip.MaximumVPIndex    = vp_info->viewportCount - 1;
+
+#if GEN_GEN == 7
+      clip.FrontWinding            = vk_to_gen_front_face[rs_info->frontFace];
+      clip.CullMode                = vk_to_gen_cullmode[rs_info->cullMode];
+      clip.ViewportZClipTestEnable = !pipeline->depth_clamp_enable;
+#else
+      clip.NonPerspectiveBarycentricEnable = wm_prog_data ?
+         (wm_prog_data->barycentric_interp_modes & 0x38) != 0 : 0;
+#endif
+   }
 }

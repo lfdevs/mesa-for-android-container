@@ -177,6 +177,10 @@ struct dri2_egl_display
    const __DRI2interopExtension *interop;
    int                       fd;
 
+   /* dri2_initialize/dri2_terminate increment/decrement this count, so does
+    * dri2_make_current (tracks if there are active contexts/surfaces). */
+   int                       ref_count;
+
    int                       own_device;
    int                       swap_available;
    int                       invalidate_available;

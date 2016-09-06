@@ -25,6 +25,8 @@
 #include "anv_private.h"
 #include "nir/nir_builder.h"
 
+#include "util/u_format_rgb9e5.h"
+
 /** Vertex attributes for color clears.  */
 struct color_clear_vattrs {
    struct anv_vue_header vue_header;
@@ -754,11 +756,21 @@ static void
 anv_cmd_clear_image(struct anv_cmd_buffer *cmd_buffer,
                     struct anv_image *image,
                     VkImageLayout image_layout,
-                    const VkClearValue *clear_value,
+                    VkClearValue clear_value,
                     uint32_t range_count,
                     const VkImageSubresourceRange *ranges)
 {
    VkDevice device_h = anv_device_to_handle(cmd_buffer->device);
+
+   VkFormat vk_format = image->vk_format;
+   if (vk_format == VK_FORMAT_E5B9G9R9_UFLOAT_PACK32) {
+      /* We can't actually render to this format so we have to work around it
+       * by manually unpacking and using R32_UINT.
+       */
+      clear_value.color.uint32[0] =
+         float3_to_rgb9e5(clear_value.color.float32);
+      vk_format = VK_FORMAT_R32_UINT;
+   }
 
    for (uint32_t r = 0; r < range_count; r++) {
       const VkImageSubresourceRange *range = &ranges[r];
@@ -773,7 +785,7 @@ anv_cmd_clear_image(struct anv_cmd_buffer *cmd_buffer,
                   .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                   .image = anv_image_to_handle(image),
                   .viewType = anv_meta_get_view_type(image),
-                  .format = image->vk_format,
+                  .format = vk_format,
                   .subresourceRange = {
                      .aspectMask = range->aspectMask,
                      .baseMipLevel = range->baseMipLevel + l,
@@ -800,7 +812,7 @@ anv_cmd_clear_image(struct anv_cmd_buffer *cmd_buffer,
                &fb);
 
             VkAttachmentDescription att_desc = {
-               .format = iview.vk_format,
+               .format = vk_format,
                .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
@@ -864,7 +876,7 @@ anv_cmd_clear_image(struct anv_cmd_buffer *cmd_buffer,
             VkClearAttachment clear_att = {
                .aspectMask = range->aspectMask,
                .colorAttachment = 0,
-               .clearValue = *clear_value,
+               .clearValue = clear_value,
             };
 
             VkClearRect clear_rect = {
@@ -903,7 +915,7 @@ void anv_CmdClearColorImage(
    meta_clear_begin(&saved_state, cmd_buffer);
 
    anv_cmd_clear_image(cmd_buffer, image, imageLayout,
-                       (const VkClearValue *) pColor,
+                       (VkClearValue) { .color = *pColor },
                        rangeCount, pRanges);
 
    meta_clear_end(&saved_state, cmd_buffer);
@@ -924,7 +936,7 @@ void anv_CmdClearDepthStencilImage(
    meta_clear_begin(&saved_state, cmd_buffer);
 
    anv_cmd_clear_image(cmd_buffer, image, imageLayout,
-                       (const VkClearValue *) pDepthStencil,
+                       (VkClearValue) { .depthStencil = *pDepthStencil },
                        rangeCount, pRanges);
 
    meta_clear_end(&saved_state, cmd_buffer);
@@ -1005,7 +1017,7 @@ do_buffer_fill(struct anv_cmd_buffer *cmd_buffer,
 
    anv_cmd_clear_image(cmd_buffer, anv_image_from_handle(dest_image),
                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                       &clear_value, 1, &range);
+                       clear_value, 1, &range);
 }
 
 void anv_CmdFillBuffer(

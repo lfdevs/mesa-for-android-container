@@ -212,8 +212,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen,
 	si_begin_new_cs(sctx);
 	r600_query_init_backend_mask(&sctx->b); /* this emits commands and must be last */
 
-	/* CIK cannot unbind a constant buffer (S_BUFFER_LOAD is buggy
-	 * with a NULL buffer). We need to use a dummy buffer instead. */
+	/* CIK cannot unbind a constant buffer (S_BUFFER_LOAD doesn't skip loads
+	 * if NUM_RECORDS == 0). We need to use a dummy buffer instead. */
 	if (sctx->b.chip_class == CIK) {
 		sctx->null_const_buf.buffer = pipe_buffer_create(screen, PIPE_BIND_CONSTANT_BUFFER,
 								 PIPE_USAGE_DEFAULT, 16);
@@ -227,6 +227,15 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen,
 							      &sctx->null_const_buf);
 			}
 		}
+
+		si_set_rw_buffer(sctx, SI_HS_CONST_DEFAULT_TESS_LEVELS,
+				 &sctx->null_const_buf);
+		si_set_rw_buffer(sctx, SI_VS_CONST_CLIP_PLANES,
+				 &sctx->null_const_buf);
+		si_set_rw_buffer(sctx, SI_PS_CONST_POLY_STIPPLE,
+				 &sctx->null_const_buf);
+		si_set_rw_buffer(sctx, SI_PS_CONST_SAMPLE_POSITIONS,
+				 &sctx->null_const_buf);
 
 		/* Clear the NULL constant buffer, because loads should return zeros. */
 		sctx->b.clear_buffer(&sctx->b.b, sctx->null_const_buf.buffer, 0,
