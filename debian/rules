@@ -52,8 +52,8 @@ else
 		GALLIUM_DRIVERS += freedreno
 	endif
 
-	# vc4 kernel support is only available on armhf
-	ifneq (,$(filter $(DEB_HOST_ARCH),armhf))
+	# vc4 kernel support is only available on armhf and arm64
+	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
 		GALLIUM_DRIVERS += vc4
 	endif
 

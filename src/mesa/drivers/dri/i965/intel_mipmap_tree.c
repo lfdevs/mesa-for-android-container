@@ -1789,8 +1789,14 @@ intel_gen7_hiz_buf_create(struct brw_context *brw,
       hz_height = DIV_ROUND_UP(hz_height, 2);
    } else {
       const unsigned hz_qpitch = h0 + h1 + (12 * vertical_align);
-      /* HZ_Height (rows) = Ceiling ( ( Q_pitch * Z_depth/2) /8 ) * 8 */
-      hz_height = DIV_ROUND_UP(hz_qpitch * Z0, 2 * 8) * 8;
+      if (mt->target == GL_TEXTURE_CUBE_MAP_ARRAY ||
+          mt->target == GL_TEXTURE_CUBE_MAP) {
+         /* HZ_Height (rows) = Ceiling ( ( Q_pitch * Z_depth * 6/2) /8 ) * 8 */
+         hz_height = DIV_ROUND_UP(hz_qpitch * Z0 * 6, 2 * 8) * 8;
+      } else {
+         /* HZ_Height (rows) = Ceiling ( ( Q_pitch * Z_depth/2) /8 ) * 8 */
+         hz_height = DIV_ROUND_UP(hz_qpitch * Z0, 2 * 8) * 8;
+      }
    }
 
    unsigned long pitch;
@@ -1887,6 +1893,15 @@ intel_gen8_hiz_buf_create(struct brw_context *brw,
    } else {
       /* HZ_Height (rows) = ceiling( (HZ_QPitch/2)/8) *8 * Z_Depth */
       hz_height = DIV_ROUND_UP(buf->qpitch, 2 * 8) * 8 * Z0;
+      if (mt->target == GL_TEXTURE_CUBE_MAP_ARRAY ||
+          mt->target == GL_TEXTURE_CUBE_MAP) {
+         /* HZ_Height (rows) = ceiling( (HZ_QPitch/2)/8) *8 * 6 * Z_Depth
+          *
+          * We can can just take our hz_height calculation from above, and
+          * multiply by 6 for the cube map and cube map array types.
+          */
+         hz_height *= 6;
+      }
    }
 
    unsigned long pitch;
