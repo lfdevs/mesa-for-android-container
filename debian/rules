@@ -176,6 +176,7 @@ override_dh_install:
 	   debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
 
   # Remove vulkan headers only where they get installed in tmp
+  # We ship those headers via src:vulkan / libvulkan-dev
   ifeq ($(DEB_HOST_ARCH_OS), linux)
     ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 x32))
 	set -e; for file in vk_platform.h vulkan.h vulkan_intel.h; do rm debian/tmp/usr/include/vulkan/$$file; done
