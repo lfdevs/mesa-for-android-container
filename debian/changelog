@@ -1,3 +1,10 @@
+mesa (12.0.3-3) unstable; urgency=medium
+
+  * Limit libgbm1 dependency to any (Closes: #841774).  Thanks, Samuel
+    Thibault!
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Mon, 24 Oct 2016 10:18:09 +0200
+
 mesa (12.0.3-2) unstable; urgency=medium
 
   * control: Add libtxc-dxtn-s2tc as an alternative in libgl1-mesa-dri's
