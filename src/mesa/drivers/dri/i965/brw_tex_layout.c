@@ -763,10 +763,8 @@ intel_miptree_set_alignment(struct brw_context *brw,
       mt->halign = 8;
       mt->valign = brw->gen >= 7 ? 8 : 4;
    } else if (brw->gen >= 9 && mt->tr_mode != INTEL_MIPTREE_TRMODE_NONE) {
-      /* XY_FAST_COPY_BLT doesn't support horizontal alignment < 32 or
-       * vertical alignment < 64. */
-      mt->halign = MAX2(tr_mode_horizontal_texture_alignment(mt), 32);
-      mt->valign = MAX2(tr_mode_vertical_texture_alignment(mt), 64);
+      mt->halign = tr_mode_horizontal_texture_alignment(mt);
+      mt->valign = tr_mode_vertical_texture_alignment(mt);
    } else {
       mt->halign =
          intel_horizontal_texture_alignment_unit(brw, mt, layout_flags);

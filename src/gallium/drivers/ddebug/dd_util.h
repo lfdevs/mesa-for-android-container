@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+#include "c99_alloca.h"
 #include "os/os_process.h"
 #include "util/u_debug.h"
 
@@ -69,6 +70,29 @@ dd_get_debug_file(bool verbose)
       fprintf(stderr, "dd: dumping to file %s\n", name);
 
    return f;
+}
+
+static inline void
+dd_parse_apitrace_marker(const char *string, int len, unsigned *call_number)
+{
+   unsigned num;
+   char *s;
+
+   if (len <= 0)
+      return;
+
+   /* Make it zero-terminated. */
+   s = alloca(len + 1);
+   memcpy(s, string, len);
+   s[len] = 0;
+
+   /* Parse the number. */
+   errno = 0;
+   num = strtol(s, NULL, 10);
+   if (errno)
+      return;
+
+   *call_number = num;
 }
 
 #endif /* DD_UTIL_H */

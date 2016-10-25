@@ -9,19 +9,19 @@ Build-Depends:
  dh-autoreconf,
  quilt (>= 0.40),
  pkg-config,
- libdrm-dev (>= 2.4.67) [!hurd-any],
+ libdrm-dev (>= 2.4.69) [!hurd-any],
  libx11-dev,
  x11proto-gl-dev (>= 1.4.14),
  libxxf86vm-dev,
  libexpat1-dev,
  dpkg-dev (>= 1.16.1),
- libgcrypt20-dev [linux-amd64 linux-i386 linux-x32],
+ libgcrypt20-dev [amd64 i386 arm64 armhf ppc64el x32],
  libxfixes-dev,
  libxdamage-dev,
  libxext-dev,
  libva-dev (>= 1.6.0) [linux-any kfreebsd-any],
  libvdpau-dev (>= 1.1.1) [linux-any kfreebsd-any],
- libvulkan-dev [linux-amd64 linux-i386 linux-x32],
+ libvulkan-dev [amd64 i386 arm64 armhf ppc64el x32],
  autoconf,
  automake,
  libtool,
@@ -40,14 +40,13 @@ Build-Depends:
  libxshmfence-dev (>= 1.1),
  python,
  python-mako,
- libudev-dev [linux-any],
  flex,
  bison,
- llvm-3.8-dev (>= 1:3.8) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
+ llvm-3.9-dev (>= 1:3.9) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
  libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
  libwayland-dev (>= 1.2.0) [linux-any],
- libclang-3.8-dev (>= 1:3.8) [amd64 i386 arm64 armhf],
- libclc-dev (>= 0.2.0+git20150813) [amd64 i386 arm64 armhf],
+ libclang-3.9-dev (>= 1:3.9) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
+ libclc-dev (>= 0.2.0+git20160907) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
 Vcs-Git: https://anonscm.debian.org/git/pkg-xorg/lib/mesa.git
 Vcs-Browser: https://anonscm.debian.org/cgit/pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.org/
@@ -88,7 +87,6 @@ Architecture: linux-any kfreebsd-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
- libudev1 [linux-any],
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: generic buffer management API -- runtime
@@ -102,7 +100,6 @@ Section: libdevel
 Architecture: linux-any kfreebsd-any
 Depends:
  libgbm1 (= ${binary:Version}),
- libudev-dev [linux-any],
  ${misc:Depends},
 Multi-Arch: same
 Description: generic buffer management API -- development files
@@ -121,7 +118,6 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libgbm1 (= ${binary:Version}) [!hurd-any],
- libudev1 [linux-any],
 Provides: libegl1-x11
 Conflicts: libegl1-x11
 Replaces: libegl1-x11
@@ -141,7 +137,7 @@ Architecture: any
 Depends:
  libegl1-mesa (= ${binary:Version}),
  libwayland-egl1-mesa (= ${binary:Version}) [linux-any],
- libdrm-dev (>= 2.4.52) [!hurd-any],
+ libdrm-dev (>= 2.4.69) [!hurd-any],
  x11proto-dri2-dev (>= 2.6),
  x11proto-gl-dev (>= 1.4.14),
  libx11-dev,
@@ -293,7 +289,6 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libglapi-mesa (= ${binary:Version}),
- libudev1 [linux-any],
 Recommends: libgl1-mesa-dri
 Conflicts: libgl1
 Replaces: libgl1
@@ -346,7 +341,7 @@ Architecture: any
 Depends:
  mesa-common-dev (= ${binary:Version}),
  libgl1-mesa-glx (= ${binary:Version}),
- libdrm-dev (>= 2.4.65) [!hurd-any],
+ libdrm-dev (>= 2.4.69) [!hurd-any],
  libx11-dev,
  libx11-xcb-dev,
  libxcb-dri3-dev,
@@ -468,7 +463,7 @@ Description: Mesa VDPAU video acceleration drivers
 
 Package: mesa-vulkan-drivers
 Section: libs
-Architecture: linux-amd64 linux-i386 linux-x32
+Architecture: amd64 i386 arm64 armhf ppc64el x32
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libvulkan1,
@@ -480,11 +475,11 @@ Description: Mesa Vulkan graphics drivers
 
 Package: mesa-opencl-icd
 Section: libs
-Architecture: amd64 i386 arm64 armhf
+Architecture: amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
- libclc-r600 (>= 0.2.0+git20150813),
- libclc-amdgcn,
+ libclc-r600 (>= 0.2.0+git20160907),
+ libclc-amdgcn (>= 0.2.0+git20160907),
  ocl-icd-libopencl1 | libopencl1,
  ${shlibs:Depends},
  ${misc:Depends},

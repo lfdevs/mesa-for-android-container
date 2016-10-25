@@ -141,7 +141,7 @@ PipeToProfile(enum pipe_video_profile profile)
    case PIPE_VIDEO_PROFILE_VC1_ADVANCED:
       return VAProfileVC1Advanced;
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
-      return VAProfileH264Baseline;
+      return VAProfileH264ConstrainedBaseline;
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
       return VAProfileH264Main;
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
@@ -183,7 +183,7 @@ ProfileToPipe(VAProfile profile)
       return PIPE_VIDEO_PROFILE_VC1_MAIN;
    case VAProfileVC1Advanced:
       return PIPE_VIDEO_PROFILE_VC1_ADVANCED;
-   case VAProfileH264Baseline:
+   case VAProfileH264ConstrainedBaseline:
       return PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE;
    case VAProfileH264Main:
       return PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN;
@@ -229,6 +229,7 @@ typedef struct {
       struct pipe_vc1_picture_desc vc1;
       struct pipe_h264_picture_desc h264;
       struct pipe_h265_picture_desc h265;
+      struct pipe_h264_enc_picture_desc h264enc;
    } desc;
 
    struct {
@@ -241,7 +242,16 @@ typedef struct {
    } mpeg4;
 
    struct vl_deint_filter *deint;
+   struct vlVaBuffer *coded_buf;
+   int target_id;
 } vlVaContext;
+
+typedef struct {
+   enum pipe_video_profile profile;
+   enum pipe_video_entrypoint entrypoint;
+   enum pipe_h264_enc_rate_control_method rc;
+   unsigned int rt_format;
+} vlVaConfig;
 
 typedef struct {
    VABufferType type;
@@ -254,11 +264,16 @@ typedef struct {
    } derived_surface;
    unsigned int export_refcount;
    VABufferInfo export_state;
+   unsigned int coded_size;
 } vlVaBuffer;
 
 typedef struct {
    struct pipe_video_buffer templat, *buffer;
    struct util_dynarray subpics; /* vlVaSubpicture */
+   VAContextID ctx;
+   vlVaBuffer *coded_buf;
+   void *feedback;
+   unsigned int frame_num_cnt;
 } vlVaSurface;
 
 // Public functions:

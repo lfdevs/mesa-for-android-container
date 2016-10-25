@@ -62,6 +62,10 @@ C_SOURCES := \
 	hud/hud_context.c \
 	hud/hud_context.h \
 	hud/hud_cpu.c \
+	hud/hud_nic.c \
+	hud/hud_cpufreq.c \
+	hud/hud_diskstat.c \
+	hud/hud_sensors_temp.c \
 	hud/hud_driver_query.c \
 	hud/hud_fps.c \
 	hud/hud_private.h \
@@ -95,6 +99,8 @@ C_SOURCES := \
 	pipebuffer/pb_bufmgr_slab.c \
 	pipebuffer/pb_cache.c \
 	pipebuffer/pb_cache.h \
+	pipebuffer/pb_slab.c \
+	pipebuffer/pb_slab.h \
 	pipebuffer/pb_validate.c \
 	pipebuffer/pb_validate.h \
 	postprocess/filters.h \
@@ -175,6 +181,7 @@ C_SOURCES := \
 	translate/translate_generic.c \
 	translate/translate_sse.c \
 	util/dbghelp.h \
+	util/u_bitcast.h \
 	util/u_bitmask.c \
 	util/u_bitmask.h \
 	util/u_blend.h \
@@ -187,7 +194,6 @@ C_SOURCES := \
 	util/u_cache.h \
 	util/u_caps.c \
 	util/u_caps.h \
-	util/u_clear.h \
 	util/u_cpu_detect.c \
 	util/u_cpu_detect.h \
 	util/u_debug.c \
@@ -227,8 +233,6 @@ C_SOURCES := \
 	util/u_format_latc.h \
 	util/u_format_other.c \
 	util/u_format_other.h \
-	util/u_format_r11g11b10f.h \
-	util/u_format_rgb9e5.h \
 	util/u_format_rgtc.c \
 	util/u_format_rgtc.h \
 	util/u_format_s3tc.c \
@@ -274,6 +278,8 @@ C_SOURCES := \
 	util/u_pstipple.c \
 	util/u_pstipple.h \
 	util/u_pwr8.h \
+	util/u_queue.c \
+	util/u_queue.h \
 	util/u_range.h \
 	util/u_rect.h \
 	util/u_resource.c \
@@ -284,12 +290,8 @@ C_SOURCES := \
 	util/u_sampler.h \
 	util/u_simple_shaders.c \
 	util/u_simple_shaders.h \
-	util/u_slab.c \
-	util/u_slab.h \
 	util/u_split_prim.h \
 	util/u_sse.h \
-	util/u_staging.c \
-	util/u_staging.h \
 	util/u_string.h \
 	util/u_suballoc.c \
 	util/u_suballoc.h \
@@ -318,6 +320,8 @@ NIR_SOURCES := \
 	nir/tgsi_to_nir.h
 
 VL_SOURCES := \
+	vl/vl_bicubic_filter.c \
+	vl/vl_bicubic_filter.h \
 	vl/vl_compositor.c \
 	vl/vl_compositor.h \
 	vl/vl_csc.c \

@@ -402,10 +402,10 @@ add_src_reg(struct fd2_compile_context *ctx, struct ir2_instruction *alu,
 	swiz[3] = swiz_vals[src->SwizzleW];
 	swiz[4] = '\0';
 
-	if ((ctx->need_sync & (uint64_t)(1 << num)) &&
+	if ((ctx->need_sync & ((uint64_t)1 << num)) &&
 			!(flags & IR2_REG_CONST)) {
 		alu->sync = true;
-		ctx->need_sync &= ~(uint64_t)(1 << num);
+		ctx->need_sync &= ~((uint64_t)1 << num);
 	}
 
 	return ir2_reg_create(alu, num, swiz, flags);

@@ -147,9 +147,7 @@ namespace clover {
       std::set<cl_image_format> s;
       pipe_texture_target target = translate_target(type);
       unsigned bindings = (PIPE_BIND_SAMPLER_VIEW |
-                           PIPE_BIND_COMPUTE_RESOURCE |
-                           PIPE_BIND_TRANSFER_READ |
-                           PIPE_BIND_TRANSFER_WRITE);
+                           PIPE_BIND_COMPUTE_RESOURCE);
 
       for (auto f : formats) {
          if (all_of([=](const device &dev) {

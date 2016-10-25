@@ -1016,7 +1016,7 @@ wrap_bookend_bo(struct brw_context *brw)
 }
 
 /* This is fairly arbitrary; the trade off is memory usage vs. extra overhead
- * from wrapping.  On Gen7, 32768 should be enough for for 128 snapshots before
+ * from wrapping.  On Gen7, 32768 should be enough for 128 snapshots before
  * wrapping (since each is 256 bytes).
  */
 #define BOOKEND_BO_SIZE_BYTES 32768

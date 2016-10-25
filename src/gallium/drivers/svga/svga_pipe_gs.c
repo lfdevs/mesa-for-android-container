@@ -46,6 +46,8 @@ svga_create_gs_state(struct pipe_context *pipe,
    if (!gs)
       return NULL;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_CREATEGS);
+
    gs->base.tokens = tgsi_dup_tokens(templ->tokens);
 
    /* Collect basic info that we'll need later:
@@ -64,6 +66,7 @@ svga_create_gs_state(struct pipe_context *pipe,
                                                          &templ->stream_output);
    }
 
+   SVGA_STATS_TIME_POP(svga_sws(svga));
    return gs;
 }
 

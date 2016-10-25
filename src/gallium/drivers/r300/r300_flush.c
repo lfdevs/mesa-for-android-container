@@ -78,8 +78,6 @@ void r300_flush(struct pipe_context *pipe,
 {
     struct r300_context *r300 = r300_context(pipe);
 
-    flags |= RADEON_FLUSH_KEEP_TILING_FLAGS;
-
     if (r300->dirty_hw) {
         r300_flush_and_cleanup(r300, flags, fence);
     } else {

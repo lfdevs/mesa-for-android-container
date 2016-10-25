@@ -175,11 +175,6 @@ enum st_manager_param {
    ST_MANAGER_BROKEN_INVALIDATE
 };
 
-/**
- * The return type of st_api->get_proc_address.
- */
-typedef void (*st_proc_t)(void);
-
 struct pipe_context;
 struct pipe_resource;
 struct pipe_fence_handle;
@@ -204,6 +199,9 @@ struct st_egl_image
 {
    /* this is owned by the caller */
    struct pipe_resource *texture;
+
+   /* format only differs from texture->format for multi-planar (YUV): */
+   enum pipe_format format;
 
    unsigned level;
    unsigned layer;
@@ -497,13 +495,6 @@ struct st_api
                           int *gl_compat_version,
                           int *gl_es1_version,
                           int *gl_es2_version);
-
-   /**
-    * Return an API entry point.
-    *
-    * For GL this is the same as _glapi_get_proc_address.
-    */
-   st_proc_t (*get_proc_address)(struct st_api *stapi, const char *procname);
 
    /**
     * Create a rendering context.

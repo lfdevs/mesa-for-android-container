@@ -107,9 +107,6 @@ nv30_validate_fb(struct nv30_context *nv30)
    PUSH_DATA (push, w << 16);
    PUSH_DATA (push, h << 16);
    PUSH_DATA (push, rt_format);
-   BEGIN_NV04(push, NV30_3D(VIEWPORT_HORIZ), 2);
-   PUSH_DATA (push, w << 16);
-   PUSH_DATA (push, h << 16);
    BEGIN_NV04(push, NV30_3D(VIEWPORT_TX_ORIGIN), 4);
    PUSH_DATA (push, (y << 16) | x);
    PUSH_DATA (push, 0);
@@ -250,6 +247,11 @@ nv30_validate_viewport(struct nv30_context *nv30)
    struct nouveau_pushbuf *push = nv30->base.pushbuf;
    struct pipe_viewport_state *vp = &nv30->viewport;
 
+   unsigned x = CLAMP(vp->translate[0] - fabsf(vp->scale[0]), 0, 4095);
+   unsigned y = CLAMP(vp->translate[1] - fabsf(vp->scale[1]), 0, 4095);
+   unsigned w = CLAMP(2.0f * fabsf(vp->scale[0]), 0, 4096);
+   unsigned h = CLAMP(2.0f * fabsf(vp->scale[1]), 0, 4096);
+
    BEGIN_NV04(push, NV30_3D(VIEWPORT_TRANSLATE_X), 8);
    PUSH_DATAf(push, vp->translate[0]);
    PUSH_DATAf(push, vp->translate[1]);
@@ -258,10 +260,14 @@ nv30_validate_viewport(struct nv30_context *nv30)
    PUSH_DATAf(push, vp->scale[0]);
    PUSH_DATAf(push, vp->scale[1]);
    PUSH_DATAf(push, vp->scale[2]);
-   PUSH_DATAf(push, 1.0f);
+   PUSH_DATAf(push, 0.0f);
    BEGIN_NV04(push, NV30_3D(DEPTH_RANGE_NEAR), 2);
    PUSH_DATAf(push, vp->translate[2] - fabsf(vp->scale[2]));
    PUSH_DATAf(push, vp->translate[2] + fabsf(vp->scale[2]));
+
+   BEGIN_NV04(push, NV30_3D(VIEWPORT_HORIZ), 2);
+   PUSH_DATA (push, (w << 16) | x);
+   PUSH_DATA (push, (h << 16) | y);
 }
 
 static void

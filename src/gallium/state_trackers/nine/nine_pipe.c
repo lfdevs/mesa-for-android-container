@@ -70,7 +70,9 @@ nine_convert_dsa_state(struct pipe_depth_stencil_alpha_state *dsa_state,
 }
 
 void
-nine_convert_rasterizer_state(struct pipe_rasterizer_state *rast_state, const DWORD *rs)
+nine_convert_rasterizer_state(struct NineDevice9 *device,
+                              struct pipe_rasterizer_state *rast_state,
+                              const DWORD *rs)
 {
     struct pipe_rasterizer_state rast;
 
@@ -120,14 +122,12 @@ nine_convert_rasterizer_state(struct pipe_rasterizer_state *rast_state, const DW
     /* offset_units has the ogl/d3d11 meaning.
      * d3d9: offset = scale * dz + bias
      * ogl/d3d11: offset = scale * dz + r * bias
-     * with r implementation dependant and is supposed to be
-     * the smallest value the depth buffer format can hold.
-     * In practice on current and past hw it seems to be 2^-23
-     * for all formats except float formats where it varies depending
-     * on the content.
-     * For now use 1 << 23, but in the future perhaps add a way in gallium
-     * to get r for the format or get the gallium behaviour */
-    rast.offset_units = asfloat(rs[D3DRS_DEPTHBIAS]) * (float)(1 << 23);
+     * with r implementation dependent (+ different formula for float depth
+     * buffers). r=2^-23 is often the right value for gallium drivers.
+     * If possible, use offset_units_unscaled, which gives the d3d9
+     * behaviour, else scale by 1 << 23 */
+    rast.offset_units = asfloat(rs[D3DRS_DEPTHBIAS]) * (device->driver_caps.offset_units_unscaled ? 1.0f : (float)(1 << 23));
+    rast.offset_units_unscaled = device->driver_caps.offset_units_unscaled;
     rast.offset_scale = asfloat(rs[D3DRS_SLOPESCALEDEPTHBIAS]);
  /* rast.offset_clamp = 0.0f; */
 
@@ -220,9 +220,17 @@ nine_convert_sampler_state(struct cso_context *ctx, int idx, const DWORD *ss)
         samp.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
     }
     samp.max_lod = 15.0f;
-    samp.wrap_s = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSU]);
-    samp.wrap_t = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSV]);
-    samp.wrap_r = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSW]);
+
+    if (ss[NINED3DSAMP_CUBETEX]) {
+        /* Cube textures are always clamped to edge on D3D */
+        samp.wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
+        samp.wrap_t = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
+        samp.wrap_r = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
+    } else {
+        samp.wrap_s = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSU]);
+        samp.wrap_t = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSV]);
+        samp.wrap_r = d3dtextureaddress_to_pipe_tex_wrap(ss[D3DSAMP_ADDRESSW]);
+    }
     samp.min_img_filter = (ss[D3DSAMP_MINFILTER] == D3DTEXF_POINT && !ss[NINED3DSAMP_SHADOW]) ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR;
     samp.mag_img_filter = (ss[D3DSAMP_MAGFILTER] == D3DTEXF_POINT && !ss[NINED3DSAMP_SHADOW]) ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR;
     if (ss[D3DSAMP_MINFILTER] == D3DTEXF_ANISOTROPIC ||
@@ -231,7 +239,7 @@ nine_convert_sampler_state(struct cso_context *ctx, int idx, const DWORD *ss)
     samp.compare_mode = ss[NINED3DSAMP_SHADOW] ? PIPE_TEX_COMPARE_R_TO_TEXTURE : PIPE_TEX_COMPARE_NONE;
     samp.compare_func = PIPE_FUNC_LEQUAL;
     samp.normalized_coords = 1;
-    samp.seamless_cube_map = 1;
+    samp.seamless_cube_map = 0;
     d3dcolor_to_pipe_color_union(&samp.border_color, ss[D3DSAMP_BORDERCOLOR]);
 
     /* see nine_state.h */

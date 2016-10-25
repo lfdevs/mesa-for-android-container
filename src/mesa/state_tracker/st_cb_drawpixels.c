@@ -60,6 +60,8 @@
 #include "st_draw.h"
 #include "st_format.h"
 #include "st_program.h"
+#include "st_sampler_view.h"
+#include "st_scissor.h"
 #include "st_texture.h"
 
 #include "pipe/p_context.h"
@@ -1071,6 +1073,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
    assert(ctx->NewState == 0x0);
 
    st_flush_bitmap_cache(st);
+   st_invalidate_readpix_cache(st);
 
    st_validate_state(st, ST_PIPELINE_RENDER);
 
@@ -1121,7 +1124,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
        * into the constant buffer, we need to update them
        */
       st_upload_constants(st, st->fp->Base.Base.Parameters,
-                          PIPE_SHADER_FRAGMENT);
+                          MESA_SHADER_FRAGMENT);
    }
 
    /* Put glDrawPixels image into a texture */
@@ -1394,6 +1397,9 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
          blit.mask = PIPE_MASK_RGBA;
          blit.filter = PIPE_TEX_FILTER_NEAREST;
 
+         if (ctx->DrawBuffer != ctx->WinSysDrawBuffer)
+            st_window_rectangles_to_blit(ctx, &blit);
+
          if (screen->is_format_supported(screen, blit.src.format,
                                          blit.src.resource->target,
                                          blit.src.resource->nr_samples,
@@ -1433,6 +1439,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    struct gl_pixelstore_attrib pack = ctx->DefaultPacking;
 
    st_flush_bitmap_cache(st);
+   st_invalidate_readpix_cache(st);
 
    st_validate_state(st, ST_PIPELINE_RENDER);
 
@@ -1481,7 +1488,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
        * into the constant buffer, we need to update them
        */
       st_upload_constants(st, st->fp->Base.Base.Parameters,
-                          PIPE_SHADER_FRAGMENT);
+                          MESA_SHADER_FRAGMENT);
    }
    else {
       assert(type == GL_DEPTH);

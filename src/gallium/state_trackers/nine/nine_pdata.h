@@ -7,7 +7,6 @@ struct pheader
     boolean unknown;
     GUID guid;
     DWORD size;
-    char data[1];
 };
 
 static int
@@ -36,8 +35,9 @@ ht_guid_delete( void *key,
                 void *data )
 {
     struct pheader *header = value;
+    void *header_data = (void *)header + sizeof(*header);
 
-    if (header->unknown) { IUnknown_Release(*(IUnknown **)header->data); }
+    if (header->unknown) { IUnknown_Release(*(IUnknown **)header_data); }
     FREE(header);
 
     return PIPE_OK;

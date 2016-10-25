@@ -145,6 +145,16 @@ SUBDIRS += apple
 libglx_la_LIBADD += $(builddir)/apple/libappleglx.la
 endif
 
+if HAVE_WINDOWSDRI
+libglx_la_SOURCES += \
+	  driwindows_glx.c
+
+SUBDIRS += windows
+libglx_la_LIBADD += \
+	  $(builddir)/windows/libwindowsdri.la \
+	  $(builddir)/windows/libwindowsglx.la
+endif
+
 if USE_LIBGLVND_GLX
 AM_CFLAGS += \
 	-DGL_LIB_NAME=\"lib@GL_LIB@.so.0\" \
@@ -180,6 +190,10 @@ GL_LDFLAGS = \
 lib@GL_LIB@_la_SOURCES =
 lib@GL_LIB@_la_LIBADD = $(GL_LIBS)
 lib@GL_LIB@_la_LDFLAGS = $(GL_LDFLAGS)
+
+if HAVE_WINDOWSDRI
+lib@GL_LIB@_la_LDFLAGS += -lgdi32 -lopengl32 -Wl,--disable-stdcall-fixup
+endif
 
 SUBDIRS += . tests
 

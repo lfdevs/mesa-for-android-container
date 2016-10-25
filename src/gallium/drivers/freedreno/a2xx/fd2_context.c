@@ -120,7 +120,5 @@ fd2_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	/* construct vertex state used for solid ops (clear, and gmem<->mem) */
 	fd2_ctx->solid_vertexbuf = create_solid_vertexbuf(pctx);
 
-	fd2_emit_setup(&fd2_ctx->base);
-
 	return pctx;
 }

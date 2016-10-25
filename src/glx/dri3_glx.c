@@ -132,6 +132,16 @@ glx_dri3_get_dri_context(struct loader_dri3_drawable *draw)
    return (gc != &dummyContext) ? dri3Ctx->driContext : NULL;
 }
 
+static __DRIscreen *
+glx_dri3_get_dri_screen(struct loader_dri3_drawable *draw)
+{
+   struct glx_context *gc = __glXGetCurrentContext();
+   struct dri3_context *pcp = (struct dri3_context *) gc;
+   struct dri3_screen *psc = (struct dri3_screen *) pcp->base.psc;
+
+   return (gc != &dummyContext && psc) ? psc->driScreen : NULL;
+}
+
 static void
 glx_dri3_flush_drawable(struct loader_dri3_drawable *draw, unsigned flags)
 {
@@ -162,13 +172,14 @@ glx_dri3_show_fps(struct loader_dri3_drawable *draw, uint64_t current_ust)
    }
 }
 
-static struct loader_dri3_vtable glx_dri3_vtable = {
+static const struct loader_dri3_vtable glx_dri3_vtable = {
    .get_swap_interval = glx_dri3_get_swap_interval,
    .clamp_swap_interval = glx_dri3_clamp_swap_interval,
    .set_swap_interval = glx_dri3_set_swap_interval,
    .set_drawable_size = glx_dri3_set_drawable_size,
    .in_current_context = glx_dri3_in_current_context,
    .get_dri_context = glx_dri3_get_dri_context,
+   .get_dri_screen = glx_dri3_get_dri_screen,
    .flush_drawable = glx_dri3_flush_drawable,
    .show_fps = glx_dri3_show_fps,
 };
@@ -769,7 +780,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
    psc->fd = loader_get_user_preferred_fd(psc->fd, &psc->is_different_gpu);
    deviceName = NULL;
 
-   driverName = loader_get_driver_for_fd(psc->fd, 0);
+   driverName = loader_get_driver_for_fd(psc->fd);
    if (!driverName) {
       ErrorMessageF("No driver found\n");
       goto handle_error;

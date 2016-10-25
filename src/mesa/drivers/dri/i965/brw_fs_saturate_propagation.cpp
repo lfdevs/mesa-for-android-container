@@ -64,7 +64,8 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
 
       bool interfered = false;
       foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
-         if (scan_inst->overwrites_reg(inst->src[0])) {
+         if (regions_overlap(scan_inst->dst, scan_inst->size_written,
+                             inst->src[0], inst->size_read(0))) {
             if (scan_inst->is_partial_write() ||
                 (scan_inst->dst.type != inst->dst.type &&
                  !scan_inst->can_change_types()))
@@ -116,7 +117,8 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
          for (int i = 0; i < scan_inst->sources; i++) {
             if (scan_inst->src[i].file == VGRF &&
                 scan_inst->src[i].nr == inst->src[0].nr &&
-                scan_inst->src[i].reg_offset == inst->src[0].reg_offset) {
+                scan_inst->src[i].offset / REG_SIZE ==
+                 inst->src[0].offset / REG_SIZE) {
                if (scan_inst->opcode != BRW_OPCODE_MOV ||
                    !scan_inst->saturate ||
                    scan_inst->src[0].abs ||

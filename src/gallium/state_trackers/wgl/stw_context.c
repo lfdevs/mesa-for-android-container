@@ -388,27 +388,27 @@ stw_get_current_dc( void )
 BOOL
 stw_make_current(HDC hdc, DHGLRC dhglrc)
 {
-   struct stw_context *curctx = NULL;
+   struct stw_context *old_ctx = NULL;
    struct stw_context *ctx = NULL;
-   struct stw_framebuffer *fb = NULL;
    BOOL ret = FALSE;
 
    if (!stw_dev)
       return FALSE;
 
-   curctx = stw_current_context();
-   if (curctx != NULL) {
-      if (curctx->dhglrc == dhglrc) {
-         if (curctx->hdc == hdc) {
+   old_ctx = stw_current_context();
+   if (old_ctx != NULL) {
+      if (old_ctx->dhglrc == dhglrc) {
+         if (old_ctx->hdc == hdc) {
             /* Return if already current. */
             return TRUE;
          }
       } else {
-         curctx->st->flush(curctx->st, ST_FLUSH_FRONT, NULL);
+         old_ctx->st->flush(old_ctx->st, ST_FLUSH_FRONT, NULL);
       }
    }
 
    if (dhglrc) {
+      struct stw_framebuffer *fb = NULL;
       stw_lock_contexts(stw_dev);
       ctx = stw_lookup_context_locked( dhglrc );
       stw_unlock_contexts(stw_dev);
@@ -416,6 +416,7 @@ stw_make_current(HDC hdc, DHGLRC dhglrc)
          goto fail;
       }
 
+      /* This call locks fb's mutex */
       fb = stw_framebuffer_from_hdc( hdc );
       if (fb) {
          stw_framebuffer_update(fb);
@@ -434,6 +435,7 @@ stw_make_current(HDC hdc, DHGLRC dhglrc)
       }
 
       if (fb->iPixelFormat != ctx->iPixelFormat) {
+         stw_framebuffer_unlock(fb);
          SetLastError(ERROR_INVALID_PIXEL_FORMAT);
          goto fail;
       }
@@ -441,36 +443,53 @@ stw_make_current(HDC hdc, DHGLRC dhglrc)
       /* Bind the new framebuffer */
       ctx->hdc = hdc;
 
+      struct stw_framebuffer *old_fb = ctx->current_framebuffer;
+      if (old_fb != fb) {
+         stw_framebuffer_reference_locked(fb);
+         ctx->current_framebuffer = fb;
+      }
+      stw_framebuffer_unlock(fb);
+
       /* Note: when we call this function we will wind up in the
        * stw_st_framebuffer_validate_locked() function which will incur
        * a recursive fb->mutex lock.
        */
       ret = stw_dev->stapi->make_current(stw_dev->stapi, ctx->st,
                                          fb->stfb, fb->stfb);
-      stw_framebuffer_reference(&ctx->current_framebuffer, fb);
-   } else {
-      ret = stw_dev->stapi->make_current(stw_dev->stapi, NULL, NULL, NULL);
-   }
+
+      if (old_fb && old_fb != fb) {
+         stw_lock_framebuffers(stw_dev);
+         stw_framebuffer_lock(old_fb);
+         stw_framebuffer_release_locked(old_fb);
+         stw_unlock_framebuffers(stw_dev);
+      }
 
 fail:
+      /* fb must be unlocked at this point. */
+      assert(!stw_own_mutex(&fb->mutex));
 
-   if (fb) {
-      stw_framebuffer_unlock(fb);
-   }
-
-   /* On failure, make the thread's current rendering context not current
-    * before returning.
-    */
-   if (!ret) {
-      stw_dev->stapi->make_current(stw_dev->stapi, NULL, NULL, NULL);
-      ctx = NULL;
+      /* On failure, make the thread's current rendering context not current
+       * before returning.
+       */
+      if (!ret) {
+         stw_make_current(NULL, 0);
+      }
+   } else {
+      ret = stw_dev->stapi->make_current(stw_dev->stapi, NULL, NULL, NULL);
    }
 
    /* Unreference the previous framebuffer if any. It must be done after
     * make_current, as it can be referenced inside.
     */
-   if (curctx && curctx != ctx) {
-      stw_framebuffer_reference(&curctx->current_framebuffer, NULL);
+   if (old_ctx && old_ctx != ctx) {
+      struct stw_framebuffer *old_fb = old_ctx->current_framebuffer;
+      if (old_fb) {
+         old_ctx->current_framebuffer = NULL;
+         stw_lock_framebuffers(stw_dev);
+         stw_framebuffer_lock(old_fb);
+         stw_framebuffer_release_locked(old_fb);
+         stw_unlock_framebuffers(stw_dev);
+      }
    }
 
    return ret;

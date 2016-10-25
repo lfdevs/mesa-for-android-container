@@ -37,7 +37,7 @@
 #include "compiler/glsl/glsl_symbol_table.h"
 #include "compiler/glsl/ir.h"
 #include "compiler/glsl/program.h"
-#include "program/hash_table.h"
+#include "util/string_to_uint_map.h"
 #include "util/strndup.h"
 
 
@@ -84,7 +84,8 @@ _mesa_BindAttribLocation(GLuint program, GLuint index,
    }
 
    if (index >= ctx->Const.Program[MESA_SHADER_VERTEX].MaxAttribs) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "glBindAttribLocation(index)");
+      _mesa_error(ctx, GL_INVALID_VALUE, "glBindAttribLocation(%u >= %u)",
+                  index, ctx->Const.Program[MESA_SHADER_VERTEX].MaxAttribs);
       return;
    }
 
@@ -1264,7 +1265,7 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
       return 1;
    case GL_COMPATIBLE_SUBROUTINES: {
       const struct gl_uniform_storage *uni;
-      struct gl_shader *sh;
+      struct gl_linked_shader *sh;
       unsigned count, i;
       int j;
 

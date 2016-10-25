@@ -38,11 +38,13 @@ extern const enum pipe_format nine_d3d9_to_pipe_format_map[120];
 extern const D3DFORMAT nine_pipe_to_d3d9_format_map[PIPE_FORMAT_COUNT];
 
 void nine_convert_dsa_state(struct pipe_depth_stencil_alpha_state *, const DWORD *);
-void nine_convert_rasterizer_state(struct pipe_rasterizer_state *, const DWORD *);
+void nine_convert_rasterizer_state(struct NineDevice9 *, struct pipe_rasterizer_state *, const DWORD *);
 void nine_convert_blend_state(struct pipe_blend_state *, const DWORD *);
 void nine_convert_sampler_state(struct cso_context *, int idx, const DWORD *);
 
 void nine_pipe_context_clear(struct NineDevice9 *);
+
+#define is_ATI1_ATI2(format) (format == PIPE_FORMAT_RGTC1_UNORM || format == PIPE_FORMAT_RGTC2_UNORM)
 
 static inline void
 rect_to_pipe_box(struct pipe_box *dst, const RECT *src)
@@ -239,8 +241,7 @@ d3d9_get_pipe_depth_format_bindings(D3DFORMAT format)
     case D3DFMT_D32F_LOCKABLE:
     case D3DFMT_D16_LOCKABLE:
     case D3DFMT_D32_LOCKABLE:
-        return PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_TRANSFER_READ |
-               PIPE_BIND_TRANSFER_WRITE;
+        return PIPE_BIND_DEPTH_STENCIL;
     case D3DFMT_DF16:
     case D3DFMT_DF24:
     case D3DFMT_INTZ:
@@ -331,6 +332,7 @@ d3d9_to_pipe_format_checked(struct pipe_screen *screen,
         case D3DFMT_D24X8:
             if (format_check_internal(PIPE_FORMAT_Z24X8_UNORM))
                 return PIPE_FORMAT_Z24X8_UNORM;
+            break;
         /* Support for X8L8V8U8 bumpenvmap format with lighting bits.
          * X8L8V8U8 is commonly supported among dx9 cards.
          * To avoid precision loss, we use PIPE_FORMAT_R32G32B32X32_FLOAT,
@@ -344,6 +346,61 @@ d3d9_to_pipe_format_checked(struct pipe_screen *screen,
             break;
     }
     return PIPE_FORMAT_NONE;
+}
+
+/* The quality levels are vendor dependent, so we set our own.
+ * Every quality level has its own sample count and sample
+ * position matrix.
+ * The exact mapping might differ from system to system but thats OK,
+ * as there's no way to gather more information about quality levels
+ * in D3D9.
+ * In case of NONMASKABLE multisample map every quality-level
+ * to a MASKABLE MultiSampleType:
+ *  0: no MSAA
+ *  1: 2x MSAA
+ *  2: 4x MSAA
+ *  ...
+ *  If the requested quality level is not available to nearest
+ *  matching quality level is used.
+ *  If no multisample is available the function sets
+ *  multisample to D3DMULTISAMPLE_NONE and returns zero.
+ */
+static inline HRESULT
+d3dmultisample_type_check(struct pipe_screen *screen,
+                          D3DFORMAT format,
+                          D3DMULTISAMPLE_TYPE *multisample,
+                          DWORD multisamplequality,
+                          DWORD *levels)
+{
+    unsigned bind, i;
+
+    assert(multisample);
+
+    if (levels)
+        *levels = 1;
+
+    if (*multisample == D3DMULTISAMPLE_NONMASKABLE) {
+        if (depth_stencil_format(format))
+            bind = d3d9_get_pipe_depth_format_bindings(format);
+        else /* render-target */
+            bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
+
+        *multisample = 0;
+        for (i = D3DMULTISAMPLE_2_SAMPLES; i < D3DMULTISAMPLE_16_SAMPLES &&
+            multisamplequality; ++i) {
+            if (d3d9_to_pipe_format_checked(screen, format, PIPE_TEXTURE_2D,
+                    i, bind, FALSE, FALSE) != PIPE_FORMAT_NONE) {
+                multisamplequality--;
+                if (levels)
+                    (*levels)++;
+                *multisample = i;
+            }
+        }
+    }
+    /* Make sure to get an exact match */
+    if (multisamplequality)
+        return D3DERR_INVALIDCALL;
+    return D3D_OK;
 }
 
 static inline const char *
@@ -728,8 +785,16 @@ static inline unsigned nine_format_get_level_alloc_size(enum pipe_format format,
 
     w = u_minify(width, level);
     h = u_minify(height, level);
-    size = nine_format_get_stride(format, w) *
-        util_format_get_nblocksy(format, h);
+    if (is_ATI1_ATI2(format)) {
+        /* For "unknown" formats like ATIx use width * height bytes */
+        size = w * h;
+    } else if (format == PIPE_FORMAT_NONE) { /* D3DFMT_NULL */
+        size = w * h * 4;
+    } else {
+        size = nine_format_get_stride(format, w) *
+            util_format_get_nblocksy(format, h);
+    }
+
     return size;
 }
 
@@ -745,8 +810,13 @@ static inline unsigned nine_format_get_size_and_offsets(enum pipe_format format,
         w = u_minify(width, l);
         h = u_minify(height, l);
         offsets[l] = size;
-        size += nine_format_get_stride(format, w) *
-            util_format_get_nblocksy(format, h);
+        if (is_ATI1_ATI2(format)) {
+            /* For "unknown" formats like ATIx use width * height bytes */
+            size += w * h;
+        } else {
+            size += nine_format_get_stride(format, w) *
+                util_format_get_nblocksy(format, h);
+        }
     }
 
     return size;

@@ -128,23 +128,20 @@ am__DEPENDENCIES_1 =
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1) \
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1)
 am__libradeon_la_SOURCES_DIST = cayman_msaa.c r600_buffer_common.c \
-	r600_cs.h r600d_common.h r600_gpu_load.c r600_perfcounter.c \
+	r600_cs.h r600_gpu_load.c r600_perfcounter.c \
 	r600_pipe_common.c r600_pipe_common.h r600_query.c \
 	r600_query.h r600_streamout.c r600_test_dma.c r600_texture.c \
 	r600_viewport.c radeon_uvd.c radeon_uvd.h radeon_vce_40_2_2.c \
 	radeon_vce_50.c radeon_vce_52.c radeon_vce.c radeon_vce.h \
 	radeon_video.c radeon_video.h radeon_winsys.h \
-	radeon_elf_util.c radeon_elf_util.h radeon_llvm_emit.c \
-	radeon_llvm_emit.h radeon_llvm.h radeon_llvm_util.c \
-	radeon_llvm_util.h radeon_setup_tgsi_llvm.c
+	radeon_elf_util.c radeon_elf_util.h
 am__objects_1 = cayman_msaa.lo r600_buffer_common.lo r600_gpu_load.lo \
 	r600_perfcounter.lo r600_pipe_common.lo r600_query.lo \
 	r600_streamout.lo r600_test_dma.lo r600_texture.lo \
 	r600_viewport.lo radeon_uvd.lo radeon_vce_40_2_2.lo \
 	radeon_vce_50.lo radeon_vce_52.lo radeon_vce.lo \
 	radeon_video.lo
-am__objects_2 = radeon_elf_util.lo radeon_llvm_emit.lo \
-	radeon_llvm_util.lo radeon_setup_tgsi_llvm.lo
+am__objects_2 = radeon_elf_util.lo
 @NEED_RADEON_LLVM_TRUE@am__objects_3 = $(am__objects_2)
 am_libradeon_la_OBJECTS = $(am__objects_1) $(am__objects_3)
 libradeon_la_OBJECTS = $(am_libradeon_la_OBJECTS)
@@ -320,11 +317,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -420,6 +416,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -455,6 +453,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -521,7 +520,6 @@ C_SOURCES := \
 	cayman_msaa.c \
 	r600_buffer_common.c \
 	r600_cs.h \
-	r600d_common.h \
 	r600_gpu_load.c \
 	r600_perfcounter.c \
 	r600_pipe_common.c \
@@ -545,13 +543,7 @@ C_SOURCES := \
 
 LLVM_C_FILES := \
 	radeon_elf_util.c \
-	radeon_elf_util.h \
-	radeon_llvm_emit.c \
-	radeon_llvm_emit.h \
-	radeon_llvm.h \
-	radeon_llvm_util.c \
-	radeon_llvm_util.h \
-	radeon_setup_tgsi_llvm.c
+	radeon_elf_util.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -700,9 +692,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_viewport.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_elf_util.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_llvm_emit.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_llvm_util.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_setup_tgsi_llvm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_uvd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_vce.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_vce_40_2_2.Plo@am__quote@

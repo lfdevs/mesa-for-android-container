@@ -87,7 +87,7 @@ typedef VdpStatus VdpVideoSurfaceDMABuf(
 );
 
 typedef VdpStatus VdpOutputSurfaceDMABuf(
-   VdpVideoSurface               surface,
+   VdpOutputSurface              surface,
    struct VdpSurfaceDMABufDesc * result
 );
 

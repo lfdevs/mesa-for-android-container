@@ -50,12 +50,14 @@
  */
 
 
+#include "compiler/nir/nir.h"
 #include "main/context.h"
 #include "main/macros.h"
 #include "main/enums.h"
 #include "program/prog_parameter.h"
 #include "program/prog_print.h"
 #include "program/prog_statevars.h"
+#include "util/bitscan.h"
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
 #include "brw_context.h"
@@ -75,16 +77,16 @@ static void calculate_curbe_offsets( struct brw_context *brw )
 {
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FS_PROG_DATA */
-   const GLuint nr_fp_regs = (brw->wm.prog_data->base.nr_params + 15) / 16;
+   const GLuint nr_fp_regs = (brw->wm.base.prog_data->nr_params + 15) / 16;
 
    /* BRW_NEW_VS_PROG_DATA */
-   const GLuint nr_vp_regs = (brw->vs.prog_data->base.base.nr_params + 15) / 16;
+   const GLuint nr_vp_regs = (brw->vs.base.prog_data->nr_params + 15) / 16;
    GLuint nr_clip_regs = 0;
    GLuint total_regs;
 
    /* _NEW_TRANSFORM */
    if (ctx->Transform.ClipPlanesEnabled) {
-      GLuint nr_planes = 6 + _mesa_bitcount_64(ctx->Transform.ClipPlanesEnabled);
+      GLuint nr_planes = 6 + _mesa_bitcount(ctx->Transform.ClipPlanesEnabled);
       nr_clip_regs = (nr_planes * 4 + 15) / 16;
    }
 
@@ -218,15 +220,15 @@ brw_upload_constant_buffer(struct brw_context *brw)
       GLuint offset = brw->curbe.wm_start * 16;
 
       /* BRW_NEW_FS_PROG_DATA | _NEW_PROGRAM_CONSTANTS: copy uniform values */
-      for (i = 0; i < brw->wm.prog_data->base.nr_params; i++) {
-	 buf[offset + i] = *brw->wm.prog_data->base.param[i];
+      for (i = 0; i < brw->wm.base.prog_data->nr_params; i++) {
+	 buf[offset + i] = *brw->wm.base.prog_data->param[i];
       }
    }
 
    /* clipper constants */
    if (brw->curbe.clip_size) {
       GLuint offset = brw->curbe.clip_start * 16;
-      GLuint j;
+      GLbitfield mask;
 
       /* If any planes are going this way, send them all this way:
        */
@@ -241,14 +243,14 @@ brw_upload_constant_buffer(struct brw_context *brw)
        * clip-space:
        */
       clip_planes = brw_select_clip_planes(ctx);
-      for (j = 0; j < MAX_CLIP_PLANES; j++) {
-	 if (ctx->Transform.ClipPlanesEnabled & (1<<j)) {
-	    buf[offset + i * 4 + 0].f = clip_planes[j][0];
-	    buf[offset + i * 4 + 1].f = clip_planes[j][1];
-	    buf[offset + i * 4 + 2].f = clip_planes[j][2];
-	    buf[offset + i * 4 + 3].f = clip_planes[j][3];
-	    i++;
-	 }
+      mask = ctx->Transform.ClipPlanesEnabled;
+      while (mask) {
+         const int j = u_bit_scan(&mask);
+         buf[offset + i * 4 + 0].f = clip_planes[j][0];
+         buf[offset + i * 4 + 1].f = clip_planes[j][1];
+         buf[offset + i * 4 + 2].f = clip_planes[j][2];
+         buf[offset + i * 4 + 3].f = clip_planes[j][3];
+         i++;
       }
    }
 
@@ -259,8 +261,8 @@ brw_upload_constant_buffer(struct brw_context *brw)
       GLuint offset = brw->curbe.vs_start * 16;
 
       /* BRW_NEW_VS_PROG_DATA | _NEW_PROGRAM_CONSTANTS: copy uniform values */
-      for (i = 0; i < brw->vs.prog_data->base.base.nr_params; i++) {
-         buf[offset + i] = *brw->vs.prog_data->base.base.param[i];
+      for (i = 0; i < brw->vs.base.prog_data->nr_params; i++) {
+         buf[offset + i] = *brw->vs.base.prog_data->param[i];
       }
    }
 
@@ -323,7 +325,8 @@ emit:
     * BRW_NEW_FRAGMENT_PROGRAM
     */
    if (brw->gen == 4 && !brw->is_g4x &&
-       (brw->fragment_program->Base.InputsRead & (1 << VARYING_SLOT_POS))) {
+       (brw->fragment_program->Base.nir->info.inputs_read &
+        (1 << VARYING_SLOT_POS))) {
       BEGIN_BATCH(2);
       OUT_BATCH(_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP << 16 | (2 - 2));
       OUT_BATCH(0);

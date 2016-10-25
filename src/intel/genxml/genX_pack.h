@@ -21,13 +21,22 @@
  * IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef GENX_PACK_H
+#define GENX_PACK_H
 
 #ifndef GEN_VERSIONx10
 #  error "The GEN_VERSIONx10 macro must be defined"
 #endif
 
-#if (GEN_VERSIONx10 == 70)
+#if (GEN_VERSIONx10 == 40)
+#  include "genxml/gen4_pack.h"
+#elif (GEN_VERSIONx10 == 45)
+#  include "genxml/gen45_pack.h"
+#elif (GEN_VERSIONx10 == 50)
+#  include "genxml/gen5_pack.h"
+#elif (GEN_VERSIONx10 == 60)
+#  include "genxml/gen6_pack.h"
+#elif (GEN_VERSIONx10 == 70)
 #  include "genxml/gen7_pack.h"
 #elif (GEN_VERSIONx10 == 75)
 #  include "genxml/gen75_pack.h"
@@ -38,3 +47,5 @@
 #else
 #  error "Need to add a pack header include for this gen"
 #endif
+
+#endif /* GENX_PACK_H */

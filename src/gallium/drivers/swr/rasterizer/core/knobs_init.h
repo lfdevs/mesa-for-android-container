@@ -38,7 +38,9 @@ template <typename T>
 static inline void ConvertEnvToKnob(const char* pOverride, T& knobValue)
 {
     uint32_t value = 0;
-    if (sscanf(pOverride, "%u", &value))
+    char* pStopped = nullptr;
+    value = strtoul(pOverride, &pStopped, 0);
+    if (pStopped != pOverride)
     {
         knobValue = static_cast<T>(value);
     }
@@ -64,10 +66,11 @@ static inline void ConvertEnvToKnob(const char* pOverride, bool& knobValue)
 
     // Try converting to a number and casting to bool
     uint32_t value = 0;
-    if (sscanf(pOverride, "%u", &value))
+    char* pStopped = nullptr;
+    value = strtoul(pOverride, &pStopped, 0);
+    if (pStopped != pOverride)
     {
         knobValue = value != 0;
-        return;
     }
 }
 

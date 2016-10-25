@@ -23,6 +23,7 @@
 
 #include "main/mtypes.h"
 #include "program/prog_parameter.h"
+#include "main/shaderapi.h"
 
 #include "brw_context.h"
 #include "brw_state.h"
@@ -47,8 +48,9 @@ brw_upload_tcs_pull_constants(struct brw_context *brw)
       return;
 
    /* BRW_NEW_TCS_PROG_DATA */
-   const struct brw_stage_prog_data *prog_data = &brw->tcs.prog_data->base.base;
+   const struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
 
+   _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_TESS_CTRL);
    /* _NEW_PROGRAM_CONSTANTS */
    brw_upload_pull_constants(brw, BRW_NEW_TCS_CONSTBUF, &tcp->program.Base,
                              stage_state, prog_data);
@@ -78,7 +80,7 @@ brw_upload_tcs_ubo_surfaces(struct brw_context *brw)
       return;
 
    /* BRW_NEW_TCS_PROG_DATA */
-   struct brw_stage_prog_data *prog_data = &brw->tcs.prog_data->base.base;
+   struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
 
    brw_upload_ubo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_TESS_CTRL],
 			   &brw->tcs.base, prog_data);
@@ -106,7 +108,7 @@ brw_upload_tcs_abo_surfaces(struct brw_context *brw)
    if (prog) {
       /* BRW_NEW_TCS_PROG_DATA */
       brw_upload_abo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_TESS_CTRL],
-                              &brw->tcs.base, &brw->tcs.prog_data->base.base);
+                              &brw->tcs.base, brw->tcs.base.prog_data);
    }
 }
 
@@ -132,7 +134,7 @@ brw_upload_tcs_image_surfaces(struct brw_context *brw)
    if (prog) {
       /* BRW_NEW_TCS_PROG_DATA, BRW_NEW_IMAGE_UNITS */
       brw_upload_image_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_TESS_CTRL],
-                                &brw->tcs.base, &brw->tcs.prog_data->base.base);
+                                &brw->tcs.base, brw->tcs.base.prog_data);
    }
 }
 

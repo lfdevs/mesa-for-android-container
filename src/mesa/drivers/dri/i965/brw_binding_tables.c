@@ -100,7 +100,7 @@ brw_upload_binding_table(struct brw_context *brw,
    } else {
       /* Upload a new binding table. */
       if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
-         brw->vtbl.emit_buffer_surface_state(
+         brw_emit_buffer_surface_state(
             brw, &stage_state->surf_offset[
                     prog_data->binding_table.shader_time_start],
             brw->shader_time.bo, 0, BRW_SURFACEFORMAT_RAW,

@@ -252,17 +252,17 @@ kms_sw_displaytarget_add_from_prime(struct kms_sw_winsys *kms_sw, int fd,
    if (!kms_sw_dt)
       return NULL;
 
-   kms_sw_dt->ref_count = 1;
-   kms_sw_dt->handle = handle;
-   kms_sw_dt->size = lseek(fd, 0, SEEK_END);
-   kms_sw_dt->width = width;
-   kms_sw_dt->height = height;
-   kms_sw_dt->stride = stride;
-
-   if (kms_sw_dt->size == (off_t)-1) {
+   off_t lseek_ret = lseek(fd, 0, SEEK_END);
+   if (lseek_ret == -1) {
       FREE(kms_sw_dt);
       return NULL;
    }
+   kms_sw_dt->size = lseek_ret;
+   kms_sw_dt->ref_count = 1;
+   kms_sw_dt->handle = handle;
+   kms_sw_dt->width = width;
+   kms_sw_dt->height = height;
+   kms_sw_dt->stride = stride;
 
    lseek(fd, 0, SEEK_SET);
 

@@ -35,6 +35,7 @@ void fd_screen_fence_ref(struct pipe_screen *pscreen,
 		struct pipe_fence_handle **ptr,
 		struct pipe_fence_handle *pfence);
 boolean fd_screen_fence_finish(struct pipe_screen *screen,
+		struct pipe_context *ctx,
 		struct pipe_fence_handle *pfence,
 		uint64_t timeout);
 struct pipe_fence_handle * fd_fence_create(struct pipe_context *pctx,

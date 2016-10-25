@@ -50,7 +50,7 @@ static CRITICAL_SECTION g_mutex = {
 static struct stw_tls_data *g_pendingTlsData = NULL;
 
 
-static inline struct stw_tls_data *
+static struct stw_tls_data *
 stw_tls_data_create(DWORD dwThreadId);
 
 static struct stw_tls_data *
@@ -111,7 +111,7 @@ stw_tls_init(void)
 /**
  * Install windows hook for a given thread (not necessarily the current one).
  */
-static inline struct stw_tls_data *
+static struct stw_tls_data *
 stw_tls_data_create(DWORD dwThreadId)
 {
    struct stw_tls_data *data;

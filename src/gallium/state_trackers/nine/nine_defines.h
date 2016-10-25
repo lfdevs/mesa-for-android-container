@@ -54,4 +54,12 @@ uint16_t nine_d3d9_to_nine_declusage(unsigned usage, unsigned index);
 
 #define NINED3DCLEAR_DEPTHSTENCIL   (D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL)
 
+#define NINE_BIND_BACKBUFFER_FLAGS    (PIPE_BIND_RENDER_TARGET |\
+                                       PIPE_BIND_SAMPLER_VIEW)
+
+#define NINE_BIND_PRESENTBUFFER_FLAGS (PIPE_BIND_RENDER_TARGET |\
+                                       PIPE_BIND_DISPLAY_TARGET |\
+                                       PIPE_BIND_SCANOUT |\
+                                       PIPE_BIND_SHARED)
+
 #endif /* _NINE_DEFINES_H_ */

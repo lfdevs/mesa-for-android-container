@@ -50,6 +50,7 @@
 #define U_IB  PIPE_BIND_BLENDABLE | U_IR
 #define U_TD  PIPE_BIND_SCANOUT | PIPE_BIND_DISPLAY_TARGET | U_TB
 #define U_TZ  PIPE_BIND_DEPTH_STENCIL | U_T
+#define U_ID  U_TD | U_I
 #if NOUVEAU_DRIVER == 0xc0
 # define U_TC  U_TB
 # define U_IC  U_IB
@@ -122,7 +123,7 @@ const struct nvc0_format nvc0_format_table[PIPE_FORMAT_COUNT] =
 const struct nv50_format nv50_format_table[PIPE_FORMAT_COUNT] =
 #endif
 {
-   C4(A, B8G8R8A8_UNORM, BGRA8_UNORM, B, G, R, A, UNORM, A8B8G8R8, TD),
+   C4(A, B8G8R8A8_UNORM, BGRA8_UNORM, B, G, R, A, UNORM, A8B8G8R8, ID),
    F3(A, B8G8R8X8_UNORM, BGRX8_UNORM, B, G, R, xx, UNORM, A8B8G8R8, TD),
    C4(A, B8G8R8A8_SRGB, BGRA8_SRGB, B, G, R, A, UNORM, A8B8G8R8, TD),
    F3(A, B8G8R8X8_SRGB, BGRX8_SRGB, B, G, R, xx, UNORM, A8B8G8R8, TD),

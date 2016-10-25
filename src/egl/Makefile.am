@@ -132,6 +132,5 @@ EXTRA_DIST = \
 	egl-symbols-check \
 	SConscript \
 	drivers/haiku \
-	docs \
 	main/egl.def \
 	main/README.txt

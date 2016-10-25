@@ -26,19 +26,19 @@
 #include "glsl_parser_extras.h"
 #include "ir.h"
 #include "program.h"
-#include "program/hash_table.h"
+#include "util/set.h"
+#include "util/hash_table.h"
 #include "linker.h"
 
 static ir_function_signature *
 find_matching_signature(const char *name, const exec_list *actual_parameters,
-			gl_shader **shader_list, unsigned num_shaders,
-			bool use_builtin);
+                        glsl_symbol_table *symbols);
 
 namespace {
 
 class call_link_visitor : public ir_hierarchical_visitor {
 public:
-   call_link_visitor(gl_shader_program *prog, gl_shader *linked,
+   call_link_visitor(gl_shader_program *prog, gl_linked_shader *linked,
 		     gl_shader **shader_list, unsigned num_shaders)
    {
       this->prog = prog;
@@ -47,18 +47,18 @@ public:
       this->success = true;
       this->linked = linked;
 
-      this->locals = hash_table_ctor(0, hash_table_pointer_hash,
-				     hash_table_pointer_compare);
+      this->locals = _mesa_set_create(NULL, _mesa_hash_pointer,
+                                      _mesa_key_pointer_equal);
    }
 
    ~call_link_visitor()
    {
-      hash_table_dtor(this->locals);
+      _mesa_set_destroy(this->locals, NULL);
    }
 
    virtual ir_visitor_status visit(ir_variable *ir)
    {
-      hash_table_insert(locals, ir, ir);
+      _mesa_set_add(locals, ir);
       return visit_continue;
    }
 
@@ -74,12 +74,15 @@ public:
       assert(callee != NULL);
       const char *const name = callee->function_name();
 
+      /* We don't actually need to find intrinsics; they're not real */
+      if (callee->is_intrinsic())
+         return visit_continue;
+
       /* Determine if the requested function signature already exists in the
        * final linked shader.  If it does, use it as the target of the call.
        */
       ir_function_signature *sig =
-	 find_matching_signature(name, &callee->parameters, &linked, 1,
-				 ir->use_builtin);
+         find_matching_signature(name, &callee->parameters, linked->symbols);
       if (sig != NULL) {
 	 ir->callee = sig;
 	 return visit_continue;
@@ -88,8 +91,13 @@ public:
       /* Try to find the signature in one of the other shaders that is being
        * linked.  If it's not found there, return an error.
        */
-      sig = find_matching_signature(name, &ir->actual_parameters, shader_list,
-				    num_shaders, ir->use_builtin);
+      for (unsigned i = 0; i < num_shaders; i++) {
+         sig = find_matching_signature(name, &ir->actual_parameters,
+                                       shader_list[i]->symbols);
+         if (sig)
+            break;
+      }
+
       if (sig == NULL) {
 	 /* FINISHME: Log the full signature of unresolved function.
 	  */
@@ -116,9 +124,7 @@ public:
 
       ir_function_signature *linked_sig =
 	 f->exact_matching_signature(NULL, &callee->parameters);
-      if ((linked_sig == NULL)
-	  || ((linked_sig != NULL)
-	      && (linked_sig->is_builtin() != ir->use_builtin))) {
+      if (linked_sig == NULL) {
 	 linked_sig = new(linked) ir_function_signature(callee->return_type);
 	 f->add_signature(linked_sig);
       }
@@ -142,19 +148,20 @@ public:
        * replace signature stored in a function.  One could easily be added,
        * but this avoids the need.
        */
-      struct hash_table *ht = hash_table_ctor(0, hash_table_pointer_hash,
-					      hash_table_pointer_compare);
+      struct hash_table *ht = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
+                                                      _mesa_key_pointer_equal);
+
       exec_list formal_parameters;
       foreach_in_list(const ir_instruction, original, &sig->parameters) {
-	 assert(const_cast<ir_instruction *>(original)->as_variable());
+         assert(const_cast<ir_instruction *>(original)->as_variable());
 
-	 ir_instruction *copy = original->clone(linked, ht);
-	 formal_parameters.push_tail(copy);
+         ir_instruction *copy = original->clone(linked, ht);
+         formal_parameters.push_tail(copy);
       }
 
       linked_sig->replace_parameters(&formal_parameters);
 
-      linked_sig->is_intrinsic = sig->is_intrinsic;
+      linked_sig->intrinsic_id = sig->intrinsic_id;
 
       if (sig->is_defined) {
          foreach_in_list(const ir_instruction, original, &sig->body) {
@@ -165,7 +172,7 @@ public:
          linked_sig->is_defined = true;
       }
 
-      hash_table_dtor(ht);
+      _mesa_hash_table_destroy(ht, NULL);
 
       /* Patch references inside the function to things outside the function
        * (i.e., function calls and global variables).
@@ -212,7 +219,7 @@ public:
 
    virtual ir_visitor_status visit(ir_dereference_variable *ir)
    {
-      if (hash_table_find(locals, ir->var) == NULL) {
+      if (_mesa_set_search(locals, ir->var) == NULL) {
 	 /* The non-function variable must be a global, so try to find the
 	  * variable in the shader's symbol table.  If the variable is not
 	  * found, then it's a global that *MUST* be defined in the original
@@ -292,12 +299,12 @@ private:
     * linked shader that are accessed by the function.  It is also used to add
     * global variables from the shader where the function originated.
     */
-   gl_shader *linked;
+   gl_linked_shader *linked;
 
    /**
     * Table of variables local to the function.
     */
-   hash_table *locals;
+   set *locals;
 };
 
 } /* anonymous namespace */
@@ -307,30 +314,16 @@ private:
  */
 ir_function_signature *
 find_matching_signature(const char *name, const exec_list *actual_parameters,
-			gl_shader **shader_list, unsigned num_shaders,
-			bool use_builtin)
+                        glsl_symbol_table *symbols)
 {
-   for (unsigned i = 0; i < num_shaders; i++) {
-      ir_function *const f = shader_list[i]->symbols->get_function(name);
+   ir_function *const f = symbols->get_function(name);
 
-      if (f == NULL)
-	 continue;
-
+   if (f) {
       ir_function_signature *sig =
-         f->matching_signature(NULL, actual_parameters, use_builtin);
+         f->matching_signature(NULL, actual_parameters, false);
 
-      if ((sig == NULL) ||
-          (!sig->is_defined && !sig->is_intrinsic))
-	 continue;
-
-      /* If this function expects to bind to a built-in function and the
-       * signature that we found isn't a built-in, keep looking.  Also keep
-       * looking if we expect a non-built-in but found a built-in.
-       */
-      if (use_builtin != sig->is_builtin())
-	    continue;
-
-      return sig;
+      if (sig && (sig->is_defined || sig->is_intrinsic()))
+         return sig;
    }
 
    return NULL;
@@ -338,7 +331,7 @@ find_matching_signature(const char *name, const exec_list *actual_parameters,
 
 
 bool
-link_function_calls(gl_shader_program *prog, gl_shader *main,
+link_function_calls(gl_shader_program *prog, gl_linked_shader *main,
 		    gl_shader **shader_list, unsigned num_shaders)
 {
    call_link_visitor v(prog, main, shader_list, num_shaders);

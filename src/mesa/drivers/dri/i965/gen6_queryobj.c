@@ -38,7 +38,6 @@
 #include "brw_state.h"
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
-#include "intel_reg.h"
 
 static inline void
 set_query_availability(struct brw_context *brw, struct brw_query_object *query,
@@ -99,7 +98,7 @@ write_xfb_primitives_written(struct brw_context *brw,
    }
 }
 
-static inline const int
+static inline int
 pipeline_target_to_index(int target)
 {
    if (target == GL_GEOMETRY_SHADER_INVOCATIONS)

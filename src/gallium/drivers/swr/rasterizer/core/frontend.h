@@ -30,21 +30,6 @@
 #include "context.h"
 #include <type_traits>
 
-INLINE
-__m128i fpToFixedPoint(const __m128 vIn)
-{
-    __m128 vFixed = _mm_mul_ps(vIn, _mm_set1_ps(FIXED_POINT_SCALE));
-    return _mm_cvtps_epi32(vFixed);
-}
-
-INLINE
-simdscalari fpToFixedPointVertical(const simdscalar vIn)
-{
-    simdscalar vFixed = _simd_mul_ps(vIn, _simd_set1_ps(FIXED_POINT_SCALE));
-    return _simd_cvtps_epi32(vFixed);
-}
-
-
 // Calculates the A and B coefficients for the 3 edges of the triangle
 // 
 // maths for edge equations:
@@ -217,14 +202,34 @@ void viewportTransform(__m128 &vX, __m128 &vY, __m128 &vZ, const SWR_VIEWPORT_MA
 
 template<uint32_t NumVerts>
 INLINE
-void viewportTransform(simdvector *v, const SWR_VIEWPORT_MATRIX & vpMatrix)
+void viewportTransform(simdvector *v, const SWR_VIEWPORT_MATRICES & vpMatrices)
 {
-    simdscalar m00 = _simd_load1_ps(&vpMatrix.m00);
-    simdscalar m30 = _simd_load1_ps(&vpMatrix.m30);
-    simdscalar m11 = _simd_load1_ps(&vpMatrix.m11);
-    simdscalar m31 = _simd_load1_ps(&vpMatrix.m31);
-    simdscalar m22 = _simd_load1_ps(&vpMatrix.m22);
-    simdscalar m32 = _simd_load1_ps(&vpMatrix.m32);
+    simdscalar m00 = _simd_load1_ps(&vpMatrices.m00[0]);
+    simdscalar m30 = _simd_load1_ps(&vpMatrices.m30[0]);
+    simdscalar m11 = _simd_load1_ps(&vpMatrices.m11[0]);
+    simdscalar m31 = _simd_load1_ps(&vpMatrices.m31[0]);
+    simdscalar m22 = _simd_load1_ps(&vpMatrices.m22[0]);
+    simdscalar m32 = _simd_load1_ps(&vpMatrices.m32[0]);
+
+    for (uint32_t i = 0; i < NumVerts; ++i)
+    {
+        v[i].x = _simd_fmadd_ps(v[i].x, m00, m30);
+        v[i].y = _simd_fmadd_ps(v[i].y, m11, m31);
+        v[i].z = _simd_fmadd_ps(v[i].z, m22, m32);
+    }
+}
+
+template<uint32_t NumVerts>
+INLINE
+void viewportTransform(simdvector *v, const SWR_VIEWPORT_MATRICES & vpMatrices, simdscalari vViewportIdx)
+{
+    // perform a gather of each matrix element based on the viewport array indexes
+    simdscalar m00 = _simd_i32gather_ps(&vpMatrices.m00[0], vViewportIdx, 4);
+    simdscalar m30 = _simd_i32gather_ps(&vpMatrices.m30[0], vViewportIdx, 4);
+    simdscalar m11 = _simd_i32gather_ps(&vpMatrices.m11[0], vViewportIdx, 4);
+    simdscalar m31 = _simd_i32gather_ps(&vpMatrices.m31[0], vViewportIdx, 4);
+    simdscalar m22 = _simd_i32gather_ps(&vpMatrices.m22[0], vViewportIdx, 4);
+    simdscalar m32 = _simd_i32gather_ps(&vpMatrices.m32[0], vViewportIdx, 4);
 
     for (uint32_t i = 0; i < NumVerts; ++i)
     {
@@ -235,7 +240,7 @@ void viewportTransform(simdvector *v, const SWR_VIEWPORT_MATRIX & vpMatrix)
 }
 
 INLINE
-void calcBoundingBoxInt(const __m128i &vX, const __m128i &vY, BBOX &bbox)
+void calcBoundingBoxInt(const __m128i &vX, const __m128i &vY, SWR_RECT &bbox)
 {
     // Need horizontal fp min here
     __m128i vX1 = _mm_shuffle_epi32(vX, _MM_SHUFFLE(3, 2, 0, 1));
@@ -257,43 +262,10 @@ void calcBoundingBoxInt(const __m128i &vX, const __m128i &vY, BBOX &bbox)
     __m128i vMaxY = _mm_max_epi32(vY, vY1);
             vMaxY = _mm_max_epi32(vMaxY, vY2);
 
-    bbox.left = _mm_extract_epi32(vMinX, 0);
-    bbox.right = _mm_extract_epi32(vMaxX, 0);
-    bbox.top = _mm_extract_epi32(vMinY, 0);
-    bbox.bottom = _mm_extract_epi32(vMaxY, 0);
-
-#if 0
-    Jacob:  A = _mm_shuffle_ps(X, Y, 0 0 0 0)
-B = _mm_shuffle_ps(Z, W, 0 0 0 0)
-A = _mm_shuffle_epi32(A, 3 0 3 0)
-A = _mm_shuffle_ps(A, B, 1 0 1 0)
-#endif
-
-}
-
-INLINE
-void calcBoundingBoxIntVertical(const simdscalari (&vX)[3], const simdscalari (&vY)[3], simdBBox &bbox)
-{
-    simdscalari vMinX = vX[0];
-    vMinX = _simd_min_epi32(vMinX, vX[1]);
-    vMinX = _simd_min_epi32(vMinX, vX[2]);
-
-    simdscalari vMaxX = vX[0];
-    vMaxX = _simd_max_epi32(vMaxX, vX[1]);
-    vMaxX = _simd_max_epi32(vMaxX, vX[2]);
-
-    simdscalari vMinY = vY[0];
-    vMinY = _simd_min_epi32(vMinY, vY[1]);
-    vMinY = _simd_min_epi32(vMinY, vY[2]);
-
-    simdscalari vMaxY = vY[0];
-    vMaxY = _simd_max_epi32(vMaxY, vY[1]);
-    vMaxY = _simd_max_epi32(vMaxY, vY[2]);
-
-    bbox.left = vMinX;
-    bbox.right = vMaxX;
-    bbox.top = vMinY;
-    bbox.bottom = vMaxY;
+    bbox.xmin = _mm_extract_epi32(vMinX, 0);
+    bbox.xmax = _mm_extract_epi32(vMaxX, 0);
+    bbox.ymin = _mm_extract_epi32(vMinY, 0);
+    bbox.ymax = _mm_extract_epi32(vMaxY, 0);
 }
 
 INLINE
@@ -332,10 +304,11 @@ void ProcessClear(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t workerId, v
 void ProcessStoreTiles(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t workerId, void *pUserData);
 void ProcessDiscardInvalidateTiles(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t workerId, void *pUserData);
 void ProcessSync(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t workerId, void *pUserData);
-void ProcessQueryStats(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t workerId, void *pUserData);
+void ProcessShutdown(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t workerId, void *pUserData);
+
+PFN_PROCESS_PRIMS GetBinTrianglesFunc(bool IsConservative);
 
 struct PA_STATE_BASE;  // forward decl
-void BinTriangles(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector tri[3], uint32_t primMask, simdscalari primID);
-void BinPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID);
-void BinLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID);
+void BinPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID, simdscalari viewportIdx);
+void BinLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID, simdscalari viewportIdx);
 

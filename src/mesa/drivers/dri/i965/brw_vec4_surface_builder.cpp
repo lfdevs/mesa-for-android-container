@@ -145,7 +145,7 @@ namespace brw {
             vec4_instruction *inst =
                bld.emit(op, dst, src_reg(payload), usurface, brw_imm_ud(arg));
             inst->mlen = sz;
-            inst->regs_written = ret_sz;
+            inst->size_written = ret_sz * REG_SIZE;
             inst->header_size = header_sz;
             inst->predicate = pred;
 

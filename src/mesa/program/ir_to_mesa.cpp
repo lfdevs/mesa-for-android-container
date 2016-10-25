@@ -46,12 +46,12 @@
 #include "compiler/glsl_types.h"
 #include "compiler/glsl/linker.h"
 #include "compiler/glsl/program.h"
-#include "program/hash_table.h"
 #include "program/prog_instruction.h"
 #include "program/prog_optimize.h"
 #include "program/prog_print.h"
 #include "program/program.h"
 #include "program/prog_parameter.h"
+#include "util/string_to_uint_map.h"
 
 
 static int swizzle_for_size(int size);
@@ -1375,6 +1375,9 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
    case ir_unop_dFdy_fine:
    case ir_unop_subroutine_to_int:
    case ir_unop_get_buffer_size:
+   case ir_unop_vote_any:
+   case ir_unop_vote_all:
+   case ir_unop_vote_eq:
       assert(!"not supported");
       break;
 
@@ -1972,7 +1975,7 @@ ir_to_mesa_visitor::visit(ir_texture *ir)
       ir->coordinate->accept(this);
 
    /* Put our coords in a temp.  We'll need to modify them for shadow,
-    * projection, or LOD, so the only case we'd use it as is is if
+    * projection, or LOD, so the only case we'd use it as-is is if
     * we're doing plain old texturing.  Mesa IR optimization should
     * handle cleaning up our mess in that case.
     */
@@ -2404,7 +2407,7 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
 
    if (type->is_vector() || type->is_scalar()) {
       size = type->vector_elements;
-      if (type->is_double())
+      if (type->is_64bit())
          size *= 2;
    } else {
       size = type_size(type) * 4;
@@ -2466,7 +2469,7 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
 void
 _mesa_generate_parameters_list_for_uniforms(struct gl_shader_program
 					    *shader_program,
-					    struct gl_shader *sh,
+					    struct gl_linked_shader *sh,
 					    struct gl_program_parameter_list
 					    *params)
 {
@@ -2776,7 +2779,7 @@ ir_to_mesa_visitor::copy_propagate(void)
 static struct gl_program *
 get_mesa_program(struct gl_context *ctx,
                  struct gl_shader_program *shader_program,
-		 struct gl_shader *shader)
+		 struct gl_linked_shader *shader)
 {
    ir_to_mesa_visitor v;
    struct prog_instruction *mesa_instructions, *mesa_inst;
@@ -2918,6 +2921,7 @@ get_mesa_program(struct gl_context *ctx,
 
    prog->SamplersUsed = shader->active_samplers;
    prog->ShadowSamplers = shader->shadow_samplers;
+   prog->ExternalSamplersUsed = gl_external_samplers(shader);
    _mesa_update_shader_textures_used(shader_program, prog);
 
    /* Set the gl_FragDepth layout. */
@@ -2993,8 +2997,7 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
 	 progress = lower_if_to_cond_assign(ir, options->MaxIfDepth) || progress;
 
-	 if (options->EmitNoNoise)
-	    progress = lower_noise(ir) || progress;
+         progress = lower_noise(ir) || progress;
 
 	 /* If there are forms of indirect addressing that the driver
 	  * cannot handle, perform the lowering pass.

@@ -5,7 +5,6 @@
 
 #include "brw_context.h"
 #include "intel_bufmgr.h"
-#include "intel_reg.h"
 
 #ifdef __cplusplus
 extern "C" {

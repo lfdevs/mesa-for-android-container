@@ -1052,7 +1052,8 @@ ilo_create_sampler_state(struct pipe_context *pipe,
 }
 
 static void
-ilo_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
+ilo_bind_sampler_states(struct pipe_context *pipe,
+                        enum pipe_shader_type shader,
                         unsigned start, unsigned count, void **samplers)
 {
    struct ilo_state_vector *vec = &ilo_context(pipe)->state_vector;
@@ -1536,7 +1537,7 @@ ilo_set_clip_state(struct pipe_context *pipe,
 static void
 ilo_set_constant_buffer(struct pipe_context *pipe,
                         uint shader, uint index,
-                        struct pipe_constant_buffer *buf)
+                        const struct pipe_constant_buffer *buf)
 {
    const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_state_vector *vec = &ilo_context(pipe)->state_vector;
@@ -1801,7 +1802,7 @@ ilo_set_viewport_states(struct pipe_context *pipe,
 }
 
 static void
-ilo_set_sampler_views(struct pipe_context *pipe, unsigned shader,
+ilo_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
                       unsigned start, unsigned count,
                       struct pipe_sampler_view **views)
 {
@@ -1845,13 +1846,16 @@ ilo_set_sampler_views(struct pipe_context *pipe, unsigned shader,
    case PIPE_SHADER_COMPUTE:
       vec->dirty |= ILO_DIRTY_VIEW_CS;
       break;
+   default:
+      assert(!"unexpected shader type");
+      break;
    }
 }
 
 static void
-ilo_set_shader_images(struct pipe_context *pipe, unsigned shader,
+ilo_set_shader_images(struct pipe_context *pipe, enum pipe_shader_type shader,
                       unsigned start, unsigned count,
-                      struct pipe_image_view *views)
+                      const struct pipe_image_view *views)
 {
 #if 0
    struct ilo_state_vector *vec = &ilo_context(pipe)->state_vector;
@@ -2015,9 +2019,8 @@ ilo_create_sampler_view(struct pipe_context *pipe,
 
       memset(&info, 0, sizeof(info));
       info.vma = ilo_resource_get_vma(res);
-      info.offset = templ->u.buf.first_element * info.struct_size;
-      info.size = (templ->u.buf.last_element -
-            templ->u.buf.first_element + 1) * info.struct_size;
+      info.offset = templ->u.buf.offset;
+      info.size = templ->u.buf.size;
       info.access = ILO_STATE_SURFACE_ACCESS_SAMPLER;
       info.format = ilo_format_translate_color(dev, templ->format);
       info.format_size = util_format_get_blocksize(templ->format);

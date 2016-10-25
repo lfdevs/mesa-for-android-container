@@ -22,9 +22,9 @@
  */
 
 #include "brw_context.h"
+#include "brw_defines.h"
 #include "intel_batchbuffer.h"
 #include "intel_fbo.h"
-#include "intel_reg.h"
 
 /**
  * According to the latest documentation, any PIPE_CONTROL with the
@@ -137,6 +137,17 @@ brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags)
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else if (brw->gen >= 6) {
+      if (brw->gen == 6 &&
+          (flags & PIPE_CONTROL_RENDER_TARGET_FLUSH)) {
+         /* Hardware workaround: SNB B-Spec says:
+          *
+          *   [Dev-SNB{W/A}]: Before a PIPE_CONTROL with Write Cache Flush
+          *   Enable = 1, a PIPE_CONTROL with any non-zero post-sync-op is
+          *   required.
+          */
+         brw_emit_post_sync_nonzero_flush(brw);
+      }
+
       flags |= gen7_cs_stall_every_four_pipe_controls(brw, flags);
 
       BEGIN_BATCH(5);
@@ -223,7 +234,7 @@ brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
 void
 brw_emit_depth_stall_flushes(struct brw_context *brw)
 {
-   assert(brw->gen >= 6 && brw->gen <= 9);
+   assert(brw->gen >= 6);
 
    /* Starting on BDW, these pipe controls are unnecessary.
     *
@@ -344,16 +355,6 @@ brw_emit_mi_flush(struct brw_context *brw)
                   PIPE_CONTROL_VF_CACHE_INVALIDATE |
                   PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
                   PIPE_CONTROL_CS_STALL;
-
-         if (brw->gen == 6) {
-            /* Hardware workaround: SNB B-Spec says:
-             *
-             * [Dev-SNB{W/A}]: Before a PIPE_CONTROL with Write Cache
-             * Flush Enable =1, a PIPE_CONTROL with any non-zero
-             * post-sync-op is required.
-             */
-            brw_emit_post_sync_nonzero_flush(brw);
-         }
       }
       brw_emit_pipe_control_flush(brw, flags);
    }
@@ -361,7 +362,7 @@ brw_emit_mi_flush(struct brw_context *brw)
 
 int
 brw_init_pipe_control(struct brw_context *brw,
-                      const struct brw_device_info *devinfo)
+                      const struct gen_device_info *devinfo)
 {
    if (devinfo->gen < 6)
       return 0;

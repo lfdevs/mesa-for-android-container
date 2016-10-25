@@ -40,7 +40,7 @@ gen9_calc_std_image_alignment_sa(const struct isl_device *dev,
 
    assert(isl_tiling_is_std_y(tiling));
 
-   const uint32_t bs = fmtl->bs;
+   const uint32_t bpb = fmtl->bpb;
    const uint32_t is_Ys = tiling == ISL_TILING_Ys;
 
    switch (info->dim) {
@@ -49,7 +49,7 @@ gen9_calc_std_image_alignment_sa(const struct isl_device *dev,
        * Layout and Tiling > 1D Surfaces > 1D Alignment Requirements.
        */
       *align_sa = (struct isl_extent3d) {
-         .w = 1 << (12 - (ffs(bs) - 1) + (4 * is_Ys)),
+         .w = 1 << (12 - (ffs(bpb) - 4) + (4 * is_Ys)),
          .h = 1,
          .d = 1,
       };
@@ -60,8 +60,8 @@ gen9_calc_std_image_alignment_sa(const struct isl_device *dev,
        * Requirements.
        */
       *align_sa = (struct isl_extent3d) {
-         .w = 1 << (6 - ((ffs(bs) - 1) / 2) + (4 * is_Ys)),
-         .h = 1 << (6 - ((ffs(bs) - 0) / 2) + (4 * is_Ys)),
+         .w = 1 << (6 - ((ffs(bpb) - 4) / 2) + (4 * is_Ys)),
+         .h = 1 << (6 - ((ffs(bpb) - 3) / 2) + (4 * is_Ys)),
          .d = 1,
       };
 
@@ -86,9 +86,9 @@ gen9_calc_std_image_alignment_sa(const struct isl_device *dev,
        * Layout and Tiling > 1D Surfaces > 1D Alignment Requirements.
        */
       *align_sa = (struct isl_extent3d) {
-         .w = 1 << (4 - ((ffs(bs) + 1) / 3) + (4 * is_Ys)),
-         .h = 1 << (4 - ((ffs(bs) - 1) / 3) + (2 * is_Ys)),
-         .d = 1 << (4 - ((ffs(bs) - 0) / 3) + (2 * is_Ys)),
+         .w = 1 << (4 - ((ffs(bpb) - 2) / 3) + (4 * is_Ys)),
+         .h = 1 << (4 - ((ffs(bpb) - 4) / 3) + (2 * is_Ys)),
+         .d = 1 << (4 - ((ffs(bpb) - 3) / 3) + (2 * is_Ys)),
       };
       return;
    }
@@ -97,12 +97,28 @@ gen9_calc_std_image_alignment_sa(const struct isl_device *dev,
 }
 
 void
-gen9_choose_image_alignment_el(const struct isl_device *dev,
-                               const struct isl_surf_init_info *restrict info,
-                               enum isl_tiling tiling,
-                               enum isl_msaa_layout msaa_layout,
-                               struct isl_extent3d *image_align_el)
+isl_gen9_choose_image_alignment_el(const struct isl_device *dev,
+                                   const struct isl_surf_init_info *restrict info,
+                                   enum isl_tiling tiling,
+                                   enum isl_dim_layout dim_layout,
+                                   enum isl_msaa_layout msaa_layout,
+                                   struct isl_extent3d *image_align_el)
 {
+   /* Handled by isl_choose_image_alignment_el */
+   assert(info->format != ISL_FORMAT_HIZ);
+
+   const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
+   if (fmtl->txc == ISL_TXC_CCS) {
+      /* Sky Lake PRM Vol. 7, "MCS Buffer for Render Target(s)" (p. 632):
+       *
+       *    "Mip-mapped and arrayed surfaces are supported with MCS buffer
+       *    layout with these alignments in the RT space: Horizontal
+       *    Alignment = 128 and Vertical Alignment = 64."
+       */
+      *image_align_el = isl_extent3d(128 / fmtl->bw, 64 / fmtl->bh, 1);
+      return;
+   }
+
    /* This BSpec text provides some insight into the hardware's alignment
     * requirements [Skylake BSpec > Memory Views > Common Surface Formats >
     * Surface Layout and Tiling > 2D Surfaces]:
@@ -158,7 +174,7 @@ gen9_choose_image_alignment_el(const struct isl_device *dev,
       return;
    }
 
-   if (info->dim == ISL_SURF_DIM_1D) {
+   if (dim_layout == ISL_DIM_LAYOUT_GEN9_1D) {
       /* See the Skylake BSpec > Memory Views > Common Surface Formats > Surface
        * Layout and Tiling > 1D Surfaces > 1D Alignment Requirements.
        */
@@ -180,6 +196,6 @@ gen9_choose_image_alignment_el(const struct isl_device *dev,
       return;
    }
 
-   gen8_choose_image_alignment_el(dev, info, tiling, msaa_layout,
-                                  image_align_el);
+   isl_gen8_choose_image_alignment_el(dev, info, tiling, dim_layout,
+                                      msaa_layout, image_align_el);
 }

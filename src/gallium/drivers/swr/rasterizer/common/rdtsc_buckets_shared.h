@@ -58,6 +58,7 @@ struct BUCKET_DESC
     uint32_t color;
 };
 
+
 struct BUCKET_THREAD
 {
     // name of thread, used in reports
@@ -77,6 +78,7 @@ struct BUCKET_THREAD
 
     // threadviz file object
     FILE* vizFile{ nullptr };
+
 
     BUCKET_THREAD() {}
     BUCKET_THREAD(const BUCKET_THREAD& that)

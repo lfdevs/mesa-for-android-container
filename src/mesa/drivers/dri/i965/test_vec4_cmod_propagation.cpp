@@ -36,7 +36,7 @@ class cmod_propagation_test : public ::testing::Test {
 
 public:
    struct brw_compiler *compiler;
-   struct brw_device_info *devinfo;
+   struct gen_device_info *devinfo;
    struct gl_context *ctx;
    struct gl_shader_program *shader_prog;
    struct brw_vue_prog_data *prog_data;
@@ -98,7 +98,7 @@ void cmod_propagation_test::SetUp()
 {
    ctx = (struct gl_context *)calloc(1, sizeof(*ctx));
    compiler = (struct brw_compiler *)calloc(1, sizeof(*compiler));
-   devinfo = (struct brw_device_info *)calloc(1, sizeof(*devinfo));
+   devinfo = (struct gen_device_info *)calloc(1, sizeof(*devinfo));
    prog_data = (struct brw_vue_prog_data *)calloc(1, sizeof(*prog_data));
    compiler->devinfo = devinfo;
 
@@ -370,7 +370,7 @@ TEST_F(cmod_propagation_test, intervening_dest_write)
    src_reg zero(brw_imm_f(0.0f));
    bld.ADD(offset(dest, 2), src0, src1);
    bld.emit(SHADER_OPCODE_TEX, dest, src2)
-      ->regs_written = 4;
+      ->size_written = 4 * REG_SIZE;
    bld.CMP(bld.null_reg_f(), offset(src_reg(dest), 2), zero, BRW_CONDITIONAL_GE);
 
    /* = Before =

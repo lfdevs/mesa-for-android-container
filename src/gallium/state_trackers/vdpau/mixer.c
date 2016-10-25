@@ -69,7 +69,7 @@ vlVdpVideoMixerCreate(VdpDevice device,
 
    vl_csc_get_matrix(VL_CSC_COLOR_STANDARD_BT_601, NULL, true, &vmixer->csc);
    if (!debug_get_bool_option("G3DVL_NO_CSC", FALSE))
-      vl_compositor_set_csc_matrix(&vmixer->cstate, (const vl_csc_matrix *)&vmixer->csc);
+      vl_compositor_set_csc_matrix(&vmixer->cstate, (const vl_csc_matrix *)&vmixer->csc, 1.0f, 0.0f);
 
    *mixer = vlAddDataHTAB(vmixer);
    if (*mixer == 0) {
@@ -82,7 +82,6 @@ vlVdpVideoMixerCreate(VdpDevice device,
       switch (features[i]) {
       /* they are valid, but we doesn't support them */
       case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL_SPATIAL:
-      case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L1:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L2:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L3:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L4:
@@ -92,7 +91,6 @@ vlVdpVideoMixerCreate(VdpDevice device,
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L8:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L9:
       case VDP_VIDEO_MIXER_FEATURE_INVERSE_TELECINE:
-      case VDP_VIDEO_MIXER_FEATURE_LUMA_KEY:
          break;
 
       case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL:
@@ -107,6 +105,13 @@ vlVdpVideoMixerCreate(VdpDevice device,
          vmixer->noise_reduction.supported = true;
          break;
 
+      case VDP_VIDEO_MIXER_FEATURE_LUMA_KEY:
+         vmixer->luma_key.supported = true;
+         break;
+
+      case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L1:
+         vmixer->bicubic.supported = true;
+         break;
       default: goto no_params;
       }
    }
@@ -148,8 +153,8 @@ vlVdpVideoMixerCreate(VdpDevice device,
                 vmixer->video_height, max_size);
       goto no_params;
    }
-   vmixer->luma_key_min = 0.f;
-   vmixer->luma_key_max = 1.f;
+   vmixer->luma_key.luma_min = 1.0f;
+   vmixer->luma_key.luma_max = 0.0f;
    pipe_mutex_unlock(dev->mutex);
 
    return VDP_STATUS_OK;
@@ -199,6 +204,11 @@ vlVdpVideoMixerDestroy(VdpVideoMixer mixer)
       vl_matrix_filter_cleanup(vmixer->sharpness.filter);
       FREE(vmixer->sharpness.filter);
    }
+
+   if (vmixer->bicubic.filter) {
+      vl_bicubic_filter_cleanup(vmixer->bicubic.filter);
+      FREE(vmixer->bicubic.filter);
+   }
    pipe_mutex_unlock(vmixer->device->mutex);
    DeviceReference(&vmixer->device, NULL);
 
@@ -227,9 +237,13 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
                                 VdpLayer const *layers)
 {
    enum vl_compositor_deinterlace deinterlace;
-   struct u_rect rect, clip, *prect;
+   struct u_rect rect, clip, *prect, dirty_area;
    unsigned i, layer = 0;
    struct pipe_video_buffer *video_buffer;
+   struct pipe_sampler_view *sampler_view, sv_templ;
+   struct pipe_surface *surface, surf_templ;
+   struct pipe_context *pipe;
+   struct pipe_resource res_tmpl, *res;
 
    vlVdpVideoMixer *vmixer;
    vlVdpSurface *surf;
@@ -322,7 +336,47 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
       prect = &rect;
    }
    vl_compositor_set_buffer_layer(&vmixer->cstate, compositor, layer, video_buffer, prect, NULL, deinterlace);
-   vl_compositor_set_layer_dst_area(&vmixer->cstate, layer++, RectToPipe(destination_video_rect, &rect));
+
+   if (vmixer->bicubic.filter || vmixer->sharpness.filter || vmixer->noise_reduction.filter) {
+      pipe = vmixer->device->context;
+      memset(&res_tmpl, 0, sizeof(res_tmpl));
+
+      res_tmpl.target = PIPE_TEXTURE_2D;
+      res_tmpl.format = dst->sampler_view->format;
+      res_tmpl.depth0 = 1;
+      res_tmpl.array_size = 1;
+      res_tmpl.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
+      res_tmpl.usage = PIPE_USAGE_DEFAULT;
+
+      if (!vmixer->bicubic.filter) {
+         res_tmpl.width0 = dst->surface->width;
+         res_tmpl.height0 = dst->surface->height;
+      } else {
+         res_tmpl.width0 = surf->templat.width;
+         res_tmpl.height0 = surf->templat.height;
+      }
+
+      res = pipe->screen->resource_create(pipe->screen, &res_tmpl);
+
+      vlVdpDefaultSamplerViewTemplate(&sv_templ, res);
+      sampler_view = pipe->create_sampler_view(pipe, res, &sv_templ);
+
+      memset(&surf_templ, 0, sizeof(surf_templ));
+      surf_templ.format = res->format;
+      surface = pipe->create_surface(pipe, res, &surf_templ);
+
+      vl_compositor_reset_dirty_area(&dirty_area);
+      pipe_resource_reference(&res, NULL);
+   } else {
+      surface = dst->surface;
+      sampler_view = dst->sampler_view;
+      dirty_area = dst->dirty_area;
+   }
+
+   if (!vmixer->bicubic.filter) {
+      vl_compositor_set_layer_dst_area(&vmixer->cstate, layer++, RectToPipe(destination_video_rect, &rect));
+      vl_compositor_set_dst_clip(&vmixer->cstate, RectToPipe(destination_rect, &clip));
+   }
 
    for (i = 0; i < layer_count; ++i) {
       vlVdpOutputSurface *src = vlGetDataHTAB(layers->source_surface);
@@ -340,22 +394,63 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
       ++layers;
    }
 
-   vl_compositor_set_dst_clip(&vmixer->cstate, RectToPipe(destination_rect, &clip));
-   if (!vmixer->noise_reduction.filter && !vmixer->sharpness.filter)
+   if (!vmixer->noise_reduction.filter && !vmixer->sharpness.filter && !vmixer->bicubic.filter)
       vlVdpSave4DelayedRendering(vmixer->device, destination_surface, &vmixer->cstate);
    else {
-      vl_compositor_render(&vmixer->cstate, compositor, dst->surface, &dst->dirty_area, true);
+      vl_compositor_render(&vmixer->cstate, compositor, surface, &dirty_area, true);
 
-      /* applying the noise reduction after scaling is actually not very
-         clever, but currently we should avoid to copy around the image
-         data once more. */
-      if (vmixer->noise_reduction.filter)
-         vl_median_filter_render(vmixer->noise_reduction.filter,
-                                 dst->sampler_view, dst->surface);
+      if (vmixer->noise_reduction.filter) {
+         if (!vmixer->sharpness.filter && !vmixer->bicubic.filter) {
+            vl_median_filter_render(vmixer->noise_reduction.filter,
+                                    sampler_view, dst->surface);
+         } else {
+            res = pipe->screen->resource_create(pipe->screen, &res_tmpl);
+            struct pipe_sampler_view *sampler_view_temp = pipe->create_sampler_view(pipe, res, &sv_templ);
+            struct pipe_surface *surface_temp = pipe->create_surface(pipe, res, &surf_templ);
+            pipe_resource_reference(&res, NULL);
 
-      if (vmixer->sharpness.filter)
-         vl_matrix_filter_render(vmixer->sharpness.filter,
-                                 dst->sampler_view, dst->surface);
+            vl_median_filter_render(vmixer->noise_reduction.filter,
+                                    sampler_view, surface_temp);
+
+            pipe_sampler_view_reference(&sampler_view, NULL);
+            pipe_surface_reference(&surface, NULL);
+
+            sampler_view = sampler_view_temp;
+            surface = surface_temp;
+         }
+      }
+
+      if (vmixer->sharpness.filter) {
+         if (!vmixer->bicubic.filter) {
+            vl_matrix_filter_render(vmixer->sharpness.filter,
+                                    sampler_view, dst->surface);
+         } else {
+            res = pipe->screen->resource_create(pipe->screen, &res_tmpl);
+            struct pipe_sampler_view *sampler_view_temp = pipe->create_sampler_view(pipe, res, &sv_templ);
+            struct pipe_surface *surface_temp = pipe->create_surface(pipe, res, &surf_templ);
+            pipe_resource_reference(&res, NULL);
+
+            vl_matrix_filter_render(vmixer->sharpness.filter,
+                                    sampler_view, surface_temp);
+
+            pipe_sampler_view_reference(&sampler_view, NULL);
+            pipe_surface_reference(&surface, NULL);
+
+            sampler_view = sampler_view_temp;
+            surface = surface_temp;
+         }
+      }
+
+      if (vmixer->bicubic.filter)
+         vl_bicubic_filter_render(vmixer->bicubic.filter,
+                                 sampler_view, dst->surface,
+                                 RectToPipe(destination_video_rect, &rect),
+                                 RectToPipe(destination_rect, &clip));
+
+      if(surface != dst->surface) {
+         pipe_sampler_view_reference(&sampler_view, NULL);
+         pipe_surface_reference(&surface, NULL);
+      }
    }
    pipe_mutex_unlock(vmixer->device->mutex);
 
@@ -458,6 +553,28 @@ vlVdpVideoMixerUpdateSharpnessFilter(vlVdpVideoMixer *vmixer)
 }
 
 /**
+ * Update the bicubic filter
+ */
+static void
+vlVdpVideoMixerUpdateBicubicFilter(vlVdpVideoMixer *vmixer)
+{
+   assert(vmixer);
+
+   /* if present remove the old filter first */
+   if (vmixer->bicubic.filter) {
+      vl_bicubic_filter_cleanup(vmixer->bicubic.filter);
+      FREE(vmixer->bicubic.filter);
+      vmixer->bicubic.filter = NULL;
+   }
+   /* and create a new filter as needed */
+   if (vmixer->bicubic.enabled) {
+      vmixer->bicubic.filter = MALLOC(sizeof(struct vl_bicubic_filter));
+      vl_bicubic_filter_init(vmixer->bicubic.filter, vmixer->device->context,
+                            vmixer->video_width, vmixer->video_height);
+   }
+}
+
+/**
  * Retrieve whether features were requested at creation time.
  */
 VdpStatus
@@ -480,7 +597,6 @@ vlVdpVideoMixerGetFeatureSupport(VdpVideoMixer mixer,
       switch (features[i]) {
       /* they are valid, but we doesn't support them */
       case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL_SPATIAL:
-      case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L1:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L2:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L3:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L4:
@@ -490,7 +606,6 @@ vlVdpVideoMixerGetFeatureSupport(VdpVideoMixer mixer,
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L8:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L9:
       case VDP_VIDEO_MIXER_FEATURE_INVERSE_TELECINE:
-      case VDP_VIDEO_MIXER_FEATURE_LUMA_KEY:
          feature_supports[i] = false;
          break;
 
@@ -504,6 +619,14 @@ vlVdpVideoMixerGetFeatureSupport(VdpVideoMixer mixer,
 
       case VDP_VIDEO_MIXER_FEATURE_NOISE_REDUCTION:
          feature_supports[i] = vmixer->noise_reduction.supported;
+         break;
+
+      case VDP_VIDEO_MIXER_FEATURE_LUMA_KEY:
+         feature_supports[i] = vmixer->luma_key.supported;
+         break;
+
+      case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L1:
+         feature_supports[i] = vmixer->bicubic.supported;
          break;
 
       default:
@@ -538,7 +661,6 @@ vlVdpVideoMixerSetFeatureEnables(VdpVideoMixer mixer,
       switch (features[i]) {
       /* they are valid, but we doesn't support them */
       case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL_SPATIAL:
-      case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L1:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L2:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L3:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L4:
@@ -548,7 +670,6 @@ vlVdpVideoMixerSetFeatureEnables(VdpVideoMixer mixer,
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L8:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L9:
       case VDP_VIDEO_MIXER_FEATURE_INVERSE_TELECINE:
-      case VDP_VIDEO_MIXER_FEATURE_LUMA_KEY:
          break;
 
       case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL:
@@ -564,6 +685,18 @@ vlVdpVideoMixerSetFeatureEnables(VdpVideoMixer mixer,
       case VDP_VIDEO_MIXER_FEATURE_NOISE_REDUCTION:
          vmixer->noise_reduction.enabled = feature_enables[i];
          vlVdpVideoMixerUpdateNoiseReductionFilter(vmixer);
+         break;
+
+      case VDP_VIDEO_MIXER_FEATURE_LUMA_KEY:
+         vmixer->luma_key.enabled = feature_enables[i];
+         if (!debug_get_bool_option("G3DVL_NO_CSC", FALSE))
+            vl_compositor_set_csc_matrix(&vmixer->cstate, (const vl_csc_matrix *)&vmixer->csc,
+                                         vmixer->luma_key.luma_min, vmixer->luma_key.luma_max);
+         break;
+
+      case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L1:
+         vmixer->bicubic.enabled = feature_enables[i];
+         vlVdpVideoMixerUpdateBicubicFilter(vmixer);
          break;
 
       default:
@@ -600,7 +733,6 @@ vlVdpVideoMixerGetFeatureEnables(VdpVideoMixer mixer,
       /* they are valid, but we doesn't support them */
       case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL:
       case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL_SPATIAL:
-      case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L1:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L2:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L3:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L4:
@@ -610,7 +742,6 @@ vlVdpVideoMixerGetFeatureEnables(VdpVideoMixer mixer,
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L8:
       case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L9:
       case VDP_VIDEO_MIXER_FEATURE_INVERSE_TELECINE:
-      case VDP_VIDEO_MIXER_FEATURE_LUMA_KEY:
          break;
 
       case VDP_VIDEO_MIXER_FEATURE_SHARPNESS:
@@ -619,6 +750,14 @@ vlVdpVideoMixerGetFeatureEnables(VdpVideoMixer mixer,
 
       case VDP_VIDEO_MIXER_FEATURE_NOISE_REDUCTION:
          feature_enables[i] = vmixer->noise_reduction.enabled;
+         break;
+
+      case VDP_VIDEO_MIXER_FEATURE_LUMA_KEY:
+         feature_enables[i] = vmixer->luma_key.enabled;
+         break;
+
+      case VDP_VIDEO_MIXER_FEATURE_HIGH_QUALITY_SCALING_L1:
+         feature_enables[i] = vmixer->bicubic.enabled;
          break;
 
       default:
@@ -671,13 +810,14 @@ vlVdpVideoMixerSetAttributeValues(VdpVideoMixer mixer,
          else
             memcpy(vmixer->csc, vdp_csc, sizeof(vl_csc_matrix));
          if (!debug_get_bool_option("G3DVL_NO_CSC", FALSE))
-            vl_compositor_set_csc_matrix(&vmixer->cstate, (const vl_csc_matrix *)&vmixer->csc);
+            vl_compositor_set_csc_matrix(&vmixer->cstate, (const vl_csc_matrix *)&vmixer->csc,
+                                         vmixer->luma_key.luma_min, vmixer->luma_key.luma_max);
          break;
 
       case VDP_VIDEO_MIXER_ATTRIBUTE_NOISE_REDUCTION_LEVEL:
 
          val = *(float*)attribute_values[i];
-         if (val < 0.f || val > 1.f) {
+         if (val < 0.0f || val > 1.0f) {
             ret = VDP_STATUS_INVALID_VALUE;
             goto fail;
          }
@@ -688,25 +828,32 @@ vlVdpVideoMixerSetAttributeValues(VdpVideoMixer mixer,
 
       case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MIN_LUMA:
          val = *(float*)attribute_values[i];
-         if (val < 0.f || val > 1.f) {
+         if (val < 0.0f || val > 1.0f) {
             ret = VDP_STATUS_INVALID_VALUE;
             goto fail;
          }
-         vmixer->luma_key_min = val;
+         vmixer->luma_key.luma_min = val;
+         if (!debug_get_bool_option("G3DVL_NO_CSC", FALSE))
+            vl_compositor_set_csc_matrix(&vmixer->cstate, (const vl_csc_matrix *)&vmixer->csc,
+                                         vmixer->luma_key.luma_min, vmixer->luma_key.luma_max);
          break;
+
       case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MAX_LUMA:
          val = *(float*)attribute_values[i];
-         if (val < 0.f || val > 1.f) {
+         if (val < 0.0f || val > 1.0f) {
             ret = VDP_STATUS_INVALID_VALUE;
             goto fail;
          }
-         vmixer->luma_key_max = val;
+         vmixer->luma_key.luma_max = val;
+         if (!debug_get_bool_option("G3DVL_NO_CSC", FALSE))
+            vl_compositor_set_csc_matrix(&vmixer->cstate, (const vl_csc_matrix *)&vmixer->csc,
+                                         vmixer->luma_key.luma_min, vmixer->luma_key.luma_max);
          break;
 
       case VDP_VIDEO_MIXER_ATTRIBUTE_SHARPNESS_LEVEL:
 
          val = *(float*)attribute_values[i];
-         if (val < -1.f || val > 1.f) {
+         if (val < -1.0f || val > 1.0f) {
             ret = VDP_STATUS_INVALID_VALUE;
             goto fail;
          }
@@ -814,10 +961,10 @@ vlVdpVideoMixerGetAttributeValues(VdpVideoMixer mixer,
          break;
 
       case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MIN_LUMA:
-         *(float*)attribute_values[i] = vmixer->luma_key_min;
+         *(float*)attribute_values[i] = vmixer->luma_key.luma_min;
          break;
       case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MAX_LUMA:
-         *(float*)attribute_values[i] = vmixer->luma_key_max;
+         *(float*)attribute_values[i] = vmixer->luma_key.luma_max;
          break;
       case VDP_VIDEO_MIXER_ATTRIBUTE_SHARPNESS_LEVEL:
          *(float*)attribute_values[i] = vmixer->sharpness.value;

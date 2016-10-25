@@ -307,6 +307,9 @@ nv50_program_create_strmout_state(const struct nv50_ir_prog_info *info,
       const unsigned r = pso->output[i].register_index;
       b = pso->output[i].output_buffer;
 
+      if (r >= info->numOutputs)
+         continue;
+
       for (c = 0; c < pso->output[i].num_components; ++c)
          so->map[base[b] + p + c] = info->out[r].slot[s + c];
    }
@@ -334,6 +337,8 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    info->io.auxCBSlot = 15;
    info->io.ucpBase = NV50_CB_AUX_UCP_OFFSET;
    info->io.genUserClip = prog->vp.clpd_nr;
+   if (prog->fp.alphatest)
+      info->io.alphaRefBase = NV50_CB_AUX_ALPHATEST_OFFSET;
 
    info->io.suInfoBase = NV50_CB_AUX_TEX_MS_OFFSET;
    info->io.sampleInfoBase = NV50_CB_AUX_SAMPLE_OFFSET;
@@ -488,7 +493,8 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
    if (prog->interps)
       nv50_ir_apply_fixups(prog->interps, prog->code,
                            prog->fp.force_persample_interp,
-                           false /* flatshade */);
+                           false /* flatshade */,
+                           prog->fp.alphatest - 1);
 
    nv50_sifc_linear_u8(&nv50->base, nv50->screen->code,
                        (prog_type << NV50_CODE_BO_SIZE_LOG2) + prog->code_base,

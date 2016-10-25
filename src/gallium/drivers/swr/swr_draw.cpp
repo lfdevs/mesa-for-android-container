@@ -162,6 +162,36 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    /* Set up frontend state
     * XXX setup provokingVertex & topologyProvokingVertex */
    SWR_FRONTEND_STATE feState = {0};
+   if (ctx->rasterizer->flatshade_first) {
+      feState.provokingVertex = {1, 0, 0};
+   } else {
+      feState.provokingVertex = {2, 1, 2};
+   }
+
+   switch (info->mode) {
+   case PIPE_PRIM_TRIANGLE_FAN:
+      feState.topologyProvokingVertex = feState.provokingVertex.triFan;
+      break;
+   case PIPE_PRIM_TRIANGLE_STRIP:
+   case PIPE_PRIM_TRIANGLES:
+      feState.topologyProvokingVertex = feState.provokingVertex.triStripList;
+      break;
+   case PIPE_PRIM_QUAD_STRIP:
+   case PIPE_PRIM_QUADS:
+      if (ctx->rasterizer->flatshade_first)
+         feState.topologyProvokingVertex = 0;
+      else
+         feState.topologyProvokingVertex = 3;
+      break;
+   case PIPE_PRIM_LINES:
+   case PIPE_PRIM_LINE_LOOP:
+   case PIPE_PRIM_LINE_STRIP:
+      feState.topologyProvokingVertex = feState.provokingVertex.lineStripList;
+      break;
+   default:
+      feState.topologyProvokingVertex = 0;
+   }
+
    feState.bEnableCutIndex = info->primitive_restart;
    SwrSetFrontendState(ctx->swrContext, &feState);
 
@@ -209,7 +239,7 @@ swr_finish(struct pipe_context *pipe)
    struct pipe_fence_handle *fence = nullptr;
 
    swr_flush(pipe, &fence, 0);
-   swr_fence_finish(pipe->screen, fence, 0);
+   swr_fence_finish(pipe->screen, NULL, fence, 0);
    swr_fence_reference(pipe->screen, &fence, NULL);
 }
 
@@ -228,37 +258,13 @@ swr_store_render_target(struct pipe_context *pipe,
 
    /* Only proceed if there's a valid surface to store to */
    if (renderTarget->pBaseAddress) {
-      /* Set viewport to full renderTarget width/height and disable scissor
-       * before StoreTiles */
-      boolean change_viewport =
-         (ctx->derived.vp.x != 0.0f || ctx->derived.vp.y != 0.0f
-          || ctx->derived.vp.width != renderTarget->width
-          || ctx->derived.vp.height != renderTarget->height);
-      if (change_viewport) {
-         SWR_VIEWPORT vp = {0};
-         vp.width = renderTarget->width;
-         vp.height = renderTarget->height;
-         SwrSetViewports(ctx->swrContext, 1, &vp, NULL);
-      }
-
-      boolean scissor_enable = ctx->derived.rastState.scissorEnable;
-      if (scissor_enable) {
-         ctx->derived.rastState.scissorEnable = FALSE;
-         SwrSetRastState(ctx->swrContext, &ctx->derived.rastState);
-      }
-
       swr_update_draw_context(ctx);
+      SWR_RECT full_rect =
+         {0, 0, (int32_t)renderTarget->width, (int32_t)renderTarget->height};
       SwrStoreTiles(ctx->swrContext,
-                    (enum SWR_RENDERTARGET_ATTACHMENT)attachment,
-                    post_tile_state);
-
-      /* Restore viewport and scissor enable */
-      if (change_viewport)
-         SwrSetViewports(ctx->swrContext, 1, &ctx->derived.vp, &ctx->derived.vpm);
-      if (scissor_enable) {
-         ctx->derived.rastState.scissorEnable = scissor_enable;
-         SwrSetRastState(ctx->swrContext, &ctx->derived.rastState);
-      }
+                    1 << attachment,
+                    post_tile_state,
+                    full_rect);
    }
 }
 

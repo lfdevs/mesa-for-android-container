@@ -277,6 +277,8 @@ svga_create_sampler_state(struct pipe_context *pipe,
             cso->mipfilter == SVGA3D_TEX_FILTER_NONE ? "SVGA3D_TEX_FILTER_NONE" : "SOMETHING");
 
    svga->hud.num_sampler_objects++;
+   SVGA_STATS_COUNT_INC(svga_screen(svga->pipe.screen)->sws,
+                        SVGA_STATS_COUNT_SAMPLER);
 
    return cso;
 }
@@ -284,7 +286,7 @@ svga_create_sampler_state(struct pipe_context *pipe,
 
 static void
 svga_bind_sampler_states(struct pipe_context *pipe,
-                         unsigned shader,
+                         enum pipe_shader_type shader,
                          unsigned start,
                          unsigned num,
                          void **samplers)
@@ -367,6 +369,8 @@ svga_create_sampler_view(struct pipe_context *pipe,
    sv->id = SVGA3D_INVALID_ID;
 
    svga->hud.num_samplerview_objects++;
+   SVGA_STATS_COUNT_INC(svga_screen(svga->pipe.screen)->sws,
+                        SVGA_STATS_COUNT_SAMPLERVIEW);
 
    return &sv->base;
 }
@@ -413,7 +417,7 @@ svga_sampler_view_destroy(struct pipe_context *pipe,
 
 static void
 svga_set_sampler_views(struct pipe_context *pipe,
-                       unsigned shader,
+                       enum pipe_shader_type shader,
                        unsigned start,
                        unsigned num,
                        struct pipe_sampler_view **views)
@@ -432,6 +436,8 @@ svga_set_sampler_views(struct pipe_context *pipe,
    /* Pre-VGPU10 only supports FS textures */
    if (!svga_have_vgpu10(svga) && shader != PIPE_SHADER_FRAGMENT)
       return;
+
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_SETSAMPLERVIEWS);
 
    /* This bit of code works around a quirk in the CSO module.
     * If start=num=0 it means all sampler views should be released.
@@ -475,7 +481,7 @@ svga_set_sampler_views(struct pipe_context *pipe,
    }
 
    if (!any_change) {
-      return;
+      goto done;
    }
 
    /* find highest non-null sampler_views[] entry */
@@ -505,30 +511,46 @@ svga_set_sampler_views(struct pipe_context *pipe,
    }
 
    /* Check if any of the sampler view resources collide with the framebuffer
-    * color buffers or depth stencil resource. If so, enable the NEW_FRAME_BUFFER
+    * color buffers or depth stencil resource. If so, set the NEW_FRAME_BUFFER
     * dirty bit so that emit_framebuffer can be invoked to create backed view
     * for the conflicted surface view.
     */
-   for (i = 0; i < svga->curr.framebuffer.nr_cbufs; i++) {
-      if (svga->curr.framebuffer.cbufs[i]) {
-         struct svga_surface *s = svga_surface(svga->curr.framebuffer.cbufs[i]);
-         if (svga_check_sampler_view_resource_collision(svga, s->handle, shader)) {
-            svga->dirty |= SVGA_NEW_FRAME_BUFFER;
-            break;
-         }
-      }
+   if (svga_check_sampler_framebuffer_resource_collision(svga, shader)) {
+      svga->dirty |= SVGA_NEW_FRAME_BUFFER;
    }
 
-   if (svga->curr.framebuffer.zsbuf) {
-      struct svga_surface *s = svga_surface(svga->curr.framebuffer.zsbuf);
-      if (s) {
-         if (svga_check_sampler_view_resource_collision(svga, s->handle, shader)) {
-            svga->dirty |= SVGA_NEW_FRAME_BUFFER;
-         }
-      }
-   }
+done:
+   SVGA_STATS_TIME_POP(svga_sws(svga));
 }
 
+/**
+ * Clean up sampler, sampler view state at context destruction time
+ */
+void
+svga_cleanup_sampler_state(struct svga_context *svga)
+{
+   enum pipe_shader_type shader;
+
+   for (shader = 0; shader <= PIPE_SHADER_GEOMETRY; shader++) {
+      unsigned i;
+
+      for (i = 0; i < svga->state.hw_draw.num_sampler_views[shader]; i++) {
+         pipe_sampler_view_release(&svga->pipe,
+                                   &svga->state.hw_draw.sampler_views[shader][i]);
+      }
+   }
+   
+   /* free polygon stipple state */
+   if (svga->polygon_stipple.sampler) {
+      svga->pipe.delete_sampler_state(&svga->pipe, svga->polygon_stipple.sampler);
+   }
+
+   if (svga->polygon_stipple.sampler_view) {
+      svga->pipe.sampler_view_destroy(&svga->pipe,
+                                      &svga->polygon_stipple.sampler_view->base);
+   }
+   pipe_resource_reference(&svga->polygon_stipple.texture, NULL);
+}
 
 void
 svga_init_sampler_functions( struct svga_context *svga )

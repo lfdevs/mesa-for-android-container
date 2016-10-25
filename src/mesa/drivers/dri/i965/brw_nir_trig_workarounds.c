@@ -15,12 +15,15 @@ struct transform {
 #endif
 
    
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_variable search1_0 = {
    { nir_search_value_variable, 0 },
    0, /* x */
    false,
    nir_type_invalid,
+   NULL,
 };
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_expression search1 = {
    { nir_search_value_expression, 0 },
    false,
@@ -28,12 +31,15 @@ static const nir_search_expression search1 = {
    { &search1_0.value },
 };
    
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_variable replace1_0_0 = {
    { nir_search_value_variable, 0 },
    0, /* x */
    false,
    nir_type_invalid,
+   NULL,
 };
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_expression replace1_0 = {
    { nir_search_value_expression, 0 },
    false,
@@ -41,10 +47,12 @@ static const nir_search_expression replace1_0 = {
    { &replace1_0_0.value },
 };
 
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_constant replace1_1 = {
    { nir_search_value_constant, 0 },
    nir_type_float, { 0x3fefffc115df6556 /* 0.99997 */ },
 };
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_expression replace1 = {
    { nir_search_value_expression, 0 },
    false,
@@ -56,12 +64,15 @@ static const struct transform brw_nir_apply_trig_workarounds_fcos_xforms[] = {
    { &search1, &replace1.value, 0 },
 };
    
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_variable search0_0 = {
    { nir_search_value_variable, 0 },
    0, /* x */
    false,
    nir_type_invalid,
+   NULL,
 };
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_expression search0 = {
    { nir_search_value_expression, 0 },
    false,
@@ -69,12 +80,15 @@ static const nir_search_expression search0 = {
    { &search0_0.value },
 };
    
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_variable replace0_0_0 = {
    { nir_search_value_variable, 0 },
    0, /* x */
    false,
    nir_type_invalid,
+   NULL,
 };
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_expression replace0_0 = {
    { nir_search_value_expression, 0 },
    false,
@@ -82,10 +96,12 @@ static const nir_search_expression replace0_0 = {
    { &replace0_0_0.value },
 };
 
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_constant replace0_1 = {
    { nir_search_value_constant, 0 },
    nir_type_float, { 0x3fefffc115df6556 /* 0.99997 */ },
 };
+#include "compiler/nir/nir_search_helpers.h"
 static const nir_search_expression replace0 = {
    { nir_search_value_expression, 0 },
    false,

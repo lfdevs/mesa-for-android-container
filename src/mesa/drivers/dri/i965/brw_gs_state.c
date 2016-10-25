@@ -83,7 +83,8 @@ brw_upload_gs_unit(struct brw_context *brw)
    if (unlikely(INTEL_DEBUG & DEBUG_STATS))
       gs->thread4.stats_enable = 1;
 
-   gs->gs6.max_vp_index = brw->ctx.Const.MaxViewports - 1;
+   /* BRW_NEW_VIEWPORT_COUNT */
+   gs->gs6.max_vp_index = brw->clip.viewport_count - 1;
 
    brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 }
@@ -96,7 +97,8 @@ const struct brw_tracked_state brw_gs_unit = {
                BRW_NEW_CURBE_OFFSETS |
                BRW_NEW_FF_GS_PROG_DATA |
                BRW_NEW_PROGRAM_CACHE |
-               BRW_NEW_URB_FENCE,
+               BRW_NEW_URB_FENCE |
+               BRW_NEW_VIEWPORT_COUNT,
    },
    .emit = brw_upload_gs_unit,
 };

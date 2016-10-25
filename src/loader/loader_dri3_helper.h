@@ -103,6 +103,7 @@ struct loader_dri3_vtable {
    void (*set_drawable_size)(struct loader_dri3_drawable *, int, int);
    bool (*in_current_context)(struct loader_dri3_drawable *);
    __DRIcontext *(*get_dri_context)(struct loader_dri3_drawable *);
+   __DRIscreen *(*get_dri_screen)(struct loader_dri3_drawable *);
    void (*flush_drawable)(struct loader_dri3_drawable *, unsigned);
    void (*show_fps)(struct loader_dri3_drawable *, uint64_t);
 };
@@ -158,7 +159,7 @@ struct loader_dri3_drawable {
    bool first_init;
 
    struct loader_dri3_extensions *ext;
-   struct loader_dri3_vtable *vtable;
+   const struct loader_dri3_vtable *vtable;
 };
 
 void
@@ -175,7 +176,7 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
                           bool is_different_gpu,
                           const __DRIconfig *dri_config,
                           struct loader_dri3_extensions *ext,
-                          struct loader_dri3_vtable *vtable,
+                          const struct loader_dri3_vtable *vtable,
                           struct loader_dri3_drawable*);
 
 bool loader_dri3_wait_for_msc(struct loader_dri3_drawable *draw,

@@ -44,4 +44,4 @@ static const struct drm_conf_ret *drm_configuration(enum drm_conf conf)
    return NULL;
 }
 PUBLIC
-DRM_DRIVER_DESCRIPTOR("i965", "i915", create_screen, drm_configuration)
+DRM_DRIVER_DESCRIPTOR("i965", create_screen, drm_configuration)

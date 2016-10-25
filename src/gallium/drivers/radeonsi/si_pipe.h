@@ -26,9 +26,7 @@
 #ifndef SI_PIPE_H
 #define SI_PIPE_H
 
-#include "si_state.h"
-
-#include <llvm-c/TargetMachine.h>
+#include "si_shader.h"
 
 #ifdef PIPE_ARCH_BIG_ENDIAN
 #define SI_BIG_ENDIAN 1
@@ -52,17 +50,20 @@
 #define SI_CONTEXT_INV_VMEM_L1		(R600_CONTEXT_PRIVATE_FLAG << 2)
 /* Used by everything except CB/DB, can be bypassed (SLC=1). Other names: TC L2 */
 #define SI_CONTEXT_INV_GLOBAL_L2	(R600_CONTEXT_PRIVATE_FLAG << 3)
+/* Write dirty L2 lines back to memory (shader and CP DMA stores), but don't
+ * invalidate L2. SI-CIK can't do it, so they will do complete invalidation. */
+#define SI_CONTEXT_WRITEBACK_GLOBAL_L2	(R600_CONTEXT_PRIVATE_FLAG << 4)
 /* Framebuffer caches. */
-#define SI_CONTEXT_FLUSH_AND_INV_CB_META (R600_CONTEXT_PRIVATE_FLAG << 4)
-#define SI_CONTEXT_FLUSH_AND_INV_DB_META (R600_CONTEXT_PRIVATE_FLAG << 5)
-#define SI_CONTEXT_FLUSH_AND_INV_DB	(R600_CONTEXT_PRIVATE_FLAG << 6)
-#define SI_CONTEXT_FLUSH_AND_INV_CB	(R600_CONTEXT_PRIVATE_FLAG << 7)
+#define SI_CONTEXT_FLUSH_AND_INV_CB_META (R600_CONTEXT_PRIVATE_FLAG << 5)
+#define SI_CONTEXT_FLUSH_AND_INV_DB_META (R600_CONTEXT_PRIVATE_FLAG << 6)
+#define SI_CONTEXT_FLUSH_AND_INV_DB	(R600_CONTEXT_PRIVATE_FLAG << 7)
+#define SI_CONTEXT_FLUSH_AND_INV_CB	(R600_CONTEXT_PRIVATE_FLAG << 8)
 /* Engine synchronization. */
-#define SI_CONTEXT_VS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 8)
-#define SI_CONTEXT_PS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 9)
-#define SI_CONTEXT_CS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 10)
-#define SI_CONTEXT_VGT_FLUSH		(R600_CONTEXT_PRIVATE_FLAG << 11)
-#define SI_CONTEXT_VGT_STREAMOUT_SYNC	(R600_CONTEXT_PRIVATE_FLAG << 12)
+#define SI_CONTEXT_VS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 9)
+#define SI_CONTEXT_PS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 10)
+#define SI_CONTEXT_CS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 11)
+#define SI_CONTEXT_VGT_FLUSH		(R600_CONTEXT_PRIVATE_FLAG << 12)
+#define SI_CONTEXT_VGT_STREAMOUT_SYNC	(R600_CONTEXT_PRIVATE_FLAG << 13)
 
 #define SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER (SI_CONTEXT_FLUSH_AND_INV_CB | \
 					      SI_CONTEXT_FLUSH_AND_INV_CB_META | \
@@ -82,9 +83,14 @@ struct u_suballocator;
 struct si_screen {
 	struct r600_common_screen	b;
 	unsigned			gs_table_depth;
+	unsigned			tess_offchip_block_dw_size;
+	bool				has_distributed_tess;
+	bool				has_draw_indirect_multi;
+	bool				has_ds_bpermute;
 
 	/* Whether shaders are monolithic (1-part) or separate (3-part). */
 	bool				use_monolithic_shaders;
+	bool				record_llvm_ir;
 
 	pipe_mutex			shader_parts_mutex;
 	struct si_shader_part		*vs_prologs;
@@ -107,6 +113,10 @@ struct si_screen {
 	 */
 	pipe_mutex			shader_cache_mutex;
 	struct hash_table		*shader_cache;
+
+	/* Shader compiler queue for multithreaded compilation. */
+	struct util_queue		shader_compiler_queue;
+	LLVMTargetMachineRef		tm[4]; /* used by the queue only */
 };
 
 struct si_blend_color {
@@ -116,11 +126,13 @@ struct si_blend_color {
 
 struct si_sampler_view {
 	struct pipe_sampler_view	base;
-	struct list_head		list;
         /* [0..7] = image descriptor
          * [4..7] = buffer descriptor */
 	uint32_t			state[8];
 	uint32_t			fmask_state[8];
+	const struct radeon_surf_level	*base_level_info;
+	unsigned			base_level;
+	unsigned			block_width;
 	bool is_stencil_sampler;
 };
 
@@ -133,6 +145,7 @@ struct si_cs_shader_state {
 	struct si_compute		*emitted_program;
 	unsigned			offset;
 	bool				initialized;
+	bool				uses_scratch;
 };
 
 struct si_textures_info {
@@ -142,9 +155,9 @@ struct si_textures_info {
 };
 
 struct si_images_info {
-	struct si_descriptors		desc;
 	struct pipe_image_view		views[SI_NUM_IMAGES];
 	uint32_t			compressed_colortex_mask;
+	unsigned			enabled_mask;
 };
 
 struct si_framebuffer {
@@ -152,7 +165,6 @@ struct si_framebuffer {
 	struct pipe_framebuffer_state	state;
 	unsigned			nr_samples;
 	unsigned			log_samples;
-	unsigned			cb0_is_integer;
 	unsigned			compressed_cb_mask;
 	unsigned			spi_shader_col_format;
 	unsigned			spi_shader_col_format_alpha;
@@ -161,6 +173,7 @@ struct si_framebuffer {
 	unsigned			color_is_int8; /* bitmask */
 	unsigned			dirty_cbufs;
 	bool				dirty_zsbuf;
+	bool				any_dst_linear;
 };
 
 struct si_clip_state {
@@ -202,10 +215,10 @@ struct si_context {
 	bool				ce_need_synchronization;
 	struct u_suballocator		*ce_suballocator;
 
-	struct pipe_fence_handle	*last_gfx_fence;
 	struct si_shader_ctx_state	fixed_func_tcs_shader;
-	LLVMTargetMachineRef		tm;
+	LLVMTargetMachineRef		tm; /* only non-threaded compilation */
 	bool				gfx_flush_in_progress;
+	bool				compute_is_busy;
 
 	/* Atoms (direct states). */
 	union si_state_atoms		atoms;
@@ -215,7 +228,6 @@ struct si_context {
 	union si_state			emitted;
 
 	/* Atom declarations. */
-	struct r600_atom		cache_flush;
 	struct si_framebuffer		framebuffer;
 	struct si_sample_locs		msaa_sample_locs;
 	struct r600_atom		db_render_state;
@@ -247,9 +259,12 @@ struct si_context {
 	struct si_vertex_element	*vertex_elements;
 	unsigned			sprite_coord_enable;
 	bool				flatshade;
+	bool				do_update_shaders;
 
 	/* shader descriptors */
 	struct si_descriptors		vertex_buffers;
+	struct si_descriptors		descriptors[SI_NUM_DESCS];
+	unsigned			descriptors_dirty;
 	struct si_buffer_resources	rw_buffers;
 	struct si_buffer_resources	const_buffers[SI_NUM_SHADERS];
 	struct si_buffer_resources	shader_buffers[SI_NUM_SHADERS];
@@ -290,15 +305,16 @@ struct si_context {
 	bool			occlusion_queries_disabled;
 
 	/* Emitted draw state. */
+	int			last_index_size;
 	int			last_base_vertex;
 	int			last_start_instance;
+	int			last_drawid;
 	int			last_sh_base_reg;
 	int			last_primitive_restart_en;
 	int			last_restart_index;
 	int			last_gs_out_prim;
 	int			last_prim;
 	int			last_multi_vgt_param;
-	int			last_ls_hs_config;
 	int			last_rast_prim;
 	unsigned		last_sc_line_stipple;
 	int			last_vtx_reuse_depth;
@@ -307,7 +323,7 @@ struct si_context {
 
 	/* Scratch buffer */
 	struct r600_resource	*scratch_buffer;
-	boolean                 emit_scratch_reloc;
+	bool			emit_scratch_reloc;
 	unsigned		scratch_waves;
 	unsigned		spi_tmpring_size;
 
@@ -321,14 +337,15 @@ struct si_context {
 
 	/* Debug state. */
 	bool			is_debug;
-	uint32_t		*last_ib;
-	unsigned		last_ib_dw_size;
+	struct radeon_saved_cs	last_gfx;
 	struct r600_resource	*last_trace_buf;
 	struct r600_resource	*trace_buf;
 	unsigned		trace_id;
 	uint64_t		dmesg_timestamp;
-	unsigned		last_bo_count;
-	struct radeon_bo_list_item *last_bo_list;
+	unsigned		apitrace_call_number;
+
+	/* Other state */
+	bool need_check_render_feedback;
 };
 
 /* cik_sdma.c */
@@ -354,7 +371,8 @@ void si_init_cp_dma_functions(struct si_context *sctx);
 
 /* si_debug.c */
 void si_init_debug_functions(struct si_context *sctx);
-void si_check_vm_faults(struct si_context *sctx);
+void si_check_vm_faults(struct r600_common_context *ctx,
+			struct radeon_saved_cs *saved, enum ring_type ring);
 bool si_replace_shader(unsigned num, struct radeon_shader_binary *binary);
 
 /* si_dma.c */
@@ -396,8 +414,6 @@ static inline void
 si_invalidate_draw_sh_constants(struct si_context *sctx)
 {
 	sctx->last_base_vertex = SI_BASE_VERTEX_UNKNOWN;
-	sctx->last_start_instance = -1; /* reset to an unknown value */
-	sctx->last_sh_base_reg = -1; /* reset to an unknown value */
 }
 
 static inline void
@@ -426,6 +442,38 @@ si_mark_atom_dirty(struct si_context *sctx,
 		   struct r600_atom *atom)
 {
 	si_set_atom_dirty(sctx, atom, true);
+}
+
+static inline struct tgsi_shader_info *si_get_vs_info(struct si_context *sctx)
+{
+	if (sctx->gs_shader.cso)
+		return &sctx->gs_shader.cso->info;
+	else if (sctx->tes_shader.cso)
+		return &sctx->tes_shader.cso->info;
+	else if (sctx->vs_shader.cso)
+		return &sctx->vs_shader.cso->info;
+	else
+		return NULL;
+}
+
+static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
+{
+	if (sctx->gs_shader.current)
+		return sctx->gs_shader.current->gs_copy_shader;
+	else if (sctx->tes_shader.current)
+		return sctx->tes_shader.current;
+	else
+		return sctx->vs_shader.current;
+}
+
+static inline bool si_vs_exports_prim_id(struct si_shader *shader)
+{
+	if (shader->selector->type == PIPE_SHADER_VERTEX)
+		return shader->key.vs.epilog.export_prim_id;
+	else if (shader->selector->type == PIPE_SHADER_TESS_EVAL)
+		return shader->key.tes.epilog.export_prim_id;
+	else
+		return false;
 }
 
 #endif

@@ -153,6 +153,12 @@ i915_drm_buffer_get_handle(struct i915_winsys *iws,
       whandle->handle = buf->flink;
    } else if (whandle->type == DRM_API_HANDLE_TYPE_KMS) {
       whandle->handle = buf->bo->handle;
+   } else if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
+      int fd;
+
+      if (drm_intel_bo_gem_export_to_prime(buf->bo, &fd))
+         return FALSE;
+      whandle->handle = fd;
    } else {
       assert(!"unknown usage");
       return FALSE;

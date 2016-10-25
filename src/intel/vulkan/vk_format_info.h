@@ -21,7 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef VK_FORMAT_INFO_H
+#define VK_FORMAT_INFO_H
 
 #include <stdbool.h>
 #include <vulkan/vulkan.h>
@@ -63,3 +64,5 @@ vk_format_is_depth_or_stencil(VkFormat format)
    const VkImageAspectFlags aspects = vk_format_aspects(format);
    return aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 }
+
+#endif /* VK_FORMAT_INFO_H */

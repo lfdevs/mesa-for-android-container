@@ -89,7 +89,6 @@ configuration_query(enum drm_conf conf)
 
 static const struct drm_driver_descriptor driver_descriptors[] = {
     {
-        .name = "i915",
         .driver_name = "i915",
         .create_screen = pipe_i915_create_screen,
         .configuration = configuration_query,
@@ -100,68 +99,57 @@ static const struct drm_driver_descriptor driver_descriptors[] = {
      * it.
      */
     {
-        .name = "i965",
-        .driver_name = "vc4",
+        .driver_name = "i965",
         .create_screen = pipe_vc4_create_screen,
         .configuration = configuration_query,
     },
 #endif
     {
-        .name = "i965",
-        .driver_name = "i915",
+        .driver_name = "i965",
         .create_screen = pipe_ilo_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "nouveau",
         .driver_name = "nouveau",
         .create_screen = pipe_nouveau_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "r300",
-        .driver_name = "radeon",
+        .driver_name = "r300",
         .create_screen = pipe_r300_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "r600",
-        .driver_name = "radeon",
+        .driver_name = "r600",
         .create_screen = pipe_r600_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "radeonsi",
-        .driver_name = "radeon",
+        .driver_name = "radeonsi",
         .create_screen = pipe_radeonsi_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "vmwgfx",
         .driver_name = "vmwgfx",
         .create_screen = pipe_vmwgfx_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "kgsl",
-        .driver_name = "freedreno",
+        .driver_name = "kgsl",
         .create_screen = pipe_freedreno_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "msm",
-        .driver_name = "freedreno",
+        .driver_name = "msm",
         .create_screen = pipe_freedreno_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "virtio_gpu",
-        .driver_name = "virtio-gpu",
+        .driver_name = "virtio_gpu",
         .create_screen = pipe_virgl_create_screen,
         .configuration = configuration_query,
     },
     {
-        .name = "vc4",
         .driver_name = "vc4",
         .create_screen = pipe_vc4_create_screen,
         .configuration = configuration_query,
@@ -188,13 +176,13 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
    ddev->base.ops = &pipe_loader_drm_ops;
    ddev->fd = fd;
 
-   ddev->base.driver_name = loader_get_driver_for_fd(fd, _LOADER_GALLIUM);
+   ddev->base.driver_name = loader_get_driver_for_fd(fd);
    if (!ddev->base.driver_name)
       goto fail;
 
 #ifdef GALLIUM_STATIC_TARGETS
    for (int i = 0; i < ARRAY_SIZE(driver_descriptors); i++) {
-      if (strcmp(driver_descriptors[i].name, ddev->base.driver_name) == 0) {
+      if (strcmp(driver_descriptors[i].driver_name, ddev->base.driver_name) == 0) {
          ddev->dd = &driver_descriptors[i];
          break;
       }
@@ -209,8 +197,8 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
    ddev->dd = (const struct drm_driver_descriptor *)
       util_dl_get_proc_address(ddev->lib, "driver_descriptor");
 
-   /* sanity check on the name */
-   if (!ddev->dd || strcmp(ddev->dd->name, ddev->base.driver_name) != 0)
+   /* sanity check on the driver name */
+   if (!ddev->dd || strcmp(ddev->dd->driver_name, ddev->base.driver_name) != 0)
       goto fail;
 #endif
 

@@ -669,6 +669,7 @@ submit_op4(struct svga_shader_emitter *emit,
     * in one slot at least:
     */
    assert(type1 == SVGA3DREG_SAMPLER);
+   (void) type1;
 
    if (type0 == SVGA3DREG_CONST &&
        ((type3 == SVGA3DREG_CONST && src0.base.num != src3.base.num) ||

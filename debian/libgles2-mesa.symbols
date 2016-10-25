@@ -18,11 +18,16 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glBindTransformFeedback@Base 9.1~
  glBindVertexArray@Base 9.1~
  glBindVertexBuffer@Base 10.7.0~
+ glBlendBarrier@Base 13.0.0~
  glBlendColor@Base 7.8.1
  glBlendEquation@Base 7.8.1
  glBlendEquationSeparate@Base 7.8.1
+ glBlendEquationSeparatei@Base 13.0.0~
+ glBlendEquationi@Base 13.0.0~
  glBlendFunc@Base 7.8.1
  glBlendFuncSeparate@Base 7.8.1
+ glBlendFuncSeparatei@Base 13.0.0~
+ glBlendFunci@Base 13.0.0~
  glBlitFramebuffer@Base 9.1~
  glBufferData@Base 7.8.1
  glBufferSubData@Base 7.8.1
@@ -130,6 +135,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGetFragDataLocation@Base 9.1~
  glGetFramebufferAttachmentParameteriv@Base 7.8.1
  glGetFramebufferParameteriv@Base 12.0.1
+ glGetGraphicsResetStatus@Base 13.0.0~
  glGetInteger64i_v@Base 9.1~
  glGetInteger64v@Base 9.1~
  glGetIntegeri_v@Base 9.1~
@@ -138,6 +144,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGetMultisamplefv@Base 10.7.0~
  glGetObjectLabel@Base 12.0.0~
  glGetObjectPtrLabel@Base 12.0.0~
+ glGetPointerv@Base 13.0.0~
  glGetProgramBinary@Base 9.1~
  glGetProgramInfoLog@Base 7.8.1
  glGetProgramInterfaceiv@Base 12.0.1
@@ -182,6 +189,9 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGetVertexAttribPointerv@Base 7.8.1
  glGetVertexAttribfv@Base 7.8.1
  glGetVertexAttribiv@Base 7.8.1
+ glGetnUniformfv@Base 13.0.0~
+ glGetnUniformiv@Base 13.0.0~
+ glGetnUniformuiv@Base 13.0.0~
  glHint@Base 7.8.1
  glInvalidateFramebuffer@Base 9.1~
  glInvalidateSubFramebuffer@Base 9.1~
@@ -209,10 +219,12 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glMultiDrawElementsEXT@Base 7.8.1
  glObjectLabel@Base 12.0.0~
  glObjectPtrLabel@Base 12.0.0~
+ glPatchParameteri@Base 13.0.0~
  glPauseTransformFeedback@Base 9.1~
  glPixelStorei@Base 7.8.1
  glPolygonOffset@Base 7.8.1
  glPopDebugGroup@Base 12.0.0~
+ glPrimitiveBoundingBox@Base 13.0.0~
  glProgramBinary@Base 9.1~
  glProgramParameteri@Base 9.1~
  glProgramUniform1f@Base 12.0.1
@@ -251,6 +263,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glPushDebugGroup@Base 12.0.0~
  glReadBuffer@Base 9.1~
  glReadPixels@Base 7.8.1
+ glReadnPixels@Base 13.0.0~
  glReleaseShaderCompiler@Base 7.8.1
  glRenderbufferStorage@Base 7.8.1
  glRenderbufferStorageMultisample@Base 9.1~

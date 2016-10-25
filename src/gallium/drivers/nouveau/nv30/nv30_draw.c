@@ -354,6 +354,9 @@ nv30_render_validate(struct nv30_context *nv30)
    BEGIN_NV04(push, NV30_3D(DEPTH_RANGE_NEAR), 2);
    PUSH_DATAf(push, 0.0);
    PUSH_DATAf(push, 1.0);
+   BEGIN_NV04(push, NV30_3D(VIEWPORT_HORIZ), 2);
+   PUSH_DATA (push, nv30->framebuffer.width << 16);
+   PUSH_DATA (push, nv30->framebuffer.height << 16);
 
    BEGIN_NV04(push, NV30_3D(VTXFMT(0)), 16);
    PUSH_DATAp(push, r->vtxfmt, 16);

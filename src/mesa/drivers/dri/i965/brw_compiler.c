@@ -40,6 +40,7 @@
    .lower_fdiv = true,                                                        \
    .lower_flrp64 = true,                                                      \
    .native_integers = true,                                                   \
+   .use_interpolated_input_intrinsics = true,                                 \
    .vertex_id_zero_based = true
 
 static const struct nir_shader_compiler_options scalar_nir_options = {
@@ -94,7 +95,7 @@ static const struct nir_shader_compiler_options vector_nir_options_gen6 = {
 };
 
 struct brw_compiler *
-brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
+brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
 {
    struct brw_compiler *compiler = rzalloc(mem_ctx, struct brw_compiler);
 
@@ -122,7 +123,6 @@ brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
       compiler->glsl_compiler_options[i].MaxIfDepth =
          devinfo->gen < 6 ? 16 : UINT_MAX;
 
-      compiler->glsl_compiler_options[i].EmitNoNoise = true;
       compiler->glsl_compiler_options[i].EmitNoMainReturn = true;
       compiler->glsl_compiler_options[i].EmitNoIndirectInput = true;
       compiler->glsl_compiler_options[i].EmitNoIndirectUniform = false;

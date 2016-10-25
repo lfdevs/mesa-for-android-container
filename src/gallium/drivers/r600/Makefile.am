@@ -3,11 +3,13 @@ include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
-	$(RADEON_CFLAGS)
+	$(RADEON_CFLAGS) \
+	-I$(top_srcdir)/src/amd/common
 
 AM_CXXFLAGS = \
 	$(GALLIUM_DRIVER_CXXFLAGS) \
-	$(RADEON_CFLAGS)
+	$(RADEON_CFLAGS) \
+	-I$(top_srcdir)/src/amd/common
 
 noinst_LTLIBRARIES = libr600.la
 

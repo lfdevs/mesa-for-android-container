@@ -37,6 +37,7 @@
 #include "freedreno_resource.h"
 #include "freedreno_texture.h"
 #include "freedreno_gmem.h"
+#include "freedreno_query_hw.h"
 #include "freedreno_util.h"
 
 /* All the generic state handling.. In case of CSO's that are specific
@@ -89,10 +90,12 @@ fd_set_sample_mask(struct pipe_context *pctx, unsigned sample_mask)
  */
 static void
 fd_set_constant_buffer(struct pipe_context *pctx, uint shader, uint index,
-		struct pipe_constant_buffer *cb)
+		const struct pipe_constant_buffer *cb)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	struct fd_constbuf_stateobj *so = &ctx->constbuf[shader];
+
+	util_copy_constant_buffer(&so->cb[index], cb);
 
 	/* Note that the state tracker can unbind constant buffers by
 	 * passing NULL here.
@@ -100,14 +103,8 @@ fd_set_constant_buffer(struct pipe_context *pctx, uint shader, uint index,
 	if (unlikely(!cb)) {
 		so->enabled_mask &= ~(1 << index);
 		so->dirty_mask &= ~(1 << index);
-		pipe_resource_reference(&so->cb[index].buffer, NULL);
 		return;
 	}
-
-	pipe_resource_reference(&so->cb[index].buffer, cb->buffer);
-	so->cb[index].buffer_offset = cb->buffer_offset;
-	so->cb[index].buffer_size   = cb->buffer_size;
-	so->cb[index].user_buffer   = cb->user_buffer;
 
 	so->enabled_mask |= 1 << index;
 	so->dirty_mask |= 1 << index;
@@ -119,16 +116,39 @@ fd_set_framebuffer_state(struct pipe_context *pctx,
 		const struct pipe_framebuffer_state *framebuffer)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	struct pipe_framebuffer_state *cso = &ctx->framebuffer;
+	struct pipe_framebuffer_state *cso;
 
-	DBG("%d: cbufs[0]=%p, zsbuf=%p", ctx->needs_flush,
-			framebuffer->cbufs[0], framebuffer->zsbuf);
+	if (ctx->screen->reorder) {
+		struct fd_batch *batch, *old_batch = NULL;
 
-	fd_context_render(pctx);
+		fd_batch_reference(&old_batch, ctx->batch);
 
-	if ((cso->width != framebuffer->width) ||
-			(cso->height != framebuffer->height))
-		ctx->needs_rb_fbd = true;
+		if (likely(old_batch))
+			fd_hw_query_set_stage(old_batch, old_batch->draw, FD_STAGE_NULL);
+
+		batch = fd_batch_from_fb(&ctx->screen->batch_cache, ctx, framebuffer);
+		fd_batch_reference(&ctx->batch, NULL);
+		fd_reset_wfi(batch);
+		ctx->batch = batch;
+		ctx->dirty = ~0;
+
+		if (old_batch && old_batch->blit && !old_batch->back_blit) {
+			/* for blits, there is not really much point in hanging on
+			 * to the uncommitted batch (ie. you probably don't blit
+			 * multiple times to the same surface), so we might as
+			 * well go ahead and flush this one:
+			 */
+			fd_batch_flush(old_batch, false);
+		}
+
+		fd_batch_reference(&old_batch, NULL);
+	} else {
+		DBG("%d: cbufs[0]=%p, zsbuf=%p", ctx->batch->needs_flush,
+				framebuffer->cbufs[0], framebuffer->zsbuf);
+		fd_batch_flush(ctx->batch, false);
+	}
+
+	cso = &ctx->batch->framebuffer;
 
 	util_copy_framebuffer_state(cso, framebuffer);
 
@@ -187,14 +207,16 @@ fd_set_vertex_buffers(struct pipe_context *pctx,
 	 * we need to mark VTXSTATE as dirty as well to trigger patching
 	 * and re-emitting the vtx shader:
 	 */
-	for (i = 0; i < count; i++) {
-		bool new_enabled = vb && (vb[i].buffer || vb[i].user_buffer);
-		bool old_enabled = so->vb[i].buffer || so->vb[i].user_buffer;
-		uint32_t new_stride = vb ? vb[i].stride : 0;
-		uint32_t old_stride = so->vb[i].stride;
-		if ((new_enabled != old_enabled) || (new_stride != old_stride)) {
-			ctx->dirty |= FD_DIRTY_VTXSTATE;
-			break;
+	if (ctx->screen->gpu_id < 300) {
+		for (i = 0; i < count; i++) {
+			bool new_enabled = vb && (vb[i].buffer || vb[i].user_buffer);
+			bool old_enabled = so->vb[i].buffer || so->vb[i].user_buffer;
+			uint32_t new_stride = vb ? vb[i].stride : 0;
+			uint32_t old_stride = so->vb[i].stride;
+			if ((new_enabled != old_enabled) || (new_stride != old_stride)) {
+				ctx->dirty |= FD_DIRTY_VTXSTATE;
+				break;
+			}
 		}
 	}
 
@@ -318,6 +340,7 @@ fd_create_stream_output_target(struct pipe_context *pctx,
 		unsigned buffer_size)
 {
 	struct pipe_stream_output_target *target;
+	struct fd_resource *rsc = fd_resource(prsc);
 
 	target = CALLOC_STRUCT(pipe_stream_output_target);
 	if (!target)
@@ -329,6 +352,10 @@ fd_create_stream_output_target(struct pipe_context *pctx,
 	target->context = pctx;
 	target->buffer_offset = buffer_offset;
 	target->buffer_size = buffer_size;
+
+	assert(rsc->base.b.target == PIPE_BUFFER);
+	util_range_add(&rsc->valid_buffer_range,
+		buffer_offset, buffer_offset + buffer_size);
 
 	return target;
 }

@@ -145,20 +145,29 @@ target_triplet = @target@
 
 @HAVE_APPLEDRI_TRUE@am__append_7 = apple
 @HAVE_APPLEDRI_TRUE@am__append_8 = $(builddir)/apple/libappleglx.la
-@USE_LIBGLVND_GLX_TRUE@am__append_9 = \
+@HAVE_WINDOWSDRI_TRUE@am__append_9 = \
+@HAVE_WINDOWSDRI_TRUE@	  driwindows_glx.c
+
+@HAVE_WINDOWSDRI_TRUE@am__append_10 = windows
+@HAVE_WINDOWSDRI_TRUE@am__append_11 = \
+@HAVE_WINDOWSDRI_TRUE@	  $(builddir)/windows/libwindowsdri.la \
+@HAVE_WINDOWSDRI_TRUE@	  $(builddir)/windows/libwindowsglx.la
+
+@USE_LIBGLVND_GLX_TRUE@am__append_12 = \
 @USE_LIBGLVND_GLX_TRUE@	-DGL_LIB_NAME=\"lib@GL_LIB@.so.0\" \
 @USE_LIBGLVND_GLX_TRUE@	$(GLVND_CFLAGS)
 
-@USE_LIBGLVND_GLX_TRUE@am__append_10 = \
+@USE_LIBGLVND_GLX_TRUE@am__append_13 = \
 @USE_LIBGLVND_GLX_TRUE@	g_glxglvnddispatchfuncs.c \
 @USE_LIBGLVND_GLX_TRUE@	g_glxglvnddispatchindices.h \
 @USE_LIBGLVND_GLX_TRUE@	glxglvnd.c \
 @USE_LIBGLVND_GLX_TRUE@	glxglvnd.h \
 @USE_LIBGLVND_GLX_TRUE@	glxglvnddispatchfuncs.h
 
-@USE_LIBGLVND_GLX_FALSE@am__append_11 = \
+@USE_LIBGLVND_GLX_FALSE@am__append_14 = \
 @USE_LIBGLVND_GLX_FALSE@	-DGL_LIB_NAME=\"lib@GL_LIB@.so.1\"
 
+@HAVE_WINDOWSDRI_TRUE@am__append_15 = -lgdi32 -lopengl32 -Wl,--disable-stdcall-fixup
 subdir = src/glx
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -222,7 +231,7 @@ lib@GL_LIB@_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_CFLAGS) $(CFLAGS) $(lib@GL_LIB@_la_LDFLAGS) $(LDFLAGS) -o \
 	$@
 libglx_la_DEPENDENCIES = $(top_builddir)/src/loader/libloader.la \
-	$(am__append_5) $(am__append_8)
+	$(am__append_5) $(am__append_8) $(am__append_11)
 am__libglx_la_SOURCES_DIST = clientattrib.c clientinfo.c compsize.c \
 	create_context.c eval.c glxclient.h glxcmds.c glxconfig.c \
 	glxconfig.h glxcurrent.c glx_error.c glx_error.h glxext.c \
@@ -238,9 +247,9 @@ am__libglx_la_SOURCES_DIST = clientattrib.c clientinfo.c compsize.c \
 	dri_common.h dri_common_query_renderer.c dri_common_interop.c \
 	xfont.c dri2.c dri2_glx.c dri2.h dri2_priv.h dri_glx.c \
 	dri_sarea.h XF86dri.c xf86dri.h xf86dristr.h dri3_glx.c \
-	dri3_priv.h applegl_glx.c g_glxglvnddispatchfuncs.c \
-	g_glxglvnddispatchindices.h glxglvnd.c glxglvnd.h \
-	glxglvnddispatchfuncs.h
+	dri3_priv.h applegl_glx.c driwindows_glx.c \
+	g_glxglvnddispatchfuncs.c g_glxglvnddispatchindices.h \
+	glxglvnd.c glxglvnd.h glxglvnddispatchfuncs.h
 @HAVE_DRISW_TRUE@am__objects_1 = drisw_glx.lo
 @HAVE_DRICOMMON_TRUE@am__objects_2 = dri_common.lo \
 @HAVE_DRICOMMON_TRUE@	dri_common_query_renderer.lo \
@@ -249,7 +258,8 @@ am__libglx_la_SOURCES_DIST = clientattrib.c clientinfo.c compsize.c \
 @HAVE_DRI2_TRUE@	XF86dri.lo
 @HAVE_DRI3_TRUE@am__objects_4 = dri3_glx.lo
 @HAVE_APPLEDRI_TRUE@am__objects_5 = applegl_glx.lo
-@USE_LIBGLVND_GLX_TRUE@am__objects_6 = g_glxglvnddispatchfuncs.lo \
+@HAVE_WINDOWSDRI_TRUE@am__objects_6 = driwindows_glx.lo
+@USE_LIBGLVND_GLX_TRUE@am__objects_7 = g_glxglvnddispatchfuncs.lo \
 @USE_LIBGLVND_GLX_TRUE@	glxglvnd.lo
 am_libglx_la_OBJECTS = clientattrib.lo clientinfo.lo compsize.lo \
 	create_context.lo eval.lo glxcmds.lo glxconfig.lo \
@@ -262,7 +272,7 @@ am_libglx_la_OBJECTS = clientattrib.lo clientinfo.lo compsize.lo \
 	query_renderer.lo render2.lo renderpix.lo single2.lo \
 	singlepix.lo vertarr.lo $(am__objects_1) $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
-	$(am__objects_6)
+	$(am__objects_6) $(am__objects_7)
 libglx_la_OBJECTS = $(am_libglx_la_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -340,7 +350,7 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = apple . tests
+DIST_SUBDIRS = apple windows . tests
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/bin/depcomp \
 	$(top_srcdir)/install-lib-links.mk
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -470,11 +480,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -570,6 +579,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -605,6 +616,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -669,7 +681,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 @HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_CFLAGS = -DGLX_SHARED_GLAPI
 @HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
-SUBDIRS = $(am__append_7) . tests
+SUBDIRS = $(am__append_7) $(am__append_10) . tests
 EXTRA_DIST = SConscript
 @HAVE_XF86VIDMODE_TRUE@EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
 AM_CFLAGS = -I$(top_srcdir)/include \
@@ -680,8 +692,8 @@ AM_CFLAGS = -I$(top_srcdir)/include \
 	$(SHARED_GLAPI_CFLAGS) $(EXTRA_DEFINES_XF86VIDMODE) \
 	-D_REENTRANT -DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
 	$(DEFINES) $(LIBDRM_CFLAGS) $(DRI2PROTO_CFLAGS) \
-	$(GLPROTO_CFLAGS) $(X11_INCLUDES) $(am__append_9) \
-	$(am__append_11)
+	$(GLPROTO_CFLAGS) $(X11_INCLUDES) $(am__append_12) \
+	$(am__append_14)
 lib_LTLIBRARIES = lib@GL_LIB@.la
 noinst_LTLIBRARIES = libglx.la
 libglx_la_SOURCES = clientattrib.c clientinfo.c compsize.c \
@@ -697,9 +709,9 @@ libglx_la_SOURCES = clientattrib.c clientinfo.c compsize.c \
 	pixelstore.c query_renderer.c render2.c renderpix.c single2.c \
 	singlepix.c vertarr.c $(am__append_1) $(am__append_2) \
 	$(am__append_3) $(am__append_4) $(am__append_6) \
-	$(am__append_10)
+	$(am__append_9) $(am__append_13)
 libglx_la_LIBADD = $(top_builddir)/src/loader/libloader.la \
-	$(am__append_5) $(am__append_8)
+	$(am__append_5) $(am__append_8) $(am__append_11)
 @USE_LIBGLVND_GLX_FALSE@GL_LIB_VERSION = 1:2
 @USE_LIBGLVND_GLX_TRUE@GL_LIB_VERSION = 0
 GL_LIBS = \
@@ -717,7 +729,7 @@ GL_LDFLAGS = \
 
 lib@GL_LIB@_la_SOURCES = 
 lib@GL_LIB@_la_LIBADD = $(GL_LIBS)
-lib@GL_LIB@_la_LDFLAGS = $(GL_LDFLAGS)
+lib@GL_LIB@_la_LDFLAGS = $(GL_LDFLAGS) $(am__append_15)
 all: all-recursive
 
 .SUFFIXES:
@@ -825,6 +837,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_common_query_renderer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/drisw_glx.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/driwindows_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eval.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/g_glxglvnddispatchfuncs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glx_error.Plo@am__quote@

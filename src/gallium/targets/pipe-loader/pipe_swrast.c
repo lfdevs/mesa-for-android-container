@@ -23,7 +23,7 @@ swrast_create_screen(struct sw_winsys *ws)
 }
 
 PUBLIC
-struct sw_driver_descriptor swrast_driver_descriptor = {
+const struct sw_driver_descriptor swrast_driver_descriptor = {
    .create_screen = swrast_create_screen,
    .winsys = {
 #ifdef HAVE_PIPE_LOADER_DRI

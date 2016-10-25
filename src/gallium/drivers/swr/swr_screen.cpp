@@ -45,6 +45,7 @@ extern "C" {
 #include "jit_api.h"
 
 #include <stdio.h>
+#include <map>
 
 /* MSVC case instensitive compare */
 #if defined(PIPE_CC_MSVC)
@@ -55,7 +56,7 @@ extern "C" {
  * Max texture sizes
  * XXX Check max texture size values against core and sampler.
  */
-#define SWR_MAX_TEXTURE_SIZE (4 * 1048 * 1048 * 1024ULL) /* 4GB */
+#define SWR_MAX_TEXTURE_SIZE (4 * 1024 * 1024 * 1024ULL) /* 4GB */
 #define SWR_MAX_TEXTURE_2D_LEVELS 14  /* 8K x 8K for now */
 #define SWR_MAX_TEXTURE_3D_LEVELS 12  /* 2K x 2K x 2K for now */
 #define SWR_MAX_TEXTURE_CUBE_LEVELS 14  /* 8K x 8K for now */
@@ -152,6 +153,7 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    switch (param) {
    case PIPE_CAP_NPOT_TEXTURES:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
+   case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
       return 1;
    case PIPE_CAP_TWO_SIDED_STENCIL:
       return 1;
@@ -239,7 +241,7 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
       return 330;
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
-      return 0;
+      return 1;
    case PIPE_CAP_COMPUTE:
       return 0;
    case PIPE_CAP_USER_VERTEX_BUFFERS:
@@ -333,6 +335,8 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
    case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
       return 1;
+   case PIPE_CAP_CULL_DISTANCE:
+      return 1;
    case PIPE_CAP_TGSI_TXQS:
    case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
    case PIPE_CAP_SHAREABLE_SHADERS:
@@ -358,8 +362,12 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_PCI_DEVICE:
    case PIPE_CAP_PCI_FUNCTION:
    case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
-   case PIPE_CAP_CULL_DISTANCE:
    case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
+   case PIPE_CAP_TGSI_VOTE:
+   case PIPE_CAP_MAX_WINDOW_RECTANGLES:
+   case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
+   case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
+   case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
       return 0;
    }
 
@@ -409,46 +417,301 @@ swr_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
 SWR_FORMAT
 mesa_to_swr_format(enum pipe_format format)
 {
-   const struct util_format_description *format_desc =
-      util_format_description(format);
-   if (!format_desc)
+   static const std::map<pipe_format,SWR_FORMAT> mesa2swr = {
+      {PIPE_FORMAT_NONE,                   (SWR_FORMAT)-1},
+      {PIPE_FORMAT_B8G8R8A8_UNORM,         B8G8R8A8_UNORM},
+      {PIPE_FORMAT_B8G8R8X8_UNORM,         B8G8R8X8_UNORM},
+      {PIPE_FORMAT_A8R8G8B8_UNORM,         (SWR_FORMAT)-1},
+      {PIPE_FORMAT_X8R8G8B8_UNORM,         (SWR_FORMAT)-1},
+      {PIPE_FORMAT_B5G5R5A1_UNORM,         B5G5R5A1_UNORM},
+      {PIPE_FORMAT_B4G4R4A4_UNORM,         B4G4R4A4_UNORM},
+      {PIPE_FORMAT_B5G6R5_UNORM,           B5G6R5_UNORM},
+      {PIPE_FORMAT_R10G10B10A2_UNORM,      R10G10B10A2_UNORM},
+      {PIPE_FORMAT_L8_UNORM,               L8_UNORM},
+      {PIPE_FORMAT_A8_UNORM,               A8_UNORM},
+      {PIPE_FORMAT_I8_UNORM,               I8_UNORM},
+      {PIPE_FORMAT_L8A8_UNORM,             L8A8_UNORM},
+      {PIPE_FORMAT_L16_UNORM,              L16_UNORM},
+      {PIPE_FORMAT_UYVY,                   YCRCB_SWAPUVY},
+      {PIPE_FORMAT_YUYV,                   (SWR_FORMAT)-1},
+      {PIPE_FORMAT_Z16_UNORM,              R16_UNORM}, // z
+      {PIPE_FORMAT_Z32_UNORM,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_Z32_FLOAT,              R32_FLOAT}, // z
+      {PIPE_FORMAT_Z24_UNORM_S8_UINT,      R24_UNORM_X8_TYPELESS}, // z
+      {PIPE_FORMAT_S8_UINT_Z24_UNORM,      (SWR_FORMAT)-1},
+      {PIPE_FORMAT_Z24X8_UNORM,            R24_UNORM_X8_TYPELESS}, // z
+      {PIPE_FORMAT_X8Z24_UNORM,            (SWR_FORMAT)-1},
+      {PIPE_FORMAT_S8_UINT,                (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R64_FLOAT,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R64G64_FLOAT,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R64G64B64_FLOAT,        (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R64G64B64A64_FLOAT,     (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32_FLOAT,              R32_FLOAT},
+      {PIPE_FORMAT_R32G32_FLOAT,           R32G32_FLOAT},
+      {PIPE_FORMAT_R32G32B32_FLOAT,        R32G32B32_FLOAT},
+      {PIPE_FORMAT_R32G32B32A32_FLOAT,     R32G32B32A32_FLOAT},
+      {PIPE_FORMAT_R32_UNORM,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32_UNORM,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32B32_UNORM,        (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32B32A32_UNORM,     (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32_USCALED,            R32_USCALED},
+      {PIPE_FORMAT_R32G32_USCALED,         R32G32_USCALED},
+      {PIPE_FORMAT_R32G32B32_USCALED,      R32G32B32_USCALED},
+      {PIPE_FORMAT_R32G32B32A32_USCALED,   R32G32B32A32_USCALED},
+      {PIPE_FORMAT_R32_SNORM,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32_SNORM,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32B32_SNORM,        (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32B32A32_SNORM,     (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32_SSCALED,            R32_SSCALED},
+      {PIPE_FORMAT_R32G32_SSCALED,         R32G32_SSCALED},
+      {PIPE_FORMAT_R32G32B32_SSCALED,      R32G32B32_SSCALED},
+      {PIPE_FORMAT_R32G32B32A32_SSCALED,   R32G32B32A32_SSCALED},
+      {PIPE_FORMAT_R16_UNORM,              R16_UNORM},
+      {PIPE_FORMAT_R16G16_UNORM,           R16G16_UNORM},
+      {PIPE_FORMAT_R16G16B16_UNORM,        R16G16B16_UNORM},
+      {PIPE_FORMAT_R16G16B16A16_UNORM,     R16G16B16A16_UNORM},
+      {PIPE_FORMAT_R16_USCALED,            R16_USCALED},
+      {PIPE_FORMAT_R16G16_USCALED,         R16G16_USCALED},
+      {PIPE_FORMAT_R16G16B16_USCALED,      R16G16B16_USCALED},
+      {PIPE_FORMAT_R16G16B16A16_USCALED,   R16G16B16A16_USCALED},
+      {PIPE_FORMAT_R16_SNORM,              R16_SNORM},
+      {PIPE_FORMAT_R16G16_SNORM,           R16G16_SNORM},
+      {PIPE_FORMAT_R16G16B16_SNORM,        R16G16B16_SNORM},
+      {PIPE_FORMAT_R16G16B16A16_SNORM,     R16G16B16A16_SNORM},
+      {PIPE_FORMAT_R16_SSCALED,            R16_SSCALED},
+      {PIPE_FORMAT_R16G16_SSCALED,         R16G16_SSCALED},
+      {PIPE_FORMAT_R16G16B16_SSCALED,      R16G16B16_SSCALED},
+      {PIPE_FORMAT_R16G16B16A16_SSCALED,   R16G16B16A16_SSCALED},
+      {PIPE_FORMAT_R8_UNORM,               R8_UNORM},
+      {PIPE_FORMAT_R8G8_UNORM,             R8G8_UNORM},
+      {PIPE_FORMAT_R8G8B8_UNORM,           R8G8B8_UNORM},
+      {PIPE_FORMAT_R8G8B8A8_UNORM,         R8G8B8A8_UNORM},
+      {PIPE_FORMAT_X8B8G8R8_UNORM,         (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8_USCALED,             R8_USCALED},
+      {PIPE_FORMAT_R8G8_USCALED,           R8G8_USCALED},
+      {PIPE_FORMAT_R8G8B8_USCALED,         R8G8B8_USCALED},
+      {PIPE_FORMAT_R8G8B8A8_USCALED,       R8G8B8A8_USCALED},
+      {PIPE_FORMAT_R8_SNORM,               R8_SNORM},
+      {PIPE_FORMAT_R8G8_SNORM,             R8G8_SNORM},
+      {PIPE_FORMAT_R8G8B8_SNORM,           R8G8B8_SNORM},
+      {PIPE_FORMAT_R8G8B8A8_SNORM,         R8G8B8A8_SNORM},
+      {PIPE_FORMAT_R8_SSCALED,             R8_SSCALED},
+      {PIPE_FORMAT_R8G8_SSCALED,           R8G8_SSCALED},
+      {PIPE_FORMAT_R8G8B8_SSCALED,         R8G8B8_SSCALED},
+      {PIPE_FORMAT_R8G8B8A8_SSCALED,       R8G8B8A8_SSCALED},
+      {PIPE_FORMAT_R32_FIXED,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32_FIXED,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32B32_FIXED,        (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32B32A32_FIXED,     (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R16_FLOAT,              R16_FLOAT},
+      {PIPE_FORMAT_R16G16_FLOAT,           R16G16_FLOAT},
+      {PIPE_FORMAT_R16G16B16_FLOAT,        R16G16B16_FLOAT},
+      {PIPE_FORMAT_R16G16B16A16_FLOAT,     R16G16B16A16_FLOAT},
+
+      {PIPE_FORMAT_L8_SRGB,                L8_UNORM_SRGB},
+      {PIPE_FORMAT_L8A8_SRGB,              L8A8_UNORM_SRGB},
+      {PIPE_FORMAT_R8G8B8_SRGB,            R8G8B8_UNORM_SRGB},
+      {PIPE_FORMAT_A8B8G8R8_SRGB,          (SWR_FORMAT)-1},
+      {PIPE_FORMAT_X8B8G8R8_SRGB,          (SWR_FORMAT)-1},
+      {PIPE_FORMAT_B8G8R8A8_SRGB,          B8G8R8A8_UNORM_SRGB},
+      {PIPE_FORMAT_B8G8R8X8_SRGB,          B8G8R8X8_UNORM_SRGB},
+      {PIPE_FORMAT_A8R8G8B8_SRGB,          (SWR_FORMAT)-1},
+      {PIPE_FORMAT_X8R8G8B8_SRGB,          (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8G8B8A8_SRGB,          R8G8B8A8_UNORM_SRGB},
+
+      {PIPE_FORMAT_DXT1_RGB,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_DXT1_RGBA,              BC1_UNORM},
+      {PIPE_FORMAT_DXT3_RGBA,              BC2_UNORM},
+      {PIPE_FORMAT_DXT5_RGBA,              BC3_UNORM},
+
+      {PIPE_FORMAT_DXT1_SRGB,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_DXT1_SRGBA,             BC1_UNORM_SRGB},
+      {PIPE_FORMAT_DXT3_SRGBA,             BC2_UNORM_SRGB},
+      {PIPE_FORMAT_DXT5_SRGBA,             BC3_UNORM_SRGB},
+
+      {PIPE_FORMAT_RGTC1_UNORM,            BC4_UNORM},
+      {PIPE_FORMAT_RGTC1_SNORM,            BC4_SNORM},
+      {PIPE_FORMAT_RGTC2_UNORM,            BC5_UNORM},
+      {PIPE_FORMAT_RGTC2_SNORM,            BC5_SNORM},
+
+      {PIPE_FORMAT_R8G8_B8G8_UNORM,        (SWR_FORMAT)-1},
+      {PIPE_FORMAT_G8R8_G8B8_UNORM,        (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_R8SG8SB8UX8U_NORM,      (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R5SG5SB6U_NORM,         (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_A8B8G8R8_UNORM,         (SWR_FORMAT)-1},
+      {PIPE_FORMAT_B5G5R5X1_UNORM,         B5G5R5X1_UNORM},
+      {PIPE_FORMAT_R10G10B10A2_USCALED,    R10G10B10A2_USCALED},
+      {PIPE_FORMAT_R11G11B10_FLOAT,        R11G11B10_FLOAT},
+      {PIPE_FORMAT_R9G9B9E5_FLOAT,         R9G9B9E5_SHAREDEXP},
+      {PIPE_FORMAT_Z32_FLOAT_S8X24_UINT,   R32_FLOAT_X8X24_TYPELESS}, // z
+      {PIPE_FORMAT_R1_UNORM,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R10G10B10X2_USCALED,    R10G10B10X2_USCALED},
+      {PIPE_FORMAT_R10G10B10X2_SNORM,      (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L4A4_UNORM,             (SWR_FORMAT)-1},
+      {PIPE_FORMAT_B10G10R10A2_UNORM,      B10G10R10A2_UNORM},
+      {PIPE_FORMAT_R10SG10SB10SA2U_NORM,   (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8G8Bx_SNORM,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8G8B8X8_UNORM,         R8G8B8X8_UNORM},
+      {PIPE_FORMAT_B4G4R4X4_UNORM,         (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_X24S8_UINT,             (SWR_FORMAT)-1},
+      {PIPE_FORMAT_S8X24_UINT,             (SWR_FORMAT)-1},
+      {PIPE_FORMAT_X32_S8X24_UINT,         (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_B2G3R3_UNORM,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L16A16_UNORM,           L16A16_UNORM},
+      {PIPE_FORMAT_A16_UNORM,              A16_UNORM},
+      {PIPE_FORMAT_I16_UNORM,              I16_UNORM},
+
+      {PIPE_FORMAT_LATC1_UNORM,            (SWR_FORMAT)-1},
+      {PIPE_FORMAT_LATC1_SNORM,            (SWR_FORMAT)-1},
+      {PIPE_FORMAT_LATC2_UNORM,            (SWR_FORMAT)-1},
+      {PIPE_FORMAT_LATC2_SNORM,            (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_A8_SNORM,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L8_SNORM,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L8A8_SNORM,             (SWR_FORMAT)-1},
+      {PIPE_FORMAT_I8_SNORM,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_A16_SNORM,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L16_SNORM,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L16A16_SNORM,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_I16_SNORM,              (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_A16_FLOAT,              A16_FLOAT},
+      {PIPE_FORMAT_L16_FLOAT,              L16_FLOAT},
+      {PIPE_FORMAT_L16A16_FLOAT,           L16A16_FLOAT},
+      {PIPE_FORMAT_I16_FLOAT,              I16_FLOAT},
+      {PIPE_FORMAT_A32_FLOAT,              A32_FLOAT},
+      {PIPE_FORMAT_L32_FLOAT,              L32_FLOAT},
+      {PIPE_FORMAT_L32A32_FLOAT,           L32A32_FLOAT},
+      {PIPE_FORMAT_I32_FLOAT,              I32_FLOAT},
+
+      {PIPE_FORMAT_YV12,                   (SWR_FORMAT)-1},
+      {PIPE_FORMAT_YV16,                   (SWR_FORMAT)-1},
+      {PIPE_FORMAT_IYUV,                   (SWR_FORMAT)-1},
+      {PIPE_FORMAT_NV12,                   (SWR_FORMAT)-1},
+      {PIPE_FORMAT_NV21,                   (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_A4R4_UNORM,             (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R4A4_UNORM,             (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8A8_UNORM,             (SWR_FORMAT)-1},
+      {PIPE_FORMAT_A8R8_UNORM,             (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_R10G10B10A2_SSCALED,    R10G10B10A2_SSCALED},
+      {PIPE_FORMAT_R10G10B10A2_SNORM,      R10G10B10A2_SNORM},
+
+      {PIPE_FORMAT_B10G10R10A2_USCALED,    B10G10R10A2_USCALED},
+      {PIPE_FORMAT_B10G10R10A2_SSCALED,    B10G10R10A2_SSCALED},
+      {PIPE_FORMAT_B10G10R10A2_SNORM,      B10G10R10A2_SNORM},
+
+      {PIPE_FORMAT_R8_UINT,                R8_UINT},
+      {PIPE_FORMAT_R8G8_UINT,              R8G8_UINT},
+      {PIPE_FORMAT_R8G8B8_UINT,            R8G8B8_UINT},
+      {PIPE_FORMAT_R8G8B8A8_UINT,          R8G8B8A8_UINT},
+
+      {PIPE_FORMAT_R8_SINT,                R8_SINT},
+      {PIPE_FORMAT_R8G8_SINT,              R8G8_SINT},
+      {PIPE_FORMAT_R8G8B8_SINT,            R8G8B8_SINT},
+      {PIPE_FORMAT_R8G8B8A8_SINT,          R8G8B8A8_SINT},
+
+      {PIPE_FORMAT_R16_UINT,               R16_UINT},
+      {PIPE_FORMAT_R16G16_UINT,            R16G16_UINT},
+      {PIPE_FORMAT_R16G16B16_UINT,         R16G16B16_UINT},
+      {PIPE_FORMAT_R16G16B16A16_UINT,      R16G16B16A16_UINT},
+
+      {PIPE_FORMAT_R16_SINT,               R16_SINT},
+      {PIPE_FORMAT_R16G16_SINT,            R16G16_SINT},
+      {PIPE_FORMAT_R16G16B16_SINT,         R16G16B16_SINT},
+      {PIPE_FORMAT_R16G16B16A16_SINT,      R16G16B16A16_SINT},
+
+      {PIPE_FORMAT_R32_UINT,               R32_UINT},
+      {PIPE_FORMAT_R32G32_UINT,            R32G32_UINT},
+      {PIPE_FORMAT_R32G32B32_UINT,         R32G32B32_UINT},
+      {PIPE_FORMAT_R32G32B32A32_UINT,      R32G32B32A32_UINT},
+
+      {PIPE_FORMAT_R32_SINT,               R32_SINT},
+      {PIPE_FORMAT_R32G32_SINT,            R32G32_SINT},
+      {PIPE_FORMAT_R32G32B32_SINT,         R32G32B32_SINT},
+      {PIPE_FORMAT_R32G32B32A32_SINT,      R32G32B32A32_SINT},
+
+      {PIPE_FORMAT_A8_UINT,                (SWR_FORMAT)-1},
+      {PIPE_FORMAT_I8_UINT,                I8_UINT},
+      {PIPE_FORMAT_L8_UINT,                L8_UINT},
+      {PIPE_FORMAT_L8A8_UINT,              L8A8_UINT},
+
+      {PIPE_FORMAT_A8_SINT,                (SWR_FORMAT)-1},
+      {PIPE_FORMAT_I8_SINT,                I8_SINT},
+      {PIPE_FORMAT_L8_SINT,                L8_SINT},
+      {PIPE_FORMAT_L8A8_SINT,              L8A8_SINT},
+
+      {PIPE_FORMAT_A16_UINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_I16_UINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L16_UINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L16A16_UINT,            (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_A16_SINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_I16_SINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L16_SINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L16A16_SINT,            (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_A32_UINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_I32_UINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L32_UINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L32A32_UINT,            (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_A32_SINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_I32_SINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L32_SINT,               (SWR_FORMAT)-1},
+      {PIPE_FORMAT_L32A32_SINT,            (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_B10G10R10A2_UINT,       B10G10R10A2_UINT},
+
+      {PIPE_FORMAT_ETC1_RGB8,              (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_R8G8_R8B8_UNORM,        (SWR_FORMAT)-1},
+      {PIPE_FORMAT_G8R8_B8R8_UNORM,        (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_R8G8B8X8_SNORM,         (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8G8B8X8_SRGB,          (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8G8B8X8_UINT,          (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8G8B8X8_SINT,          (SWR_FORMAT)-1},
+      {PIPE_FORMAT_B10G10R10X2_UNORM,      B10G10R10X2_UNORM},
+      {PIPE_FORMAT_R16G16B16X16_UNORM,     R16G16B16X16_UNORM},
+      {PIPE_FORMAT_R16G16B16X16_SNORM,     (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R16G16B16X16_FLOAT,     R16G16B16X16_FLOAT},
+      {PIPE_FORMAT_R16G16B16X16_UINT,      (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R16G16B16X16_SINT,      (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32B32X32_FLOAT,     R32G32B32X32_FLOAT},
+      {PIPE_FORMAT_R32G32B32X32_UINT,      (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32G32B32X32_SINT,      (SWR_FORMAT)-1},
+
+      {PIPE_FORMAT_R8A8_SNORM,             (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R16A16_UNORM,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R16A16_SNORM,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R16A16_FLOAT,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32A32_FLOAT,           (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8A8_UINT,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R8A8_SINT,              (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R16A16_UINT,            (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R16A16_SINT,            (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32A32_UINT,            (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R32A32_SINT,            (SWR_FORMAT)-1},
+      {PIPE_FORMAT_R10G10B10A2_UINT,       R10G10B10A2_UINT},
+
+      {PIPE_FORMAT_B5G6R5_SRGB,            B5G6R5_UNORM_SRGB}
+   };
+
+   try {
+      return mesa2swr.at(format);
+   }
+   catch (std::out_of_range) {
+      debug_printf("asked to convert unsupported format %s\n",
+                   util_format_name(format));
+
       return (SWR_FORMAT)-1;
-
-   // more robust check would be comparing all attributes of the formats
-   // luckily format names are mostly standardized
-   for (int i = 0; i < NUM_SWR_FORMATS; i++) {
-      const SWR_FORMAT_INFO &swr_desc = GetFormatInfo((SWR_FORMAT)i);
-
-      if (!strcasecmp(format_desc->short_name, swr_desc.name))
-         return (SWR_FORMAT)i;
    }
-
-   // ... with some exceptions
-   switch (format) {
-   case PIPE_FORMAT_R8G8B8A8_SRGB:
-      return R8G8B8A8_UNORM_SRGB;
-   case PIPE_FORMAT_B8G8R8A8_SRGB:
-      return B8G8R8A8_UNORM_SRGB;
-   case PIPE_FORMAT_I8_UNORM:
-      return R8_UNORM;
-   case PIPE_FORMAT_Z16_UNORM:
-      return R16_UNORM;
-   case PIPE_FORMAT_Z24X8_UNORM:
-   case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-      return R24_UNORM_X8_TYPELESS;
-   case PIPE_FORMAT_Z32_FLOAT:
-      return R32_FLOAT;
-   case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
-      return R32_FLOAT_X8X24_TYPELESS;
-   case PIPE_FORMAT_L8A8_UNORM:
-      return R8G8_UNORM;
-   default:
-      break;
-   }
-
-   debug_printf("asked to convert unsupported format %s\n",
-                format_desc->name);
-   return (SWR_FORMAT)-1;
 }
 
 static boolean
@@ -509,7 +772,7 @@ swr_texture_layout(struct swr_screen *screen,
 
    SWR_FORMAT_INFO finfo = GetFormatInfo(res->swr.format);
 
-   unsigned total_size = 0;
+   size_t total_size = 0;
    unsigned width = pt->width0;
    unsigned height = pt->height0;
    unsigned depth = pt->depth0;
@@ -652,7 +915,7 @@ swr_resource_destroy(struct pipe_screen *p_screen, struct pipe_resource *pt)
       if (!swr_is_fence_pending(screen->flush_fence))
          swr_fence_submit(swr_context(pipe), screen->flush_fence);
 
-      swr_fence_finish(p_screen, screen->flush_fence, 0);
+      swr_fence_finish(p_screen, NULL, screen->flush_fence, 0);
       swr_resource_unused(pt);
    }
 
@@ -687,7 +950,7 @@ swr_flush_frontbuffer(struct pipe_screen *p_screen,
    struct pipe_context *pipe = screen->pipe;
 
    if (pipe) {
-      swr_fence_finish(p_screen, screen->flush_fence, 0);
+      swr_fence_finish(p_screen, NULL, screen->flush_fence, 0);
       swr_resource_unused(resource);
       SwrEndFrame(swr_context(pipe)->swrContext);
    }
@@ -707,7 +970,7 @@ swr_destroy_screen(struct pipe_screen *p_screen)
 
    fprintf(stderr, "SWR destroy screen!\n");
 
-   swr_fence_finish(p_screen, screen->flush_fence, 0);
+   swr_fence_finish(p_screen, NULL, screen->flush_fence, 0);
    swr_fence_reference(p_screen, &screen->flush_fence, NULL);
 
    JitDestroyContext(screen->hJitMgr);
@@ -748,7 +1011,7 @@ swr_create_screen(struct sw_winsys *winsys)
 
    screen->base.flush_frontbuffer = swr_flush_frontbuffer;
 
-   screen->hJitMgr = JitCreateContext(KNOB_SIMD_WIDTH, KNOB_ARCH_STR);
+   screen->hJitMgr = JitCreateContext(KNOB_SIMD_WIDTH, KNOB_ARCH_STR, "swr");
 
    swr_fence_init(&screen->base);
 

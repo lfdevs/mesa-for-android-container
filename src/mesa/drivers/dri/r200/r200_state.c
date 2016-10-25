@@ -49,6 +49,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "tnl/t_pipeline.h"
 #include "swrast_setup/swrast_setup.h"
 #include "drivers/common/meta.h"
+#include "util/bitscan.h"
 
 #include "radeon_common.h"
 #include "radeon_mipmap_tree.h"
@@ -1112,27 +1113,26 @@ static void update_light( struct gl_context *ctx )
 
 
    if (ctx->Light.Enabled) {
-      GLint p;
-      for (p = 0 ; p < MAX_LIGHTS; p++) {
-	 if (ctx->Light.Light[p].Enabled) {
-	    struct gl_light *l = &ctx->Light.Light[p];
-	    GLfloat *fcmd = (GLfloat *)R200_DB_STATE( lit[p] );
+      GLbitfield mask = ctx->Light._EnabledLights;
+      while (mask) {
+         const int p = u_bit_scan(&mask);
+         struct gl_light *l = &ctx->Light.Light[p];
+         GLfloat *fcmd = (GLfloat *)R200_DB_STATE( lit[p] );
 
-	    if (l->EyePosition[3] == 0.0) {
-	       COPY_3FV( &fcmd[LIT_POSITION_X], l->_VP_inf_norm );
-	       COPY_3FV( &fcmd[LIT_DIRECTION_X], l->_h_inf_norm );
-	       fcmd[LIT_POSITION_W] = 0;
-	       fcmd[LIT_DIRECTION_W] = 0;
-	    } else {
-	       COPY_4V( &fcmd[LIT_POSITION_X], l->_Position );
-	       fcmd[LIT_DIRECTION_X] = -l->_NormSpotDirection[0];
-	       fcmd[LIT_DIRECTION_Y] = -l->_NormSpotDirection[1];
-	       fcmd[LIT_DIRECTION_Z] = -l->_NormSpotDirection[2];
-	       fcmd[LIT_DIRECTION_W] = 0;
-	    }
+         if (l->EyePosition[3] == 0.0) {
+            COPY_3FV( &fcmd[LIT_POSITION_X], l->_VP_inf_norm );
+            COPY_3FV( &fcmd[LIT_DIRECTION_X], l->_h_inf_norm );
+            fcmd[LIT_POSITION_W] = 0;
+            fcmd[LIT_DIRECTION_W] = 0;
+         } else {
+            COPY_4V( &fcmd[LIT_POSITION_X], l->_Position );
+            fcmd[LIT_DIRECTION_X] = -l->_NormSpotDirection[0];
+            fcmd[LIT_DIRECTION_Y] = -l->_NormSpotDirection[1];
+            fcmd[LIT_DIRECTION_Z] = -l->_NormSpotDirection[2];
+            fcmd[LIT_DIRECTION_W] = 0;
+         }
 
-	    R200_DB_STATECHANGE( rmesa, &rmesa->hw.lit[p] );
-	 }
+         R200_DB_STATECHANGE( rmesa, &rmesa->hw.lit[p] );
       }
    }
 }
@@ -1360,18 +1360,17 @@ static void r200ClipPlane( struct gl_context *ctx, GLenum plane, const GLfloat *
 static void r200UpdateClipPlanes( struct gl_context *ctx )
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
-   GLuint p;
+   GLbitfield mask = ctx->Transform.ClipPlanesEnabled;
 
-   for (p = 0; p < ctx->Const.MaxClipPlanes; p++) {
-      if (ctx->Transform.ClipPlanesEnabled & (1 << p)) {
-	 GLint *ip = (GLint *)ctx->Transform._ClipUserPlane[p];
+   while (mask) {
+      const int p = u_bit_scan(&mask);
+      GLint *ip = (GLint *)ctx->Transform._ClipUserPlane[p];
 
-	 R200_STATECHANGE( rmesa, ucp[p] );
-	 rmesa->hw.ucp[p].cmd[UCP_X] = ip[0];
-	 rmesa->hw.ucp[p].cmd[UCP_Y] = ip[1];
-	 rmesa->hw.ucp[p].cmd[UCP_Z] = ip[2];
-	 rmesa->hw.ucp[p].cmd[UCP_W] = ip[3];
-      }
+      R200_STATECHANGE( rmesa, ucp[p] );
+      rmesa->hw.ucp[p].cmd[UCP_X] = ip[0];
+      rmesa->hw.ucp[p].cmd[UCP_Y] = ip[1];
+      rmesa->hw.ucp[p].cmd[UCP_Z] = ip[2];
+      rmesa->hw.ucp[p].cmd[UCP_W] = ip[3];
    }
 }
 
@@ -1851,11 +1850,8 @@ static void r200Enable( struct gl_context *ctx, GLenum cap, GLboolean state )
    case GL_POINT_SPRITE_ARB:
       R200_STATECHANGE( rmesa, spr );
       if ( state ) {
-	 int i;
-	 for (i = 0; i < 6; i++) {
-	    rmesa->hw.spr.cmd[SPR_POINT_SPRITE_CNTL] |=
-		ctx->Point.CoordReplace[i] << (R200_PS_GEN_TEX_0_SHIFT + i);
-	 }
+	 rmesa->hw.spr.cmd[SPR_POINT_SPRITE_CNTL] |= R200_PS_GEN_TEX_MASK &
+            (ctx->Point.CoordReplace << R200_PS_GEN_TEX_0_SHIFT);
       } else {
 	 rmesa->hw.spr.cmd[SPR_POINT_SPRITE_CNTL] &= ~R200_PS_GEN_TEX_MASK;
       }

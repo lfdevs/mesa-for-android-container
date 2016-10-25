@@ -32,6 +32,7 @@
 #include "kernel/vc4_packet.h"
 
 struct vc4_bo;
+struct vc4_job;
 
 /**
  * Undefined structure, used for typechecking that you're passing the pointers
@@ -49,10 +50,10 @@ struct vc4_cl {
 #endif
 };
 
-void vc4_init_cl(struct vc4_context *vc4, struct vc4_cl *cl);
+void vc4_init_cl(void *mem_ctx, struct vc4_cl *cl);
 void vc4_reset_cl(struct vc4_cl *cl);
 void vc4_dump_cl(void *cl, uint32_t size, bool is_render);
-uint32_t vc4_gem_hindex(struct vc4_context *vc4, struct vc4_bo *bo);
+uint32_t vc4_gem_hindex(struct vc4_job *job, struct vc4_bo *bo);
 
 struct PACKED unaligned_16 { uint16_t x; };
 struct PACKED unaligned_32 { uint32_t x; };
@@ -174,10 +175,10 @@ cl_start_shader_reloc(struct vc4_cl *cl, uint32_t n)
 }
 
 static inline void
-cl_reloc(struct vc4_context *vc4, struct vc4_cl *cl, struct vc4_cl_out **cl_out,
+cl_reloc(struct vc4_job *job, struct vc4_cl *cl, struct vc4_cl_out **cl_out,
          struct vc4_bo *bo, uint32_t offset)
 {
-        *(uint32_t *)cl->reloc_next = vc4_gem_hindex(vc4, bo);
+        *(uint32_t *)cl->reloc_next = vc4_gem_hindex(job, bo);
         cl_advance(&cl->reloc_next, 4);
 
 #ifdef DEBUG
@@ -188,11 +189,11 @@ cl_reloc(struct vc4_context *vc4, struct vc4_cl *cl, struct vc4_cl_out **cl_out,
 }
 
 static inline void
-cl_aligned_reloc(struct vc4_context *vc4, struct vc4_cl *cl,
+cl_aligned_reloc(struct vc4_job *job, struct vc4_cl *cl,
                  struct vc4_cl_out **cl_out,
                  struct vc4_bo *bo, uint32_t offset)
 {
-        *(uint32_t *)cl->reloc_next = vc4_gem_hindex(vc4, bo);
+        *(uint32_t *)cl->reloc_next = vc4_gem_hindex(job, bo);
         cl_advance(&cl->reloc_next, 4);
 
 #ifdef DEBUG

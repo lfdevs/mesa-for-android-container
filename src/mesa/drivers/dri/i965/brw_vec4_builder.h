@@ -95,7 +95,7 @@ namespace brw {
       vec4_builder
       at_end() const
       {
-         return at(NULL, (exec_node *)&shader->instructions.tail);
+         return at(NULL, (exec_node *)&shader->instructions.tail_sentinel);
       }
 
       /**
@@ -373,6 +373,7 @@ namespace brw {
       ALU1(CBIT)
       ALU2(CMPN)
       ALU3(CSEL)
+      ALU1(DIM)
       ALU2(DP2)
       ALU2(DP3)
       ALU2(DP4)

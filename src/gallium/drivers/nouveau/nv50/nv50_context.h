@@ -47,6 +47,7 @@
 #define NV50_NEW_3D_SAMPLERS     (1 << 20)
 #define NV50_NEW_3D_STRMOUT      (1 << 21)
 #define NV50_NEW_3D_MIN_SAMPLES  (1 << 22)
+#define NV50_NEW_3D_WINDOW_RECTS (1 << 23)
 #define NV50_NEW_3D_CONTEXT      (1 << 31)
 
 #define NV50_NEW_CP_PROGRAM   (1 << 0)
@@ -96,7 +97,10 @@
 /* Sample position pairs for the current output MS level */
 #define NV50_CB_AUX_SAMPLE_OFFSET 0x300
 #define NV50_CB_AUX_SAMPLE_OFFSET_SIZE (4 * 8 * 2)
-/* next spot: 0x340 */
+/* Alpha test ref value */
+#define NV50_CB_AUX_ALPHATEST_OFFSET 0x340
+#define NV50_CB_AUX_ALPHATEST_SIZE (4)
+/* next spot: 0x344 */
 /* 4 32-bit floats for the vertex runout, put at the end */
 #define NV50_CB_AUX_RUNOUT_OFFSET (NV50_CB_AUX_SIZE - 0x10)
 
@@ -168,6 +172,7 @@ struct nv50_context {
    struct pipe_viewport_state viewports[NV50_MAX_VIEWPORTS];
    unsigned viewports_dirty;
    struct pipe_clip_state clip;
+   struct nv50_window_rect_stateobj window_rect;
 
    unsigned sample_mask;
    unsigned min_samples;
@@ -281,8 +286,7 @@ nv50_m2mf_copy_linear(struct nouveau_context *pipe,
                       unsigned size);
 void
 nv50_cb_push(struct nouveau_context *nv,
-             struct nouveau_bo *bo, unsigned domain,
-             unsigned base, unsigned size,
+             struct nv04_resource *res,
              unsigned offset, unsigned words, const uint32_t *data);
 
 /* nv50_vbo.c */

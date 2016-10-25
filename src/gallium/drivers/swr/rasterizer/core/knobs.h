@@ -35,6 +35,13 @@
 #define KNOB_ARCH_AVX512 2
 
 ///////////////////////////////////////////////////////////////////////////////
+// AVX512 Support
+///////////////////////////////////////////////////////////////////////////////
+
+#define ENABLE_AVX512_SIMD16    0
+#define USE_8x2_TILE_BACKEND    0
+
+///////////////////////////////////////////////////////////////////////////////
 // Architecture validation
 ///////////////////////////////////////////////////////////////////////////////
 #if !defined(KNOB_ARCH)
@@ -52,13 +59,33 @@
 #define KNOB_SIMD_WIDTH 8
 #define KNOB_SIMD_BYTES 32
 #elif (KNOB_ARCH == KNOB_ARCH_AVX512)
+#if 0
+// not ready to enable this globally, enabled on the side (below)
 #define KNOB_ARCH_ISA AVX512F
 #define KNOB_ARCH_STR "AVX512"
 #define KNOB_SIMD_WIDTH 16
 #define KNOB_SIMD_BYTES 64
-#error "AVX512 not yet supported"
+#else
+#define KNOB_ARCH_ISA AVX2
+#define KNOB_ARCH_STR "AVX2"
+#define KNOB_SIMD_WIDTH 8
+#define KNOB_SIMD_BYTES 32
+#endif
 #else
 #error "Unknown architecture"
+#endif
+
+#if ENABLE_AVX512_SIMD16
+
+#define KNOB_SIMD16_WIDTH 16
+#define KNOB_SIMD16_BYTES 64
+
+#if (KNOB_ARCH == KNOB_ARCH_AVX512)
+#define ENABLE_AVX512_EMULATION 0
+#else
+#define ENABLE_AVX512_EMULATION 1
+#endif
+
 #endif
 
 #define MAX_KNOB_ARCH_STR_LEN sizeof("AVX512_PLUS_PADDING")
@@ -66,13 +93,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Configuration knobs
 ///////////////////////////////////////////////////////////////////////////////
-#define KNOB_MAX_NUM_THREADS                256 // Supports up to dual-HSW-Xeon.
-
 // Maximum supported number of active vertex buffer streams
 #define KNOB_NUM_STREAMS                    32
 
 // Maximum supported number of attributes per vertex
-#define KNOB_NUM_ATTRIBUTES                 38
+#define KNOB_NUM_ATTRIBUTES                 39
 
 // Maximum supported active viewports and scissors
 #define KNOB_NUM_VIEWPORTS_SCISSORS         16
@@ -93,12 +118,12 @@
 
 // fixed macrotile pixel dimension for now, eventually will be 
 // dynamically set based on tile format and pixel size
-#define KNOB_MACROTILE_X_DIM                64
-#define KNOB_MACROTILE_Y_DIM                64
+#define KNOB_MACROTILE_X_DIM                32
+#define KNOB_MACROTILE_Y_DIM                32
+#define KNOB_MACROTILE_X_DIM_FIXED_SHIFT    13
+#define KNOB_MACROTILE_Y_DIM_FIXED_SHIFT    13
 #define KNOB_MACROTILE_X_DIM_FIXED          (KNOB_MACROTILE_X_DIM << 8)
 #define KNOB_MACROTILE_Y_DIM_FIXED          (KNOB_MACROTILE_Y_DIM << 8)
-#define KNOB_MACROTILE_X_DIM_FIXED_SHIFT    14
-#define KNOB_MACROTILE_Y_DIM_FIXED_SHIFT    14
 #define KNOB_MACROTILE_X_DIM_IN_TILES       (KNOB_MACROTILE_X_DIM >> KNOB_TILE_X_DIM_SHIFT)
 #define KNOB_MACROTILE_Y_DIM_IN_TILES       (KNOB_MACROTILE_Y_DIM >> KNOB_TILE_Y_DIM_SHIFT)
 
@@ -116,13 +141,33 @@
 
 #if KNOB_SIMD_WIDTH==8 && KNOB_TILE_X_DIM < 4
 #error "incompatible width/tile dimensions"
+#elif KNOB_SIMD_WIDTH==16 && KNOB_TILE_X_DIM < 4
+#error "incompatible width/tile dimensions"
+#endif
+
+#if ENABLE_AVX512_SIMD16
+#if KNOB_SIMD16_WIDTH == 16 && KNOB_TILE_X_DIM < 8
+#error "incompatible width/tile dimensions"
+#endif
 #endif
 
 #if KNOB_SIMD_WIDTH == 8
 #define SIMD_TILE_X_DIM 4
 #define SIMD_TILE_Y_DIM 2
+#elif KNOB_SIMD_WIDTH == 16
+#define SIMD_TILE_X_DIM 4
+#define SIMD_TILE_Y_DIM 4
 #else
 #error "Invalid simd width"
+#endif
+
+#if ENABLE_AVX512_SIMD16
+#if KNOB_SIMD16_WIDTH == 16
+#define SIMD16_TILE_X_DIM 8
+#define SIMD16_TILE_Y_DIM 2
+#else
+#error "Invalid simd width"
+#endif
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////

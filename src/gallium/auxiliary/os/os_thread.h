@@ -116,6 +116,22 @@ typedef mtx_t pipe_mutex;
 #define pipe_mutex_unlock(mutex) \
    (void) mtx_unlock(&(mutex))
 
+#define pipe_mutex_assert_locked(mutex) \
+   __pipe_mutex_assert_locked(&(mutex))
+
+static inline void
+__pipe_mutex_assert_locked(pipe_mutex *mutex)
+{
+#ifdef DEBUG
+   /* NOTE: this would not work for recursive mutexes, but
+    * pipe_mutex doesn't support those
+    */
+   int ret = mtx_trylock(mutex);
+   assert(ret == thrd_busy);
+   if (ret == thrd_success)
+      mtx_unlock(mutex);
+#endif
+}
 
 /* pipe_condvar
  */

@@ -27,6 +27,7 @@
 #include "r600d.h"
 
 #include <errno.h>
+#include "util/u_bitcast.h"
 #include "util/u_dump.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
@@ -1956,7 +1957,7 @@ static int print_src(struct r600_bytecode_alu *alu, unsigned idx)
 			need_chan = 1;
 			break;
 		case V_SQ_ALU_SRC_LITERAL:
-			o += fprintf(stderr, "[0x%08X %f]", src->value, *(float*)&src->value);
+			o += fprintf(stderr, "[0x%08X %f]", src->value, u_bitcast_u2f(src->value));
 			break;
 		case V_SQ_ALU_SRC_0_5:
 			o += fprintf(stderr, "0.5");
@@ -2343,6 +2344,12 @@ void r600_vertex_data_type(enum pipe_format pformat,
 		return;
 	}
 
+	if (pformat == PIPE_FORMAT_B5G6R5_UNORM) {
+		*format = FMT_5_6_5;
+		*endian = r600_endian_swap(16);
+		return;
+	}
+
 	desc = util_format_description(pformat);
 	if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN) {
 		goto out_unknown;
@@ -2615,7 +2622,8 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 		return NULL;
 	}
 
-	u_suballocator_alloc(rctx->allocator_fetch_shader, fs_size, &shader->offset,
+	u_suballocator_alloc(rctx->allocator_fetch_shader, fs_size, 256,
+			     &shader->offset,
 			     (struct pipe_resource**)&shader->buffer);
 	if (!shader->buffer) {
 		r600_bytecode_clear(&bc);

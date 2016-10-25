@@ -265,6 +265,40 @@ get_tex_ycbcr(struct gl_context *ctx, GLuint dimensions,
    }
 }
 
+/**
+ * Depending on the base format involved we may need to apply a rebase
+ * transform (for example: if we download to a Luminance format we want
+ * G=0 and B=0).
+ */
+static bool
+teximage_needs_rebase(mesa_format texFormat, GLenum baseFormat,
+                      bool is_compressed, uint8_t *rebaseSwizzle)
+{
+   bool needsRebase = false;
+
+   if (baseFormat == GL_LUMINANCE ||
+       baseFormat == GL_INTENSITY) {
+      needsRebase = true;
+      rebaseSwizzle[0] = MESA_FORMAT_SWIZZLE_X;
+      rebaseSwizzle[1] = MESA_FORMAT_SWIZZLE_ZERO;
+      rebaseSwizzle[2] = MESA_FORMAT_SWIZZLE_ZERO;
+      rebaseSwizzle[3] = MESA_FORMAT_SWIZZLE_ONE;
+   } else if (baseFormat == GL_LUMINANCE_ALPHA) {
+      needsRebase = true;
+      rebaseSwizzle[0] = MESA_FORMAT_SWIZZLE_X;
+      rebaseSwizzle[1] = MESA_FORMAT_SWIZZLE_ZERO;
+      rebaseSwizzle[2] = MESA_FORMAT_SWIZZLE_ZERO;
+      rebaseSwizzle[3] = MESA_FORMAT_SWIZZLE_W;
+   } else if (!is_compressed &&
+              (baseFormat != _mesa_get_format_base_format(texFormat))) {
+      needsRebase =
+         _mesa_compute_rgba2base2rgba_component_mapping(baseFormat,
+                                                        rebaseSwizzle);
+   }
+
+   return needsRebase;
+}
+
 
 /**
  * Get a color texture image with decompression.
@@ -319,26 +353,8 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
       }
    }
 
-   /* Depending on the base format involved we may need to apply a rebase
-    * transform (for example: if we download to a Luminance format we want
-    * G=0 and B=0).
-    */
-   if (baseFormat == GL_LUMINANCE ||
-       baseFormat == GL_INTENSITY) {
-      needsRebase = true;
-      rebaseSwizzle[0] = MESA_FORMAT_SWIZZLE_X;
-      rebaseSwizzle[1] = MESA_FORMAT_SWIZZLE_ZERO;
-      rebaseSwizzle[2] = MESA_FORMAT_SWIZZLE_ZERO;
-      rebaseSwizzle[3] = MESA_FORMAT_SWIZZLE_ONE;
-   } else if (baseFormat == GL_LUMINANCE_ALPHA) {
-      needsRebase = true;
-      rebaseSwizzle[0] = MESA_FORMAT_SWIZZLE_X;
-      rebaseSwizzle[1] = MESA_FORMAT_SWIZZLE_ZERO;
-      rebaseSwizzle[2] = MESA_FORMAT_SWIZZLE_ZERO;
-      rebaseSwizzle[3] = MESA_FORMAT_SWIZZLE_W;
-   } else {
-      needsRebase = false;
-   }
+   needsRebase = teximage_needs_rebase(texFormat, baseFormat, true,
+                                       rebaseSwizzle);
 
    srcStride = 4 * width * sizeof(GLfloat);
    dstStride = _mesa_image_row_stride(&ctx->Pack, width, format, type);
@@ -423,31 +439,8 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
    bool needsRebase;
    void *rgba = NULL;
 
-   /* Depending on the base format involved we may need to apply a rebase
-    * transform (for example: if we download to a Luminance format we want
-    * G=0 and B=0).
-    */
-   if (texImage->_BaseFormat == GL_LUMINANCE ||
-       texImage->_BaseFormat == GL_INTENSITY) {
-      needsRebase = true;
-      rebaseSwizzle[0] = MESA_FORMAT_SWIZZLE_X;
-      rebaseSwizzle[1] = MESA_FORMAT_SWIZZLE_ZERO;
-      rebaseSwizzle[2] = MESA_FORMAT_SWIZZLE_ZERO;
-      rebaseSwizzle[3] = MESA_FORMAT_SWIZZLE_ONE;
-   } else if (texImage->_BaseFormat == GL_LUMINANCE_ALPHA) {
-      needsRebase = true;
-      rebaseSwizzle[0] = MESA_FORMAT_SWIZZLE_X;
-      rebaseSwizzle[1] = MESA_FORMAT_SWIZZLE_ZERO;
-      rebaseSwizzle[2] = MESA_FORMAT_SWIZZLE_ZERO;
-      rebaseSwizzle[3] = MESA_FORMAT_SWIZZLE_W;
-    } else if (texImage->_BaseFormat !=
-               _mesa_get_format_base_format(texFormat)) {
-      needsRebase =
-         _mesa_compute_rgba2base2rgba_component_mapping(texImage->_BaseFormat,
-                                                        rebaseSwizzle);
-    } else {
-      needsRebase = false;
-    }
+   needsRebase = teximage_needs_rebase(texFormat, texImage->_BaseFormat, false,
+                                       rebaseSwizzle);
 
    /* Describe the dst format */
    dst_is_integer = _mesa_is_enum_format_integer(format);

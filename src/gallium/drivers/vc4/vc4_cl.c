@@ -26,9 +26,9 @@
 #include "vc4_context.h"
 
 void
-vc4_init_cl(struct vc4_context *vc4, struct vc4_cl *cl)
+vc4_init_cl(void *mem_ctx, struct vc4_cl *cl)
 {
-        cl->base = ralloc_size(vc4, 1);
+        cl->base = ralloc_size(mem_ctx, 1);
         cl->next = cl->base;
         cl->size = 0;
 }
@@ -56,25 +56,25 @@ vc4_reset_cl(struct vc4_cl *cl)
 }
 
 uint32_t
-vc4_gem_hindex(struct vc4_context *vc4, struct vc4_bo *bo)
+vc4_gem_hindex(struct vc4_job *job, struct vc4_bo *bo)
 {
         uint32_t hindex;
-        uint32_t *current_handles = vc4->bo_handles.base;
+        uint32_t *current_handles = job->bo_handles.base;
 
-        for (hindex = 0; hindex < cl_offset(&vc4->bo_handles) / 4; hindex++) {
+        for (hindex = 0; hindex < cl_offset(&job->bo_handles) / 4; hindex++) {
                 if (current_handles[hindex] == bo->handle)
                         return hindex;
         }
 
         struct vc4_cl_out *out;
 
-        out = cl_start(&vc4->bo_handles);
+        out = cl_start(&job->bo_handles);
         cl_u32(&out, bo->handle);
-        cl_end(&vc4->bo_handles, out);
+        cl_end(&job->bo_handles, out);
 
-        out = cl_start(&vc4->bo_pointers);
+        out = cl_start(&job->bo_pointers);
         cl_ptr(&out, vc4_bo_reference(bo));
-        cl_end(&vc4->bo_pointers, out);
+        cl_end(&job->bo_pointers, out);
 
         return hindex;
 }

@@ -53,7 +53,6 @@ typedef ShaderVariant<PFN_PIXEL_KERNEL> VariantFS;
 struct swr_vertex_shader {
    struct pipe_shader_state pipe;
    struct lp_tgsi_info info;
-   unsigned linkageMask;
    std::unordered_map<swr_jit_vs_key, std::unique_ptr<VariantVS>> map;
    SWR_STREAMOUT_STATE soState;
    PFN_SO_FUNC soFunc[PIPE_PRIM_MAX] {0};
@@ -63,6 +62,7 @@ struct swr_fragment_shader {
    struct pipe_shader_state pipe;
    struct lp_tgsi_info info;
    uint32_t constantMask;
+   uint32_t flatConstantMask;
    uint32_t pointSpriteMask;
    std::unordered_map<swr_jit_fs_key, std::unique_ptr<VariantFS>> map;
 };
@@ -87,7 +87,7 @@ struct swr_blend_state {
 struct swr_derived_state {
    SWR_RASTSTATE rastState;
    SWR_VIEWPORT vp;
-   SWR_VIEWPORT_MATRIX vpm;
+   SWR_VIEWPORT_MATRICES vpm;
 };
 
 void swr_update_derived(struct pipe_context *,

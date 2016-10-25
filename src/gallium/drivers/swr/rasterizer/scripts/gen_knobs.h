@@ -51,23 +51,20 @@ private:
 struct GlobalKnobs
 {
     //-----------------------------------------------------------
+    // KNOB_ENABLE_ASSERT_DIALOGS
+    //
+    // Use dialogs when asserts fire.
+    // Asserts are only enabled in debug builds
+    //
+    DEFINE_KNOB(ENABLE_ASSERT_DIALOGS, bool, true);
+
+    //-----------------------------------------------------------
     // KNOB_SINGLE_THREADED
     //
     // If enabled will perform all rendering on the API thread.
     // This is useful mainly for debugging purposes.
     //
     DEFINE_KNOB(SINGLE_THREADED, bool, false);
-
-    //-----------------------------------------------------------
-    // KNOB_HYPERTHREADED_FE
-    //
-    // EXPERIMENTAL!!
-    // If enabled will attempt to use secondary threads per core to perform
-    // front-end (VS/GS) work.
-    // 
-    // Note: Setting this will cause KNOB_MAX_THREADS_PER_CORE to be ignored.
-    //
-    DEFINE_KNOB(HYPERTHREADED_FE, bool, false);
 
     //-----------------------------------------------------------
     // KNOB_DUMP_SHADER_IR
@@ -162,8 +159,9 @@ struct GlobalKnobs
     // KNOB_MAX_DRAWS_IN_FLIGHT
     //
     // Maximum number of draws outstanding before API thread blocks.
+    // This value MUST be evenly divisible into 2^32
     //
-    DEFINE_KNOB(MAX_DRAWS_IN_FLIGHT, uint32_t, 96);
+    DEFINE_KNOB(MAX_DRAWS_IN_FLIGHT, uint32_t, 128);
 
     //-----------------------------------------------------------
     // KNOB_MAX_PRIMS_PER_DRAW
@@ -184,11 +182,11 @@ struct GlobalKnobs
     DEFINE_KNOB(MAX_TESS_PRIMS_PER_DRAW, uint32_t, 16);
 
     //-----------------------------------------------------------
-    // KNOB_BUCKETS_ENABLE_THREADVIZ
+    // KNOB_DEBUG_OUTPUT_DIR
     //
-    // Enable threadviz output.
+    // Output directory for debug data.
     //
-    DEFINE_KNOB(BUCKETS_ENABLE_THREADVIZ, bool, false);
+    DEFINE_KNOB(DEBUG_OUTPUT_DIR, std::string, "/tmp/Rast/DebugOutput");
 
     //-----------------------------------------------------------
     // KNOB_TOSS_DRAW
@@ -265,8 +263,10 @@ struct GlobalKnobs
 };
 extern GlobalKnobs g_GlobalKnobs;
 
+#undef DEFINE_KNOB
+
+#define KNOB_ENABLE_ASSERT_DIALOGS       GET_KNOB(ENABLE_ASSERT_DIALOGS)
 #define KNOB_SINGLE_THREADED             GET_KNOB(SINGLE_THREADED)
-#define KNOB_HYPERTHREADED_FE            GET_KNOB(HYPERTHREADED_FE)
 #define KNOB_DUMP_SHADER_IR              GET_KNOB(DUMP_SHADER_IR)
 #define KNOB_USE_GENERIC_STORETILE       GET_KNOB(USE_GENERIC_STORETILE)
 #define KNOB_FAST_CLEAR                  GET_KNOB(FAST_CLEAR)
@@ -280,7 +280,7 @@ extern GlobalKnobs g_GlobalKnobs;
 #define KNOB_MAX_DRAWS_IN_FLIGHT         GET_KNOB(MAX_DRAWS_IN_FLIGHT)
 #define KNOB_MAX_PRIMS_PER_DRAW          GET_KNOB(MAX_PRIMS_PER_DRAW)
 #define KNOB_MAX_TESS_PRIMS_PER_DRAW     GET_KNOB(MAX_TESS_PRIMS_PER_DRAW)
-#define KNOB_BUCKETS_ENABLE_THREADVIZ    GET_KNOB(BUCKETS_ENABLE_THREADVIZ)
+#define KNOB_DEBUG_OUTPUT_DIR            GET_KNOB(DEBUG_OUTPUT_DIR)
 #define KNOB_TOSS_DRAW                   GET_KNOB(TOSS_DRAW)
 #define KNOB_TOSS_QUEUE_FE               GET_KNOB(TOSS_QUEUE_FE)
 #define KNOB_TOSS_FETCH                  GET_KNOB(TOSS_FETCH)

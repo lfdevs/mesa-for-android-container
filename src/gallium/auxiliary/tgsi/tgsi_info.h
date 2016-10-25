@@ -98,8 +98,18 @@ enum tgsi_opcode_type {
    TGSI_TYPE_UNSIGNED,
    TGSI_TYPE_SIGNED,
    TGSI_TYPE_FLOAT,
-   TGSI_TYPE_DOUBLE
+   TGSI_TYPE_DOUBLE,
+   TGSI_TYPE_UNSIGNED64,
+   TGSI_TYPE_SIGNED64,
 };
+
+static inline bool tgsi_type_is_64bit(enum tgsi_opcode_type type)
+{
+   if (type == TGSI_TYPE_DOUBLE || type == TGSI_TYPE_UNSIGNED64 ||
+       type == TGSI_TYPE_SIGNED64)
+      return true;
+   return false;
+}
 
 enum tgsi_opcode_type
 tgsi_opcode_infer_src_type( uint opcode );

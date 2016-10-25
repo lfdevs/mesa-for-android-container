@@ -45,6 +45,7 @@ struct pipe_loader_sw_device {
    struct util_dl_library *lib;
 #endif
    struct sw_winsys *ws;
+   int fd;
 };
 
 #define pipe_loader_sw_device(dev) ((struct pipe_loader_sw_device *)dev)
@@ -92,6 +93,7 @@ pipe_loader_sw_probe_init_common(struct pipe_loader_sw_device *sdev)
    sdev->base.type = PIPE_LOADER_DEVICE_SOFTWARE;
    sdev->base.driver_name = "swrast";
    sdev->base.ops = &pipe_loader_sw_ops;
+   sdev->fd = -1;
 
 #ifdef GALLIUM_STATIC_TARGETS
    sdev->dd = &driver_descriptors;
@@ -168,6 +170,8 @@ pipe_loader_sw_probe_kms(struct pipe_loader_device **devs, int fd)
 
    if (!pipe_loader_sw_probe_init_common(sdev))
       goto fail;
+
+   sdev->fd = fd;
 
    for (i = 0; sdev->dd->winsys[i].name; i++) {
       if (strcmp(sdev->dd->winsys[i].name, "kms_dri") == 0) {
@@ -271,6 +275,11 @@ pipe_loader_sw_release(struct pipe_loader_device **dev)
 #ifndef GALLIUM_STATIC_TARGETS
    if (sdev->lib)
       util_dl_close(sdev->lib);
+#endif
+
+#ifdef HAVE_PIPE_LOADER_KMS
+   if (sdev->fd != -1)
+      close(sdev->fd);
 #endif
 
    FREE(sdev);

@@ -155,10 +155,10 @@ lp_build_print_value(struct gallivm_state *gallivm,
 }
 
 
-static int
+static unsigned
 lp_get_printf_arg_count(const char *fmt)
 {
-   int count =0;
+   unsigned count = 0;
    const char *p = fmt;
    int c;
 
@@ -195,8 +195,7 @@ lp_build_printf(struct gallivm_state *gallivm,
 {
    LLVMValueRef params[50];
    va_list arglist;
-   int argcount;
-   int i;
+   unsigned argcount, i;
 
    argcount = lp_get_printf_arg_count(fmt);
    assert(ARRAY_SIZE(params) >= argcount + 1);

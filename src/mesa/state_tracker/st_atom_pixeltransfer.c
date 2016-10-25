@@ -30,6 +30,7 @@
  */
 
 #include "st_context.h"
+#include "st_sampler_view.h"
 #include "st_texture.h"
 
 #include "util/u_inlines.h"
@@ -102,10 +103,5 @@ update_pixel_transfer(struct st_context *st)
 
 
 const struct st_tracked_state st_update_pixel_transfer = {
-   "st_update_pixel_transfer",				/* name */
-   {							/* dirty */
-      _NEW_PIXEL,					/* mesa */
-      0,						/* st */
-   },
    update_pixel_transfer				/* update */
 };

@@ -35,6 +35,14 @@
 #include "vc4_context.h"
 #include "vc4_screen.h"
 
+#ifdef HAVE_VALGRIND
+#include <valgrind.h>
+#include <memcheck.h>
+#define VG(x) x
+#else
+#define VG(x)
+#endif
+
 static bool dump_stats = false;
 
 static void
@@ -209,6 +217,7 @@ vc4_bo_free(struct vc4_bo *bo)
                 }
 #endif
                 munmap(bo->map, bo->size);
+                VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
         }
 
         struct drm_gem_close c;
@@ -618,6 +627,7 @@ vc4_bo_map_unsynchronized(struct vc4_bo *bo)
                         bo->handle, (long long)offset, bo->size);
                 abort();
         }
+        VG(VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, false));
 
         return bo->map;
 }

@@ -26,6 +26,27 @@
  */
 
 #include "nir.h"
+#include "nir_builder.h"
+
+static nir_alu_instr *
+get_parent_mov(nir_ssa_def *ssa)
+{
+   if (ssa->parent_instr->type != nir_instr_type_alu)
+      return NULL;
+
+   nir_alu_instr *alu = nir_instr_as_alu(ssa->parent_instr);
+   return (alu->op == nir_op_imov || alu->op == nir_op_fmov) ? alu : NULL;
+}
+
+static bool
+matching_mov(nir_alu_instr *mov1, nir_ssa_def *ssa)
+{
+   if (!mov1)
+      return false;
+
+   nir_alu_instr *mov2 = get_parent_mov(ssa);
+   return mov2 && nir_alu_srcs_equal(mov1, mov2, 0, 0);
+}
 
 /*
  * This is a pass for removing phi nodes that look like:
@@ -43,7 +64,7 @@
  */
 
 static bool
-remove_phis_block(nir_block *block)
+remove_phis_block(nir_block *block, nir_builder *b)
 {
    bool progress = false;
 
@@ -54,6 +75,7 @@ remove_phis_block(nir_block *block)
       nir_phi_instr *phi = nir_instr_as_phi(instr);
 
       nir_ssa_def *def = NULL;
+      nir_alu_instr *mov = NULL;
       bool srcs_same = true;
 
       nir_foreach_phi_src(src, phi) {
@@ -75,8 +97,9 @@ remove_phis_block(nir_block *block)
          
          if (def == NULL) {
             def  = src->src.ssa;
+            mov = get_parent_mov(def);
          } else {
-            if (src->src.ssa != def) {
+            if (src->src.ssa != def && !matching_mov(mov, src->src.ssa)) {
                srcs_same = false;
                break;
             }
@@ -90,6 +113,21 @@ remove_phis_block(nir_block *block)
        * least one forward edge.
        */
       assert(def != NULL);
+
+      if (mov) {
+         /* If the sources were all mov's from the same source with the same
+          * swizzle, then we can't just pick a random move because it may not
+          * dominate the phi node. Instead, we need to emit our own move after
+          * the phi which uses the shared source, and rewrite uses of the phi
+          * to use the move instead. This is ok, because while the mov's may
+          * not all dominate the phi node, their shared source does.
+          */
+
+         b->cursor = nir_after_phis(block);
+         def = mov->op == nir_op_imov ?
+            nir_imov_alu(b, mov->src[0], def->num_components) :
+            nir_fmov_alu(b, mov->src[0], def->num_components);
+      }
 
       assert(phi->dest.is_ssa);
       nir_ssa_def_rewrite_uses(&phi->dest.ssa, nir_src_for_ssa(def));
@@ -105,9 +143,11 @@ static bool
 remove_phis_impl(nir_function_impl *impl)
 {
    bool progress = false;
+   nir_builder bld;
+   nir_builder_init(&bld, impl);
 
    nir_foreach_block(block, impl) {
-      progress |= remove_phis_block(block);
+      progress |= remove_phis_block(block, &bld);
    }
 
    if (progress) {

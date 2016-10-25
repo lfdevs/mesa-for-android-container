@@ -186,9 +186,13 @@ print_alu_src(nir_alu_instr *instr, unsigned src, print_state *state)
    print_src(&instr->src[src].src, state);
 
    bool print_swizzle = false;
+   unsigned used_channels = 0;
+
    for (unsigned i = 0; i < 4; i++) {
       if (!nir_alu_instr_channel_used(instr, src, i))
          continue;
+
+      used_channels++;
 
       if (instr->src[src].swizzle[i] != i) {
          print_swizzle = true;
@@ -196,7 +200,11 @@ print_alu_src(nir_alu_instr *instr, unsigned src, print_state *state)
       }
    }
 
-   if (print_swizzle) {
+   unsigned live_channels = instr->src[src].src.is_ssa
+      ? instr->src[src].src.ssa->num_components
+      : instr->src[src].src.reg.reg->num_components;
+
+   if (print_swizzle || used_channels != live_channels) {
       fprintf(fp, ".");
       for (unsigned i = 0; i < 4; i++) {
          if (!nir_alu_instr_channel_used(instr, src, i))
@@ -374,7 +382,7 @@ print_var_decl(nir_variable *var, print_state *state)
    const char *const inv = (var->data.invariant) ? "invariant " : "";
    fprintf(fp, "%s%s%s%s%s %s ",
            cent, samp, patch, inv, get_variable_mode_str(var->data.mode),
-           glsl_interp_qualifier_name(var->data.interpolation));
+           glsl_interp_mode_name(var->data.interpolation));
 
    const char *const coher = (var->data.image.coherent) ? "coherent " : "";
    const char *const volat = (var->data.image._volatile) ? "volatile " : "";
@@ -383,9 +391,8 @@ print_var_decl(nir_variable *var, print_state *state)
    const char *const wonly = (var->data.image.write_only) ? "writeonly " : "";
    fprintf(fp, "%s%s%s%s%s", coher, volat, restr, ronly, wonly);
 
-   glsl_print_type(var->type, fp);
-
-   fprintf(fp, " %s", get_var_name(var, state));
+   fprintf(fp, "%s %s", glsl_get_type_name(var->type),
+           get_var_name(var, state));
 
    if (var->data.mode == nir_var_shader_in ||
        var->data.mode == nir_var_shader_out ||
@@ -449,8 +456,8 @@ static void
 print_arg(nir_variable *var, print_state *state)
 {
    FILE *fp = state->fp;
-   glsl_print_type(var->type, fp);
-   fprintf(fp, " %s", get_var_name(var, state));
+   fprintf(fp, "%s %s", glsl_get_type_name(var->type),
+           get_var_name(var, state));
 }
 
 static void
@@ -570,6 +577,8 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
       [NIR_INTRINSIC_RANGE] = "range",
       [NIR_INTRINSIC_DESC_SET] = "desc-set",
       [NIR_INTRINSIC_BINDING] = "binding",
+      [NIR_INTRINSIC_COMPONENT] = "component",
+      [NIR_INTRINSIC_INTERP_MODE] = "interp_mode",
    };
    for (unsigned idx = 1; idx < NIR_INTRINSIC_NUM_INDEX_FLAGS; idx++) {
       if (!info->index_map[idx])
@@ -614,6 +623,8 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
 
    nir_foreach_variable(var, var_list) {
       if ((var->data.driver_location == nir_intrinsic_base(instr)) &&
+          (instr->intrinsic == nir_intrinsic_load_uniform ||
+           var->data.location_frac == nir_intrinsic_component(instr)) &&
           var->name) {
          fprintf(fp, "\t/* %s */", var->name);
          break;
@@ -1085,14 +1096,13 @@ print_function(nir_function *function, print_state *state)
          unreachable("Invalid parameter type");
       }
 
-      glsl_print_type(function->params[i].type, fp);
+      fprintf(fp, "%s", glsl_get_type_name(function->params[i].type));
    }
 
    if (function->return_type != NULL) {
       if (function->num_params != 0)
          fprintf(fp, ", ");
-      fprintf(fp, "returning ");
-      glsl_print_type(function->return_type, fp);
+      fprintf(fp, "returning %s", glsl_get_type_name(function->return_type));
    }
 
    fprintf(fp, "\n");

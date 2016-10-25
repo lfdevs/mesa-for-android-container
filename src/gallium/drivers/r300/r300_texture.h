@@ -62,6 +62,7 @@ void r300_texture_setup_format_state(struct r300_screen *screen,
                                      struct r300_texture_format_state *out);
 
 boolean r300_resource_get_handle(struct pipe_screen* screen,
+                                 struct pipe_context *ctx,
                                 struct pipe_resource *texture,
                                 struct winsys_handle *whandle,
                                  unsigned usage);

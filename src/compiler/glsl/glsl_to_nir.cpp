@@ -134,7 +134,7 @@ glsl_to_nir(const struct gl_shader_program *shader_prog,
             gl_shader_stage stage,
             const nir_shader_compiler_options *options)
 {
-   struct gl_shader *sh = shader_prog->_LinkedShaders[stage];
+   struct gl_linked_shader *sh = shader_prog->_LinkedShaders[stage];
 
    nir_shader *shader = nir_shader_create(NULL, stage, options);
 
@@ -146,7 +146,7 @@ glsl_to_nir(const struct gl_shader_program *shader_prog,
    shader->info.name = ralloc_asprintf(shader, "GLSL%d", shader_prog->Name);
    if (shader_prog->Label)
       shader->info.label = ralloc_strdup(shader, shader_prog->Label);
-   shader->info.num_textures = _mesa_fls(sh->Program->SamplersUsed);
+   shader->info.num_textures = util_last_bit(sh->Program->SamplersUsed);
    shader->info.num_ubos = sh->NumUniformBlocks;
    shader->info.num_abos = shader_prog->NumAtomicBuffers;
    shader->info.num_ssbos = sh->NumShaderStorageBlocks;
@@ -154,6 +154,7 @@ glsl_to_nir(const struct gl_shader_program *shader_prog,
    shader->info.inputs_read = sh->Program->InputsRead;
    shader->info.double_inputs_read = sh->Program->DoubleInputsRead;
    shader->info.outputs_written = sh->Program->OutputsWritten;
+   shader->info.outputs_read = sh->Program->OutputsRead;
    shader->info.patch_inputs_read = sh->Program->PatchInputsRead;
    shader->info.patch_outputs_written = sh->Program->PatchOutputsWritten;
    shader->info.system_values_read = sh->Program->SystemValuesRead;
@@ -166,14 +167,14 @@ glsl_to_nir(const struct gl_shader_program *shader_prog,
 
    switch (stage) {
    case MESA_SHADER_TESS_CTRL:
-      shader->info.tcs.vertices_out = shader_prog->TessCtrl.VerticesOut;
+      shader->info.tcs.vertices_out = sh->info.TessCtrl.VerticesOut;
       break;
 
    case MESA_SHADER_GEOMETRY:
       shader->info.gs.vertices_in = shader_prog->Geom.VerticesIn;
-      shader->info.gs.output_primitive = sh->Geom.OutputType;
-      shader->info.gs.vertices_out = sh->Geom.VerticesOut;
-      shader->info.gs.invocations = sh->Geom.Invocations;
+      shader->info.gs.output_primitive = sh->info.Geom.OutputType;
+      shader->info.gs.vertices_out = sh->info.Geom.VerticesOut;
+      shader->info.gs.invocations = sh->info.Geom.Invocations;
       shader->info.gs.uses_end_primitive = shader_prog->Geom.UsesEndPrimitive;
       shader->info.gs.uses_streams = shader_prog->Geom.UsesStreams;
       break;
@@ -184,7 +185,7 @@ glsl_to_nir(const struct gl_shader_program *shader_prog,
 
       shader->info.fs.uses_discard = fp->UsesKill;
       shader->info.fs.uses_sample_qualifier = fp->IsSample != 0;
-      shader->info.fs.early_fragment_tests = sh->EarlyFragmentTests;
+      shader->info.fs.early_fragment_tests = sh->info.EarlyFragmentTests;
       shader->info.fs.depth_layout = fp->FragDepthLayout;
       break;
    }
@@ -406,6 +407,7 @@ nir_visitor::visit(ir_variable *ir)
    var->data.image.restrict_flag = ir->data.image_restrict;
    var->data.image.format = ir->data.image_format;
    var->data.max_array_access = ir->data.max_array_access;
+   var->data.fb_fetch_output = ir->data.fb_fetch_output;
 
    var->num_state_slots = ir->get_num_state_slots();
    if (var->num_state_slots > 0) {
@@ -447,7 +449,7 @@ nir_function_visitor::visit_enter(ir_function *ir)
 void
 nir_visitor::create_function(ir_function_signature *ir)
 {
-   if (ir->is_intrinsic)
+   if (ir->is_intrinsic())
       return;
 
    nir_function *func = nir_function_create(shader, ir->function_name());
@@ -468,7 +470,7 @@ nir_visitor::visit(ir_function *ir)
 void
 nir_visitor::visit(ir_function_signature *ir)
 {
-   if (ir->is_intrinsic)
+   if (ir->is_intrinsic())
       return;
 
    struct hash_entry *entry =
@@ -605,53 +607,101 @@ nir_visitor::visit(ir_return *ir)
 void
 nir_visitor::visit(ir_call *ir)
 {
-   if (ir->callee->is_intrinsic) {
+   if (ir->callee->is_intrinsic()) {
       nir_intrinsic_op op;
-      if (strcmp(ir->callee_name(), "__intrinsic_atomic_read") == 0) {
+
+      switch (ir->callee->intrinsic_id) {
+      case ir_intrinsic_atomic_counter_read:
          op = nir_intrinsic_atomic_counter_read_var;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_increment") == 0) {
+         break;
+      case ir_intrinsic_atomic_counter_increment:
          op = nir_intrinsic_atomic_counter_inc_var;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_predecrement") == 0) {
+         break;
+      case ir_intrinsic_atomic_counter_predecrement:
          op = nir_intrinsic_atomic_counter_dec_var;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_load") == 0) {
+         break;
+      case ir_intrinsic_atomic_counter_add:
+         op = nir_intrinsic_atomic_counter_add_var;
+         break;
+      case ir_intrinsic_atomic_counter_and:
+         op = nir_intrinsic_atomic_counter_and_var;
+         break;
+      case ir_intrinsic_atomic_counter_or:
+         op = nir_intrinsic_atomic_counter_or_var;
+         break;
+      case ir_intrinsic_atomic_counter_xor:
+         op = nir_intrinsic_atomic_counter_xor_var;
+         break;
+      case ir_intrinsic_atomic_counter_min:
+         op = nir_intrinsic_atomic_counter_min_var;
+         break;
+      case ir_intrinsic_atomic_counter_max:
+         op = nir_intrinsic_atomic_counter_max_var;
+         break;
+      case ir_intrinsic_atomic_counter_exchange:
+         op = nir_intrinsic_atomic_counter_exchange_var;
+         break;
+      case ir_intrinsic_atomic_counter_comp_swap:
+         op = nir_intrinsic_atomic_counter_comp_swap_var;
+         break;
+      case ir_intrinsic_image_load:
          op = nir_intrinsic_image_load;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_store") == 0) {
+         break;
+      case ir_intrinsic_image_store:
          op = nir_intrinsic_image_store;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_atomic_add") == 0) {
+         break;
+      case ir_intrinsic_image_atomic_add:
          op = nir_intrinsic_image_atomic_add;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_atomic_min") == 0) {
+         break;
+      case ir_intrinsic_image_atomic_min:
          op = nir_intrinsic_image_atomic_min;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_atomic_max") == 0) {
+         break;
+      case ir_intrinsic_image_atomic_max:
          op = nir_intrinsic_image_atomic_max;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_atomic_and") == 0) {
+         break;
+      case ir_intrinsic_image_atomic_and:
          op = nir_intrinsic_image_atomic_and;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_atomic_or") == 0) {
+         break;
+      case ir_intrinsic_image_atomic_or:
          op = nir_intrinsic_image_atomic_or;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_atomic_xor") == 0) {
+         break;
+      case ir_intrinsic_image_atomic_xor:
          op = nir_intrinsic_image_atomic_xor;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_atomic_exchange") == 0) {
+         break;
+      case ir_intrinsic_image_atomic_exchange:
          op = nir_intrinsic_image_atomic_exchange;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_atomic_comp_swap") == 0) {
+         break;
+      case ir_intrinsic_image_atomic_comp_swap:
          op = nir_intrinsic_image_atomic_comp_swap;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_memory_barrier") == 0) {
+         break;
+      case ir_intrinsic_memory_barrier:
          op = nir_intrinsic_memory_barrier;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_size") == 0) {
+         break;
+      case ir_intrinsic_image_size:
          op = nir_intrinsic_image_size;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_image_samples") == 0) {
+         break;
+      case ir_intrinsic_image_samples:
          op = nir_intrinsic_image_samples;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_store_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_store:
          op = nir_intrinsic_store_ssbo;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_load_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_load:
          op = nir_intrinsic_load_ssbo;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_add_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_atomic_add:
          op = nir_intrinsic_ssbo_atomic_add;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_and_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_atomic_and:
          op = nir_intrinsic_ssbo_atomic_and;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_or_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_atomic_or:
          op = nir_intrinsic_ssbo_atomic_or;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_xor_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_atomic_xor:
          op = nir_intrinsic_ssbo_atomic_xor;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_min_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_atomic_min:
          assert(ir->return_deref);
          if (ir->return_deref->type == glsl_type::int_type)
             op = nir_intrinsic_ssbo_atomic_imin;
@@ -659,7 +709,8 @@ nir_visitor::visit(ir_call *ir)
             op = nir_intrinsic_ssbo_atomic_umin;
          else
             unreachable("Invalid type");
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_max_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_atomic_max:
          assert(ir->return_deref);
          if (ir->return_deref->type == glsl_type::int_type)
             op = nir_intrinsic_ssbo_atomic_imax;
@@ -667,35 +718,50 @@ nir_visitor::visit(ir_call *ir)
             op = nir_intrinsic_ssbo_atomic_umax;
          else
             unreachable("Invalid type");
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_exchange_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_atomic_exchange:
          op = nir_intrinsic_ssbo_atomic_exchange;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_comp_swap_ssbo") == 0) {
+         break;
+      case ir_intrinsic_ssbo_atomic_comp_swap:
          op = nir_intrinsic_ssbo_atomic_comp_swap;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_shader_clock") == 0) {
+         break;
+      case ir_intrinsic_shader_clock:
          op = nir_intrinsic_shader_clock;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_group_memory_barrier") == 0) {
+         break;
+      case ir_intrinsic_group_memory_barrier:
          op = nir_intrinsic_group_memory_barrier;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_memory_barrier_atomic_counter") == 0) {
+         break;
+      case ir_intrinsic_memory_barrier_atomic_counter:
          op = nir_intrinsic_memory_barrier_atomic_counter;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_memory_barrier_buffer") == 0) {
+         break;
+      case ir_intrinsic_memory_barrier_buffer:
          op = nir_intrinsic_memory_barrier_buffer;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_memory_barrier_image") == 0) {
+         break;
+      case ir_intrinsic_memory_barrier_image:
          op = nir_intrinsic_memory_barrier_image;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_memory_barrier_shared") == 0) {
+         break;
+      case ir_intrinsic_memory_barrier_shared:
          op = nir_intrinsic_memory_barrier_shared;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_load_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_load:
          op = nir_intrinsic_load_shared;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_store_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_store:
          op = nir_intrinsic_store_shared;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_add_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_atomic_add:
          op = nir_intrinsic_shared_atomic_add;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_and_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_atomic_and:
          op = nir_intrinsic_shared_atomic_and;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_or_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_atomic_or:
          op = nir_intrinsic_shared_atomic_or;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_xor_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_atomic_xor:
          op = nir_intrinsic_shared_atomic_xor;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_min_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_atomic_min:
          assert(ir->return_deref);
          if (ir->return_deref->type == glsl_type::int_type)
             op = nir_intrinsic_shared_atomic_imin;
@@ -703,7 +769,8 @@ nir_visitor::visit(ir_call *ir)
             op = nir_intrinsic_shared_atomic_umin;
          else
             unreachable("Invalid type");
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_max_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_atomic_max:
          assert(ir->return_deref);
          if (ir->return_deref->type == glsl_type::int_type)
             op = nir_intrinsic_shared_atomic_imax;
@@ -711,11 +778,14 @@ nir_visitor::visit(ir_call *ir)
             op = nir_intrinsic_shared_atomic_umax;
          else
             unreachable("Invalid type");
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_exchange_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_atomic_exchange:
          op = nir_intrinsic_shared_atomic_exchange;
-      } else if (strcmp(ir->callee_name(), "__intrinsic_atomic_comp_swap_shared") == 0) {
+         break;
+      case ir_intrinsic_shared_atomic_comp_swap:
          op = nir_intrinsic_shared_atomic_comp_swap;
-      } else {
+         break;
+      default:
          unreachable("not reached");
       }
 
@@ -725,11 +795,40 @@ nir_visitor::visit(ir_call *ir)
       switch (op) {
       case nir_intrinsic_atomic_counter_read_var:
       case nir_intrinsic_atomic_counter_inc_var:
-      case nir_intrinsic_atomic_counter_dec_var: {
-         ir_dereference *param =
-            (ir_dereference *) ir->actual_parameters.get_head();
-         instr->variables[0] = evaluate_deref(&instr->instr, param);
-         nir_ssa_dest_init(&instr->instr, &instr->dest, 1, 32, NULL);
+      case nir_intrinsic_atomic_counter_dec_var:
+      case nir_intrinsic_atomic_counter_add_var:
+      case nir_intrinsic_atomic_counter_min_var:
+      case nir_intrinsic_atomic_counter_max_var:
+      case nir_intrinsic_atomic_counter_and_var:
+      case nir_intrinsic_atomic_counter_or_var:
+      case nir_intrinsic_atomic_counter_xor_var:
+      case nir_intrinsic_atomic_counter_exchange_var:
+      case nir_intrinsic_atomic_counter_comp_swap_var: {
+         /* Set the counter variable dereference. */
+         exec_node *param = ir->actual_parameters.get_head();
+         ir_dereference *counter = (ir_dereference *)param;
+
+         instr->variables[0] = evaluate_deref(&instr->instr, counter);
+         param = param->get_next();
+
+         /* Set the intrinsic destination. */
+         if (ir->return_deref) {
+            nir_ssa_dest_init(&instr->instr, &instr->dest, 1, 32, NULL);
+         }
+
+         /* Set the intrinsic parameters. */
+         if (!param->is_tail_sentinel()) {
+            instr->src[0] =
+               nir_src_for_ssa(evaluate_rvalue((ir_dereference *)param));
+            param = param->get_next();
+         }
+
+         if (!param->is_tail_sentinel()) {
+            instr->src[1] =
+               nir_src_for_ssa(evaluate_rvalue((ir_dereference *)param));
+            param = param->get_next();
+         }
+
          nir_builder_instr_insert(&b, &instr->instr);
          break;
       }
@@ -1283,9 +1382,6 @@ nir_visitor::visit(ir_expression *ir)
       if (intrin->intrinsic == nir_intrinsic_interp_var_at_offset ||
           intrin->intrinsic == nir_intrinsic_interp_var_at_sample)
          intrin->src[0] = nir_src_for_ssa(evaluate_rvalue(ir->operands[1]));
-
-      if (intrin->intrinsic == nir_intrinsic_interp_var_at_offset)
-         shader->info.uses_interp_var_at_offset = true;
 
       unsigned bit_size =  glsl_get_bit_size(deref->type);
       add_instr(&intrin->instr, deref->type->vector_elements, bit_size);
@@ -1953,7 +2049,7 @@ void
 nir_visitor::visit(ir_constant *ir)
 {
    /*
-    * We don't know if this variable is an an array or struct that gets
+    * We don't know if this variable is an array or struct that gets
     * dereferenced, so do the safe thing an make it a variable with a
     * constant initializer and return a dereference.
     */

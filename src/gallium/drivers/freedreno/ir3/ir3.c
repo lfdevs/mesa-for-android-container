@@ -428,11 +428,13 @@ static int emit_cat5(struct ir3_instruction *instr, void *ptr,
 
 	iassert(!((dst->flags ^ type_flags(instr->cat5.type)) & IR3_REG_HALF));
 
+	assume(src1 || !src2);
+	assume(src2 || !src3);
+
 	if (src1) {
 		cat5->full = ! (src1->flags & IR3_REG_HALF);
 		cat5->src1 = reg(src1, info, instr->repeat, IR3_REG_HALF);
 	}
-
 
 	if (instr->flags & IR3_INSTR_S2EN) {
 		if (src2) {
@@ -571,7 +573,7 @@ void * ir3_assemble(struct ir3 *shader, struct ir3_info *info,
 		}
 	}
 
-	/* need a integer number of instruction "groups" (sets of 16
+	/* need an integer number of instruction "groups" (sets of 16
 	 * instructions on a4xx or sets of 4 instructions on a3xx),
 	 * so pad out w/ NOPs if needed: (NOTE each instruction is 64bits)
 	 */

@@ -451,7 +451,7 @@ xmesa_MapRenderbuffer(struct gl_context *ctx,
 
          assert(xrb->pixmap);
 
-         /* Install error handler for XGetImage() in case the the window
+         /* Install error handler for XGetImage() in case the window
           * isn't mapped.  If we fail we'll create a temporary XImage.
           */
          mesaXErrorFlag = 0;

@@ -39,25 +39,25 @@ fs_visitor::emit_vs_system_value(int location)
       fs_reg(ATTR, 4 * (_mesa_bitcount_64(nir->info.inputs_read) +
                         _mesa_bitcount_64(nir->info.double_inputs_read)),
              BRW_REGISTER_TYPE_D);
-   brw_vs_prog_data *vs_prog_data = (brw_vs_prog_data *) prog_data;
+   struct brw_vs_prog_data *vs_prog_data = brw_vs_prog_data(prog_data);
 
    switch (location) {
    case SYSTEM_VALUE_BASE_VERTEX:
-      reg->reg_offset = 0;
+      reg->offset = 0;
       vs_prog_data->uses_basevertex = true;
       break;
    case SYSTEM_VALUE_BASE_INSTANCE:
-      reg->reg_offset = 1;
+      reg->offset = REG_SIZE;
       vs_prog_data->uses_baseinstance = true;
       break;
    case SYSTEM_VALUE_VERTEX_ID:
       unreachable("should have been lowered");
    case SYSTEM_VALUE_VERTEX_ID_ZERO_BASE:
-      reg->reg_offset = 2;
+      reg->offset = 2 * REG_SIZE;
       vs_prog_data->uses_vertexid = true;
       break;
    case SYSTEM_VALUE_INSTANCE_ID:
-      reg->reg_offset = 3;
+      reg->offset = 3 * REG_SIZE;
       vs_prog_data->uses_instanceid = true;
       break;
    case SYSTEM_VALUE_DRAW_ID:
@@ -67,7 +67,7 @@ fs_visitor::emit_vs_system_value(int location)
            BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) |
            BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID)))
          reg->nr += 4;
-      reg->reg_offset = 0;
+      reg->offset = 0;
       vs_prog_data->uses_drawid = true;
       break;
    default:
@@ -97,7 +97,7 @@ fs_visitor::emit_mcs_fetch(const fs_reg &coordinate, unsigned components,
    /* We only care about one or two regs of response, but the sampler always
     * writes 4/8.
     */
-   inst->regs_written = 4 * dispatch_width / 8;
+   inst->size_written = 4 * dest.component_size(inst->exec_size);
 
    return dest;
 }
@@ -160,7 +160,7 @@ fs_visitor::emit_dummy_fs()
    /* Tell the SF we don't have any inputs.  Gen4-5 require at least one
     * varying to avoid GPU hangs, so set that.
     */
-   brw_wm_prog_data *wm_prog_data = (brw_wm_prog_data *) this->prog_data;
+   struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(this->prog_data);
    wm_prog_data->num_varying_inputs = devinfo->gen < 6 ? 1 : 0;
    memset(wm_prog_data->urb_setup, -1,
           sizeof(wm_prog_data->urb_setup[0]) * VARYING_SLOT_MAX);
@@ -184,7 +184,7 @@ struct brw_reg
 fs_visitor::interp_reg(int location, int channel)
 {
    assert(stage == MESA_SHADER_FRAGMENT);
-   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
+   struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
    int regnr = prog_data->urb_setup[location] * 2 + channel / 2;
    int stride = (channel & 1) * 4;
 
@@ -213,9 +213,9 @@ fs_visitor::emit_interpolation_setup_gen4()
 
    abld = bld.annotate("compute pixel deltas from v0");
 
-   this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC] =
+   this->delta_xy[BRW_BARYCENTRIC_PERSPECTIVE_PIXEL] =
       vgrf(glsl_type::vec2_type);
-   const fs_reg &delta_xy = this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC];
+   const fs_reg &delta_xy = this->delta_xy[BRW_BARYCENTRIC_PERSPECTIVE_PIXEL];
    const fs_reg xstart(negate(brw_vec1_grf(1, 0)));
    const fs_reg ystart(negate(brw_vec1_grf(1, 1)));
 
@@ -308,9 +308,41 @@ fs_visitor::emit_interpolation_setup_gen6()
    this->wpos_w = vgrf(glsl_type::float_type);
    abld.emit(SHADER_OPCODE_RCP, this->wpos_w, this->pixel_w);
 
-   for (int i = 0; i < BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT; ++i) {
+   struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(prog_data);
+   uint32_t centroid_modes = wm_prog_data->barycentric_interp_modes &
+      (1 << BRW_BARYCENTRIC_PERSPECTIVE_CENTROID |
+       1 << BRW_BARYCENTRIC_NONPERSPECTIVE_CENTROID);
+
+   for (int i = 0; i < BRW_BARYCENTRIC_MODE_COUNT; ++i) {
       uint8_t reg = payload.barycentric_coord_reg[i];
       this->delta_xy[i] = fs_reg(brw_vec16_grf(reg, 0));
+
+      if (devinfo->needs_unlit_centroid_workaround &&
+          (centroid_modes & (1 << i))) {
+         /* Get the pixel/sample mask into f0 so that we know which
+          * pixels are lit.  Then, for each channel that is unlit,
+          * replace the centroid data with non-centroid data.
+          */
+         bld.emit(FS_OPCODE_MOV_DISPATCH_TO_FLAGS);
+
+         uint8_t pixel_reg = payload.barycentric_coord_reg[i - 1];
+
+         set_predicate_inv(BRW_PREDICATE_NORMAL, true,
+                           bld.half(0).MOV(brw_vec8_grf(reg, 0),
+                                           brw_vec8_grf(pixel_reg, 0)));
+         set_predicate_inv(BRW_PREDICATE_NORMAL, true,
+                           bld.half(0).MOV(brw_vec8_grf(reg + 1, 0),
+                                           brw_vec8_grf(pixel_reg + 1, 0)));
+         if (dispatch_width == 16) {
+            set_predicate_inv(BRW_PREDICATE_NORMAL, true,
+                              bld.half(1).MOV(brw_vec8_grf(reg + 2, 0),
+                                              brw_vec8_grf(pixel_reg + 2, 0)));
+            set_predicate_inv(BRW_PREDICATE_NORMAL, true,
+                              bld.half(1).MOV(brw_vec8_grf(reg + 3, 0),
+                                              brw_vec8_grf(pixel_reg + 3, 0)));
+         }
+         assert(dispatch_width != 32); /* not implemented yet */
+      }
    }
 }
 
@@ -374,7 +406,7 @@ fs_visitor::emit_single_fb_write(const fs_builder &bld,
                                  fs_reg src0_alpha, unsigned components)
 {
    assert(stage == MESA_SHADER_FRAGMENT);
-   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
+   struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
 
    /* Hand over gl_FragDepth or the payload depth. */
    const fs_reg dst_depth = (payload.dest_depth_reg ?
@@ -413,7 +445,7 @@ void
 fs_visitor::emit_fb_writes()
 {
    assert(stage == MESA_SHADER_FRAGMENT);
-   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
+   struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
    brw_wm_prog_key *key = (brw_wm_prog_key*) this->key;
 
    fs_inst *inst = NULL;
@@ -437,33 +469,25 @@ fs_visitor::emit_fb_writes()
                            "in SIMD16+ mode.\n");
    }
 
-   if (do_dual_src) {
-      const fs_builder abld = bld.annotate("FB dual-source write");
+   for (int target = 0; target < key->nr_color_regions; target++) {
+      /* Skip over outputs that weren't written. */
+      if (this->outputs[target].file == BAD_FILE)
+         continue;
 
-      inst = emit_single_fb_write(abld, this->outputs[0],
-                                  this->dual_src_output, reg_undef, 4);
-      inst->target = 0;
+      const fs_builder abld = bld.annotate(
+         ralloc_asprintf(this->mem_ctx, "FB write target %d", target));
 
-      prog_data->dual_src_blend = true;
-   } else {
-      for (int target = 0; target < key->nr_color_regions; target++) {
-         /* Skip over outputs that weren't written. */
-         if (this->outputs[target].file == BAD_FILE)
-            continue;
+      fs_reg src0_alpha;
+      if (devinfo->gen >= 6 && key->replicate_alpha && target != 0)
+         src0_alpha = offset(outputs[0], bld, 3);
 
-         const fs_builder abld = bld.annotate(
-            ralloc_asprintf(this->mem_ctx, "FB write target %d", target));
-
-         fs_reg src0_alpha;
-         if (devinfo->gen >= 6 && key->replicate_alpha && target != 0)
-            src0_alpha = offset(outputs[0], bld, 3);
-
-         inst = emit_single_fb_write(abld, this->outputs[target], reg_undef,
-                                     src0_alpha,
-                                     this->output_components[target]);
-         inst->target = target;
-      }
+      inst = emit_single_fb_write(abld, this->outputs[target],
+                                  this->dual_src_output, src0_alpha, 4);
+      inst->target = target;
    }
+
+   prog_data->dual_src_blend = (this->dual_src_output.file != BAD_FILE);
+   assert(!prog_data->dual_src_blend || key->nr_color_regions == 1);
 
    if (inst == NULL) {
       /* Even if there's no color buffers enabled, we still need to send
@@ -509,8 +533,7 @@ fs_visitor::setup_uniform_clipplane_values(gl_clip_plane *clip_planes)
  */
 void fs_visitor::compute_clip_distance(gl_clip_plane *clip_planes)
 {
-   struct brw_vue_prog_data *vue_prog_data =
-      (struct brw_vue_prog_data *) prog_data;
+   struct brw_vue_prog_data *vue_prog_data = brw_vue_prog_data(prog_data);
    const struct brw_vs_prog_key *key =
       (const struct brw_vs_prog_key *) this->key;
 
@@ -545,14 +568,12 @@ void fs_visitor::compute_clip_distance(gl_clip_plane *clip_planes)
    const fs_builder abld = bld.annotate("user clip distances");
 
    this->outputs[VARYING_SLOT_CLIP_DIST0] = vgrf(glsl_type::vec4_type);
-   this->output_components[VARYING_SLOT_CLIP_DIST0] = 4;
    this->outputs[VARYING_SLOT_CLIP_DIST1] = vgrf(glsl_type::vec4_type);
-   this->output_components[VARYING_SLOT_CLIP_DIST1] = 4;
 
    for (int i = 0; i < key->nr_userclip_plane_consts; i++) {
       fs_reg u = userplane[i];
-      fs_reg output = outputs[VARYING_SLOT_CLIP_DIST0 + i / 4];
-      output.reg_offset = i & 3;
+      const fs_reg output = offset(outputs[VARYING_SLOT_CLIP_DIST0 + i / 4],
+                                   bld, i & 3);
 
       abld.MUL(output, outputs[clip_vertex], u);
       for (int j = 1; j < 4; j++) {
@@ -568,7 +589,7 @@ fs_visitor::emit_urb_writes(const fs_reg &gs_vertex_count)
    int slot, urb_offset, length;
    int starting_urb_offset = 0;
    const struct brw_vue_prog_data *vue_prog_data =
-      (const struct brw_vue_prog_data *) this->prog_data;
+      brw_vue_prog_data(this->prog_data);
    const struct brw_vs_prog_key *vs_key =
       (const struct brw_vs_prog_key *) this->key;
    const GLbitfield64 psiz_mask =
@@ -617,7 +638,7 @@ fs_visitor::emit_urb_writes(const fs_reg &gs_vertex_count)
 
    if (stage == MESA_SHADER_GEOMETRY) {
       const struct brw_gs_prog_data *gs_prog_data =
-         (const struct brw_gs_prog_data *) this->prog_data;
+         brw_gs_prog_data(this->prog_data);
 
       /* We need to increment the Global Offset to skip over the control data
        * header and the extra "Vertex Count" field (1 HWord) at the beginning
@@ -724,10 +745,8 @@ fs_visitor::emit_urb_writes(const fs_reg &gs_vertex_count)
                sources[length++] = reg;
             }
          } else {
-            for (unsigned i = 0; i < output_components[varying]; i++)
+            for (unsigned i = 0; i < 4; i++)
                sources[length++] = offset(this->outputs[varying], bld, i);
-            for (unsigned i = output_components[varying]; i < 4; i++)
-               sources[length++] = brw_imm_d(0);
          }
          break;
       }
@@ -881,8 +900,7 @@ fs_visitor::init()
    }
 
    if (stage == MESA_SHADER_COMPUTE) {
-      const brw_cs_prog_data *cs_prog_data =
-         (const brw_cs_prog_data *) prog_data;
+      const struct brw_cs_prog_data *cs_prog_data = brw_cs_prog_data(prog_data);
       unsigned size = cs_prog_data->local_size[0] *
                       cs_prog_data->local_size[1] *
                       cs_prog_data->local_size[2];
@@ -901,7 +919,6 @@ fs_visitor::init()
    this->nir_ssa_values = NULL;
 
    memset(&this->payload, 0, sizeof(this->payload));
-   memset(this->output_components, 0, sizeof(this->output_components));
    this->source_depth_to_render_target = false;
    this->runtime_check_aads_emit = false;
    this->first_non_payload_grf = 0;
@@ -920,7 +937,6 @@ fs_visitor::init()
    this->promoted_constants = 0,
 
    this->spilled_any_registers = false;
-   this->do_dual_src = false;
 }
 
 fs_visitor::~fs_visitor()

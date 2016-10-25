@@ -90,7 +90,8 @@ nv30_resource_init(struct pipe_context *pipe)
    pipe->transfer_map = u_transfer_map_vtbl;
    pipe->transfer_flush_region = u_transfer_flush_region_vtbl;
    pipe->transfer_unmap = u_transfer_unmap_vtbl;
-   pipe->transfer_inline_write = u_transfer_inline_write_vtbl;
+   pipe->buffer_subdata = u_default_buffer_subdata;
+   pipe->texture_subdata = u_default_texture_subdata;
    pipe->create_surface = nv30_miptree_surface_new;
    pipe->surface_destroy = nv30_miptree_surface_del;
    pipe->resource_copy_region = nv30_resource_copy_region;

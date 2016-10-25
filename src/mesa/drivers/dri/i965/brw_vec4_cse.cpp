@@ -129,7 +129,7 @@ instructions_match(vec4_instruction *a, vec4_instruction *b)
           a->shadow_compare == b->shadow_compare &&
           a->dst.writemask == b->dst.writemask &&
           a->force_writemask_all == b->force_writemask_all &&
-          a->regs_written == b->regs_written &&
+          a->size_written == b->size_written &&
           operands_match(a, b);
 }
 
@@ -178,10 +178,10 @@ vec4_visitor::opt_cse_local(bblock_t *block)
             bool no_existing_temp = entry->tmp.file == BAD_FILE;
             if (no_existing_temp && !entry->generator->dst.is_null()) {
                entry->tmp = retype(src_reg(VGRF, alloc.allocate(
-                                              entry->generator->regs_written),
+                                              regs_written(entry->generator)),
                                            NULL), inst->dst.type);
 
-               for (unsigned i = 0; i < entry->generator->regs_written; ++i) {
+               for (unsigned i = 0; i < regs_written(entry->generator); ++i) {
                   vec4_instruction *copy = MOV(offset(entry->generator->dst, i),
                                                offset(entry->tmp, i));
                   copy->force_writemask_all =
@@ -196,7 +196,7 @@ vec4_visitor::opt_cse_local(bblock_t *block)
             if (!inst->dst.is_null()) {
                assert(inst->dst.type == entry->tmp.type);
 
-               for (unsigned i = 0; i < inst->regs_written; ++i) {
+               for (unsigned i = 0; i < regs_written(inst); ++i) {
                   vec4_instruction *copy = MOV(offset(inst->dst, i),
                                                offset(entry->tmp, i));
                   copy->force_writemask_all = inst->force_writemask_all;

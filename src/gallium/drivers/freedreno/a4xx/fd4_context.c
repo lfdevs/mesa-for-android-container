@@ -47,45 +47,14 @@ fd4_context_destroy(struct pipe_context *pctx)
 	fd_bo_del(fd4_ctx->fs_pvt_mem);
 	fd_bo_del(fd4_ctx->vsc_size_mem);
 
-	pctx->delete_vertex_elements_state(pctx, fd4_ctx->solid_vbuf_state.vtx);
-	pctx->delete_vertex_elements_state(pctx, fd4_ctx->blit_vbuf_state.vtx);
-
-	pipe_resource_reference(&fd4_ctx->solid_vbuf, NULL);
-	pipe_resource_reference(&fd4_ctx->blit_texcoord_vbuf, NULL);
+	fd_context_cleanup_common_vbos(&fd4_ctx->base);
 
 	u_upload_destroy(fd4_ctx->border_color_uploader);
 
 	fd_context_destroy(pctx);
 }
 
-/* TODO we could combine a few of these small buffers (solid_vbuf,
- * blit_texcoord_vbuf, and vsc_size_mem, into a single buffer and
- * save a tiny bit of memory
- */
-
-static struct pipe_resource *
-create_solid_vertexbuf(struct pipe_context *pctx)
-{
-	static const float init_shader_const[] = {
-			-1.000000, +1.000000, +1.000000,
-			+1.000000, -1.000000, +1.000000,
-	};
-	struct pipe_resource *prsc = pipe_buffer_create(pctx->screen,
-			PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE, sizeof(init_shader_const));
-	pipe_buffer_write(pctx, prsc, 0,
-			sizeof(init_shader_const), init_shader_const);
-	return prsc;
-}
-
-static struct pipe_resource *
-create_blit_texcoord_vertexbuf(struct pipe_context *pctx)
-{
-	struct pipe_resource *prsc = pipe_buffer_create(pctx->screen,
-			PIPE_BIND_CUSTOM, PIPE_USAGE_DYNAMIC, 16);
-	return prsc;
-}
-
-static const uint8_t primtypes[PIPE_PRIM_MAX] = {
+static const uint8_t primtypes[] = {
 		[PIPE_PRIM_POINTS]         = DI_PT_POINTLIST,
 		[PIPE_PRIM_LINES]          = DI_PT_LINELIST,
 		[PIPE_PRIM_LINE_STRIP]     = DI_PT_LINESTRIP,
@@ -93,6 +62,7 @@ static const uint8_t primtypes[PIPE_PRIM_MAX] = {
 		[PIPE_PRIM_TRIANGLES]      = DI_PT_TRILIST,
 		[PIPE_PRIM_TRIANGLE_STRIP] = DI_PT_TRISTRIP,
 		[PIPE_PRIM_TRIANGLE_FAN]   = DI_PT_TRIFAN,
+		[PIPE_PRIM_MAX]            = DI_PT_RECTLIST,  /* internal clear blits */
 };
 
 struct pipe_context *
@@ -134,36 +104,7 @@ fd4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	fd4_ctx->vsc_size_mem = fd_bo_new(screen->dev, 0x1000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
-	fd4_ctx->solid_vbuf = create_solid_vertexbuf(pctx);
-	fd4_ctx->blit_texcoord_vbuf = create_blit_texcoord_vertexbuf(pctx);
-
-	/* setup solid_vbuf_state: */
-	fd4_ctx->solid_vbuf_state.vtx = pctx->create_vertex_elements_state(
-			pctx, 1, (struct pipe_vertex_element[]){{
-				.vertex_buffer_index = 0,
-				.src_offset = 0,
-				.src_format = PIPE_FORMAT_R32G32B32_FLOAT,
-			}});
-	fd4_ctx->solid_vbuf_state.vertexbuf.count = 1;
-	fd4_ctx->solid_vbuf_state.vertexbuf.vb[0].stride = 12;
-	fd4_ctx->solid_vbuf_state.vertexbuf.vb[0].buffer = fd4_ctx->solid_vbuf;
-
-	/* setup blit_vbuf_state: */
-	fd4_ctx->blit_vbuf_state.vtx = pctx->create_vertex_elements_state(
-			pctx, 2, (struct pipe_vertex_element[]){{
-				.vertex_buffer_index = 0,
-				.src_offset = 0,
-				.src_format = PIPE_FORMAT_R32G32_FLOAT,
-			}, {
-				.vertex_buffer_index = 1,
-				.src_offset = 0,
-				.src_format = PIPE_FORMAT_R32G32B32_FLOAT,
-			}});
-	fd4_ctx->blit_vbuf_state.vertexbuf.count = 2;
-	fd4_ctx->blit_vbuf_state.vertexbuf.vb[0].stride = 8;
-	fd4_ctx->blit_vbuf_state.vertexbuf.vb[0].buffer = fd4_ctx->blit_texcoord_vbuf;
-	fd4_ctx->blit_vbuf_state.vertexbuf.vb[1].stride = 12;
-	fd4_ctx->blit_vbuf_state.vertexbuf.vb[1].buffer = fd4_ctx->solid_vbuf;
+	fd_context_setup_common_vbos(&fd4_ctx->base);
 
 	fd4_query_context_init(pctx);
 

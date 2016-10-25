@@ -104,6 +104,7 @@ BOOL WINAPI
 wglBindTexImageARB(HPBUFFERARB hPbuffer, int iBuffer)
 {
    HDC prevDrawable = stw_get_current_dc();
+   HDC dc;
    struct stw_context *curctx = stw_current_context();
    struct stw_framebuffer *fb;
    GLenum texFormat, srcBuffer, target;
@@ -164,10 +165,12 @@ wglBindTexImageARB(HPBUFFERARB hPbuffer, int iBuffer)
     */
    pixelFormatSave = fb->iPixelFormat;
    fb->iPixelFormat = curctx->iPixelFormat;
-   retVal = stw_make_current(wglGetPbufferDCARB(hPbuffer), curctx->dhglrc);
+   dc = wglGetPbufferDCARB(hPbuffer);
+   retVal = stw_make_current(dc, curctx->dhglrc);
    fb->iPixelFormat = pixelFormatSave;
    if (!retVal) {
       debug_printf("stw_make_current(#1) failed in wglBindTexImageARB()\n");
+      wglReleasePbufferDCARB(hPbuffer, dc);
       return FALSE;
    }
 
@@ -180,6 +183,8 @@ wglBindTexImageARB(HPBUFFERARB hPbuffer, int iBuffer)
    if (!retVal) {
       debug_printf("stw_make_current(#2) failed in wglBindTexImageARB()\n");
    }
+
+   wglReleasePbufferDCARB(hPbuffer, dc);
 
    return retVal;
 }

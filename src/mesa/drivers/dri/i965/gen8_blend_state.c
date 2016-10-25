@@ -107,7 +107,8 @@ gen8_upload_blend_state(struct brw_context *brw)
             GEN8_BLEND_LOGIC_OP_ENABLE |
             SET_FIELD(intel_translate_logic_op(ctx->Color.LogicOp),
                       GEN8_BLEND_LOGIC_OP_FUNCTION);
-      } else if (ctx->Color.BlendEnabled & (1 << i) && !integer) {
+      } else if (ctx->Color.BlendEnabled & (1 << i) && !integer &&
+                 !ctx->Color._AdvancedBlendMode) {
          GLenum eqRGB = ctx->Color.Blend[i].EquationRGB;
          GLenum eqA = ctx->Color.Blend[i].EquationA;
          GLenum srcRGB = ctx->Color.Blend[i].SrcRGB;

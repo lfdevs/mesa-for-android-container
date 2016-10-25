@@ -21,26 +21,34 @@
  * IN THE SOFTWARE.
  */
 
-#include "anv_wsi.h"
+#include "anv_private.h"
+#include "wsi_common.h"
+#include "vk_format_info.h"
+
+static const struct wsi_callbacks wsi_cbs = {
+   .get_phys_device_format_properties = anv_GetPhysicalDeviceFormatProperties,
+};
 
 VkResult
 anv_init_wsi(struct anv_physical_device *physical_device)
 {
    VkResult result;
 
-   memset(physical_device->wsi, 0, sizeof(physical_device->wsi));
+   memset(physical_device->wsi_device.wsi, 0, sizeof(physical_device->wsi_device.wsi));
 
 #ifdef VK_USE_PLATFORM_XCB_KHR
-   result = anv_x11_init_wsi(physical_device);
+   result = wsi_x11_init_wsi(&physical_device->wsi_device, &physical_device->instance->alloc);
    if (result != VK_SUCCESS)
       return result;
 #endif
 
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   result = anv_wl_init_wsi(physical_device);
+   result = wsi_wl_init_wsi(&physical_device->wsi_device, &physical_device->instance->alloc,
+                            anv_physical_device_to_handle(physical_device),
+                            &wsi_cbs);
    if (result != VK_SUCCESS) {
 #ifdef VK_USE_PLATFORM_XCB_KHR
-      anv_x11_finish_wsi(physical_device);
+      wsi_x11_finish_wsi(&physical_device->wsi_device, &physical_device->instance->alloc);
 #endif
       return result;
    }
@@ -53,10 +61,10 @@ void
 anv_finish_wsi(struct anv_physical_device *physical_device)
 {
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   anv_wl_finish_wsi(physical_device);
+   wsi_wl_finish_wsi(&physical_device->wsi_device, &physical_device->instance->alloc);
 #endif
 #ifdef VK_USE_PLATFORM_XCB_KHR
-   anv_x11_finish_wsi(physical_device);
+   wsi_x11_finish_wsi(&physical_device->wsi_device, &physical_device->instance->alloc);
 #endif
 }
 
@@ -68,7 +76,7 @@ void anv_DestroySurfaceKHR(
    ANV_FROM_HANDLE(anv_instance, instance, _instance);
    ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
 
-   anv_free2(&instance->alloc, pAllocator, surface);
+   vk_free2(&instance->alloc, pAllocator, surface);
 }
 
 VkResult anv_GetPhysicalDeviceSurfaceSupportKHR(
@@ -79,9 +87,11 @@ VkResult anv_GetPhysicalDeviceSurfaceSupportKHR(
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
    ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
-   struct anv_wsi_interface *iface = device->wsi[surface->platform];
+   struct wsi_interface *iface = device->wsi_device.wsi[surface->platform];
 
-   return iface->get_support(surface, device, queueFamilyIndex, pSupported);
+   return iface->get_support(surface, &device->wsi_device,
+                             &device->instance->alloc,
+                             queueFamilyIndex, pSupported);
 }
 
 VkResult anv_GetPhysicalDeviceSurfaceCapabilitiesKHR(
@@ -91,9 +101,9 @@ VkResult anv_GetPhysicalDeviceSurfaceCapabilitiesKHR(
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
    ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
-   struct anv_wsi_interface *iface = device->wsi[surface->platform];
+   struct wsi_interface *iface = device->wsi_device.wsi[surface->platform];
 
-   return iface->get_capabilities(surface, device, pSurfaceCapabilities);
+   return iface->get_capabilities(surface, pSurfaceCapabilities);
 }
 
 VkResult anv_GetPhysicalDeviceSurfaceFormatsKHR(
@@ -104,9 +114,9 @@ VkResult anv_GetPhysicalDeviceSurfaceFormatsKHR(
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
    ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
-   struct anv_wsi_interface *iface = device->wsi[surface->platform];
+   struct wsi_interface *iface = device->wsi_device.wsi[surface->platform];
 
-   return iface->get_formats(surface, device, pSurfaceFormatCount,
+   return iface->get_formats(surface, &device->wsi_device, pSurfaceFormatCount,
                              pSurfaceFormats);
 }
 
@@ -118,11 +128,127 @@ VkResult anv_GetPhysicalDeviceSurfacePresentModesKHR(
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
    ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
-   struct anv_wsi_interface *iface = device->wsi[surface->platform];
+   struct wsi_interface *iface = device->wsi_device.wsi[surface->platform];
 
-   return iface->get_present_modes(surface, device, pPresentModeCount,
+   return iface->get_present_modes(surface, pPresentModeCount,
                                    pPresentModes);
 }
+
+
+static VkResult
+x11_anv_wsi_image_create(VkDevice device_h,
+                         const VkSwapchainCreateInfoKHR *pCreateInfo,
+                         const VkAllocationCallbacks* pAllocator,
+                         VkImage *image_p,
+                         VkDeviceMemory *memory_p,
+                         uint32_t *size,
+                         uint32_t *offset,
+                         uint32_t *row_pitch, int *fd_p)
+{
+   struct anv_device *device = anv_device_from_handle(device_h);
+   VkImage image_h;
+   struct anv_image *image;
+
+   VkResult result;
+   result = anv_image_create(anv_device_to_handle(device),
+      &(struct anv_image_create_info) {
+         .isl_tiling_flags = ISL_TILING_X_BIT,
+         .stride = 0,
+         .vk_info =
+      &(VkImageCreateInfo) {
+         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+         .imageType = VK_IMAGE_TYPE_2D,
+         .format = pCreateInfo->imageFormat,
+         .extent = {
+            .width = pCreateInfo->imageExtent.width,
+            .height = pCreateInfo->imageExtent.height,
+            .depth = 1
+         },
+         .mipLevels = 1,
+         .arrayLayers = 1,
+         .samples = 1,
+         /* FIXME: Need a way to use X tiling to allow scanout */
+         .tiling = VK_IMAGE_TILING_OPTIMAL,
+         .usage = (pCreateInfo->imageUsage |
+                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+         .flags = 0,
+      }},
+      NULL,
+      &image_h);
+   if (result != VK_SUCCESS)
+      return result;
+
+   image = anv_image_from_handle(image_h);
+   assert(vk_format_is_color(image->vk_format));
+
+   VkDeviceMemory memory_h;
+   struct anv_device_memory *memory;
+   result = anv_AllocateMemory(anv_device_to_handle(device),
+      &(VkMemoryAllocateInfo) {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+         .allocationSize = image->size,
+         .memoryTypeIndex = 0,
+      },
+      NULL /* XXX: pAllocator */,
+      &memory_h);
+   if (result != VK_SUCCESS)
+      goto fail_create_image;
+
+   memory = anv_device_memory_from_handle(memory_h);
+   memory->bo.is_winsys_bo = true;
+
+   anv_BindImageMemory(VK_NULL_HANDLE, image_h, memory_h, 0);
+
+   struct anv_surface *surface = &image->color_surface;
+   assert(surface->isl.tiling == ISL_TILING_X);
+
+   *row_pitch = surface->isl.row_pitch;
+   int ret = anv_gem_set_tiling(device, memory->bo.gem_handle,
+                                surface->isl.row_pitch, I915_TILING_X);
+   if (ret) {
+      /* FINISHME: Choose a better error. */
+      result = vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                         "set_tiling failed: %m");
+      goto fail_alloc_memory;
+   }
+
+   int fd = anv_gem_handle_to_fd(device, memory->bo.gem_handle);
+   if (fd == -1) {
+      /* FINISHME: Choose a better error. */
+      result = vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                         "handle_to_fd failed: %m");
+      goto fail_alloc_memory;
+   }
+
+   *image_p = image_h;
+   *memory_p = memory_h;
+   *fd_p = fd;
+   *size = image->size;
+   *offset = image->offset;
+   return VK_SUCCESS;
+fail_alloc_memory:
+   anv_FreeMemory(device_h, memory_h, pAllocator);
+
+fail_create_image:
+   anv_DestroyImage(device_h, image_h, pAllocator);
+   return result;
+}
+
+static void
+x11_anv_wsi_image_free(VkDevice device,
+                       const VkAllocationCallbacks* pAllocator,
+                       VkImage image_h,
+                       VkDeviceMemory memory_h)
+{
+   anv_DestroyImage(device, image_h, pAllocator);
+
+   anv_FreeMemory(device, memory_h, pAllocator);
+}
+
+static const struct wsi_image_fns anv_wsi_image_fns = {
+   .create_wsi_image = x11_anv_wsi_image_create,
+   .free_wsi_image = x11_anv_wsi_image_free,
+};
 
 VkResult anv_CreateSwapchainKHR(
     VkDevice                                     _device,
@@ -132,41 +258,52 @@ VkResult anv_CreateSwapchainKHR(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, pCreateInfo->surface);
-   struct anv_wsi_interface *iface =
-      device->instance->physicalDevice.wsi[surface->platform];
-   struct anv_swapchain *swapchain;
+   struct wsi_interface *iface =
+      device->instance->physicalDevice.wsi_device.wsi[surface->platform];
+   struct wsi_swapchain *swapchain;
+   const VkAllocationCallbacks *alloc;
 
-   VkResult result = iface->create_swapchain(surface, device, pCreateInfo,
-                                             pAllocator, &swapchain);
+   if (pAllocator)
+     alloc = pAllocator;
+   else
+     alloc = &device->alloc;
+   VkResult result = iface->create_swapchain(surface, _device,
+                                             &device->instance->physicalDevice.wsi_device,
+                                             pCreateInfo,
+                                             alloc, &anv_wsi_image_fns,
+                                             &swapchain);
    if (result != VK_SUCCESS)
       return result;
 
-   if (pAllocator)
-      swapchain->alloc = *pAllocator;
-   else
-      swapchain->alloc = device->alloc;
+   swapchain->alloc = *alloc;
 
    for (unsigned i = 0; i < ARRAY_SIZE(swapchain->fences); i++)
       swapchain->fences[i] = VK_NULL_HANDLE;
 
-   *pSwapchain = anv_swapchain_to_handle(swapchain);
+   *pSwapchain = wsi_swapchain_to_handle(swapchain);
 
    return VK_SUCCESS;
 }
 
 void anv_DestroySwapchainKHR(
-    VkDevice                                     device,
+    VkDevice                                     _device,
     VkSwapchainKHR                               _swapchain,
     const VkAllocationCallbacks*                 pAllocator)
 {
-   ANV_FROM_HANDLE(anv_swapchain, swapchain, _swapchain);
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   ANV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
+   const VkAllocationCallbacks *alloc;
 
+   if (pAllocator)
+     alloc = pAllocator;
+   else
+     alloc = &device->alloc;
    for (unsigned i = 0; i < ARRAY_SIZE(swapchain->fences); i++) {
       if (swapchain->fences[i] != VK_NULL_HANDLE)
-         anv_DestroyFence(device, swapchain->fences[i], pAllocator);
+         anv_DestroyFence(_device, swapchain->fences[i], pAllocator);
    }
 
-   swapchain->destroy(swapchain, pAllocator);
+   swapchain->destroy(swapchain, alloc);
 }
 
 VkResult anv_GetSwapchainImagesKHR(
@@ -175,7 +312,7 @@ VkResult anv_GetSwapchainImagesKHR(
     uint32_t*                                    pSwapchainImageCount,
     VkImage*                                     pSwapchainImages)
 {
-   ANV_FROM_HANDLE(anv_swapchain, swapchain, _swapchain);
+   ANV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
 
    return swapchain->get_images(swapchain, pSwapchainImageCount,
                                 pSwapchainImages);
@@ -189,7 +326,7 @@ VkResult anv_AcquireNextImageKHR(
     VkFence                                      fence,
     uint32_t*                                    pImageIndex)
 {
-   ANV_FROM_HANDLE(anv_swapchain, swapchain, _swapchain);
+   ANV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
 
    return swapchain->acquire_next_image(swapchain, timeout, semaphore,
                                         pImageIndex);
@@ -203,9 +340,9 @@ VkResult anv_QueuePresentKHR(
    VkResult result;
 
    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
-      ANV_FROM_HANDLE(anv_swapchain, swapchain, pPresentInfo->pSwapchains[i]);
+      ANV_FROM_HANDLE(wsi_swapchain, swapchain, pPresentInfo->pSwapchains[i]);
 
-      assert(swapchain->device == queue->device);
+      assert(anv_device_from_handle(swapchain->device) == queue->device);
 
       if (swapchain->fences[0] == VK_NULL_HANDLE) {
          result = anv_CreateFence(anv_device_to_handle(queue->device),
@@ -222,7 +359,7 @@ VkResult anv_QueuePresentKHR(
 
       anv_QueueSubmit(_queue, 0, NULL, swapchain->fences[0]);
 
-      result = swapchain->queue_present(swapchain, queue,
+      result = swapchain->queue_present(swapchain,
                                         pPresentInfo->pImageIndices[i]);
       /* TODO: What if one of them returns OUT_OF_DATE? */
       if (result != VK_SUCCESS)

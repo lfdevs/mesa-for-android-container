@@ -114,6 +114,8 @@ public:
     * for the ir->location's used.
     */
    dst_reg output_reg[BRW_VARYING_SLOT_COUNT];
+   dst_reg output_generic_reg[MAX_VARYINGS_INCL_PATCH][4];
+   unsigned output_generic_num_components[MAX_VARYINGS_INCL_PATCH][4];
    const char *output_reg_annotation[BRW_VARYING_SLOT_COUNT];
    int uniforms;
 
@@ -213,6 +215,8 @@ public:
    EMIT3(MAD)
    EMIT2(ADDC)
    EMIT2(SUBB)
+   EMIT1(DIM)
+
 #undef EMIT1
 #undef EMIT2
 #undef EMIT3
@@ -257,9 +261,8 @@ public:
                      uint32_t constant_offset,
                      src_reg offset_value,
                      src_reg mcs,
-                     bool is_cube_array,
                      uint32_t surface, src_reg surface_reg,
-                     uint32_t sampler, src_reg sampler_reg);
+                     src_reg sampler_reg);
 
    src_reg emit_mcs_fetch(const glsl_type *coordinate_type, src_reg coordinate,
                           src_reg surface);
@@ -268,6 +271,7 @@ public:
    void emit_ndc_computation();
    void emit_psiz_and_flags(dst_reg reg);
    vec4_instruction *emit_generic_urb_slot(dst_reg reg, int varying);
+   void emit_generic_urb_slot(dst_reg reg, int varying, int component);
    virtual void emit_urb_slot(dst_reg reg, int varying);
 
    void emit_shader_time_begin();

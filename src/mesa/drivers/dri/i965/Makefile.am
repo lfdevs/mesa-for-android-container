@@ -35,7 +35,9 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/gtest/include \
 	-I$(top_srcdir)/src/compiler/nir \
 	-I$(top_srcdir)/src/intel \
+	-I$(top_builddir)/src/compiler/glsl \
 	-I$(top_builddir)/src/compiler/nir \
+	-I$(top_builddir)/src/intel \
 	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS) \
@@ -47,11 +49,40 @@ brw_nir_trig_workarounds.c: brw_nir_trig_workarounds.py $(top_srcdir)/src/compil
 	$(MKDIR_GEN)
 	$(AM_V_GEN) PYTHONPATH=$(top_srcdir)/src/compiler/nir $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_nir_trig_workarounds.py > $@ || ($(RM) $@; false)
 
-noinst_LTLIBRARIES = libi965_dri.la libi965_compiler.la
+I965_PERGEN_LIBS = \
+	libi965_gen6.la \
+	libi965_gen7.la \
+	libi965_gen75.la \
+	libi965_gen8.la \
+	libi965_gen9.la
+
+libi965_gen6_la_SOURCES = $(i965_gen6_FILES)
+libi965_gen6_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=60
+
+libi965_gen7_la_SOURCES = $(i965_gen7_FILES)
+libi965_gen7_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=70
+
+libi965_gen75_la_SOURCES = $(i965_gen75_FILES)
+libi965_gen75_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=75
+
+libi965_gen8_la_SOURCES = $(i965_gen8_FILES)
+libi965_gen8_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=80
+
+libi965_gen9_la_SOURCES = $(i965_gen9_FILES)
+libi965_gen9_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=90
+
+noinst_LTLIBRARIES = \
+	libi965_dri.la \
+	libi965_compiler.la \
+	$(I965_PERGEN_LIBS)
+
 libi965_dri_la_SOURCES = $(i965_FILES)
 libi965_dri_la_LIBADD = \
+	$(top_builddir)/src/intel/common/libintel_common.la \
 	$(top_builddir)/src/intel/isl/libisl.la \
 	libi965_compiler.la \
+	$(top_builddir)/src/intel/blorp/libblorp.la \
+	$(I965_PERGEN_LIBS) \
 	$(INTEL_LIBS)
 
 libi965_compiler_la_SOURCES = \
@@ -66,6 +97,7 @@ EXTRA_DIST = \
 
 TEST_LIBS = \
 	libi965_compiler.la \
+	$(I965_PERGEN_LIBS) \
 	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/intel/isl/libisl.la \

@@ -151,6 +151,8 @@ gl_varying_slot_name(gl_varying_slot slot)
       ENUM(VARYING_SLOT_CLIP_VERTEX),
       ENUM(VARYING_SLOT_CLIP_DIST0),
       ENUM(VARYING_SLOT_CLIP_DIST1),
+      ENUM(VARYING_SLOT_CULL_DIST0),
+      ENUM(VARYING_SLOT_CULL_DIST1),
       ENUM(VARYING_SLOT_PRIMITIVE_ID),
       ENUM(VARYING_SLOT_LAYER),
       ENUM(VARYING_SLOT_VIEWPORT),
@@ -158,6 +160,8 @@ gl_varying_slot_name(gl_varying_slot slot)
       ENUM(VARYING_SLOT_PNTC),
       ENUM(VARYING_SLOT_TESS_LEVEL_OUTER),
       ENUM(VARYING_SLOT_TESS_LEVEL_INNER),
+      ENUM(VARYING_SLOT_BOUNDING_BOX0),
+      ENUM(VARYING_SLOT_BOUNDING_BOX1),
       ENUM(VARYING_SLOT_VAR0),
       ENUM(VARYING_SLOT_VAR1),
       ENUM(VARYING_SLOT_VAR2),
@@ -226,15 +230,15 @@ gl_system_value_name(gl_system_value sysval)
 }
 
 const char *
-glsl_interp_qualifier_name(enum glsl_interp_qualifier qual)
+glsl_interp_mode_name(enum glsl_interp_mode qual)
 {
    static const char *names[] = {
-      ENUM(INTERP_QUALIFIER_NONE),
-      ENUM(INTERP_QUALIFIER_SMOOTH),
-      ENUM(INTERP_QUALIFIER_FLAT),
-      ENUM(INTERP_QUALIFIER_NOPERSPECTIVE),
+      ENUM(INTERP_MODE_NONE),
+      ENUM(INTERP_MODE_SMOOTH),
+      ENUM(INTERP_MODE_FLAT),
+      ENUM(INTERP_MODE_NOPERSPECTIVE),
    };
-   STATIC_ASSERT(ARRAY_SIZE(names) == INTERP_QUALIFIER_COUNT);
+   STATIC_ASSERT(ARRAY_SIZE(names) == INTERP_MODE_COUNT);
    return NAME(qual);
 }
 

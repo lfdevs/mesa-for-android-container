@@ -577,8 +577,10 @@ nv04_surface_init(struct gl_context *ctx)
 	/* Swizzled surface. */
 	if (context_chipset(ctx) < 0x20)
 		class = NV04_SURFACE_SWZ_CLASS;
-	else
+	else if (context_chipset (ctx) < 0x30)
 		class = NV20_SURFACE_SWZ_CLASS;
+	else
+		class = NV30_SURFACE_SWZ_CLASS;
 
 	ret = nouveau_object_new(chan, handle++, class, NULL, 0, &hw->swzsurf);
 	if (ret)

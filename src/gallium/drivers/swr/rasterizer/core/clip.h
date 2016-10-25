@@ -63,7 +63,7 @@ void Clip(const float *pTriangle, const float *pAttribs, int numAttribs, float *
           int *numVerts, float *pOutAttribs);
 
 INLINE
-void ComputeClipCodes(DRIVER_TYPE type, const API_STATE& state, const simdvector& vertex, simdscalar& clipCodes)
+void ComputeClipCodes(DRIVER_TYPE type, const API_STATE& state, const simdvector& vertex, simdscalar& clipCodes, simdscalari viewportIndexes)
 {
     clipCodes = _simd_setzero_ps();
 
@@ -110,22 +110,22 @@ void ComputeClipCodes(DRIVER_TYPE type, const API_STATE& state, const simdvector
     clipCodes = _simd_or_ps(clipCodes, _simd_and_ps(vRes, _simd_castsi_ps(_simd_set1_epi32(NEGW))));
 
     // GUARDBAND_LEFT
-    simdscalar gbMult = _simd_mul_ps(vNegW, _simd_set1_ps(state.gbState.left));
+    simdscalar gbMult = _simd_mul_ps(vNegW, _simd_i32gather_ps(&state.gbState.left[0], viewportIndexes, 4));
     vRes = _simd_cmplt_ps(vertex.x, gbMult);
     clipCodes = _simd_or_ps(clipCodes, _simd_and_ps(vRes, _simd_castsi_ps(_simd_set1_epi32(GUARDBAND_LEFT))));
 
     // GUARDBAND_TOP
-    gbMult = _simd_mul_ps(vNegW, _simd_set1_ps(state.gbState.top));
+    gbMult = _simd_mul_ps(vNegW, _simd_i32gather_ps(&state.gbState.top[0], viewportIndexes, 4));
     vRes = _simd_cmplt_ps(vertex.y, gbMult);
     clipCodes = _simd_or_ps(clipCodes, _simd_and_ps(vRes, _simd_castsi_ps(_simd_set1_epi32(GUARDBAND_TOP))));
 
     // GUARDBAND_RIGHT
-    gbMult = _simd_mul_ps(vertex.w, _simd_set1_ps(state.gbState.right));
+    gbMult = _simd_mul_ps(vertex.w, _simd_i32gather_ps(&state.gbState.right[0], viewportIndexes, 4));
     vRes = _simd_cmpgt_ps(vertex.x, gbMult);
     clipCodes = _simd_or_ps(clipCodes, _simd_and_ps(vRes, _simd_castsi_ps(_simd_set1_epi32(GUARDBAND_RIGHT))));
 
     // GUARDBAND_BOTTOM
-    gbMult = _simd_mul_ps(vertex.w, _simd_set1_ps(state.gbState.bottom));
+    gbMult = _simd_mul_ps(vertex.w, _simd_i32gather_ps(&state.gbState.bottom[0], viewportIndexes, 4));
     vRes = _simd_cmpgt_ps(vertex.y, gbMult);
     clipCodes = _simd_or_ps(clipCodes, _simd_and_ps(vRes, _simd_castsi_ps(_simd_set1_epi32(GUARDBAND_BOTTOM))));
 }
@@ -140,11 +140,11 @@ public:
         static_assert(NumVertsPerPrim >= 1 && NumVertsPerPrim <= 3, "Invalid NumVertsPerPrim");
     }
 
-    void ComputeClipCodes(simdvector vertex[])
+    void ComputeClipCodes(simdvector vertex[], simdscalari viewportIndexes)
     {
         for (uint32_t i = 0; i < NumVertsPerPrim; ++i)
         {
-            ::ComputeClipCodes(this->driverType, this->state, vertex[i], this->clipCodes[i]);
+            ::ComputeClipCodes(this->driverType, this->state, vertex[i], this->clipCodes[i], viewportIndexes);
         }
     }
 
@@ -302,7 +302,7 @@ public:
     }
 
     // clip SIMD primitives
-    void ClipSimd(const simdscalar& vPrimMask, const simdscalar& vClipMask, PA_STATE& pa, const simdscalari& vPrimId)
+    void ClipSimd(const simdscalar& vPrimMask, const simdscalar& vClipMask, PA_STATE& pa, const simdscalari& vPrimId, const simdscalari& vViewportIdx)
     {
         // input/output vertex store for clipper
         simdvertex vertices[7]; // maximum 7 verts generated per triangle
@@ -324,16 +324,13 @@ public:
         }
 
         // assemble attribs
-        DWORD slot = 0;
-        uint32_t mapIdx = 0;
-        uint32_t tmpLinkage = this->state.linkageMask;
+        const SWR_BACKEND_STATE& backendState = this->state.backendState;
 
         int32_t maxSlot = -1;
-        while (_BitScanForward(&slot, tmpLinkage))
+        for (uint32_t slot = 0; slot < backendState.numAttributes; ++slot)
         {
-            tmpLinkage &= ~(1 << slot);
             // Compute absolute attrib slot in vertex array
-            uint32_t mapSlot = this->state.linkageMap[mapIdx++];
+            uint32_t mapSlot = backendState.swizzleEnable ? backendState.swizzleMap[slot].sourceAttrib : slot;
             maxSlot = std::max<int32_t>(maxSlot, mapSlot);
             uint32_t inputSlot = VERTEX_ATTRIB_START_SLOT + mapSlot;
 
@@ -385,7 +382,7 @@ public:
         PRIMITIVE_TOPOLOGY clipTopology = TOP_UNKNOWN;
         if (NumVertsPerPrim == 3)
         {
-            pfnBinFunc = BinTriangles;
+            pfnBinFunc = GetBinTrianglesFunc((pa.pDC->pState->state.rastState.conservativeRast > 0));
             clipTopology = TOP_TRIANGLE_FAN;
 
             // so that the binner knows to bloat wide points later
@@ -405,6 +402,7 @@ public:
 
         uint32_t* pVertexCount = (uint32_t*)&vNumClippedVerts;
         uint32_t* pPrimitiveId = (uint32_t*)&vPrimId;
+        uint32_t* pViewportIdx = (uint32_t*)&vViewportIdx;
 
         const simdscalari vOffsets = _mm256_set_epi32(
             0 * sizeof(simdvertex),  // unused lane
@@ -490,20 +488,23 @@ public:
                     if (assemble)
                     {
                         static const uint32_t primMaskMap[] = { 0x0, 0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f, 0xff };
-                        pfnBinFunc(this->pDC, clipPa, this->workerId, attrib, primMaskMap[numEmittedPrims], _simd_set1_epi32(pPrimitiveId[inputPrim]));
+                        pfnBinFunc(this->pDC, clipPa, this->workerId, attrib, primMaskMap[numEmittedPrims], _simd_set1_epi32(pPrimitiveId[inputPrim]), _simd_set1_epi32(pViewportIdx[inputPrim]));
                     }
                 } while (clipPa.NextPrim());
             }
         }
 
         // update global pipeline stat
-        SWR_CONTEXT* pContext = this->pDC->pContext;
-        UPDATE_STAT(CPrimitives, numClippedPrims);
+        UPDATE_STAT_FE(CPrimitives, numClippedPrims);
     }
     
     // execute the clipper stage
-    void ExecuteStage(PA_STATE& pa, simdvector prim[], uint32_t primMask, simdscalari primId)
+    void ExecuteStage(PA_STATE& pa, simdvector prim[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx)
     {
+        SWR_ASSERT(pa.pDC != nullptr);
+
+        SWR_CONTEXT *pContext = pa.pDC->pContext;
+
         // set up binner based on PA state
         PFN_PROCESS_PRIMS pfnBinner;
         switch (pa.binTopology)
@@ -519,16 +520,15 @@ public:
             pfnBinner = BinLines;
             break;
         default:
-            pfnBinner = BinTriangles;
+            pfnBinner = GetBinTrianglesFunc((pa.pDC->pState->state.rastState.conservativeRast > 0));
             break;
         };
 
         // update clipper invocations pipeline stat
-        SWR_CONTEXT* pContext = this->pDC->pContext;
         uint32_t numInvoc = _mm_popcnt_u32(primMask);
-        UPDATE_STAT(CInvocations, numInvoc);
+        UPDATE_STAT_FE(CInvocations, numInvoc);
 
-        ComputeClipCodes(prim);
+        ComputeClipCodes(prim, viewportIdx);
 
         // cull prims with NAN coords
         primMask &= ~ComputeNaNMask(prim);
@@ -552,20 +552,19 @@ public:
 
         if (clipMask)
         {
-            RDTSC_START(FEGuardbandClip);
+            AR_BEGIN(FEGuardbandClip, pa.pDC->drawId);
             // we have to clip tris, execute the clipper, which will also
             // call the binner
-            ClipSimd(vMask(primMask), vMask(clipMask), pa, primId);
-            RDTSC_STOP(FEGuardbandClip, 1, 0);
+            ClipSimd(vMask(primMask), vMask(clipMask), pa, primId, viewportIdx);
+            AR_END(FEGuardbandClip, 1);
         }
         else if (validMask)
         {
             // update CPrimitives pipeline state
-            SWR_CONTEXT* pContext = this->pDC->pContext;
-            UPDATE_STAT(CPrimitives, _mm_popcnt_u32(validMask));
+            UPDATE_STAT_FE(CPrimitives, _mm_popcnt_u32(validMask));
 
             // forward valid prims directly to binner
-            pfnBinner(this->pDC, pa, this->workerId, prim, validMask, primId);
+            pfnBinner(this->pDC, pa, this->workerId, prim, validMask, primId, viewportIdx);
         }
     }
 
@@ -951,6 +950,6 @@ private:
 
 
 // pipeline stage functions
-void ClipTriangles(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId);
-void ClipLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId);
-void ClipPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId);
+void ClipTriangles(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx);
+void ClipLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx);
+void ClipPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx);

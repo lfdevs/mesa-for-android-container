@@ -48,6 +48,7 @@
 #include "pipe/p_video_codec.h"
 #include "util/u_memory.h"
 #include "util/u_surface.h"
+#include "vl/vl_video_buffer.h"
 #include "vl/vl_vlc.h"
 
 #include "entrypoint.h"
@@ -68,7 +69,7 @@ OMX_ERRORTYPE vid_dec_LoaderComponent(stLoaderComponentType *comp)
    comp->componentVersion.s.nVersionMinor = 0;
    comp->componentVersion.s.nRevision = 0;
    comp->componentVersion.s.nStep = 1;
-   comp->name_specific_length = 2;
+   comp->name_specific_length = 3;
 
    comp->name = CALLOC(1, OMX_MAX_STRINGNAME_SIZE);
    if (comp->name == NULL)
@@ -90,6 +91,10 @@ OMX_ERRORTYPE vid_dec_LoaderComponent(stLoaderComponentType *comp)
    if (comp->name_specific[1] == NULL)
       goto error_specific;
 
+   comp->name_specific[2] = CALLOC(1, OMX_MAX_STRINGNAME_SIZE);
+   if (comp->name_specific[2] == NULL)
+      goto error_specific;
+
    comp->role_specific[0] = CALLOC(1, OMX_MAX_STRINGNAME_SIZE);
    if (comp->role_specific[0] == NULL)
       goto error_specific;
@@ -98,20 +103,28 @@ OMX_ERRORTYPE vid_dec_LoaderComponent(stLoaderComponentType *comp)
    if (comp->role_specific[1] == NULL)
       goto error_specific;
 
+   comp->role_specific[2] = CALLOC(1, OMX_MAX_STRINGNAME_SIZE);
+   if (comp->role_specific[2] == NULL)
+      goto error_specific;
+
    strcpy(comp->name, OMX_VID_DEC_BASE_NAME);
    strcpy(comp->name_specific[0], OMX_VID_DEC_MPEG2_NAME);
    strcpy(comp->name_specific[1], OMX_VID_DEC_AVC_NAME);
+   strcpy(comp->name_specific[2], OMX_VID_DEC_HEVC_NAME);
 
    strcpy(comp->role_specific[0], OMX_VID_DEC_MPEG2_ROLE);
    strcpy(comp->role_specific[1], OMX_VID_DEC_AVC_ROLE);
+   strcpy(comp->role_specific[2], OMX_VID_DEC_HEVC_ROLE);
 
    comp->constructor = vid_dec_Constructor;
 
    return OMX_ErrorNone;
 
 error_specific:
+   FREE(comp->role_specific[2]);
    FREE(comp->role_specific[1]);
    FREE(comp->role_specific[0]);
+   FREE(comp->name_specific[2]);
    FREE(comp->name_specific[1]);
    FREE(comp->name_specific[0]);
 
@@ -150,6 +163,9 @@ static OMX_ERRORTYPE vid_dec_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
    if (!strcmp(name, OMX_VID_DEC_AVC_NAME))
       priv->profile = PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH;
 
+   if (!strcmp(name, OMX_VID_DEC_HEVC_NAME))
+      priv->profile = PIPE_VIDEO_PROFILE_HEVC_MAIN;
+
    priv->BufferMgmtCallback = vid_dec_FrameDecoded;
    priv->messageHandler = vid_dec_MessageHandler;
    priv->destructor = vid_dec_Destructor;
@@ -165,6 +181,19 @@ static OMX_ERRORTYPE vid_dec_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
    priv->pipe = screen->context_create(screen, priv->screen, 0);
    if (!priv->pipe)
       return OMX_ErrorInsufficientResources;
+
+   if (!vl_compositor_init(&priv->compositor, priv->pipe)) {
+      priv->pipe->destroy(priv->pipe);
+      priv->pipe = NULL;
+      return OMX_ErrorInsufficientResources;
+   }
+
+   if (!vl_compositor_init_state(&priv->cstate, priv->pipe)) {
+      vl_compositor_cleanup(&priv->compositor);
+      priv->pipe->destroy(priv->pipe);
+      priv->pipe = NULL;
+      return OMX_ErrorInsufficientResources;
+   }
 
    priv->sPortTypesParam[OMX_PortDomainVideo].nStartPortNumber = 0;
    priv->sPortTypesParam[OMX_PortDomainVideo].nPorts = 2;
@@ -217,8 +246,11 @@ static OMX_ERRORTYPE vid_dec_Destructor(OMX_COMPONENTTYPE *comp)
       priv->ports=NULL;
    }
 
-   if (priv->pipe)
+   if (priv->pipe) {
+      vl_compositor_cleanup_state(&priv->cstate);
+      vl_compositor_cleanup(&priv->compositor);
       priv->pipe->destroy(priv->pipe);
+   }
 
    if (priv->screen)
       omx_put_screen();
@@ -273,6 +305,8 @@ static OMX_ERRORTYPE vid_dec_SetParameter(OMX_HANDLETYPE handle, OMX_INDEXTYPE i
          priv->profile = PIPE_VIDEO_PROFILE_MPEG2_MAIN;
       } else if (!strcmp((char *)role->cRole, OMX_VID_DEC_AVC_ROLE)) {
          priv->profile = PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH;
+      } else if (!strcmp((char *)role->cRole, OMX_VID_DEC_HEVC_ROLE)) {
+         priv->profile = PIPE_VIDEO_PROFILE_HEVC_MAIN;
       } else {
          return OMX_ErrorBadParameter;
       }
@@ -321,6 +355,8 @@ static OMX_ERRORTYPE vid_dec_GetParameter(OMX_HANDLETYPE handle, OMX_INDEXTYPE i
          strcpy((char *)role->cRole, OMX_VID_DEC_MPEG2_ROLE);
       else if (priv->profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH)
          strcpy((char *)role->cRole, OMX_VID_DEC_AVC_ROLE);
+      else if (priv->profile == PIPE_VIDEO_PROFILE_HEVC_MAIN)
+         strcpy((char *)role->cRole, OMX_VID_DEC_HEVC_ROLE);
 
       break;
    }
@@ -366,6 +402,8 @@ static OMX_ERRORTYPE vid_dec_MessageHandler(OMX_COMPONENTTYPE* comp, internalReq
             vid_dec_mpeg12_Init(priv);
          else if (priv->profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH)
             vid_dec_h264_Init(priv);
+         else if (priv->profile == PIPE_VIDEO_PROFILE_HEVC_MAIN)
+            vid_dec_h265_Init(priv);
 
       } else if ((msg->messageParam == OMX_StateLoaded) && (priv->state == OMX_StateIdle)) {
          if (priv->shadow) {
@@ -385,16 +423,38 @@ static OMX_ERRORTYPE vid_dec_MessageHandler(OMX_COMPONENTTYPE* comp, internalReq
 void vid_dec_NeedTarget(vid_dec_PrivateType *priv)
 {
    struct pipe_video_buffer templat = {};
+   struct vl_screen *omx_screen;
+   struct pipe_screen *pscreen;
    omx_base_video_PortType *port;
 
+   omx_screen = priv->screen;
    port = (omx_base_video_PortType *)priv->ports[OMX_BASE_FILTER_INPUTPORT_INDEX];
 
+   assert(omx_screen);
+   assert(port);
+
+   pscreen = omx_screen->pscreen;
+
+   assert(pscreen);
+
    if (!priv->target) {
-      templat.buffer_format = PIPE_FORMAT_NV12;
+      memset(&templat, 0, sizeof(templat));
+
       templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
       templat.width = port->sPortParam.format.video.nFrameWidth;
       templat.height = port->sPortParam.format.video.nFrameHeight;
-      templat.interlaced = false;
+      templat.buffer_format = pscreen->get_video_param(
+            pscreen,
+            PIPE_VIDEO_PROFILE_UNKNOWN,
+            PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+            PIPE_VIDEO_CAP_PREFERED_FORMAT
+      );
+      templat.interlaced = pscreen->get_video_param(
+          pscreen,
+          PIPE_VIDEO_PROFILE_UNKNOWN,
+          PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+          PIPE_VIDEO_CAP_PREFERS_INTERLACED
+      );
       priv->target = priv->pipe->create_video_buffer(priv->pipe, &templat);
    }
 }
@@ -493,34 +553,63 @@ static void vid_dec_FillOutput(vid_dec_PrivateType *priv, struct pipe_video_buff
    OMX_VIDEO_PORTDEFINITIONTYPE *def = &port->sPortParam.format.video;
 
    struct pipe_sampler_view **views;
-   struct pipe_transfer *transfer;
-   struct pipe_box box = { };
-   uint8_t *src, *dst;
+   unsigned i, j;
+   unsigned width, height;
 
    views = buf->get_sampler_view_planes(buf);
 
-   dst = output->pBuffer;
+   for (i = 0; i < 2 /* NV12 */; i++) {
+      if (!views[i]) continue;
+      width = def->nFrameWidth;
+      height = def->nFrameHeight;
+      vl_video_buffer_adjust_size(&width, &height, i, buf->chroma_format, buf->interlaced);
+      for (j = 0; j < views[i]->texture->array_size; ++j) {
+         struct pipe_box box = {0, 0, j, width, height, 1};
+         struct pipe_transfer *transfer;
+         uint8_t *map, *dst;
+         map = priv->pipe->transfer_map(priv->pipe, views[i]->texture, 0,
+                  PIPE_TRANSFER_READ, &box, &transfer);
+         if (!map)
+            return;
 
-   box.width = def->nFrameWidth;
-   box.height = def->nFrameHeight;
-   box.depth = 1;
+         dst = ((uint8_t*)output->pBuffer + output->nOffset) + j * def->nStride +
+               i * def->nFrameWidth * def->nFrameHeight;
+         util_copy_rect(dst,
+            views[i]->texture->format,
+            def->nStride * views[i]->texture->array_size, 0, 0,
+            box.width, box.height, map, transfer->stride, 0, 0);
 
-   src = priv->pipe->transfer_map(priv->pipe, views[0]->texture, 0,
-                                  PIPE_TRANSFER_READ, &box, &transfer);
-   util_copy_rect(dst, views[0]->texture->format, def->nStride, 0, 0,
-                  box.width, box.height, src, transfer->stride, 0, 0);
-   pipe_transfer_unmap(priv->pipe, transfer);
+         pipe_transfer_unmap(priv->pipe, transfer);
+      }
+   }
+}
 
-   dst = ((uint8_t*)output->pBuffer) + (def->nStride * box.height);
+static void vid_dec_deint(vid_dec_PrivateType *priv, struct pipe_video_buffer *src_buf,
+                          struct pipe_video_buffer *dst_buf)
+{
+   struct vl_compositor *compositor = &priv->compositor;
+   struct vl_compositor_state *s = &priv->cstate;
+   struct pipe_surface **dst_surface;
+   struct u_rect dst_rect;
 
-   box.width = def->nFrameWidth / 2;
-   box.height = def->nFrameHeight / 2;
+   dst_surface = dst_buf->get_surfaces(dst_buf);
+   vl_compositor_clear_layers(s);
 
-   src = priv->pipe->transfer_map(priv->pipe, views[1]->texture, 0,
-                                  PIPE_TRANSFER_READ, &box, &transfer);
-   util_copy_rect(dst, views[1]->texture->format, def->nStride, 0, 0,
-                  box.width, box.height, src, transfer->stride, 0, 0);
-   pipe_transfer_unmap(priv->pipe, transfer);
+   dst_rect.x0 = 0;
+   dst_rect.x1 = src_buf->width;
+   dst_rect.y0 = 0;
+   dst_rect.y1 = src_buf->height;
+
+   vl_compositor_set_yuv_layer(s, compositor, 0, src_buf, NULL, NULL, true);
+   vl_compositor_set_layer_dst_area(s, 0, &dst_rect);
+   vl_compositor_render(s, compositor, dst_surface[0], NULL, false);
+
+   dst_rect.x1 /= 2;
+   dst_rect.y1 /= 2;
+
+   vl_compositor_set_yuv_layer(s, compositor, 0, src_buf, NULL, NULL, false);
+   vl_compositor_set_layer_dst_area(s, 0, &dst_rect);
+   vl_compositor_render(s, compositor, dst_surface[1], NULL, false);
 }
 
 static void vid_dec_FrameDecoded(OMX_COMPONENTTYPE *comp, OMX_BUFFERHEADERTYPE* input,
@@ -538,7 +627,33 @@ static void vid_dec_FrameDecoded(OMX_COMPONENTTYPE *comp, OMX_BUFFERHEADERTYPE* 
 
    if (input->pInputPortPrivate) {
       if (output->pInputPortPrivate) {
-         struct pipe_video_buffer *tmp = output->pOutputPortPrivate;
+         struct pipe_video_buffer *tmp, *vbuf, *new_vbuf;
+
+         tmp = output->pOutputPortPrivate;
+         vbuf = input->pInputPortPrivate;
+         if (vbuf->interlaced) {
+            /* re-allocate the progressive buffer */
+            omx_base_video_PortType *port;
+            struct pipe_video_buffer templat = {};
+
+            port = (omx_base_video_PortType *)
+                    priv->ports[OMX_BASE_FILTER_INPUTPORT_INDEX];
+            memset(&templat, 0, sizeof(templat));
+            templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
+            templat.width = port->sPortParam.format.video.nFrameWidth;
+            templat.height = port->sPortParam.format.video.nFrameHeight;
+            templat.buffer_format = PIPE_FORMAT_NV12;
+            templat.interlaced = false;
+            new_vbuf = priv->pipe->create_video_buffer(priv->pipe, &templat);
+
+            /* convert the interlaced to the progressive */
+            vid_dec_deint(priv, input->pInputPortPrivate, new_vbuf);
+            priv->pipe->flush(priv->pipe, NULL, 0);
+
+            /* set the progrssive buffer for next round */
+            vbuf->destroy(vbuf);
+            input->pInputPortPrivate = new_vbuf;
+         }
          output->pOutputPortPrivate = input->pInputPortPrivate;
          input->pInputPortPrivate = tmp;
       } else {

@@ -46,7 +46,6 @@ LIBGLSL_FILES = \
 	glsl/ir_hierarchical_visitor.cpp \
 	glsl/ir_hierarchical_visitor.h \
 	glsl/ir_hv_accept.cpp \
-	glsl/ir_import_prototypes.cpp \
 	glsl/ir_optimization.h \
 	glsl/ir_print_visitor.cpp \
 	glsl/ir_print_visitor.h \
@@ -77,6 +76,7 @@ LIBGLSL_FILES = \
 	glsl/loop_analysis.h \
 	glsl/loop_controls.cpp \
 	glsl/loop_unroll.cpp \
+	glsl/lower_blend_equation_advanced.cpp \
 	glsl/lower_buffer_access.cpp \
 	glsl/lower_buffer_access.h \
 	glsl/lower_const_arrays_to_uniforms.cpp \
@@ -135,6 +135,10 @@ LIBGLSL_FILES = \
 	glsl/s_expression.cpp \
 	glsl/s_expression.h
 
+LIBGLSL_SHADER_CACHE_FILES = \
+	glsl/cache.c \
+	glsl/cache.h
+
 # glsl_compiler
 
 GLSL_COMPILER_CXX_FILES = \
@@ -144,9 +148,13 @@ GLSL_COMPILER_CXX_FILES = \
 	glsl/standalone.h
 
 # libglsl generated sources
-LIBGLSL_GENERATED_CXX_FILES = \
+LIBGLSL_GENERATED_FILES = \
+	glsl/ir_expression_operation.h \
+	glsl/ir_expression_operation_constant.h \
+	glsl/ir_expression_operation_strings.h \
 	glsl/glsl_lexer.cpp \
-	glsl/glsl_parser.cpp
+	glsl/glsl_parser.cpp \
+	glsl/glsl_parser.h
 
 # libglcpp
 
@@ -201,6 +209,7 @@ NIR_FILES = \
 	nir/nir_lower_indirect_derefs.c \
 	nir/nir_lower_io.c \
 	nir/nir_lower_io_to_temporaries.c \
+	nir/nir_lower_io_to_scalar.c \
 	nir/nir_lower_io_types.c \
 	nir/nir_lower_passthrough_edgeflags.c \
 	nir/nir_lower_phis_to_scalar.c \
@@ -236,6 +245,7 @@ NIR_FILES = \
 	nir/nir_repair_ssa.c \
 	nir/nir_search.c \
 	nir/nir_search.h \
+	nir/nir_search_helpers.h \
 	nir/nir_split_var_copies.c \
 	nir/nir_sweep.c \
 	nir/nir_to_ssa.c \

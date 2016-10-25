@@ -34,6 +34,7 @@
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
 #include "util/u_surface.h"
+#include "cso_cache/cso_context.h"
 
 #include "st_cb_texture.h"
 #include "st_debug.h"
@@ -44,8 +45,8 @@
 #include "st_format.h"
 
 static void
-st_bind_images(struct st_context *st, struct gl_shader *shader,
-              unsigned shader_type)
+st_bind_images(struct st_context *st, struct gl_linked_shader *shader,
+              enum pipe_shader_type shader_type)
 {
    unsigned i;
    struct pipe_image_view images[MAX_IMAGE_UNIFORMS];
@@ -87,19 +88,13 @@ st_bind_images(struct st_context *st, struct gl_shader *shader,
 
       if (stObj->pt->target == PIPE_BUFFER) {
          unsigned base, size;
-         unsigned f, n;
-         const struct util_format_description *desc
-            = util_format_description(img->format);
 
          base = stObj->base.BufferOffset;
          assert(base < stObj->pt->width0);
          size = MIN2(stObj->pt->width0 - base, (unsigned)stObj->base.BufferSize);
 
-         f = (base / (desc->block.bits / 8)) * desc->block.width;
-         n = (size / (desc->block.bits / 8)) * desc->block.width;
-         assert(n > 0);
-         img->u.buf.first_element = f;
-         img->u.buf.last_element  = f + (n - 1);
+         img->u.buf.offset = base;
+         img->u.buf.size = size;
       } else {
          img->u.tex.level = u->Level + stObj->base.MinLevel;
          if (stObj->pt->target == PIPE_TEXTURE_3D) {
@@ -122,12 +117,12 @@ st_bind_images(struct st_context *st, struct gl_shader *shader,
          }
       }
    }
-   st->pipe->set_shader_images(st->pipe, shader_type, 0, shader->NumImages,
-                               images);
+   cso_set_shader_images(st->cso_context, shader_type, 0, shader->NumImages,
+                         images);
    /* clear out any stale shader images */
    if (shader->NumImages < c->MaxImageUniforms)
-      st->pipe->set_shader_images(
-            st->pipe, shader_type,
+      cso_set_shader_images(
+            st->cso_context, shader_type,
             shader->NumImages,
             c->MaxImageUniforms - shader->NumImages,
             NULL);
@@ -145,11 +140,6 @@ static void bind_vs_images(struct st_context *st)
 }
 
 const struct st_tracked_state st_bind_vs_images = {
-   "st_bind_vs_images",
-   {
-      _NEW_TEXTURE,
-      ST_NEW_VERTEX_PROGRAM | ST_NEW_IMAGE_UNITS,
-   },
    bind_vs_images
 };
 
@@ -165,11 +155,6 @@ static void bind_fs_images(struct st_context *st)
 }
 
 const struct st_tracked_state st_bind_fs_images = {
-   "st_bind_fs_images",
-   {
-      _NEW_TEXTURE,
-      ST_NEW_FRAGMENT_PROGRAM | ST_NEW_IMAGE_UNITS,
-   },
    bind_fs_images
 };
 
@@ -185,11 +170,6 @@ static void bind_gs_images(struct st_context *st)
 }
 
 const struct st_tracked_state st_bind_gs_images = {
-   "st_bind_gs_images",
-   {
-      _NEW_TEXTURE,
-      ST_NEW_GEOMETRY_PROGRAM | ST_NEW_IMAGE_UNITS,
-   },
    bind_gs_images
 };
 
@@ -205,11 +185,6 @@ static void bind_tcs_images(struct st_context *st)
 }
 
 const struct st_tracked_state st_bind_tcs_images = {
-   "st_bind_tcs_images",
-   {
-      _NEW_TEXTURE,
-      ST_NEW_TESSCTRL_PROGRAM | ST_NEW_IMAGE_UNITS,
-   },
    bind_tcs_images
 };
 
@@ -225,11 +200,6 @@ static void bind_tes_images(struct st_context *st)
 }
 
 const struct st_tracked_state st_bind_tes_images = {
-   "st_bind_tes_images",
-   {
-      _NEW_TEXTURE,
-      ST_NEW_TESSEVAL_PROGRAM | ST_NEW_IMAGE_UNITS,
-   },
    bind_tes_images
 };
 
@@ -245,10 +215,5 @@ static void bind_cs_images(struct st_context *st)
 }
 
 const struct st_tracked_state st_bind_cs_images = {
-   "st_bind_cs_images",
-   {
-      _NEW_TEXTURE,
-      ST_NEW_COMPUTE_PROGRAM | ST_NEW_IMAGE_UNITS,
-   },
    bind_cs_images
 };

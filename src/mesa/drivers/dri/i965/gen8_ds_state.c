@@ -29,15 +29,18 @@
 static void
 gen8_upload_ds_state(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    const struct brw_stage_state *stage_state = &brw->tes.base;
    /* BRW_NEW_TESS_PROGRAMS */
    bool active = brw->tess_eval_program;
 
    /* BRW_NEW_TES_PROG_DATA */
-   const struct brw_tes_prog_data *tes_prog_data = brw->tes.prog_data;
-   const struct brw_vue_prog_data *vue_prog_data = &tes_prog_data->base;
-   const struct brw_stage_prog_data *prog_data = &vue_prog_data->base;
+   const struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   const struct brw_vue_prog_data *vue_prog_data =
+      brw_vue_prog_data(stage_state->prog_data);
+   const struct brw_tes_prog_data *tes_prog_data =
+      brw_tes_prog_data(stage_state->prog_data);
    const int ds_pkt_len = brw->gen >= 9 ? 11 : 9;
 
    if (active) {
@@ -64,11 +67,12 @@ gen8_upload_ds_state(struct brw_context *brw)
 
       OUT_BATCH(GEN7_DS_ENABLE |
                 GEN7_DS_STATISTICS_ENABLE |
-                (brw->max_ds_threads - 1) << HSW_DS_MAX_THREADS_SHIFT |
+                (devinfo->max_tes_threads - 1) << HSW_DS_MAX_THREADS_SHIFT |
                 (vue_prog_data->dispatch_mode == DISPATCH_MODE_SIMD8 ?
                  GEN7_DS_SIMD8_DISPATCH_ENABLE : 0) |
                 (tes_prog_data->domain == BRW_TESS_DOMAIN_TRI ?
                  GEN7_DS_COMPUTE_W_COORDINATE_ENABLE : 0));
+      /* _NEW_TRANSFORM */
       OUT_BATCH(SET_FIELD(ctx->Transform.ClipPlanesEnabled,
                           GEN8_DS_USER_CLIP_DISTANCE) |
                 SET_FIELD(vue_prog_data->cull_distance_mask,
@@ -106,7 +110,7 @@ gen8_upload_ds_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_ds_state = {
    .dirty = {
-      .mesa  = 0,
+      .mesa  = _NEW_TRANSFORM,
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_BLORP |
                BRW_NEW_TESS_PROGRAMS |

@@ -71,8 +71,8 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
    EGLint type = surf->Type;
    EGLint texture_type = EGL_PBUFFER_BIT;
    EGLint i, err = EGL_SUCCESS;
-   EGLint tex_target = -1;
-   EGLint tex_format = -1;
+   EGLint attr = EGL_NONE;
+   EGLint val = EGL_NONE;
 
    if (!attrib_list)
       return EGL_SUCCESS;
@@ -81,8 +81,8 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
       texture_type |= EGL_PIXMAP_BIT;
 
    for (i = 0; attrib_list[i] != EGL_NONE; i++) {
-      EGLint attr = attrib_list[i++];
-      EGLint val = attrib_list[i];
+      attr = attrib_list[i++];
+      val = attrib_list[i];
 
       switch (attr) {
       /* common attributes */
@@ -189,7 +189,6 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
             break;
          }
 
-         tex_format = val;
          switch (val) {
          case EGL_TEXTURE_RGB:
          case EGL_TEXTURE_RGBA:
@@ -209,7 +208,6 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
             break;
          }
 
-         tex_target = val;
          switch (val) {
          case EGL_TEXTURE_2D:
          case EGL_NO_TEXTURE:
@@ -235,18 +233,20 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
          break;
       }
 
-      if (type == EGL_PBUFFER_BIT) {
-         if ((tex_target == EGL_NO_TEXTURE && tex_format != EGL_NO_TEXTURE) ||
-             (tex_format == EGL_NO_TEXTURE && tex_target != EGL_NO_TEXTURE)) {
-            err = EGL_BAD_MATCH;
-         }
-      }
-
-      if (err != EGL_SUCCESS) {
-         _eglLog(_EGL_WARNING, "bad surface attribute 0x%04x", attr);
+      if (err != EGL_SUCCESS)
          break;
+   }
+
+   if (err == EGL_SUCCESS && type == EGL_PBUFFER_BIT) {
+      if ((surf->TextureTarget == EGL_NO_TEXTURE && surf->TextureFormat != EGL_NO_TEXTURE) ||
+          (surf->TextureFormat == EGL_NO_TEXTURE && surf->TextureTarget != EGL_NO_TEXTURE)) {
+         attr = surf->TextureTarget == EGL_NO_TEXTURE ? EGL_TEXTURE_TARGET : EGL_TEXTURE_FORMAT;
+         err = EGL_BAD_MATCH;
       }
    }
+
+   if (err != EGL_SUCCESS)
+      _eglLog(_EGL_WARNING, "bad surface attribute 0x%04x", attr);
 
    return err;
 }

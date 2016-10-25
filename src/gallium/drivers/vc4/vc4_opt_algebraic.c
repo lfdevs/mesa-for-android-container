@@ -143,7 +143,7 @@ qir_opt_algebraic(struct vc4_compile *c)
 {
         bool progress = false;
 
-        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
+        qir_for_each_inst_inorder(inst, c) {
                 switch (inst->op) {
                 case QOP_FMIN:
                         if (is_1f(c, inst->src[1]) &&

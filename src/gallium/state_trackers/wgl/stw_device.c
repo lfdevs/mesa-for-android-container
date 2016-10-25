@@ -116,6 +116,8 @@ stw_init(const struct stw_winsys *stw_winsys)
 
    stw_pixelformat_init();
 
+   stw_dev->initialized = true;
+
    return TRUE;
 
 error1:

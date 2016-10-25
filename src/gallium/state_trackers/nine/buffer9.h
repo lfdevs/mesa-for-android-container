@@ -88,10 +88,10 @@ NineBuffer9_Upload( struct NineBuffer9 *This )
     struct pipe_context *pipe = This->pipe;
 
     assert(This->base.pool == D3DPOOL_MANAGED && This->managed.dirty);
-    pipe->transfer_inline_write(pipe, This->base.resource, 0, 0,
-                                &This->managed.dirty_box,
-                                (char *)This->managed.data + This->managed.dirty_box.x,
-                                This->size, This->size);
+    pipe->buffer_subdata(pipe, This->base.resource, 0,
+                         This->managed.dirty_box.x,
+                         This->managed.dirty_box.width,
+                         (char *)This->managed.data + This->managed.dirty_box.x);
     This->managed.dirty = FALSE;
 }
 

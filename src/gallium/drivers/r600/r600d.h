@@ -96,8 +96,13 @@
 #define		COPY_DW_DST_IS_MEM		(1 << 1)
 #define PKT3_WAIT_REG_MEM                      0x3C
 #define		WAIT_REG_MEM_EQUAL		3
+#define		WAIT_REG_MEM_GEQUAL		5
+#define		WAIT_REG_MEM_MEMORY		(1 << 4)
+#define		WAIT_REG_MEM_PFP		(1 << 8)
 #define PKT3_MEM_WRITE                         0x3D
+#define		MEM_WRITE_32_BITS		(1 << 18)
 #define PKT3_INDIRECT_BUFFER                   0x32
+#define PKT3_PFP_SYNC_ME		       0x42 /* EG+ */
 #define PKT3_SURFACE_SYNC                      0x43
 #define PKT3_ME_INITIALIZE                     0x44
 #define PKT3_COND_WRITE                        0x45

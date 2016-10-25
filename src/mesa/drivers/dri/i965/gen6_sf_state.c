@@ -29,6 +29,7 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 #include "brw_util.h"
+#include "compiler/nir/nir.h"
 #include "main/macros.h"
 #include "main/fbobject.h"
 #include "main/framebuffer.h"
@@ -158,6 +159,9 @@ calculate_attr_overrides(const struct brw_context *brw,
                          uint32_t *urb_entry_read_length,
                          uint32_t *urb_entry_read_offset)
 {
+   /* BRW_NEW_FS_PROG_DATA */
+   const struct brw_wm_prog_data *wm_prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
    uint32_t max_source_attr = 0;
 
    *point_sprite_enables = 0;
@@ -173,7 +177,8 @@ calculate_attr_overrides(const struct brw_context *brw,
     * - VARYING_SLOT_{PSIZ,LAYER} and VARYING_SLOT_POS on gen6+
     */
 
-   bool fs_needs_vue_header = brw->fragment_program->Base.InputsRead &
+   bool fs_needs_vue_header =
+      brw->fragment_program->Base.nir->info.inputs_read &
       (VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT);
 
    *urb_entry_read_offset = fs_needs_vue_header ? 0 : 1;
@@ -193,9 +198,9 @@ calculate_attr_overrides(const struct brw_context *brw,
     * correctly set the attr overrides.
     *
     * _NEW_POLYGON
-    * BRW_NEW_PRIMITIVE | BRW_NEW_GEOMETRY_PROGRAM | BRW_NEW_TES_PROG_DATA
+    * BRW_NEW_PRIMITIVE | BRW_NEW_GS_PROG_DATA | BRW_NEW_TES_PROG_DATA
     */
-   bool drawing_points = is_drawing_points(brw);
+   bool drawing_points = brw_is_drawing_points(brw);
 
    /* Initialize all the attr_overrides to 0.  In the loop below we'll modify
     * just the ones that correspond to inputs used by the fs.
@@ -203,8 +208,7 @@ calculate_attr_overrides(const struct brw_context *brw,
    memset(attr_overrides, 0, 16*sizeof(*attr_overrides));
 
    for (int attr = 0; attr < VARYING_SLOT_MAX; attr++) {
-      /* BRW_NEW_FS_PROG_DATA */
-      int input_index = brw->wm.prog_data->urb_setup[attr];
+      int input_index = wm_prog_data->urb_setup[attr];
 
       if (input_index < 0)
 	 continue;
@@ -214,7 +218,7 @@ calculate_attr_overrides(const struct brw_context *brw,
       if (drawing_points) {
          if (brw->ctx.Point.PointSprite &&
              (attr >= VARYING_SLOT_TEX0 && attr <= VARYING_SLOT_TEX7) &&
-             brw->ctx.Point.CoordReplace[attr - VARYING_SLOT_TEX0]) {
+             (brw->ctx.Point.CoordReplace & (1u << (attr - VARYING_SLOT_TEX0)))) {
             point_sprite = true;
          }
 
@@ -267,7 +271,9 @@ upload_sf_state(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FS_PROG_DATA */
-   uint32_t num_outputs = brw->wm.prog_data->num_varying_inputs;
+   const struct brw_wm_prog_data *wm_prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
+   uint32_t num_outputs = wm_prog_data->num_varying_inputs;
    uint32_t dw1, dw2, dw3, dw4;
    uint32_t point_sprite_enables;
    int i;
@@ -335,9 +341,11 @@ upload_sf_state(struct brw_context *brw)
        unreachable("not reached");
    }
 
-   /* _NEW_SCISSOR _NEW_POLYGON BRW_NEW_GEOMETRY_PROGRAM BRW_NEW_PRIMITIVE */
+   /* _NEW_SCISSOR | _NEW_POLYGON,
+    * BRW_NEW_GS_PROG_DATA | BRW_NEW_TES_PROG_DATA | BRW_NEW_PRIMITIVE
+    */
    if (ctx->Scissor.EnableFlags ||
-       is_drawing_points(brw) || is_drawing_lines(brw))
+       brw_is_drawing_points(brw) || brw_is_drawing_lines(brw))
       dw3 |= GEN6_SF_SCISSOR_ENABLE;
 
    /* _NEW_POLYGON */
@@ -373,12 +381,11 @@ upload_sf_state(struct brw_context *brw)
    if (multisampled_fbo && ctx->Multisample.Enabled)
       dw3 |= GEN6_SF_MSRAST_ON_PATTERN;
 
-   /* _NEW_PROGRAM | _NEW_POINT */
-   if (!(ctx->VertexProgram.PointSizeEnabled ||
-	 ctx->Point._Attenuated))
+   /* _NEW_PROGRAM | _NEW_POINT, BRW_NEW_VUE_MAP_GEOM_OUT */
+   if (use_state_point_size(brw))
       dw4 |= GEN6_SF_USE_STATE_POINT_WIDTH;
 
-   /* Clamp to ARB_point_parameters user limits */
+   /* _NEW_POINT - Clamp to ARB_point_parameters user limits */
    point_size = CLAMP(ctx->Point.Size, ctx->Point.MinSize, ctx->Point.MaxSize);
 
    /* Clamp to the hardware limits and convert to fixed point */
@@ -429,7 +436,7 @@ upload_sf_state(struct brw_context *brw)
       OUT_BATCH(attr_overrides[i * 2] | attr_overrides[i * 2 + 1] << 16);
    }
    OUT_BATCH(point_sprite_enables); /* dw16 */
-   OUT_BATCH(brw->wm.prog_data->flat_inputs);
+   OUT_BATCH(wm_prog_data->flat_inputs);
    OUT_BATCH(0); /* wrapshortest enables 0-7 */
    OUT_BATCH(0); /* wrapshortest enables 8-15 */
    ADVANCE_BATCH();
@@ -449,7 +456,7 @@ const struct brw_tracked_state gen6_sf_state = {
                BRW_NEW_CONTEXT |
                BRW_NEW_FRAGMENT_PROGRAM |
                BRW_NEW_FS_PROG_DATA |
-               BRW_NEW_GEOMETRY_PROGRAM |
+               BRW_NEW_GS_PROG_DATA |
                BRW_NEW_PRIMITIVE |
                BRW_NEW_TES_PROG_DATA |
                BRW_NEW_VUE_MAP_GEOM_OUT,

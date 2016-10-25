@@ -31,8 +31,7 @@
 #include "nv20_3d.xml.h"
 #include "nv10_driver.h"
 #include "nv20_driver.h"
-
-#include "util/simple_list.h"
+#include "util/bitscan.h"
 
 #define LIGHT_MODEL_AMBIENT_R(side)			\
 	((side) ? NV20_3D_LIGHT_MODEL_BACK_AMBIENT_R :	\
@@ -240,7 +239,7 @@ nv20_emit_material_ambient(struct gl_context *ctx, int emit)
 	struct nouveau_pushbuf *push = context_push(ctx);
 	float (*mat)[4] = ctx->Light.Material.Attrib;
 	float c_scene[3], c_factor[3];
-	struct gl_light *l;
+	GLbitfield mask;
 
 	if (USE_COLOR_MATERIAL(AMBIENT, side)) {
 		COPY_3V(c_scene, mat[MAT_ATTRIB_EMISSION(side)]);
@@ -264,8 +263,10 @@ nv20_emit_material_ambient(struct gl_context *ctx, int emit)
 		PUSH_DATAp(push, c_factor, 3);
 	}
 
-	foreach(l, &ctx->Light.EnabledList) {
-		const int i = l - ctx->Light.Light;
+	mask = ctx->Light._EnabledLights;
+	while (mask) {
+		const int i = u_bit_scan(&mask);
+		struct gl_light *l = &ctx->Light.Light[i];
 		float *c_light = (USE_COLOR_MATERIAL(AMBIENT, side) ?
 				  l->Ambient :
 				  l->_MatAmbient[side]);
@@ -281,13 +282,15 @@ nv20_emit_material_diffuse(struct gl_context *ctx, int emit)
 	const int side = emit - NOUVEAU_STATE_MATERIAL_FRONT_DIFFUSE;
 	struct nouveau_pushbuf *push = context_push(ctx);
 	GLfloat (*mat)[4] = ctx->Light.Material.Attrib;
-	struct gl_light *l;
+	GLbitfield mask;
 
 	BEGIN_NV04(push, SUBC_3D(MATERIAL_FACTOR_A(side)), 1);
 	PUSH_DATAf(push, mat[MAT_ATTRIB_DIFFUSE(side)][3]);
 
-	foreach(l, &ctx->Light.EnabledList) {
-		const int i = l - ctx->Light.Light;
+	mask = ctx->Light._EnabledLights;
+	while (mask) {
+		const int i = u_bit_scan(&mask);
+		struct gl_light *l = &ctx->Light.Light[i];
 		float *c_light = (USE_COLOR_MATERIAL(DIFFUSE, side) ?
 				  l->Diffuse :
 				  l->_MatDiffuse[side]);
@@ -302,10 +305,12 @@ nv20_emit_material_specular(struct gl_context *ctx, int emit)
 {
 	const int side = emit - NOUVEAU_STATE_MATERIAL_FRONT_SPECULAR;
 	struct nouveau_pushbuf *push = context_push(ctx);
-	struct gl_light *l;
+	GLbitfield mask;
 
-	foreach(l, &ctx->Light.EnabledList) {
-		const int i = l - ctx->Light.Light;
+	mask = ctx->Light._EnabledLights;
+	while (mask) {
+		const int i = u_bit_scan(&mask);
+		struct gl_light *l = &ctx->Light.Light[i];
 		float *c_light = (USE_COLOR_MATERIAL(SPECULAR, side) ?
 				  l->Specular :
 				  l->_MatSpecular[side]);

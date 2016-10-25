@@ -104,13 +104,6 @@ extern void intelFallback(struct intel_context *intel, GLbitfield bit,
 #endif
 #endif
 
-struct intel_sync_object {
-   struct gl_sync_object Base;
-
-   /** Batch associated with this sync object */
-   drm_intel_bo *bo;
-};
-
 struct intel_batchbuffer {
    /** Current batchbuffer being queued up. */
    drm_intel_bo *bo;

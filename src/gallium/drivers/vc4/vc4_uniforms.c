@@ -28,7 +28,7 @@
 #include "vc4_qir.h"
 
 static void
-write_texture_p0(struct vc4_context *vc4,
+write_texture_p0(struct vc4_job *job,
                  struct vc4_cl_out **uniforms,
                  struct vc4_texture_stateobj *texstate,
                  uint32_t unit)
@@ -37,11 +37,11 @@ write_texture_p0(struct vc4_context *vc4,
                 vc4_sampler_view(texstate->textures[unit]);
         struct vc4_resource *rsc = vc4_resource(sview->base.texture);
 
-        cl_reloc(vc4, &vc4->uniforms, uniforms, rsc->bo, sview->texture_p0);
+        cl_reloc(job, &job->uniforms, uniforms, rsc->bo, sview->texture_p0);
 }
 
 static void
-write_texture_p1(struct vc4_context *vc4,
+write_texture_p1(struct vc4_job *job,
                  struct vc4_cl_out **uniforms,
                  struct vc4_texture_stateobj *texstate,
                  uint32_t unit)
@@ -55,7 +55,7 @@ write_texture_p1(struct vc4_context *vc4,
 }
 
 static void
-write_texture_p2(struct vc4_context *vc4,
+write_texture_p2(struct vc4_job *job,
                  struct vc4_cl_out **uniforms,
                  struct vc4_texture_stateobj *texstate,
                  uint32_t data)
@@ -72,7 +72,19 @@ write_texture_p2(struct vc4_context *vc4,
 }
 
 static void
-write_texture_msaa_addr(struct vc4_context *vc4,
+write_texture_first_level(struct vc4_job *job,
+                          struct vc4_cl_out **uniforms,
+                          struct vc4_texture_stateobj *texstate,
+                          uint32_t data)
+{
+        uint32_t unit = data & 0xffff;
+        struct pipe_sampler_view *texture = texstate->textures[unit];
+
+        cl_aligned_f(uniforms, texture->u.tex.first_level);
+}
+
+static void
+write_texture_msaa_addr(struct vc4_job *job,
                  struct vc4_cl_out **uniforms,
                         struct vc4_texture_stateobj *texstate,
                         uint32_t unit)
@@ -80,7 +92,7 @@ write_texture_msaa_addr(struct vc4_context *vc4,
         struct pipe_sampler_view *texture = texstate->textures[unit];
         struct vc4_resource *rsc = vc4_resource(texture->texture);
 
-        cl_aligned_reloc(vc4, &vc4->uniforms, uniforms, rsc->bo, 0);
+        cl_aligned_reloc(job, &job->uniforms, uniforms, rsc->bo, 0);
 }
 
 
@@ -92,7 +104,7 @@ write_texture_msaa_addr(struct vc4_context *vc4,
 }
 
 static void
-write_texture_border_color(struct vc4_context *vc4,
+write_texture_border_color(struct vc4_job *job,
                            struct vc4_cl_out **uniforms,
                            struct vc4_texture_stateobj *texstate,
                            uint32_t unit)
@@ -182,10 +194,11 @@ vc4_upload_ubo(struct vc4_context *vc4,
                 return NULL;
 
         struct vc4_bo *ubo = vc4_bo_alloc(vc4->screen, shader->ubo_size, "ubo");
-        uint32_t *data = vc4_bo_map(ubo);
+        void *data = vc4_bo_map(ubo);
         for (uint32_t i = 0; i < shader->num_ubo_ranges; i++) {
                 memcpy(data + shader->ubo_ranges[i].dst_offset,
-                       gallium_uniforms + shader->ubo_ranges[i].src_offset,
+                       ((const void *)gallium_uniforms +
+                        shader->ubo_ranges[i].src_offset),
                        shader->ubo_ranges[i].size);
         }
 
@@ -198,14 +211,15 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                    struct vc4_texture_stateobj *texstate)
 {
         struct vc4_shader_uniform_info *uinfo = &shader->uniforms;
+        struct vc4_job *job = vc4->job;
         const uint32_t *gallium_uniforms = cb->cb[0].user_buffer;
         struct vc4_bo *ubo = vc4_upload_ubo(vc4, shader, gallium_uniforms);
 
-        cl_ensure_space(&vc4->uniforms, (uinfo->count +
+        cl_ensure_space(&job->uniforms, (uinfo->count +
                                          uinfo->num_texture_samples) * 4);
 
         struct vc4_cl_out *uniforms =
-                cl_start_shader_reloc(&vc4->uniforms,
+                cl_start_shader_reloc(&job->uniforms,
                                       uinfo->num_texture_samples);
 
         for (int i = 0; i < uinfo->count; i++) {
@@ -238,31 +252,36 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                         break;
 
                 case QUNIFORM_TEXTURE_CONFIG_P0:
-                        write_texture_p0(vc4, &uniforms, texstate,
+                        write_texture_p0(job, &uniforms, texstate,
                                          uinfo->data[i]);
                         break;
 
                 case QUNIFORM_TEXTURE_CONFIG_P1:
-                        write_texture_p1(vc4, &uniforms, texstate,
+                        write_texture_p1(job, &uniforms, texstate,
                                          uinfo->data[i]);
                         break;
 
                 case QUNIFORM_TEXTURE_CONFIG_P2:
-                        write_texture_p2(vc4, &uniforms, texstate,
+                        write_texture_p2(job, &uniforms, texstate,
                                          uinfo->data[i]);
                         break;
 
+                case QUNIFORM_TEXTURE_FIRST_LEVEL:
+                        write_texture_first_level(job, &uniforms, texstate,
+                                                  uinfo->data[i]);
+                        break;
+
                 case QUNIFORM_UBO_ADDR:
-                        cl_aligned_reloc(vc4, &vc4->uniforms, &uniforms, ubo, 0);
+                        cl_aligned_reloc(job, &job->uniforms, &uniforms, ubo, 0);
                         break;
 
                 case QUNIFORM_TEXTURE_MSAA_ADDR:
-                        write_texture_msaa_addr(vc4, &uniforms,
+                        write_texture_msaa_addr(job, &uniforms,
                                                 texstate, uinfo->data[i]);
                         break;
 
                 case QUNIFORM_TEXTURE_BORDER_COLOR:
-                        write_texture_border_color(vc4, &uniforms,
+                        write_texture_border_color(job, &uniforms,
                                                    texstate, uinfo->data[i]);
                         break;
 
@@ -324,6 +343,11 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                 case QUNIFORM_SAMPLE_MASK:
                         cl_aligned_u32(&uniforms, vc4->sample_mask);
                         break;
+
+                case QUNIFORM_UNIFORMS_ADDRESS:
+                        /* This will be filled in by the kernel. */
+                        cl_aligned_u32(&uniforms, 0xd0d0d0d0);
+                        break;
                 }
 #if 0
                 uint32_t written_val = *((uint32_t *)uniforms - 1);
@@ -332,7 +356,7 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
 #endif
         }
 
-        cl_end(&vc4->uniforms, uniforms);
+        cl_end(&job->uniforms, uniforms);
 
         vc4_bo_unreference(&ubo);
 }
@@ -345,6 +369,7 @@ vc4_set_shader_uniform_dirty_flags(struct vc4_compiled_shader *shader)
         for (int i = 0; i < shader->uniforms.count; i++) {
                 switch (shader->uniforms.contents[i]) {
                 case QUNIFORM_CONSTANT:
+                case QUNIFORM_UNIFORMS_ADDRESS:
                         break;
                 case QUNIFORM_UNIFORM:
                 case QUNIFORM_UBO_ADDR:
@@ -366,10 +391,14 @@ vc4_set_shader_uniform_dirty_flags(struct vc4_compiled_shader *shader)
                 case QUNIFORM_TEXTURE_CONFIG_P1:
                 case QUNIFORM_TEXTURE_CONFIG_P2:
                 case QUNIFORM_TEXTURE_BORDER_COLOR:
+                case QUNIFORM_TEXTURE_FIRST_LEVEL:
                 case QUNIFORM_TEXTURE_MSAA_ADDR:
                 case QUNIFORM_TEXRECT_SCALE_X:
                 case QUNIFORM_TEXRECT_SCALE_Y:
-                        dirty |= VC4_DIRTY_TEXSTATE;
+                        /* We could flag this on just the stage we're
+                         * compiling for, but it's not passed in.
+                         */
+                        dirty |= VC4_DIRTY_FRAGTEX | VC4_DIRTY_VERTTEX;
                         break;
 
                 case QUNIFORM_BLEND_CONST_COLOR_X:

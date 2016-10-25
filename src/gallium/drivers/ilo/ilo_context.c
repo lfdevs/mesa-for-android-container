@@ -129,7 +129,7 @@ ilo_context_destroy(struct pipe_context *pipe)
    if (ilo->cp)
       ilo_cp_destroy(ilo->cp);
 
-   util_slab_destroy(&ilo->transfer_mempool);
+   slab_destroy(&ilo->transfer_mempool);
 
    FREE(ilo);
 }
@@ -151,8 +151,8 @@ ilo_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
     * initialize first, otherwise it may not be safe to call
     * ilo_context_destroy() on errors
     */
-   util_slab_create(&ilo->transfer_mempool,
-         sizeof(struct ilo_transfer), 64, UTIL_SLAB_SINGLETHREADED);
+   slab_create(&ilo->transfer_mempool,
+         sizeof(struct ilo_transfer), 64);
 
    ilo->shader_cache = ilo_shader_cache_create();
    ilo->cp = ilo_cp_create(ilo->dev, ilo->winsys, ilo->shader_cache);

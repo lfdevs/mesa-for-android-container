@@ -56,7 +56,7 @@ assign_vue_slot(struct brw_vue_map *vue_map, int varying, int slot)
  * Compute the VUE map for a shader stage.
  */
 void
-brw_compute_vue_map(const struct brw_device_info *devinfo,
+brw_compute_vue_map(const struct gen_device_info *devinfo,
                     struct brw_vue_map *vue_map,
                     GLbitfield64 slots_valid,
                     bool separate)

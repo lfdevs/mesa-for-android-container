@@ -98,9 +98,9 @@ IDirect3DVertexBuffer9Vtbl NineVertexBuffer9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)NineResource9_SetPrivateData,
-    (void *)NineResource9_GetPrivateData,
-    (void *)NineResource9_FreePrivateData,
+    (void *)NineUnknown_SetPrivateData,
+    (void *)NineUnknown_GetPrivateData,
+    (void *)NineUnknown_FreePrivateData,
     (void *)NineResource9_SetPriority,
     (void *)NineResource9_GetPriority,
     (void *)NineResource9_PreLoad,

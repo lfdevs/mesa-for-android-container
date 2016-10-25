@@ -383,7 +383,7 @@ xa_fence_wait(struct xa_fence *fence, uint64_t timeout)
 	struct pipe_screen *screen = fence->xa->screen;
 	boolean timed_out;
 
-	timed_out = !screen->fence_finish(screen, fence->pipe_fence, timeout);
+	timed_out = !screen->fence_finish(screen, NULL, fence->pipe_fence, timeout);
 	if (timed_out)
 	    return -XA_ERR_BUSY;
 

@@ -25,7 +25,7 @@
 
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
-#include "util/u_slab.h"
+#include "util/slab.h"
 #include "util/list.h"
 
 struct pipe_screen;
@@ -56,7 +56,7 @@ struct virgl_context {
 
    struct pipe_framebuffer_state framebuffer;
 
-   struct util_slab_mempool texture_transfer_pool;
+   struct slab_child_pool texture_transfer_pool;
 
    struct pipe_index_buffer index_buffer;
    struct u_upload_mgr *uploader;

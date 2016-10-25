@@ -188,7 +188,7 @@ nv30_sampler_state_delete(struct pipe_context *pipe, void *hwcso)
 
 static void
 nv30_bind_sampler_states(struct pipe_context *pipe,
-                         unsigned shader, unsigned start_slot,
+                         enum pipe_shader_type shader, unsigned start_slot,
                          unsigned num_samplers, void **samplers)
 {
    switch (shader) {
@@ -197,6 +197,9 @@ nv30_bind_sampler_states(struct pipe_context *pipe,
       break;
    case PIPE_SHADER_FRAGMENT:
       nv30_fragtex_sampler_states_bind(pipe, num_samplers, samplers);
+      break;
+   default:
+      assert(!"unexpected shader type");
       break;
    }
 }

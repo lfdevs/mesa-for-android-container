@@ -45,6 +45,7 @@
 #include "os/os_thread.h"
 
 #include "vl/vl_video_buffer.h"
+#include "vl/vl_bicubic_filter.h"
 #include "vl/vl_compositor.h"
 #include "vl/vl_csc.h"
 #include "vl/vl_deint_filter.h"
@@ -363,9 +364,19 @@ typedef struct
    struct vl_compositor_state cstate;
 
    struct {
+       bool supported, enabled;
+       float luma_min, luma_max;
+   } luma_key;
+
+   struct {
 	  bool supported, enabled, spatial;
 	  struct vl_deint_filter *filter;
    } deint;
+
+   struct {
+	  bool supported, enabled;
+	  struct vl_bicubic_filter *filter;
+   } bicubic;
 
    struct {
       bool supported, enabled;
@@ -382,7 +393,6 @@ typedef struct
    unsigned video_width, video_height;
    enum pipe_video_chroma_format chroma_format;
    unsigned max_layers, skip_chroma_deint;
-   float luma_key_min, luma_key_max;
 
    bool custom_csc;
    vl_csc_matrix csc;

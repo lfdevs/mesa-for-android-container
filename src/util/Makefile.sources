@@ -1,7 +1,11 @@
 MESA_UTIL_FILES :=	\
+	bitscan.c \
+	bitscan.h \
 	bitset.h \
 	debug.c \
 	debug.h \
+	format_r11g11b10f.h \
+	format_rgb9e5.h \
 	format_srgb.h \
 	half_float.c \
 	half_float.h \
@@ -21,12 +25,20 @@ MESA_UTIL_FILES :=	\
 	set.c \
 	set.h \
 	simple_list.h \
+	slab.c \
+	slab.h \
+	string_to_uint_map.h \
+	string_to_uint_map.cpp \
 	strndup.c \
 	strndup.h \
 	strtod.c \
 	strtod.h \
 	texcompress_rgtc_tmp.h \
-	u_atomic.h
+	u_atomic.h \
+	u_endian.h \
+	u_vector.c \
+	u_vector.h \
+	vk_alloc.h
 
 MESA_UTIL_GENERATED_FILES = \
 	format_srgb.c

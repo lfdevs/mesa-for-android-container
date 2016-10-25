@@ -42,6 +42,7 @@
 #include "compiler.h"
 #include "glheader.h"
 #include "errors.h"
+#include "util/bitscan.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,7 +73,7 @@ extern "C" {
 
 /**
  * Sometimes we treat GLfloats as GLints.  On x86 systems, moving a float
- * as a int (thereby using integer registers instead of FP registers) is
+ * as an int (thereby using integer registers instead of FP registers) is
  * a performance win.  Typically, this can be done with ordinary casts.
  * But with gcc's -fstrict-aliasing flag (which defaults to on in gcc 3.0)
  * these casts generate warnings.
@@ -324,22 +325,6 @@ extern void
 _mesa_exec_free( void *addr );
 
 
-#ifndef FFS_DEFINED
-#define FFS_DEFINED 1
-#ifdef HAVE___BUILTIN_FFS
-#define ffs __builtin_ffs
-#else
-extern int ffs(int i);
-#endif
-
-#ifdef HAVE___BUILTIN_FFSLL
-#define ffsll __builtin_ffsll
-#else
-extern int ffsll(long long int i);
-#endif
-#endif /* FFS_DEFINED */
-
-
 #ifdef HAVE___BUILTIN_POPCOUNT
 #define _mesa_bitcount(i) __builtin_popcount(i)
 #else
@@ -354,51 +339,6 @@ extern unsigned int
 _mesa_bitcount_64(uint64_t n);
 #endif
 
-/**
- * Find the last (most significant) bit set in a word.
- *
- * Essentially ffs() in the reverse direction.
- */
-static inline unsigned int
-_mesa_fls(unsigned int n)
-{
-#ifdef HAVE___BUILTIN_CLZ
-   return n == 0 ? 0 : 32 - __builtin_clz(n);
-#else
-   unsigned int v = 1;
-
-   if (n == 0)
-      return 0;
-
-   while (n >>= 1)
-       v++;
-
-   return v;
-#endif
-}
-
-/**
- * Find the last (most significant) bit set in a uint64_t value.
- *
- * Essentially ffsll() in the reverse direction.
- */
-static inline unsigned int
-_mesa_flsll(uint64_t n)
-{
-#ifdef HAVE___BUILTIN_CLZLL
-   return n == 0 ? 0 : 64 - __builtin_clzll(n);
-#else
-   unsigned int v = 1;
-
-   if (n == 0)
-      return 0;
-
-   while (n >>= 1)
-       v++;
-
-   return v;
-#endif
-}
 
 static inline bool
 _mesa_half_is_negative(GLhalfARB h)

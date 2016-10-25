@@ -131,8 +131,15 @@ llvmpipe_create_surface(struct pipe_context *pipe,
 {
    struct pipe_surface *ps;
 
-   if (!(pt->bind & (PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_RENDER_TARGET)))
+   if (!(pt->bind & (PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_RENDER_TARGET))) {
       debug_printf("Illegal surface creation without bind flag\n");
+      if (util_format_is_depth_or_stencil(surf_tmpl->format)) {
+         pt->bind |= PIPE_BIND_DEPTH_STENCIL;
+      }
+      else {
+         pt->bind |= PIPE_BIND_RENDER_TARGET;
+      }
+   }
 
    ps = CALLOC_STRUCT(pipe_surface);
    if (ps) {
@@ -183,11 +190,12 @@ llvmpipe_clear_render_target(struct pipe_context *pipe,
                              struct pipe_surface *dst,
                              const union pipe_color_union *color,
                              unsigned dstx, unsigned dsty,
-                             unsigned width, unsigned height)
+                             unsigned width, unsigned height,
+                             bool render_condition_enabled)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
-   if (!llvmpipe_check_render_cond(llvmpipe))
+   if (render_condition_enabled && !llvmpipe_check_render_cond(llvmpipe))
       return;
 
    util_clear_render_target(pipe, dst, color,
@@ -202,11 +210,12 @@ llvmpipe_clear_depth_stencil(struct pipe_context *pipe,
                              double depth,
                              unsigned stencil,
                              unsigned dstx, unsigned dsty,
-                             unsigned width, unsigned height)
+                             unsigned width, unsigned height,
+                             bool render_condition_enabled)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
-   if (!llvmpipe_check_render_cond(llvmpipe))
+   if (render_condition_enabled && !llvmpipe_check_render_cond(llvmpipe))
       return;
 
    util_clear_depth_stencil(pipe, dst, clear_flags,

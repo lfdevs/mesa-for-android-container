@@ -191,10 +191,17 @@ static const char strings[] =
    "vkGetDisplayPlaneCapabilitiesKHR\0"
    "vkCreateDisplayPlaneSurfaceKHR\0"
    "vkCreateSharedSwapchainsKHR\0"
+   "vkCreateXlibSurfaceKHR\0"
+   "vkGetPhysicalDeviceXlibPresentationSupportKHR\0"
    "vkCreateXcbSurfaceKHR\0"
    "vkGetPhysicalDeviceXcbPresentationSupportKHR\0"
    "vkCreateWaylandSurfaceKHR\0"
    "vkGetPhysicalDeviceWaylandPresentationSupportKHR\0"
+   "vkCreateMirSurfaceKHR\0"
+   "vkGetPhysicalDeviceMirPresentationSupportKHR\0"
+   "vkCreateAndroidSurfaceKHR\0"
+   "vkCreateWin32SurfaceKHR\0"
+   "vkGetPhysicalDeviceWin32PresentationSupportKHR\0"
    "vkCreateDebugReportCallbackEXT\0"
    "vkDestroyDebugReportCallbackEXT\0"
    "vkDebugReportMessageEXT\0"
@@ -357,14 +364,21 @@ static const struct anv_entrypoint entrypoints[] = {
    {  3366, 0x4b60d48c },
    {  3399, 0x7ac4dacb },
    {  3430, 0x47655c4a },
-   {  3458, 0xc5e5b106 },
-   {  3480, 0x41782cb9 },
-   {  3525, 0x2b2a4b79 },
-   {  3551, 0x84e085ac },
-   {  3600, 0x0987ef56 },
-   {  3631, 0x43d4c4e2 },
-   {  3663, 0xa4e75334 },
-   {  3687, 0x6392dfa7 },
+   {  3458, 0xa693bc66 },
+   {  3481, 0x34a063ab },
+   {  3527, 0xc5e5b106 },
+   {  3549, 0x41782cb9 },
+   {  3594, 0x2b2a4b79 },
+   {  3620, 0x84e085ac },
+   {  3669, 0x2ce93a55 },
+   {  3691, 0xcf1e6028 },
+   {  3736, 0x03667f4e },
+   {  3762, 0xfa2ba1e2 },
+   {  3786, 0x80e72505 },
+   {  3833, 0x0987ef56 },
+   {  3864, 0x43d4c4e2 },
+   {  3896, 0xa4e75334 },
+   {  3920, 0x6392dfa7 },
 };
 
 
@@ -529,6 +543,12 @@ VkResult anv_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR 
 VkResult anv_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
 VkResult anv_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 VkResult anv_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkResult anv_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkBool32 anv_GetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, Display* dpy, VisualID visualID) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkResult anv_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -541,6 +561,21 @@ VkResult anv_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurface
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 VkBool32 anv_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult anv_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 anv_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult anv_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult anv_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 anv_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult anv_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void anv_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void anv_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
@@ -702,6 +737,12 @@ const struct anv_dispatch_table anv_layer = {
    .GetDisplayPlaneCapabilitiesKHR = anv_GetDisplayPlaneCapabilitiesKHR,
    .CreateDisplayPlaneSurfaceKHR = anv_CreateDisplayPlaneSurfaceKHR,
    .CreateSharedSwapchainsKHR = anv_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .CreateXlibSurfaceKHR = anv_CreateXlibSurfaceKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .GetPhysicalDeviceXlibPresentationSupportKHR = anv_GetPhysicalDeviceXlibPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .CreateXcbSurfaceKHR = anv_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -714,6 +755,21 @@ const struct anv_dispatch_table anv_layer = {
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    .GetPhysicalDeviceWaylandPresentationSupportKHR = anv_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = anv_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = anv_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = anv_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = anv_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = anv_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = anv_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = anv_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = anv_DebugReportMessageEXT,
@@ -875,6 +931,12 @@ VkResult gen7_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR
 VkResult gen7_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
 VkResult gen7_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 VkResult gen7_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkResult gen7_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkBool32 gen7_GetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, Display* dpy, VisualID visualID) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkResult gen7_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -887,6 +949,21 @@ VkResult gen7_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfac
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 VkBool32 gen7_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult gen7_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 gen7_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen7_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen7_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 gen7_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult gen7_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void gen7_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void gen7_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
@@ -1048,6 +1125,12 @@ const struct anv_dispatch_table gen7_layer = {
    .GetDisplayPlaneCapabilitiesKHR = gen7_GetDisplayPlaneCapabilitiesKHR,
    .CreateDisplayPlaneSurfaceKHR = gen7_CreateDisplayPlaneSurfaceKHR,
    .CreateSharedSwapchainsKHR = gen7_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .CreateXlibSurfaceKHR = gen7_CreateXlibSurfaceKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .GetPhysicalDeviceXlibPresentationSupportKHR = gen7_GetPhysicalDeviceXlibPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .CreateXcbSurfaceKHR = gen7_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -1060,6 +1143,21 @@ const struct anv_dispatch_table gen7_layer = {
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen7_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = gen7_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = gen7_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = gen7_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = gen7_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = gen7_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = gen7_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = gen7_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = gen7_DebugReportMessageEXT,
@@ -1221,6 +1319,12 @@ VkResult gen75_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKH
 VkResult gen75_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
 VkResult gen75_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 VkResult gen75_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkResult gen75_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkBool32 gen75_GetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, Display* dpy, VisualID visualID) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkResult gen75_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -1233,6 +1337,21 @@ VkResult gen75_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfa
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 VkBool32 gen75_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult gen75_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 gen75_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen75_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen75_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 gen75_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult gen75_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void gen75_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void gen75_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
@@ -1394,6 +1513,12 @@ const struct anv_dispatch_table gen75_layer = {
    .GetDisplayPlaneCapabilitiesKHR = gen75_GetDisplayPlaneCapabilitiesKHR,
    .CreateDisplayPlaneSurfaceKHR = gen75_CreateDisplayPlaneSurfaceKHR,
    .CreateSharedSwapchainsKHR = gen75_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .CreateXlibSurfaceKHR = gen75_CreateXlibSurfaceKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .GetPhysicalDeviceXlibPresentationSupportKHR = gen75_GetPhysicalDeviceXlibPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .CreateXcbSurfaceKHR = gen75_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -1406,6 +1531,21 @@ const struct anv_dispatch_table gen75_layer = {
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen75_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = gen75_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = gen75_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = gen75_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = gen75_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = gen75_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = gen75_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = gen75_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = gen75_DebugReportMessageEXT,
@@ -1567,6 +1707,12 @@ VkResult gen8_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR
 VkResult gen8_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
 VkResult gen8_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 VkResult gen8_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkResult gen8_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkBool32 gen8_GetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, Display* dpy, VisualID visualID) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkResult gen8_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -1579,6 +1725,21 @@ VkResult gen8_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfac
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 VkBool32 gen8_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult gen8_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 gen8_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen8_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen8_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 gen8_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult gen8_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void gen8_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void gen8_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
@@ -1740,6 +1901,12 @@ const struct anv_dispatch_table gen8_layer = {
    .GetDisplayPlaneCapabilitiesKHR = gen8_GetDisplayPlaneCapabilitiesKHR,
    .CreateDisplayPlaneSurfaceKHR = gen8_CreateDisplayPlaneSurfaceKHR,
    .CreateSharedSwapchainsKHR = gen8_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .CreateXlibSurfaceKHR = gen8_CreateXlibSurfaceKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .GetPhysicalDeviceXlibPresentationSupportKHR = gen8_GetPhysicalDeviceXlibPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .CreateXcbSurfaceKHR = gen8_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -1752,6 +1919,21 @@ const struct anv_dispatch_table gen8_layer = {
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen8_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = gen8_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = gen8_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = gen8_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = gen8_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = gen8_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = gen8_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = gen8_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = gen8_DebugReportMessageEXT,
@@ -1913,6 +2095,12 @@ VkResult gen9_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR
 VkResult gen9_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
 VkResult gen9_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 VkResult gen9_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkResult gen9_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+VkBool32 gen9_GetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, Display* dpy, VisualID visualID) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkResult gen9_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -1925,6 +2113,21 @@ VkResult gen9_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfac
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 VkBool32 gen9_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult gen9_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 gen9_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen9_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen9_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 gen9_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult gen9_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void gen9_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void gen9_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
@@ -2086,6 +2289,12 @@ const struct anv_dispatch_table gen9_layer = {
    .GetDisplayPlaneCapabilitiesKHR = gen9_GetDisplayPlaneCapabilitiesKHR,
    .CreateDisplayPlaneSurfaceKHR = gen9_CreateDisplayPlaneSurfaceKHR,
    .CreateSharedSwapchainsKHR = gen9_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .CreateXlibSurfaceKHR = gen9_CreateXlibSurfaceKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+   .GetPhysicalDeviceXlibPresentationSupportKHR = gen9_GetPhysicalDeviceXlibPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .CreateXcbSurfaceKHR = gen9_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
@@ -2098,6 +2307,21 @@ const struct anv_dispatch_table gen9_layer = {
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen9_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = gen9_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = gen9_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = gen9_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = gen9_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = gen9_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = gen9_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = gen9_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = gen9_DebugReportMessageEXT,
@@ -2105,22 +2329,14 @@ const struct anv_dispatch_table gen9_layer = {
 };
 
 
-static const struct brw_device_info *dispatch_devinfo;
-
-void
-anv_set_dispatch_devinfo(const struct brw_device_info *devinfo)
+static void * __attribute__ ((noinline))
+anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
 {
-   dispatch_devinfo = devinfo;
-}
-
-void * __attribute__ ((noinline))
-anv_resolve_entrypoint(uint32_t index)
-{
-   if (dispatch_devinfo == NULL) {
+   if (devinfo == NULL) {
       return anv_layer.entrypoints[index];
    }
 
-   switch (dispatch_devinfo->gen) {
+   switch (devinfo->gen) {
    case 9:
       if (gen9_layer.entrypoints[index])
          return gen9_layer.entrypoints[index];
@@ -2130,7 +2346,7 @@ anv_resolve_entrypoint(uint32_t index)
          return gen8_layer.entrypoints[index];
       /* fall through */
    case 7:
-      if (dispatch_devinfo->is_haswell && gen75_layer.entrypoints[index])
+      if (devinfo->is_haswell && gen75_layer.entrypoints[index])
          return gen75_layer.entrypoints[index];
 
       if (gen7_layer.entrypoints[index])
@@ -2146,16 +2362,16 @@ anv_resolve_entrypoint(uint32_t index)
 /* Hash table stats:
  * size 256 entries
  * collisions  entries
- *      0       109
- *      1        29
- *      2         9
- *      3         8
- *      4         4
+ *      0       111
+ *      1        30
+ *      2        10
+ *      3         7
+ *      4         6
  *      5         1
- *      6         0
+ *      6         1
  *      7         1
  *      8         1
- *      9+        1
+ *      9+        2
  */
 
 #define none 0xffff
@@ -2164,39 +2380,39 @@ static const uint16_t map[] = {
     0x0044,   none,   none,   none, 0x0096, 0x002b, 0x0040, 0x0061,
     0x0049, 0x0022, 0x0056,   none,   none,   none, 0x0095,   none,
       none,   none,   none, 0x0067,   none,   none,   none, 0x0099,
-    0x0052, 0x009b, 0x0058, 0x004c,   none, 0x0069,   none,   none,
+    0x0052, 0x009d, 0x0058, 0x004c,   none, 0x0069,   none,   none,
       none,   none, 0x0054,   none, 0x0014, 0x005b, 0x0070, 0x0002,
     0x007c,   none, 0x001e, 0x002f,   none,   none, 0x0077, 0x0018,
     0x004b, 0x002a,   none, 0x0003, 0x0065, 0x0080, 0x006d, 0x0053,
       none,   none, 0x004d, 0x0090, 0x0024,   none, 0x005e, 0x000b,
-    0x0088, 0x0091,   none,   none, 0x005c, 0x0033,   none, 0x00a1,
-    0x0087, 0x003f, 0x001d, 0x002c, 0x0082, 0x005a,   none,   none,
-      none, 0x0019, 0x0046, 0x003a, 0x0093,   none, 0x0034,   none,
+    0x0088, 0x0091,   none,   none, 0x005c, 0x0033,   none, 0x00a8,
+    0x0087, 0x003f, 0x001d, 0x002c, 0x0082, 0x005a, 0x00a2,   none,
+      none, 0x0019, 0x0046, 0x003a, 0x0093, 0x00a1, 0x0034,   none,
     0x0051,   none,   none, 0x0020,   none, 0x0066, 0x0075,   none,
-      none,   none, 0x0035, 0x001f, 0x006f, 0x0060, 0x0047, 0x0005,
-    0x0023, 0x009f,   none, 0x006b,   none, 0x0041, 0x0028,   none,
-    0x0068,   none,   none, 0x003e, 0x0048, 0x007b, 0x0055,   none,
+      none, 0x00a3, 0x0035, 0x001f, 0x006f, 0x0060, 0x0047, 0x0005,
+    0x0023, 0x00a6,   none, 0x006b,   none, 0x0041, 0x0028,   none,
+    0x0068,   none,   none, 0x003e, 0x0048, 0x007b, 0x0055, 0x00a5,
       none, 0x0045, 0x006e, 0x0084,   none, 0x0089, 0x000d, 0x0030,
       none, 0x0027, 0x0081, 0x009a, 0x005d, 0x008a, 0x000a, 0x008f,
       none, 0x0063, 0x0007,   none, 0x0098, 0x0097,   none,   none,
       none, 0x0059, 0x0026,   none, 0x003c,   none, 0x0037,   none,
     0x0004, 0x0038, 0x0011,   none, 0x0072, 0x0016,   none, 0x003d,
-    0x00a0, 0x006a, 0x003b,   none, 0x004a, 0x0013, 0x0000, 0x007a,
-    0x002e, 0x0071,   none,   none, 0x0074, 0x0009, 0x004f, 0x0029,
-      none, 0x004e, 0x009d, 0x0031,   none, 0x001b,   none, 0x0073,
+    0x00a4, 0x006a, 0x003b,   none, 0x004a, 0x0013, 0x0000, 0x007a,
+    0x002e, 0x0071,   none, 0x009c, 0x0074, 0x0009, 0x004f, 0x0029,
+      none, 0x004e, 0x009b, 0x0031,   none, 0x001b,   none, 0x0073,
     0x005f, 0x0032, 0x0078, 0x008e,   none,   none,   none, 0x006c,
-      none,   none, 0x0036,   none, 0x0050,   none, 0x007d,   none,
-    0x008c, 0x0006, 0x001a, 0x000c, 0x009c, 0x0094, 0x0092,   none,
-      none, 0x008d, 0x009e, 0x0015, 0x0083, 0x0043,   none,   none,
-    0x000f,   none, 0x0008,   none, 0x0025, 0x007f, 0x001c,   none,
+      none,   none, 0x0036,   none, 0x0050, 0x009f, 0x007d,   none,
+    0x008c, 0x0006, 0x001a, 0x000c, 0x009e, 0x0094, 0x0092,   none,
+      none, 0x008d, 0x00a0, 0x0015, 0x0083, 0x0043,   none,   none,
+    0x000f, 0x00a7, 0x0008,   none, 0x0025, 0x007f, 0x001c,   none,
     0x0076,   none, 0x0064, 0x0085,   none,   none,   none, 0x0010,
     0x007e,   none,   none, 0x0017, 0x0012, 0x000e,   none, 0x0021,
-    0x008b, 0x0079, 0x0001, 0x00a2,   none, 0x002d,   none,   none,
+    0x008b, 0x0079, 0x0001, 0x00a9,   none, 0x002d,   none,   none,
       none, 0x0086,   none, 0x0062,   none, 0x0057, 0x0042, 0x0039,
 };
 
 void *
-anv_lookup_entrypoint(const char *name)
+anv_lookup_entrypoint(const struct gen_device_info *devinfo, const char *name)
 {
    static const uint32_t prime_factor = 5024183;
    static const uint32_t prime_step = 19;
@@ -2220,6 +2436,6 @@ anv_lookup_entrypoint(const char *name)
    if (strcmp(name, strings + e->name) != 0)
       return NULL;
 
-   return anv_resolve_entrypoint(i);
+   return anv_resolve_entrypoint(devinfo, i);
 }
 

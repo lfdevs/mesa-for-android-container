@@ -196,6 +196,12 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
    case PIPE_CAP_CULL_DISTANCE:
    case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
+   case PIPE_CAP_TGSI_VOTE:
+   case PIPE_CAP_MAX_WINDOW_RECTANGLES:
+   case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
+   case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
+   case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
+   case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -369,10 +375,8 @@ nv30_screen_is_format_supported(struct pipe_screen *pscreen,
       return false;
    }
 
-   /* transfers & shared are always supported */
-   bindings &= ~(PIPE_BIND_TRANSFER_READ |
-                 PIPE_BIND_TRANSFER_WRITE |
-                 PIPE_BIND_SHARED);
+   /* shared is always supported */
+   bindings &= ~PIPE_BIND_SHARED;
 
    return (nv30_format_info(pscreen, format)->bindings & bindings) == bindings;
 }

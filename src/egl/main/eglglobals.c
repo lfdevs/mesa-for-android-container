@@ -50,13 +50,26 @@ struct _egl_global _eglGlobal =
       _eglFiniDisplay
    },
 
-   /* ClientExtensionsString */
+   /* ClientExtensionString */
    "EGL_EXT_client_extensions"
    " EGL_EXT_platform_base"
+#ifdef HAVE_WAYLAND_PLATFORM
    " EGL_EXT_platform_wayland"
+#endif
+#ifdef HAVE_X11_PLATFORM
    " EGL_EXT_platform_x11"
-   " EGL_KHR_client_get_all_proc_addresses"
+#endif
+#ifdef HAVE_DRM_PLATFORM
    " EGL_MESA_platform_gbm"
+#endif
+#ifdef HAVE_SURFACELESS_PLATFORM
+   " EGL_MESA_platform_surfaceless"
+#endif
+   " EGL_KHR_client_get_all_proc_addresses"
+   " EGL_KHR_debug",
+
+   NULL, /* debugCallback */
+   _EGL_DEBUG_BIT_CRITICAL | _EGL_DEBUG_BIT_ERROR, /* debugTypesEnabled */
 };
 
 

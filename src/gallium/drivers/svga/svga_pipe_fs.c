@@ -48,6 +48,8 @@ svga_create_fs_state(struct pipe_context *pipe,
    if (!fs)
       return NULL;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_CREATEFS);
+
    fs->base.tokens = tgsi_dup_tokens(templ->tokens);
 
    /* Collect basic info that we'll need later:
@@ -62,6 +64,7 @@ svga_create_fs_state(struct pipe_context *pipe,
 
    fs->draw_shader = draw_create_fragment_shader(svga->swtnl.draw, templ);
 
+   SVGA_STATS_TIME_POP(svga_sws(svga));
    return fs;
 }
 

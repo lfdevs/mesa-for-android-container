@@ -44,7 +44,7 @@ VkResult anv_CreateDmaBufImageINTEL(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DMA_BUF_IMAGE_CREATE_INFO_INTEL);
 
-   mem = anv_alloc2(&device->alloc, pAllocator, sizeof(*mem), 8,
+   mem = vk_alloc2(&device->alloc, pAllocator, sizeof(*mem), 8,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (mem == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -94,7 +94,7 @@ VkResult anv_CreateDmaBufImageINTEL(
    return VK_SUCCESS;
 
  fail:
-   anv_free2(&device->alloc, pAllocator, mem);
+   vk_free2(&device->alloc, pAllocator, mem);
 
    return result;
 }

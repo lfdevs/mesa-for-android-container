@@ -113,11 +113,27 @@ struct svga_transfer
     * big enough */
    void *swbuf;
 
+   /* True if guest backed surface is supported and we can directly map
+    * to the surface for this transfer.
+    */
    boolean use_direct_map;
+
+   struct {
+      struct pipe_resource *buf;  /* points to the upload buffer if this
+                                   * transfer is done via the upload buffer
+                                   * instead of directly mapping to the
+                                   * resource's surface.
+                                   */
+      void *map;
+      unsigned offset;
+      SVGA3dBox box;
+      unsigned nlayers;
+   } upload;
 };
 
 
-static inline struct svga_texture *svga_texture( struct pipe_resource *resource )
+static inline struct svga_texture *
+svga_texture(struct pipe_resource *resource)
 {
    struct svga_texture *tex = (struct svga_texture *)resource;
    assert(tex == NULL || tex->b.vtbl == &svga_texture_vtbl);
@@ -255,5 +271,22 @@ svga_texture_generate_mipmap(struct pipe_context *pipe,
                              unsigned first_layer,
                              unsigned last_layer);
 
+boolean
+svga_texture_transfer_map_upload_create(struct svga_context *svga);
+
+void
+svga_texture_transfer_map_upload_destroy(struct svga_context *svga);
+
+boolean
+svga_texture_transfer_map_can_upload(struct svga_context *svga,
+                                     struct svga_transfer *st);
+
+void *
+svga_texture_transfer_map_upload(struct svga_context *svga,
+                                 struct svga_transfer *st);
+
+void
+svga_texture_transfer_unmap_upload(struct svga_context *svga,
+                                   struct svga_transfer *st);
 
 #endif /* SVGA_TEXTURE_H */

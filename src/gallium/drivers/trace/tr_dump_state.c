@@ -543,8 +543,8 @@ void trace_dump_sampler_view_template(const struct pipe_sampler_view *state,
    if (target == PIPE_BUFFER) {
       trace_dump_member_begin("buf");
       trace_dump_struct_begin(""); /* anonymous */
-      trace_dump_member(uint, &state->u.buf, first_element);
-      trace_dump_member(uint, &state->u.buf, last_element);
+      trace_dump_member(uint, &state->u.buf, offset);
+      trace_dump_member(uint, &state->u.buf, size);
       trace_dump_struct_end(); /* anonymous */
       trace_dump_member_end(); /* buf */
    } else {
@@ -760,8 +760,8 @@ void trace_dump_image_view(const struct pipe_image_view *state)
    if (state->resource->target == PIPE_BUFFER) {
       trace_dump_member_begin("buf");
       trace_dump_struct_begin(""); /* anonymous */
-      trace_dump_member(uint, &state->u.buf, first_element);
-      trace_dump_member(uint, &state->u.buf, last_element);
+      trace_dump_member(uint, &state->u.buf, offset);
+      trace_dump_member(uint, &state->u.buf, size);
       trace_dump_struct_end(); /* anonymous */
       trace_dump_member_end(); /* buf */
    } else {

@@ -4,10 +4,8 @@
 #include "pipe/p_state.h"
 #include "util/u_math.h"
 
-static inline
-void u_box_1d( unsigned x,
-	       unsigned w,
-	       struct pipe_box *box )
+static inline void
+u_box_1d(unsigned x, unsigned w, struct pipe_box *box)
 {
    box->x = x;
    box->y = 0;
@@ -17,12 +15,8 @@ void u_box_1d( unsigned x,
    box->depth = 1;
 }
 
-static inline
-void u_box_2d( unsigned x,
-	       unsigned y,
-	       unsigned w,
-	       unsigned h,
-	       struct pipe_box *box )
+static inline void
+u_box_2d(unsigned x,unsigned y, unsigned w, unsigned h, struct pipe_box *box)
 {
    box->x = x;
    box->y = y;
@@ -32,10 +26,8 @@ void u_box_2d( unsigned x,
    box->depth = 1;
 }
 
-static inline
-void u_box_origin_2d( unsigned w,
-		      unsigned h,
-		      struct pipe_box *box )
+static inline void
+u_box_origin_2d(unsigned w, unsigned h, struct pipe_box *box)
 {
    box->x = 0;
    box->y = 0;
@@ -45,13 +37,9 @@ void u_box_origin_2d( unsigned w,
    box->depth = 1;
 }
 
-static inline
-void u_box_2d_zslice( unsigned x,
-		      unsigned y,
-		      unsigned z,
-		      unsigned w,
-		      unsigned h,
-		      struct pipe_box *box )
+static inline void
+u_box_2d_zslice(unsigned x, unsigned y, unsigned z,
+                unsigned w, unsigned h, struct pipe_box *box)
 {
    box->x = x;
    box->y = y;
@@ -61,14 +49,10 @@ void u_box_2d_zslice( unsigned x,
    box->depth = 1;
 }
 
-static inline
-void u_box_3d( unsigned x,
-	       unsigned y,
-	       unsigned z,
-	       unsigned w,
-	       unsigned h,
-	       unsigned d,
-	       struct pipe_box *box )
+static inline void
+u_box_3d(unsigned x, unsigned y, unsigned z,
+         unsigned w, unsigned h, unsigned d,
+         struct pipe_box *box)
 {
    box->x = x;
    box->y = y;
@@ -140,11 +124,15 @@ static inline void
 u_box_union_2d(struct pipe_box *dst,
                const struct pipe_box *a, const struct pipe_box *b)
 {
-   dst->x = MIN2(a->x, b->x);
-   dst->y = MIN2(a->y, b->y);
+   int x, y;
 
-   dst->width = MAX2(a->x + a->width, b->x + b->width) - dst->x;
-   dst->height = MAX2(a->y + a->height, b->y + b->height) - dst->y;
+   x = MIN2(a->x, b->x);
+   y = MIN2(a->y, b->y);
+
+   dst->width = MAX2(a->x + a->width, b->x + b->width) - x;
+   dst->height = MAX2(a->y + a->height, b->y + b->height) - y;
+   dst->x = x;
+   dst->y = y;
 }
 
 /* Aliasing of @dst permitted. */
@@ -152,13 +140,18 @@ static inline void
 u_box_union_3d(struct pipe_box *dst,
                const struct pipe_box *a, const struct pipe_box *b)
 {
-   dst->x = MIN2(a->x, b->x);
-   dst->y = MIN2(a->y, b->y);
-   dst->z = MIN2(a->z, b->z);
+   int x, y, z;
 
-   dst->width = MAX2(a->x + a->width, b->x + b->width) - dst->x;
-   dst->height = MAX2(a->y + a->height, b->y + b->height) - dst->y;
-   dst->depth = MAX2(a->z + a->depth, b->z + b->depth) - dst->z;
+   x = MIN2(a->x, b->x);
+   y = MIN2(a->y, b->y);
+   z = MIN2(a->z, b->z);
+
+   dst->width = MAX2(a->x + a->width, b->x + b->width) - x;
+   dst->height = MAX2(a->y + a->height, b->y + b->height) - y;
+   dst->depth = MAX2(a->z + a->depth, b->z + b->depth) - z;
+   dst->x = x;
+   dst->y = y;
+   dst->z = z;
 }
 
 static inline boolean

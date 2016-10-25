@@ -33,8 +33,10 @@
 #include "util/u_transfer.h"
 #include "util/u_string.h"
 #include "util/u_surface.h"
+#include "util/set.h"
 
 #include "freedreno_resource.h"
+#include "freedreno_batch_cache.h"
 #include "freedreno_screen.h"
 #include "freedreno_surface.h"
 #include "freedreno_context.h"
@@ -45,13 +47,6 @@
 
 /* XXX this should go away, needed for 'struct winsys_handle' */
 #include "state_tracker/drm_driver.h"
-
-static bool
-pending(struct fd_resource *rsc, enum fd_resource_status status)
-{
-	return (rsc->status & status) ||
-		(rsc->stencil && (rsc->stencil->status & status));
-}
 
 static void
 fd_invalidate_resource(struct fd_context *ctx, struct pipe_resource *prsc)
@@ -108,10 +103,183 @@ realloc_bo(struct fd_resource *rsc, uint32_t size)
 
 	rsc->bo = fd_bo_new(screen->dev, size, flags);
 	rsc->timestamp = 0;
-	rsc->status = 0;
-	rsc->pending_ctx = NULL;
-	list_delinit(&rsc->list);
 	util_range_set_empty(&rsc->valid_buffer_range);
+	fd_bc_invalidate_resource(rsc, true);
+}
+
+static void
+do_blit(struct fd_context *ctx, const struct pipe_blit_info *blit, bool fallback)
+{
+	/* TODO size threshold too?? */
+	if ((blit->src.resource->target != PIPE_BUFFER) && !fallback) {
+		/* do blit on gpu: */
+		fd_blitter_pipe_begin(ctx, false, true, FD_STAGE_BLIT);
+		util_blitter_blit(ctx->blitter, blit);
+		fd_blitter_pipe_end(ctx);
+	} else {
+		/* do blit on cpu: */
+		util_resource_copy_region(&ctx->base,
+				blit->dst.resource, blit->dst.level, blit->dst.box.x,
+				blit->dst.box.y, blit->dst.box.z,
+				blit->src.resource, blit->src.level, &blit->src.box);
+	}
+}
+
+static bool
+fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
+		unsigned level, unsigned usage, const struct pipe_box *box)
+{
+	struct pipe_context *pctx = &ctx->base;
+	struct pipe_resource *prsc = &rsc->base.b;
+	bool fallback = false;
+
+	if (prsc->next)
+		return false;
+
+	/* TODO: somehow munge dimensions and format to copy unsupported
+	 * render target format to something that is supported?
+	 */
+	if (!pctx->screen->is_format_supported(pctx->screen,
+			prsc->format, prsc->target, prsc->nr_samples,
+			PIPE_BIND_RENDER_TARGET))
+		fallback = true;
+
+	/* these cases should be handled elsewhere.. just for future
+	 * reference in case this gets split into a more generic(ish)
+	 * helper.
+	 */
+	debug_assert(!(usage & PIPE_TRANSFER_READ));
+	debug_assert(!(usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE));
+
+	/* if we do a gpu blit to clone the whole resource, we'll just
+	 * end up stalling on that.. so only allow if we can discard
+	 * current range (and blit, possibly cpu or gpu, the rest)
+	 */
+	if (!(usage & PIPE_TRANSFER_DISCARD_RANGE))
+		return false;
+
+	bool whole_level = util_texrange_covers_whole_level(prsc, level,
+		box->x, box->y, box->z, box->width, box->height, box->depth);
+
+	/* TODO need to be more clever about current level */
+	if ((prsc->target >= PIPE_TEXTURE_2D) && !whole_level)
+		return false;
+
+	struct pipe_resource *pshadow =
+		pctx->screen->resource_create(pctx->screen, prsc);
+
+	if (!pshadow)
+		return false;
+
+	assert(!ctx->in_shadow);
+	ctx->in_shadow = true;
+
+	/* get rid of any references that batch-cache might have to us (which
+	 * should empty/destroy rsc->batches hashset)
+	 */
+	fd_bc_invalidate_resource(rsc, false);
+
+	pipe_mutex_lock(ctx->screen->lock);
+
+	/* Swap the backing bo's, so shadow becomes the old buffer,
+	 * blit from shadow to new buffer.  From here on out, we
+	 * cannot fail.
+	 *
+	 * Note that we need to do it in this order, otherwise if
+	 * we go down cpu blit path, the recursive transfer_map()
+	 * sees the wrong status..
+	 */
+	struct fd_resource *shadow = fd_resource(pshadow);
+
+	DBG("shadow: %p (%d) -> %p (%d)\n", rsc, rsc->base.b.reference.count,
+			shadow, shadow->base.b.reference.count);
+
+	/* TODO valid_buffer_range?? */
+	swap(rsc->bo,        shadow->bo);
+	swap(rsc->timestamp, shadow->timestamp);
+	swap(rsc->write_batch,   shadow->write_batch);
+
+	/* at this point, the newly created shadow buffer is not referenced
+	 * by any batches, but the existing rsc (probably) is.  We need to
+	 * transfer those references over:
+	 */
+	debug_assert(shadow->batch_mask == 0);
+	struct fd_batch *batch;
+	foreach_batch(batch, &ctx->screen->batch_cache, rsc->batch_mask) {
+		struct set_entry *entry = _mesa_set_search(batch->resources, rsc);
+		_mesa_set_remove(batch->resources, entry);
+		_mesa_set_add(batch->resources, shadow);
+	}
+	swap(rsc->batch_mask, shadow->batch_mask);
+
+	pipe_mutex_unlock(ctx->screen->lock);
+
+	struct pipe_blit_info blit = {0};
+	blit.dst.resource = prsc;
+	blit.dst.format   = prsc->format;
+	blit.src.resource = pshadow;
+	blit.src.format   = pshadow->format;
+	blit.mask = util_format_get_mask(prsc->format);
+	blit.filter = PIPE_TEX_FILTER_NEAREST;
+
+#define set_box(field, val) do {     \
+		blit.dst.field = (val);      \
+		blit.src.field = (val);      \
+	} while (0)
+
+	/* blit the other levels in their entirety: */
+	for (unsigned l = 0; l <= prsc->last_level; l++) {
+		if (l == level)
+			continue;
+
+		/* just blit whole level: */
+		set_box(level, l);
+		set_box(box.width,  u_minify(prsc->width0, l));
+		set_box(box.height, u_minify(prsc->height0, l));
+		set_box(box.depth,  u_minify(prsc->depth0, l));
+
+		do_blit(ctx, &blit, fallback);
+	}
+
+	/* deal w/ current level specially, since we might need to split
+	 * it up into a couple blits:
+	 */
+	if (!whole_level) {
+		set_box(level, level);
+
+		switch (prsc->target) {
+		case PIPE_BUFFER:
+		case PIPE_TEXTURE_1D:
+			set_box(box.y, 0);
+			set_box(box.z, 0);
+			set_box(box.height, 1);
+			set_box(box.depth, 1);
+
+			if (box->x > 0) {
+				set_box(box.x, 0);
+				set_box(box.width, box->x);
+
+				do_blit(ctx, &blit, fallback);
+			}
+			if ((box->x + box->width) < u_minify(prsc->width0, level)) {
+				set_box(box.x, box->x + box->width);
+				set_box(box.width, u_minify(prsc->width0, level) - (box->x + box->width));
+
+				do_blit(ctx, &blit, fallback);
+			}
+			break;
+		case PIPE_TEXTURE_2D:
+			/* TODO */
+		default:
+			unreachable("TODO");
+		}
+	}
+
+	ctx->in_shadow = false;
+
+	pipe_resource_reference(&pshadow, NULL);
+
+	return true;
 }
 
 static unsigned
@@ -260,7 +428,7 @@ fd_resource_transfer_unmap(struct pipe_context *pctx,
 				   ptrans->box.x + ptrans->box.width);
 
 	pipe_resource_reference(&ptrans->resource, NULL);
-	util_slab_free(&ctx->transfer_pool, ptrans);
+	slab_free(&ctx->transfer_pool, ptrans);
 
 	free(trans->staging);
 }
@@ -286,11 +454,11 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	DBG("prsc=%p, level=%u, usage=%x, box=%dx%d+%d,%d", prsc, level, usage,
 		box->width, box->height, box->x, box->y);
 
-	ptrans = util_slab_alloc(&ctx->transfer_pool);
+	ptrans = slab_alloc(&ctx->transfer_pool);
 	if (!ptrans)
 		return NULL;
 
-	/* util_slab_alloc() doesn't zero: */
+	/* slab_alloc_st() doesn't zero: */
 	trans = fd_transfer(ptrans);
 	memset(trans, 0, sizeof(*trans));
 
@@ -300,6 +468,9 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	ptrans->box = *box;
 	ptrans->stride = util_format_get_nblocksx(format, slice->pitch) * rsc->cpp;
 	ptrans->layer_stride = rsc->layer_first ? rsc->layer_size : slice->size0;
+
+	if (ctx->in_shadow && !(usage & PIPE_TRANSFER_READ))
+		usage |= PIPE_TRANSFER_UNSYNCHRONIZED;
 
 	if (usage & PIPE_TRANSFER_READ)
 		op |= DRM_FREEDRENO_PREP_READ;
@@ -320,21 +491,67 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 		 * to wait.
 		 */
 	} else if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
+		struct fd_batch *write_batch = NULL;
+
+		/* hold a reference, so it doesn't disappear under us: */
+		fd_batch_reference(&write_batch, rsc->write_batch);
+
+		if ((usage & PIPE_TRANSFER_WRITE) && write_batch &&
+				write_batch->back_blit) {
+			/* if only thing pending is a back-blit, we can discard it: */
+			fd_batch_reset(write_batch);
+		}
+
 		/* If the GPU is writing to the resource, or if it is reading from the
 		 * resource and we're trying to write to it, flush the renders.
 		 */
-		if (((ptrans->usage & PIPE_TRANSFER_WRITE) &&
-					pending(rsc, FD_PENDING_READ | FD_PENDING_WRITE)) ||
-				pending(rsc, FD_PENDING_WRITE))
-			fd_context_render(pctx);
+		bool needs_flush = pending(rsc, !!(usage & PIPE_TRANSFER_WRITE));
+		bool busy = needs_flush || (0 != fd_bo_cpu_prep(rsc->bo,
+				ctx->screen->pipe, op | DRM_FREEDRENO_PREP_NOSYNC));
+
+		/* if we need to flush/stall, see if we can make a shadow buffer
+		 * to avoid this:
+		 *
+		 * TODO we could go down this path !reorder && !busy_for_read
+		 * ie. we only *don't* want to go down this path if the blit
+		 * will trigger a flush!
+		 */
+		if (ctx->screen->reorder && busy && !(usage & PIPE_TRANSFER_READ)) {
+			if (fd_try_shadow_resource(ctx, rsc, level, usage, box)) {
+				needs_flush = busy = false;
+				fd_invalidate_resource(ctx, prsc);
+			}
+		}
+
+		if (needs_flush) {
+			if (usage & PIPE_TRANSFER_WRITE) {
+				struct fd_batch *batch, *last_batch = NULL;
+				foreach_batch(batch, &ctx->screen->batch_cache, rsc->batch_mask) {
+					fd_batch_reference(&last_batch, batch);
+					fd_batch_flush(batch, false);
+				}
+				if (last_batch) {
+					fd_batch_sync(last_batch);
+					fd_batch_reference(&last_batch, NULL);
+				}
+				assert(rsc->batch_mask == 0);
+			} else {
+				fd_batch_flush(write_batch, true);
+			}
+			assert(!rsc->write_batch);
+		}
+
+		fd_batch_reference(&write_batch, NULL);
 
 		/* The GPU keeps track of how the various bo's are being used, and
 		 * will wait if necessary for the proper operation to have
 		 * completed.
 		 */
-		ret = fd_bo_cpu_prep(rsc->bo, ctx->screen->pipe, op);
-		if (ret)
-			goto fail;
+		if (busy) {
+			ret = fd_bo_cpu_prep(rsc->bo, ctx->screen->pipe, op);
+			if (ret)
+				goto fail;
+		}
 	}
 
 	buf = fd_bo_map(rsc->bo);
@@ -451,9 +668,9 @@ fd_resource_destroy(struct pipe_screen *pscreen,
 		struct pipe_resource *prsc)
 {
 	struct fd_resource *rsc = fd_resource(prsc);
+	fd_bc_invalidate_resource(rsc, true);
 	if (rsc->bo)
 		fd_bo_del(rsc->bo);
-	list_delinit(&rsc->list);
 	util_range_destroy(&rsc->valid_buffer_range);
 	FREE(rsc);
 }
@@ -476,7 +693,6 @@ static const struct u_resource_vtbl fd_resource_vtbl = {
 		.transfer_map             = fd_resource_transfer_map,
 		.transfer_flush_region    = fd_resource_transfer_flush_region,
 		.transfer_unmap           = fd_resource_transfer_unmap,
-		.transfer_inline_write    = u_default_transfer_inline_write,
 };
 
 static uint32_t
@@ -545,6 +761,20 @@ slice_alignment(struct pipe_screen *pscreen, const struct pipe_resource *tmpl)
 	}
 }
 
+/* special case to resize query buf after allocated.. */
+void
+fd_resource_resize(struct pipe_resource *prsc, uint32_t sz)
+{
+	struct fd_resource *rsc = fd_resource(prsc);
+
+	debug_assert(prsc->width0 == 0);
+	debug_assert(prsc->target == PIPE_BUFFER);
+	debug_assert(prsc->bind == PIPE_BIND_QUERY_BUFFER);
+
+	prsc->width0 = sz;
+	realloc_bo(rsc, setup_slices(rsc, 1, prsc->format));
+}
+
 /**
  * Create a new texture object, using the given template info.
  */
@@ -557,8 +787,8 @@ fd_resource_create(struct pipe_screen *pscreen,
 	enum pipe_format format = tmpl->format;
 	uint32_t size, alignment;
 
-	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
-			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
+	DBG("%p: target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
+			"nr_samples=%u, usage=%u, bind=%x, flags=%x", prsc,
 			tmpl->target, util_format_name(format),
 			tmpl->width0, tmpl->height0, tmpl->depth0,
 			tmpl->array_size, tmpl->last_level, tmpl->nr_samples,
@@ -570,7 +800,7 @@ fd_resource_create(struct pipe_screen *pscreen,
 	*prsc = *tmpl;
 
 	pipe_reference_init(&prsc->reference, 1);
-	list_inithead(&rsc->list);
+
 	prsc->screen = pscreen;
 
 	util_range_init(&rsc->valid_buffer_range);
@@ -601,6 +831,15 @@ fd_resource_create(struct pipe_screen *pscreen,
 	}
 
 	size = setup_slices(rsc, alignment, format);
+
+	/* special case for hw-query buffer, which we need to allocate before we
+	 * know the size:
+	 */
+	if (size == 0) {
+		/* note, semi-intention == instead of & */
+		debug_assert(prsc->bind == PIPE_BIND_QUERY_BUFFER);
+		return prsc;
+	}
 
 	if (rsc->layer_first) {
 		rsc->layer_size = align(size, 4096);
@@ -657,19 +896,22 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 	*prsc = *tmpl;
 
 	pipe_reference_init(&prsc->reference, 1);
-	list_inithead(&rsc->list);
+
 	prsc->screen = pscreen;
 
 	util_range_init(&rsc->valid_buffer_range);
 
-	rsc->bo = fd_screen_bo_from_handle(pscreen, handle, &slice->pitch);
+	rsc->bo = fd_screen_bo_from_handle(pscreen, handle);
 	if (!rsc->bo)
 		goto fail;
 
 	rsc->base.vtbl = &fd_resource_vtbl;
 	rsc->cpp = util_format_get_blocksize(tmpl->format);
-	slice->pitch /= rsc->cpp;
+	slice->pitch = handle->stride / rsc->cpp;
 	slice->offset = handle->offset;
+
+	if ((slice->pitch < align(prsc->width0, 32)) || (slice->pitch % 32))
+		goto fail;
 
 	assert(rsc->cpp);
 
@@ -679,9 +921,6 @@ fail:
 	fd_resource_destroy(pscreen, prsc);
 	return NULL;
 }
-
-static void fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond);
-static void fd_blitter_pipe_end(struct fd_context *ctx);
 
 /**
  * _copy_region using pipe (3d engine)
@@ -702,7 +941,8 @@ fd_blitter_pipe_copy_region(struct fd_context *ctx,
 	if (!util_blitter_is_copy_supported(ctx->blitter, dst, src))
 		return false;
 
-	fd_blitter_pipe_begin(ctx, false);
+	/* TODO we could discard if dst box covers dst level fully.. */
+	fd_blitter_pipe_begin(ctx, false, false, FD_STAGE_BLIT);
 	util_blitter_copy_texture(ctx->blitter,
 			dst, dst_level, dstx, dsty, dstz,
 			src, src_level, src_box);
@@ -772,6 +1012,7 @@ fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	struct pipe_blit_info info = *blit_info;
+	bool discard = false;
 
 	if (info.src.resource->nr_samples > 1 &&
 			info.dst.resource->nr_samples <= 1 &&
@@ -783,6 +1024,13 @@ fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 
 	if (info.render_condition_enable && !fd_render_condition_check(pctx))
 		return;
+
+	if (!info.scissor_enable && !info.alpha_blend) {
+		discard = util_texrange_covers_whole_level(info.dst.resource,
+				info.dst.level, info.dst.box.x, info.dst.box.y,
+				info.dst.box.z, info.dst.box.width,
+				info.dst.box.height, info.dst.box.depth);
+	}
 
 	if (util_try_blit_via_copy_region(pctx, &info)) {
 		return; /* done */
@@ -800,14 +1048,17 @@ fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 		return;
 	}
 
-	fd_blitter_pipe_begin(ctx, info.render_condition_enable);
+	fd_blitter_pipe_begin(ctx, info.render_condition_enable, discard, FD_STAGE_BLIT);
 	util_blitter_blit(ctx->blitter, &info);
 	fd_blitter_pipe_end(ctx);
 }
 
-static void
-fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond)
+void
+fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond, bool discard,
+		enum fd_render_stage stage)
 {
+	util_blitter_save_fragment_constant_buffer_slot(ctx->blitter,
+			ctx->constbuf[PIPE_SHADER_FRAGMENT].cb);
 	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vtx.vertexbuf.vb);
 	util_blitter_save_vertex_elements(ctx->blitter, ctx->vtx.vtx);
 	util_blitter_save_vertex_shader(ctx->blitter, ctx->prog.vp);
@@ -821,7 +1072,8 @@ fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond)
 	util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->zsa);
 	util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
 	util_blitter_save_sample_mask(ctx->blitter, ctx->sample_mask);
-	util_blitter_save_framebuffer(ctx->blitter, &ctx->framebuffer);
+	util_blitter_save_framebuffer(ctx->blitter,
+			ctx->batch ? &ctx->batch->framebuffer : NULL);
 	util_blitter_save_fragment_sampler_states(ctx->blitter,
 			ctx->fragtex.num_samplers,
 			(void **)ctx->fragtex.samplers);
@@ -831,13 +1083,18 @@ fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond)
 		util_blitter_save_render_condition(ctx->blitter,
 			ctx->cond_query, ctx->cond_cond, ctx->cond_mode);
 
-	fd_hw_query_set_stage(ctx, ctx->ring, FD_STAGE_BLIT);
+	if (ctx->batch)
+		fd_hw_query_set_stage(ctx->batch, ctx->batch->draw, stage);
+
+	ctx->in_blit = discard;
 }
 
-static void
+void
 fd_blitter_pipe_end(struct fd_context *ctx)
 {
-	fd_hw_query_set_stage(ctx, ctx->ring, FD_STAGE_NULL);
+	if (ctx->batch)
+		fd_hw_query_set_stage(ctx->batch, ctx->batch->draw, FD_STAGE_NULL);
+	ctx->in_blit = false;
 }
 
 static void
@@ -845,8 +1102,10 @@ fd_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
 	struct fd_resource *rsc = fd_resource(prsc);
 
-	if (pending(rsc, FD_PENDING_WRITE | FD_PENDING_READ))
-		fd_context_render(pctx);
+	if (rsc->write_batch)
+		fd_batch_flush(rsc->write_batch, true);
+
+	assert(!rsc->write_batch);
 }
 
 void
@@ -864,7 +1123,8 @@ fd_resource_context_init(struct pipe_context *pctx)
 	pctx->transfer_map = u_transfer_map_vtbl;
 	pctx->transfer_flush_region = u_transfer_flush_region_vtbl;
 	pctx->transfer_unmap = u_transfer_unmap_vtbl;
-	pctx->transfer_inline_write = u_transfer_inline_write_vtbl;
+	pctx->buffer_subdata = u_default_buffer_subdata;
+        pctx->texture_subdata = u_default_texture_subdata;
 	pctx->create_surface = fd_create_surface;
 	pctx->surface_destroy = fd_surface_destroy;
 	pctx->resource_copy_region = fd_resource_copy_region;

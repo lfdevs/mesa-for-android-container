@@ -23,6 +23,8 @@ struct nv50_context;
 
 #define NV50_MAX_VIEWPORTS 16
 
+#define NV50_MAX_WINDOW_RECTANGLES 8
+
 #define NV50_MAX_GLOBALS 16
 
 #define ONE_TEMP_SIZE (4/*vector*/ * sizeof(float))

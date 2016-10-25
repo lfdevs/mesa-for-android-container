@@ -24,16 +24,24 @@
 #include "anv_private.h"
 #include "vk_format_info.h"
 
-#define ISL_SWIZZLE(r, g, b, a) { \
-   ISL_CHANNEL_SELECT_##r, \
-   ISL_CHANNEL_SELECT_##g, \
-   ISL_CHANNEL_SELECT_##b, \
-   ISL_CHANNEL_SELECT_##a, \
+/*
+ * gcc-4 and earlier don't allow compound literals where a constant
+ * is required in -std=c99/gnu99 mode, so we can't use ISL_SWIZZLE()
+ * here. -std=c89/gnu89 would allow it, but we depend on c99 features
+ * so using -std=c89/gnu89 is not an option. Starting from gcc-5
+ * compound literals can also be considered constant in -std=c99/gnu99
+ * mode.
+ */
+#define _ISL_SWIZZLE(r, g, b, a) { \
+      ISL_CHANNEL_SELECT_##r, \
+      ISL_CHANNEL_SELECT_##g, \
+      ISL_CHANNEL_SELECT_##b, \
+      ISL_CHANNEL_SELECT_##a, \
 }
 
-#define RGBA ISL_SWIZZLE(RED, GREEN, BLUE, ALPHA)
-#define BGRA ISL_SWIZZLE(BLUE, GREEN, RED, ALPHA)
-#define RGB1 ISL_SWIZZLE(RED, GREEN, BLUE, ONE)
+#define RGBA _ISL_SWIZZLE(RED, GREEN, BLUE, ALPHA)
+#define BGRA _ISL_SWIZZLE(BLUE, GREEN, RED, ALPHA)
+#define RGB1 _ISL_SWIZZLE(RED, GREEN, BLUE, ONE)
 
 #define swiz_fmt(__vk_fmt, __hw_fmt, __swizzle)     \
    [__vk_fmt] = { \
@@ -245,7 +253,7 @@ static const struct anv_format anv_formats[] = {
  * Exactly one bit must be set in \a aspect.
  */
 struct anv_format
-anv_get_format(const struct brw_device_info *devinfo, VkFormat vk_format,
+anv_get_format(const struct gen_device_info *devinfo, VkFormat vk_format,
                VkImageAspectFlags aspect, VkImageTiling tiling)
 {
    struct anv_format format = anv_formats[vk_format];
@@ -271,18 +279,19 @@ anv_get_format(const struct brw_device_info *devinfo, VkFormat vk_format,
       isl_format_get_layout(format.isl_format);
 
    if (tiling == VK_IMAGE_TILING_OPTIMAL &&
-       !util_is_power_of_two(isl_layout->bs)) {
+       !util_is_power_of_two(isl_layout->bpb)) {
       /* Tiled formats *must* be power-of-two because we need up upload
        * them with the render pipeline.  For 3-channel formats, we fix
        * this by switching them over to RGBX or RGBA formats under the
        * hood.
        */
       enum isl_format rgbx = isl_format_rgb_to_rgbx(format.isl_format);
-      if (rgbx != ISL_FORMAT_UNSUPPORTED) {
+      if (rgbx != ISL_FORMAT_UNSUPPORTED &&
+          isl_format_supports_rendering(devinfo, rgbx)) {
          format.isl_format = rgbx;
       } else {
          format.isl_format = isl_format_rgb_to_rgba(format.isl_format);
-         format.swizzle = (struct anv_format_swizzle) RGB1;
+         format.swizzle = ISL_SWIZZLE(RED, GREEN, BLUE, ONE);
       }
    }
 
@@ -302,7 +311,7 @@ anv_get_format(const struct brw_device_info *devinfo, VkFormat vk_format,
 // Format capabilities
 
 static VkFormatFeatureFlags
-get_image_format_properties(const struct brw_device_info *devinfo,
+get_image_format_properties(const struct gen_device_info *devinfo,
                             enum isl_format base, struct anv_format format)
 {
    if (format.isl_format == ISL_FORMAT_UNSUPPORTED)
@@ -343,7 +352,7 @@ get_image_format_properties(const struct brw_device_info *devinfo,
 }
 
 static VkFormatFeatureFlags
-get_buffer_format_properties(const struct brw_device_info *devinfo,
+get_buffer_format_properties(const struct gen_device_info *devinfo,
                              enum isl_format format)
 {
    if (format == ISL_FORMAT_UNSUPPORTED)
@@ -371,8 +380,8 @@ anv_physical_device_get_format_properties(struct anv_physical_device *physical_d
                                           VkFormat format,
                                           VkFormatProperties *out_properties)
 {
-   int gen = physical_device->info->gen * 10;
-   if (physical_device->info->is_haswell)
+   int gen = physical_device->info.gen * 10;
+   if (physical_device->info.is_haswell)
       gen += 5;
 
    VkFormatFeatureFlags linear = 0, tiled = 0, buffer = 0;
@@ -380,25 +389,25 @@ anv_physical_device_get_format_properties(struct anv_physical_device *physical_d
       /* Nothing to do here */
    } else if (vk_format_is_depth_or_stencil(format)) {
       tiled |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
-      if (physical_device->info->gen >= 8)
+      if (physical_device->info.gen >= 8)
          tiled |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
 
       tiled |= VK_FORMAT_FEATURE_BLIT_SRC_BIT |
                VK_FORMAT_FEATURE_BLIT_DST_BIT;
    } else {
       struct anv_format linear_fmt, tiled_fmt;
-      linear_fmt = anv_get_format(physical_device->info, format,
+      linear_fmt = anv_get_format(&physical_device->info, format,
                                   VK_IMAGE_ASPECT_COLOR_BIT,
                                   VK_IMAGE_TILING_LINEAR);
-      tiled_fmt = anv_get_format(physical_device->info, format,
+      tiled_fmt = anv_get_format(&physical_device->info, format,
                                  VK_IMAGE_ASPECT_COLOR_BIT,
                                  VK_IMAGE_TILING_OPTIMAL);
 
-      linear = get_image_format_properties(physical_device->info,
+      linear = get_image_format_properties(&physical_device->info,
                                            linear_fmt.isl_format, linear_fmt);
-      tiled = get_image_format_properties(physical_device->info,
+      tiled = get_image_format_properties(&physical_device->info,
                                           linear_fmt.isl_format, tiled_fmt);
-      buffer = get_buffer_format_properties(physical_device->info,
+      buffer = get_buffer_format_properties(&physical_device->info,
                                             linear_fmt.isl_format);
 
       /* XXX: We handle 3-channel formats by switching them out for RGBX or
@@ -409,7 +418,7 @@ anv_physical_device_get_format_properties(struct anv_physical_device *physical_d
        * what most clients will want.
        */
       if (linear_fmt.isl_format != ISL_FORMAT_UNSUPPORTED &&
-          !util_is_power_of_two(isl_format_layouts[linear_fmt.isl_format].bs) &&
+          !util_is_power_of_two(isl_format_layouts[linear_fmt.isl_format].bpb) &&
           isl_format_rgb_to_rgbx(linear_fmt.isl_format) == ISL_FORMAT_UNSUPPORTED) {
          tiled &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT &
                   ~VK_FORMAT_FEATURE_BLIT_DST_BIT;
@@ -507,25 +516,15 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties(
       sampleCounts = isl_device_get_sample_counts(&physical_device->isl_dev);
    }
 
-   if (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
-      /* Meta implements transfers by sampling from the source image. */
-      if (!(format_feature_flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) {
+   if (usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+      /* Accept transfers on anything we can sample from or renderer to. */
+      if (!(format_feature_flags & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                                    VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT))) {
          goto unsupported;
       }
    }
-
-#if 0
-   if (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
-      if (anv_format_for_vk_format(format)->has_stencil) {
-         /* Not yet implemented because copying to a W-tiled surface is crazy
-          * hard.
-          */
-         anv_finishme("support VK_IMAGE_USAGE_TRANSFER_DST_BIT for "
-                      "stencil format");
-         goto unsupported;
-      }
-   }
-#endif
 
    if (usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) {

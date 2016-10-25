@@ -134,7 +134,8 @@ i915_clear_render_target_render(struct pipe_context *pipe,
                                 struct pipe_surface *dst,
                                 const union pipe_color_union *color,
                                 unsigned dstx, unsigned dsty,
-                                unsigned width, unsigned height)
+                                unsigned width, unsigned height,
+                                bool render_condition_enabled)
 {
    struct i915_context *i915 = i915_context(pipe);
    struct pipe_framebuffer_state fb_state;
@@ -166,7 +167,8 @@ i915_clear_depth_stencil_render(struct pipe_context *pipe,
                                 double depth,
                                 unsigned stencil,
                                 unsigned dstx, unsigned dsty,
-                                unsigned width, unsigned height)
+                                unsigned width, unsigned height,
+                                bool render_condition_enabled)
 {
    struct i915_context *i915 = i915_context(pipe);
    struct pipe_framebuffer_state fb_state;
@@ -281,7 +283,8 @@ i915_clear_render_target_blitter(struct pipe_context *pipe,
                                  struct pipe_surface *dst,
                                  const union pipe_color_union *color,
                                  unsigned dstx, unsigned dsty,
-                                 unsigned width, unsigned height)
+                                 unsigned width, unsigned height,
+                                 bool render_condition_enabled)
 {
    struct i915_texture *tex = i915_texture(dst->texture);
    struct pipe_resource *pt = &tex->b.b;
@@ -309,7 +312,8 @@ i915_clear_depth_stencil_blitter(struct pipe_context *pipe,
                                  double depth,
                                  unsigned stencil,
                                  unsigned dstx, unsigned dsty,
-                                 unsigned width, unsigned height)
+                                 unsigned width, unsigned height,
+                                 bool render_condition_enabled)
 {
    struct i915_texture *tex = i915_texture(dst->texture);
    struct pipe_resource *pt = &tex->b.b;

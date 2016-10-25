@@ -41,73 +41,12 @@ void
 vc4_flush(struct pipe_context *pctx)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
-        struct pipe_surface *cbuf = vc4->framebuffer.cbufs[0];
-        struct pipe_surface *zsbuf = vc4->framebuffer.zsbuf;
 
-        if (!vc4->needs_flush)
-                return;
-
-        /* The RCL setup would choke if the draw bounds cause no drawing, so
-         * just drop the drawing if that's the case.
-         */
-        if (vc4->draw_max_x <= vc4->draw_min_x ||
-            vc4->draw_max_y <= vc4->draw_min_y) {
-                vc4_job_reset(vc4);
-                return;
+        struct hash_entry *entry;
+        hash_table_foreach(vc4->jobs, entry) {
+                struct vc4_job *job = entry->data;
+                vc4_job_submit(vc4, job);
         }
-
-        /* Increment the semaphore indicating that binning is done and
-         * unblocking the render thread.  Note that this doesn't act until the
-         * FLUSH completes.
-         */
-        cl_ensure_space(&vc4->bcl, 8);
-        struct vc4_cl_out *bcl = cl_start(&vc4->bcl);
-        cl_u8(&bcl, VC4_PACKET_INCREMENT_SEMAPHORE);
-        /* The FLUSH caps all of our bin lists with a VC4_PACKET_RETURN. */
-        cl_u8(&bcl, VC4_PACKET_FLUSH);
-        cl_end(&vc4->bcl, bcl);
-
-        if (cbuf && (vc4->resolve & PIPE_CLEAR_COLOR0)) {
-                pipe_surface_reference(&vc4->color_write,
-                                       cbuf->texture->nr_samples > 1 ?
-                                       NULL : cbuf);
-                pipe_surface_reference(&vc4->msaa_color_write,
-                                       cbuf->texture->nr_samples > 1 ?
-                                       cbuf : NULL);
-
-                if (!(vc4->cleared & PIPE_CLEAR_COLOR0)) {
-                        pipe_surface_reference(&vc4->color_read, cbuf);
-                } else {
-                        pipe_surface_reference(&vc4->color_read, NULL);
-                }
-
-        } else {
-                pipe_surface_reference(&vc4->color_write, NULL);
-                pipe_surface_reference(&vc4->color_read, NULL);
-                pipe_surface_reference(&vc4->msaa_color_write, NULL);
-        }
-
-        if (vc4->framebuffer.zsbuf &&
-            (vc4->resolve & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))) {
-                pipe_surface_reference(&vc4->zs_write,
-                                       zsbuf->texture->nr_samples > 1 ?
-                                       NULL : zsbuf);
-                pipe_surface_reference(&vc4->msaa_zs_write,
-                                       zsbuf->texture->nr_samples > 1 ?
-                                       zsbuf : NULL);
-
-                if (!(vc4->cleared & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))) {
-                        pipe_surface_reference(&vc4->zs_read, zsbuf);
-                } else {
-                        pipe_surface_reference(&vc4->zs_read, NULL);
-                }
-        } else {
-                pipe_surface_reference(&vc4->zs_write, NULL);
-                pipe_surface_reference(&vc4->zs_read, NULL);
-                pipe_surface_reference(&vc4->msaa_zs_write, NULL);
-        }
-
-        vc4_job_submit(vc4);
 }
 
 static void
@@ -127,69 +66,30 @@ vc4_pipe_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
         }
 }
 
-/**
- * Flushes the current command lists if they reference the given BO.
- *
- * This helps avoid flushing the command buffers when unnecessary.
- */
-bool
-vc4_cl_references_bo(struct pipe_context *pctx, struct vc4_bo *bo,
-                     bool include_reads)
-{
-        struct vc4_context *vc4 = vc4_context(pctx);
-
-        if (!vc4->needs_flush)
-                return false;
-
-        /* Walk all the referenced BOs in the drawing command list to see if
-         * they match.
-         */
-        if (include_reads) {
-                struct vc4_bo **referenced_bos = vc4->bo_pointers.base;
-                for (int i = 0; i < cl_offset(&vc4->bo_handles) / 4; i++) {
-                        if (referenced_bos[i] == bo) {
-                                return true;
-                        }
-                }
-        }
-
-        /* Also check for the Z/color buffers, since the references to those
-         * are only added immediately before submit.
-         */
-        struct vc4_surface *csurf = vc4_surface(vc4->framebuffer.cbufs[0]);
-        if (csurf) {
-                struct vc4_resource *ctex = vc4_resource(csurf->base.texture);
-                if (ctex->bo == bo) {
-                        return true;
-                }
-        }
-
-        struct vc4_surface *zsurf = vc4_surface(vc4->framebuffer.zsbuf);
-        if (zsurf) {
-                struct vc4_resource *ztex =
-                        vc4_resource(zsurf->base.texture);
-                if (ztex->bo == bo) {
-                        return true;
-                }
-        }
-
-        return false;
-}
-
 static void
 vc4_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
-        struct pipe_surface *zsurf = vc4->framebuffer.zsbuf;
+        struct vc4_resource *rsc = vc4_resource(prsc);
 
-        if (zsurf && zsurf->texture == prsc)
-                vc4->resolve &= ~(PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL);
+        rsc->initialized_buffers = 0;
+
+        struct hash_entry *entry = _mesa_hash_table_search(vc4->write_jobs,
+                                                           prsc);
+        if (!entry)
+                return;
+
+        struct vc4_job *job = entry->data;
+        if (job->key.zsbuf && job->key.zsbuf->texture == prsc)
+                job->resolve &= ~(PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL);
 }
 
 static void
 vc4_context_destroy(struct pipe_context *pctx)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
+
+        vc4_flush(pctx);
 
         if (vc4->blitter)
                 util_blitter_destroy(vc4->blitter);
@@ -200,13 +100,10 @@ vc4_context_destroy(struct pipe_context *pctx)
         if (vc4->uploader)
                 u_upload_destroy(vc4->uploader);
 
-        util_slab_destroy(&vc4->transfer_pool);
+        slab_destroy_child(&vc4->transfer_pool);
 
         pipe_surface_reference(&vc4->framebuffer.cbufs[0], NULL);
         pipe_surface_reference(&vc4->framebuffer.zsbuf, NULL);
-
-        pipe_surface_reference(&vc4->color_write, NULL);
-        pipe_surface_reference(&vc4->color_read, NULL);
 
         vc4_program_fini(pctx);
 
@@ -246,8 +143,7 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
         vc4->fd = screen->fd;
 
-        util_slab_create(&vc4->transfer_pool, sizeof(struct vc4_transfer),
-                         16, UTIL_SLAB_SINGLETHREADED);
+        slab_create_child(&vc4->transfer_pool, &screen->transfer_pool);
         vc4->blitter = util_blitter_create(pctx);
         if (!vc4->blitter)
                 goto fail;

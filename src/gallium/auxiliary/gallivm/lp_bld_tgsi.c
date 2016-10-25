@@ -186,15 +186,15 @@ void lp_build_fetch_args(
 }
 
 /**
- * with doubles src and dst channels aren't 1:1.
+ * with 64-bit src and dst channels aren't 1:1.
  * check the src/dst types for the opcode,
- * 1. if neither is double then src == dst;
- * 2. if dest is double
+ * 1. if neither is 64-bit then src == dst;
+ * 2. if dest is 64-bit
  *     - don't store to y or w
- *     - if src is double then src == dst.
+ *     - if src is 64-bit then src == dst.
  *     - else for f2d, d.xy = s.x
  *     - else for f2d, d.zw = s.y
- * 3. if dst is single, src is double
+ * 3. if dst is single, src is 64-bit
  *    - map dst x,z to src xy;
  *    - map dst y,w to src zw;
  */
@@ -204,12 +204,12 @@ static int get_src_chan_idx(unsigned opcode,
    enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(opcode);
    enum tgsi_opcode_type stype = tgsi_opcode_infer_src_type(opcode);
 
-   if (dtype != TGSI_TYPE_DOUBLE && stype != TGSI_TYPE_DOUBLE)
+   if (!tgsi_type_is_64bit(dtype) && !tgsi_type_is_64bit(stype))
       return dst_chan_index;
-   if (dtype == TGSI_TYPE_DOUBLE) {
+   if (tgsi_type_is_64bit(dtype)) {
       if (dst_chan_index == 1 || dst_chan_index == 3)
          return -1;
-      if (stype == TGSI_TYPE_DOUBLE)
+      if (tgsi_type_is_64bit(stype))
          return dst_chan_index;
       if (dst_chan_index == 0)
          return 0;
@@ -335,7 +335,7 @@ lp_build_emit_fetch(
    enum tgsi_opcode_type stype = tgsi_opcode_infer_src_type(inst->Instruction.Opcode);
 
    if (chan_index == LP_CHAN_ALL) {
-      swizzle = ~0;
+      swizzle = ~0u;
    } else {
       swizzle = tgsi_util_get_full_src_register_swizzle(reg, chan_index);
       if (swizzle > 3) {
@@ -364,6 +364,8 @@ lp_build_emit_fetch(
          break;
       case TGSI_TYPE_UNSIGNED:
       case TGSI_TYPE_SIGNED:
+      case TGSI_TYPE_UNSIGNED64:
+      case TGSI_TYPE_SIGNED64:
       case TGSI_TYPE_VOID:
       default:
          /* abs modifier is only legal on floating point types */
@@ -387,6 +389,10 @@ lp_build_emit_fetch(
       case TGSI_TYPE_UNSIGNED:
          res = lp_build_negate( &bld_base->int_bld, res );
          break;
+      case TGSI_TYPE_SIGNED64:
+      case TGSI_TYPE_UNSIGNED64:
+         res = lp_build_negate( &bld_base->int64_bld, res );
+         break;
       case TGSI_TYPE_VOID:
       default:
          assert(0);
@@ -398,7 +404,7 @@ lp_build_emit_fetch(
     * Swizzle the argument
     */
 
-   if (swizzle == ~0) {
+   if (swizzle == ~0u) {
       res = bld_base->emit_swizzle(bld_base, res,
                      reg->Register.SwizzleX,
                      reg->Register.SwizzleY,
@@ -453,7 +459,7 @@ lp_build_emit_fetch_texoffset(
     * Swizzle the argument
     */
 
-   if (swizzle == ~0) {
+   if (swizzle == ~0u) {
       res = bld_base->emit_swizzle(bld_base, res,
                                    off->SwizzleX,
                                    off->SwizzleY,

@@ -29,20 +29,17 @@
 
 struct swr_query_result {
    SWR_STATS core;
-   uint64_t timestamp;
+   SWR_STATS_FE coreFE;
+   uint64_t timestamp_start;
+   uint64_t timestamp_end;
 };
 
 struct swr_query {
    unsigned type; /* PIPE_QUERY_* */
    unsigned index;
 
-   struct swr_query_result *result;
-   struct swr_query_result start;
-   struct swr_query_result end;
-
+   struct swr_query_result result;
    struct pipe_fence_handle *fence;
-
-   boolean enable_stats;
 };
 
 extern void swr_query_init(struct pipe_context *pipe);

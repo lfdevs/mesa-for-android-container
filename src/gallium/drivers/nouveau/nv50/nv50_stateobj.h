@@ -31,7 +31,7 @@ struct nv50_rasterizer_stateobj {
 struct nv50_zsa_stateobj {
    struct pipe_depth_stencil_alpha_state pipe;
    int size;
-   uint32_t state[34];
+   uint32_t state[38];
 };
 
 struct nv50_constbuf {
@@ -60,6 +60,12 @@ struct nv50_vertex_stateobj {
    unsigned vertex_size;
    unsigned packet_vertex_limit;
    struct nv50_vertex_element element[0];
+};
+
+struct nv50_window_rect_stateobj {
+   bool inclusive;
+   unsigned rects;
+   struct pipe_scissor_state rect[PIPE_MAX_WINDOW_RECTANGLES];
 };
 
 struct nv50_so_target {

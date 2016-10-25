@@ -293,7 +293,7 @@ Status XvMCCreateContext(Display *dpy, XvPortID port, int surface_type_id,
       context_priv->color_standard,
       &context_priv->procamp, true, &csc
    );
-   vl_compositor_set_csc_matrix(&context_priv->cstate, (const vl_csc_matrix *)&csc);
+   vl_compositor_set_csc_matrix(&context_priv->cstate, (const vl_csc_matrix *)&csc, 1.0f, 0.0f);
 
    context_priv->vscreen = vscreen;
    context_priv->pipe = pipe;

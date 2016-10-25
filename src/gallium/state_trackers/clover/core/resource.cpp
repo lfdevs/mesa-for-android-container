@@ -136,9 +136,7 @@ root_resource::root_resource(clover::device &dev, memory_obj &obj,
    info.target = translate_target(obj.type());
    info.bind = (PIPE_BIND_SAMPLER_VIEW |
                 PIPE_BIND_COMPUTE_RESOURCE |
-                PIPE_BIND_GLOBAL |
-                PIPE_BIND_TRANSFER_READ |
-                PIPE_BIND_TRANSFER_WRITE);
+                PIPE_BIND_GLOBAL);
 
    if (obj.flags() & CL_MEM_USE_HOST_PTR && user_ptr_support) {
       // Page alignment is normally required for this, just try, hope for the
@@ -161,9 +159,13 @@ root_resource::root_resource(clover::device &dev, memory_obj &obj,
       box rect { {{ 0, 0, 0 }}, {{ info.width0, info.height0, info.depth0 }} };
       unsigned cpp = util_format_get_blocksize(info.format);
 
-      q.pipe->transfer_inline_write(q.pipe, pipe, 0, PIPE_TRANSFER_WRITE,
-                                    rect, data_ptr, cpp * info.width0,
-                                    cpp * info.width0 * info.height0);
+      if (pipe->target == PIPE_BUFFER)
+         q.pipe->buffer_subdata(q.pipe, pipe, PIPE_TRANSFER_WRITE,
+                                0, info.width0, data_ptr);
+      else
+         q.pipe->texture_subdata(q.pipe, pipe, 0, PIPE_TRANSFER_WRITE,
+                                 rect, data_ptr, cpp * info.width0,
+                                 cpp * info.width0 * info.height0);
    }
 }
 

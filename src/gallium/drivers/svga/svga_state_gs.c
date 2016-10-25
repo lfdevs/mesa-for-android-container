@@ -175,6 +175,8 @@ emit_hw_gs(struct svga_context *svga, unsigned dirty)
    enum pipe_error ret = PIPE_OK;
    struct svga_compile_key key;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_EMITGS);
+
    /* If there's a user-defined GS, we should have a pointer to a derived
     * GS.  This should have been resolved in update_tgsi_transform().
     */
@@ -190,7 +192,7 @@ emit_hw_gs(struct svga_context *svga, unsigned dirty)
          ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_GS, NULL);
          svga->state.hw_draw.gs = NULL;
       }
-      return ret;
+      goto done;
    }
 
    /* If there is stream output info for this geometry shader, then use
@@ -218,7 +220,7 @@ emit_hw_gs(struct svga_context *svga, unsigned dirty)
       if (!variant) {
          ret = compile_gs(svga, gs, &key, &variant);
          if (ret != PIPE_OK)
-            return ret;
+            goto done;
 
          /* insert the new variant at head of linked list */
          assert(variant);
@@ -231,14 +233,16 @@ emit_hw_gs(struct svga_context *svga, unsigned dirty)
       /* Bind the new variant */
       ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_GS, variant);
       if (ret != PIPE_OK)
-         return ret;
+         goto done;
 
       svga->rebind.flags.gs = FALSE;
       svga->dirty |= SVGA_NEW_GS_VARIANT;
       svga->state.hw_draw.gs = variant;
    }
 
-   return PIPE_OK;
+done:
+   SVGA_STATS_TIME_POP(svga_sws(svga));
+   return ret;
 }
 
 struct svga_tracked_state svga_hw_gs =

@@ -38,7 +38,7 @@ qir_opt_small_immediates(struct vc4_compile *c)
 {
         bool progress = false;
 
-        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
+        qir_for_each_inst_inorder(inst, c) {
                 /* The small immediate value sits in the raddr B field, so we
                  * can't have 2 small immediates in one instruction (unless
                  * they're the same value, but that should be optimized away

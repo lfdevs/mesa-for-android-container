@@ -255,7 +255,7 @@ dei_draw_again:
    parm $r4 maddr 0x5f7 /* INDEX_BATCH_FIRST, start */
    parm $r4 send $r4 /* index_bias, send start */
    maddr 0x18e3 /* CB_POS */
-   send 0x180 /* 256 + 128 */
+   send 0x1a0 /* 256 + 160 */
    braz $r2 #dei_end
    parm $r5 send $r4 /* start_instance, send index_bias */
    send $r5 /* send start_instance */
@@ -311,7 +311,7 @@ dai_draw_again:
    braz $r3 #dai_end
    parm $r4 send $r4 /* start_instance */
    maddr 0x18e3 /* CB_POS */
-   send 0x180 /* 256 + 128 */
+   send 0x1a0 /* 256 + 160 */
    send 0x0 /* send 0 as base_vertex */
    send $r4 /* send start_instance */
    send $r6 /* draw id */
@@ -374,7 +374,7 @@ deic_draw_again:
    parm $r4 maddr 0x5f7 /* INDEX_BATCH_FIRST, start */
    parm $r4 send $r4 /* index_bias, send start */
    maddr 0x18e3 /* CB_POS */
-   send 0x180 /* 256 + 128 */
+   send 0x1a0 /* 256 + 160 */
    braz $r2 #deic_end
    parm $r5 send $r4 /* start_instance, send index_bias */
    send $r5 /* send start_instance */
@@ -455,7 +455,7 @@ daic_draw_again:
    braz $r3 #daic_end
    parm $r4 send $r4 /* start_instance */
    maddr 0x18e3 /* CB_POS */
-   send 0x180 /* 256 + 128 */
+   send 0x1a0 /* 256 + 160 */
    send 0x0 /* send 0 as base_vertex */
    send $r4 /* send start_instance */
    send $r6 /* draw id */

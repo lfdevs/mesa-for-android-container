@@ -44,6 +44,8 @@
 #include "egldriver.h"
 #include "eglglobals.h"
 #include "egllog.h"
+#include "eglimage.h"
+#include "eglsync.h"
 
 /* Includes for _eglNativePlatformDetectNativeDisplay */
 #ifdef HAVE_MINCORE
@@ -178,25 +180,24 @@ _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
 _EGLPlatformType
 _eglGetNativePlatform(void *nativeDisplay)
 {
-   static _EGLPlatformType native_platform = _EGL_INVALID_PLATFORM;
-   char *detection_method = NULL;
+   static _EGLPlatformType native_platform;
+   char *detection_method;
+
+   native_platform = _eglGetNativePlatformFromEnv();
+   detection_method = "environment overwrite";
 
    if (native_platform == _EGL_INVALID_PLATFORM) {
-      native_platform = _eglGetNativePlatformFromEnv();
-      detection_method = "environment overwrite";
-      if (native_platform == _EGL_INVALID_PLATFORM) {
-         native_platform = _eglNativePlatformDetectNativeDisplay(nativeDisplay);
-         detection_method = "autodetected";
-         if (native_platform == _EGL_INVALID_PLATFORM) {
-            native_platform = _EGL_NATIVE_PLATFORM;
-            detection_method = "build-time configuration";
-         }
-      }
+      native_platform = _eglNativePlatformDetectNativeDisplay(nativeDisplay);
+      detection_method = "autodetected";
    }
 
-   if (detection_method != NULL)
-      _eglLog(_EGL_DEBUG, "Native platform type: %s (%s)",
-              egl_platforms[native_platform].name, detection_method);
+   if (native_platform == _EGL_INVALID_PLATFORM) {
+      native_platform = _EGL_NATIVE_PLATFORM;
+      detection_method = "build-time configuration";
+   }
+
+   _eglLog(_EGL_DEBUG, "Native platform type: %s (%s)",
+           egl_platforms[native_platform].name, detection_method);
 
    return native_platform;
 }
@@ -301,6 +302,26 @@ _eglReleaseDisplayResources(_EGLDriver *drv, _EGLDisplay *display)
       drv->API.DestroySurface(drv, display, surf);
    }
    assert(!display->ResourceLists[_EGL_RESOURCE_SURFACE]);
+
+   list = display->ResourceLists[_EGL_RESOURCE_IMAGE];
+   while (list) {
+      _EGLImage *image = (_EGLImage *) list;
+      list = list->Next;
+
+      _eglUnlinkImage(image);
+      drv->API.DestroyImageKHR(drv, display, image);
+   }
+   assert(!display->ResourceLists[_EGL_RESOURCE_IMAGE]);
+
+   list = display->ResourceLists[_EGL_RESOURCE_SYNC];
+   while (list) {
+      _EGLSync *sync = (_EGLSync *) list;
+      list = list->Next;
+
+      _eglUnlinkSync(sync);
+      drv->API.DestroySyncKHR(drv, display, sync);
+   }
+   assert(!display->ResourceLists[_EGL_RESOURCE_SYNC]);
 }
 
 
@@ -519,3 +540,24 @@ _eglGetWaylandDisplay(struct wl_display *native_display,
    return _eglFindDisplay(_EGL_PLATFORM_WAYLAND, native_display);
 }
 #endif /* HAVE_WAYLAND_PLATFORM */
+
+#ifdef HAVE_SURFACELESS_PLATFORM
+_EGLDisplay*
+_eglGetSurfacelessDisplay(void *native_display,
+                          const EGLint *attrib_list)
+{
+   /* This platform has no native display. */
+   if (native_display != NULL) {
+      _eglError(EGL_BAD_PARAMETER, "eglGetPlatformDisplay");
+      return NULL;
+   }
+
+   /* This platform recognizes no display attributes. */
+   if (attrib_list != NULL && attrib_list[0] != EGL_NONE) {
+      _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
+      return NULL;
+   }
+
+   return _eglFindDisplay(_EGL_PLATFORM_SURFACELESS, native_display);
+}
+#endif /* HAVE_SURFACELESS_PLATFORM */

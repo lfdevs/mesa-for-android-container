@@ -196,6 +196,16 @@ wrap_mode_needs_border_color(unsigned wrap_mode)
           wrap_mode == GEN8_TEXCOORDMODE_HALF_BORDER;
 }
 
+static bool
+has_component(mesa_format format, int i)
+{
+   if (_mesa_is_format_color_format(format))
+      return _mesa_format_has_color_component(format, i);
+
+   /* depth and stencil have only one component */
+   return i == 0;
+}
+
 /**
  * Upload SAMPLER_BORDER_COLOR_STATE.
  */
@@ -281,7 +291,10 @@ upload_default_color(struct brw_context *brw,
       memset(sdc, 0, 20 * 4);
       sdc = &sdc[16];
 
-      int bits_per_channel = _mesa_get_format_bits(format, GL_RED_BITS);
+      const int bits_per_channel =
+         _mesa_get_format_bits(format,
+                               format == MESA_FORMAT_S_UINT8 ?
+                               GL_STENCIL_BITS : GL_RED_BITS);
 
       /* From the Haswell PRM, "Command Reference: Structures", Page 36:
        * "If any color channel is missing from the surface format,
@@ -291,7 +304,7 @@ upload_default_color(struct brw_context *brw,
        */
       unsigned c[4] = { 0, 0, 0, 1 };
       for (int i = 0; i < 4; i++) {
-         if (_mesa_format_has_color_component(format, i))
+         if (has_component(format, i))
             c[i] = color.ui[i];
       }
 

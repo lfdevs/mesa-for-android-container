@@ -69,7 +69,9 @@
 #define SI_SHADER_H
 
 #include <llvm-c/Core.h> /* LLVMModuleRef */
+#include <llvm-c/TargetMachine.h>
 #include "tgsi/tgsi_scan.h"
+#include "util/u_queue.h"
 #include "si_state.h"
 
 struct radeon_shader_binary;
@@ -96,6 +98,7 @@ enum {
 	SI_SGPR_VERTEX_BUFFERS_HI,
 	SI_SGPR_BASE_VERTEX,
 	SI_SGPR_START_INSTANCE,
+	SI_SGPR_DRAWID,
 	SI_ES_NUM_USER_SGPR,
 
 	/* hw VS only */
@@ -126,7 +129,8 @@ enum {
 
 	/* CS only */
 	SI_SGPR_GRID_SIZE = SI_NUM_RESOURCE_SGPRS,
-	SI_CS_NUM_USER_SGPR = SI_SGPR_GRID_SIZE + 3
+	SI_SGPR_BLOCK_SIZE = SI_SGPR_GRID_SIZE + 3,
+	SI_CS_NUM_USER_SGPR = SI_SGPR_BLOCK_SIZE + 3
 };
 
 /* LLVM function parameter indices */
@@ -142,10 +146,11 @@ enum {
 	SI_PARAM_VERTEX_BUFFERS	= SI_NUM_RESOURCE_PARAMS,
 	SI_PARAM_BASE_VERTEX,
 	SI_PARAM_START_INSTANCE,
+	SI_PARAM_DRAWID,
 	/* [0] = clamp vertex color, VS as VS only */
 	SI_PARAM_VS_STATE_BITS,
 	/* same value as TCS_IN_LAYOUT, VS as LS only */
-	SI_PARAM_LS_OUT_LAYOUT = SI_PARAM_START_INSTANCE + 1,
+	SI_PARAM_LS_OUT_LAYOUT = SI_PARAM_DRAWID + 1,
 	/* the other VS parameters are assigned dynamically */
 
 	/* Layout of TCS outputs in the offchip buffer
@@ -215,6 +220,7 @@ enum {
 
 	/* CS only parameters */
 	SI_PARAM_GRID_SIZE = SI_NUM_RESOURCE_PARAMS,
+	SI_PARAM_BLOCK_SIZE,
 	SI_PARAM_BLOCK_ID,
 	SI_PARAM_THREAD_ID,
 
@@ -233,6 +239,15 @@ struct si_shader;
  * binaries for one TGSI program. This can be shared by multiple contexts.
  */
 struct si_shader_selector {
+	struct si_screen	*screen;
+	struct util_queue_fence ready;
+
+	/* Should only be used by si_init_shader_selector_async
+	 * if thread_index == -1 (non-threaded). */
+	LLVMTargetMachineRef	tm;
+	struct pipe_debug_callback debug;
+	bool			is_debug_context;
+
 	pipe_mutex		mutex;
 	struct si_shader	*first_variant; /* immutable after the first variant */
 	struct si_shader	*last_variant; /* mutable */
@@ -311,16 +326,14 @@ struct si_tcs_epilog_bits {
 /* Common PS bits between the shader key and the prolog key. */
 struct si_ps_prolog_bits {
 	unsigned	color_two_side:1;
-	/* TODO: add a flatshade bit that skips interpolation for colors */
+	unsigned	flatshade_colors:1;
 	unsigned	poly_stipple:1;
-	unsigned	force_persample_interp:1;
-	/* TODO:
-	 * - add force_center_interp if MSAA is disabled and centroid or
-	 *   sample are present
-	 * - add force_center_interp_bc_optimize to force center interpolation
-	 *   based on the bc_optimize SGPR bit if MSAA is enabled, centroid is
-	 *   present and sample isn't present.
-	 */
+	unsigned	force_persp_sample_interp:1;
+	unsigned	force_linear_sample_interp:1;
+	unsigned	force_persp_center_interp:1;
+	unsigned	force_linear_center_interp:1;
+	unsigned	bc_optimize_for_persp:1;
+	unsigned	bc_optimize_for_linear:1;
 };
 
 /* Common PS bits between the shader key and the epilog key. */
@@ -355,6 +368,7 @@ union si_shader_part_key {
 		unsigned	colors_read:8; /* color input components read */
 		unsigned	num_interp_inputs:5; /* BCOLOR is at this location */
 		unsigned	face_vgpr_index:5;
+		unsigned	wqm:1;
 		char		color_attr_index[2];
 		char		color_interp_vgpr_index[2]; /* -1 == constant */
 	} ps_prolog;
@@ -390,6 +404,8 @@ union si_shader_key {
 struct si_shader_config {
 	unsigned			num_sgprs;
 	unsigned			num_vgprs;
+	unsigned			spilled_sgprs;
+	unsigned			spilled_vgprs;
 	unsigned			lds_size;
 	unsigned			spi_ps_input_ena;
 	unsigned			spi_ps_input_addr;
@@ -423,12 +439,17 @@ struct si_shader {
 	struct r600_resource		*scratch_bo;
 	union si_shader_key		key;
 	bool				is_binary_shared;
-	unsigned			z_order;
 
 	/* The following data is all that's needed for binary shaders. */
 	struct radeon_shader_binary	binary;
 	struct si_shader_config		config;
 	struct si_shader_info		info;
+
+	/* Shader key + LLVM IR + disassembly + statistics.
+	 * Generated for debug contexts only.
+	 */
+	char				*shader_log;
+	size_t				shader_log_size;
 };
 
 struct si_shader_part {
@@ -437,38 +458,6 @@ struct si_shader_part {
 	struct radeon_shader_binary binary;
 	struct si_shader_config config;
 };
-
-static inline struct tgsi_shader_info *si_get_vs_info(struct si_context *sctx)
-{
-	if (sctx->gs_shader.cso)
-		return &sctx->gs_shader.cso->info;
-	else if (sctx->tes_shader.cso)
-		return &sctx->tes_shader.cso->info;
-	else if (sctx->vs_shader.cso)
-		return &sctx->vs_shader.cso->info;
-	else
-		return NULL;
-}
-
-static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
-{
-	if (sctx->gs_shader.current)
-		return sctx->gs_shader.current->gs_copy_shader;
-	else if (sctx->tes_shader.current)
-		return sctx->tes_shader.current;
-	else
-		return sctx->vs_shader.current;
-}
-
-static inline bool si_vs_exports_prim_id(struct si_shader *shader)
-{
-	if (shader->selector->type == PIPE_SHADER_VERTEX)
-		return shader->key.vs.epilog.export_prim_id;
-	else if (shader->selector->type == PIPE_SHADER_TESS_EVAL)
-		return shader->key.tes.epilog.export_prim_id;
-	else
-		return false;
-}
 
 /* si_shader.c */
 int si_compile_tgsi_shader(struct si_screen *sscreen,
@@ -479,7 +468,6 @@ int si_compile_tgsi_shader(struct si_screen *sscreen,
 int si_shader_create(struct si_screen *sscreen, LLVMTargetMachineRef tm,
 		     struct si_shader *shader,
 		     struct pipe_debug_callback *debug);
-void si_dump_shader_key(unsigned shader, union si_shader_key *key, FILE *f);
 int si_compile_llvm(struct si_screen *sscreen,
 		    struct radeon_shader_binary *binary,
 		    struct si_shader_config *conf,
@@ -501,5 +489,7 @@ void si_shader_apply_scratch_relocs(struct si_context *sctx,
 void si_shader_binary_read_config(struct radeon_shader_binary *binary,
 				  struct si_shader_config *conf,
 				  unsigned symbol_offset);
+unsigned si_get_spi_shader_z_format(bool writes_z, bool writes_stencil,
+				    bool writes_samplemask);
 
 #endif

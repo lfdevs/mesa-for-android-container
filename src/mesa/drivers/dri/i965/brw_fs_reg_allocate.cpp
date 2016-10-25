@@ -36,8 +36,8 @@ static void
 assign_reg(unsigned *reg_hw_locations, fs_reg *reg)
 {
    if (reg->file == VGRF) {
-      reg->nr = reg_hw_locations[reg->nr] + reg->reg_offset;
-      reg->reg_offset = 0;
+      reg->nr = reg_hw_locations[reg->nr] + reg->offset / REG_SIZE;
+      reg->offset %= REG_SIZE;
    }
 }
 
@@ -75,7 +75,7 @@ fs_visitor::assign_regs_trivial()
 static void
 brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
 {
-   const struct brw_device_info *devinfo = compiler->devinfo;
+   const struct gen_device_info *devinfo = compiler->devinfo;
    int base_reg_count = BRW_MAX_GRF;
    const int index = _mesa_logbase2(dispatch_width / 8);
 
@@ -362,9 +362,9 @@ void fs_visitor::calculate_payload_ranges(int payload_node_count,
             if (node_nr >= payload_node_count)
                continue;
 
-            for (int j = 0; j < inst->regs_read(i); j++) {
+            for (unsigned j = 0; j < regs_read(inst, i); j++) {
                payload_last_use_ip[node_nr + j] = use_ip;
-               assert(node_nr + j < payload_node_count);
+               assert(node_nr + j < unsigned(payload_node_count));
             }
          }
       }
@@ -563,14 +563,14 @@ fs_visitor::assign_regs(bool allow_spilling, bool spill_all)
        * second operand of a PLN instruction needs to be an
        * even-numbered register, so we have a special register class
        * wm_aligned_pairs_class to handle this case.  pre-GEN6 always
-       * uses this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC] as the
+       * uses this->delta_xy[BRW_BARYCENTRIC_PERSPECTIVE_PIXEL] as the
        * second operand of a PLN instruction (since it doesn't support
        * any other interpolation modes).  So all we need to do is find
        * that register and set it to the appropriate class.
        */
       if (compiler->fs_reg_sets[rsi].aligned_pairs_class >= 0 &&
-          this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC].file == VGRF &&
-          this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC].nr == i) {
+          this->delta_xy[BRW_BARYCENTRIC_PERSPECTIVE_PIXEL].file == VGRF &&
+          this->delta_xy[BRW_BARYCENTRIC_PERSPECTIVE_PIXEL].nr == i) {
          c = compiler->fs_reg_sets[rsi].aligned_pairs_class;
       }
 
@@ -754,7 +754,7 @@ static void
 emit_unspill(const fs_builder &bld, fs_reg dst,
              uint32_t spill_offset, unsigned count)
 {
-   const brw_device_info *devinfo = bld.shader->devinfo;
+   const gen_device_info *devinfo = bld.shader->devinfo;
    const unsigned reg_size = dst.component_size(bld.dispatch_width()) /
                              REG_SIZE;
    assert(count % reg_size == 0);
@@ -780,7 +780,7 @@ emit_unspill(const fs_builder &bld, fs_reg dst,
          unspill_inst->mlen = 1; /* header contains offset */
       }
 
-      dst.reg_offset += reg_size;
+      dst.offset += reg_size * REG_SIZE;
       spill_offset += reg_size * REG_SIZE;
    }
 }
@@ -796,7 +796,7 @@ emit_spill(const fs_builder &bld, fs_reg src,
    for (unsigned i = 0; i < count / reg_size; i++) {
       fs_inst *spill_inst =
          bld.emit(SHADER_OPCODE_GEN4_SCRATCH_WRITE, bld.null_reg_f(), src);
-      src.reg_offset += reg_size;
+      src.offset += reg_size * REG_SIZE;
       spill_inst->offset = spill_offset + i * reg_size * REG_SIZE;
       spill_inst->mlen = 1 + reg_size; /* header, value */
       spill_inst->base_mrf = spill_base_mrf(bld.shader);
@@ -826,7 +826,8 @@ fs_visitor::choose_spill_reg(struct ra_graph *g)
       }
 
       if (inst->dst.file == VGRF)
-         spill_costs[inst->dst.nr] += inst->regs_written * loop_scale;
+         spill_costs[inst->dst.nr] += DIV_ROUND_UP(inst->size_written, REG_SIZE)
+                                      * loop_scale;
 
       switch (inst->opcode) {
 
@@ -903,20 +904,20 @@ fs_visitor::spill_reg(int spill_reg)
       for (unsigned int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == VGRF &&
              inst->src[i].nr == spill_reg) {
-            int regs_read = inst->regs_read(i);
-            int subset_spill_offset = (spill_offset +
-                                       REG_SIZE * inst->src[i].reg_offset);
-            fs_reg unspill_dst(VGRF, alloc.allocate(regs_read));
+            int count = regs_read(inst, i);
+            int subset_spill_offset = spill_offset +
+               ROUND_DOWN_TO(inst->src[i].offset, REG_SIZE);
+            fs_reg unspill_dst(VGRF, alloc.allocate(count));
 
             inst->src[i].nr = unspill_dst.nr;
-            inst->src[i].reg_offset = 0;
+            inst->src[i].offset %= REG_SIZE;
 
             /* We read the largest power-of-two divisor of the register count
              * (because only POT scratch read blocks are allowed by the
              * hardware) up to the maximum supported block size.
              */
             const unsigned width =
-               MIN2(32, 1u << (ffs(MAX2(1, regs_read) * 8) - 1));
+               MIN2(32, 1u << (ffs(MAX2(1, count) * 8) - 1));
 
             /* Set exec_all() on unspill messages under the (rather
              * pessimistic) assumption that there is no one-to-one
@@ -926,18 +927,18 @@ fs_visitor::spill_reg(int spill_reg)
              * unspill destination is a block-local temporary.
              */
             emit_unspill(ibld.exec_all().group(width, 0),
-                         unspill_dst, subset_spill_offset, regs_read);
+                         unspill_dst, subset_spill_offset, count);
 	 }
       }
 
       if (inst->dst.file == VGRF &&
           inst->dst.nr == spill_reg) {
-         int subset_spill_offset = (spill_offset +
-                                    REG_SIZE * inst->dst.reg_offset);
-         fs_reg spill_src(VGRF, alloc.allocate(inst->regs_written));
+         int subset_spill_offset = spill_offset +
+            ROUND_DOWN_TO(inst->dst.offset, REG_SIZE);
+         fs_reg spill_src(VGRF, alloc.allocate(regs_written(inst)));
 
          inst->dst.nr = spill_src.nr;
-         inst->dst.reg_offset = 0;
+         inst->dst.offset %= REG_SIZE;
 
          /* If we're immediately spilling the register, we should not use
           * destination dependency hints.  Doing so will cause the GPU do
@@ -971,19 +972,19 @@ fs_visitor::spill_reg(int spill_reg)
          const fs_builder ubld = ibld.exec_all(!per_channel).group(width, 0);
 
 	 /* If our write is going to affect just part of the
-          * inst->regs_written(), then we need to unspill the destination
-          * since we write back out all of the regs_written().  If the
-          * original instruction had force_writemask_all set and is not a
-          * partial write, there should be no need for the unspill since the
+          * regs_written(inst), then we need to unspill the destination since
+          * we write back out all of the regs_written().  If the original
+          * instruction had force_writemask_all set and is not a partial
+          * write, there should be no need for the unspill since the
           * instruction will be overwriting the whole destination in any case.
 	  */
          if (inst->is_partial_write() ||
              (!inst->force_writemask_all && !per_channel))
             emit_unspill(ubld, spill_src, subset_spill_offset,
-                         inst->regs_written);
+                         regs_written(inst));
 
          emit_spill(ubld.at(block, inst->next), spill_src,
-                    subset_spill_offset, inst->regs_written);
+                    subset_spill_offset, regs_written(inst));
       }
    }
 

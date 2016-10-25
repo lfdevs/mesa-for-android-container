@@ -336,7 +336,7 @@ static void ConvertPixelFromFloat(
                 // Convert from 32-bit float to 16-bit float using _mm_cvtps_ph
                 // @todo 16bit float instruction support is orthogonal to avx support.  need to
                 // add check for F16C support instead.
-#if KNOB_ARCH == KNOB_ARCH_AVX2
+#if KNOB_ARCH >= KNOB_ARCH_AVX2
                 __m128 src128 = _mm_set1_ps(src);
                 __m128i srci128 = _mm_cvtps_ph(src128, _MM_FROUND_TRUNC);
                 UINT value = _mm_extract_epi16(srci128, 0);
@@ -519,7 +519,7 @@ INLINE static void ConvertPixelToFloat(
             float dst;
             if (FormatTraits<SrcFormat>::GetBPC(comp) == 16)
             {
-#if KNOB_ARCH == KNOB_ARCH_AVX2
+#if KNOB_ARCH >= KNOB_ARCH_AVX2
                 // Convert from 16-bit float to 32-bit float using _mm_cvtph_ps
                 // @todo 16bit float instruction support is orthogonal to avx support.  need to
                 // add check for F16C support instead.
@@ -581,13 +581,16 @@ INLINE static void ConvertPixelFromFloat(
     case R32G32_SINT: ConvertPixelFromFloat<R32G32_SINT>(pDst, srcPixel); break;
     case R32G32_UINT: ConvertPixelFromFloat<R32G32_UINT>(pDst, srcPixel); break;
     case R32_FLOAT_X8X24_TYPELESS: ConvertPixelFromFloat<R32_FLOAT_X8X24_TYPELESS>(pDst, srcPixel); break;
+    case X32_TYPELESS_G8X24_UINT: ConvertPixelFromFloat<X32_TYPELESS_G8X24_UINT>(pDst, srcPixel); break;
+    case L32A32_FLOAT: ConvertPixelFromFloat<L32A32_FLOAT>(pDst, srcPixel); break;
     case R16G16B16X16_UNORM: ConvertPixelFromFloat<R16G16B16X16_UNORM>(pDst, srcPixel); break;
     case R16G16B16X16_FLOAT: ConvertPixelFromFloat<R16G16B16X16_FLOAT>(pDst, srcPixel); break;
+    case L32X32_FLOAT: ConvertPixelFromFloat<L32X32_FLOAT>(pDst, srcPixel); break;
+    case I32X32_FLOAT: ConvertPixelFromFloat<I32X32_FLOAT>(pDst, srcPixel); break;
     case R16G16B16A16_SSCALED: ConvertPixelFromFloat<R16G16B16A16_SSCALED>(pDst, srcPixel); break;
     case R16G16B16A16_USCALED: ConvertPixelFromFloat<R16G16B16A16_USCALED>(pDst, srcPixel); break;
     case R32G32_SSCALED: ConvertPixelFromFloat<R32G32_SSCALED>(pDst, srcPixel); break;
     case R32G32_USCALED: ConvertPixelFromFloat<R32G32_USCALED>(pDst, srcPixel); break;
-    case R32_FLOAT_X8X24_TYPELESS_LD: ConvertPixelFromFloat<R32_FLOAT_X8X24_TYPELESS_LD>(pDst, srcPixel); break;
     case B8G8R8A8_UNORM: ConvertPixelFromFloat<B8G8R8A8_UNORM>(pDst, srcPixel); break;
     case B8G8R8A8_UNORM_SRGB: ConvertPixelFromFloat<B8G8R8A8_UNORM_SRGB>(pDst, srcPixel); break;
     case R10G10B10A2_UNORM: ConvertPixelFromFloat<R10G10B10A2_UNORM>(pDst, srcPixel); break;
@@ -606,11 +609,18 @@ INLINE static void ConvertPixelFromFloat(
     case B10G10R10A2_UNORM: ConvertPixelFromFloat<B10G10R10A2_UNORM>(pDst, srcPixel); break;
     case B10G10R10A2_UNORM_SRGB: ConvertPixelFromFloat<B10G10R10A2_UNORM_SRGB>(pDst, srcPixel); break;
     case R11G11B10_FLOAT: ConvertPixelFromFloat<R11G11B10_FLOAT>(pDst, srcPixel); break;
+    case R10G10B10_FLOAT_A2_UNORM: ConvertPixelFromFloat<R10G10B10_FLOAT_A2_UNORM>(pDst, srcPixel); break;
     case R32_SINT: ConvertPixelFromFloat<R32_SINT>(pDst, srcPixel); break;
     case R32_UINT: ConvertPixelFromFloat<R32_UINT>(pDst, srcPixel); break;
     case R32_FLOAT: ConvertPixelFromFloat<R32_FLOAT>(pDst, srcPixel); break;
     case R24_UNORM_X8_TYPELESS: ConvertPixelFromFloat<R24_UNORM_X8_TYPELESS>(pDst, srcPixel); break;
-    case R24_UNORM_X8_TYPELESS_LD: ConvertPixelFromFloat<R24_UNORM_X8_TYPELESS_LD>(pDst, srcPixel); break;
+    case X24_TYPELESS_G8_UINT: ConvertPixelFromFloat<X24_TYPELESS_G8_UINT>(pDst, srcPixel); break;
+    case L32_UNORM: ConvertPixelFromFloat<L32_UNORM>(pDst, srcPixel); break;
+    case L16A16_UNORM: ConvertPixelFromFloat<L16A16_UNORM>(pDst, srcPixel); break;
+    case I24X8_UNORM: ConvertPixelFromFloat<I24X8_UNORM>(pDst, srcPixel); break;
+    case L24X8_UNORM: ConvertPixelFromFloat<L24X8_UNORM>(pDst, srcPixel); break;
+    case I32_FLOAT: ConvertPixelFromFloat<I32_FLOAT>(pDst, srcPixel); break;
+    case L32_FLOAT: ConvertPixelFromFloat<L32_FLOAT>(pDst, srcPixel); break;
     case A32_FLOAT: ConvertPixelFromFloat<A32_FLOAT>(pDst, srcPixel); break;
     case B8G8R8X8_UNORM: ConvertPixelFromFloat<B8G8R8X8_UNORM>(pDst, srcPixel); break;
     case B8G8R8X8_UNORM_SRGB: ConvertPixelFromFloat<B8G8R8X8_UNORM_SRGB>(pDst, srcPixel); break;
@@ -618,6 +628,7 @@ INLINE static void ConvertPixelFromFloat(
     case R8G8B8X8_UNORM_SRGB: ConvertPixelFromFloat<R8G8B8X8_UNORM_SRGB>(pDst, srcPixel); break;
     case R9G9B9E5_SHAREDEXP: ConvertPixelFromFloat<R9G9B9E5_SHAREDEXP>(pDst, srcPixel); break;
     case B10G10R10X2_UNORM: ConvertPixelFromFloat<B10G10R10X2_UNORM>(pDst, srcPixel); break;
+    case L16A16_FLOAT: ConvertPixelFromFloat<L16A16_FLOAT>(pDst, srcPixel); break;
     case R10G10B10X2_USCALED: ConvertPixelFromFloat<R10G10B10X2_USCALED>(pDst, srcPixel); break;
     case R8G8B8A8_SSCALED: ConvertPixelFromFloat<R8G8B8A8_SSCALED>(pDst, srcPixel); break;
     case R8G8B8A8_USCALED: ConvertPixelFromFloat<R8G8B8A8_USCALED>(pDst, srcPixel); break;
@@ -640,21 +651,38 @@ INLINE static void ConvertPixelFromFloat(
     case R16_SINT: ConvertPixelFromFloat<R16_SINT>(pDst, srcPixel); break;
     case R16_UINT: ConvertPixelFromFloat<R16_UINT>(pDst, srcPixel); break;
     case R16_FLOAT: ConvertPixelFromFloat<R16_FLOAT>(pDst, srcPixel); break;
+    case I16_UNORM: ConvertPixelFromFloat<I16_UNORM>(pDst, srcPixel); break;
+    case L16_UNORM: ConvertPixelFromFloat<L16_UNORM>(pDst, srcPixel); break;
     case A16_UNORM: ConvertPixelFromFloat<A16_UNORM>(pDst, srcPixel); break;
+    case L8A8_UNORM: ConvertPixelFromFloat<L8A8_UNORM>(pDst, srcPixel); break;
+    case I16_FLOAT: ConvertPixelFromFloat<I16_FLOAT>(pDst, srcPixel); break;
+    case L16_FLOAT: ConvertPixelFromFloat<L16_FLOAT>(pDst, srcPixel); break;
     case A16_FLOAT: ConvertPixelFromFloat<A16_FLOAT>(pDst, srcPixel); break;
+    case L8A8_UNORM_SRGB: ConvertPixelFromFloat<L8A8_UNORM_SRGB>(pDst, srcPixel); break;
     case B5G5R5X1_UNORM: ConvertPixelFromFloat<B5G5R5X1_UNORM>(pDst, srcPixel); break;
     case B5G5R5X1_UNORM_SRGB: ConvertPixelFromFloat<B5G5R5X1_UNORM_SRGB>(pDst, srcPixel); break;
     case R8G8_SSCALED: ConvertPixelFromFloat<R8G8_SSCALED>(pDst, srcPixel); break;
     case R8G8_USCALED: ConvertPixelFromFloat<R8G8_USCALED>(pDst, srcPixel); break;
     case R16_SSCALED: ConvertPixelFromFloat<R16_SSCALED>(pDst, srcPixel); break;
     case R16_USCALED: ConvertPixelFromFloat<R16_USCALED>(pDst, srcPixel); break;
+    case A1B5G5R5_UNORM: ConvertPixelFromFloat<A1B5G5R5_UNORM>(pDst, srcPixel); break;
+    case A4B4G4R4_UNORM: ConvertPixelFromFloat<A4B4G4R4_UNORM>(pDst, srcPixel); break;
+    case L8A8_UINT: ConvertPixelFromFloat<L8A8_UINT>(pDst, srcPixel); break;
+    case L8A8_SINT: ConvertPixelFromFloat<L8A8_SINT>(pDst, srcPixel); break;
     case R8_UNORM: ConvertPixelFromFloat<R8_UNORM>(pDst, srcPixel); break;
     case R8_SNORM: ConvertPixelFromFloat<R8_SNORM>(pDst, srcPixel); break;
     case R8_SINT: ConvertPixelFromFloat<R8_SINT>(pDst, srcPixel); break;
     case R8_UINT: ConvertPixelFromFloat<R8_UINT>(pDst, srcPixel); break;
     case A8_UNORM: ConvertPixelFromFloat<A8_UNORM>(pDst, srcPixel); break;
+    case I8_UNORM: ConvertPixelFromFloat<I8_UNORM>(pDst, srcPixel); break;
+    case L8_UNORM: ConvertPixelFromFloat<L8_UNORM>(pDst, srcPixel); break;
     case R8_SSCALED: ConvertPixelFromFloat<R8_SSCALED>(pDst, srcPixel); break;
     case R8_USCALED: ConvertPixelFromFloat<R8_USCALED>(pDst, srcPixel); break;
+    case L8_UNORM_SRGB: ConvertPixelFromFloat<L8_UNORM_SRGB>(pDst, srcPixel); break;
+    case L8_UINT: ConvertPixelFromFloat<L8_UINT>(pDst, srcPixel); break;
+    case L8_SINT: ConvertPixelFromFloat<L8_SINT>(pDst, srcPixel); break;
+    case I8_UINT: ConvertPixelFromFloat<I8_UINT>(pDst, srcPixel); break;
+    case I8_SINT: ConvertPixelFromFloat<I8_SINT>(pDst, srcPixel); break;
     case YCRCB_SWAPUVY: ConvertPixelFromFloat<YCRCB_SWAPUVY>(pDst, srcPixel); break;
     case BC1_UNORM: ConvertPixelFromFloat<BC1_UNORM>(pDst, srcPixel); break;
     case BC2_UNORM: ConvertPixelFromFloat<BC2_UNORM>(pDst, srcPixel); break;
@@ -676,8 +704,10 @@ INLINE static void ConvertPixelFromFloat(
     case R16G16B16_SNORM: ConvertPixelFromFloat<R16G16B16_SNORM>(pDst, srcPixel); break;
     case R16G16B16_SSCALED: ConvertPixelFromFloat<R16G16B16_SSCALED>(pDst, srcPixel); break;
     case R16G16B16_USCALED: ConvertPixelFromFloat<R16G16B16_USCALED>(pDst, srcPixel); break;
+    case BC6H_SF16: ConvertPixelFromFloat<BC6H_SF16>(pDst, srcPixel); break;
     case BC7_UNORM: ConvertPixelFromFloat<BC7_UNORM>(pDst, srcPixel); break;
     case BC7_UNORM_SRGB: ConvertPixelFromFloat<BC7_UNORM_SRGB>(pDst, srcPixel); break;
+    case BC6H_UF16: ConvertPixelFromFloat<BC6H_UF16>(pDst, srcPixel); break;
     case R8G8B8_UNORM_SRGB: ConvertPixelFromFloat<R8G8B8_UNORM_SRGB>(pDst, srcPixel); break;
     case R16G16B16_UINT: ConvertPixelFromFloat<R16G16B16_UINT>(pDst, srcPixel); break;
     case R16G16B16_SINT: ConvertPixelFromFloat<R16G16B16_SINT>(pDst, srcPixel); break;
@@ -692,9 +722,8 @@ INLINE static void ConvertPixelFromFloat(
     case B10G10R10A2_SINT: ConvertPixelFromFloat<B10G10R10A2_SINT>(pDst, srcPixel); break;
     case R8G8B8_UINT: ConvertPixelFromFloat<R8G8B8_UINT>(pDst, srcPixel); break;
     case R8G8B8_SINT: ConvertPixelFromFloat<R8G8B8_SINT>(pDst, srcPixel); break;
+    case RAW: ConvertPixelFromFloat<RAW>(pDst, srcPixel); break;
     default:
         break;
     }
 }
-
-

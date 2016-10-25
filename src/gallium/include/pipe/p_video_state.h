@@ -131,6 +131,7 @@ enum pipe_h264_enc_rate_control_method
 struct pipe_picture_desc
 {
    enum pipe_video_profile profile;
+   enum pipe_video_entrypoint entry_point;
 };
 
 struct pipe_quant_matrix
@@ -352,9 +353,29 @@ struct pipe_h264_enc_rate_control
    unsigned frame_rate_num;
    unsigned frame_rate_den;
    unsigned vbv_buffer_size;
+   unsigned vbv_buf_lv;
    unsigned target_bits_picture;
    unsigned peak_bits_picture_integer;
    unsigned peak_bits_picture_fraction;
+   unsigned fill_data_enable;
+   unsigned enforce_hrd;
+};
+
+struct pipe_h264_enc_motion_estimation
+{
+   unsigned motion_est_quarter_pixel;
+   unsigned enc_disable_sub_mode;
+   unsigned lsmvert;
+   unsigned enc_en_ime_overw_dis_subm;
+   unsigned enc_ime_overw_dis_subm_no;
+   unsigned enc_ime2_search_range_x;
+   unsigned enc_ime2_search_range_y;
+};
+
+struct pipe_h264_enc_pic_control
+{
+   unsigned enc_cabac_enable;
+   unsigned enc_constraint_set_flags;
 };
 
 struct pipe_h264_enc_picture_desc
@@ -363,17 +384,30 @@ struct pipe_h264_enc_picture_desc
 
    struct pipe_h264_enc_rate_control rate_ctrl;
 
+   struct pipe_h264_enc_motion_estimation motion_est;
+   struct pipe_h264_enc_pic_control pic_ctrl;
+
    unsigned quant_i_frames;
    unsigned quant_p_frames;
    unsigned quant_b_frames;
 
    enum pipe_h264_enc_picture_type picture_type;
    unsigned frame_num;
+   unsigned frame_num_cnt;
+   unsigned p_remain;
+   unsigned i_remain;
+   unsigned idr_pic_id;
+   unsigned gop_cnt;
    unsigned pic_order_cnt;
    unsigned ref_idx_l0;
    unsigned ref_idx_l1;
+   unsigned gop_size;
+   unsigned ref_pic_mode;
 
    bool not_referenced;
+   bool is_idr;
+   bool enable_vui;
+   unsigned int frame_idx[32];
 };
 
 struct pipe_h265_sps

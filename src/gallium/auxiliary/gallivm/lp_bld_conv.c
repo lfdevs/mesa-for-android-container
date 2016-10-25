@@ -311,7 +311,7 @@ lp_build_clamped_float_to_unsigned_norm(struct gallivm_state *gallivm,
        * important, we also get exact results for 0.0 and 1.0.
        */
 
-      unsigned n = MIN2(src_type.width - 1, dst_width);
+      unsigned n = MIN2(src_type.width - 1u, dst_width);
 
       double scale = (double)(1ULL << n);
       unsigned lshift = dst_width - n;
@@ -445,7 +445,7 @@ int lp_build_conv_auto(struct gallivm_state *gallivm,
                        unsigned num_srcs,
                        LLVMValueRef *dst)
 {
-   int i;
+   unsigned i;
    int num_dsts = num_srcs;
 
    if (src_type.floating == dst_type->floating &&

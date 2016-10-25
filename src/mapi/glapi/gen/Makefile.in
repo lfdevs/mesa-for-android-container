@@ -89,9 +89,10 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 @HAVE_APPLEDRI_TRUE@am__append_1 = $(MESA_GLAPI_DIR)/glapi_gentable.c
-@HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__append_2 = $(MESA_GLAPI_DIR)/glapi_x86-64.S
-@HAVE_X86_64_ASM_FALSE@@HAVE_X86_ASM_TRUE@am__append_3 = $(MESA_GLAPI_DIR)/glapi_x86.S
-@HAVE_SPARC_ASM_TRUE@am__append_4 = $(MESA_GLAPI_DIR)/glapi_sparc.S
+@HAVE_WINDOWSDRI_TRUE@am__append_2 = $(MESA_GLAPI_DIR)/glapi_gentable.c
+@HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__append_3 = $(MESA_GLAPI_DIR)/glapi_x86-64.S
+@HAVE_X86_64_ASM_FALSE@@HAVE_X86_ASM_TRUE@am__append_4 = $(MESA_GLAPI_DIR)/glapi_x86.S
+@HAVE_SPARC_ASM_TRUE@am__append_5 = $(MESA_GLAPI_DIR)/glapi_sparc.S
 subdir = src/mapi/glapi/gen
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -233,11 +234,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -333,6 +333,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -368,6 +370,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -456,9 +459,9 @@ MESA_MAPI_DIR = $(top_srcdir)/src/mapi
 MESA_GLX_DIR = $(top_builddir)/src/glx
 MESA_GLAPI_OUTPUTS = $(MESA_GLAPI_DIR)/glapi_mapi_tmp.h \
 	$(MESA_GLAPI_DIR)/glprocs.h $(MESA_GLAPI_DIR)/glapitemp.h \
-	$(MESA_GLAPI_DIR)/glapitable.h $(am__append_1)
-MESA_GLAPI_ASM_OUTPUTS = $(am__append_2) $(am__append_3) \
-	$(am__append_4)
+	$(MESA_GLAPI_DIR)/glapitable.h $(am__append_1) $(am__append_2)
+MESA_GLAPI_ASM_OUTPUTS = $(am__append_3) $(am__append_4) \
+	$(am__append_5)
 BUILT_SOURCES = \
 	$(MESA_GLAPI_OUTPUTS) \
 	$(MESA_GLAPI_ASM_OUTPUTS) \
@@ -528,6 +531,7 @@ API_XML = \
 	ARB_color_buffer_float.xml \
 	ARB_compressed_texture_pixel_storage.xml \
 	ARB_compute_shader.xml \
+	ARB_compute_variable_group_size.xml \
 	ARB_copy_buffer.xml \
 	ARB_copy_image.xml \
 	ARB_debug_output.xml \
@@ -599,6 +603,7 @@ API_XML = \
 	EXT_texture_array.xml \
 	EXT_texture_integer.xml \
 	EXT_transform_feedback.xml \
+	EXT_window_rectangles.xml \
 	GREMEDY_string_marker.xml \
 	INTEL_performance_query.xml \
 	KHR_debug.xml \

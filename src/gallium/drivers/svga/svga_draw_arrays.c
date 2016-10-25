@@ -100,6 +100,8 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
    enum pipe_error ret = PIPE_OK;
    int i;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(hwtnl->svga), SVGA_STATS_TIME_GENERATEINDICES);
+
    for (i = 0; i < IDX_CACHE_MAX; i++) {
       if (hwtnl->index_cache[prim][i].buffer != NULL &&
           hwtnl->index_cache[prim][i].generate == generate) {
@@ -110,7 +112,7 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
             if (DBG)
                debug_printf("%s retrieve %d/%d\n", __FUNCTION__, i, gen_nr);
 
-            return PIPE_OK;
+            goto done;
          }
          else if (gen_type == U_GENERATE_REUSABLE) {
             pipe_resource_reference(&hwtnl->index_cache[prim][i].buffer,
@@ -154,7 +156,7 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
 
    ret = generate_indices(hwtnl, gen_nr, gen_size, generate, out_buf);
    if (ret != PIPE_OK)
-      return ret;
+      goto done;
 
    hwtnl->index_cache[prim][i].generate = generate;
    hwtnl->index_cache[prim][i].gen_nr = gen_nr;
@@ -164,7 +166,9 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
       debug_printf("%s cache %d/%d\n", __FUNCTION__,
                    i, hwtnl->index_cache[prim][i].gen_nr);
 
-   return PIPE_OK;
+done:
+   SVGA_STATS_TIME_POP(svga_sws(hwtnl->svga));
+   return ret;
 }
 
 
@@ -212,6 +216,8 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
    enum pipe_error ret = PIPE_OK;
    unsigned api_pv = hwtnl->api_pv;
    struct svga_context *svga = hwtnl->svga;
+
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_HWTNLDRAWARRAYS);
 
    if (svga->curr.rast->templ.fill_front !=
        svga->curr.rast->templ.fill_back) {
@@ -266,7 +272,7 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
    }
 
    if (gen_type == U_GENERATE_LINEAR) {
-      return simple_draw_arrays(hwtnl, gen_prim, start, count,
+      ret = simple_draw_arrays(hwtnl, gen_prim, start, count,
                                 start_instance, instance_count);
    }
    else {
@@ -296,13 +302,11 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
                                                   gen_prim, 0, gen_nr,
                                                   start_instance,
                                                   instance_count);
-      if (ret != PIPE_OK)
-         goto done;
-
 done:
       if (gen_buf)
          pipe_resource_reference(&gen_buf, NULL);
-
-      return ret;
    }
+
+   SVGA_STATS_TIME_POP(svga_sws(svga));
+   return ret;
 }

@@ -26,10 +26,12 @@
 #include "d3d9types.h"
 #include "d3d9caps.h"
 #include "nine_defines.h"
+#include "nine_helpers.h"
 #include "pipe/p_state.h" /* PIPE_MAX_ATTRIBS */
 #include "util/u_memory.h"
 
 struct NineDevice9;
+struct NineVertexDeclaration9;
 
 struct nine_lconstf /* NOTE: both pointers should be FREE'd by the user */
 {
@@ -76,6 +78,20 @@ struct nine_shader_info
 
     struct nine_lconstf lconstf; /* out, NOTE: members to be free'd by user */
     uint8_t bumpenvmat_needed;
+
+    boolean swvp_on;
+
+    boolean process_vertices;
+    struct NineVertexDeclaration9 *vdecl_out;
+    struct pipe_stream_output_info so;
+};
+
+struct nine_vs_output_info
+{
+    BYTE output_semantic;
+    int output_semantic_index;
+    int mask;
+    int output_index;
 };
 
 static inline void
@@ -143,6 +159,67 @@ nine_shader_variants_free(struct nine_shader_variant *list)
         list->next = ptr->next;
         FREE(ptr);
     }
+}
+
+struct nine_shader_variant_so
+{
+    struct nine_shader_variant_so *next;
+    struct NineVertexDeclaration9 *vdecl;
+    struct pipe_stream_output_info so;
+    void *cso;
+};
+
+static inline void *
+nine_shader_variant_so_get(struct nine_shader_variant_so *list,
+                           struct NineVertexDeclaration9 *vdecl,
+                           struct pipe_stream_output_info *so)
+{
+    while (list->vdecl != vdecl && list->next)
+        list = list->next;
+    if (list->vdecl == vdecl) {
+        *so = list->so;
+        return list->cso;
+    }
+    return NULL;
+}
+
+static inline boolean
+nine_shader_variant_so_add(struct nine_shader_variant_so *list,
+                           struct NineVertexDeclaration9 *vdecl,
+                           struct pipe_stream_output_info *so, void *cso)
+{
+    if (list->vdecl == NULL) { /* first shader */
+        list->next = NULL;
+        nine_bind(&list->vdecl, vdecl);
+        list->so = *so;
+        list->cso = cso;
+        return TRUE;
+    }
+    while (list->next) {
+        assert(list->vdecl != vdecl);
+        list = list->next;
+    }
+    list->next = MALLOC_STRUCT(nine_shader_variant_so);
+    if (!list->next)
+        return FALSE;
+    list->next->next = NULL;
+    nine_bind(&list->vdecl, vdecl);
+    list->next->so = *so;
+    list->next->cso = cso;
+    return TRUE;
+}
+
+static inline void
+nine_shader_variants_so_free(struct nine_shader_variant_so *list)
+{
+    while (list->next) {
+        struct nine_shader_variant_so *ptr = list->next;
+        list->next = ptr->next;
+        nine_bind(&ptr->vdecl, NULL);
+        FREE(ptr);
+    }
+    if (list->vdecl)
+        nine_bind(&list->vdecl, NULL);
 }
 
 #endif /* _NINE_SHADER_H_ */

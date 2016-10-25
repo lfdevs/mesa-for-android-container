@@ -263,8 +263,6 @@ public:
 	}
 };
 
-class value;
-
 enum value_kind {
 	VLK_REG,
 	VLK_REL_REG,
@@ -433,8 +431,6 @@ inline value_flags& operator &=(value_flags &l, value_flags r) {
 	return l;
 }
 
-struct value;
-
 sb_ostream& operator << (sb_ostream &o, value &v);
 
 typedef uint32_t value_hash;
@@ -467,7 +463,7 @@ enum constraint_kind {
 
 class shader;
 class sb_value_pool;
-class ra_chunk;
+struct ra_chunk;
 class ra_constraint;
 
 class value {

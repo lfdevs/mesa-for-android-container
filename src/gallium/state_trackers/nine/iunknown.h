@@ -53,6 +53,9 @@ struct NineUnknown
 
     const GUID **guids; /* for QueryInterface */
 
+    /* for [GS]etPrivateData/FreePrivateData */
+    struct util_hash_table *pdata;
+
     void (*dtor)(void *data); /* top-level dtor */
 };
 static inline struct NineUnknown *
@@ -94,6 +97,23 @@ NineUnknown_Release( struct NineUnknown *This );
 HRESULT NINE_WINAPI
 NineUnknown_GetDevice( struct NineUnknown *This,
                        IDirect3DDevice9 **ppDevice );
+
+HRESULT NINE_WINAPI
+NineUnknown_SetPrivateData( struct NineUnknown *This,
+                            REFGUID refguid,
+                            const void *pData,
+                            DWORD SizeOfData,
+                            DWORD Flags );
+
+HRESULT NINE_WINAPI
+NineUnknown_GetPrivateData( struct NineUnknown *This,
+                            REFGUID refguid,
+                            void *pData,
+                            DWORD *pSizeOfData );
+
+HRESULT NINE_WINAPI
+NineUnknown_FreePrivateData( struct NineUnknown *This,
+                             REFGUID refguid );
 
 /*** Nine private methods ***/
 

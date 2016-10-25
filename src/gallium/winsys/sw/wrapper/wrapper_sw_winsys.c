@@ -202,7 +202,7 @@ wsw_dt_get_handle(struct sw_winsys *ws,
    struct wrapper_sw_displaytarget *wdt = wrapper_sw_displaytarget(dt);
    struct pipe_resource *tex = wdt->tex;
 
-   return wsw->screen->resource_get_handle(wsw->screen, tex, whandle,
+   return wsw->screen->resource_get_handle(wsw->screen, NULL, tex, whandle,
                                            PIPE_HANDLE_USAGE_READ_WRITE);
 }
 

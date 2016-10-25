@@ -34,6 +34,7 @@
 #include "pipe/p_video_state.h"
 #include "pipe/p_state.h"
 
+#include "util/macros.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
@@ -226,8 +227,8 @@ Status XvMCRenderSurface(Display *dpy, XvMCContext *context, unsigned int pictur
 
    XvMCContextPrivate *context_priv;
    XvMCSurfacePrivate *target_surface_priv;
-   XvMCSurfacePrivate *past_surface_priv;
-   XvMCSurfacePrivate *future_surface_priv;
+   MAYBE_UNUSED XvMCSurfacePrivate *past_surface_priv;
+   MAYBE_UNUSED XvMCSurfacePrivate *future_surface_priv;
    XvMCMacroBlock *xvmc_mb;
 
    XVMC_MSG(XVMC_TRACE, "[XvMC] Rendering to surface %p, with past %p and future %p\n",
@@ -488,7 +489,7 @@ Status XvMCGetSurfaceStatus(Display *dpy, XvMCSurface *surface, int *status)
    *status = 0;
 
    if (surface_priv->fence)
-      if (!pipe->screen->fence_finish(pipe->screen, surface_priv->fence, 0))
+      if (!pipe->screen->fence_finish(pipe->screen, NULL, surface_priv->fence, 0))
          *status |= XVMC_RENDERING;
 
    return Success;

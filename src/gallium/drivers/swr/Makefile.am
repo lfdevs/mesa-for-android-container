@@ -29,18 +29,22 @@ noinst_LTLIBRARIES = libmesaswr.la
 libmesaswr_la_SOURCES = $(LOADER_SOURCES)
 
 COMMON_CXXFLAGS = \
+	-fno-strict-aliasing \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(LLVM_CXXFLAGS) \
 	$(SWR_CXX11_CXXFLAGS) \
 	-I$(builddir)/rasterizer/scripts \
 	-I$(builddir)/rasterizer/jitter \
+	-I$(builddir)/rasterizer/archrast \
 	-I$(srcdir)/rasterizer \
 	-I$(srcdir)/rasterizer/core \
 	-I$(srcdir)/rasterizer/scripts \
-	-I$(srcdir)/rasterizer/jitter
+	-I$(srcdir)/rasterizer/jitter \
+	-I$(srcdir)/rasterizer/archrast
 
 COMMON_SOURCES = \
 	$(CXX_SOURCES) \
+	$(ARCHRAST_CXX_SOURCES) \
 	$(COMMON_CXX_SOURCES) \
 	$(CORE_CXX_SOURCES) \
 	$(JITTER_CXX_SOURCES) \
@@ -53,7 +57,11 @@ BUILT_SOURCES = \
 	rasterizer/scripts/gen_knobs.h \
 	rasterizer/jitter/state_llvm.h \
 	rasterizer/jitter/builder_x86.h \
-	rasterizer/jitter/builder_x86.cpp
+	rasterizer/jitter/builder_x86.cpp \
+	rasterizer/archrast/gen_ar_event.h \
+	rasterizer/archrast/gen_ar_event.cpp \
+	rasterizer/archrast/gen_ar_eventhandler.h \
+	rasterizer/archrast/gen_ar_eventhandlerfile.h
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
@@ -106,6 +114,37 @@ rasterizer/jitter/builder_x86.cpp: rasterizer/jitter/scripts/gen_llvm_ir_macros.
 		--output rasterizer/jitter/builder_x86.cpp \
 		--gen_x86_cpp
 
+rasterizer/archrast/gen_ar_event.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_event_h.template rasterizer/archrast/events.proto
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		--proto $(srcdir)/rasterizer/archrast/events.proto \
+		--output rasterizer/archrast/gen_ar_event.h \
+		--gen_event_h
+
+rasterizer/archrast/gen_ar_event.cpp: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_event_cpp.template rasterizer/archrast/events.proto
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		--proto $(srcdir)/rasterizer/archrast/events.proto \
+		--output rasterizer/archrast/gen_ar_event.cpp \
+		--gen_event_cpp
+
+rasterizer/archrast/gen_ar_eventhandler.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_eventhandler_h.template rasterizer/archrast/events.proto
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		--proto $(srcdir)/rasterizer/archrast/events.proto \
+		--output rasterizer/archrast/gen_ar_eventhandler.h \
+		--gen_eventhandler_h
+
+rasterizer/archrast/gen_ar_eventhandlerfile.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_eventhandlerfile_h.template rasterizer/archrast/events.proto
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		--proto $(srcdir)/rasterizer/archrast/events.proto \
+		--output rasterizer/archrast/gen_ar_eventhandlerfile.h \
+		--gen_eventhandlerfile_h
 
 COMMON_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
@@ -196,8 +235,10 @@ libswrAVX2_la_LDFLAGS = \
 include $(top_srcdir)/install-gallium-links.mk
 
 EXTRA_DIST = \
+	rasterizer/archrast/events.proto \
 	rasterizer/jitter/scripts/gen_llvm_ir_macros.py \
 	rasterizer/jitter/scripts/gen_llvm_types.py \
+	rasterizer/scripts/gen_archrast.py \
 	rasterizer/scripts/gen_knobs.py \
 	rasterizer/scripts/knob_defs.py \
 	rasterizer/scripts/mako/ast.py \
@@ -217,4 +258,8 @@ EXTRA_DIST = \
 	rasterizer/scripts/mako/runtime.py \
 	rasterizer/scripts/mako/template.py \
 	rasterizer/scripts/mako/util.py \
-	rasterizer/scripts/templates/knobs.template
+	rasterizer/scripts/templates/knobs.template \
+	rasterizer/scripts/templates/ar_event_h.template \
+	rasterizer/scripts/templates/ar_event_cpp.template \
+	rasterizer/scripts/templates/ar_eventhandler_h.template \
+	rasterizer/scripts/templates/ar_eventhandlerfile_h.template

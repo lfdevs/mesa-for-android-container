@@ -81,7 +81,8 @@ static void * assemble_tgsi(struct pipe_context *pctx,
 			.tokens = toks,
 	};
 
-	tgsi_text_translate(src, toks, ARRAY_SIZE(toks));
+	bool ret = tgsi_text_translate(src, toks, ARRAY_SIZE(toks));
+	assume(ret);
 
 	if (frag)
 		return pctx->create_fs_state(pctx, &cso);

@@ -44,6 +44,11 @@
 #include "swr_state.h"
 #include "swr_screen.h"
 
+using namespace SwrJit;
+
+static unsigned
+locate_linkage(ubyte name, ubyte index, struct tgsi_shader_info *info);
+
 bool operator==(const swr_jit_fs_key &lhs, const swr_jit_fs_key &rhs)
 {
    return !memcmp(&lhs, &rhs, sizeof(lhs));
@@ -106,7 +111,6 @@ swr_generate_fs_key(struct swr_jit_fs_key &key,
 
    key.nr_cbufs = ctx->framebuffer.nr_cbufs;
    key.light_twoside = ctx->rasterizer->light_twoside;
-   key.flatshade = ctx->rasterizer->flatshade;
    memcpy(&key.vs_output_semantic_name,
           &ctx->vs->info.base.output_semantic_name,
           sizeof(key.vs_output_semantic_name));
@@ -123,6 +127,11 @@ swr_generate_vs_key(struct swr_jit_vs_key &key,
                     swr_vertex_shader *swr_vs)
 {
    memset(&key, 0, sizeof(key));
+
+   key.clip_plane_mask =
+      swr_vs->info.base.clipdist_writemask ?
+      swr_vs->info.base.clipdist_writemask & ctx->rasterizer->clip_plane_enable :
+      ctx->rasterizer->clip_plane_enable;
 
    swr_generate_sampler_key(swr_vs->info, ctx, PIPE_SHADER_VERTEX, key);
 }
@@ -149,18 +158,6 @@ PFN_VERTEX_FUNC
 BuilderSWR::CompileVS(struct swr_context *ctx, swr_jit_vs_key &key)
 {
    struct swr_vertex_shader *swr_vs = ctx->vs;
-
-   swr_vs->linkageMask = 0;
-
-   for (unsigned i = 0; i < swr_vs->info.base.num_outputs; i++) {
-      switch (swr_vs->info.base.output_semantic_name[i]) {
-      case TGSI_SEMANTIC_POSITION:
-         break;
-      default:
-         swr_vs->linkageMask |= (1 << i);
-         break;
-      }
-   }
 
    LLVMValueRef inputs[PIPE_MAX_SHADER_INPUTS][TGSI_NUM_CHANNELS];
    LLVMValueRef outputs[PIPE_MAX_SHADER_OUTPUTS][TGSI_NUM_CHANNELS];
@@ -253,6 +250,63 @@ BuilderSWR::CompileVS(struct swr_context *ctx, swr_jit_vs_key &key)
          if (swr_vs->info.base.output_semantic_name[attrib] == TGSI_SEMANTIC_PSIZE)
             outSlot = VERTEX_POINT_SIZE_SLOT;
          STORE(val, vtxOutput, {0, 0, outSlot, channel});
+      }
+   }
+
+   if (ctx->rasterizer->clip_plane_enable ||
+       swr_vs->info.base.culldist_writemask) {
+      unsigned clip_mask = ctx->rasterizer->clip_plane_enable;
+
+      unsigned cv = 0;
+      if (swr_vs->info.base.writes_clipvertex) {
+         cv = 1 + locate_linkage(TGSI_SEMANTIC_CLIPVERTEX, 0,
+                                 &swr_vs->info.base);
+      } else {
+         for (int i = 0; i < PIPE_MAX_SHADER_OUTPUTS; i++) {
+            if (swr_vs->info.base.output_semantic_name[i] == TGSI_SEMANTIC_POSITION &&
+                swr_vs->info.base.output_semantic_index[i] == 0) {
+               cv = i;
+               break;
+            }
+         }
+      }
+      LLVMValueRef cx = LLVMBuildLoad(gallivm->builder, outputs[cv][0], "");
+      LLVMValueRef cy = LLVMBuildLoad(gallivm->builder, outputs[cv][1], "");
+      LLVMValueRef cz = LLVMBuildLoad(gallivm->builder, outputs[cv][2], "");
+      LLVMValueRef cw = LLVMBuildLoad(gallivm->builder, outputs[cv][3], "");
+
+      for (unsigned val = 0; val < PIPE_MAX_CLIP_PLANES; val++) {
+         // clip distance overrides user clip planes
+         if ((swr_vs->info.base.clipdist_writemask & clip_mask & (1 << val)) ||
+             ((swr_vs->info.base.culldist_writemask << swr_vs->info.base.num_written_clipdistance) & (1 << val))) {
+            unsigned cv = 1 + locate_linkage(TGSI_SEMANTIC_CLIPDIST, val < 4 ? 0 : 1,
+                                             &swr_vs->info.base);
+            if (val < 4) {
+               LLVMValueRef dist = LLVMBuildLoad(gallivm->builder, outputs[cv][val], "");
+               STORE(unwrap(dist), vtxOutput, {0, 0, VERTEX_CLIPCULL_DIST_LO_SLOT, val});
+            } else {
+               LLVMValueRef dist = LLVMBuildLoad(gallivm->builder, outputs[cv][val - 4], "");
+               STORE(unwrap(dist), vtxOutput, {0, 0, VERTEX_CLIPCULL_DIST_HI_SLOT, val - 4});
+            }
+            continue;
+         }
+
+         if (!(clip_mask & (1 << val)))
+            continue;
+
+         Value *px = LOAD(GEP(hPrivateData, {0, swr_draw_context_userClipPlanes, val, 0}));
+         Value *py = LOAD(GEP(hPrivateData, {0, swr_draw_context_userClipPlanes, val, 1}));
+         Value *pz = LOAD(GEP(hPrivateData, {0, swr_draw_context_userClipPlanes, val, 2}));
+         Value *pw = LOAD(GEP(hPrivateData, {0, swr_draw_context_userClipPlanes, val, 3}));
+         Value *dist = FADD(FMUL(unwrap(cx), VBROADCAST(px)),
+                            FADD(FMUL(unwrap(cy), VBROADCAST(py)),
+                                 FADD(FMUL(unwrap(cz), VBROADCAST(pz)),
+                                      FMUL(unwrap(cw), VBROADCAST(pw)))));
+
+         if (val < 4)
+            STORE(dist, vtxOutput, {0, 0, VERTEX_CLIPCULL_DIST_LO_SLOT, val});
+         else
+            STORE(dist, vtxOutput, {0, 0, VERTEX_CLIPCULL_DIST_HI_SLOT, val - 4});
       }
    }
 
@@ -355,15 +409,13 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
       GEP(hPrivateData, {0, swr_draw_context_num_constantsFS});
    const_sizes_ptr->setName("num_fs_constants");
 
-   // xxx should check for flat shading versus interpolation
-
-
    // load *pAttribs, *pPerspAttribs
    Value *pRawAttribs = LOAD(pPS, {0, SWR_PS_CONTEXT_pAttribs}, "pRawAttribs");
    Value *pPerspAttribs =
       LOAD(pPS, {0, SWR_PS_CONTEXT_pPerspAttribs}, "pPerspAttribs");
 
    swr_fs->constantMask = 0;
+   swr_fs->flatConstantMask = 0;
    swr_fs->pointSpriteMask = 0;
 
    for (int attrib = 0; attrib < PIPE_MAX_SHADER_INPUTS; attrib++) {
@@ -461,6 +513,8 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
 
       if (interpMode == TGSI_INTERPOLATE_CONSTANT) {
          swr_fs->constantMask |= 1 << linkedAttrib;
+      } else if (interpMode == TGSI_INTERPOLATE_COLOR) {
+         swr_fs->flatConstantMask |= 1 << linkedAttrib;
       }
 
       for (int channel = 0; channel < TGSI_NUM_CHANNELS; channel++) {
@@ -488,6 +542,8 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
 
                if (interpMode == TGSI_INTERPOLATE_CONSTANT) {
                   swr_fs->constantMask |= 1 << bcolorAttrib;
+               } else if (interpMode == TGSI_INTERPOLATE_COLOR) {
+                  swr_fs->flatConstantMask |= 1 << bcolorAttrib;
                }
             }
 
@@ -497,9 +553,6 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
 
             if (interpMode == TGSI_INTERPOLATE_CONSTANT) {
                inputs[attrib][channel] = wrap(va);
-            } else if ((interpMode == TGSI_INTERPOLATE_COLOR) &&
-                       (key.flatshade == true)) {
-               inputs[attrib][channel] = wrap(vc);
             } else {
                Value *vk = FSUB(FSUB(VIMMED1(1.0f), vi), vj);
 

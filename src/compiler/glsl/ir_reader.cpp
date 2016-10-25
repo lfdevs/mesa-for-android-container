@@ -208,7 +208,7 @@ ir_reader::read_function(s_expression *expr, bool skip_body)
    /* Skip over "function" tag and function name (which are guaranteed to be
     * present by the above PARTIAL_MATCH call).
     */
-   exec_node *node = ((s_list *) expr)->subexpressions.head->next->next;
+   exec_node *node = ((s_list *) expr)->subexpressions.get_head_raw()->next->next;
    for (/* nothing */; !node->is_tail_sentinel(); node = node->next) {
       s_expression *s_sig = (s_expression *) node;
       read_function_sig(f, s_sig, skip_body);
@@ -251,7 +251,7 @@ ir_reader::read_function_sig(ir_function *f, s_expression *expr, bool skip_body)
    state->symbols->push_scope();
 
    /* Skip over the "parameters" tag. */
-   exec_node *node = paramlist->subexpressions.head->next;
+   exec_node *node = paramlist->subexpressions.get_head_raw()->next;
    for (/* nothing */; !node->is_tail_sentinel(); node = node->next) {
       ir_variable *var = read_declaration((s_expression *) node);
       if (var == NULL)
@@ -448,11 +448,11 @@ ir_reader::read_declaration(s_expression *expr)
       } else if (strcmp(qualifier->value(), "stream3") == 0) {
 	 var->data.stream = 3;
       } else if (strcmp(qualifier->value(), "smooth") == 0) {
-	 var->data.interpolation = INTERP_QUALIFIER_SMOOTH;
+	 var->data.interpolation = INTERP_MODE_SMOOTH;
       } else if (strcmp(qualifier->value(), "flat") == 0) {
-	 var->data.interpolation = INTERP_QUALIFIER_FLAT;
+	 var->data.interpolation = INTERP_MODE_FLAT;
       } else if (strcmp(qualifier->value(), "noperspective") == 0) {
-	 var->data.interpolation = INTERP_QUALIFIER_NOPERSPECTIVE;
+	 var->data.interpolation = INTERP_MODE_NOPERSPECTIVE;
       } else {
 	 ir_read_error(expr, "unknown qualifier: %s", qualifier->value());
 	 return NULL;

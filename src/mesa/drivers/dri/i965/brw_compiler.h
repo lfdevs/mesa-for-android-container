@@ -24,7 +24,7 @@
 #pragma once
 
 #include <stdio.h>
-#include "brw_device_info.h"
+#include "common/gen_device_info.h"
 #include "main/mtypes.h"
 #include "main/macros.h"
 
@@ -38,7 +38,7 @@ struct brw_geometry_program;
 union gl_constant_value;
 
 struct brw_compiler {
-   const struct brw_device_info *devinfo;
+   const struct gen_device_info *devinfo;
 
    struct {
       struct ra_regs *regs;
@@ -260,6 +260,7 @@ struct brw_wm_prog_key {
    unsigned line_aa:2;
    bool high_quality_derivatives:1;
    bool force_dual_color_blend:1;
+   bool coherent_fb_fetch:1;
 
    uint16_t drawable_height;
    uint64_t input_slots_valid;
@@ -388,6 +389,7 @@ struct brw_wm_prog_data {
        * surface indices the WM-specific surfaces
        */
       uint32_t render_target_start;
+      uint32_t render_target_read_start;
       /** @} */
    } binding_table;
 
@@ -564,7 +566,7 @@ GLuint brw_varying_to_offset(const struct brw_vue_map *vue_map, GLuint varying)
    return brw_vue_slot_to_offset(vue_map->varying_to_slot[varying]);
 }
 
-void brw_compute_vue_map(const struct brw_device_info *devinfo,
+void brw_compute_vue_map(const struct gen_device_info *devinfo,
                          struct brw_vue_map *vue_map,
                          GLbitfield64 slots_valid,
                          bool separate_shader);
@@ -729,11 +731,28 @@ struct brw_gs_prog_data
    unsigned char transform_feedback_swizzles[64 /* BRW_MAX_SOL_BINDINGS */];
 };
 
+#define DEFINE_PROG_DATA_DOWNCAST(stage)                       \
+static inline struct brw_##stage##_prog_data *                 \
+brw_##stage##_prog_data(struct brw_stage_prog_data *prog_data) \
+{                                                              \
+   return (struct brw_##stage##_prog_data *) prog_data;        \
+}
+DEFINE_PROG_DATA_DOWNCAST(vue)
+DEFINE_PROG_DATA_DOWNCAST(vs)
+DEFINE_PROG_DATA_DOWNCAST(tcs)
+DEFINE_PROG_DATA_DOWNCAST(tes)
+DEFINE_PROG_DATA_DOWNCAST(gs)
+DEFINE_PROG_DATA_DOWNCAST(wm)
+DEFINE_PROG_DATA_DOWNCAST(cs)
+DEFINE_PROG_DATA_DOWNCAST(ff_gs)
+DEFINE_PROG_DATA_DOWNCAST(clip)
+DEFINE_PROG_DATA_DOWNCAST(sf)
+#undef DEFINE_PROG_DATA_DOWNCAST
 
 /** @} */
 
 struct brw_compiler *
-brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo);
+brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo);
 
 /**
  * Compile a vertex shader.
@@ -864,6 +883,55 @@ encode_slm_size(unsigned gen, uint32_t bytes)
    }
 
    return slm_size;
+}
+
+/**
+ * Return true if the given shader stage is dispatched contiguously by the
+ * relevant fixed function starting from channel 0 of the SIMD thread, which
+ * implies that the dispatch mask of a thread can be assumed to have the form
+ * '2^n - 1' for some n.
+ */
+static inline bool
+brw_stage_has_packed_dispatch(const struct gen_device_info *devinfo,
+                              gl_shader_stage stage,
+                              const struct brw_stage_prog_data *prog_data)
+{
+   /* The code below makes assumptions about the hardware's thread dispatch
+    * behavior that could be proven wrong in future generations -- Make sure
+    * to do a full test run with brw_fs_test_dispatch_packing() hooked up to
+    * the NIR front-end before changing this assertion.
+    */
+   assert(devinfo->gen <= 9);
+
+   switch (stage) {
+   case MESA_SHADER_FRAGMENT: {
+      /* The PSD discards subspans coming in with no lit samples, which in the
+       * per-pixel shading case implies that each subspan will either be fully
+       * lit (due to the VMask being used to allow derivative computations),
+       * or not dispatched at all.  In per-sample dispatch mode individual
+       * samples from the same subspan have a fixed relative location within
+       * the SIMD thread, so dispatch of unlit samples cannot be avoided in
+       * general and we should return false.
+       */
+      const struct brw_wm_prog_data *wm_prog_data =
+         (const struct brw_wm_prog_data *)prog_data;
+      return !wm_prog_data->persample_dispatch;
+   }
+   case MESA_SHADER_COMPUTE:
+      /* Compute shaders will be spawned with either a fully enabled dispatch
+       * mask or with whatever bottom/right execution mask was given to the
+       * GPGPU walker command to be used along the workgroup edges -- In both
+       * cases the dispatch mask is required to be tightly packed for our
+       * invocation index calculations to work.
+       */
+      return true;
+   default:
+      /* Most remaining fixed functions are limited to use a packed dispatch
+       * mask due to the hardware representation of the dispatch mask as a
+       * single counter representing the number of enabled channels.
+       */
+      return true;
+   }
 }
 
 #ifdef __cplusplus

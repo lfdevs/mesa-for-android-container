@@ -123,7 +123,7 @@ static const struct {
 void fs_visitor::setup_fs_payload_gen4()
 {
    assert(stage == MESA_SHADER_FRAGMENT);
-   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
+   struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
    brw_wm_prog_key *key = (brw_wm_prog_key*) this->key;
    GLuint reg = 2;
    bool kill_stats_promoted_workaround = false;

@@ -165,9 +165,17 @@ void ir_print_visitor::visit(ir_variable *ir)
 {
    fprintf(f, "(declare ");
 
-   char loc[256] = {0};
+   char binding[32] = {0};
+   if (ir->data.binding)
+      snprintf(binding, sizeof(binding), "binding=%i ", ir->data.binding);
+
+   char loc[32] = {0};
    if (ir->data.location != -1)
       snprintf(loc, sizeof(loc), "location=%i ", ir->data.location);
+
+   char component[32] = {0};
+   if (ir->data.explicit_component)
+      snprintf(component, sizeof(component), "component=%i ", ir->data.location_frac);
 
    const char *const cent = (ir->data.centroid) ? "centroid " : "";
    const char *const samp = (ir->data.sample) ? "sample " : "";
@@ -181,10 +189,10 @@ void ir_print_visitor::visit(ir_variable *ir)
    STATIC_ASSERT(ARRAY_SIZE(mode) == ir_var_mode_count);
    const char *const stream [] = {"", "stream1 ", "stream2 ", "stream3 "};
    const char *const interp[] = { "", "smooth", "flat", "noperspective" };
-   STATIC_ASSERT(ARRAY_SIZE(interp) == INTERP_QUALIFIER_COUNT);
+   STATIC_ASSERT(ARRAY_SIZE(interp) == INTERP_MODE_COUNT);
 
-   fprintf(f, "(%s%s%s%s%s%s%s%s%s) ",
-           loc, cent, samp, patc, inv, prec, mode[ir->data.mode],
+   fprintf(f, "(%s%s%s%s%s%s%s%s%s%s%s) ",
+           binding, loc, component, cent, samp, patc, inv, prec, mode[ir->data.mode],
            stream[ir->data.stream],
            interp[ir->data.interpolation]);
 
@@ -255,7 +263,7 @@ void ir_print_visitor::visit(ir_expression *ir)
 
    print_type(f, ir->type);
 
-   fprintf(f, " %s ", ir->operator_string());
+   fprintf(f, " %s ", ir_expression_operation_strings[ir->operation]);
 
    for (unsigned i = 0; i < ir->get_num_operands(); i++) {
       ir->operands[i]->accept(this);
@@ -344,7 +352,7 @@ void ir_print_visitor::visit(ir_texture *ir)
       ir->lod_info.component->accept(this);
       break;
    case ir_samples_identical:
-      unreachable(!"ir_samples_identical was already handled");
+      unreachable("ir_samples_identical was already handled");
    };
    fprintf(f, ")");
 }
@@ -470,7 +478,8 @@ void ir_print_visitor::visit(ir_constant *ir)
             else
                fprintf(f, "%f", ir->value.d[i]);
             break;
-	 default: assert(0);
+	 default:
+            unreachable("Invalid constant type");
 	 }
       }
    }

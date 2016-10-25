@@ -722,8 +722,8 @@ util_dump_image_view(FILE *stream, const struct pipe_image_view *state)
    util_dump_member(stream, format, state, format);
 
    if (state->resource->target == PIPE_BUFFER) {
-      util_dump_member(stream, uint, state, u.buf.first_element);
-      util_dump_member(stream, uint, state, u.buf.last_element);
+      util_dump_member(stream, uint, state, u.buf.offset);
+      util_dump_member(stream, uint, state, u.buf.size);
    }
    else {
       util_dump_member(stream, uint, state, u.tex.first_layer);
@@ -732,6 +732,25 @@ util_dump_image_view(FILE *stream, const struct pipe_image_view *state)
    }
 
    util_dump_struct_end(stream);
+}
+
+
+void
+util_dump_shader_buffer(FILE *stream, const struct pipe_shader_buffer *state)
+{
+   if (!state) {
+      util_dump_null(stream);
+      return;
+   }
+
+   util_dump_struct_begin(stream, "pipe_shader_buffer");
+
+   util_dump_member(stream, ptr, state, buffer);
+   util_dump_member(stream, uint, state, buffer_offset);
+   util_dump_member(stream, uint, state, buffer_size);
+
+   util_dump_struct_end(stream);
+
 }
 
 
@@ -750,8 +769,8 @@ util_dump_sampler_view(FILE *stream, const struct pipe_sampler_view *state)
    util_dump_member(stream, ptr, state, texture);
 
    if (state->target == PIPE_BUFFER) {
-      util_dump_member(stream, uint, state, u.buf.first_element);
-      util_dump_member(stream, uint, state, u.buf.last_element);
+      util_dump_member(stream, uint, state, u.buf.offset);
+      util_dump_member(stream, uint, state, u.buf.size);
    }
    else {
       util_dump_member(stream, uint, state, u.tex.first_layer);

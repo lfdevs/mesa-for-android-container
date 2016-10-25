@@ -46,6 +46,7 @@
 #include "compiler/glsl/ir_uniform.h"
 #include "compiler/glsl_types.h"
 #include "program/program.h"
+#include "util/bitscan.h"
 
 /**
  * Update the vertex/fragment program's TexturesUsed array.
@@ -66,8 +67,8 @@ void
 _mesa_update_shader_textures_used(struct gl_shader_program *shProg,
 				  struct gl_program *prog)
 {
-   GLuint s;
-   struct gl_shader *shader =
+   GLbitfield mask = prog->SamplersUsed;
+   struct gl_linked_shader *shader =
       shProg->_LinkedShaders[_mesa_program_enum_to_shader_stage(prog->Target)];
 
    assert(shader);
@@ -77,26 +78,25 @@ _mesa_update_shader_textures_used(struct gl_shader_program *shProg,
 
    shProg->SamplersValidated = GL_TRUE;
 
-   for (s = 0; s < MAX_SAMPLERS; s++) {
-      if (prog->SamplersUsed & (1u << s)) {
-         GLuint unit = shader->SamplerUnits[s];
-         GLuint tgt = shader->SamplerTargets[s];
-         assert(unit < ARRAY_SIZE(prog->TexturesUsed));
-         assert(tgt < NUM_TEXTURE_TARGETS);
+   while (mask) {
+      const int s = u_bit_scan(&mask);
+      GLuint unit = shader->SamplerUnits[s];
+      GLuint tgt = shader->SamplerTargets[s];
+      assert(unit < ARRAY_SIZE(prog->TexturesUsed));
+      assert(tgt < NUM_TEXTURE_TARGETS);
 
-         /* The types of the samplers associated with a particular texture
-          * unit must be an exact match.  Page 74 (page 89 of the PDF) of the
-          * OpenGL 3.3 core spec says:
-          *
-          *     "It is not allowed to have variables of different sampler
-          *     types pointing to the same texture image unit within a program
-          *     object."
-          */
-         if (prog->TexturesUsed[unit] & ~(1 << tgt))
-            shProg->SamplersValidated = GL_FALSE;
+      /* The types of the samplers associated with a particular texture
+       * unit must be an exact match.  Page 74 (page 89 of the PDF) of the
+       * OpenGL 3.3 core spec says:
+       *
+       *     "It is not allowed to have variables of different sampler
+       *     types pointing to the same texture image unit within a program
+       *     object."
+       */
+      if (prog->TexturesUsed[unit] & ~(1 << tgt))
+         shProg->SamplersValidated = GL_FALSE;
 
-         prog->TexturesUsed[unit] |= (1 << tgt);
-      }
+      prog->TexturesUsed[unit] |= (1 << tgt);
    }
 }
 

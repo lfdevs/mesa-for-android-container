@@ -127,6 +127,30 @@ lp_build_uadd_overflow(struct gallivm_state *gallivm,
 }
 
 /**
+ * Performs unsigned subtraction of two integers and reports 
+ * overflow if detected.
+ *
+ * The values @a and @b must be of the same integer type. If
+ * an overflow is detected the IN/OUT @ofbit parameter is used:
+ * - if it's pointing to a null value, the overflow bit is simply
+ *   stored inside the variable it's pointing to,
+ * - if it's pointing to a valid value, then that variable,
+ *   which must be of i1 type, is ORed with the newly detected
+ *   overflow bit. This is done to allow chaining of a number of
+ *   overflow functions together without having to test the 
+ *   overflow bit after every single one.
+ */
+LLVMValueRef
+lp_build_usub_overflow(struct gallivm_state *gallivm,
+                       LLVMValueRef a,
+                       LLVMValueRef b,
+                       LLVMValueRef *ofbit)
+{
+   return build_binary_int_overflow(gallivm, "llvm.usub.with.overflow",
+                                    a, b, ofbit);
+}
+
+/**
  * Performs unsigned multiplication of  two integers and 
  * reports overflow if detected.
  *

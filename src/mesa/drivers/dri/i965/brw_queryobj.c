@@ -41,7 +41,6 @@
 #include "brw_defines.h"
 #include "brw_state.h"
 #include "intel_batchbuffer.h"
-#include "intel_reg.h"
 
 /**
  * Emit PIPE_CONTROLs to write the current GPU timestamp into a buffer.
@@ -496,7 +495,7 @@ brw_get_timestamp(struct gl_context *ctx)
    struct brw_context *brw = brw_context(ctx);
    uint64_t result = 0;
 
-   switch (brw->intelScreen->hw_has_timestamp) {
+   switch (brw->screen->hw_has_timestamp) {
    case 3: /* New kernel, always full 36bit accuracy */
       drm_intel_reg_read(brw->bufmgr, TIMESTAMP | 1, &result);
       break;

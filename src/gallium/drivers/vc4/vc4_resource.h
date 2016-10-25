@@ -71,6 +71,17 @@ struct vc4_resource {
         uint64_t writes;
 
         /**
+         * Bitmask of PIPE_CLEAR_COLOR0, PIPE_CLEAR_DEPTH, PIPE_CLEAR_STENCIL
+         * for which parts of the resource are defined.
+         *
+         * Used for avoiding fallback to quad clears for clearing just depth,
+         * when the stencil contents have never been initialized.  Note that
+         * we're lazy and fields not present in the buffer (DEPTH in a color
+         * buffer) may get marked.
+         */
+        uint32_t initialized_buffers;
+
+        /**
          * Resource containing the non-GL_TEXTURE_BASE_LEVEL-rebased texture
          * contents, or the 4-byte index buffer.
          *

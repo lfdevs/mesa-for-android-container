@@ -31,6 +31,7 @@
 #include "brw_util.h"
 #include "program/prog_parameter.h"
 #include "program/prog_statevars.h"
+#include "main/shaderapi.h"
 #include "intel_batchbuffer.h"
 
 static void
@@ -42,8 +43,9 @@ gen6_upload_vs_push_constants(struct brw_context *brw)
    const struct brw_vertex_program *vp =
       brw_vertex_program_const(brw->vertex_program);
    /* BRW_NEW_VS_PROG_DATA */
-   const struct brw_stage_prog_data *prog_data = &brw->vs.prog_data->base.base;
+   const struct brw_stage_prog_data *prog_data = brw->vs.base.prog_data;
 
+   _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_VERTEX);
    gen6_upload_push_constants(brw, &vp->program.Base, prog_data,
                               stage_state, AUB_TRACE_VS_CONSTANTS);
 
@@ -72,7 +74,11 @@ const struct brw_tracked_state gen6_vs_push_constants = {
 static void
 upload_vs_state(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_stage_state *stage_state = &brw->vs.base;
+   const struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   const struct brw_vue_prog_data *vue_prog_data =
+      brw_vue_prog_data(stage_state->prog_data);
    uint32_t floating_point_mode = 0;
 
    /* From the BSpec, 3D Pipeline > Geometry > Vertex Shader > State,
@@ -112,7 +118,7 @@ upload_vs_state(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
-   if (brw->vs.prog_data->base.base.use_alt_mode)
+   if (prog_data->use_alt_mode)
       floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
 
    BEGIN_BATCH(6);
@@ -120,10 +126,10 @@ upload_vs_state(struct brw_context *brw)
    OUT_BATCH(stage_state->prog_offset);
    OUT_BATCH(floating_point_mode |
 	     ((ALIGN(stage_state->sampler_count, 4)/4) << GEN6_VS_SAMPLER_COUNT_SHIFT) |
-             ((brw->vs.prog_data->base.base.binding_table.size_bytes / 4) <<
+             ((prog_data->binding_table.size_bytes / 4) <<
               GEN6_VS_BINDING_TABLE_ENTRY_COUNT_SHIFT));
 
-   if (brw->vs.prog_data->base.base.total_scratch) {
+   if (prog_data->total_scratch) {
       OUT_RELOC(stage_state->scratch_bo,
 		I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
 		ffs(stage_state->per_thread_scratch) - 11);
@@ -131,12 +137,12 @@ upload_vs_state(struct brw_context *brw)
       OUT_BATCH(0);
    }
 
-   OUT_BATCH((brw->vs.prog_data->base.base.dispatch_grf_start_reg <<
+   OUT_BATCH((prog_data->dispatch_grf_start_reg <<
               GEN6_VS_DISPATCH_START_GRF_SHIFT) |
-	     (brw->vs.prog_data->base.urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
+	     (vue_prog_data->urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
 	     (0 << GEN6_VS_URB_ENTRY_READ_OFFSET_SHIFT));
 
-   OUT_BATCH(((brw->max_vs_threads - 1) << GEN6_VS_MAX_THREADS_SHIFT) |
+   OUT_BATCH(((devinfo->max_vs_threads - 1) << GEN6_VS_MAX_THREADS_SHIFT) |
 	     GEN6_VS_STATISTICS_ENABLE |
 	     GEN6_VS_ENABLE);
    ADVANCE_BATCH();

@@ -25,13 +25,10 @@
 #include "nine_helpers.h"
 #include "nine_defines.h"
 
-#include "pipe/p_screen.h"
-
-#include "util/u_hash_table.h"
 #include "util/u_inlines.h"
 #include "util/u_resource.h"
 
-#include "nine_pdata.h"
+#include "pipe/p_screen.h"
 
 #define DBG_CHANNEL DBG_RESOURCE
 
@@ -100,10 +97,6 @@ NineResource9_ctor( struct NineResource9 *This,
     This->usage = Usage;
     This->priority = 0;
 
-    This->pdata = util_hash_table_create(ht_guid_hash, ht_guid_compare);
-    if (!This->pdata)
-        return E_OUTOFMEMORY;
-
     return D3D_OK;
 }
 
@@ -111,11 +104,6 @@ void
 NineResource9_dtor( struct NineResource9 *This )
 {
     DBG("This=%p\n", This);
-
-    if (This->pdata) {
-        util_hash_table_foreach(This->pdata, ht_guid_delete, NULL);
-        util_hash_table_destroy(This->pdata);
-    }
 
     /* NOTE: We do have to use refcounting, the driver might
      * still hold a reference. */
@@ -138,107 +126,6 @@ D3DPOOL
 NineResource9_GetPool( struct NineResource9 *This )
 {
     return This->pool;
-}
-
-HRESULT NINE_WINAPI
-NineResource9_SetPrivateData( struct NineResource9 *This,
-                              REFGUID refguid,
-                              const void *pData,
-                              DWORD SizeOfData,
-                              DWORD Flags )
-{
-    enum pipe_error err;
-    struct pheader *header;
-    const void *user_data = pData;
-    char guid_str[64];
-
-    DBG("This=%p GUID=%s pData=%p SizeOfData=%u Flags=%x\n",
-        This, GUID_sprintf(guid_str, refguid), pData, SizeOfData, Flags);
-
-    if (Flags & D3DSPD_IUNKNOWN)
-        user_assert(SizeOfData == sizeof(IUnknown *), D3DERR_INVALIDCALL);
-
-    /* data consists of a header and the actual data. avoiding 2 mallocs */
-    header = CALLOC_VARIANT_LENGTH_STRUCT(pheader, SizeOfData-1);
-    if (!header) { return E_OUTOFMEMORY; }
-    header->unknown = (Flags & D3DSPD_IUNKNOWN) ? TRUE : FALSE;
-
-    /* if the refguid already exists, delete it */
-    NineResource9_FreePrivateData(This, refguid);
-
-    /* IUnknown special case */
-    if (header->unknown) {
-        /* here the pointer doesn't point to the data we want, so point at the
-         * pointer making what we eventually copy is the pointer itself */
-        user_data = &pData;
-    }
-
-    header->size = SizeOfData;
-    memcpy(header->data, user_data, header->size);
-    memcpy(&header->guid, refguid, sizeof(header->guid));
-
-    err = util_hash_table_set(This->pdata, &header->guid, header);
-    if (err == PIPE_OK) {
-        if (header->unknown) { IUnknown_AddRef(*(IUnknown **)header->data); }
-        return D3D_OK;
-    }
-
-    FREE(header);
-    if (err == PIPE_ERROR_OUT_OF_MEMORY) { return E_OUTOFMEMORY; }
-
-    return D3DERR_DRIVERINTERNALERROR;
-}
-
-HRESULT NINE_WINAPI
-NineResource9_GetPrivateData( struct NineResource9 *This,
-                              REFGUID refguid,
-                              void *pData,
-                              DWORD *pSizeOfData )
-{
-    struct pheader *header;
-    DWORD sizeofdata;
-    char guid_str[64];
-
-    DBG("This=%p GUID=%s pData=%p pSizeOfData=%p\n",
-        This, GUID_sprintf(guid_str, refguid), pData, pSizeOfData);
-
-    header = util_hash_table_get(This->pdata, refguid);
-    if (!header) { return D3DERR_NOTFOUND; }
-
-    user_assert(pSizeOfData, E_POINTER);
-    sizeofdata = *pSizeOfData;
-    *pSizeOfData = header->size;
-
-    if (!pData) {
-        return D3D_OK;
-    }
-    if (sizeofdata < header->size) {
-        return D3DERR_MOREDATA;
-    }
-
-    if (header->unknown) { IUnknown_AddRef(*(IUnknown **)header->data); }
-    memcpy(pData, header->data, header->size);
-
-    return D3D_OK;
-}
-
-HRESULT NINE_WINAPI
-NineResource9_FreePrivateData( struct NineResource9 *This,
-                               REFGUID refguid )
-{
-    struct pheader *header;
-    char guid_str[64];
-
-    DBG("This=%p GUID=%s\n", This, GUID_sprintf(guid_str, refguid));
-
-    header = util_hash_table_get(This->pdata, refguid);
-    if (!header)
-        return D3DERR_NOTFOUND;
-
-    ht_guid_delete(NULL, header, NULL);
-    util_hash_table_remove(This->pdata, refguid);
-
-    return D3D_OK;
 }
 
 DWORD NINE_WINAPI

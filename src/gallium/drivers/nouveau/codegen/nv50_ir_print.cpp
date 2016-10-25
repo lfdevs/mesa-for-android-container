@@ -86,6 +86,7 @@ const char *operationStr[OP_LAST + 1] =
    "mad",
    "fma",
    "sad",
+   "shladd",
    "abs",
    "neg",
    "not",
@@ -210,6 +211,26 @@ static const char *subfmOpStr[] =
    "", "3d"
 };
 
+static const char *shflOpStr[] =
+{
+  "idx", "up", "down", "bfly"
+};
+
+static const char *pixldOpStr[] =
+{
+   "count", "covmask", "offset", "cent_offset", "sampleid"
+};
+
+static const char *rcprsqOpStr[] =
+{
+   "", "64h"
+};
+
+static const char *emitOpStr[] =
+{
+   "", "restart"
+};
+
 static const char *DataTypeStr[] =
 {
    "-",
@@ -289,6 +310,10 @@ static const char *SemanticStr[SV_LAST + 1] =
    "VERTEX_STRIDE",
    "INVOCATION_INFO",
    "THREAD_KILL",
+   "BASEVERTEX",
+   "BASEINSTANCE",
+   "DRAWID",
+   "WORK_DIM",
    "?",
    "(INVALID)"
 };
@@ -546,6 +571,7 @@ void Instruction::print() const
          PRINT("%s ", interpStr[ipa]);
       switch (op) {
       case OP_SUREDP:
+      case OP_SUREDB:
       case OP_ATOM:
          if (subOp < ARRAY_SIZE(atomSubOpStr))
             PRINT("%s ", atomSubOpStr[subOp]);
@@ -558,6 +584,23 @@ void Instruction::print() const
       case OP_SUBFM:
          if (subOp < ARRAY_SIZE(subfmOpStr))
             PRINT("%s ", subfmOpStr[subOp]);
+         break;
+      case OP_SHFL:
+         if (subOp < ARRAY_SIZE(shflOpStr))
+            PRINT("%s ", shflOpStr[subOp]);
+         break;
+      case OP_PIXLD:
+         if (subOp < ARRAY_SIZE(pixldOpStr))
+            PRINT("%s ", pixldOpStr[subOp]);
+         break;
+      case OP_RCP:
+      case OP_RSQ:
+         if (subOp < ARRAY_SIZE(rcprsqOpStr))
+            PRINT("%s ", rcprsqOpStr[subOp]);
+         break;
+      case OP_EMIT:
+         if (subOp < ARRAY_SIZE(emitOpStr))
+            PRINT("%s ", emitOpStr[subOp]);
          break;
       default:
          if (subOp)

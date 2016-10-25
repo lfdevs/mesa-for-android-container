@@ -51,6 +51,7 @@ fd_screen_fence_ref(struct pipe_screen *pscreen,
 }
 
 boolean fd_screen_fence_finish(struct pipe_screen *screen,
+		struct pipe_context *ctx,
 		struct pipe_fence_handle *fence,
 		uint64_t timeout)
 {

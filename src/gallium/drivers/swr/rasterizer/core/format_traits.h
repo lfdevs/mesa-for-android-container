@@ -1,6 +1,5 @@
-
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2016 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -20,20 +19,18 @@
 * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 * IN THE SOFTWARE.
-* 
+*
 * @file format_traits.h
-* 
-* @brief auto-generated file
-* 
+*
+* @brief Format Traits.  auto-generated file
+*
 * DO NOT EDIT
-* 
+*
 ******************************************************************************/
-
 #pragma once
 
 #include "format_types.h"
 #include "utils.h"
-
 
 //////////////////////////////////////////////////////////////////////////
 /// FormatSwizzle - Component swizzle selects
@@ -66,8 +63,8 @@ struct FormatTraits :
     static const bool isSRGB{ false };
     static const bool isBC{ false };
     static const bool isSubsampled{ false };
-    static const uint32_t bcWidth{1};
-    static const uint32_t bcHeight{1};
+    static const uint32_t bcWidth{ 1 };
+    static const uint32_t bcHeight{ 1 };
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -88,7 +85,7 @@ template<> struct FormatTraits<R32G32B32A32_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32_32 TransposeT;
+    typedef Transpose32_32_32_32    TransposeT;
     typedef Format4<32, 32, 32, 32> FormatT;
 };
 
@@ -110,7 +107,7 @@ template<> struct FormatTraits<R32G32B32A32_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32_32 TransposeT;
+    typedef Transpose32_32_32_32    TransposeT;
     typedef Format4<32, 32, 32, 32> FormatT;
 };
 
@@ -132,7 +129,7 @@ template<> struct FormatTraits<R32G32B32A32_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32_32 TransposeT;
+    typedef Transpose32_32_32_32    TransposeT;
     typedef Format4<32, 32, 32, 32> FormatT;
 };
 
@@ -154,7 +151,7 @@ template<> struct FormatTraits<R32G32B32X32_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32_32 TransposeT;
+    typedef Transpose32_32_32_32    TransposeT;
     typedef Format4<32, 32, 32, 32> FormatT;
 };
 
@@ -176,7 +173,7 @@ template<> struct FormatTraits<R32G32B32A32_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32_32 TransposeT;
+    typedef Transpose32_32_32_32    TransposeT;
     typedef Format4<32, 32, 32, 32> FormatT;
 };
 
@@ -198,7 +195,7 @@ template<> struct FormatTraits<R32G32B32A32_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32_32 TransposeT;
+    typedef Transpose32_32_32_32    TransposeT;
     typedef Format4<32, 32, 32, 32> FormatT;
 };
 
@@ -220,7 +217,7 @@ template<> struct FormatTraits<R32G32B32_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32 TransposeT;
+    typedef Transpose32_32_32   TransposeT;
     typedef Format3<32, 32, 32> FormatT;
 };
 
@@ -242,7 +239,7 @@ template<> struct FormatTraits<R32G32B32_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32 TransposeT;
+    typedef Transpose32_32_32   TransposeT;
     typedef Format3<32, 32, 32> FormatT;
 };
 
@@ -264,7 +261,7 @@ template<> struct FormatTraits<R32G32B32_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32 TransposeT;
+    typedef Transpose32_32_32   TransposeT;
     typedef Format3<32, 32, 32> FormatT;
 };
 
@@ -286,7 +283,7 @@ template<> struct FormatTraits<R32G32B32_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32 TransposeT;
+    typedef Transpose32_32_32   TransposeT;
     typedef Format3<32, 32, 32> FormatT;
 };
 
@@ -308,7 +305,7 @@ template<> struct FormatTraits<R32G32B32_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32_32 TransposeT;
+    typedef Transpose32_32_32   TransposeT;
     typedef Format3<32, 32, 32> FormatT;
 };
 
@@ -330,7 +327,7 @@ template<> struct FormatTraits<R16G16B16A16_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -352,7 +349,7 @@ template<> struct FormatTraits<R16G16B16A16_SNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -374,7 +371,7 @@ template<> struct FormatTraits<R16G16B16A16_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -396,7 +393,7 @@ template<> struct FormatTraits<R16G16B16A16_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -418,7 +415,7 @@ template<> struct FormatTraits<R16G16B16A16_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -440,7 +437,7 @@ template<> struct FormatTraits<R32G32_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -462,7 +459,7 @@ template<> struct FormatTraits<R32G32_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -484,7 +481,7 @@ template<> struct FormatTraits<R32G32_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -506,7 +503,7 @@ template<> struct FormatTraits<R32_FLOAT_X8X24_TYPELESS> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -528,7 +525,7 @@ template<> struct FormatTraits<X32_TYPELESS_G8X24_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -550,7 +547,7 @@ template<> struct FormatTraits<L32A32_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -572,7 +569,7 @@ template<> struct FormatTraits<R16G16B16X16_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -594,7 +591,7 @@ template<> struct FormatTraits<R16G16B16X16_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -616,7 +613,7 @@ template<> struct FormatTraits<L32X32_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -638,7 +635,7 @@ template<> struct FormatTraits<I32X32_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -660,7 +657,7 @@ template<> struct FormatTraits<R16G16B16A16_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -682,7 +679,7 @@ template<> struct FormatTraits<R16G16B16A16_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16_16 TransposeT;
+    typedef Transpose16_16_16_16    TransposeT;
     typedef Format4<16, 16, 16, 16> FormatT;
 };
 
@@ -704,7 +701,7 @@ template<> struct FormatTraits<R32G32_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -726,29 +723,7 @@ template<> struct FormatTraits<R32G32_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose32_32 TransposeT;
-    typedef Format2<32, 32> FormatT;
-};
-
-//////////////////////////////////////////////////////////////////////////
-/// FormatTraits<R32_FLOAT_X8X24_TYPELESS_LD> - Format traits specialization for R32_FLOAT_X8X24_TYPELESS_LD
-//////////////////////////////////////////////////////////////////////////
-template<> struct FormatTraits<R32_FLOAT_X8X24_TYPELESS_LD> :
-    ComponentTraits<SWR_TYPE_FLOAT, 32, SWR_TYPE_UNUSED, 32>,
-    FormatSwizzle<0, 1>,
-    Defaults<0, 0, 0, 0x3f800000>
-{
-    static const uint32_t bpp{ 64 };
-    static const uint32_t numComps{ 1 };
-    static const bool hasAlpha{ false };
-    static const uint32_t alphaComp{ 3 };
-    static const bool isSRGB{ false };
-    static const bool isBC{ false };
-    static const bool isSubsampled{ false };
-    static const uint32_t bcWidth{ 1 };
-    static const uint32_t bcHeight{ 1 };
-
-    typedef Transpose32_32 TransposeT;
+    typedef Transpose32_32  TransposeT;
     typedef Format2<32, 32> FormatT;
 };
 
@@ -770,7 +745,7 @@ template<> struct FormatTraits<B8G8R8A8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -792,7 +767,7 @@ template<> struct FormatTraits<B8G8R8A8_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -814,7 +789,7 @@ template<> struct FormatTraits<R10G10B10A2_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -836,7 +811,7 @@ template<> struct FormatTraits<R10G10B10A2_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -858,7 +833,7 @@ template<> struct FormatTraits<R10G10B10A2_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -880,7 +855,7 @@ template<> struct FormatTraits<R8G8B8A8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -902,7 +877,7 @@ template<> struct FormatTraits<R8G8B8A8_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -924,7 +899,7 @@ template<> struct FormatTraits<R8G8B8A8_SNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -946,7 +921,7 @@ template<> struct FormatTraits<R8G8B8A8_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -968,7 +943,7 @@ template<> struct FormatTraits<R8G8B8A8_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -990,7 +965,7 @@ template<> struct FormatTraits<R16G16_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1012,7 +987,7 @@ template<> struct FormatTraits<R16G16_SNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1034,7 +1009,7 @@ template<> struct FormatTraits<R16G16_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1056,7 +1031,7 @@ template<> struct FormatTraits<R16G16_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1078,7 +1053,7 @@ template<> struct FormatTraits<R16G16_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1100,7 +1075,7 @@ template<> struct FormatTraits<B10G10R10A2_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -1122,7 +1097,7 @@ template<> struct FormatTraits<B10G10R10A2_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -1144,8 +1119,30 @@ template<> struct FormatTraits<R11G11B10_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose11_11_10 TransposeT;
+    typedef Transpose11_11_10   TransposeT;
     typedef Format3<11, 11, 10> FormatT;
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// FormatTraits<R10G10B10_FLOAT_A2_UNORM> - Format traits specialization for R10G10B10_FLOAT_A2_UNORM
+//////////////////////////////////////////////////////////////////////////
+template<> struct FormatTraits<R10G10B10_FLOAT_A2_UNORM> :
+    ComponentTraits<SWR_TYPE_FLOAT, 10, SWR_TYPE_FLOAT, 10, SWR_TYPE_FLOAT, 10, SWR_TYPE_FLOAT, 2>,
+    FormatSwizzle<0, 1, 2, 3>,
+    Defaults<0, 0, 0, 0x3f800000>
+{
+    static const uint32_t bpp{ 32 };
+    static const uint32_t numComps{ 4 };
+    static const bool hasAlpha{ true };
+    static const uint32_t alphaComp{ 3 };
+    static const bool isSRGB{ false };
+    static const bool isBC{ false };
+    static const bool isSubsampled{ false };
+    static const uint32_t bcWidth{ 1 };
+    static const uint32_t bcHeight{ 1 };
+
+    typedef Transpose10_10_10_2    TransposeT;
+    typedef Format4<10, 10, 10, 2> FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1167,7 +1164,7 @@ template<> struct FormatTraits<R32_SINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1189,7 +1186,7 @@ template<> struct FormatTraits<R32_UINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1211,7 +1208,7 @@ template<> struct FormatTraits<R32_FLOAT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1233,7 +1230,7 @@ template<> struct FormatTraits<R24_UNORM_X8_TYPELESS> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<24> FormatT;
+    typedef Format1<24>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1255,21 +1252,21 @@ template<> struct FormatTraits<X24_TYPELESS_G8_UINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
-/// FormatTraits<R24_UNORM_X8_TYPELESS_LD> - Format traits specialization for R24_UNORM_X8_TYPELESS_LD
+/// FormatTraits<L32_UNORM> - Format traits specialization for L32_UNORM
 //////////////////////////////////////////////////////////////////////////
-template<> struct FormatTraits<R24_UNORM_X8_TYPELESS_LD> :
-    ComponentTraits<SWR_TYPE_UNORM, 24>,
+template<> struct FormatTraits<L32_UNORM> :
+    ComponentTraits<SWR_TYPE_UNORM, 32>,
     FormatSwizzle<0>,
     Defaults<0, 0, 0, 0x3f800000>
 {
     static const uint32_t bpp{ 32 };
     static const uint32_t numComps{ 1 };
     static const bool hasAlpha{ false };
-    static const uint32_t alphaComp{ 3 };
+    static const uint32_t alphaComp{ 0 };
     static const bool isSRGB{ false };
     static const bool isBC{ false };
     static const bool isSubsampled{ false };
@@ -1277,7 +1274,7 @@ template<> struct FormatTraits<R24_UNORM_X8_TYPELESS_LD> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<24> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1298,7 +1295,7 @@ template<> struct FormatTraits<L16A16_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1320,7 +1317,7 @@ template<> struct FormatTraits<I24X8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose24_8 TransposeT;
+    typedef Transpose24_8  TransposeT;
     typedef Format2<24, 8> FormatT;
 };
 
@@ -1342,7 +1339,7 @@ template<> struct FormatTraits<L24X8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose24_8 TransposeT;
+    typedef Transpose24_8  TransposeT;
     typedef Format2<24, 8> FormatT;
 };
 
@@ -1365,7 +1362,7 @@ template<> struct FormatTraits<I32_FLOAT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1387,7 +1384,7 @@ template<> struct FormatTraits<L32_FLOAT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1409,7 +1406,7 @@ template<> struct FormatTraits<A32_FLOAT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1430,7 +1427,7 @@ template<> struct FormatTraits<B8G8R8X8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -1452,7 +1449,7 @@ template<> struct FormatTraits<B8G8R8X8_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -1474,7 +1471,7 @@ template<> struct FormatTraits<R8G8B8X8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -1496,7 +1493,7 @@ template<> struct FormatTraits<R8G8B8X8_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -1518,7 +1515,7 @@ template<> struct FormatTraits<R9G9B9E5_SHAREDEXP> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose9_9_9_5 TransposeT;
+    typedef Transpose9_9_9_5    TransposeT;
     typedef Format4<9, 9, 9, 5> FormatT;
 };
 
@@ -1540,7 +1537,7 @@ template<> struct FormatTraits<B10G10R10X2_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -1562,7 +1559,7 @@ template<> struct FormatTraits<L16A16_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1584,7 +1581,7 @@ template<> struct FormatTraits<R10G10B10X2_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -1606,7 +1603,7 @@ template<> struct FormatTraits<R8G8B8A8_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -1628,7 +1625,7 @@ template<> struct FormatTraits<R8G8B8A8_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -1650,7 +1647,7 @@ template<> struct FormatTraits<R16G16_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1672,7 +1669,7 @@ template<> struct FormatTraits<R16G16_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16 TransposeT;
+    typedef Transpose16_16  TransposeT;
     typedef Format2<16, 16> FormatT;
 };
 
@@ -1695,7 +1692,7 @@ template<> struct FormatTraits<R32_SSCALED> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1717,7 +1714,7 @@ template<> struct FormatTraits<R32_USCALED> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<32> TransposeT;
-    typedef Format1<32> FormatT;
+    typedef Format1<32>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1738,7 +1735,7 @@ template<> struct FormatTraits<B5G6R5_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose5_6_5 TransposeT;
+    typedef Transpose5_6_5   TransposeT;
     typedef Format3<5, 6, 5> FormatT;
 };
 
@@ -1760,7 +1757,7 @@ template<> struct FormatTraits<B5G6R5_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose5_6_5 TransposeT;
+    typedef Transpose5_6_5   TransposeT;
     typedef Format3<5, 6, 5> FormatT;
 };
 
@@ -1782,7 +1779,7 @@ template<> struct FormatTraits<B5G5R5A1_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose5_5_5_1 TransposeT;
+    typedef Transpose5_5_5_1    TransposeT;
     typedef Format4<5, 5, 5, 1> FormatT;
 };
 
@@ -1804,7 +1801,7 @@ template<> struct FormatTraits<B5G5R5A1_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose5_5_5_1 TransposeT;
+    typedef Transpose5_5_5_1    TransposeT;
     typedef Format4<5, 5, 5, 1> FormatT;
 };
 
@@ -1826,7 +1823,7 @@ template<> struct FormatTraits<B4G4R4A4_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose4_4_4_4 TransposeT;
+    typedef Transpose4_4_4_4    TransposeT;
     typedef Format4<4, 4, 4, 4> FormatT;
 };
 
@@ -1848,7 +1845,7 @@ template<> struct FormatTraits<B4G4R4A4_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose4_4_4_4 TransposeT;
+    typedef Transpose4_4_4_4    TransposeT;
     typedef Format4<4, 4, 4, 4> FormatT;
 };
 
@@ -1870,7 +1867,7 @@ template<> struct FormatTraits<R8G8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -1892,7 +1889,7 @@ template<> struct FormatTraits<R8G8_SNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -1914,7 +1911,7 @@ template<> struct FormatTraits<R8G8_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -1936,7 +1933,7 @@ template<> struct FormatTraits<R8G8_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -1959,7 +1956,7 @@ template<> struct FormatTraits<R16_UNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1981,7 +1978,7 @@ template<> struct FormatTraits<R16_SNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2003,7 +2000,7 @@ template<> struct FormatTraits<R16_SINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2025,7 +2022,7 @@ template<> struct FormatTraits<R16_UINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2047,7 +2044,7 @@ template<> struct FormatTraits<R16_FLOAT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2069,7 +2066,7 @@ template<> struct FormatTraits<I16_UNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2091,7 +2088,7 @@ template<> struct FormatTraits<L16_UNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2113,7 +2110,7 @@ template<> struct FormatTraits<A16_UNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2134,7 +2131,7 @@ template<> struct FormatTraits<L8A8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -2157,7 +2154,7 @@ template<> struct FormatTraits<I16_FLOAT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2179,7 +2176,7 @@ template<> struct FormatTraits<L16_FLOAT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2201,7 +2198,7 @@ template<> struct FormatTraits<A16_FLOAT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2222,7 +2219,7 @@ template<> struct FormatTraits<L8A8_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -2244,7 +2241,7 @@ template<> struct FormatTraits<B5G5R5X1_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose5_5_5_1 TransposeT;
+    typedef Transpose5_5_5_1    TransposeT;
     typedef Format4<5, 5, 5, 1> FormatT;
 };
 
@@ -2266,7 +2263,7 @@ template<> struct FormatTraits<B5G5R5X1_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose5_5_5_1 TransposeT;
+    typedef Transpose5_5_5_1    TransposeT;
     typedef Format4<5, 5, 5, 1> FormatT;
 };
 
@@ -2288,7 +2285,7 @@ template<> struct FormatTraits<R8G8_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -2310,7 +2307,7 @@ template<> struct FormatTraits<R8G8_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -2333,7 +2330,7 @@ template<> struct FormatTraits<R16_SSCALED> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2355,7 +2352,51 @@ template<> struct FormatTraits<R16_USCALED> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<16> TransposeT;
-    typedef Format1<16> FormatT;
+    typedef Format1<16>                  FormatT;
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// FormatTraits<A1B5G5R5_UNORM> - Format traits specialization for A1B5G5R5_UNORM
+//////////////////////////////////////////////////////////////////////////
+template<> struct FormatTraits<A1B5G5R5_UNORM> :
+    ComponentTraits<SWR_TYPE_UNORM, 1, SWR_TYPE_UNORM, 5, SWR_TYPE_UNORM, 5, SWR_TYPE_UNORM, 5>,
+    FormatSwizzle<3, 2, 1, 0>,
+    Defaults<0, 0, 0, 0x3f800000>
+{
+    static const uint32_t bpp{ 16 };
+    static const uint32_t numComps{ 4 };
+    static const bool hasAlpha{ true };
+    static const uint32_t alphaComp{ 3 };
+    static const bool isSRGB{ false };
+    static const bool isBC{ false };
+    static const bool isSubsampled{ false };
+    static const uint32_t bcWidth{ 1 };
+    static const uint32_t bcHeight{ 1 };
+
+    typedef Transpose1_5_5_5    TransposeT;
+    typedef Format4<1, 5, 5, 5> FormatT;
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// FormatTraits<A4B4G4R4_UNORM> - Format traits specialization for A4B4G4R4_UNORM
+//////////////////////////////////////////////////////////////////////////
+template<> struct FormatTraits<A4B4G4R4_UNORM> :
+    ComponentTraits<SWR_TYPE_UNORM, 4, SWR_TYPE_UNORM, 4, SWR_TYPE_UNORM, 4, SWR_TYPE_UNORM, 4>,
+    FormatSwizzle<3, 2, 1, 0>,
+    Defaults<0, 0, 0, 0x3f800000>
+{
+    static const uint32_t bpp{ 16 };
+    static const uint32_t numComps{ 4 };
+    static const bool hasAlpha{ true };
+    static const uint32_t alphaComp{ 3 };
+    static const bool isSRGB{ false };
+    static const bool isBC{ false };
+    static const bool isSubsampled{ false };
+    static const uint32_t bcWidth{ 1 };
+    static const uint32_t bcHeight{ 1 };
+
+    typedef Transpose4_4_4_4    TransposeT;
+    typedef Format4<4, 4, 4, 4> FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2376,7 +2417,7 @@ template<> struct FormatTraits<L8A8_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -2398,7 +2439,7 @@ template<> struct FormatTraits<L8A8_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8 TransposeT;
+    typedef Transpose8_8  TransposeT;
     typedef Format2<8, 8> FormatT;
 };
 
@@ -2421,7 +2462,7 @@ template<> struct FormatTraits<R8_UNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2443,7 +2484,7 @@ template<> struct FormatTraits<R8_SNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2465,7 +2506,7 @@ template<> struct FormatTraits<R8_SINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2487,7 +2528,7 @@ template<> struct FormatTraits<R8_UINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2509,7 +2550,7 @@ template<> struct FormatTraits<A8_UNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2531,7 +2572,7 @@ template<> struct FormatTraits<I8_UNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2553,7 +2594,7 @@ template<> struct FormatTraits<L8_UNORM> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2575,7 +2616,7 @@ template<> struct FormatTraits<R8_SSCALED> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2597,7 +2638,7 @@ template<> struct FormatTraits<R8_USCALED> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2619,7 +2660,7 @@ template<> struct FormatTraits<L8_UNORM_SRGB> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2641,7 +2682,7 @@ template<> struct FormatTraits<L8_UINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2663,7 +2704,7 @@ template<> struct FormatTraits<L8_SINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2685,7 +2726,7 @@ template<> struct FormatTraits<I8_UINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2707,7 +2748,7 @@ template<> struct FormatTraits<I8_SINT> :
     static const uint32_t bcHeight{ 1 };
 
     typedef TransposeSingleComponent<8> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2728,7 +2769,7 @@ template<> struct FormatTraits<YCRCB_SWAPUVY> :
     static const uint32_t bcWidth{ 2 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -2750,8 +2791,8 @@ template<> struct FormatTraits<BC1_UNORM> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<64> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2772,8 +2813,8 @@ template<> struct FormatTraits<BC2_UNORM> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2794,8 +2835,8 @@ template<> struct FormatTraits<BC3_UNORM> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2816,8 +2857,8 @@ template<> struct FormatTraits<BC4_UNORM> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<64> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2838,8 +2879,8 @@ template<> struct FormatTraits<BC5_UNORM> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2860,8 +2901,8 @@ template<> struct FormatTraits<BC1_UNORM_SRGB> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<64> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2882,8 +2923,8 @@ template<> struct FormatTraits<BC2_UNORM_SRGB> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2904,8 +2945,8 @@ template<> struct FormatTraits<BC3_UNORM_SRGB> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2926,7 +2967,7 @@ template<> struct FormatTraits<YCRCB_SWAPUV> :
     static const uint32_t bcWidth{ 2 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8_8 TransposeT;
+    typedef Transpose8_8_8_8    TransposeT;
     typedef Format4<8, 8, 8, 8> FormatT;
 };
 
@@ -2948,7 +2989,7 @@ template<> struct FormatTraits<R8G8B8_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8 TransposeT;
+    typedef Transpose8_8_8   TransposeT;
     typedef Format3<8, 8, 8> FormatT;
 };
 
@@ -2970,7 +3011,7 @@ template<> struct FormatTraits<R8G8B8_SNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8 TransposeT;
+    typedef Transpose8_8_8   TransposeT;
     typedef Format3<8, 8, 8> FormatT;
 };
 
@@ -2992,7 +3033,7 @@ template<> struct FormatTraits<R8G8B8_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8 TransposeT;
+    typedef Transpose8_8_8   TransposeT;
     typedef Format3<8, 8, 8> FormatT;
 };
 
@@ -3014,7 +3055,7 @@ template<> struct FormatTraits<R8G8B8_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8 TransposeT;
+    typedef Transpose8_8_8   TransposeT;
     typedef Format3<8, 8, 8> FormatT;
 };
 
@@ -3036,8 +3077,8 @@ template<> struct FormatTraits<BC4_SNORM> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<64> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3058,8 +3099,8 @@ template<> struct FormatTraits<BC5_SNORM> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3080,7 +3121,7 @@ template<> struct FormatTraits<R16G16B16_FLOAT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16 TransposeT;
+    typedef Transpose16_16_16   TransposeT;
     typedef Format3<16, 16, 16> FormatT;
 };
 
@@ -3102,7 +3143,7 @@ template<> struct FormatTraits<R16G16B16_UNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16 TransposeT;
+    typedef Transpose16_16_16   TransposeT;
     typedef Format3<16, 16, 16> FormatT;
 };
 
@@ -3124,7 +3165,7 @@ template<> struct FormatTraits<R16G16B16_SNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16 TransposeT;
+    typedef Transpose16_16_16   TransposeT;
     typedef Format3<16, 16, 16> FormatT;
 };
 
@@ -3146,7 +3187,7 @@ template<> struct FormatTraits<R16G16B16_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16 TransposeT;
+    typedef Transpose16_16_16   TransposeT;
     typedef Format3<16, 16, 16> FormatT;
 };
 
@@ -3168,7 +3209,7 @@ template<> struct FormatTraits<R16G16B16_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16 TransposeT;
+    typedef Transpose16_16_16   TransposeT;
     typedef Format3<16, 16, 16> FormatT;
 };
 
@@ -3190,8 +3231,8 @@ template<> struct FormatTraits<BC6H_SF16> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3212,8 +3253,8 @@ template<> struct FormatTraits<BC7_UNORM> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3234,8 +3275,8 @@ template<> struct FormatTraits<BC7_UNORM_SRGB> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3256,8 +3297,8 @@ template<> struct FormatTraits<BC6H_UF16> :
     static const uint32_t bcWidth{ 4 };
     static const uint32_t bcHeight{ 4 };
 
-    typedef TransposeSingleComponent<128> TransposeT;
-    typedef Format1<8> FormatT;
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3278,7 +3319,7 @@ template<> struct FormatTraits<R8G8B8_UNORM_SRGB> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8 TransposeT;
+    typedef Transpose8_8_8   TransposeT;
     typedef Format3<8, 8, 8> FormatT;
 };
 
@@ -3300,7 +3341,7 @@ template<> struct FormatTraits<R16G16B16_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16 TransposeT;
+    typedef Transpose16_16_16   TransposeT;
     typedef Format3<16, 16, 16> FormatT;
 };
 
@@ -3322,7 +3363,7 @@ template<> struct FormatTraits<R16G16B16_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose16_16_16 TransposeT;
+    typedef Transpose16_16_16   TransposeT;
     typedef Format3<16, 16, 16> FormatT;
 };
 
@@ -3344,7 +3385,7 @@ template<> struct FormatTraits<R10G10B10A2_SNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3366,7 +3407,7 @@ template<> struct FormatTraits<R10G10B10A2_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3388,7 +3429,7 @@ template<> struct FormatTraits<R10G10B10A2_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3410,7 +3451,7 @@ template<> struct FormatTraits<R10G10B10A2_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3432,7 +3473,7 @@ template<> struct FormatTraits<B10G10R10A2_SNORM> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3454,7 +3495,7 @@ template<> struct FormatTraits<B10G10R10A2_USCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3476,7 +3517,7 @@ template<> struct FormatTraits<B10G10R10A2_SSCALED> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3498,7 +3539,7 @@ template<> struct FormatTraits<B10G10R10A2_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3520,7 +3561,7 @@ template<> struct FormatTraits<B10G10R10A2_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose10_10_10_2 TransposeT;
+    typedef Transpose10_10_10_2    TransposeT;
     typedef Format4<10, 10, 10, 2> FormatT;
 };
 
@@ -3542,7 +3583,7 @@ template<> struct FormatTraits<R8G8B8_UINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8 TransposeT;
+    typedef Transpose8_8_8   TransposeT;
     typedef Format3<8, 8, 8> FormatT;
 };
 
@@ -3564,7 +3605,28 @@ template<> struct FormatTraits<R8G8B8_SINT> :
     static const uint32_t bcWidth{ 1 };
     static const uint32_t bcHeight{ 1 };
 
-    typedef Transpose8_8_8 TransposeT;
+    typedef Transpose8_8_8   TransposeT;
     typedef Format3<8, 8, 8> FormatT;
 };
 
+//////////////////////////////////////////////////////////////////////////
+/// FormatTraits<RAW> - Format traits specialization for RAW
+//////////////////////////////////////////////////////////////////////////
+template<> struct FormatTraits<RAW> :
+    ComponentTraits<SWR_TYPE_UINT, 8>,
+    FormatSwizzle<0>,
+    Defaults<0, 0, 0, 0x1>
+{
+    static const uint32_t bpp{ 8 };
+    static const uint32_t numComps{ 1 };
+    static const bool hasAlpha{ false };
+    static const uint32_t alphaComp{ 3 };
+    static const bool isSRGB{ false };
+    static const bool isBC{ false };
+    static const bool isSubsampled{ false };
+    static const uint32_t bcWidth{ 1 };
+    static const uint32_t bcHeight{ 1 };
+
+    typedef TransposeSingleComponent<8> TransposeT;
+    typedef Format1<8>                  FormatT;
+};

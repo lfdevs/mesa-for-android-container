@@ -3185,7 +3185,7 @@
         <glx handcode="true"/>
     </function>
 
-    <function name="GetPointerv" es1="1.1">
+    <function name="GetPointerv" es1="1.1" es2="3.2">
         <param name="pname" type="GLenum"/>
         <param name="params" type="GLvoid **" output="true"/>
         <glx handcode="true"/>
@@ -8254,7 +8254,9 @@
     <enum name="QUERY_BUFFER_BARRIER_BIT"           value="0x00008000"/>
 </category>
 
-<!-- ARB extensions 149 - 153 -->
+<!-- ARB extensions 149 - 152 -->
+
+<xi:include href="ARB_compute_variable_group_size.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <xi:include href="ARB_indirect_parameters.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
@@ -8293,6 +8295,71 @@
 
 <!-- ARB extension 171 -->
 <xi:include href="ARB_pipeline_statistics_query.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<category name="es3.2">
+    <!-- This should be in es_EXT, but this file is included first and
+         the alias doesn't work otherwise. -->
+    <function name="PrimitiveBoundingBox" es2="3.2" desktop="false">
+        <param name="minX" type="GLfloat"/>
+        <param name="minY" type="GLfloat"/>
+        <param name="minZ" type="GLfloat"/>
+        <param name="minW" type="GLfloat"/>
+        <param name="maxX" type="GLfloat"/>
+        <param name="maxY" type="GLfloat"/>
+        <param name="maxZ" type="GLfloat"/>
+        <param name="maxW" type="GLfloat"/>
+    </function>
+
+    <function name="BlendBarrier" es2="3.2"/>
+</category>
+
+<category name="KHR_blend_equation_advanced" number="174">
+    <enum name="BLEND_ADVANCED_COHERENT_KHR"              value="0x9285"/>
+
+    <enum name="MULTIPLY_KHR"                             value="0x9294"/>
+    <enum name="SCREEN_KHR"                               value="0x9295"/>
+    <enum name="OVERLAY_KHR"                              value="0x9296"/>
+    <enum name="DARKEN_KHR"                               value="0x9297"/>
+    <enum name="LIGHTEN_KHR"                              value="0x9298"/>
+    <enum name="COLORDODGE_KHR"                           value="0x9299"/>
+    <enum name="COLORBURN_KHR"                            value="0x929A"/>
+    <enum name="HARDLIGHT_KHR"                            value="0x929B"/>
+    <enum name="SOFTLIGHT_KHR"                            value="0x929C"/>
+    <enum name="DIFFERENCE_KHR"                           value="0x929E"/>
+    <enum name="EXCLUSION_KHR"                            value="0x92A0"/>
+
+    <enum name="HSL_HUE_KHR"                              value="0x92AD"/>
+    <enum name="HSL_SATURATION_KHR"                       value="0x92AE"/>
+    <enum name="HSL_COLOR_KHR"                            value="0x92AF"/>
+    <enum name="HSL_LUMINOSITY_KHR"                       value="0x92B0"/>
+
+    <function name="BlendBarrierKHR" alias="BlendBarrier" es2="2.0"/>
+</category>
+
+<category name="ARB_ES3_2_compatibility" number="177">
+
+    <enum name="PRIMITIVE_BOUNDING_BOX_ARB" count="8"       value="0x92BE">
+        <size name="Get" mode="get"/>
+    </enum>
+    <enum name="MULTISAMPLE_LINE_WIDTH_RANGE_ARB" count="2" value="0x9381">
+        <size name="Get" mode="get"/>
+    </enum>
+    <enum name="MULTISAMPLE_LINE_WIDTH_GRANULARITY_ARB"     value="0x9382">
+        <size name="Get" mode="get"/>
+    </enum>
+
+    <function name="PrimitiveBoundingBoxARB" alias="PrimitiveBoundingBox">
+        <param name="minX" type="GLfloat"/>
+        <param name="minY" type="GLfloat"/>
+        <param name="minZ" type="GLfloat"/>
+        <param name="minW" type="GLfloat"/>
+        <param name="maxX" type="GLfloat"/>
+        <param name="maxY" type="GLfloat"/>
+        <param name="maxZ" type="GLfloat"/>
+        <param name="maxW" type="GLfloat"/>
+    </function>
+
+</category>
 
 <!-- Non-ARB extensions sorted by extension number. -->
 
@@ -12757,6 +12824,8 @@
         <param name="clamp"  type="GLfloat"/>
     </function>
 </category>
+
+<xi:include href="EXT_window_rectangles.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <!-- Unnumbered extensions sorted by name. -->
 

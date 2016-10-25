@@ -90,7 +90,6 @@ enum CORE_BUCKETS
     BEOutputMerger,
     BEStoreTiles,
     BEEndTile,
-    WorkerWaitForThreadEvent,
 
     NumBuckets
 };
@@ -169,12 +168,12 @@ INLINE void rdtscEndFrame()
 {
     gCurrentFrame++;
 
-    if (gCurrentFrame == KNOB_BUCKETS_START_FRAME)
+    if (gCurrentFrame == KNOB_BUCKETS_START_FRAME && KNOB_BUCKETS_START_FRAME < KNOB_BUCKETS_END_FRAME)
     {
         gBucketMgr.StartCapture();
     }
 
-    if (gCurrentFrame == KNOB_BUCKETS_END_FRAME)
+    if (gCurrentFrame == KNOB_BUCKETS_END_FRAME && KNOB_BUCKETS_START_FRAME < KNOB_BUCKETS_END_FRAME)
     {
         gBucketMgr.StopCapture();
         gBucketMgr.PrintReport("rdtsc.txt");

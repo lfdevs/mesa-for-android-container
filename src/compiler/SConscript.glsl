@@ -70,22 +70,42 @@ if env['msvc']:
 # Copy these files to avoid generation object files into src/mesa/program
 env.Prepend(CPPPATH = ['#src/mesa/main'])
 env.Command('glsl/imports.c', '#src/mesa/main/imports.c', Copy('$TARGET', '$SOURCE'))
+env.Command('glsl/extensions_table.c', '#src/mesa/main/extensions_table.c', Copy('$TARGET', '$SOURCE'))
 # Copy these files to avoid generation object files into src/mesa/program
 env.Prepend(CPPPATH = ['#src/mesa/program'])
-env.Command('glsl/prog_hash_table.c', '#src/mesa/program/prog_hash_table.c', Copy('$TARGET', '$SOURCE'))
 env.Command('glsl/symbol_table.c', '#src/mesa/program/symbol_table.c', Copy('$TARGET', '$SOURCE'))
 env.Command('glsl/dummy_errors.c', '#src/mesa/program/dummy_errors.c', Copy('$TARGET', '$SOURCE'))
 
 compiler_objs = env.StaticObject(source_lists['GLSL_COMPILER_CXX_FILES'])
 
 mesa_objs = env.StaticObject([
+    'glsl/extensions_table.c',
     'glsl/imports.c',
-    'glsl/prog_hash_table.c',
     'glsl/symbol_table.c',
     'glsl/dummy_errors.c',
 ])
 
 compiler_objs += mesa_objs
+
+# GLSL generated sources
+env.CodeGenerate(
+    target = 'glsl/ir_expression_operation.h',
+    script = 'glsl/ir_expression_operation.py',
+    source = [],
+    command = python_cmd + ' $SCRIPT enum > $TARGET'
+)
+env.CodeGenerate(
+    target = 'glsl/ir_expression_operation_constant.h',
+    script = 'glsl/ir_expression_operation.py',
+    source = [],
+    command = python_cmd + ' $SCRIPT constant > $TARGET'
+)
+env.CodeGenerate(
+    target = 'glsl/ir_expression_operation_strings.h',
+    script = 'glsl/ir_expression_operation.py',
+    source = [],
+    command = python_cmd + ' $SCRIPT strings > $TARGET'
+)
 
 glsl = env.ConvenienceLibrary(
     target = 'glsl',
@@ -97,6 +117,11 @@ glsl = env.ConvenienceLibrary(
 env.Depends(glsl, glsl_parser)
 
 Export('glsl')
+
+#
+# XXX: It's important to not add any generated source files after this point,
+# or it will break MinGW cross-compilation.
+#
 
 # Skip building these programs as they will cause SCons error "Two environments
 # with different actions were specified for the same target"

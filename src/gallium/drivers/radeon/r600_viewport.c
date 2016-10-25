@@ -22,6 +22,7 @@
  */
 
 #include "r600_cs.h"
+#include "util/u_viewport.h"
 #include "tgsi/tgsi_scan.h"
 
 #define GET_MAX_SCISSOR(rctx) (rctx->chip_class >= EVERGREEN ? 16384 : 8192)
@@ -260,6 +261,7 @@ static void r600_set_viewport_states(struct pipe_context *ctx,
 				     const struct pipe_viewport_state *state)
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
+	unsigned mask;
 	int i;
 
 	for (i = 0; i < num_viewports; i++) {
@@ -270,13 +272,28 @@ static void r600_set_viewport_states(struct pipe_context *ctx,
 					       &rctx->viewports.as_scissor[index]);
 	}
 
-	rctx->viewports.dirty_mask |= ((1 << num_viewports) - 1) << start_slot;
-	rctx->scissors.dirty_mask |= ((1 << num_viewports) - 1) << start_slot;
+	mask = ((1 << num_viewports) - 1) << start_slot;
+	rctx->viewports.dirty_mask |= mask;
+	rctx->viewports.depth_range_dirty_mask |= mask;
+	rctx->scissors.dirty_mask |= mask;
 	rctx->set_atom_dirty(rctx, &rctx->viewports.atom, true);
 	rctx->set_atom_dirty(rctx, &rctx->scissors.atom, true);
 }
 
-static void r600_emit_viewports(struct r600_common_context *rctx, struct r600_atom *atom)
+static void r600_emit_one_viewport(struct r600_common_context *rctx,
+				   struct pipe_viewport_state *state)
+{
+	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+
+	radeon_emit(cs, fui(state->scale[0]));
+	radeon_emit(cs, fui(state->translate[0]));
+	radeon_emit(cs, fui(state->scale[1]));
+	radeon_emit(cs, fui(state->translate[1]));
+	radeon_emit(cs, fui(state->scale[2]));
+	radeon_emit(cs, fui(state->translate[2]));
+}
+
+static void r600_emit_viewports(struct r600_common_context *rctx)
 {
 	struct radeon_winsys_cs *cs = rctx->gfx.cs;
 	struct pipe_viewport_state *states = rctx->viewports.states;
@@ -288,12 +305,7 @@ static void r600_emit_viewports(struct r600_common_context *rctx, struct r600_at
 			return;
 
 		radeon_set_context_reg_seq(cs, R_02843C_PA_CL_VPORT_XSCALE, 6);
-		radeon_emit(cs, fui(states[0].scale[0]));
-		radeon_emit(cs, fui(states[0].translate[0]));
-		radeon_emit(cs, fui(states[0].scale[1]));
-		radeon_emit(cs, fui(states[0].translate[1]));
-		radeon_emit(cs, fui(states[0].scale[2]));
-		radeon_emit(cs, fui(states[0].translate[2]));
+		r600_emit_one_viewport(rctx, &states[0]);
 		rctx->viewports.dirty_mask &= ~1; /* clear one bit */
 		return;
 	}
@@ -305,24 +317,69 @@ static void r600_emit_viewports(struct r600_common_context *rctx, struct r600_at
 
 		radeon_set_context_reg_seq(cs, R_02843C_PA_CL_VPORT_XSCALE +
 					       start * 4 * 6, count * 6);
-		for (i = start; i < start+count; i++) {
-			radeon_emit(cs, fui(states[i].scale[0]));
-			radeon_emit(cs, fui(states[i].translate[0]));
-			radeon_emit(cs, fui(states[i].scale[1]));
-			radeon_emit(cs, fui(states[i].translate[1]));
-			radeon_emit(cs, fui(states[i].scale[2]));
-			radeon_emit(cs, fui(states[i].translate[2]));
-		}
+		for (i = start; i < start+count; i++)
+			r600_emit_one_viewport(rctx, &states[i]);
 	}
 	rctx->viewports.dirty_mask = 0;
 }
 
-void r600_set_scissor_enable(struct r600_common_context *rctx, bool enable)
+static void r600_emit_depth_ranges(struct r600_common_context *rctx)
 {
-	if (rctx->scissor_enabled != enable) {
-		rctx->scissor_enabled = enable;
+	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct pipe_viewport_state *states = rctx->viewports.states;
+	unsigned mask = rctx->viewports.depth_range_dirty_mask;
+	float zmin, zmax;
+
+	/* The simple case: Only 1 viewport is active. */
+	if (!rctx->vs_writes_viewport_index) {
+		if (!(mask & 1))
+			return;
+
+		util_viewport_zmin_zmax(&states[0], rctx->clip_halfz, &zmin, &zmax);
+
+		radeon_set_context_reg_seq(cs, R_0282D0_PA_SC_VPORT_ZMIN_0, 2);
+		radeon_emit(cs, fui(zmin));
+		radeon_emit(cs, fui(zmax));
+		rctx->viewports.depth_range_dirty_mask &= ~1; /* clear one bit */
+		return;
+	}
+
+	while (mask) {
+		int start, count, i;
+
+		u_bit_scan_consecutive_range(&mask, &start, &count);
+
+		radeon_set_context_reg_seq(cs, R_0282D0_PA_SC_VPORT_ZMIN_0 +
+					   start * 4 * 2, count * 2);
+		for (i = start; i < start+count; i++) {
+			util_viewport_zmin_zmax(&states[i], rctx->clip_halfz, &zmin, &zmax);
+			radeon_emit(cs, fui(zmin));
+			radeon_emit(cs, fui(zmax));
+		}
+	}
+	rctx->viewports.depth_range_dirty_mask = 0;
+}
+
+static void r600_emit_viewport_states(struct r600_common_context *rctx,
+				      struct r600_atom *atom)
+{
+	r600_emit_viewports(rctx);
+	r600_emit_depth_ranges(rctx);
+}
+
+/* Set viewport dependencies on pipe_rasterizer_state. */
+void r600_viewport_set_rast_deps(struct r600_common_context *rctx,
+				 bool scissor_enable, bool clip_halfz)
+{
+	if (rctx->scissor_enabled != scissor_enable) {
+		rctx->scissor_enabled = scissor_enable;
 		rctx->scissors.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
 		rctx->set_atom_dirty(rctx, &rctx->scissors.atom, true);
+	}
+	if (rctx->clip_halfz != clip_halfz) {
+		rctx->clip_halfz = clip_halfz;
+		rctx->viewports.depth_range_dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+		rctx->set_atom_dirty(rctx, &rctx->viewports.atom, true);
 	}
 }
 
@@ -357,14 +414,16 @@ void r600_update_vs_writes_viewport_index(struct r600_common_context *rctx,
 
 	if (rctx->scissors.dirty_mask)
 	    rctx->set_atom_dirty(rctx, &rctx->scissors.atom, true);
-	if (rctx->viewports.dirty_mask)
+
+	if (rctx->viewports.dirty_mask ||
+	    rctx->viewports.depth_range_dirty_mask)
 	    rctx->set_atom_dirty(rctx, &rctx->viewports.atom, true);
 }
 
 void r600_init_viewport_functions(struct r600_common_context *rctx)
 {
 	rctx->scissors.atom.emit = r600_emit_scissors;
-	rctx->viewports.atom.emit = r600_emit_viewports;
+	rctx->viewports.atom.emit = r600_emit_viewport_states;
 
 	rctx->scissors.atom.num_dw = (2 + 16 * 2) + 6;
 	rctx->viewports.atom.num_dw = 2 + 16 * 6;

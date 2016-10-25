@@ -491,9 +491,9 @@ toy_compiler_cleanup(struct toy_compiler *tc)
    struct toy_inst *inst, *next;
 
    LIST_FOR_EACH_ENTRY_SAFE(inst, next, &tc->instructions, list)
-      util_slab_free(&tc->mempool, inst);
+      slab_free_st(&tc->mempool, inst);
 
-   util_slab_destroy(&tc->mempool);
+   slab_destroy(&tc->mempool);
 }
 
 /**
@@ -543,8 +543,8 @@ toy_compiler_init(struct toy_compiler *tc, const struct ilo_dev *dev)
 
    tc_init_inst_templ(tc);
 
-   util_slab_create(&tc->mempool, sizeof(struct toy_inst),
-         64, UTIL_SLAB_SINGLETHREADED);
+   slab_create(&tc->mempool, sizeof(struct toy_inst),
+         64);
 
    list_inithead(&tc->instructions);
    /* instructions are added to the tail */

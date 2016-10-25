@@ -98,6 +98,7 @@ st_generate_mipmap(struct gl_context *ctx, GLenum target,
       return;
 
    st_flush_bitmap_cache(st);
+   st_invalidate_readpix_cache(st);
 
    /* The texture isn't in a "complete" state yet so set the expected
     * lastLevel here, since it won't get done in st_finalize_texture().

@@ -68,10 +68,10 @@ opt_cmod_propagation_local(bblock_t *block)
 
       bool read_flag = false;
       foreach_inst_in_block_reverse_starting_from(vec4_instruction, scan_inst, inst) {
-         if (inst->src[0].in_range(scan_inst->dst,
-                                   scan_inst->regs_written)) {
+         if (regions_overlap(inst->src[0], inst->size_read(0),
+                             scan_inst->dst, scan_inst->size_written)) {
             if ((scan_inst->predicate && scan_inst->opcode != BRW_OPCODE_SEL) ||
-                scan_inst->dst.reg_offset != inst->src[0].reg_offset ||
+                scan_inst->dst.offset != inst->src[0].offset ||
                 (scan_inst->dst.writemask != WRITEMASK_X &&
                  scan_inst->dst.writemask != WRITEMASK_XYZW) ||
                 (scan_inst->dst.writemask == WRITEMASK_XYZW &&

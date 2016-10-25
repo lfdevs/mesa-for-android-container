@@ -27,7 +27,6 @@
 
 #include "r600_asm.h"
 #ifdef HAVE_OPENCL
-#include "radeon/radeon_llvm.h"
 #include <llvm-c/Core.h>
 #endif
 

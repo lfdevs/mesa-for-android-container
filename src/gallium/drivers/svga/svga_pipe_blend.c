@@ -37,6 +37,9 @@
 static inline unsigned
 svga_translate_blend_factor(const struct svga_context *svga, unsigned factor)
 {
+   /* Note: there is no SVGA3D_BLENDOP_[INV]BLENDFACTORALPHA so
+    * we can't translate PIPE_BLENDFACTOR_[INV_]CONST_ALPHA properly.
+    */
    switch (factor) {
    case PIPE_BLENDFACTOR_ZERO:            return SVGA3D_BLENDOP_ZERO;
    case PIPE_BLENDFACTOR_SRC_ALPHA:       return SVGA3D_BLENDOP_SRCALPHA;
@@ -334,6 +337,8 @@ svga_create_blend_state(struct pipe_context *pipe,
    }
 
    svga->hud.num_blend_objects++;
+   SVGA_STATS_COUNT_INC(svga_screen(svga->pipe.screen)->sws,
+                        SVGA_STATS_COUNT_BLENDSTATE);
 
    return blend;
 }

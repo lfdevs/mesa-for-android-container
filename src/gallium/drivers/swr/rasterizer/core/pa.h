@@ -1159,25 +1159,15 @@ struct PA_FACTORY
         if ((IsIndexedT::value && IsCutIndexEnabledT::value && (
             topo == TOP_TRIANGLE_STRIP || topo == TOP_POINT_LIST ||
             topo == TOP_LINE_LIST || topo == TOP_LINE_STRIP ||
-            topo == TOP_TRIANGLE_LIST || topo == TOP_LINE_LIST_ADJ ||
-            topo == TOP_LISTSTRIP_ADJ || topo == TOP_TRI_LIST_ADJ ||
-            topo == TOP_TRI_STRIP_ADJ)) ||
+            topo == TOP_TRIANGLE_LIST)) ||
 
             // non-indexed draws with adjacency topologies must use cut-aware PA until we add support
             // for them in the optimized PA
-            (!IsIndexedT::value && (
-            topo == TOP_LINE_LIST_ADJ || topo == TOP_LISTSTRIP_ADJ || topo == TOP_TRI_LIST_ADJ || topo == TOP_TRI_STRIP_ADJ)))
+            (topo == TOP_LINE_LIST_ADJ || topo == TOP_LISTSTRIP_ADJ || topo == TOP_TRI_LIST_ADJ || topo == TOP_TRI_STRIP_ADJ))
         {
             memset(&indexStore, 0, sizeof(indexStore));
-            DWORD numAttribs;
-            if (_BitScanReverse(&numAttribs, state.feAttribMask))
-            {
-                numAttribs++;
-            }
-            else
-            {
-                numAttribs = 0;
-            }
+            uint32_t numAttribs = state.feNumAttributes;
+
             new (&this->paCut) PA_STATE_CUT(pDC, (uint8_t*)&this->vertexStore[0], MAX_NUM_VERTS_PER_PRIM * KNOB_SIMD_WIDTH, 
                 &this->indexStore[0], numVerts, numAttribs, state.topology, false);
             cutPA = true;

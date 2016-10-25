@@ -32,10 +32,13 @@
 #include "pipe/p_state.h"
 #include "pipe/p_screen.h"
 #include "dd_util.h"
+#include "os/os_thread.h"
 
 enum dd_mode {
    DD_DETECT_HANGS,
-   DD_DUMP_ALL_CALLS
+   DD_DETECT_HANGS_PIPELINED,
+   DD_DUMP_ALL_CALLS,
+   DD_DUMP_APITRACE_CALL,
 };
 
 struct dd_screen
@@ -47,6 +50,73 @@ struct dd_screen
    bool no_flush;
    bool verbose;
    unsigned skip_count;
+   unsigned apitrace_dump_call;
+};
+
+enum call_type
+{
+   CALL_DRAW_VBO,
+   CALL_LAUNCH_GRID,
+   CALL_RESOURCE_COPY_REGION,
+   CALL_BLIT,
+   CALL_FLUSH_RESOURCE,
+   CALL_CLEAR,
+   CALL_CLEAR_BUFFER,
+   CALL_CLEAR_RENDER_TARGET,
+   CALL_CLEAR_DEPTH_STENCIL,
+   CALL_GENERATE_MIPMAP,
+};
+
+struct call_resource_copy_region
+{
+   struct pipe_resource *dst;
+   unsigned dst_level;
+   unsigned dstx, dsty, dstz;
+   struct pipe_resource *src;
+   unsigned src_level;
+   struct pipe_box src_box;
+};
+
+struct call_clear
+{
+   unsigned buffers;
+   union pipe_color_union color;
+   double depth;
+   unsigned stencil;
+};
+
+struct call_clear_buffer
+{
+   struct pipe_resource *res;
+   unsigned offset;
+   unsigned size;
+   const void *clear_value;
+   int clear_value_size;
+};
+
+struct call_generate_mipmap {
+   struct pipe_resource *res;
+   enum pipe_format format;
+   unsigned base_level;
+   unsigned last_level;
+   unsigned first_layer;
+   unsigned last_layer;
+};
+
+struct dd_call
+{
+   enum call_type type;
+
+   union {
+      struct pipe_draw_info draw_vbo;
+      struct pipe_grid_info launch_grid;
+      struct call_resource_copy_region resource_copy_region;
+      struct pipe_blit_info blit;
+      struct pipe_resource *flush_resource;
+      struct call_clear clear;
+      struct call_clear_buffer clear_buffer;
+      struct call_generate_mipmap generate_mipmap;
+   } info;
 };
 
 struct dd_query
@@ -72,11 +142,8 @@ struct dd_state
    } state;
 };
 
-struct dd_context
+struct dd_draw_state
 {
-   struct pipe_context base;
-   struct pipe_context *pipe;
-
    struct {
       struct dd_query *query;
       bool condition;
@@ -113,7 +180,69 @@ struct dd_context
    struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    float tess_default_levels[6];
 
+   unsigned apitrace_call_number;
+};
+
+struct dd_draw_state_copy
+{
+   struct dd_draw_state base;
+
+   /* dd_draw_state_copy does not reference real CSOs. Instead, it points to
+    * these variables, which serve as storage.
+    */
+   struct dd_query render_cond;
+   struct dd_state shaders[PIPE_SHADER_TYPES];
+   struct dd_state sampler_states[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
+   struct dd_state velems;
+   struct dd_state rs;
+   struct dd_state dsa;
+   struct dd_state blend;
+};
+
+struct dd_draw_record {
+   struct dd_draw_record *next;
+
+   int64_t timestamp;
+   uint32_t sequence_no;
+
+   struct dd_call call;
+   struct dd_draw_state_copy draw_state;
+   char *driver_state_log;
+};
+
+struct dd_context
+{
+   struct pipe_context base;
+   struct pipe_context *pipe;
+
+   struct dd_draw_state draw_state;
    unsigned num_draw_calls;
+
+   /* Pipelined hang detection.
+    *
+    * This is without unnecessary flushes and waits. There is a memory-based
+    * fence that is incremented by clear_buffer every draw call. Driver fences
+    * are not used.
+    *
+    * After each draw call, a new dd_draw_record is created that contains
+    * a copy of all states, the output of pipe_context::dump_debug_state,
+    * and it has a fence number assigned. That's done without knowing whether
+    * that draw call is problematic or not. The record is added into the list
+    * of all records.
+    *
+    * An independent, separate thread loops over the list of records and checks
+    * their fences. Records with signalled fences are freed. On fence timeout,
+    * the thread dumps the record of the oldest unsignalled fence.
+    */
+   pipe_thread thread;
+   pipe_mutex mutex;
+   int kill_thread;
+   struct pipe_resource *fence;
+   struct pipe_transfer *fence_transfer;
+   uint32_t *mapped_fence;
+   uint32_t sequence_no;
+   struct dd_draw_record *records;
+   int max_log_buffer_size;
 };
 
 
@@ -122,6 +251,7 @@ dd_context_create(struct dd_screen *dscreen, struct pipe_context *pipe);
 
 void
 dd_init_draw_functions(struct dd_context *dctx);
+PIPE_THREAD_ROUTINE(dd_thread_pipelined_hang_detect, input);
 
 
 static inline struct dd_context *

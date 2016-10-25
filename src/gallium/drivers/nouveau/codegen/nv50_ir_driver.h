@@ -75,8 +75,6 @@ struct nv50_ir_prog_symbol
    uint32_t offset;
 };
 
-#define NVISA_GF100_CHIPSET_C0 0xc0
-#define NVISA_GF100_CHIPSET_D0 0xd0
 #define NVISA_GK104_CHIPSET    0xe0
 #define NVISA_GK20A_CHIPSET    0xea
 #define NVISA_GM107_CHIPSET    0x110
@@ -166,6 +164,7 @@ struct nv50_ir_prog_info
       uint8_t auxCBSlot;         /* driver constant buffer slot */
       uint16_t ucpBase;          /* base address for UCPs */
       uint16_t drawInfoBase;     /* base address for draw parameters */
+      uint16_t alphaRefBase;     /* base address for alpha test values */
       uint8_t pointSize;         /* output index for PointSize */
       uint8_t instanceId;        /* system value index of InstanceID */
       uint8_t vertexId;          /* system value index of VertexID */
@@ -206,7 +205,8 @@ extern void nv50_ir_relocate_code(void *relocData, uint32_t *code,
 
 extern void
 nv50_ir_apply_fixups(void *fixupData, uint32_t *code,
-                     bool force_per_sample, bool flatshade);
+                     bool force_per_sample, bool flatshade,
+                     uint8_t alphatest);
 
 /* obtain code that will be shared among programs */
 extern void nv50_ir_get_target_library(uint32_t chipset,

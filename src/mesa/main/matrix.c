@@ -43,6 +43,7 @@
 #include "matrix.h"
 #include "mtypes.h"
 #include "math/m_matrix.h"
+#include "util/bitscan.h"
 
 
 /**
@@ -242,6 +243,24 @@ _mesa_PushMatrix( void )
       }
       return;
    }
+   if (stack->Depth + 1 >= stack->StackSize) {
+      unsigned new_stack_size = stack->StackSize * 2;
+      unsigned i;
+      GLmatrix *new_stack = realloc(stack->Stack,
+                                    sizeof(*new_stack) * new_stack_size);
+
+      if (!new_stack) {
+         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glPushMatrix()");
+         return;
+      }
+
+      for (i = stack->StackSize; i < new_stack_size; i++)
+         _math_matrix_ctr(&new_stack[i]);
+
+      stack->Stack = new_stack;
+      stack->StackSize = new_stack_size;
+   }
+
    _math_matrix_copy( &stack->Stack[stack->Depth + 1],
                       &stack->Stack[stack->Depth] );
    stack->Depth++;
@@ -337,9 +356,11 @@ _mesa_LoadMatrixf( const GLfloat *m )
           m[2], m[6], m[10], m[14],
           m[3], m[7], m[11], m[15]);
 
-   FLUSH_VERTICES(ctx, 0);
-   _math_matrix_loadf( ctx->CurrentStack->Top, m );
-   ctx->NewState |= ctx->CurrentStack->DirtyFlag;
+   if (memcmp(m, ctx->CurrentStack->Top->m, 16 * sizeof(GLfloat)) != 0) {
+      FLUSH_VERTICES(ctx, 0);
+      _math_matrix_loadf( ctx->CurrentStack->Top, m );
+      ctx->NewState |= ctx->CurrentStack->DirtyFlag;
+   }
 }
 
 
@@ -554,20 +575,20 @@ _mesa_MultTransposeMatrixd( const GLdouble *m )
 static void
 update_projection( struct gl_context *ctx )
 {
+   GLbitfield mask;
+
    _math_matrix_analyse( ctx->ProjectionMatrixStack.Top );
 
    /* Recompute clip plane positions in clipspace.  This is also done
     * in _mesa_ClipPlane().
     */
-   if (ctx->Transform.ClipPlanesEnabled) {
-      GLuint p;
-      for (p = 0; p < ctx->Const.MaxClipPlanes; p++) {
-	 if (ctx->Transform.ClipPlanesEnabled & (1 << p)) {
-	    _mesa_transform_vector( ctx->Transform._ClipUserPlane[p],
-				 ctx->Transform.EyeUserPlane[p],
-				 ctx->ProjectionMatrixStack.Top->inv );
-	 }
-      }
+   mask = ctx->Transform.ClipPlanesEnabled;
+   while (mask) {
+      const int p = u_bit_scan(&mask);
+
+      _mesa_transform_vector( ctx->Transform._ClipUserPlane[p],
+                              ctx->Transform.EyeUserPlane[p],
+                              ctx->ProjectionMatrixStack.Top->inv );
    }
 }
 
@@ -644,9 +665,10 @@ init_matrix_stack( struct gl_matrix_stack *stack,
    stack->Depth = 0;
    stack->MaxDepth = maxDepth;
    stack->DirtyFlag = dirtyFlag;
-   /* The stack */
-   stack->Stack = calloc(maxDepth, sizeof(GLmatrix));
-   for (i = 0; i < maxDepth; i++) {
+   /* The stack will be dynamically resized at glPushMatrix() time */
+   stack->Stack = calloc(1, sizeof(GLmatrix));
+   stack->StackSize = 1;
+   for (i = 0; i < stack->StackSize; i++) {
       _math_matrix_ctr(&stack->Stack[i]);
    }
    stack->Top = stack->Stack;
@@ -664,11 +686,12 @@ static void
 free_matrix_stack( struct gl_matrix_stack *stack )
 {
    GLuint i;
-   for (i = 0; i < stack->MaxDepth; i++) {
+   for (i = 0; i < stack->StackSize; i++) {
       _math_matrix_dtr(&stack->Stack[i]);
    }
    free(stack->Stack);
    stack->Stack = stack->Top = NULL;
+   stack->StackSize = 0;
 }
 
 /*@}*/

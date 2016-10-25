@@ -635,6 +635,15 @@ generic_%u_byte( GLint rop, const void * ptr )
         if name != None and name not in f.glx_vendorpriv_names:
             print '#endif'
 
+        if f.command_variable_length() != "":
+            print "    if (0%s < 0) {" % f.command_variable_length()
+            print "        __glXSetError(gc, GL_INVALID_VALUE);"
+            if f.return_type != 'void':
+                print "        return 0;"
+            else:
+                print "        return;"
+            print "    }"
+
         condition_list = []
         for p in f.parameterIterateCounters():
             condition_list.append( "%s >= 0" % (p.name) )

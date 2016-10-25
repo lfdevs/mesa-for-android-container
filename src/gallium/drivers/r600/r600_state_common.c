@@ -350,9 +350,11 @@ static void r600_bind_rs_state(struct pipe_context *ctx, void *state)
 
 	if (rs->offset_enable &&
 	    (rs->offset_units != rctx->poly_offset_state.offset_units ||
-	     rs->offset_scale != rctx->poly_offset_state.offset_scale)) {
+	     rs->offset_scale != rctx->poly_offset_state.offset_scale ||
+	     rs->offset_units_unscaled != rctx->poly_offset_state.offset_units_unscaled)) {
 		rctx->poly_offset_state.offset_units = rs->offset_units;
 		rctx->poly_offset_state.offset_scale = rs->offset_scale;
+		rctx->poly_offset_state.offset_units_unscaled = rs->offset_units_unscaled;
 		r600_mark_atom_dirty(rctx, &rctx->poly_offset_state.atom);
 	}
 
@@ -364,7 +366,7 @@ static void r600_bind_rs_state(struct pipe_context *ctx, void *state)
 		r600_mark_atom_dirty(rctx, &rctx->clip_misc_state.atom);
 	}
 
-	r600_set_scissor_enable(&rctx->b, rs->scissor_enable);
+	r600_viewport_set_rast_deps(&rctx->b, rs->scissor_enable, rs->clip_halfz);
 
 	/* Re-emit PA_SC_LINE_STIPPLE. */
 	rctx->last_primitive_type = -1;
@@ -406,7 +408,7 @@ void r600_sampler_states_dirty(struct r600_context *rctx,
 }
 
 static void r600_bind_sampler_states(struct pipe_context *pipe,
-                               unsigned shader,
+			       enum pipe_shader_type shader,
 			       unsigned start,
 			       unsigned count, void **states)
 {
@@ -512,7 +514,7 @@ static void r600_bind_vertex_elements(struct pipe_context *ctx, void *state)
 static void r600_delete_vertex_elements(struct pipe_context *ctx, void *state)
 {
 	struct r600_fetch_shader *shader = (struct r600_fetch_shader*)state;
-	pipe_resource_reference((struct pipe_resource**)&shader->buffer, NULL);
+	r600_resource_reference(&shader->buffer, NULL);
 	FREE(shader);
 }
 
@@ -533,7 +535,6 @@ static void r600_set_index_buffer(struct pipe_context *ctx,
 void r600_vertex_buffers_dirty(struct r600_context *rctx)
 {
 	if (rctx->vertex_buffer_state.dirty_mask) {
-		rctx->b.flags |= R600_CONTEXT_INV_VERTEX_CACHE;
 		rctx->vertex_buffer_state.atom.num_dw = (rctx->b.chip_class >= EVERGREEN ? 12 : 11) *
 					       util_bitcount(rctx->vertex_buffer_state.dirty_mask);
 		r600_mark_atom_dirty(rctx, &rctx->vertex_buffer_state.atom);
@@ -590,14 +591,14 @@ void r600_sampler_views_dirty(struct r600_context *rctx,
 			      struct r600_samplerview_state *state)
 {
 	if (state->dirty_mask) {
-		rctx->b.flags |= R600_CONTEXT_INV_TEX_CACHE;
 		state->atom.num_dw = (rctx->b.chip_class >= EVERGREEN ? 14 : 13) *
 				     util_bitcount(state->dirty_mask);
 		r600_mark_atom_dirty(rctx, &state->atom);
 	}
 }
 
-static void r600_set_sampler_views(struct pipe_context *pipe, unsigned shader,
+static void r600_set_sampler_views(struct pipe_context *pipe,
+				   enum pipe_shader_type shader,
 				   unsigned start, unsigned count,
 				   struct pipe_sampler_view **views)
 {
@@ -640,7 +641,7 @@ static void r600_set_sampler_views(struct pipe_context *pipe, unsigned shader,
 				(struct r600_texture*)rviews[i]->base.texture;
 			bool is_buffer = rviews[i]->base.texture->target == PIPE_BUFFER;
 
-			if (!is_buffer && rtex->is_depth && !rtex->is_flushing_texture) {
+			if (!is_buffer && rtex->db_compatible) {
 				dst->views.compressed_depthtex_mask |= 1 << i;
 			} else {
 				dst->views.compressed_depthtex_mask &= ~(1 << i);
@@ -1048,7 +1049,6 @@ static void r600_delete_tes_state(struct pipe_context *ctx, void *state)
 void r600_constant_buffers_dirty(struct r600_context *rctx, struct r600_constbuf_state *state)
 {
 	if (state->dirty_mask) {
-		rctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE;
 		state->atom.num_dw = rctx->b.chip_class >= EVERGREEN ? util_bitcount(state->dirty_mask)*20
 								   : util_bitcount(state->dirty_mask)*19;
 		r600_mark_atom_dirty(rctx, &state->atom);
@@ -1056,7 +1056,7 @@ void r600_constant_buffers_dirty(struct r600_context *rctx, struct r600_constbuf
 }
 
 static void r600_set_constant_buffer(struct pipe_context *ctx, uint shader, uint index,
-				     struct pipe_constant_buffer *input)
+				     const struct pipe_constant_buffer *input)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_constbuf_state *state = &rctx->constbuf_state[shader];
@@ -2157,7 +2157,7 @@ void r600_emit_shader(struct r600_context *rctx, struct r600_atom *a)
 	r600_emit_command_buffer(cs, &shader->command_buffer);
 	radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
 	radeon_emit(cs, radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx, shader->bo,
-					      RADEON_USAGE_READ, RADEON_PRIO_USER_SHADER));
+					      RADEON_USAGE_READ, RADEON_PRIO_SHADER_BINARY));
 }
 
 unsigned r600_get_swizzle_combined(const unsigned char *swizzle_format,
@@ -2782,12 +2782,11 @@ static void r600_invalidate_buffer(struct pipe_context *ctx, struct pipe_resourc
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
 	struct r600_resource *rbuffer = r600_resource(buf);
-	unsigned i, shader, mask, alignment = rbuffer->buf->alignment;
+	unsigned i, shader, mask;
 	struct r600_pipe_sampler_view *view;
 
 	/* Reallocate the buffer in the same pipe_resource. */
-	r600_init_resource(&rctx->screen->b, rbuffer, rbuffer->b.b.width0,
-			   alignment);
+	r600_alloc_resource(&rctx->screen->b, rbuffer);
 
 	/* We changed the buffer, now we need to bind it where the old one was bound. */
 	/* Vertex buffers. */
@@ -2830,10 +2829,9 @@ static void r600_invalidate_buffer(struct pipe_context *ctx, struct pipe_resourc
 	}
 
 	/* Texture buffer objects - update the virtual addresses in descriptors. */
-	LIST_FOR_EACH_ENTRY(view, &rctx->b.texture_buffers, list) {
+	LIST_FOR_EACH_ENTRY(view, &rctx->texture_buffers, list) {
 		if (view->base.texture == &rbuffer->b.b) {
-			unsigned stride = util_format_get_blocksize(view->base.format);
-			uint64_t offset = (uint64_t)view->base.u.buf.first_element * stride;
+			uint64_t offset = view->base.u.buf.offset;
 			uint64_t va = rbuffer->gpu_address + offset;
 
 			view->tex_resource_words[0] = va;

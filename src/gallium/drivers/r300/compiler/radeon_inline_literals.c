@@ -28,6 +28,7 @@
 #include "radeon_dataflow.h"
 #include "radeon_program.h"
 #include "radeon_program_constants.h"
+#include "util/u_bitcast.h"
 #include <stdio.h>
 
 #define VERBOSE 0
@@ -45,7 +46,7 @@
  */
 static int ieee_754_to_r300_float(float f, unsigned char *r300_float_out)
 {
-	unsigned float_bits = *((unsigned *)&f);
+	unsigned float_bits = u_bitcast_f2u(f);
 	/* XXX: Handle big-endian */
 	unsigned mantissa = float_bits &         0x007fffff;
 	unsigned biased_exponent = (float_bits & 0x7f800000) >> 23;

@@ -85,7 +85,7 @@ create_frag_shader(struct vl_matrix_filter *filter, unsigned num_offsets,
    struct ureg_dst t_sum;
    struct ureg_dst o_fragment;
    bool first;
-   int i;
+   unsigned i;
 
    shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader) {

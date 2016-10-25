@@ -30,8 +30,7 @@
 #include "nouveau_util.h"
 #include "nv10_3d.xml.h"
 #include "nv10_driver.h"
-
-#include "util/simple_list.h"
+#include "util/bitscan.h"
 
 void
 nv10_emit_clip_plane(struct gl_context *ctx, int emit)
@@ -323,7 +322,7 @@ nv10_emit_material_ambient(struct gl_context *ctx, int emit)
 	struct nouveau_pushbuf *push = context_push(ctx);
 	float (*mat)[4] = ctx->Light.Material.Attrib;
 	float c_scene[3], c_factor[3];
-	struct gl_light *l;
+	GLbitfield mask;
 
 	if (USE_COLOR_MATERIAL(AMBIENT)) {
 		COPY_3V(c_scene, ctx->Light.Model.Ambient);
@@ -347,8 +346,10 @@ nv10_emit_material_ambient(struct gl_context *ctx, int emit)
 		PUSH_DATAp(push, c_factor, 3);
 	}
 
-	foreach(l, &ctx->Light.EnabledList) {
-		const int i = l - ctx->Light.Light;
+	mask = ctx->Light._EnabledLights;
+	while (mask) {
+		const int i = u_bit_scan(&mask);
+		struct gl_light *l = &ctx->Light.Light[i];
 		float *c_light = (USE_COLOR_MATERIAL(AMBIENT) ?
 				  l->Ambient :
 				  l->_MatAmbient[0]);
@@ -363,13 +364,15 @@ nv10_emit_material_diffuse(struct gl_context *ctx, int emit)
 {
 	struct nouveau_pushbuf *push = context_push(ctx);
 	GLfloat (*mat)[4] = ctx->Light.Material.Attrib;
-	struct gl_light *l;
+	GLbitfield mask;
 
 	BEGIN_NV04(push, NV10_3D(MATERIAL_FACTOR_A), 1);
 	PUSH_DATAf(push, mat[MAT_ATTRIB_FRONT_DIFFUSE][3]);
 
-	foreach(l, &ctx->Light.EnabledList) {
-		const int i = l - ctx->Light.Light;
+	mask = ctx->Light._EnabledLights;
+	while (mask) {
+		const int i = u_bit_scan(&mask);
+		struct gl_light *l = &ctx->Light.Light[i];
 		float *c_light = (USE_COLOR_MATERIAL(DIFFUSE) ?
 				  l->Diffuse :
 				  l->_MatDiffuse[0]);
@@ -383,10 +386,12 @@ void
 nv10_emit_material_specular(struct gl_context *ctx, int emit)
 {
 	struct nouveau_pushbuf *push = context_push(ctx);
-	struct gl_light *l;
+	GLbitfield mask;
 
-	foreach(l, &ctx->Light.EnabledList) {
-		const int i = l - ctx->Light.Light;
+	mask = ctx->Light._EnabledLights;
+	while (mask) {
+		const int i = u_bit_scan(&mask);
+		struct gl_light *l = &ctx->Light.Light[i];
 		float *c_light = (USE_COLOR_MATERIAL(SPECULAR) ?
 				  l->Specular :
 				  l->_MatSpecular[0]);

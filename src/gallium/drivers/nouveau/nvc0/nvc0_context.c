@@ -161,8 +161,11 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
       for (i = 0; i < NVC0_MAX_BUFFERS; ++i)
          pipe_resource_reference(&nvc0->buffers[s][i].buffer, NULL);
 
-      for (i = 0; i < NVC0_MAX_IMAGES; ++i)
+      for (i = 0; i < NVC0_MAX_IMAGES; ++i) {
          pipe_resource_reference(&nvc0->images[s][i].resource, NULL);
+         if (nvc0->screen->base.class_3d >= GM107_3D_CLASS)
+            pipe_sampler_view_reference(&nvc0->images_tic[s][i], NULL);
+      }
    }
 
    for (s = 0; s < 2; ++s) {
@@ -436,11 +439,11 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
    flags = NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_RD;
 
-   BCTX_REFN_bo(nvc0->bufctx_3d, 3D_SCREEN, flags, screen->text);
+   BCTX_REFN_bo(nvc0->bufctx_3d, 3D_TEXT, flags, screen->text);
    BCTX_REFN_bo(nvc0->bufctx_3d, 3D_SCREEN, flags, screen->uniform_bo);
    BCTX_REFN_bo(nvc0->bufctx_3d, 3D_SCREEN, flags, screen->txc);
    if (screen->compute) {
-      BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->text);
+      BCTX_REFN_bo(nvc0->bufctx_cp, CP_TEXT, flags, screen->text);
       BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->uniform_bo);
       BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->txc);
    }

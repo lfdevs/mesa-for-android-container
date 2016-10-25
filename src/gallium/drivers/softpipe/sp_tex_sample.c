@@ -3192,7 +3192,7 @@ sp_get_dims(const struct sp_sampler_view *sp_sview,
    const struct pipe_resource *texture = view->texture;
 
    if (view->target == PIPE_BUFFER) {
-      dims[0] = (view->u.buf.last_element - view->u.buf.first_element) + 1;
+      dims[0] = view->u.buf.size / util_format_get_blocksize(view->format);
       /* the other values are undefined, but let's avoid potential valgrind
        * warnings.
        */
@@ -3264,17 +3264,22 @@ sp_get_texels(const struct sp_sampler_view *sp_sview,
    const int width = u_minify(texture->width0, level);
    const int height = u_minify(texture->height0, level);
    const int depth = u_minify(texture->depth0, level);
+   unsigned elem_size, first_element, last_element;
 
    addr.value = 0;
    addr.bits.level = level;
 
    switch (sp_sview->base.target) {
    case PIPE_BUFFER:
+      elem_size = util_format_get_blocksize(sp_sview->base.format);
+      first_element = sp_sview->base.u.buf.offset / elem_size;
+      last_element = (sp_sview->base.u.buf.offset +
+                      sp_sview->base.u.buf.size) / elem_size - 1;
       for (j = 0; j < TGSI_QUAD_SIZE; j++) {
          const int x = CLAMP(v_i[j] + offset[0] +
-                             sp_sview->base.u.buf.first_element,
-                             sp_sview->base.u.buf.first_element,
-                             sp_sview->base.u.buf.last_element);
+                             first_element,
+                             first_element,
+                             last_element);
          tx = get_texel_2d_no_border(sp_sview, addr, x, 0);
          for (c = 0; c < 4; c++) {
             rgba[c][j] = tx[c];

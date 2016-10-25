@@ -208,11 +208,13 @@ am__objects_2 = libswrAVX_la-swr_clear.lo libswrAVX_la-swr_context.lo \
 	libswrAVX_la-swr_scratch.lo libswrAVX_la-swr_shader.lo \
 	libswrAVX_la-swr_fence.lo libswrAVX_la-swr_query.lo
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_3 = rasterizer/common/libswrAVX_la-formats.lo \
+am__objects_3 = rasterizer/archrast/libswrAVX_la-archrast.lo
+am__objects_4 = rasterizer/common/libswrAVX_la-formats.lo \
 	rasterizer/common/libswrAVX_la-rdtsc_buckets.lo \
 	rasterizer/common/libswrAVX_la-swr_assert.lo
-am__objects_4 = rasterizer/core/libswrAVX_la-api.lo \
+am__objects_5 = rasterizer/core/libswrAVX_la-api.lo \
 	rasterizer/core/libswrAVX_la-backend.lo \
+	rasterizer/core/libswrAVX_la-binner.lo \
 	rasterizer/core/libswrAVX_la-clip.lo \
 	rasterizer/core/libswrAVX_la-frontend.lo \
 	rasterizer/core/libswrAVX_la-multisample.lo \
@@ -221,20 +223,32 @@ am__objects_4 = rasterizer/core/libswrAVX_la-api.lo \
 	rasterizer/core/libswrAVX_la-rdtsc_core.lo \
 	rasterizer/core/libswrAVX_la-threads.lo \
 	rasterizer/core/libswrAVX_la-tilemgr.lo
-am__objects_5 = rasterizer/jitter/libswrAVX_la-blend_jit.lo \
+am__objects_6 = rasterizer/jitter/libswrAVX_la-blend_jit.lo \
 	rasterizer/jitter/libswrAVX_la-builder.lo \
 	rasterizer/jitter/libswrAVX_la-builder_misc.lo \
 	rasterizer/jitter/libswrAVX_la-fetch_jit.lo \
 	rasterizer/jitter/libswrAVX_la-JitManager.lo \
 	rasterizer/jitter/libswrAVX_la-streamout_jit.lo
-am__objects_6 = rasterizer/memory/libswrAVX_la-ClearTile.lo \
+am__objects_7 = rasterizer/memory/libswrAVX_la-ClearTile.lo \
 	rasterizer/memory/libswrAVX_la-LoadTile.lo \
-	rasterizer/memory/libswrAVX_la-StoreTile.lo
-am__objects_7 = rasterizer/scripts/libswrAVX_la-gen_knobs.lo \
-	rasterizer/jitter/libswrAVX_la-builder_x86.lo
-am__objects_8 = $(am__objects_2) $(am__objects_3) $(am__objects_4) \
-	$(am__objects_5) $(am__objects_6) $(am__objects_7)
-am_libswrAVX_la_OBJECTS = $(am__objects_8)
+	rasterizer/memory/libswrAVX_la-LoadTile_Linear.lo \
+	rasterizer/memory/libswrAVX_la-LoadTile_TileX.lo \
+	rasterizer/memory/libswrAVX_la-LoadTile_TileY.lo \
+	rasterizer/memory/libswrAVX_la-StoreTile.lo \
+	rasterizer/memory/libswrAVX_la-StoreTile_Linear2.lo \
+	rasterizer/memory/libswrAVX_la-StoreTile_Linear.lo \
+	rasterizer/memory/libswrAVX_la-StoreTile_TileW.lo \
+	rasterizer/memory/libswrAVX_la-StoreTile_TileX2.lo \
+	rasterizer/memory/libswrAVX_la-StoreTile_TileX.lo \
+	rasterizer/memory/libswrAVX_la-StoreTile_TileY2.lo \
+	rasterizer/memory/libswrAVX_la-StoreTile_TileY.lo
+am__objects_8 = rasterizer/scripts/libswrAVX_la-gen_knobs.lo \
+	rasterizer/jitter/libswrAVX_la-builder_x86.lo \
+	rasterizer/archrast/libswrAVX_la-gen_ar_event.lo
+am__objects_9 = $(am__objects_2) $(am__objects_3) $(am__objects_4) \
+	$(am__objects_5) $(am__objects_6) $(am__objects_7) \
+	$(am__objects_8)
+am_libswrAVX_la_OBJECTS = $(am__objects_9)
 nodist_libswrAVX_la_OBJECTS =  \
 	rasterizer/jitter/libswrAVX_la-builder_gen.lo
 libswrAVX_la_OBJECTS = $(am_libswrAVX_la_OBJECTS) \
@@ -243,17 +257,19 @@ libswrAVX_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(libswrAVX_la_CXXFLAGS) \
 	$(CXXFLAGS) $(libswrAVX_la_LDFLAGS) $(LDFLAGS) -o $@
 libswrAVX2_la_DEPENDENCIES = $(am__DEPENDENCIES_2)
-am__objects_9 = libswrAVX2_la-swr_clear.lo \
+am__objects_10 = libswrAVX2_la-swr_clear.lo \
 	libswrAVX2_la-swr_context.lo libswrAVX2_la-swr_draw.lo \
 	libswrAVX2_la-swr_screen.lo libswrAVX2_la-swr_state.lo \
 	libswrAVX2_la-swr_tex_sample.lo libswrAVX2_la-swr_scratch.lo \
 	libswrAVX2_la-swr_shader.lo libswrAVX2_la-swr_fence.lo \
 	libswrAVX2_la-swr_query.lo
-am__objects_10 = rasterizer/common/libswrAVX2_la-formats.lo \
+am__objects_11 = rasterizer/archrast/libswrAVX2_la-archrast.lo
+am__objects_12 = rasterizer/common/libswrAVX2_la-formats.lo \
 	rasterizer/common/libswrAVX2_la-rdtsc_buckets.lo \
 	rasterizer/common/libswrAVX2_la-swr_assert.lo
-am__objects_11 = rasterizer/core/libswrAVX2_la-api.lo \
+am__objects_13 = rasterizer/core/libswrAVX2_la-api.lo \
 	rasterizer/core/libswrAVX2_la-backend.lo \
+	rasterizer/core/libswrAVX2_la-binner.lo \
 	rasterizer/core/libswrAVX2_la-clip.lo \
 	rasterizer/core/libswrAVX2_la-frontend.lo \
 	rasterizer/core/libswrAVX2_la-multisample.lo \
@@ -262,20 +278,32 @@ am__objects_11 = rasterizer/core/libswrAVX2_la-api.lo \
 	rasterizer/core/libswrAVX2_la-rdtsc_core.lo \
 	rasterizer/core/libswrAVX2_la-threads.lo \
 	rasterizer/core/libswrAVX2_la-tilemgr.lo
-am__objects_12 = rasterizer/jitter/libswrAVX2_la-blend_jit.lo \
+am__objects_14 = rasterizer/jitter/libswrAVX2_la-blend_jit.lo \
 	rasterizer/jitter/libswrAVX2_la-builder.lo \
 	rasterizer/jitter/libswrAVX2_la-builder_misc.lo \
 	rasterizer/jitter/libswrAVX2_la-fetch_jit.lo \
 	rasterizer/jitter/libswrAVX2_la-JitManager.lo \
 	rasterizer/jitter/libswrAVX2_la-streamout_jit.lo
-am__objects_13 = rasterizer/memory/libswrAVX2_la-ClearTile.lo \
+am__objects_15 = rasterizer/memory/libswrAVX2_la-ClearTile.lo \
 	rasterizer/memory/libswrAVX2_la-LoadTile.lo \
-	rasterizer/memory/libswrAVX2_la-StoreTile.lo
-am__objects_14 = rasterizer/scripts/libswrAVX2_la-gen_knobs.lo \
-	rasterizer/jitter/libswrAVX2_la-builder_x86.lo
-am__objects_15 = $(am__objects_9) $(am__objects_10) $(am__objects_11) \
-	$(am__objects_12) $(am__objects_13) $(am__objects_14)
-am_libswrAVX2_la_OBJECTS = $(am__objects_15)
+	rasterizer/memory/libswrAVX2_la-LoadTile_Linear.lo \
+	rasterizer/memory/libswrAVX2_la-LoadTile_TileX.lo \
+	rasterizer/memory/libswrAVX2_la-LoadTile_TileY.lo \
+	rasterizer/memory/libswrAVX2_la-StoreTile.lo \
+	rasterizer/memory/libswrAVX2_la-StoreTile_Linear2.lo \
+	rasterizer/memory/libswrAVX2_la-StoreTile_Linear.lo \
+	rasterizer/memory/libswrAVX2_la-StoreTile_TileW.lo \
+	rasterizer/memory/libswrAVX2_la-StoreTile_TileX2.lo \
+	rasterizer/memory/libswrAVX2_la-StoreTile_TileX.lo \
+	rasterizer/memory/libswrAVX2_la-StoreTile_TileY2.lo \
+	rasterizer/memory/libswrAVX2_la-StoreTile_TileY.lo
+am__objects_16 = rasterizer/scripts/libswrAVX2_la-gen_knobs.lo \
+	rasterizer/jitter/libswrAVX2_la-builder_x86.lo \
+	rasterizer/archrast/libswrAVX2_la-gen_ar_event.lo
+am__objects_17 = $(am__objects_10) $(am__objects_11) $(am__objects_12) \
+	$(am__objects_13) $(am__objects_14) $(am__objects_15) \
+	$(am__objects_16)
+am_libswrAVX2_la_OBJECTS = $(am__objects_17)
 nodist_libswrAVX2_la_OBJECTS =  \
 	rasterizer/jitter/libswrAVX2_la-builder_gen.lo
 libswrAVX2_la_OBJECTS = $(am_libswrAVX2_la_OBJECTS) \
@@ -471,11 +499,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -571,6 +598,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -606,6 +635,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -694,6 +724,11 @@ CXX_SOURCES := \
 	swr_query.h \
 	swr_query.cpp
 
+ARCHRAST_CXX_SOURCES := \
+	rasterizer/archrast/archrast.cpp \
+	rasterizer/archrast/archrast.h \
+	rasterizer/archrast/eventmanager.h
+
 COMMON_CXX_SOURCES := \
 	rasterizer/common/formats.cpp \
 	rasterizer/common/formats.h \
@@ -703,6 +738,7 @@ COMMON_CXX_SOURCES := \
 	rasterizer/common/rdtsc_buckets.h \
 	rasterizer/common/rdtsc_buckets_shared.h \
 	rasterizer/common/rdtsc_buckets_shared.h \
+	rasterizer/common/simd16intrin.h \
 	rasterizer/common/simdintrin.h \
 	rasterizer/common/swr_assert.cpp \
 	rasterizer/common/swr_assert.h
@@ -713,9 +749,11 @@ CORE_CXX_SOURCES := \
 	rasterizer/core/arena.h \
 	rasterizer/core/backend.cpp \
 	rasterizer/core/backend.h \
+	rasterizer/core/binner.cpp \
 	rasterizer/core/blend.h \
 	rasterizer/core/clip.cpp \
 	rasterizer/core/clip.h \
+	rasterizer/core/conservativeRast.h \
 	rasterizer/core/context.h \
 	rasterizer/core/depthstencil.h \
 	rasterizer/core/fifo.hpp \
@@ -763,7 +801,19 @@ MEMORY_CXX_SOURCES := \
 	rasterizer/memory/ClearTile.cpp \
 	rasterizer/memory/Convert.h \
 	rasterizer/memory/LoadTile.cpp \
+	rasterizer/memory/LoadTile.h \
+	rasterizer/memory/LoadTile_Linear.cpp \
+	rasterizer/memory/LoadTile_TileX.cpp \
+	rasterizer/memory/LoadTile_TileY.cpp \
 	rasterizer/memory/StoreTile.cpp \
+	rasterizer/memory/StoreTile.h \
+	rasterizer/memory/StoreTile_Linear2.cpp \
+	rasterizer/memory/StoreTile_Linear.cpp \
+	rasterizer/memory/StoreTile_TileW.cpp \
+	rasterizer/memory/StoreTile_TileX2.cpp \
+	rasterizer/memory/StoreTile_TileX.cpp \
+	rasterizer/memory/StoreTile_TileY2.cpp \
+	rasterizer/memory/StoreTile_TileY.cpp \
 	rasterizer/memory/TilingFunctions.h \
 	rasterizer/memory/tilingtraits.h
 
@@ -836,18 +886,22 @@ AM_CXXFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(SWR_CXX11_CXXFLAGS)
 noinst_LTLIBRARIES = libmesaswr.la
 libmesaswr_la_SOURCES = $(LOADER_SOURCES)
 COMMON_CXXFLAGS = \
+	-fno-strict-aliasing \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(LLVM_CXXFLAGS) \
 	$(SWR_CXX11_CXXFLAGS) \
 	-I$(builddir)/rasterizer/scripts \
 	-I$(builddir)/rasterizer/jitter \
+	-I$(builddir)/rasterizer/archrast \
 	-I$(srcdir)/rasterizer \
 	-I$(srcdir)/rasterizer/core \
 	-I$(srcdir)/rasterizer/scripts \
-	-I$(srcdir)/rasterizer/jitter
+	-I$(srcdir)/rasterizer/jitter \
+	-I$(srcdir)/rasterizer/archrast
 
 COMMON_SOURCES = \
 	$(CXX_SOURCES) \
+	$(ARCHRAST_CXX_SOURCES) \
 	$(COMMON_CXX_SOURCES) \
 	$(CORE_CXX_SOURCES) \
 	$(JITTER_CXX_SOURCES) \
@@ -860,7 +914,11 @@ BUILT_SOURCES = \
 	rasterizer/scripts/gen_knobs.h \
 	rasterizer/jitter/state_llvm.h \
 	rasterizer/jitter/builder_x86.h \
-	rasterizer/jitter/builder_x86.cpp
+	rasterizer/jitter/builder_x86.cpp \
+	rasterizer/archrast/gen_ar_event.h \
+	rasterizer/archrast/gen_ar_event.cpp \
+	rasterizer/archrast/gen_ar_eventhandler.h \
+	rasterizer/archrast/gen_ar_eventhandlerfile.h
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
@@ -931,8 +989,10 @@ libswrAVX2_la_LDFLAGS = \
 	$(COMMON_LDFLAGS)
 
 EXTRA_DIST = \
+	rasterizer/archrast/events.proto \
 	rasterizer/jitter/scripts/gen_llvm_ir_macros.py \
 	rasterizer/jitter/scripts/gen_llvm_types.py \
+	rasterizer/scripts/gen_archrast.py \
 	rasterizer/scripts/gen_knobs.py \
 	rasterizer/scripts/knob_defs.py \
 	rasterizer/scripts/mako/ast.py \
@@ -952,7 +1012,11 @@ EXTRA_DIST = \
 	rasterizer/scripts/mako/runtime.py \
 	rasterizer/scripts/mako/template.py \
 	rasterizer/scripts/mako/util.py \
-	rasterizer/scripts/templates/knobs.template
+	rasterizer/scripts/templates/knobs.template \
+	rasterizer/scripts/templates/ar_event_h.template \
+	rasterizer/scripts/templates/ar_event_cpp.template \
+	rasterizer/scripts/templates/ar_eventhandler_h.template \
+	rasterizer/scripts/templates/ar_eventhandlerfile_h.template
 
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -1038,6 +1102,15 @@ clean-noinstLTLIBRARIES:
 
 libmesaswr.la: $(libmesaswr_la_OBJECTS) $(libmesaswr_la_DEPENDENCIES) $(EXTRA_libmesaswr_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(CXXLINK)  $(libmesaswr_la_OBJECTS) $(libmesaswr_la_LIBADD) $(LIBS)
+rasterizer/archrast/$(am__dirstamp):
+	@$(MKDIR_P) rasterizer/archrast
+	@: > rasterizer/archrast/$(am__dirstamp)
+rasterizer/archrast/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) rasterizer/archrast/$(DEPDIR)
+	@: > rasterizer/archrast/$(DEPDIR)/$(am__dirstamp)
+rasterizer/archrast/libswrAVX_la-archrast.lo:  \
+	rasterizer/archrast/$(am__dirstamp) \
+	rasterizer/archrast/$(DEPDIR)/$(am__dirstamp)
 rasterizer/common/$(am__dirstamp):
 	@$(MKDIR_P) rasterizer/common
 	@: > rasterizer/common/$(am__dirstamp)
@@ -1062,6 +1135,9 @@ rasterizer/core/$(DEPDIR)/$(am__dirstamp):
 rasterizer/core/libswrAVX_la-api.lo: rasterizer/core/$(am__dirstamp) \
 	rasterizer/core/$(DEPDIR)/$(am__dirstamp)
 rasterizer/core/libswrAVX_la-backend.lo:  \
+	rasterizer/core/$(am__dirstamp) \
+	rasterizer/core/$(DEPDIR)/$(am__dirstamp)
+rasterizer/core/libswrAVX_la-binner.lo:  \
 	rasterizer/core/$(am__dirstamp) \
 	rasterizer/core/$(DEPDIR)/$(am__dirstamp)
 rasterizer/core/libswrAVX_la-clip.lo: rasterizer/core/$(am__dirstamp) \
@@ -1123,7 +1199,37 @@ rasterizer/memory/libswrAVX_la-ClearTile.lo:  \
 rasterizer/memory/libswrAVX_la-LoadTile.lo:  \
 	rasterizer/memory/$(am__dirstamp) \
 	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-LoadTile_Linear.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-LoadTile_TileX.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-LoadTile_TileY.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
 rasterizer/memory/libswrAVX_la-StoreTile.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-StoreTile_Linear2.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-StoreTile_Linear.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-StoreTile_TileW.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-StoreTile_TileX2.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-StoreTile_TileX.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-StoreTile_TileY2.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX_la-StoreTile_TileY.lo:  \
 	rasterizer/memory/$(am__dirstamp) \
 	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
 rasterizer/scripts/$(am__dirstamp):
@@ -1138,12 +1244,18 @@ rasterizer/scripts/libswrAVX_la-gen_knobs.lo:  \
 rasterizer/jitter/libswrAVX_la-builder_x86.lo:  \
 	rasterizer/jitter/$(am__dirstamp) \
 	rasterizer/jitter/$(DEPDIR)/$(am__dirstamp)
+rasterizer/archrast/libswrAVX_la-gen_ar_event.lo:  \
+	rasterizer/archrast/$(am__dirstamp) \
+	rasterizer/archrast/$(DEPDIR)/$(am__dirstamp)
 rasterizer/jitter/libswrAVX_la-builder_gen.lo:  \
 	rasterizer/jitter/$(am__dirstamp) \
 	rasterizer/jitter/$(DEPDIR)/$(am__dirstamp)
 
 libswrAVX.la: $(libswrAVX_la_OBJECTS) $(libswrAVX_la_DEPENDENCIES) $(EXTRA_libswrAVX_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(libswrAVX_la_LINK) -rpath $(libdir) $(libswrAVX_la_OBJECTS) $(libswrAVX_la_LIBADD) $(LIBS)
+rasterizer/archrast/libswrAVX2_la-archrast.lo:  \
+	rasterizer/archrast/$(am__dirstamp) \
+	rasterizer/archrast/$(DEPDIR)/$(am__dirstamp)
 rasterizer/common/libswrAVX2_la-formats.lo:  \
 	rasterizer/common/$(am__dirstamp) \
 	rasterizer/common/$(DEPDIR)/$(am__dirstamp)
@@ -1156,6 +1268,9 @@ rasterizer/common/libswrAVX2_la-swr_assert.lo:  \
 rasterizer/core/libswrAVX2_la-api.lo: rasterizer/core/$(am__dirstamp) \
 	rasterizer/core/$(DEPDIR)/$(am__dirstamp)
 rasterizer/core/libswrAVX2_la-backend.lo:  \
+	rasterizer/core/$(am__dirstamp) \
+	rasterizer/core/$(DEPDIR)/$(am__dirstamp)
+rasterizer/core/libswrAVX2_la-binner.lo:  \
 	rasterizer/core/$(am__dirstamp) \
 	rasterizer/core/$(DEPDIR)/$(am__dirstamp)
 rasterizer/core/libswrAVX2_la-clip.lo:  \
@@ -1206,7 +1321,37 @@ rasterizer/memory/libswrAVX2_la-ClearTile.lo:  \
 rasterizer/memory/libswrAVX2_la-LoadTile.lo:  \
 	rasterizer/memory/$(am__dirstamp) \
 	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-LoadTile_Linear.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-LoadTile_TileX.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-LoadTile_TileY.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
 rasterizer/memory/libswrAVX2_la-StoreTile.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-StoreTile_Linear2.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-StoreTile_Linear.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-StoreTile_TileW.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-StoreTile_TileX2.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-StoreTile_TileX.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-StoreTile_TileY2.lo:  \
+	rasterizer/memory/$(am__dirstamp) \
+	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
+rasterizer/memory/libswrAVX2_la-StoreTile_TileY.lo:  \
 	rasterizer/memory/$(am__dirstamp) \
 	rasterizer/memory/$(DEPDIR)/$(am__dirstamp)
 rasterizer/scripts/libswrAVX2_la-gen_knobs.lo:  \
@@ -1215,6 +1360,9 @@ rasterizer/scripts/libswrAVX2_la-gen_knobs.lo:  \
 rasterizer/jitter/libswrAVX2_la-builder_x86.lo:  \
 	rasterizer/jitter/$(am__dirstamp) \
 	rasterizer/jitter/$(DEPDIR)/$(am__dirstamp)
+rasterizer/archrast/libswrAVX2_la-gen_ar_event.lo:  \
+	rasterizer/archrast/$(am__dirstamp) \
+	rasterizer/archrast/$(DEPDIR)/$(am__dirstamp)
 rasterizer/jitter/libswrAVX2_la-builder_gen.lo:  \
 	rasterizer/jitter/$(am__dirstamp) \
 	rasterizer/jitter/$(DEPDIR)/$(am__dirstamp)
@@ -1224,6 +1372,8 @@ libswrAVX2.la: $(libswrAVX2_la_OBJECTS) $(libswrAVX2_la_DEPENDENCIES) $(EXTRA_li
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f rasterizer/archrast/*.$(OBJEXT)
+	-rm -f rasterizer/archrast/*.lo
 	-rm -f rasterizer/common/*.$(OBJEXT)
 	-rm -f rasterizer/common/*.lo
 	-rm -f rasterizer/core/*.$(OBJEXT)
@@ -1259,6 +1409,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_tex_sample.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/swr_loader.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/archrast/$(DEPDIR)/libswrAVX2_la-archrast.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/archrast/$(DEPDIR)/libswrAVX2_la-gen_ar_event.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/archrast/$(DEPDIR)/libswrAVX_la-archrast.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/archrast/$(DEPDIR)/libswrAVX_la-gen_ar_event.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/common/$(DEPDIR)/libswrAVX2_la-formats.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/common/$(DEPDIR)/libswrAVX2_la-rdtsc_buckets.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/common/$(DEPDIR)/libswrAVX2_la-swr_assert.Plo@am__quote@
@@ -1267,6 +1421,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/common/$(DEPDIR)/libswrAVX_la-swr_assert.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX2_la-api.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX2_la-backend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX2_la-binner.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX2_la-clip.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX2_la-frontend.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX2_la-multisample.Plo@am__quote@
@@ -1277,6 +1432,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX2_la-tilemgr.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX_la-api.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX_la-backend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX_la-binner.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX_la-clip.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX_la-frontend.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/core/$(DEPDIR)/libswrAVX_la-multisample.Plo@am__quote@
@@ -1303,10 +1459,30 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/jitter/$(DEPDIR)/libswrAVX_la-streamout_jit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-ClearTile.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_Linear.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_TileX.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_TileY.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_Linear.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_Linear2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileW.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileX.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileX2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileY.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileY2.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-ClearTile.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_Linear.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_TileX.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_TileY.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_Linear.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_Linear2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileW.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileX.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileX2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileY.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileY2.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/scripts/$(DEPDIR)/libswrAVX2_la-gen_knobs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rasterizer/scripts/$(DEPDIR)/libswrAVX_la-gen_knobs.Plo@am__quote@
 
@@ -1404,6 +1580,13 @@ libswrAVX_la-swr_query.lo: swr_query.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o libswrAVX_la-swr_query.lo `test -f 'swr_query.cpp' || echo '$(srcdir)/'`swr_query.cpp
 
+rasterizer/archrast/libswrAVX_la-archrast.lo: rasterizer/archrast/archrast.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/archrast/libswrAVX_la-archrast.lo -MD -MP -MF rasterizer/archrast/$(DEPDIR)/libswrAVX_la-archrast.Tpo -c -o rasterizer/archrast/libswrAVX_la-archrast.lo `test -f 'rasterizer/archrast/archrast.cpp' || echo '$(srcdir)/'`rasterizer/archrast/archrast.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/archrast/$(DEPDIR)/libswrAVX_la-archrast.Tpo rasterizer/archrast/$(DEPDIR)/libswrAVX_la-archrast.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/archrast/archrast.cpp' object='rasterizer/archrast/libswrAVX_la-archrast.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/archrast/libswrAVX_la-archrast.lo `test -f 'rasterizer/archrast/archrast.cpp' || echo '$(srcdir)/'`rasterizer/archrast/archrast.cpp
+
 rasterizer/common/libswrAVX_la-formats.lo: rasterizer/common/formats.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/common/libswrAVX_la-formats.lo -MD -MP -MF rasterizer/common/$(DEPDIR)/libswrAVX_la-formats.Tpo -c -o rasterizer/common/libswrAVX_la-formats.lo `test -f 'rasterizer/common/formats.cpp' || echo '$(srcdir)/'`rasterizer/common/formats.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/common/$(DEPDIR)/libswrAVX_la-formats.Tpo rasterizer/common/$(DEPDIR)/libswrAVX_la-formats.Plo
@@ -1438,6 +1621,13 @@ rasterizer/core/libswrAVX_la-backend.lo: rasterizer/core/backend.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/core/backend.cpp' object='rasterizer/core/libswrAVX_la-backend.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/core/libswrAVX_la-backend.lo `test -f 'rasterizer/core/backend.cpp' || echo '$(srcdir)/'`rasterizer/core/backend.cpp
+
+rasterizer/core/libswrAVX_la-binner.lo: rasterizer/core/binner.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/core/libswrAVX_la-binner.lo -MD -MP -MF rasterizer/core/$(DEPDIR)/libswrAVX_la-binner.Tpo -c -o rasterizer/core/libswrAVX_la-binner.lo `test -f 'rasterizer/core/binner.cpp' || echo '$(srcdir)/'`rasterizer/core/binner.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/core/$(DEPDIR)/libswrAVX_la-binner.Tpo rasterizer/core/$(DEPDIR)/libswrAVX_la-binner.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/core/binner.cpp' object='rasterizer/core/libswrAVX_la-binner.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/core/libswrAVX_la-binner.lo `test -f 'rasterizer/core/binner.cpp' || echo '$(srcdir)/'`rasterizer/core/binner.cpp
 
 rasterizer/core/libswrAVX_la-clip.lo: rasterizer/core/clip.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/core/libswrAVX_la-clip.lo -MD -MP -MF rasterizer/core/$(DEPDIR)/libswrAVX_la-clip.Tpo -c -o rasterizer/core/libswrAVX_la-clip.lo `test -f 'rasterizer/core/clip.cpp' || echo '$(srcdir)/'`rasterizer/core/clip.cpp
@@ -1551,12 +1741,82 @@ rasterizer/memory/libswrAVX_la-LoadTile.lo: rasterizer/memory/LoadTile.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-LoadTile.lo `test -f 'rasterizer/memory/LoadTile.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile.cpp
 
+rasterizer/memory/libswrAVX_la-LoadTile_Linear.lo: rasterizer/memory/LoadTile_Linear.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-LoadTile_Linear.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_Linear.Tpo -c -o rasterizer/memory/libswrAVX_la-LoadTile_Linear.lo `test -f 'rasterizer/memory/LoadTile_Linear.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_Linear.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_Linear.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_Linear.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/LoadTile_Linear.cpp' object='rasterizer/memory/libswrAVX_la-LoadTile_Linear.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-LoadTile_Linear.lo `test -f 'rasterizer/memory/LoadTile_Linear.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_Linear.cpp
+
+rasterizer/memory/libswrAVX_la-LoadTile_TileX.lo: rasterizer/memory/LoadTile_TileX.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-LoadTile_TileX.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_TileX.Tpo -c -o rasterizer/memory/libswrAVX_la-LoadTile_TileX.lo `test -f 'rasterizer/memory/LoadTile_TileX.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_TileX.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_TileX.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_TileX.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/LoadTile_TileX.cpp' object='rasterizer/memory/libswrAVX_la-LoadTile_TileX.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-LoadTile_TileX.lo `test -f 'rasterizer/memory/LoadTile_TileX.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_TileX.cpp
+
+rasterizer/memory/libswrAVX_la-LoadTile_TileY.lo: rasterizer/memory/LoadTile_TileY.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-LoadTile_TileY.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_TileY.Tpo -c -o rasterizer/memory/libswrAVX_la-LoadTile_TileY.lo `test -f 'rasterizer/memory/LoadTile_TileY.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_TileY.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_TileY.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-LoadTile_TileY.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/LoadTile_TileY.cpp' object='rasterizer/memory/libswrAVX_la-LoadTile_TileY.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-LoadTile_TileY.lo `test -f 'rasterizer/memory/LoadTile_TileY.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_TileY.cpp
+
 rasterizer/memory/libswrAVX_la-StoreTile.lo: rasterizer/memory/StoreTile.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-StoreTile.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile.Tpo -c -o rasterizer/memory/libswrAVX_la-StoreTile.lo `test -f 'rasterizer/memory/StoreTile.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile.Plo
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile.cpp' object='rasterizer/memory/libswrAVX_la-StoreTile.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-StoreTile.lo `test -f 'rasterizer/memory/StoreTile.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile.cpp
+
+rasterizer/memory/libswrAVX_la-StoreTile_Linear2.lo: rasterizer/memory/StoreTile_Linear2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-StoreTile_Linear2.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_Linear2.Tpo -c -o rasterizer/memory/libswrAVX_la-StoreTile_Linear2.lo `test -f 'rasterizer/memory/StoreTile_Linear2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_Linear2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_Linear2.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_Linear2.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_Linear2.cpp' object='rasterizer/memory/libswrAVX_la-StoreTile_Linear2.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-StoreTile_Linear2.lo `test -f 'rasterizer/memory/StoreTile_Linear2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_Linear2.cpp
+
+rasterizer/memory/libswrAVX_la-StoreTile_Linear.lo: rasterizer/memory/StoreTile_Linear.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-StoreTile_Linear.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_Linear.Tpo -c -o rasterizer/memory/libswrAVX_la-StoreTile_Linear.lo `test -f 'rasterizer/memory/StoreTile_Linear.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_Linear.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_Linear.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_Linear.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_Linear.cpp' object='rasterizer/memory/libswrAVX_la-StoreTile_Linear.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-StoreTile_Linear.lo `test -f 'rasterizer/memory/StoreTile_Linear.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_Linear.cpp
+
+rasterizer/memory/libswrAVX_la-StoreTile_TileW.lo: rasterizer/memory/StoreTile_TileW.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-StoreTile_TileW.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileW.Tpo -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileW.lo `test -f 'rasterizer/memory/StoreTile_TileW.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileW.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileW.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileW.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileW.cpp' object='rasterizer/memory/libswrAVX_la-StoreTile_TileW.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileW.lo `test -f 'rasterizer/memory/StoreTile_TileW.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileW.cpp
+
+rasterizer/memory/libswrAVX_la-StoreTile_TileX2.lo: rasterizer/memory/StoreTile_TileX2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-StoreTile_TileX2.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileX2.Tpo -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileX2.lo `test -f 'rasterizer/memory/StoreTile_TileX2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileX2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileX2.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileX2.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileX2.cpp' object='rasterizer/memory/libswrAVX_la-StoreTile_TileX2.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileX2.lo `test -f 'rasterizer/memory/StoreTile_TileX2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileX2.cpp
+
+rasterizer/memory/libswrAVX_la-StoreTile_TileX.lo: rasterizer/memory/StoreTile_TileX.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-StoreTile_TileX.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileX.Tpo -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileX.lo `test -f 'rasterizer/memory/StoreTile_TileX.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileX.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileX.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileX.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileX.cpp' object='rasterizer/memory/libswrAVX_la-StoreTile_TileX.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileX.lo `test -f 'rasterizer/memory/StoreTile_TileX.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileX.cpp
+
+rasterizer/memory/libswrAVX_la-StoreTile_TileY2.lo: rasterizer/memory/StoreTile_TileY2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-StoreTile_TileY2.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileY2.Tpo -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileY2.lo `test -f 'rasterizer/memory/StoreTile_TileY2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileY2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileY2.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileY2.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileY2.cpp' object='rasterizer/memory/libswrAVX_la-StoreTile_TileY2.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileY2.lo `test -f 'rasterizer/memory/StoreTile_TileY2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileY2.cpp
+
+rasterizer/memory/libswrAVX_la-StoreTile_TileY.lo: rasterizer/memory/StoreTile_TileY.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX_la-StoreTile_TileY.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileY.Tpo -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileY.lo `test -f 'rasterizer/memory/StoreTile_TileY.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileY.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileY.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX_la-StoreTile_TileY.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileY.cpp' object='rasterizer/memory/libswrAVX_la-StoreTile_TileY.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX_la-StoreTile_TileY.lo `test -f 'rasterizer/memory/StoreTile_TileY.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileY.cpp
 
 rasterizer/scripts/libswrAVX_la-gen_knobs.lo: rasterizer/scripts/gen_knobs.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/scripts/libswrAVX_la-gen_knobs.lo -MD -MP -MF rasterizer/scripts/$(DEPDIR)/libswrAVX_la-gen_knobs.Tpo -c -o rasterizer/scripts/libswrAVX_la-gen_knobs.lo `test -f 'rasterizer/scripts/gen_knobs.cpp' || echo '$(srcdir)/'`rasterizer/scripts/gen_knobs.cpp
@@ -1571,6 +1831,13 @@ rasterizer/jitter/libswrAVX_la-builder_x86.lo: rasterizer/jitter/builder_x86.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/jitter/builder_x86.cpp' object='rasterizer/jitter/libswrAVX_la-builder_x86.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/jitter/libswrAVX_la-builder_x86.lo `test -f 'rasterizer/jitter/builder_x86.cpp' || echo '$(srcdir)/'`rasterizer/jitter/builder_x86.cpp
+
+rasterizer/archrast/libswrAVX_la-gen_ar_event.lo: rasterizer/archrast/gen_ar_event.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/archrast/libswrAVX_la-gen_ar_event.lo -MD -MP -MF rasterizer/archrast/$(DEPDIR)/libswrAVX_la-gen_ar_event.Tpo -c -o rasterizer/archrast/libswrAVX_la-gen_ar_event.lo `test -f 'rasterizer/archrast/gen_ar_event.cpp' || echo '$(srcdir)/'`rasterizer/archrast/gen_ar_event.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/archrast/$(DEPDIR)/libswrAVX_la-gen_ar_event.Tpo rasterizer/archrast/$(DEPDIR)/libswrAVX_la-gen_ar_event.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/archrast/gen_ar_event.cpp' object='rasterizer/archrast/libswrAVX_la-gen_ar_event.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/archrast/libswrAVX_la-gen_ar_event.lo `test -f 'rasterizer/archrast/gen_ar_event.cpp' || echo '$(srcdir)/'`rasterizer/archrast/gen_ar_event.cpp
 
 rasterizer/jitter/libswrAVX_la-builder_gen.lo: rasterizer/jitter/builder_gen.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/jitter/libswrAVX_la-builder_gen.lo -MD -MP -MF rasterizer/jitter/$(DEPDIR)/libswrAVX_la-builder_gen.Tpo -c -o rasterizer/jitter/libswrAVX_la-builder_gen.lo `test -f 'rasterizer/jitter/builder_gen.cpp' || echo '$(srcdir)/'`rasterizer/jitter/builder_gen.cpp
@@ -1649,6 +1916,13 @@ libswrAVX2_la-swr_query.lo: swr_query.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o libswrAVX2_la-swr_query.lo `test -f 'swr_query.cpp' || echo '$(srcdir)/'`swr_query.cpp
 
+rasterizer/archrast/libswrAVX2_la-archrast.lo: rasterizer/archrast/archrast.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/archrast/libswrAVX2_la-archrast.lo -MD -MP -MF rasterizer/archrast/$(DEPDIR)/libswrAVX2_la-archrast.Tpo -c -o rasterizer/archrast/libswrAVX2_la-archrast.lo `test -f 'rasterizer/archrast/archrast.cpp' || echo '$(srcdir)/'`rasterizer/archrast/archrast.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/archrast/$(DEPDIR)/libswrAVX2_la-archrast.Tpo rasterizer/archrast/$(DEPDIR)/libswrAVX2_la-archrast.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/archrast/archrast.cpp' object='rasterizer/archrast/libswrAVX2_la-archrast.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/archrast/libswrAVX2_la-archrast.lo `test -f 'rasterizer/archrast/archrast.cpp' || echo '$(srcdir)/'`rasterizer/archrast/archrast.cpp
+
 rasterizer/common/libswrAVX2_la-formats.lo: rasterizer/common/formats.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/common/libswrAVX2_la-formats.lo -MD -MP -MF rasterizer/common/$(DEPDIR)/libswrAVX2_la-formats.Tpo -c -o rasterizer/common/libswrAVX2_la-formats.lo `test -f 'rasterizer/common/formats.cpp' || echo '$(srcdir)/'`rasterizer/common/formats.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/common/$(DEPDIR)/libswrAVX2_la-formats.Tpo rasterizer/common/$(DEPDIR)/libswrAVX2_la-formats.Plo
@@ -1683,6 +1957,13 @@ rasterizer/core/libswrAVX2_la-backend.lo: rasterizer/core/backend.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/core/backend.cpp' object='rasterizer/core/libswrAVX2_la-backend.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/core/libswrAVX2_la-backend.lo `test -f 'rasterizer/core/backend.cpp' || echo '$(srcdir)/'`rasterizer/core/backend.cpp
+
+rasterizer/core/libswrAVX2_la-binner.lo: rasterizer/core/binner.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/core/libswrAVX2_la-binner.lo -MD -MP -MF rasterizer/core/$(DEPDIR)/libswrAVX2_la-binner.Tpo -c -o rasterizer/core/libswrAVX2_la-binner.lo `test -f 'rasterizer/core/binner.cpp' || echo '$(srcdir)/'`rasterizer/core/binner.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/core/$(DEPDIR)/libswrAVX2_la-binner.Tpo rasterizer/core/$(DEPDIR)/libswrAVX2_la-binner.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/core/binner.cpp' object='rasterizer/core/libswrAVX2_la-binner.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/core/libswrAVX2_la-binner.lo `test -f 'rasterizer/core/binner.cpp' || echo '$(srcdir)/'`rasterizer/core/binner.cpp
 
 rasterizer/core/libswrAVX2_la-clip.lo: rasterizer/core/clip.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/core/libswrAVX2_la-clip.lo -MD -MP -MF rasterizer/core/$(DEPDIR)/libswrAVX2_la-clip.Tpo -c -o rasterizer/core/libswrAVX2_la-clip.lo `test -f 'rasterizer/core/clip.cpp' || echo '$(srcdir)/'`rasterizer/core/clip.cpp
@@ -1796,12 +2077,82 @@ rasterizer/memory/libswrAVX2_la-LoadTile.lo: rasterizer/memory/LoadTile.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-LoadTile.lo `test -f 'rasterizer/memory/LoadTile.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile.cpp
 
+rasterizer/memory/libswrAVX2_la-LoadTile_Linear.lo: rasterizer/memory/LoadTile_Linear.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-LoadTile_Linear.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_Linear.Tpo -c -o rasterizer/memory/libswrAVX2_la-LoadTile_Linear.lo `test -f 'rasterizer/memory/LoadTile_Linear.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_Linear.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_Linear.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_Linear.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/LoadTile_Linear.cpp' object='rasterizer/memory/libswrAVX2_la-LoadTile_Linear.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-LoadTile_Linear.lo `test -f 'rasterizer/memory/LoadTile_Linear.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_Linear.cpp
+
+rasterizer/memory/libswrAVX2_la-LoadTile_TileX.lo: rasterizer/memory/LoadTile_TileX.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-LoadTile_TileX.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_TileX.Tpo -c -o rasterizer/memory/libswrAVX2_la-LoadTile_TileX.lo `test -f 'rasterizer/memory/LoadTile_TileX.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_TileX.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_TileX.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_TileX.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/LoadTile_TileX.cpp' object='rasterizer/memory/libswrAVX2_la-LoadTile_TileX.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-LoadTile_TileX.lo `test -f 'rasterizer/memory/LoadTile_TileX.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_TileX.cpp
+
+rasterizer/memory/libswrAVX2_la-LoadTile_TileY.lo: rasterizer/memory/LoadTile_TileY.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-LoadTile_TileY.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_TileY.Tpo -c -o rasterizer/memory/libswrAVX2_la-LoadTile_TileY.lo `test -f 'rasterizer/memory/LoadTile_TileY.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_TileY.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_TileY.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-LoadTile_TileY.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/LoadTile_TileY.cpp' object='rasterizer/memory/libswrAVX2_la-LoadTile_TileY.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-LoadTile_TileY.lo `test -f 'rasterizer/memory/LoadTile_TileY.cpp' || echo '$(srcdir)/'`rasterizer/memory/LoadTile_TileY.cpp
+
 rasterizer/memory/libswrAVX2_la-StoreTile.lo: rasterizer/memory/StoreTile.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-StoreTile.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile.Tpo -c -o rasterizer/memory/libswrAVX2_la-StoreTile.lo `test -f 'rasterizer/memory/StoreTile.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile.Plo
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile.cpp' object='rasterizer/memory/libswrAVX2_la-StoreTile.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-StoreTile.lo `test -f 'rasterizer/memory/StoreTile.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile.cpp
+
+rasterizer/memory/libswrAVX2_la-StoreTile_Linear2.lo: rasterizer/memory/StoreTile_Linear2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-StoreTile_Linear2.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_Linear2.Tpo -c -o rasterizer/memory/libswrAVX2_la-StoreTile_Linear2.lo `test -f 'rasterizer/memory/StoreTile_Linear2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_Linear2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_Linear2.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_Linear2.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_Linear2.cpp' object='rasterizer/memory/libswrAVX2_la-StoreTile_Linear2.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-StoreTile_Linear2.lo `test -f 'rasterizer/memory/StoreTile_Linear2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_Linear2.cpp
+
+rasterizer/memory/libswrAVX2_la-StoreTile_Linear.lo: rasterizer/memory/StoreTile_Linear.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-StoreTile_Linear.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_Linear.Tpo -c -o rasterizer/memory/libswrAVX2_la-StoreTile_Linear.lo `test -f 'rasterizer/memory/StoreTile_Linear.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_Linear.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_Linear.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_Linear.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_Linear.cpp' object='rasterizer/memory/libswrAVX2_la-StoreTile_Linear.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-StoreTile_Linear.lo `test -f 'rasterizer/memory/StoreTile_Linear.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_Linear.cpp
+
+rasterizer/memory/libswrAVX2_la-StoreTile_TileW.lo: rasterizer/memory/StoreTile_TileW.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-StoreTile_TileW.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileW.Tpo -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileW.lo `test -f 'rasterizer/memory/StoreTile_TileW.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileW.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileW.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileW.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileW.cpp' object='rasterizer/memory/libswrAVX2_la-StoreTile_TileW.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileW.lo `test -f 'rasterizer/memory/StoreTile_TileW.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileW.cpp
+
+rasterizer/memory/libswrAVX2_la-StoreTile_TileX2.lo: rasterizer/memory/StoreTile_TileX2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-StoreTile_TileX2.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileX2.Tpo -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileX2.lo `test -f 'rasterizer/memory/StoreTile_TileX2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileX2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileX2.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileX2.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileX2.cpp' object='rasterizer/memory/libswrAVX2_la-StoreTile_TileX2.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileX2.lo `test -f 'rasterizer/memory/StoreTile_TileX2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileX2.cpp
+
+rasterizer/memory/libswrAVX2_la-StoreTile_TileX.lo: rasterizer/memory/StoreTile_TileX.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-StoreTile_TileX.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileX.Tpo -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileX.lo `test -f 'rasterizer/memory/StoreTile_TileX.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileX.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileX.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileX.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileX.cpp' object='rasterizer/memory/libswrAVX2_la-StoreTile_TileX.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileX.lo `test -f 'rasterizer/memory/StoreTile_TileX.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileX.cpp
+
+rasterizer/memory/libswrAVX2_la-StoreTile_TileY2.lo: rasterizer/memory/StoreTile_TileY2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-StoreTile_TileY2.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileY2.Tpo -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileY2.lo `test -f 'rasterizer/memory/StoreTile_TileY2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileY2.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileY2.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileY2.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileY2.cpp' object='rasterizer/memory/libswrAVX2_la-StoreTile_TileY2.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileY2.lo `test -f 'rasterizer/memory/StoreTile_TileY2.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileY2.cpp
+
+rasterizer/memory/libswrAVX2_la-StoreTile_TileY.lo: rasterizer/memory/StoreTile_TileY.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/memory/libswrAVX2_la-StoreTile_TileY.lo -MD -MP -MF rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileY.Tpo -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileY.lo `test -f 'rasterizer/memory/StoreTile_TileY.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileY.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileY.Tpo rasterizer/memory/$(DEPDIR)/libswrAVX2_la-StoreTile_TileY.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/memory/StoreTile_TileY.cpp' object='rasterizer/memory/libswrAVX2_la-StoreTile_TileY.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/memory/libswrAVX2_la-StoreTile_TileY.lo `test -f 'rasterizer/memory/StoreTile_TileY.cpp' || echo '$(srcdir)/'`rasterizer/memory/StoreTile_TileY.cpp
 
 rasterizer/scripts/libswrAVX2_la-gen_knobs.lo: rasterizer/scripts/gen_knobs.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/scripts/libswrAVX2_la-gen_knobs.lo -MD -MP -MF rasterizer/scripts/$(DEPDIR)/libswrAVX2_la-gen_knobs.Tpo -c -o rasterizer/scripts/libswrAVX2_la-gen_knobs.lo `test -f 'rasterizer/scripts/gen_knobs.cpp' || echo '$(srcdir)/'`rasterizer/scripts/gen_knobs.cpp
@@ -1817,6 +2168,13 @@ rasterizer/jitter/libswrAVX2_la-builder_x86.lo: rasterizer/jitter/builder_x86.cp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/jitter/libswrAVX2_la-builder_x86.lo `test -f 'rasterizer/jitter/builder_x86.cpp' || echo '$(srcdir)/'`rasterizer/jitter/builder_x86.cpp
 
+rasterizer/archrast/libswrAVX2_la-gen_ar_event.lo: rasterizer/archrast/gen_ar_event.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/archrast/libswrAVX2_la-gen_ar_event.lo -MD -MP -MF rasterizer/archrast/$(DEPDIR)/libswrAVX2_la-gen_ar_event.Tpo -c -o rasterizer/archrast/libswrAVX2_la-gen_ar_event.lo `test -f 'rasterizer/archrast/gen_ar_event.cpp' || echo '$(srcdir)/'`rasterizer/archrast/gen_ar_event.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/archrast/$(DEPDIR)/libswrAVX2_la-gen_ar_event.Tpo rasterizer/archrast/$(DEPDIR)/libswrAVX2_la-gen_ar_event.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='rasterizer/archrast/gen_ar_event.cpp' object='rasterizer/archrast/libswrAVX2_la-gen_ar_event.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o rasterizer/archrast/libswrAVX2_la-gen_ar_event.lo `test -f 'rasterizer/archrast/gen_ar_event.cpp' || echo '$(srcdir)/'`rasterizer/archrast/gen_ar_event.cpp
+
 rasterizer/jitter/libswrAVX2_la-builder_gen.lo: rasterizer/jitter/builder_gen.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT rasterizer/jitter/libswrAVX2_la-builder_gen.lo -MD -MP -MF rasterizer/jitter/$(DEPDIR)/libswrAVX2_la-builder_gen.Tpo -c -o rasterizer/jitter/libswrAVX2_la-builder_gen.lo `test -f 'rasterizer/jitter/builder_gen.cpp' || echo '$(srcdir)/'`rasterizer/jitter/builder_gen.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) rasterizer/jitter/$(DEPDIR)/libswrAVX2_la-builder_gen.Tpo rasterizer/jitter/$(DEPDIR)/libswrAVX2_la-builder_gen.Plo
@@ -1829,6 +2187,7 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf rasterizer/archrast/.libs rasterizer/archrast/_libs
 	-rm -rf rasterizer/common/.libs rasterizer/common/_libs
 	-rm -rf rasterizer/core/.libs rasterizer/core/_libs
 	-rm -rf rasterizer/jitter/.libs rasterizer/jitter/_libs
@@ -1955,6 +2314,8 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f rasterizer/archrast/$(DEPDIR)/$(am__dirstamp)
+	-rm -f rasterizer/archrast/$(am__dirstamp)
 	-rm -f rasterizer/common/$(DEPDIR)/$(am__dirstamp)
 	-rm -f rasterizer/common/$(am__dirstamp)
 	-rm -f rasterizer/core/$(DEPDIR)/$(am__dirstamp)
@@ -1977,7 +2338,7 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool clean-local \
 	clean-noinstLTLIBRARIES mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR) rasterizer/common/$(DEPDIR) rasterizer/core/$(DEPDIR) rasterizer/jitter/$(DEPDIR) rasterizer/memory/$(DEPDIR) rasterizer/scripts/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) rasterizer/archrast/$(DEPDIR) rasterizer/common/$(DEPDIR) rasterizer/core/$(DEPDIR) rasterizer/jitter/$(DEPDIR) rasterizer/memory/$(DEPDIR) rasterizer/scripts/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-local distclean-tags
@@ -2023,7 +2384,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR) rasterizer/common/$(DEPDIR) rasterizer/core/$(DEPDIR) rasterizer/jitter/$(DEPDIR) rasterizer/memory/$(DEPDIR) rasterizer/scripts/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) rasterizer/archrast/$(DEPDIR) rasterizer/common/$(DEPDIR) rasterizer/core/$(DEPDIR) rasterizer/jitter/$(DEPDIR) rasterizer/memory/$(DEPDIR) rasterizer/scripts/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -2110,6 +2471,38 @@ rasterizer/jitter/builder_x86.cpp: rasterizer/jitter/scripts/gen_llvm_ir_macros.
 		--output rasterizer/jitter/builder_x86.cpp \
 		--gen_x86_cpp
 
+rasterizer/archrast/gen_ar_event.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_event_h.template rasterizer/archrast/events.proto
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		--proto $(srcdir)/rasterizer/archrast/events.proto \
+		--output rasterizer/archrast/gen_ar_event.h \
+		--gen_event_h
+
+rasterizer/archrast/gen_ar_event.cpp: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_event_cpp.template rasterizer/archrast/events.proto
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		--proto $(srcdir)/rasterizer/archrast/events.proto \
+		--output rasterizer/archrast/gen_ar_event.cpp \
+		--gen_event_cpp
+
+rasterizer/archrast/gen_ar_eventhandler.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_eventhandler_h.template rasterizer/archrast/events.proto
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		--proto $(srcdir)/rasterizer/archrast/events.proto \
+		--output rasterizer/archrast/gen_ar_eventhandler.h \
+		--gen_eventhandler_h
+
+rasterizer/archrast/gen_ar_eventhandlerfile.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_eventhandlerfile_h.template rasterizer/archrast/events.proto
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		--proto $(srcdir)/rasterizer/archrast/events.proto \
+		--output rasterizer/archrast/gen_ar_eventhandlerfile.h \
+		--gen_eventhandlerfile_h
+
 # XXX: As we cannot use BUILT_SOURCES (the files will end up in the dist
 # tarball) just annotate the dependency directly.
 # As the single direct user of builder_gen.h is a header (builder.h) trace all
@@ -2140,8 +2533,8 @@ distclean-local:
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	fi;							\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(MKDIR_P) $$link_dir;					\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list="$(dri_LTLIBRARIES:%.la=.libs/%.so)";		\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+="$(egl_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)";	\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+="$(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)";	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list="$$file_list$(egl_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)";	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list="$$file_list$(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*)";	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $$file_list; do 				\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		if test -h .libs/$$f; then			\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			cp -d $$f $$link_dir;			\

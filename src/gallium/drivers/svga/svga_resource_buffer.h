@@ -192,17 +192,26 @@ struct svga_buffer
    unsigned size;  /**< Approximate size in bytes */
 
    boolean dirty;  /**< Need to do a readback before mapping? */
+
+   /** In some cases we try to keep the results of the translate_indices()
+    * function from svga_draw_elements.c
+    */
+   struct {
+      enum pipe_prim_type orig_prim, new_prim;
+      struct pipe_resource *buffer;
+      unsigned index_size;
+      unsigned offset;  /**< first index */
+      unsigned count;   /**< num indices */
+   } translated_indices;
 };
 
 
 static inline struct svga_buffer *
-svga_buffer(struct pipe_resource *buffer)
+svga_buffer(struct pipe_resource *resource)
 {
-   if (buffer) {
-      assert(((struct svga_buffer *)buffer)->b.vtbl == &svga_buffer_vtbl);
-      return (struct svga_buffer *)buffer;
-   }
-   return NULL;
+   struct svga_buffer *buf = (struct svga_buffer *) resource;
+   assert(buf == NULL || buf->b.vtbl == &svga_buffer_vtbl);
+   return buf;
 }
 
 
@@ -254,7 +263,7 @@ svga_buffer_hw_storage_map(struct svga_context *svga,
 {
    struct svga_winsys_screen *sws = svga_buffer_winsys_screen(sbuf);
 
-   svga->hud.num_resources_mapped++;
+   svga->hud.num_buffers_mapped++;
 
    if (sws->have_gb_objects) {
       return svga->swc->surface_map(svga->swc, sbuf->handle, flags, retry);

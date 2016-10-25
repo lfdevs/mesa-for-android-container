@@ -1469,7 +1469,7 @@ static void*
 }
 
 static void r300_bind_sampler_states(struct pipe_context* pipe,
-                                     unsigned shader,
+                                     enum pipe_shader_type shader,
                                      unsigned start, unsigned count,
                                      void** states)
 {
@@ -1522,7 +1522,8 @@ static uint32_t r300_assign_texture_cache_region(unsigned index, unsigned num)
         return R300_TX_CACHE(num + index);
 }
 
-static void r300_set_sampler_views(struct pipe_context* pipe, unsigned shader,
+static void r300_set_sampler_views(struct pipe_context* pipe,
+                                   enum pipe_shader_type shader,
                                    unsigned start, unsigned count,
                                    struct pipe_sampler_view** views)
 {
@@ -2003,7 +2004,7 @@ static void r300_delete_vs_state(struct pipe_context* pipe, void* shader)
 
 static void r300_set_constant_buffer(struct pipe_context *pipe,
                                      uint shader, uint index,
-                                     struct pipe_constant_buffer *cb)
+                                     const struct pipe_constant_buffer *cb)
 {
     struct r300_context* r300 = r300_context(pipe);
     struct r300_constant_buffer *cbuf;

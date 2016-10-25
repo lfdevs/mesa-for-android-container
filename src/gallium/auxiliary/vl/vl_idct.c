@@ -321,13 +321,11 @@ static void *
 create_stage1_frag_shader(struct vl_idct *idct)
 {
    struct ureg_program *shader;
-
    struct ureg_src l_addr[2], r_addr[2];
-
    struct ureg_dst l[4][2], r[2];
    struct ureg_dst *fragment;
-
-   int i, j;
+   unsigned i;
+   int j;
 
    shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader)

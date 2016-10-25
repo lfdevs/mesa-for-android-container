@@ -283,6 +283,32 @@ nv50_validate_viewport(struct nv50_context *nv50)
    nv50->viewports_dirty = 0;
 }
 
+static void
+nv50_validate_window_rects(struct nv50_context *nv50)
+{
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   bool enable = nv50->window_rect.rects > 0 || nv50->window_rect.inclusive;
+   int i;
+
+   BEGIN_NV04(push, NV50_3D(CLIP_RECTS_EN), 1);
+   PUSH_DATA (push, enable);
+   if (!enable)
+      return;
+
+   BEGIN_NV04(push, NV50_3D(CLIP_RECTS_MODE), 1);
+   PUSH_DATA (push, !nv50->window_rect.inclusive);
+   BEGIN_NV04(push, NV50_3D(CLIP_RECT_HORIZ(0)), NV50_MAX_WINDOW_RECTANGLES * 2);
+   for (i = 0; i < nv50->window_rect.rects; i++) {
+      struct pipe_scissor_state *s = &nv50->window_rect.rect[i];
+      PUSH_DATA(push, (s->maxx << 16) | s->minx);
+      PUSH_DATA(push, (s->maxy << 16) | s->miny);
+   }
+   for (; i < NV50_MAX_WINDOW_RECTANGLES; i++) {
+      PUSH_DATA(push, 0);
+      PUSH_DATA(push, 0);
+   }
+}
+
 static inline void
 nv50_check_program_ucps(struct nv50_context *nv50,
                         struct nv50_program *vp, uint8_t mask)
@@ -497,10 +523,12 @@ validate_list_3d[] = {
     { nv50_validate_scissor,       NV50_NEW_3D_SCISSOR },
 #endif
     { nv50_validate_viewport,      NV50_NEW_3D_VIEWPORT },
+    { nv50_validate_window_rects,  NV50_NEW_3D_WINDOW_RECTS },
     { nv50_vertprog_validate,      NV50_NEW_3D_VERTPROG },
     { nv50_gmtyprog_validate,      NV50_NEW_3D_GMTYPROG },
     { nv50_fragprog_validate,      NV50_NEW_3D_FRAGPROG | NV50_NEW_3D_RASTERIZER |
-                                   NV50_NEW_3D_MIN_SAMPLES },
+                                   NV50_NEW_3D_MIN_SAMPLES | NV50_NEW_3D_ZSA |
+                                   NV50_NEW_3D_FRAMEBUFFER},
     { nv50_fp_linkage_validate,    NV50_NEW_3D_FRAGPROG | NV50_NEW_3D_VERTPROG |
                                    NV50_NEW_3D_GMTYPROG | NV50_NEW_3D_RASTERIZER },
     { nv50_gp_linkage_validate,    NV50_NEW_3D_GMTYPROG | NV50_NEW_3D_VERTPROG },

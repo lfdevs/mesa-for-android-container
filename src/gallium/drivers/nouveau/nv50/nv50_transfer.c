@@ -371,32 +371,24 @@ nv50_miptree_transfer_unmap(struct pipe_context *pctx,
    FREE(tx);
 }
 
-void
-nv50_cb_push(struct nouveau_context *nv,
-             struct nouveau_bo *bo, unsigned domain,
-             unsigned base, unsigned size,
-             unsigned offset, unsigned words, const uint32_t *data)
+static void
+nv50_cb_bo_push(struct nouveau_context *nv,
+                struct nouveau_bo *bo, unsigned domain,
+                unsigned bufid,
+                unsigned offset, unsigned words,
+                const uint32_t *data)
 {
    struct nouveau_pushbuf *push = nv->pushbuf;
-   struct nouveau_bufctx *bctx = nv50_context(&nv->pipe)->bufctx;
 
    assert(!(offset & 3));
-   size = align(size, 0x100);
-
-   nouveau_bufctx_refn(bctx, 0, bo, NOUVEAU_BO_WR | domain);
-   nouveau_pushbuf_bufctx(push, bctx);
-   nouveau_pushbuf_validate(push);
 
    while (words) {
       unsigned nr = MIN2(words, NV04_PFIFO_MAX_PACKET_LEN);
 
-      PUSH_SPACE(push, nr + 7);
-      BEGIN_NV04(push, NV50_3D(CB_DEF_ADDRESS_HIGH), 3);
-      PUSH_DATAh(push, bo->offset + base);
-      PUSH_DATA (push, bo->offset + base);
-      PUSH_DATA (push, (NV50_CB_TMP << 16) | (size & 0xffff));
+      PUSH_SPACE(push, nr + 3);
+      PUSH_REFN (push, bo, NOUVEAU_BO_WR | domain);
       BEGIN_NV04(push, NV50_3D(CB_ADDR), 1);
-      PUSH_DATA (push, (offset << 6) | NV50_CB_TMP);
+      PUSH_DATA (push, (offset << 6) | bufid);
       BEGIN_NI04(push, NV50_3D(CB_DATA(0)), nr);
       PUSH_DATAp(push, data, nr);
 
@@ -404,6 +396,41 @@ nv50_cb_push(struct nouveau_context *nv,
       data += nr;
       offset += nr * 4;
    }
+}
 
-   nouveau_bufctx_reset(bctx, 0);
+void
+nv50_cb_push(struct nouveau_context *nv,
+             struct nv04_resource *res,
+             unsigned offset, unsigned words, const uint32_t *data)
+{
+   struct nv50_context *nv50 = nv50_context(&nv->pipe);
+   struct nv50_constbuf *cb = NULL;
+   int s, bufid;
+   /* Go through all the constbuf binding points of this buffer and try to
+    * find one which contains the region to be updated.
+    */
+   /* XXX compute? */
+   for (s = 0; s < 3 && !cb; s++) {
+      uint16_t bindings = res->cb_bindings[s];
+      while (bindings) {
+         int i = ffs(bindings) - 1;
+         uint32_t cb_offset = nv50->constbuf[s][i].offset;
+
+         bindings &= ~(1 << i);
+         if (cb_offset <= offset &&
+             cb_offset + nv50->constbuf[s][i].size >= offset + words * 4) {
+            cb = &nv50->constbuf[s][i];
+            bufid = s * 16 + i;
+            break;
+         }
+      }
+   }
+
+   if (cb) {
+      nv50_cb_bo_push(nv, res->bo, res->domain,
+                      bufid, offset - cb->offset, words, data);
+   } else {
+      nv->push_data(nv, res->bo, res->offset + offset, res->domain,
+                    words * 4, data);
+   }
 }

@@ -188,6 +188,69 @@ nve4_screen_compute_setup(struct nvc0_screen *screen,
 }
 
 static void
+gm107_compute_validate_surfaces(struct nvc0_context *nvc0,
+                                struct pipe_image_view *view, int slot)
+{
+   struct nv04_resource *res = nv04_resource(view->resource);
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nvc0_screen *screen = nvc0->screen;
+   struct nouveau_bo *txc = nvc0->screen->txc;
+   struct nv50_tic_entry *tic;
+   uint64_t address;
+   const int s = 5;
+
+   tic = nv50_tic_entry(nvc0->images_tic[s][slot]);
+
+   res = nv04_resource(tic->pipe.texture);
+   nvc0_update_tic(nvc0, tic, res);
+
+   if (tic->id < 0) {
+      tic->id = nvc0_screen_tic_alloc(nvc0->screen, tic);
+
+      /* upload the texture view */
+      PUSH_SPACE(push, 16);
+      BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
+      PUSH_DATAh(push, txc->offset + (tic->id * 32));
+      PUSH_DATA (push, txc->offset + (tic->id * 32));
+      BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
+      PUSH_DATA (push, 32);
+      PUSH_DATA (push, 1);
+      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 9);
+      PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
+      PUSH_DATAp(push, &tic->tic[0], 8);
+
+      BEGIN_NIC0(push, NVE4_CP(TIC_FLUSH), 1);
+      PUSH_DATA (push, (tic->id << 4) | 1);
+   } else
+   if (res->status & NOUVEAU_BUFFER_STATUS_GPU_WRITING) {
+      BEGIN_NIC0(push, NVE4_CP(TEX_CACHE_CTL), 1);
+      PUSH_DATA (push, (tic->id << 4) | 1);
+   }
+   nvc0->screen->tic.lock[tic->id / 32] |= 1 << (tic->id % 32);
+
+   res->status &= ~NOUVEAU_BUFFER_STATUS_GPU_WRITING;
+   res->status |=  NOUVEAU_BUFFER_STATUS_GPU_READING;
+
+   BCTX_REFN(nvc0->bufctx_cp, CP_SUF, res, RD);
+
+   address = screen->uniform_bo->offset + NVC0_CB_AUX_INFO(s);
+
+   /* upload the texture handle */
+   BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
+   PUSH_DATAh(push, address + NVC0_CB_AUX_TEX_INFO(slot + 32));
+   PUSH_DATA (push, address + NVC0_CB_AUX_TEX_INFO(slot + 32));
+   BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
+   PUSH_DATA (push, 4);
+   PUSH_DATA (push, 0x1);
+   BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 2);
+   PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
+   PUSH_DATA (push, tic->id);
+
+   BEGIN_NVC0(push, NVE4_CP(FLUSH), 1);
+   PUSH_DATA (push, NVE4_COMPUTE_FLUSH_CB);
+}
+
+static void
 nve4_compute_validate_surfaces(struct nvc0_context *nvc0)
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
@@ -200,17 +263,18 @@ nve4_compute_validate_surfaces(struct nvc0_context *nvc0)
 
    address = nvc0->screen->uniform_bo->offset + NVC0_CB_AUX_INFO(s);
 
-   BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
-   PUSH_DATAh(push, address + NVC0_CB_AUX_SU_INFO(0));
-   PUSH_DATA (push, address + NVC0_CB_AUX_SU_INFO(0));
-   BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
-   PUSH_DATA (push, 16 * NVC0_MAX_IMAGES * 4);
-   PUSH_DATA (push, 0x1);
-   BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + 16 * NVC0_MAX_IMAGES);
-   PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
-
    for (i = 0; i < NVC0_MAX_IMAGES; ++i) {
       struct pipe_image_view *view = &nvc0->images[s][i];
+
+      BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
+      PUSH_DATAh(push, address + NVC0_CB_AUX_SU_INFO(i));
+      PUSH_DATA (push, address + NVC0_CB_AUX_SU_INFO(i));
+      BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
+      PUSH_DATA (push, 16 * 4);
+      PUSH_DATA (push, 0x1);
+      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + 16);
+      PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
+
       if (view->resource) {
          struct nv04_resource *res = nv04_resource(view->resource);
 
@@ -221,6 +285,9 @@ nve4_compute_validate_surfaces(struct nvc0_context *nvc0)
 
          nve4_set_surface_info(push, view, nvc0);
          BCTX_REFN(nvc0->bufctx_cp, CP_SUF, res, RDWR);
+
+         if (nvc0->screen->base.class_3d >= GM107_3D_CLASS)
+            gm107_compute_validate_surfaces(nvc0, view, i);
       } else {
          for (j = 0; j < 16; j++)
             PUSH_DATA(push, 0);
@@ -377,6 +444,7 @@ nve4_compute_validate_buffers(struct nvc0_context *nvc0)
          BCTX_REFN(nvc0->bufctx_cp, CP_BUF, res, RDWR);
          util_range_add(&res->valid_buffer_range,
                         nvc0->buffers[s][i].buffer_offset,
+                        nvc0->buffers[s][i].buffer_offset +
                         nvc0->buffers[s][i].buffer_size);
       } else {
          PUSH_DATA (push, 0);
@@ -437,10 +505,10 @@ nve4_compute_upload_input(struct nvc0_context *nvc0,
       PUSH_DATAp(push, info->input, cp->parm_size / 4);
    }
    BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
-   PUSH_DATAh(push, address + NVC0_CB_AUX_GRID_INFO);
-   PUSH_DATA (push, address + NVC0_CB_AUX_GRID_INFO);
+   PUSH_DATAh(push, address + NVC0_CB_AUX_GRID_INFO(0));
+   PUSH_DATA (push, address + NVC0_CB_AUX_GRID_INFO(0));
    BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
-   PUSH_DATA (push, 7 * 4);
+   PUSH_DATA (push, 8 * 4);
    PUSH_DATA (push, 0x1);
 
    if (unlikely(info->indirect)) {
@@ -450,18 +518,19 @@ nve4_compute_upload_input(struct nvc0_context *nvc0,
       nouveau_pushbuf_space(push, 16, 0, 1);
       PUSH_REFN(push, res->bo, NOUVEAU_BO_RD | res->domain);
 
-      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + 7);
+      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + 8);
       PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
       PUSH_DATAp(push, info->block, 3);
       nouveau_pushbuf_data(push, res->bo, offset,
                            NVC0_IB_ENTRY_1_NO_PREFETCH | 3 * 4);
    } else {
-      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + 7);
+      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + 8);
       PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
       PUSH_DATAp(push, info->block, 3);
       PUSH_DATAp(push, info->grid, 3);
    }
    PUSH_DATA (push, 0);
+   PUSH_DATA (push, info->work_dim);
 
    BEGIN_NVC0(push, NVE4_CP(FLUSH), 1);
    PUSH_DATA (push, NVE4_COMPUTE_FLUSH_CB);

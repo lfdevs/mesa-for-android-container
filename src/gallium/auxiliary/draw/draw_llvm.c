@@ -659,80 +659,42 @@ generate_vs(struct draw_llvm_variant *variant,
 static void
 generate_fetch(struct gallivm_state *gallivm,
                struct draw_context *draw,
-               LLVMValueRef vbuffers_ptr,
+               const struct util_format_description *format_desc,
+               LLVMValueRef vb_stride,
+               LLVMValueRef stride_fixed,
+               LLVMValueRef map_ptr,
+               LLVMValueRef buffer_size_adj,
+               LLVMValueRef ofbit,
                LLVMValueRef *res,
-               struct pipe_vertex_element *velem,
-               LLVMValueRef vbuf,
-               LLVMValueRef index,
-               LLVMValueRef instance_id,
-               LLVMValueRef start_instance)
+               LLVMValueRef index)
 {
-   const struct util_format_description *format_desc =
-      util_format_description(velem->src_format);
    LLVMValueRef zero = LLVMConstNull(LLVMInt32TypeInContext(gallivm->context));
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMValueRef indices =
-      LLVMConstInt(LLVMInt64TypeInContext(gallivm->context),
-                   velem->vertex_buffer_index, 0);
-   LLVMValueRef vbuffer_ptr = LLVMBuildGEP(builder, vbuffers_ptr,
-                                           &indices, 1, "");
-   LLVMValueRef vb_stride = draw_jit_vbuffer_stride(gallivm, vbuf);
-   LLVMValueRef vb_buffer_offset = draw_jit_vbuffer_offset(gallivm, vbuf);
-   LLVMValueRef map_ptr = draw_jit_dvbuffer_map(gallivm, vbuffer_ptr);
-   LLVMValueRef buffer_size = draw_jit_dvbuffer_size(gallivm, vbuffer_ptr);
    LLVMValueRef stride;
    LLVMValueRef buffer_overflowed;
-   LLVMValueRef needed_buffer_size;
    LLVMValueRef temp_ptr =
       lp_build_alloca(gallivm,
                       lp_build_vec_type(gallivm, lp_float32_vec4_type()), "");
-   LLVMValueRef ofbit = NULL;
    struct lp_build_if_state if_ctx;
 
-   if (velem->instance_divisor) {
-      /* Index is equal to the start instance plus the number of current 
-       * instance divided by the divisor. In this case we compute it as:
-       * index = start_instance + (instance_id  / divisor)
-       */
-      LLVMValueRef current_instance;
-      current_instance = LLVMBuildUDiv(builder, instance_id,
-                                       lp_build_const_int32(gallivm, velem->instance_divisor),
-                                       "instance_divisor");
-      index = lp_build_uadd_overflow(gallivm, start_instance,
-                                     current_instance, &ofbit);
+   if (format_desc->format == PIPE_FORMAT_NONE) {
+      *res = lp_build_const_vec(gallivm, lp_float32_vec4_type(), 0);
+      return;
    }
 
    stride = lp_build_umul_overflow(gallivm, vb_stride, index, &ofbit);
-   stride = lp_build_uadd_overflow(gallivm, stride, vb_buffer_offset, &ofbit);
-   stride = lp_build_uadd_overflow(
-      gallivm, stride,
-      lp_build_const_int32(gallivm, velem->src_offset), &ofbit);
-   needed_buffer_size = lp_build_uadd_overflow(
-      gallivm, stride,
-      lp_build_const_int32(gallivm,
-                           util_format_get_blocksize(velem->src_format)),
-      &ofbit);
+   stride = lp_build_uadd_overflow(gallivm, stride, stride_fixed, &ofbit);
 
    buffer_overflowed = LLVMBuildICmp(builder, LLVMIntUGT,
-                                     needed_buffer_size, buffer_size,
+                                     stride, buffer_size_adj,
                                      "buffer_overflowed");
    buffer_overflowed = LLVMBuildOr(builder, buffer_overflowed, ofbit, "");
-#if 0
-   lp_build_printf(gallivm, "vbuf index = %u, vb_stride is %u\n",
-                   index, vb_stride);
-   lp_build_printf(gallivm, "   vb_buffer_offset = %u, src_offset is %u\n",
-                   vb_buffer_offset,
-                   lp_build_const_int32(gallivm, velem->src_offset));
-   lp_build_print_value(gallivm, "   blocksize = ",
-                        lp_build_const_int32(
-                           gallivm,
-                           util_format_get_blocksize(velem->src_format)));
-   lp_build_printf(gallivm, "   instance_id = %u\n", instance_id);
-   lp_build_printf(gallivm, "   stride = %u\n", stride);
-   lp_build_printf(gallivm, "   buffer size = %u\n", buffer_size);
-   lp_build_printf(gallivm, "   needed_buffer_size = %u\n", needed_buffer_size);
-   lp_build_print_value(gallivm, "   buffer overflowed = ", buffer_overflowed);
-#endif
+
+   if (0) {
+      lp_build_printf(gallivm, "   stride = %u\n", stride);
+      lp_build_printf(gallivm, "   buffer size adj = %u\n", buffer_size_adj);
+      lp_build_print_value(gallivm, "   buffer overflowed = ", buffer_overflowed);
+   }
 
    lp_build_if(&if_ctx, gallivm, buffer_overflowed);
    {
@@ -761,36 +723,34 @@ generate_fetch(struct gallivm_state *gallivm,
 
 static void
 convert_to_soa(struct gallivm_state *gallivm,
-               LLVMValueRef (*src_aos)[LP_MAX_VECTOR_WIDTH / 32],
+               LLVMValueRef src_aos[LP_MAX_VECTOR_WIDTH / 32],
                LLVMValueRef (*dst_soa)[TGSI_NUM_CHANNELS],
-               unsigned num_attribs, const struct lp_type soa_type)
+               unsigned attrib, const struct lp_type soa_type)
 {
-   unsigned i, j, k;
+   unsigned j, k;
    struct lp_type aos_channel_type = soa_type;
+
+   LLVMValueRef aos_channels[TGSI_NUM_CHANNELS];
+   unsigned pixels_per_channel = soa_type.length / TGSI_NUM_CHANNELS;
 
    debug_assert(TGSI_NUM_CHANNELS == 4);
    debug_assert((soa_type.length % TGSI_NUM_CHANNELS) == 0);
 
    aos_channel_type.length >>= 1;
 
-   for (i = 0; i < num_attribs; ++i) {
-      LLVMValueRef aos_channels[TGSI_NUM_CHANNELS];
-      unsigned pixels_per_channel = soa_type.length / TGSI_NUM_CHANNELS;
+   for (j = 0; j < TGSI_NUM_CHANNELS; ++j) {
+      LLVMValueRef channel[LP_MAX_VECTOR_LENGTH] = { 0 };
 
-      for (j = 0; j < TGSI_NUM_CHANNELS; ++j) {
-         LLVMValueRef channel[LP_MAX_VECTOR_LENGTH] = { 0 };
+      assert(pixels_per_channel <= LP_MAX_VECTOR_LENGTH);
 
-         assert(pixels_per_channel <= LP_MAX_VECTOR_LENGTH);
-
-         for (k = 0; k < pixels_per_channel; ++k) {
-            channel[k] = src_aos[i][j + TGSI_NUM_CHANNELS * k];
-         }
-
-         aos_channels[j] = lp_build_concat(gallivm, channel, aos_channel_type, pixels_per_channel);
+      for (k = 0; k < pixels_per_channel; ++k) {
+         channel[k] = src_aos[j + TGSI_NUM_CHANNELS * k];
       }
 
-      lp_build_transpose_aos(gallivm, soa_type, aos_channels, dst_soa[i]);
+      aos_channels[j] = lp_build_concat(gallivm, channel, aos_channel_type, pixels_per_channel);
    }
+
+   lp_build_transpose_aos(gallivm, soa_type, aos_channels, dst_soa[attrib]);
 }
 
 
@@ -1123,10 +1083,8 @@ generate_viewport(struct draw_llvm_variant *variant,
 
       /* divide by w */
       out = LLVMBuildFMul(builder, out, out3, "");
-      /* mult by scale */
-      out = LLVMBuildFMul(builder, out, scale, "");
-      /* add translation */
-      out = LLVMBuildFAdd(builder, out, trans, "");
+      /* mult by scale, add translation */
+      out = lp_build_fmuladd(builder, out, scale, trans);
 
       /* store transformed outputs */
       LLVMBuildStore(builder, out, outputs[pos][i]);
@@ -1303,22 +1261,19 @@ generate_clipmask(struct draw_llvm *llvm,
             plane_ptr = LLVMBuildGEP(builder, planes_ptr, indices, 3, "");
             plane1 = LLVMBuildLoad(builder, plane_ptr, "plane_y");
             planes = lp_build_broadcast(gallivm, vs_type_llvm, plane1);
-            test = LLVMBuildFMul(builder, planes, cv_y, "");
-            sum = LLVMBuildFAdd(builder, sum, test, "");
+            sum = lp_build_fmuladd(builder, planes, cv_y, sum);
 
             indices[2] = lp_build_const_int32(gallivm, 2);
             plane_ptr = LLVMBuildGEP(builder, planes_ptr, indices, 3, "");
             plane1 = LLVMBuildLoad(builder, plane_ptr, "plane_z");
             planes = lp_build_broadcast(gallivm, vs_type_llvm, plane1);
-            test = LLVMBuildFMul(builder, planes, cv_z, "");
-            sum = LLVMBuildFAdd(builder, sum, test, "");
+            sum = lp_build_fmuladd(builder, planes, cv_z, sum);
 
             indices[2] = lp_build_const_int32(gallivm, 3);
             plane_ptr = LLVMBuildGEP(builder, planes_ptr, indices, 3, "");
             plane1 = LLVMBuildLoad(builder, plane_ptr, "plane_w");
             planes = lp_build_broadcast(gallivm, vs_type_llvm, plane1);
-            test = LLVMBuildFMul(builder, planes, cv_w, "");
-            sum = LLVMBuildFAdd(builder, sum, test, "");
+            sum = lp_build_fmuladd(builder, planes, cv_w, sum);
 
             test = lp_build_compare(gallivm, f32_type, PIPE_FUNC_GREATER, zero, sum);
             temp = lp_build_const_int_vec(gallivm, i32_type, 1LL << plane_idx);
@@ -1549,6 +1504,13 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant,
    LLVMValueRef io_ptr, vbuffers_ptr, vb_ptr;
    LLVMValueRef zero = lp_build_const_int32(gallivm, 0);
    LLVMValueRef one = lp_build_const_int32(gallivm, 1);
+   LLVMValueRef vb_stride[PIPE_MAX_SHADER_INPUTS];
+   LLVMValueRef map_ptr[PIPE_MAX_SHADER_INPUTS];
+   LLVMValueRef buffer_size_adj[PIPE_MAX_SHADER_INPUTS];
+   LLVMValueRef stride_fixed[PIPE_MAX_SHADER_INPUTS];
+   LLVMValueRef ofbit[PIPE_MAX_SHADER_INPUTS];
+   LLVMValueRef instance_index[PIPE_MAX_SHADER_INPUTS];
+
    struct draw_context *draw = llvm->draw;
    const struct tgsi_shader_info *vs_info = &draw->vs.vertex_shader->info;
    unsigned i, j;
@@ -1693,14 +1655,67 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant,
 
    fetch_max = LLVMBuildSub(builder, end, one, "fetch_max");
 
+   /*
+    * Pre-calculate everything which is constant per shader invocation.
+    */
+   for (j = 0; j < draw->pt.nr_vertex_elements; ++j) {
+      LLVMValueRef vb_buffer_offset, buffer_size;
+      LLVMValueRef vb_info, vbuffer_ptr;
+      struct pipe_vertex_element *velem = &draw->pt.vertex_element[j];
+      LLVMValueRef vb_index =
+         lp_build_const_int32(gallivm, velem->vertex_buffer_index);
+      LLVMValueRef bsize = lp_build_const_int32(gallivm,
+                                                util_format_get_blocksize(velem->src_format));
+      LLVMValueRef src_offset = lp_build_const_int32(gallivm,
+                                                     velem->src_offset);
+
+      vbuffer_ptr = LLVMBuildGEP(builder, vbuffers_ptr, &vb_index, 1, "");
+      vb_info = LLVMBuildGEP(builder, vb_ptr, &vb_index, 1, "");
+      vb_stride[j] = draw_jit_vbuffer_stride(gallivm, vb_info);
+      vb_buffer_offset = draw_jit_vbuffer_offset(gallivm, vb_info);
+      map_ptr[j] = draw_jit_dvbuffer_map(gallivm, vbuffer_ptr);
+      buffer_size = draw_jit_dvbuffer_size(gallivm, vbuffer_ptr);
+
+      ofbit[j] = NULL;
+      stride_fixed[j] = lp_build_uadd_overflow(gallivm, vb_buffer_offset,
+                                               src_offset, &ofbit[j]);
+      buffer_size_adj[j] = lp_build_usub_overflow(gallivm, buffer_size, bsize,
+                                                   &ofbit[j]);
+
+      if (velem->instance_divisor) {
+         /* Index is equal to the start instance plus the number of current 
+          * instance divided by the divisor. In this case we compute it as:
+          * index = start_instance + (instance_id  / divisor)
+          */
+         LLVMValueRef current_instance;
+         current_instance = LLVMBuildUDiv(builder, system_values.instance_id,
+                                          lp_build_const_int32(gallivm,
+                                                               velem->instance_divisor),
+                                          "instance_divisor");
+         instance_index[j] = lp_build_uadd_overflow(gallivm, start_instance,
+                                                    current_instance, &ofbit[j]);
+      }
+
+      if (0) {
+         lp_build_printf(gallivm, "vbuf index = %u, vb_stride is %u\n",
+                         vb_index, vb_stride[j]);
+         lp_build_printf(gallivm, "   vb_buffer_offset = %u, src_offset is %u\n",
+                         vb_buffer_offset, src_offset);
+         lp_build_print_value(gallivm, "   blocksize = ", bsize);
+         lp_build_printf(gallivm, "   instance_id = %u\n", system_values.instance_id);
+         lp_build_printf(gallivm, "   buffer size = %u\n", buffer_size);
+      }
+   }
+
    lp_build_loop_begin(&lp_loop, gallivm, zero);
    {
       LLVMValueRef inputs[PIPE_MAX_SHADER_INPUTS][TGSI_NUM_CHANNELS];
-      LLVMValueRef aos_attribs[PIPE_MAX_SHADER_INPUTS][LP_MAX_VECTOR_WIDTH / 32] = { { 0 } };
+      LLVMValueRef aos_attribs[LP_MAX_VECTOR_WIDTH / 32] = { 0 };
       LLVMValueRef io;
       LLVMValueRef clipmask;   /* holds the clipmask value */
       LLVMValueRef true_index_array = lp_build_zero(gallivm,
                                                     lp_type_uint_vec(32, 32*vector_length));
+      LLVMValueRef true_indices[LP_MAX_VECTOR_WIDTH / 32];
       const LLVMValueRef (*ptr_aos)[TGSI_NUM_CHANNELS];
 
       io_itr = lp_loop.counter;
@@ -1710,6 +1725,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant,
       lp_build_printf(gallivm, " --- io %d = %p, loop counter %d\n",
                       io_itr, io, lp_loop.counter);
 #endif
+
       for (i = 0; i < vector_length; ++i) {
          LLVMValueRef vert_index =
             LLVMBuildAdd(builder,
@@ -1759,22 +1775,25 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant,
             lp_build_endif(&if_ctx);
             true_index = LLVMBuildLoad(builder, index_ptr, "true_index");
          }
+         true_indices[i] = true_index;
          true_index_array = LLVMBuildInsertElement(
             gallivm->builder, true_index_array, true_index,
             lp_build_const_int32(gallivm, i), "");
-
-         for (j = 0; j < draw->pt.nr_vertex_elements; ++j) {
-            struct pipe_vertex_element *velem = &draw->pt.vertex_element[j];
-            LLVMValueRef vb_index =
-               lp_build_const_int32(gallivm, velem->vertex_buffer_index);
-            LLVMValueRef vb = LLVMBuildGEP(builder, vb_ptr, &vb_index, 1, "");
-            generate_fetch(gallivm, draw, vbuffers_ptr,
-                           &aos_attribs[j][i], velem, vb, true_index,
-                           system_values.instance_id, start_instance);
-         }
       }
-      convert_to_soa(gallivm, aos_attribs, inputs,
-                     draw->pt.nr_vertex_elements, vs_type);
+
+      for (j = 0; j < key->nr_vertex_elements; ++j) {
+         struct pipe_vertex_element *velem = &draw->pt.vertex_element[j];
+         const struct util_format_description *format_desc =
+            util_format_description(velem->src_format);
+
+         for (i = 0; i < vector_length; ++i) {
+            generate_fetch(gallivm, draw, format_desc,
+                           vb_stride[j], stride_fixed[j], map_ptr[j],
+                           buffer_size_adj[j], ofbit[j], &aos_attribs[i],
+                           velem->instance_divisor ? instance_index[j] : true_indices[i]);
+         }
+         convert_to_soa(gallivm, aos_attribs, inputs, j, vs_type);
+      }
 
       /* In the paths with elts vertex id has to be unaffected by the
        * index bias and because indices inside our elements array have
@@ -1871,15 +1890,6 @@ draw_llvm_make_variant_key(struct draw_llvm *llvm, char *store)
 
    key->clamp_vertex_color = llvm->draw->rasterizer->clamp_vertex_color; /**/
 
-   /* Presumably all variants of the shader should have the same
-    * number of vertex elements - ie the number of shader inputs.
-    * NOTE: we NEED to store the needed number of needed inputs
-    * here, not the number of provided elements to match keysize
-    * (and the offset of sampler state in the key).
-    */
-   key->nr_vertex_elements = llvm->draw->vs.vertex_shader->info.file_max[TGSI_FILE_INPUT] + 1;
-   assert(key->nr_vertex_elements <= llvm->draw->pt.nr_vertex_elements);
-
    /* will have to rig this up properly later */
    key->clip_xy = llvm->draw->clip_xy;
    key->clip_z = llvm->draw->clip_z;
@@ -1905,13 +1915,34 @@ draw_llvm_make_variant_key(struct draw_llvm *llvm, char *store)
       key->nr_sampler_views = key->nr_samplers;
    }
 
-   draw_sampler = draw_llvm_variant_key_samplers(key);
+   /* Presumably all variants of the shader should have the same
+    * number of vertex elements - ie the number of shader inputs.
+    * NOTE: we NEED to store the needed number of needed inputs
+    * here, not the number of provided elements to match keysize
+    * (and the offset of sampler state in the key).
+    * If we have excess number of vertex elements, this is valid,
+    * but the excess ones don't matter.
+    * If we don't have enough vertex elements (which looks not really
+    * valid but we'll handle it gracefully) fill out missing ones with
+    * zero (we'll recognize these later by PIPE_FORMAT_NONE).
+    */
+   key->nr_vertex_elements =
+      llvm->draw->vs.vertex_shader->info.file_max[TGSI_FILE_INPUT] + 1;
 
+   if (llvm->draw->pt.nr_vertex_elements < key->nr_vertex_elements) {
+      debug_printf("draw: vs with %d inputs but only have %d vertex elements\n",
+                   key->nr_vertex_elements, llvm->draw->pt.nr_vertex_elements);
+      memset(key->vertex_element, 0,
+             sizeof(struct pipe_vertex_element) * key->nr_vertex_elements);
+   }
    memcpy(key->vertex_element,
           llvm->draw->pt.vertex_element,
-          sizeof(struct pipe_vertex_element) * key->nr_vertex_elements);
+          sizeof(struct pipe_vertex_element) *
+             MIN2(key->nr_vertex_elements, llvm->draw->pt.nr_vertex_elements));
 
-   memset(draw_sampler, 0, MAX2(key->nr_samplers, key->nr_sampler_views) * sizeof *draw_sampler);
+   draw_sampler = draw_llvm_variant_key_samplers(key);
+   memset(draw_sampler, 0,
+          MAX2(key->nr_samplers, key->nr_sampler_views) * sizeof *draw_sampler);
 
    for (i = 0 ; i < key->nr_samplers; i++) {
       lp_sampler_static_sampler_state(&draw_sampler[i].sampler_state,

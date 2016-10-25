@@ -32,7 +32,6 @@
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
-#include "intel_reg.h"
 
 /*
  * GPR0 = 80 * GPR0;

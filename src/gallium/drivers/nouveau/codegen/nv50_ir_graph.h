@@ -147,7 +147,7 @@ public:
 
 public:
    Graph();
-   ~Graph(); // does *not* free the nodes (make it an option ?)
+   virtual ~Graph(); // does *not* free the nodes (make it an option ?)
 
    inline Node *getRoot() const { return root; }
 

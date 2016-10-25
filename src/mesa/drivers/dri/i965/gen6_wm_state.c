@@ -33,6 +33,7 @@
 #include "program/program.h"
 #include "program/prog_parameter.h"
 #include "program/prog_statevars.h"
+#include "main/shaderapi.h"
 #include "main/framebuffer.h"
 #include "intel_batchbuffer.h"
 
@@ -44,9 +45,11 @@ gen6_upload_wm_push_constants(struct brw_context *brw)
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
    /* BRW_NEW_FS_PROG_DATA */
-   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
+   const struct brw_stage_prog_data *prog_data = brw->wm.base.prog_data;
 
-   gen6_upload_push_constants(brw, &fp->program.Base, &prog_data->base,
+   _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_FRAGMENT);
+
+   gen6_upload_push_constants(brw, &fp->program.Base, prog_data,
                               stage_state, AUB_TRACE_WM_CONSTANTS);
 
    if (brw->gen >= 7) {
@@ -77,6 +80,7 @@ gen6_upload_wm_state(struct brw_context *brw,
                      bool line_stipple_enable, bool polygon_stipple_enable,
                      bool statistic_enable)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t dw2, dw4, dw5, dw6, ksp0, ksp2;
 
    /* We can't fold this into gen6_upload_wm_push_constants(), because
@@ -127,7 +131,7 @@ gen6_upload_wm_state(struct brw_context *brw,
    dw2 |= ((prog_data->base.binding_table.size_bytes / 4) <<
            GEN6_WM_BINDING_TABLE_ENTRY_COUNT_SHIFT);
 
-   dw5 |= (brw->max_wm_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT;
+   dw5 |= (devinfo->max_wm_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT;
 
    if (prog_data->dispatch_8)
       dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
@@ -237,7 +241,8 @@ upload_wm_state(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FS_PROG_DATA */
-   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
+   const struct brw_wm_prog_data *prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
 
    /* _NEW_BUFFERS */
    const bool multisampled_fbo = _mesa_geometric_samples(ctx->DrawBuffer) > 1;

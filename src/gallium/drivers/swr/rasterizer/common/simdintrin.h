@@ -36,6 +36,30 @@
 typedef __m256 simdscalar;
 typedef __m256i simdscalari;
 typedef uint8_t simdmask;
+#elif KNOB_SIMD_WIDTH == 16
+#if ENABLE_AVX512_EMULATION
+struct simdscalar
+{
+    __m256  lo;
+    __m256  hi;
+};
+struct simdscalard
+{
+    __m256d lo;
+    __m256d hi;
+};
+struct simdscalari
+{
+    __m256i lo;
+    __m256i hi;
+};
+typedef uint16_t simdmask;
+#else
+typedef __m512 simdscalar;
+typedef __m512d simdscalard;
+typedef __m512i simdscalari;
+typedef __mask16 simdmask;
+#endif
 #else
 #error Unsupported vector width
 #endif
@@ -90,6 +114,7 @@ OSALIGNSIMD(union) simdvector
 #define _simd_round_ps _mm256_round_ps
 #define _simd_castpd_ps _mm256_castpd_ps
 #define _simd_broadcast_ps(a) _mm256_broadcast_ps((const __m128*)(a))
+#define _simd_stream_ps _mm256_stream_ps
 
 #define _simd_load_sd _mm256_load_sd
 #define _simd_movemask_pd _mm256_movemask_pd
@@ -271,6 +296,7 @@ __m256i _simdemu_sllv_epi32(__m256i vA, __m256i vCount)
 #define _simd_cmplt_epi32 _simdemu_cmplt_epi32
 #define _simd_cmpgt_epi32 _simdemu_cmpgt_epi32
 #define _simd_or_si _simdemu_or_si
+#define _simd_xor_si _simdemu_xor_si
 #define _simd_castps_si _mm256_castps_si256
 #define _simd_adds_epu8 _simdemu_adds_epu8
 #define _simd_subs_epu8 _simdemu_subs_epu8
@@ -302,6 +328,7 @@ SIMD_EMU_EPI(_simdemu_cmpeq_epi32, _mm_cmpeq_epi32)
 SIMD_EMU_EPI(_simdemu_cmplt_epi32, _mm_cmplt_epi32)
 SIMD_EMU_EPI(_simdemu_cmpgt_epi32, _mm_cmpgt_epi32)
 SIMD_EMU_EPI(_simdemu_or_si, _mm_or_si128)
+SIMD_EMU_EPI(_simdemu_xor_si, _mm_xor_si128)
 SIMD_EMU_EPI(_simdemu_adds_epu8, _mm_adds_epu8)
 SIMD_EMU_EPI(_simdemu_subs_epu8, _mm_subs_epu8)
 SIMD_EMU_EPI(_simdemu_add_epi8, _mm_add_epi8)
@@ -314,6 +341,8 @@ SIMD_EMU_EPI(_simdemu_cmpeq_epi16, _mm_cmpeq_epi16)
 
 #define _simd_unpacklo_epi32(a, b) _mm256_castps_si256(_mm256_unpacklo_ps(_mm256_castsi256_ps(a), _mm256_castsi256_ps(b)))
 #define _simd_unpackhi_epi32(a, b) _mm256_castps_si256(_mm256_unpackhi_ps(_mm256_castsi256_ps(a), _mm256_castsi256_ps(b)))
+#define _simd_unpacklo_epi64(a, b) _mm256_castpd_si256(_mm256_unpacklo_pd(_mm256_castsi256_pd(a), _mm256_castsi256_pd(b)))
+#define _simd_unpackhi_epi64(a, b) _mm256_castpd_si256(_mm256_unpackhi_pd(_mm256_castsi256_pd(a), _mm256_castsi256_pd(b)))
 
 #define _simd_slli_epi32(a,i) _simdemu_slli_epi32(a,i)
 #define _simd_srai_epi32(a,i) _simdemu_srai_epi32(a,i)
@@ -408,6 +437,63 @@ int _simdemu_movemask_epi8(__m256i a)
 
     return (resHi << 16) | resLo;
 }
+
+INLINE
+__m256i _simd_cvtepu8_epi32(__m128i a)
+{
+    __m128i resultlo = _mm_cvtepu8_epi32(a);
+    __m128i resulthi = _mm_shuffle_epi8(a, _mm_set_epi32(0x80808007, 0x80808006, 0x80808005, 0x80808004));
+
+    __m256i result = _mm256_castsi128_si256(resultlo);
+
+    return _mm256_insertf128_si256(result, resulthi, 1);
+}
+
+INLINE
+__m256i _simd_cvtepu16_epi32(__m128i a)
+{
+    __m128i resultlo = _mm_cvtepu16_epi32(a);
+    __m128i resulthi = _mm_shuffle_epi8(a, _mm_set_epi32(0x80800F0E, 0x80800D0C, 0x80800B0A, 0x80800908));
+
+    __m256i result = _mm256_castsi128_si256(resultlo);
+
+    return _mm256_insertf128_si256(result, resulthi, 1);
+}
+
+INLINE
+__m256i _simd_packus_epi32(__m256i a, __m256i b)
+{
+    __m128i alo = _mm256_extractf128_si256(a, 0);
+    __m128i ahi = _mm256_extractf128_si256(a, 1);
+
+    __m128i blo = _mm256_extractf128_si256(b, 0);
+    __m128i bhi = _mm256_extractf128_si256(b, 1);
+
+    __m128i resultlo = _mm_packus_epi32(alo, blo);
+    __m128i resulthi = _mm_packus_epi32(ahi, bhi);
+
+    __m256i result = _mm256_castsi128_si256(resultlo);
+
+    return _mm256_insertf128_si256(result, resulthi, 1);
+}
+
+INLINE
+__m256i _simd_packs_epi32(__m256i a, __m256i b)
+{
+    __m128i alo = _mm256_extractf128_si256(a, 0);
+    __m128i ahi = _mm256_extractf128_si256(a, 1);
+
+    __m128i blo = _mm256_extractf128_si256(b, 0);
+    __m128i bhi = _mm256_extractf128_si256(b, 1);
+
+    __m128i resultlo = _mm_packs_epi32(alo, blo);
+    __m128i resulthi = _mm_packs_epi32(ahi, bhi);
+
+    __m256i result = _mm256_castsi128_si256(resultlo);
+
+    return _mm256_insertf128_si256(result, resulthi, 1);
+}
+
 #else
 
 #define _simd_mul_epi32 _mm256_mul_epi32
@@ -425,10 +511,13 @@ int _simdemu_movemask_epi8(__m256i a)
 #define _simd_cmplt_epi32(a,b) _mm256_cmpgt_epi32(b,a)
 #define _simd_cmpgt_epi32(a,b) _mm256_cmpgt_epi32(a,b)
 #define _simd_or_si _mm256_or_si256
+#define _simd_xor_si _mm256_xor_si256
 #define _simd_castps_si _mm256_castps_si256
 
 #define _simd_unpacklo_epi32 _mm256_unpacklo_epi32
 #define _simd_unpackhi_epi32 _mm256_unpackhi_epi32
+#define _simd_unpacklo_epi64 _mm256_unpacklo_epi64
+#define _simd_unpackhi_epi64 _mm256_unpackhi_epi64
 
 #define _simd_srli_si(a,i) _simdemu_srli_si128<i>(a)
 #define _simd_slli_epi32 _mm256_slli_epi32
@@ -454,18 +543,23 @@ int _simdemu_movemask_epi8(__m256i a)
 #define _simd_cmpeq_epi16  _mm256_cmpeq_epi16
 #define _simd_movemask_epi8 _mm256_movemask_epi8
 #define _simd_permute_ps _mm256_permutevar8x32_ps
+#define _simd_permute_epi32 _mm256_permutevar8x32_epi32
 #define _simd_srlv_epi32 _mm256_srlv_epi32
 #define _simd_sllv_epi32 _mm256_sllv_epi32
+#define _simd_cvtepu8_epi32 _mm256_cvtepu8_epi32
+#define _simd_cvtepu16_epi32 _mm256_cvtepu16_epi32
+#define _simd_packus_epi32 _mm256_packus_epi32
+#define _simd_packs_epi32 _mm256_packs_epi32
 
-INLINE
-simdscalari _simd_permute_epi32(simdscalari a, simdscalari index)
-{
-    return _simd_castps_si(_mm256_permutevar8x32_ps(_mm256_castsi256_ps(a), index));
-}
 #endif
 
-#define _simd_shuffleps_epi32(vA, vB, imm) _mm256_castps_si256(_mm256_shuffle_ps(_mm256_castsi256_ps(vA), _mm256_castsi256_ps(vB), imm))
+#define _simd_permute2f128_ps _mm256_permute2f128_ps
+#define _simd_permute2f128_pd _mm256_permute2f128_pd
+#define _simd_permute2f128_si _mm256_permute2f128_si256
 #define _simd_shuffle_ps _mm256_shuffle_ps
+#define _simd_shuffle_pd _mm256_shuffle_pd
+#define _simd_shuffle_epi32(a, b, imm8) _mm256_castps_si256(_mm256_shuffle_ps(_mm256_castsi256_ps(a), _mm256_castsi256_ps(b), imm8))
+#define _simd_shuffle_epi64(a, b, imm8) _mm256_castps_si256(_mm256_shuffle_pd(_mm256_castsi256_pd(a), _mm256_castsi256_pd(b), imm8))
 #define _simd_set1_epi32 _mm256_set1_epi32
 #define _simd_set_epi32 _mm256_set_epi32
 #define _simd_set1_epi8 _mm256_set1_epi8
@@ -479,7 +573,6 @@ simdscalari _simd_permute_epi32(simdscalari a, simdscalari index)
 #define _simd_sub_ps _mm256_sub_ps
 #define _simd_testz_ps _mm256_testz_ps
 #define _simd_xor_ps _mm256_xor_ps
-
 
 INLINE
 simdscalari _simd_blendv_epi32(simdscalari a, simdscalari b, simdscalar mask)
@@ -562,6 +655,615 @@ void _simdvec_transpose(simdvector &v)
     SWR_ASSERT(false, "Need to implement 8 wide version");
 }
 
+#elif KNOB_SIMD_WIDTH == 16
+
+#if ENABLE_AVX512_EMULATION
+
+#define SIMD_EMU_AVX512_0(type, func, intrin) \
+INLINE type func()\
+{\
+    type result;\
+\
+    result.lo = intrin();\
+    result.hi = intrin();\
+\
+    return result;\
+}
+
+#define SIMD_EMU_AVX512_1(type, func, intrin) \
+INLINE type func(type a)\
+{\
+    type result;\
+\
+    result.lo = intrin(a.lo);\
+    result.hi = intrin(a.hi);\
+\
+    return result;\
+}
+
+#define SIMD_EMU_AVX512_2(type, func, intrin) \
+INLINE type func(type a, type b)\
+{\
+    type result;\
+\
+    result.lo = intrin(a.lo, b.lo);\
+    result.hi = intrin(a.hi, b.hi);\
+\
+    return result;\
+}
+
+#define SIMD_EMU_AVX512_3(type, func, intrin) \
+INLINE type func(type a, type b, type c)\
+{\
+    type result;\
+\
+    result.lo = intrin(a.lo, b.lo, c.lo);\
+    result.hi = intrin(a.hi, b.hi, c.hi);\
+\
+    return result;\
+}
+
+SIMD_EMU_AVX512_0(simdscalar, _simd_setzero_ps, _mm256_setzero_ps)
+SIMD_EMU_AVX512_0(simdscalari, _simd_setzero_si, _mm256_setzero_si256)
+
+INLINE simdscalar _simd_set1_ps(float a)
+{
+    simdscalar result;
+
+    result.lo = _mm256_set1_ps(a);
+    result.hi = _mm256_set1_ps(a);
+
+    return result;
+}
+
+INLINE simdscalari _simd_set1_epi8(char a)
+{
+    simdscalari result;
+
+    result.lo = _mm256_set1_epi8(a);
+    result.hi = _mm256_set1_epi8(a);
+
+    return result;
+}
+
+INLINE simdscalari _simd_set1_epi32(int a)
+{
+    simdscalari result;
+
+    result.lo = _mm256_set1_epi32(a);
+    result.hi = _mm256_set1_epi32(a);
+
+    return result;
+}
+
+INLINE simdscalari _simd_set_epi32(int e7, int e6, int e5, int e4, int e3, int e2, int e1, int e0)
+{
+    simdscalari result;
+
+    result.lo = _mm256_set_epi32(e7, e6, e5, e4, e3, e2, e1, e0);
+    result.hi = _mm256_set_epi32(e7, e6, e5, e4, e3, e2, e1, e0);
+
+    return result;
+}
+
+INLINE simdscalari _simd_set_epi32(int e15, int e14, int e13, int e12, int e11, int e10, int e9, int e8, int e7, int e6, int e5, int e4, int e3, int e2, int e1, int e0)
+{
+    simdscalari result;
+
+    result.lo = _mm256_set_epi32(e7, e6, e5, e4, e3, e2, e1, e0);
+    result.hi = _mm256_set_epi32(e15, e14, e13, e12, e11, e10, e9, e8);
+
+    return result;
+}
+
+INLINE simdscalar _simd_load_ps(float const *m)
+{
+    float const *n = reinterpret_cast<float const *>(reinterpret_cast<uint8_t const *>(m) + sizeof(simdscalar::lo));
+
+    simdscalar result;
+
+    result.lo = _mm256_load_ps(m);
+    result.hi = _mm256_load_ps(n);
+
+    return result;
+}
+
+INLINE simdscalar _simd_loadu_ps(float const *m)
+{
+    float const *n = reinterpret_cast<float const *>(reinterpret_cast<uint8_t const *>(m) + sizeof(simdscalar::lo));
+
+    simdscalar result;
+
+    result.lo = _mm256_loadu_ps(m);
+    result.hi = _mm256_loadu_ps(n);
+
+    return result;
+}
+
+INLINE simdscalar _simd_load1_ps(float const *m)
+{
+    simdscalar result;
+
+    result.lo = _mm256_broadcast_ss(m);
+    result.hi = _mm256_broadcast_ss(m);
+
+    return result;
+}
+
+INLINE simdscalari _simd_load_si(simdscalari const *m)
+{
+    simdscalari result;
+
+    result.lo = _mm256_load_si256(&m[0].lo);
+    result.hi = _mm256_load_si256(&m[0].hi);
+
+    return result;
+}
+
+INLINE simdscalari _simd_loadu_si(simdscalari const *m)
+{
+    simdscalari result;
+
+    result.lo = _mm256_loadu_si256(&m[0].lo);
+    result.hi = _mm256_loadu_si256(&m[0].hi);
+
+    return result;
+}
+
+INLINE simdscalar _simd_broadcast_ss(float const *m)
+{
+    simdscalar result;
+
+    result.lo = _mm256_broadcast_ss(m);
+    result.hi = _mm256_broadcast_ss(m);
+
+    return result;
+}
+
+INLINE simdscalar _simd_broadcast_ps(__m128 const *m)
+{
+    simdscalar result;
+
+    result.lo = _mm256_broadcast_ps(m);
+    result.hi = _mm256_broadcast_ps(m);
+
+    return result;
+}
+
+INLINE void _simd_store_ps(float *m, simdscalar a)
+{
+    float *n = reinterpret_cast<float *>(reinterpret_cast<uint8_t *>(m) + sizeof(simdscalar::lo));
+
+    _mm256_store_ps(m, a.lo);
+    _mm256_store_ps(n, a.hi);
+}
+
+INLINE void _simd_maskstore_ps(float *m, simdscalari mask, simdscalar a)
+{
+    float *n = reinterpret_cast<float *>(reinterpret_cast<uint8_t *>(m) + sizeof(simdscalar::lo));
+
+    _mm256_maskstore_ps(m, mask.lo, a.lo);
+    _mm256_maskstore_ps(n, mask.hi, a.hi);
+}
+
+INLINE void _simd_store_si(simdscalari *m, simdscalari a)
+{
+    _mm256_store_si256(&m[0].lo, a.lo);
+    _mm256_store_si256(&m[0].hi, a.hi);
+}
+
+INLINE simdscalar _simd_blend_ps(simdscalar a, simdscalar b, const simdmask mask)
+{
+    simdscalar result;
+
+    result.lo = _mm256_blend_ps(a.lo, b.lo, reinterpret_cast<const uint8_t *>(&mask)[0]);
+    result.hi = _mm256_blend_ps(a.hi, b.hi, reinterpret_cast<const uint8_t *>(&mask)[1]);
+
+    return result;
+}
+
+SIMD_EMU_AVX512_3(simdscalar, _simd_blendv_ps, _mm256_blendv_ps)
+
+INLINE simdscalari _simd_blendv_epi32(simdscalari a, simdscalari b, const simdscalar mask)
+{
+    simdscalari result;
+
+    result.lo = _mm256_castps_si256(_mm256_blendv_ps(_mm256_castsi256_ps(a.lo), _mm256_castsi256_ps(b.lo), mask.lo));
+    result.hi = _mm256_castps_si256(_mm256_blendv_ps(_mm256_castsi256_ps(a.hi), _mm256_castsi256_ps(b.hi), mask.hi));
+
+    return result;
+}
+
+INLINE simdscalari _simd_blendv_epi32(simdscalari a, simdscalari b, const simdscalari mask)
+{
+    simdscalari result;
+
+    result.lo = _mm256_castps_si256(_mm256_blendv_ps(_mm256_castsi256_ps(a.lo), _mm256_castsi256_ps(b.lo), _mm256_castsi256_ps(mask.lo)));
+    result.hi = _mm256_castps_si256(_mm256_blendv_ps(_mm256_castsi256_ps(a.hi), _mm256_castsi256_ps(b.hi), _mm256_castsi256_ps(mask.hi)));
+
+    return result;
+}
+
+SIMD_EMU_AVX512_2(simdscalar, _simd_mul_ps, _mm256_mul_ps)
+SIMD_EMU_AVX512_2(simdscalar, _simd_add_ps, _mm256_add_ps)
+SIMD_EMU_AVX512_2(simdscalar, _simd_sub_ps, _mm256_sub_ps)
+SIMD_EMU_AVX512_1(simdscalar, _simd_rsqrt_ps, _mm256_rsqrt_ps)
+SIMD_EMU_AVX512_2(simdscalar, _simd_min_ps, _mm256_min_ps)
+SIMD_EMU_AVX512_2(simdscalar, _simd_max_ps, _mm256_max_ps)
+
+INLINE simdmask _simd_movemask_ps(simdscalar a)
+{
+    simdmask mask;
+
+    reinterpret_cast<uint8_t *>(&mask)[0] = _mm256_movemask_ps(a.lo);
+    reinterpret_cast<uint8_t *>(&mask)[1] = _mm256_movemask_ps(a.hi);
+
+    return mask;
+}
+
+INLINE simdmask _simd_movemask_pd(simdscalard a)
+{
+    simdmask mask;
+
+    reinterpret_cast<uint8_t *>(&mask)[0] = _mm256_movemask_pd(a.lo);
+    reinterpret_cast<uint8_t *>(&mask)[1] = _mm256_movemask_pd(a.hi);
+
+    return mask;
+}
+
+INLINE simdmask _simd_movemask_epi8(simdscalari a)
+{
+    simdmask mask;
+
+    reinterpret_cast<uint8_t *>(&mask)[0] = _mm256_movemask_epi8(a.lo);
+    reinterpret_cast<uint8_t *>(&mask)[1] = _mm256_movemask_epi8(a.hi);
+
+    return mask;
+}
+
+INLINE simdscalari _simd_cvtps_epi32(simdscalar a)
+{
+    simdscalari result;
+
+    result.lo = _mm256_cvtps_epi32(a.lo);
+    result.hi = _mm256_cvtps_epi32(a.hi);
+
+    return result;
+}
+
+INLINE simdscalari _simd_cvttps_epi32(simdscalar a)
+{
+    simdscalari result;
+
+    result.lo = _mm256_cvttps_epi32(a.lo);
+    result.hi = _mm256_cvttps_epi32(a.hi);
+
+    return result;
+}
+
+INLINE simdscalar _simd_cvtepi32_ps(simdscalari a)
+{
+    simdscalar result;
+
+    result.lo = _mm256_cvtepi32_ps(a.lo);
+    result.hi = _mm256_cvtepi32_ps(a.hi);
+
+    return result;
+}
+
+INLINE simdscalar _simd_cmp_ps(simdscalar a, simdscalar b, const int comp)
+{
+    simdscalar result;
+
+    result.lo = _mm256_cmp_ps(a.lo, b.lo, comp);
+    result.hi = _mm256_cmp_ps(a.hi, b.hi, comp);
+
+    return result;
+}
+
+#define _simd_cmplt_ps(a, b) _simd_cmp_ps(a, b, _CMP_LT_OQ)
+#define _simd_cmpgt_ps(a, b) _simd_cmp_ps(a, b, _CMP_GT_OQ)
+#define _simd_cmpneq_ps(a, b) _simd_cmp_ps(a, b, _CMP_NEQ_OQ)
+#define _simd_cmpeq_ps(a, b) _simd_cmp_ps(a, b, _CMP_EQ_OQ)
+#define _simd_cmpge_ps(a, b) _simd_cmp_ps(a, b, _CMP_GE_OQ)
+#define _simd_cmple_ps(a, b) _simd_cmp_ps(a, b, _CMP_LE_OQ)
+
+SIMD_EMU_AVX512_2(simdscalar, _simd_and_ps, _mm256_and_ps)
+SIMD_EMU_AVX512_2(simdscalar, _simd_or_ps, _mm256_or_ps)
+SIMD_EMU_AVX512_1(simdscalar, _simd_rcp_ps, _mm256_rcp_ps)
+SIMD_EMU_AVX512_2(simdscalar, _simd_div_ps, _mm256_div_ps)
+
+INLINE simdscalar _simd_castsi_ps(simdscalari a)
+{
+    return *reinterpret_cast<simdscalar *>(&a);
+}
+
+INLINE simdscalari _simd_castps_si(simdscalar a)
+{
+    return *reinterpret_cast<simdscalari *>(&a);
+}
+
+INLINE simdscalard _simd_castsi_pd(simdscalari a)
+{
+    return *reinterpret_cast<simdscalard *>(&a);
+}
+
+INLINE simdscalari _simd_castpd_si(simdscalard a)
+{
+    return *reinterpret_cast<simdscalari *>(&a);
+}
+
+INLINE simdscalar _simd_castpd_ps(simdscalard a)
+{
+    return *reinterpret_cast<simdscalar *>(&a);
+}
+
+INLINE simdscalard _simd_castps_pd(simdscalar a)
+{
+    return *reinterpret_cast<simdscalard *>(&a);
+}
+
+SIMD_EMU_AVX512_2(simdscalar, _simd_andnot_ps, _mm256_andnot_ps)
+
+INLINE simdscalar _simd_round_ps(simdscalar a, const int mode)
+{
+    simdscalar result;
+
+    result.lo = _mm256_round_ps(a.lo, mode);
+    result.hi = _mm256_round_ps(a.hi, mode);
+
+    return result;
+}
+
+SIMD_EMU_AVX512_2(simdscalari, _simd_mul_epi32, _mm256_mul_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_mullo_epi32, _mm256_mullo_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_sub_epi32, _mm256_sub_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_sub_epi64, _mm256_sub_epi64)
+SIMD_EMU_AVX512_2(simdscalari, _simd_min_epi32, _mm256_min_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_max_epi32, _mm256_max_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_min_epu32, _mm256_min_epu32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_max_epu32, _mm256_max_epu32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_add_epi32, _mm256_add_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_and_si, _mm256_and_si256)
+SIMD_EMU_AVX512_2(simdscalari, _simd_andnot_si, _mm256_andnot_si256)
+SIMD_EMU_AVX512_2(simdscalari, _simd_or_si, _mm256_or_si256)
+SIMD_EMU_AVX512_2(simdscalari, _simd_xor_si, _mm256_xor_si256)
+SIMD_EMU_AVX512_2(simdscalari, _simd_cmpeq_epi32, _mm256_cmpeq_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_cmpgt_epi32, _mm256_cmpgt_epi32)
+
+INLINE int _simd_testz_ps(simdscalar a, simdscalar b)
+{
+    int lo = _mm256_testz_ps(a.lo, b.lo);
+    int hi = _mm256_testz_ps(a.hi, b.hi);
+
+    return lo & hi;
+}
+
+#define _simd_cmplt_epi32(a, b) _simd_cmpgt_epi32(b, a)
+
+SIMD_EMU_AVX512_2(simdscalari, _simd_unpacklo_epi32, _mm256_unpacklo_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_unpackhi_epi32, _mm256_unpackhi_epi32)
+
+INLINE simdscalari _simd_slli_epi32(simdscalari a, const int imm8)
+{
+    simdscalari result;
+
+    result.lo = _mm256_slli_epi32(a.lo, imm8);
+    result.hi = _mm256_slli_epi32(a.hi, imm8);
+
+    return result;
+}
+
+INLINE simdscalari _simd_srai_epi32(simdscalari a, const int imm8)
+{
+    simdscalari result;
+
+    result.lo = _mm256_srai_epi32(a.lo, imm8);
+    result.hi = _mm256_srai_epi32(a.hi, imm8);
+
+    return result;
+}
+
+INLINE simdscalari _simd_srli_epi32(simdscalari a, const int imm8)
+{
+    simdscalari result;
+
+    result.lo = _mm256_srli_epi32(a.lo, imm8);
+    result.hi = _mm256_srli_epi32(a.hi, imm8);
+
+    return result;
+}
+
+#define _simd128_fmadd_ps _mm_fmadd_ps
+
+SIMD_EMU_AVX512_3(simdscalar, _simd_fmadd_ps, _mm256_fmadd_ps)
+SIMD_EMU_AVX512_3(simdscalar, _simd_fmsub_ps, _mm256_fmsub_ps)
+
+SIMD_EMU_AVX512_2(simdscalari, _simd_shuffle_epi8, _mm256_shuffle_epi8)
+SIMD_EMU_AVX512_2(simdscalari, _simd_adds_epu8, _mm256_adds_epu8)
+SIMD_EMU_AVX512_2(simdscalari, _simd_subs_epu8, _mm256_subs_epu8)
+SIMD_EMU_AVX512_2(simdscalari, _simd_add_epi8, _mm256_add_epi8)
+
+INLINE simdscalar _simd_i32gather_ps(float const *m, simdscalari a, const int imm8)
+{
+    simdscalar result;
+
+    result.lo = _mm256_i32gather_ps(m, a.lo, imm8);
+    result.hi = _mm256_i32gather_ps(m, a.hi, imm8);
+
+    return result;
+}
+
+SIMD_EMU_AVX512_1(simdscalari, _simd_abs_epi32, _mm256_abs_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_cmpeq_epi64, _mm256_cmpeq_epi64)
+SIMD_EMU_AVX512_2(simdscalari, _simd_cmpgt_epi64, _mm256_cmpgt_epi64)
+SIMD_EMU_AVX512_2(simdscalari, _simd_cmpeq_epi16, _mm256_cmpeq_epi16)
+SIMD_EMU_AVX512_2(simdscalari, _simd_cmpgt_epi16, _mm256_cmpgt_epi16)
+SIMD_EMU_AVX512_2(simdscalari, _simd_cmpeq_epi8, _mm256_cmpeq_epi8)
+SIMD_EMU_AVX512_2(simdscalari, _simd_cmpgt_epi8, _mm256_cmpgt_epi8)
+
+INLINE simdscalar _simd_permute_ps(simdscalar a, simdscalari b)
+{
+    simdscalar result;
+
+    result.lo = _mm256_permutevar8x32_ps(a.lo, b.lo);
+    result.hi = _mm256_permutevar8x32_ps(a.hi, b.hi);
+
+    return result;
+}
+
+SIMD_EMU_AVX512_2(simdscalari, _simd_permute_epi32, _mm256_permutevar8x32_epi32)
+
+SIMD_EMU_AVX512_2(simdscalari, _simd_srlv_epi32, _mm256_srlv_epi32)
+SIMD_EMU_AVX512_2(simdscalari, _simd_sllv_epi32, _mm256_sllv_epi32)
+
+INLINE simdscalar _simd_shuffle_ps(simdscalar a, simdscalar b, const int imm8)
+{
+    simdscalar result;
+
+    result.lo = _mm256_shuffle_ps(a.lo, b.lo, imm8);
+    result.hi = _mm256_shuffle_ps(a.hi, b.hi, imm8);
+
+    return result;
+}
+
+// convert bitmask to vector mask
+INLINE simdscalar vMask(int32_t mask)
+{
+    simdscalari temp = _simd_set1_epi32(mask);
+
+    simdscalari bits = _simd_set_epi32(0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010, 0x0008, 0x0004, 0x0002, 0x0001);
+
+    simdscalari result = _simd_cmplt_epi32(_simd_setzero_si(), _simd_and_si(temp, bits));
+
+    return _simd_castsi_ps(result);
+}
+
+#else
+
+INLINE __m512 _m512_broadcast_ss(void const *m)
+{
+    return _mm512_extload_ps(m, _MM_UPCONV_PS_NONE, _MM_BROADCAST_1X16, 0);
+}
+
+INLINE __m512 _m512_broadcast_ps(void const *m)
+{
+    return _mm512_extload_ps(m, _MM_UPCONV_PS_NONE, _MM_BROADCAST_4X16, 0);
+}
+
+INLINE __m512 _m512_blend_ps(__m512 a, __m512 b, const int mask)
+{
+    const __mask16 mask16 = _mm512_int2mask(mask);
+
+    return _mm512_mask_blend_ps(mask16, a, b);
+}
+
+INLINE __m512 _m512_blendv_ps(__m512 a, __m512 b, __m512 mask)
+{
+    const __mask16 mask16 = _mm512_cmpeq_ps_mask(mask, _mm512_setzero_ps());
+
+    return _mm512_mask_blend_ps(mask16, a, b);
+}
+
+INLINE int _m512_movemask_ps(__m512 a)
+{
+    __m512 mask = _mm512_set1_epi32(0x80000000);
+
+    __m512 temp = _mm512_and_epi32(a, mask);
+
+    const __mask16 mask16 = _mm512_cmpeq_epu32_mask(temp, mask);
+
+    return _mm512mask2int(mask16);
+}
+
+INLINE int _m512_movemask_pd(__m512 a)
+{
+    __m512 mask = _mm512_set1_epi64(0x8000000000000000);
+
+    __m512 temp = _mm512_and_epi64(a, mask);
+
+    const __mask16 mask16 = _mm512_cmpeq_epu64_mask(temp, mask);
+
+    return _mm512mask2int(mask16);
+}
+
+INLINE __m512 _m512_cmp_ps(__m512 a, __m512 b, __m512 comp)
+{
+    const __mask16 mask16 = _mm512_cmpeq_ps_mask(a, b, comp);
+
+    return _mm512_mask_blend_epi32(mask16, _mm512_setzero_epi32(), _mm512_set1_epi32(0xFFFFFFFF));
+}
+
+INLINE __m512 _mm512_cmplt_epi32(__m512 a, __m512 b)
+{
+    const __mask16 mask16 = _mm512_cmplt_epi32_mask(a, b);
+
+    return _mm512_mask_blend_epi32(mask16, _mm512_setzero_epi32(), _mm512_set1_epi32(0xFFFFFFFF));
+}
+
+INLINE __m512 _mm512_cmpgt_epi32(__m512 a, __m512 b)
+{
+    const __mask16 mask16 = _mm512_cmpgt_epi32_mask(a, b);
+
+    return _mm512_mask_blend_epi32(mask16, _mm512_setzero_epi32(), _mm512_set1_epi32(0xFFFFFFFF));
+}
+
+#define _simd_load_ps _mm512_load_ps
+#define _simd_load1_ps _mm256_broadcast_ss
+#define _simd_loadu_ps _mm512_loadu_ps
+#define _simd_setzero_ps _mm512_setzero_ps
+#define _simd_set1_ps _mm512_set1_ps
+#define _simd_blend_ps  _mm512_blend_ps
+#define _simd_blendv_ps _mm512_blendv_ps
+#define _simd_store_ps _mm512_store_ps
+#define _simd_mul_ps _mm512_mul_ps
+#define _simd_add_ps _mm512_add_ps
+#define _simd_sub_ps _mm512_sub_ps
+#define _simd_rsqrt_ps _mm512_rsqrt28_ps
+#define _simd_min_ps _mm512_min_ps
+#define _simd_max_ps _mm512_max_ps
+#define _simd_movemask_ps _mm512_movemask_ps
+#define _simd_cvtps_epi32 _mm512_cvtps_epi32
+#define _simd_cvttps_epi32 _mm512_cvttps_epi32
+#define _simd_cvtepi32_ps _mm512_cvtepi32_ps
+#define _simd_cmplt_ps(a, b) _mm512_cmp_ps(a, b, _CMP_LT_OQ)
+#define _simd_cmpgt_ps(a, b) _mm512_cmp_ps(a, b, _CMP_GT_OQ)
+#define _simd_cmpneq_ps(a, b) _mm512_cmp_ps(a, b, _CMP_NEQ_OQ)
+#define _simd_cmpeq_ps(a, b) _mm512_cmp_ps(a, b, _CMP_EQ_OQ)
+#define _simd_cmpge_ps(a, b) _mm512_cmp_ps(a, b, _CMP_GE_OQ)
+#define _simd_cmple_ps(a, b) _mm512_cmp_ps(a, b, _CMP_LE_OQ)
+#define _simd_cmp_ps(a, b, comp) _mm512_cmp_ps(a, b, comp)
+#define _simd_and_ps _mm512_and_ps
+#define _simd_or_ps _mm512_or_ps
+#define _simd_rcp_ps _mm512_rcp28_ps
+#define _simd_div_ps _mm512_div_ps
+#define _simd_castsi_ps _mm512_castsi512_ps
+#define _simd_andnot_ps _mm512_andnot_ps
+#define _simd_round_ps _mm512_round_ps
+#define _simd_castpd_ps _mm512_castpd_ps
+#define _simd_broadcast_ps _m512_broadcast_ps
+#define _simd_movemask_pd _mm512_movemask_pd
+#define _simd_castsi_pd _mm512_castsi512_pd
+
+#define _simd_mul_epi32 _mm512_mul_epi32
+#define _simd_mullo_epi32 _mm512_mullo_epi32
+#define _simd_sub_epi32 _mm512_sub_epi32
+#define _simd_sub_epi64 _mm512_sub_epi64
+#define _simd_min_epi32 _mm512_min_epi32
+#define _simd_max_epi32 _mm512_max_epi32
+#define _simd_min_epu32 _mm512_min_epu32
+#define _simd_max_epu32 _mm512_max_epu32
+#define _simd_add_epi32 _mm512_add_epi32
+#define _simd_and_si _mm512_and_si512
+#define _simd_andnot_si _mm512_andnot_si512
+#define _simd_cmpeq_epi32 _mm512_cmpeq_epi32
+#define _simd_cmplt_epi32(a,b) _mm256_cmpgt_epi32(b,a)
+#define _simd_cmpgt_epi32(a,b) _mm256_cmpgt_epi32(a,b)
+#define _simd_or_si _mm512_or_si512
+#define _simd_castps_si _mm512_castps_si512
+
+#endif
+
 #else
 #error Unsupported vector width
 #endif
@@ -594,6 +1296,7 @@ void _simdvec_mov(simdvector& r, const simdvector& v)
     r[3] = v[3];
 }
 
+#if 0
 // just move a lane from the source simdvector to dest simdvector
 INLINE
 void _simdvec_mov(simdvector &r, unsigned int rlane, simdvector& s, unsigned int slane)
@@ -604,6 +1307,7 @@ void _simdvec_mov(simdvector &r, unsigned int rlane, simdvector& s, unsigned int
     _simd_mov(r[3], rlane, s[3], slane);
 }
 
+#endif
 INLINE
 void _simdvec_dp3_ps(simdscalar& r, const simdvector& v0, const simdvector& v1)
 {
@@ -1002,7 +1706,7 @@ static INLINE simdscalar _simd_abs_ps(simdscalar a)
 INLINE
 UINT pdep_u32(UINT a, UINT mask)
 {
-#if KNOB_ARCH==KNOB_ARCH_AVX2
+#if KNOB_ARCH >= KNOB_ARCH_AVX2
     return _pdep_u32(a, mask);
 #else
     UINT result = 0;
@@ -1035,7 +1739,7 @@ UINT pdep_u32(UINT a, UINT mask)
 INLINE
 UINT pext_u32(UINT a, UINT mask)
 {
-#if KNOB_ARCH==KNOB_ARCH_AVX2
+#if KNOB_ARCH >= KNOB_ARCH_AVX2
     return _pext_u32(a, mask);
 #else
     UINT result = 0;
@@ -1055,5 +1759,9 @@ UINT pext_u32(UINT a, UINT mask)
     return result;
 #endif
 }
+
+#if ENABLE_AVX512_SIMD16
+#include "simd16intrin.h"
+#endif//ENABLE_AVX512_SIMD16
 
 #endif//__SWR_SIMDINTRIN_H__

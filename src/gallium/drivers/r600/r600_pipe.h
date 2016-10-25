@@ -57,6 +57,7 @@
 /* the number of CS dwords for flushing and drawing */
 #define R600_MAX_FLUSH_CS_DWORDS	18
 #define R600_MAX_DRAW_CS_DWORDS		58
+#define R600_MAX_PFP_SYNC_ME_DWORDS	16
 
 #define R600_MAX_USER_CONST_BUFFERS 13
 #define R600_MAX_DRIVER_CONST_BUFFERS 3
@@ -272,8 +273,10 @@ struct r600_rasterizer_state {
 	float				offset_units;
 	float				offset_scale;
 	bool				offset_enable;
+	bool				offset_units_unscaled;
 	bool				scissor_enable;
 	bool				multisample_enable;
+	bool				clip_halfz;
 };
 
 struct r600_poly_offset_state {
@@ -281,6 +284,7 @@ struct r600_poly_offset_state {
 	enum pipe_format		zs_format;
 	float				offset_units;
 	float				offset_scale;
+	bool				offset_units_unscaled;
 };
 
 struct r600_blend_state {
@@ -497,6 +501,11 @@ struct r600_context {
 	unsigned			zwritemask;
 	int					ps_iter_samples;
 
+	/* The list of all texture buffer objects in this context.
+	 * This list is walked when a buffer is invalidated/reallocated and
+	 * the GPU addresses are updated. */
+	struct list_head		texture_buffers;
+
 	/* Index buffer. */
 	struct pipe_index_buffer	index_buffer;
 
@@ -518,9 +527,9 @@ struct r600_context {
 static inline void r600_emit_command_buffer(struct radeon_winsys_cs *cs,
 					    struct r600_command_buffer *cb)
 {
-	assert(cs->cdw + cb->num_dw <= cs->max_dw);
-	memcpy(cs->buf + cs->cdw, cb->buf, 4 * cb->num_dw);
-	cs->cdw += cb->num_dw;
+	assert(cs->current.cdw + cb->num_dw <= cs->current.max_dw);
+	memcpy(cs->current.buf + cs->current.cdw, cb->buf, 4 * cb->num_dw);
+	cs->current.cdw += cb->num_dw;
 }
 
 static inline void r600_set_atom_dirty(struct r600_context *rctx,
@@ -663,13 +672,15 @@ void r600_context_gfx_flush(void *context, unsigned flags,
 void r600_begin_new_cs(struct r600_context *ctx);
 void r600_flush_emit(struct r600_context *ctx);
 void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw, boolean count_draw_in);
+void r600_emit_pfp_sync_me(struct r600_context *rctx);
 void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 			     struct pipe_resource *dst, uint64_t dst_offset,
 			     struct pipe_resource *src, uint64_t src_offset,
 			     unsigned size);
 void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 				   struct pipe_resource *dst, uint64_t offset,
-				   unsigned size, uint32_t clear_value);
+				   unsigned size, uint32_t clear_value,
+				   enum r600_coherency coher);
 void r600_dma_copy_buffer(struct r600_context *rctx,
 			  struct pipe_resource *dst,
 			  struct pipe_resource *src,
@@ -874,13 +885,13 @@ static inline void radeon_compute_set_context_reg_seq(struct radeon_winsys_cs *c
 {
 	radeon_set_context_reg_seq(cs, reg, num);
 	/* Set the compute bit on the packet header */
-	cs->buf[cs->cdw - 2] |= RADEON_CP_PACKET3_COMPUTE_MODE;
+	cs->current.buf[cs->current.cdw - 2] |= RADEON_CP_PACKET3_COMPUTE_MODE;
 }
 
 static inline void radeon_set_ctl_const_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg >= R600_CTL_CONST_OFFSET);
-	assert(cs->cdw+2+num <= cs->max_dw);
+	assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
 	radeon_emit(cs, PKT3(PKT3_SET_CTL_CONST, num, 0));
 	radeon_emit(cs, (reg - R600_CTL_CONST_OFFSET) >> 2);
 }
@@ -921,12 +932,21 @@ static inline unsigned r600_pack_float_12p4(float x)
 	       x >= 4096 ? 0xffff : x * 16;
 }
 
-/* Return if the depth format can be read without the DB->CB copy on r6xx-r7xx. */
-static inline bool r600_can_read_depth(struct r600_texture *rtex)
+static inline unsigned r600_get_flush_flags(enum r600_coherency coher)
 {
-	return rtex->resource.b.b.nr_samples <= 1 &&
-	       (rtex->resource.b.b.format == PIPE_FORMAT_Z16_UNORM ||
-		rtex->resource.b.b.format == PIPE_FORMAT_Z32_FLOAT);
+	switch (coher) {
+	default:
+	case R600_COHERENCY_NONE:
+		return 0;
+	case R600_COHERENCY_SHADER:
+		return R600_CONTEXT_INV_CONST_CACHE |
+		       R600_CONTEXT_INV_VERTEX_CACHE |
+		       R600_CONTEXT_INV_TEX_CACHE |
+		       R600_CONTEXT_STREAMOUT_FLUSH;
+	case R600_COHERENCY_CB_META:
+		return R600_CONTEXT_FLUSH_AND_INV_CB |
+		       R600_CONTEXT_FLUSH_AND_INV_CB_META;
+	}
 }
 
 #define     V_028A6C_OUTPRIM_TYPE_POINTLIST            0

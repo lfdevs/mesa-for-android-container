@@ -583,12 +583,12 @@ init_dct_coeff_table(struct dct_coeff *dst, const struct dct_coeff_compressed *s
          break;
       }
 
-      for(i=0; i<(1 << (17 - coeff.length)); ++i)
+      for(i = 0; i < (1u << (17 - coeff.length)); ++i)
          dst[src->bitcode << 1 | i] = coeff;
 
       if (has_sign) {
 	 coeff.level = -coeff.level;
-         for(; i<(1 << (18 - coeff.length)); ++i)
+         for(; i < (1u << (18 - coeff.length)); ++i)
             dst[src->bitcode << 1 | i] = coeff;
       }
    }

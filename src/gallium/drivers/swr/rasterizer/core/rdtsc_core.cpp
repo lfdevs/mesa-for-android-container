@@ -85,7 +85,6 @@ BUCKET_DESC gCoreBuckets[] = {
     { "BEOutputMerger", "", false, 0xffffffff },
     { "BEStoreTiles", "", true, 0xff00cccc },
     { "BEEndTile", "", false, 0xffffffff },
-    { "WorkerWaitForThreadEvent", "", false, 0xffffffff },
 };
 
 /// @todo bucketmanager and mapping should probably be a part of the SWR context

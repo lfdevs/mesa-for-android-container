@@ -59,8 +59,7 @@
 #define FB_BUFFER_SIZE 2048
 #define FB_BUFFER_SIZE_TONGA (2048 * 64)
 #define IT_SCALING_TABLE_SIZE 992
-
-#define FW_1_66_16 ((1 << 24) | (66 << 16) | (16 << 8))
+#define UVD_SESSION_CONTEXT_SIZE (128 * 1024)
 
 /* UVD decoder representation */
 struct ruvd_decoder {
@@ -91,12 +90,13 @@ struct ruvd_decoder {
 	struct rvid_buffer		dpb;
 	bool				use_legacy;
 	struct rvid_buffer		ctx;
+	struct rvid_buffer		sessionctx;
 };
 
 /* flush IB to the hardware */
-static void flush(struct ruvd_decoder *dec)
+static int flush(struct ruvd_decoder *dec, unsigned flags)
 {
-	dec->ws->cs_flush(dec->cs, RADEON_FLUSH_ASYNC, NULL);
+	return dec->ws->cs_flush(dec->cs, flags, NULL);
 }
 
 /* add a new set register command to the IB */
@@ -113,7 +113,8 @@ static void send_cmd(struct ruvd_decoder *dec, unsigned cmd,
 {
 	int reloc_idx;
 
-	reloc_idx = dec->ws->cs_add_buffer(dec->cs, buf, usage, domain,
+	reloc_idx = dec->ws->cs_add_buffer(dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
+					   domain,
 					  RADEON_PRIO_UVD);
 	if (!dec->use_legacy) {
 		uint64_t addr;
@@ -122,6 +123,7 @@ static void send_cmd(struct ruvd_decoder *dec, unsigned cmd,
 		set_reg(dec, RUVD_GPCOM_VCPU_DATA0, addr);
 		set_reg(dec, RUVD_GPCOM_VCPU_DATA1, addr >> 32);
 	} else {
+		off += dec->ws->buffer_get_reloc_offset(buf);
 		set_reg(dec, RUVD_GPCOM_VCPU_DATA0, off);
 		set_reg(dec, RUVD_GPCOM_VCPU_DATA1, reloc_idx * 4);
 	}
@@ -171,6 +173,12 @@ static void send_msg_buf(struct ruvd_decoder *dec)
 	dec->msg = NULL;
 	dec->fb = NULL;
 	dec->it = NULL;
+
+
+	if (dec->sessionctx.res)
+		send_cmd(dec, RUVD_CMD_SESSION_CONTEXT_BUFFER,
+			 dec->sessionctx.res->buf, 0, RADEON_USAGE_READWRITE,
+			 RADEON_DOMAIN_VRAM);
 
 	/* and send it to the hardware */
 	send_cmd(dec, RUVD_CMD_MSG_BUFFER, buf->res->buf, 0,
@@ -929,7 +937,7 @@ static void ruvd_destroy(struct pipe_video_codec *decoder)
 	dec->msg->stream_handle = dec->stream_handle;
 	send_msg_buf(dec);
 
-	flush(dec);
+	flush(dec, 0);
 
 	dec->ws->cs_destroy(dec->cs);
 
@@ -939,10 +947,8 @@ static void ruvd_destroy(struct pipe_video_codec *decoder)
 	}
 
 	rvid_destroy_buffer(&dec->dpb);
-	if ((u_reduce_video_profile(dec->base.profile) == PIPE_VIDEO_FORMAT_HEVC) ||
-	    (dec->stream_type == RUVD_CODEC_H264_PERF &&
-	    ((struct r600_common_screen*)dec->screen)->family >= CHIP_POLARIS10))
-		rvid_destroy_buffer(&dec->ctx);
+	rvid_destroy_buffer(&dec->ctx);
+	rvid_destroy_buffer(&dec->sessionctx);
 
 	FREE(dec);
 }
@@ -1128,12 +1134,9 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 
 	send_cmd(dec, RUVD_CMD_DPB_BUFFER, dec->dpb.res->buf, 0,
 		 RADEON_USAGE_READWRITE, RADEON_DOMAIN_VRAM);
-	if ((u_reduce_video_profile(picture->profile) == PIPE_VIDEO_FORMAT_HEVC) ||
-	    (dec->stream_type == RUVD_CODEC_H264_PERF &&
-	    ((struct r600_common_screen*)dec->screen)->family >= CHIP_POLARIS10)) {
+	if (dec->ctx.res)
 		send_cmd(dec, RUVD_CMD_CONTEXT_BUFFER, dec->ctx.res->buf, 0,
 			RADEON_USAGE_READWRITE, RADEON_DOMAIN_VRAM);
-	}
 	send_cmd(dec, RUVD_CMD_BITSTREAM_BUFFER, bs_buf->res->buf,
 		 0, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
 	send_cmd(dec, RUVD_CMD_DECODING_TARGET_BUFFER, dt, 0,
@@ -1145,7 +1148,7 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 			 FB_BUFFER_OFFSET + dec->fb_size, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
 	set_reg(dec, RUVD_ENGINE_CNTL, 1);
 
-	flush(dec);
+	flush(dec, RADEON_FLUSH_ASYNC);
 	next_buffer(dec);
 }
 
@@ -1170,7 +1173,7 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 	unsigned bs_buf_size;
 	struct radeon_info info;
 	struct ruvd_decoder *dec;
-	int i;
+	int r, i;
 
 	ws->query_info(ws, &info);
 
@@ -1185,12 +1188,6 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 		height = align(height, VL_MACROBLOCK_HEIGHT);
 		break;
 	case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-		if ((info.family == CHIP_POLARIS10 || info.family == CHIP_POLARIS11) &&
-		    info.uvd_fw_version < FW_1_66_16 ) {
-			RVID_ERR("POLARIS10/11 firmware version need to be updated.\n");
-			return NULL;
-		}
-
 		width = align(width, VL_MACROBLOCK_WIDTH);
 		height = align(height, VL_MACROBLOCK_HEIGHT);
 		break;
@@ -1206,7 +1203,7 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 		return NULL;
 
 	if (info.drm_major < 3)
-		dec->use_legacy = TRUE;
+		dec->use_legacy = true;
 
 	dec->base = *templ;
 	dec->base.context = context;
@@ -1233,7 +1230,7 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 
 	dec->fb_size = (info.family == CHIP_TONGA) ? FB_BUFFER_SIZE_TONGA :
 			FB_BUFFER_SIZE;
-	bs_buf_size = width * height * 512 / (16 * 16);
+	bs_buf_size = width * height * (512 / (16 * 16));
 	for (i = 0; i < NUM_BUFFERS; ++i) {
 		unsigned msg_fb_it_size = FB_BUFFER_OFFSET + dec->fb_size;
 		STATIC_ASSERT(sizeof(struct ruvd_msg) <= FB_BUFFER_OFFSET);
@@ -1273,6 +1270,16 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 		rvid_clear_buffer(context, &dec->ctx);
 	}
 
+	if (info.family >= CHIP_POLARIS10 && info.drm_minor >= 3) {
+		if (!rvid_create_buffer(dec->screen, &dec->sessionctx,
+					UVD_SESSION_CONTEXT_SIZE,
+					PIPE_USAGE_DEFAULT)) {
+			RVID_ERR("Can't allocated session ctx.\n");
+			goto error;
+		}
+		rvid_clear_buffer(context, &dec->sessionctx);
+	}
+
 	map_msg_fb_it_buf(dec);
 	dec->msg->size = sizeof(*dec->msg);
 	dec->msg->msg_type = RUVD_MSG_CREATE;
@@ -1282,7 +1289,10 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 	dec->msg->body.create.height_in_samples = dec->base.height;
 	dec->msg->body.create.dpb_size = dpb_size;
 	send_msg_buf(dec);
-	flush(dec);
+	r = flush(dec, 0);
+	if (r)
+		goto error;
+
 	next_buffer(dec);
 
 	return &dec->base;
@@ -1296,8 +1306,8 @@ error:
 	}
 
 	rvid_destroy_buffer(&dec->dpb);
-	if (dec->stream_type == RUVD_CODEC_H264_PERF && info.family >= CHIP_POLARIS10)
-		rvid_destroy_buffer(&dec->ctx);
+	rvid_destroy_buffer(&dec->ctx);
+	rvid_destroy_buffer(&dec->sessionctx);
 
 	FREE(dec);
 

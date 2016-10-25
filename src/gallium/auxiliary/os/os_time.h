@@ -70,12 +70,8 @@ os_time_get(void)
 /*
  * Sleep.
  */
-#if defined(PIPE_OS_UNIX)
-#define os_time_sleep(_usecs) usleep(_usecs)
-#else
 void
 os_time_sleep(int64_t usecs);
-#endif
 
 
 /*

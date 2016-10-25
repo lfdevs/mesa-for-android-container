@@ -43,6 +43,7 @@
 #include "pipe/p_compiler.h"
 #include "pipe/p_defines.h"
 
+#include "svga_mksstats.h"
 
 struct svga_winsys_screen;
 struct svga_winsys_buffer;
@@ -87,6 +88,139 @@ struct winsys_handle;
 #define SVGA_QUERY_FLAG_REF        (1 << 1)
 
 #define SVGA_HINT_FLAG_CAN_PRE_FLUSH (1 << 0)  /* Can preemptively flush */
+
+/**
+ * SVGA mks statistics info
+ */
+struct svga_winsys_stats_timeframe {
+   void *counterTime;
+   uint64 startTime;
+   uint64 adjustedStartTime;
+   struct svga_winsys_stats_timeframe *enclosing;
+};
+
+enum svga_stats_count {
+   SVGA_STATS_COUNT_BLENDSTATE,
+   SVGA_STATS_COUNT_DEPTHSTENCILSTATE,
+   SVGA_STATS_COUNT_RASTERIZERSTATE,
+   SVGA_STATS_COUNT_SAMPLER,
+   SVGA_STATS_COUNT_SAMPLERVIEW,
+   SVGA_STATS_COUNT_SURFACEWRITEFLUSH,
+   SVGA_STATS_COUNT_TEXREADBACK,
+   SVGA_STATS_COUNT_VERTEXELEMENT,
+   SVGA_STATS_COUNT_MAX
+};
+
+enum svga_stats_time {
+   SVGA_STATS_TIME_BUFFERSFLUSH,
+   SVGA_STATS_TIME_BUFFERTRANSFERMAP,
+   SVGA_STATS_TIME_BUFFERTRANSFERUNMAP,
+   SVGA_STATS_TIME_CONTEXTFINISH,
+   SVGA_STATS_TIME_CONTEXTFLUSH,
+   SVGA_STATS_TIME_CREATEBACKEDSURFACEVIEW,
+   SVGA_STATS_TIME_CREATEBUFFER,
+   SVGA_STATS_TIME_CREATECONTEXT,
+   SVGA_STATS_TIME_CREATEFS,
+   SVGA_STATS_TIME_CREATEGS,
+   SVGA_STATS_TIME_CREATESURFACE,
+   SVGA_STATS_TIME_CREATESURFACEVIEW,
+   SVGA_STATS_TIME_CREATETEXTURE,
+   SVGA_STATS_TIME_CREATEVS,
+   SVGA_STATS_TIME_DEFINESHADER,
+   SVGA_STATS_TIME_DESTROYSURFACE,
+   SVGA_STATS_TIME_DRAWVBO,
+   SVGA_STATS_TIME_DRAWARRAYS,
+   SVGA_STATS_TIME_DRAWELEMENTS,
+   SVGA_STATS_TIME_EMITFS,
+   SVGA_STATS_TIME_EMITGS,
+   SVGA_STATS_TIME_EMITVS,
+   SVGA_STATS_TIME_FENCEFINISH,
+   SVGA_STATS_TIME_GENERATEINDICES,
+   SVGA_STATS_TIME_HWTNLDRAWARRAYS,
+   SVGA_STATS_TIME_HWTNLDRAWELEMENTS,
+   SVGA_STATS_TIME_HWTNLFLUSH,
+   SVGA_STATS_TIME_HWTNLPRIM,
+   SVGA_STATS_TIME_PROPAGATESURFACE,
+   SVGA_STATS_TIME_SETSAMPLERVIEWS,
+   SVGA_STATS_TIME_SURFACEFLUSH,
+   SVGA_STATS_TIME_SWTNLDRAWVBO,
+   SVGA_STATS_TIME_SWTNLUPDATEDRAW,
+   SVGA_STATS_TIME_SWTNLUPDATEVDECL,
+   SVGA_STATS_TIME_TEXTRANSFERMAP,
+   SVGA_STATS_TIME_TEXTRANSFERUNMAP,
+   SVGA_STATS_TIME_TGSIVGPU10TRANSLATE,
+   SVGA_STATS_TIME_TGSIVGPU9TRANSLATE,
+   SVGA_STATS_TIME_UPDATESTATE,
+   SVGA_STATS_TIME_VALIDATESURFACEVIEW,
+   SVGA_STATS_TIME_VBUFDRAWARRAYS,
+   SVGA_STATS_TIME_VBUFDRAWELEMENTS,
+   SVGA_STATS_TIME_VBUFRENDERALLOCVERT,
+   SVGA_STATS_TIME_VBUFRENDERMAPVERT,
+   SVGA_STATS_TIME_VBUFRENDERUNMAPVERT,
+   SVGA_STATS_TIME_VBUFSUBMITSTATE,
+   SVGA_STATS_TIME_MAX
+};
+
+#define SVGA_STATS_PREFIX "GuestGL_"
+
+#define SVGA_STATS_COUNT_NAMES                \
+   SVGA_STATS_PREFIX "BlendState",            \
+   SVGA_STATS_PREFIX "DepthStencilState",     \
+   SVGA_STATS_PREFIX "RasterizerState",       \
+   SVGA_STATS_PREFIX "Sampler",               \
+   SVGA_STATS_PREFIX "SamplerView",           \
+   SVGA_STATS_PREFIX "SurfaceWriteFlush",     \
+   SVGA_STATS_PREFIX "TextureReadback",       \
+   SVGA_STATS_PREFIX "VertexElement"          \
+
+#define SVGA_STATS_TIME_NAMES                       \
+   SVGA_STATS_PREFIX "BuffersFlush",                \
+   SVGA_STATS_PREFIX "BufferTransferMap",           \
+   SVGA_STATS_PREFIX "BufferTransferUnmap",         \
+   SVGA_STATS_PREFIX "ContextFinish",               \
+   SVGA_STATS_PREFIX "ContextFlush",                \
+   SVGA_STATS_PREFIX "CreateBackedSurfaceView",     \
+   SVGA_STATS_PREFIX "CreateBuffer",                \
+   SVGA_STATS_PREFIX "CreateContext",               \
+   SVGA_STATS_PREFIX "CreateFS",                    \
+   SVGA_STATS_PREFIX "CreateGS",                    \
+   SVGA_STATS_PREFIX "CreateSurface",               \
+   SVGA_STATS_PREFIX "CreateSurfaceView",           \
+   SVGA_STATS_PREFIX "CreateTexture",               \
+   SVGA_STATS_PREFIX "CreateVS",                    \
+   SVGA_STATS_PREFIX "DefineShader",                \
+   SVGA_STATS_PREFIX "DestroySurface",              \
+   SVGA_STATS_PREFIX "DrawVBO",                     \
+   SVGA_STATS_PREFIX "DrawArrays",                  \
+   SVGA_STATS_PREFIX "DrawElements",                \
+   SVGA_STATS_PREFIX "EmitFS",                      \
+   SVGA_STATS_PREFIX "EmitGS",                      \
+   SVGA_STATS_PREFIX "EmitVS",                      \
+   SVGA_STATS_PREFIX "FenceFinish",                 \
+   SVGA_STATS_PREFIX "GenerateIndices",             \
+   SVGA_STATS_PREFIX "HWtnlDrawArrays",             \
+   SVGA_STATS_PREFIX "HWtnlDrawElements",           \
+   SVGA_STATS_PREFIX "HWtnlFlush",                  \
+   SVGA_STATS_PREFIX "HWtnlPrim",                   \
+   SVGA_STATS_PREFIX "PropagateSurface",            \
+   SVGA_STATS_PREFIX "SetSamplerViews",             \
+   SVGA_STATS_PREFIX "SurfaceFlush",                \
+   SVGA_STATS_PREFIX "SwtnlDrawVBO",                \
+   SVGA_STATS_PREFIX "SwtnlUpdateDraw",             \
+   SVGA_STATS_PREFIX "SwtnlUpdateVDecl",            \
+   SVGA_STATS_PREFIX "TextureTransferMap",          \
+   SVGA_STATS_PREFIX "TextureTransferUnmap",        \
+   SVGA_STATS_PREFIX "TGSIVGPU10Translate",         \
+   SVGA_STATS_PREFIX "TGSIVGPU9Translate",          \
+   SVGA_STATS_PREFIX "UpdateState",                 \
+   SVGA_STATS_PREFIX "ValidateSurfaceView",         \
+   SVGA_STATS_PREFIX "VbufDrawArrays",              \
+   SVGA_STATS_PREFIX "VbufDrawElements",            \
+   SVGA_STATS_PREFIX "VbufRenderAllocVertices",     \
+   SVGA_STATS_PREFIX "VbufRenderMapVertices",       \
+   SVGA_STATS_PREFIX "VbufRenderUnmapVertices",     \
+   SVGA_STATS_PREFIX "VbufSubmitState"
+   
 
 /** Opaque surface handle */
 struct svga_winsys_surface;
@@ -290,6 +424,9 @@ struct svga_winsys_context
 
    /** To report perf/conformance/etc issues to the state tracker */
    struct pipe_debug_callback *debug_callback;
+
+   /** The more recent command issued to command buffer */
+   SVGAFifo3dCmdId last_command;
 };
 
 
@@ -419,6 +556,14 @@ struct svga_winsys_screen
                          uint32 numMipLevels);
 
    /**
+    * Invalidate the content of this surface
+    */
+   void
+   (*surface_invalidate)(struct svga_winsys_screen *sws,
+                         struct svga_winsys_surface *surface);
+
+
+   /**
     * Buffer management. Buffer attributes are mostly fixed over its lifetime.
     *
     * @param usage bitmask of SVGA_BUFFER_USAGE_* flags.
@@ -539,6 +684,25 @@ struct svga_winsys_screen
                        SVGA3dQueryState *queryState,
                        void *result, uint32 resultLen);
 
+   /**
+    * Increment a statistic counter
+    */
+   void 
+   (*stats_inc)(enum svga_stats_count);
+
+   /**
+    * Push a time frame onto the stack
+    */
+   void
+   (*stats_time_push)(enum svga_stats_time, struct svga_winsys_stats_timeframe *);
+
+   /**
+    * Pop a time frame.
+    */
+   void
+   (*stats_time_pop)();
+
+
    /** Have VGPU v10 hardware? */
    boolean have_vgpu10;
 
@@ -547,6 +711,7 @@ struct svga_winsys_screen
 
    boolean have_generate_mipmap_cmd;
    boolean have_set_predication_cmd;
+   boolean have_transfer_from_buffer_cmd;
 };
 
 

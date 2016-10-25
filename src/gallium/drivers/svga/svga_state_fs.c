@@ -180,7 +180,7 @@ make_fs_key(const struct svga_context *svga,
             struct svga_fragment_shader *fs,
             struct svga_compile_key *key)
 {
-   const unsigned shader = PIPE_SHADER_FRAGMENT;
+   const enum pipe_shader_type shader = PIPE_SHADER_FRAGMENT;
    unsigned i;
 
    memset(key, 0, sizeof *key);
@@ -407,6 +407,8 @@ emit_hw_fs(struct svga_context *svga, unsigned dirty)
    struct svga_fragment_shader *fs = svga->curr.fs;
    struct svga_compile_key key;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_EMITFS);
+
    /* SVGA_NEW_BLEND
     * SVGA_NEW_TEXTURE_BINDING
     * SVGA_NEW_RAST
@@ -418,13 +420,13 @@ emit_hw_fs(struct svga_context *svga, unsigned dirty)
     */
    ret = make_fs_key(svga, fs, &key);
    if (ret != PIPE_OK)
-      return ret;
+      goto done;
 
    variant = svga_search_shader_key(&fs->base, &key);
    if (!variant) {
       ret = compile_fs(svga, fs, &key, &variant);
       if (ret != PIPE_OK)
-         return ret;
+         goto done;
    }
 
    assert(variant);
@@ -432,7 +434,7 @@ emit_hw_fs(struct svga_context *svga, unsigned dirty)
    if (variant != svga->state.hw_draw.fs) {
       ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_PS, variant);
       if (ret != PIPE_OK)
-         return ret;
+         goto done;
 
       svga->rebind.flags.fs = FALSE;
 
@@ -440,7 +442,9 @@ emit_hw_fs(struct svga_context *svga, unsigned dirty)
       svga->state.hw_draw.fs = variant;
    }
 
-   return PIPE_OK;
+done:
+   SVGA_STATS_TIME_POP(svga_sws(svga));
+   return ret;
 }
 
 struct svga_tracked_state svga_hw_fs = 

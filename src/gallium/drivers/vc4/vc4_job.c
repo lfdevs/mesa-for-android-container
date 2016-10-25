@@ -28,65 +28,254 @@
 
 #include <xf86drm.h>
 #include "vc4_context.h"
+#include "util/hash_table.h"
 
-void
-vc4_job_init(struct vc4_context *vc4)
+static void
+remove_from_ht(struct hash_table *ht, void *key)
 {
-        vc4_init_cl(vc4, &vc4->bcl);
-        vc4_init_cl(vc4, &vc4->shader_rec);
-        vc4_init_cl(vc4, &vc4->uniforms);
-        vc4_init_cl(vc4, &vc4->bo_handles);
-        vc4_init_cl(vc4, &vc4->bo_pointers);
-        vc4_job_reset(vc4);
-}
-
-void
-vc4_job_reset(struct vc4_context *vc4)
-{
-        struct vc4_bo **referenced_bos = vc4->bo_pointers.base;
-        for (int i = 0; i < cl_offset(&vc4->bo_handles) / 4; i++) {
-                vc4_bo_unreference(&referenced_bos[i]);
-        }
-        vc4_reset_cl(&vc4->bcl);
-        vc4_reset_cl(&vc4->shader_rec);
-        vc4_reset_cl(&vc4->uniforms);
-        vc4_reset_cl(&vc4->bo_handles);
-        vc4_reset_cl(&vc4->bo_pointers);
-        vc4->shader_rec_count = 0;
-
-        vc4->needs_flush = false;
-        vc4->draw_calls_queued = 0;
-
-        /* We have no hardware context saved between our draw calls, so we
-         * need to flag the next draw as needing all state emitted.  Emitting
-         * all state at the start of our draws is also what ensures that we
-         * return to the state we need after a previous tile has finished.
-         */
-        vc4->dirty = ~0;
-        vc4->resolve = 0;
-        vc4->cleared = 0;
-
-        vc4->draw_min_x = ~0;
-        vc4->draw_min_y = ~0;
-        vc4->draw_max_x = 0;
-        vc4->draw_max_y = 0;
+        struct hash_entry *entry = _mesa_hash_table_search(ht, key);
+        _mesa_hash_table_remove(ht, entry);
 }
 
 static void
-vc4_submit_setup_rcl_surface(struct vc4_context *vc4,
+vc4_job_free(struct vc4_context *vc4, struct vc4_job *job)
+{
+        struct vc4_bo **referenced_bos = job->bo_pointers.base;
+        for (int i = 0; i < cl_offset(&job->bo_handles) / 4; i++) {
+                vc4_bo_unreference(&referenced_bos[i]);
+        }
+
+        remove_from_ht(vc4->jobs, &job->key);
+
+        if (job->color_write) {
+                remove_from_ht(vc4->write_jobs, job->color_write->texture);
+                pipe_surface_reference(&job->color_write, NULL);
+        }
+        if (job->msaa_color_write) {
+                remove_from_ht(vc4->write_jobs, job->msaa_color_write->texture);
+                pipe_surface_reference(&job->msaa_color_write, NULL);
+        }
+        if (job->zs_write) {
+                remove_from_ht(vc4->write_jobs, job->zs_write->texture);
+                pipe_surface_reference(&job->zs_write, NULL);
+        }
+        if (job->msaa_zs_write) {
+                remove_from_ht(vc4->write_jobs, job->msaa_zs_write->texture);
+                pipe_surface_reference(&job->msaa_zs_write, NULL);
+        }
+
+        pipe_surface_reference(&job->color_read, NULL);
+        pipe_surface_reference(&job->zs_read, NULL);
+
+        if (vc4->job == job)
+                vc4->job = NULL;
+
+        ralloc_free(job);
+}
+
+static struct vc4_job *
+vc4_job_create(struct vc4_context *vc4)
+{
+        struct vc4_job *job = rzalloc(vc4, struct vc4_job);
+
+        vc4_init_cl(job, &job->bcl);
+        vc4_init_cl(job, &job->shader_rec);
+        vc4_init_cl(job, &job->uniforms);
+        vc4_init_cl(job, &job->bo_handles);
+        vc4_init_cl(job, &job->bo_pointers);
+
+        job->draw_min_x = ~0;
+        job->draw_min_y = ~0;
+        job->draw_max_x = 0;
+        job->draw_max_y = 0;
+
+        return job;
+}
+
+void
+vc4_flush_jobs_writing_resource(struct vc4_context *vc4,
+                                struct pipe_resource *prsc)
+{
+        struct hash_entry *entry = _mesa_hash_table_search(vc4->write_jobs,
+                                                           prsc);
+        if (entry) {
+                struct vc4_job *job = entry->data;
+                vc4_job_submit(vc4, job);
+        }
+}
+
+void
+vc4_flush_jobs_reading_resource(struct vc4_context *vc4,
+                                struct pipe_resource *prsc)
+{
+        struct vc4_resource *rsc = vc4_resource(prsc);
+
+        vc4_flush_jobs_writing_resource(vc4, prsc);
+
+        struct hash_entry *entry;
+        hash_table_foreach(vc4->jobs, entry) {
+                struct vc4_job *job = entry->data;
+
+                struct vc4_bo **referenced_bos = job->bo_pointers.base;
+                for (int i = 0; i < cl_offset(&job->bo_handles) / 4; i++) {
+                        if (referenced_bos[i] == rsc->bo) {
+                                vc4_job_submit(vc4, job);
+                                continue;
+                        }
+                }
+
+                /* Also check for the Z/color buffers, since the references to
+                 * those are only added immediately before submit.
+                 */
+                if (job->color_read && !(job->cleared & PIPE_CLEAR_COLOR)) {
+                        struct vc4_resource *ctex =
+                                vc4_resource(job->color_read->texture);
+                        if (ctex->bo == rsc->bo) {
+                                vc4_job_submit(vc4, job);
+                                continue;
+                        }
+                }
+
+                if (job->zs_read && !(job->cleared &
+                                      (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))) {
+                        struct vc4_resource *ztex =
+                                vc4_resource(job->zs_read->texture);
+                        if (ztex->bo == rsc->bo) {
+                                vc4_job_submit(vc4, job);
+                                continue;
+                        }
+                }
+        }
+}
+
+/**
+ * Returns a vc4_job struture for tracking V3D rendering to a particular FBO.
+ *
+ * If we've already started rendering to this FBO, then return old same job,
+ * otherwise make a new one.  If we're beginning rendering to an FBO, make
+ * sure that any previous reads of the FBO (or writes to its color/Z surfaces)
+ * have been flushed.
+ */
+struct vc4_job *
+vc4_get_job(struct vc4_context *vc4,
+            struct pipe_surface *cbuf, struct pipe_surface *zsbuf)
+{
+        /* Return the existing job for this FBO if we have one */
+        struct vc4_job_key local_key = {.cbuf = cbuf, .zsbuf = zsbuf};
+        struct hash_entry *entry = _mesa_hash_table_search(vc4->jobs,
+                                                           &local_key);
+        if (entry)
+                return entry->data;
+
+        /* Creating a new job.  Make sure that any previous jobs reading or
+         * writing these buffers are flushed.
+         */
+        if (cbuf)
+                vc4_flush_jobs_reading_resource(vc4, cbuf->texture);
+        if (zsbuf)
+                vc4_flush_jobs_reading_resource(vc4, zsbuf->texture);
+
+        struct vc4_job *job = vc4_job_create(vc4);
+
+        if (cbuf) {
+                if (cbuf->texture->nr_samples > 1) {
+                        job->msaa = true;
+                        pipe_surface_reference(&job->msaa_color_write, cbuf);
+                } else {
+                        pipe_surface_reference(&job->color_write, cbuf);
+                }
+        }
+
+        if (zsbuf) {
+                if (zsbuf->texture->nr_samples > 1) {
+                        job->msaa = true;
+                        pipe_surface_reference(&job->msaa_zs_write, zsbuf);
+                } else {
+                        pipe_surface_reference(&job->zs_write, zsbuf);
+                }
+        }
+
+        if (job->msaa) {
+                job->tile_width = 32;
+                job->tile_height = 32;
+        } else {
+                job->tile_width = 64;
+                job->tile_height = 64;
+        }
+
+        if (cbuf)
+                _mesa_hash_table_insert(vc4->write_jobs, cbuf->texture, job);
+        if (zsbuf)
+                _mesa_hash_table_insert(vc4->write_jobs, zsbuf->texture, job);
+
+        job->key.cbuf = cbuf;
+        job->key.zsbuf = zsbuf;
+        _mesa_hash_table_insert(vc4->jobs, &job->key, job);
+
+        return job;
+}
+
+struct vc4_job *
+vc4_get_job_for_fbo(struct vc4_context *vc4)
+{
+        if (vc4->job)
+                return vc4->job;
+
+        struct pipe_surface *cbuf = vc4->framebuffer.cbufs[0];
+        struct pipe_surface *zsbuf = vc4->framebuffer.zsbuf;
+        struct vc4_job *job = vc4_get_job(vc4, cbuf, zsbuf);
+
+        /* The dirty flags are tracking what's been updated while vc4->job has
+         * been bound, so set them all to ~0 when switching between jobs.  We
+         * also need to reset all state at the start of rendering.
+         */
+        vc4->dirty = ~0;
+
+        /* Set up the read surfaces in the job.  If they aren't actually
+         * getting read (due to a clear starting the frame), job->cleared will
+         * mask out the read.
+         */
+        pipe_surface_reference(&job->color_read, cbuf);
+        pipe_surface_reference(&job->zs_read, zsbuf);
+
+        /* If we're binding to uninitialized buffers, no need to load their
+         * contents before drawing.
+         */
+        if (cbuf) {
+                struct vc4_resource *rsc = vc4_resource(cbuf->texture);
+                if (!rsc->writes)
+                        job->cleared |= PIPE_CLEAR_COLOR0;
+        }
+
+        if (zsbuf) {
+                struct vc4_resource *rsc = vc4_resource(zsbuf->texture);
+                if (!rsc->writes)
+                        job->cleared |= PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL;
+        }
+
+        job->draw_tiles_x = DIV_ROUND_UP(vc4->framebuffer.width,
+                                         job->tile_width);
+        job->draw_tiles_y = DIV_ROUND_UP(vc4->framebuffer.height,
+                                         job->tile_height);
+
+        vc4->job = job;
+
+        return job;
+}
+
+static void
+vc4_submit_setup_rcl_surface(struct vc4_job *job,
                              struct drm_vc4_submit_rcl_surface *submit_surf,
                              struct pipe_surface *psurf,
                              bool is_depth, bool is_write)
 {
         struct vc4_surface *surf = vc4_surface(psurf);
 
-        if (!surf) {
-                submit_surf->hindex = ~0;
+        if (!surf)
                 return;
-        }
 
         struct vc4_resource *rsc = vc4_resource(psurf->texture);
-        submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
+        submit_surf->hindex = vc4_gem_hindex(job, rsc->bo);
         submit_surf->offset = surf->offset;
 
         if (psurf->texture->nr_samples <= 1) {
@@ -117,19 +306,17 @@ vc4_submit_setup_rcl_surface(struct vc4_context *vc4,
 }
 
 static void
-vc4_submit_setup_rcl_render_config_surface(struct vc4_context *vc4,
+vc4_submit_setup_rcl_render_config_surface(struct vc4_job *job,
                                            struct drm_vc4_submit_rcl_surface *submit_surf,
                                            struct pipe_surface *psurf)
 {
         struct vc4_surface *surf = vc4_surface(psurf);
 
-        if (!surf) {
-                submit_surf->hindex = ~0;
+        if (!surf)
                 return;
-        }
 
         struct vc4_resource *rsc = vc4_resource(psurf->texture);
-        submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
+        submit_surf->hindex = vc4_gem_hindex(job, rsc->bo);
         submit_surf->offset = surf->offset;
 
         if (psurf->texture->nr_samples <= 1) {
@@ -146,19 +333,17 @@ vc4_submit_setup_rcl_render_config_surface(struct vc4_context *vc4,
 }
 
 static void
-vc4_submit_setup_rcl_msaa_surface(struct vc4_context *vc4,
+vc4_submit_setup_rcl_msaa_surface(struct vc4_job *job,
                                   struct drm_vc4_submit_rcl_surface *submit_surf,
                                   struct pipe_surface *psurf)
 {
         struct vc4_surface *surf = vc4_surface(psurf);
 
-        if (!surf) {
-                submit_surf->hindex = ~0;
+        if (!surf)
                 return;
-        }
 
         struct vc4_resource *rsc = vc4_resource(psurf->texture);
-        submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
+        submit_surf->hindex = vc4_gem_hindex(job, rsc->bo);
         submit_surf->offset = surf->offset;
         submit_surf->bits = 0;
         rsc->writes++;
@@ -168,34 +353,75 @@ vc4_submit_setup_rcl_msaa_surface(struct vc4_context *vc4,
  * Submits the job to the kernel and then reinitializes it.
  */
 void
-vc4_job_submit(struct vc4_context *vc4)
+vc4_job_submit(struct vc4_context *vc4, struct vc4_job *job)
 {
-        if (vc4_debug & VC4_DEBUG_CL) {
-                fprintf(stderr, "BCL:\n");
-                vc4_dump_cl(vc4->bcl.base, cl_offset(&vc4->bcl), false);
+        if (!job->needs_flush)
+                goto done;
+
+        /* The RCL setup would choke if the draw bounds cause no drawing, so
+         * just drop the drawing if that's the case.
+         */
+        if (job->draw_max_x <= job->draw_min_x ||
+            job->draw_max_y <= job->draw_min_y) {
+                goto done;
         }
 
-        struct drm_vc4_submit_cl submit;
-        memset(&submit, 0, sizeof(submit));
+        if (vc4_debug & VC4_DEBUG_CL) {
+                fprintf(stderr, "BCL:\n");
+                vc4_dump_cl(job->bcl.base, cl_offset(&job->bcl), false);
+        }
 
-        cl_ensure_space(&vc4->bo_handles, 6 * sizeof(uint32_t));
-        cl_ensure_space(&vc4->bo_pointers, 6 * sizeof(struct vc4_bo *));
+        if (cl_offset(&job->bcl) > 0) {
+                /* Increment the semaphore indicating that binning is done and
+                 * unblocking the render thread.  Note that this doesn't act
+                 * until the FLUSH completes.
+                 */
+                cl_ensure_space(&job->bcl, 8);
+                struct vc4_cl_out *bcl = cl_start(&job->bcl);
+                cl_u8(&bcl, VC4_PACKET_INCREMENT_SEMAPHORE);
+                /* The FLUSH caps all of our bin lists with a
+                 * VC4_PACKET_RETURN.
+                 */
+                cl_u8(&bcl, VC4_PACKET_FLUSH);
+                cl_end(&job->bcl, bcl);
+        }
+        struct drm_vc4_submit_cl submit = {
+                .color_read.hindex = ~0,
+                .zs_read.hindex = ~0,
+                .color_write.hindex = ~0,
+                .msaa_color_write.hindex = ~0,
+                .zs_write.hindex = ~0,
+                .msaa_zs_write.hindex = ~0,
+        };
 
-        vc4_submit_setup_rcl_surface(vc4, &submit.color_read,
-                                     vc4->color_read, false, false);
-        vc4_submit_setup_rcl_render_config_surface(vc4, &submit.color_write,
-                                                   vc4->color_write);
-        vc4_submit_setup_rcl_surface(vc4, &submit.zs_read,
-                                     vc4->zs_read, true, false);
-        vc4_submit_setup_rcl_surface(vc4, &submit.zs_write,
-                                     vc4->zs_write, true, true);
+        cl_ensure_space(&job->bo_handles, 6 * sizeof(uint32_t));
+        cl_ensure_space(&job->bo_pointers, 6 * sizeof(struct vc4_bo *));
 
-        vc4_submit_setup_rcl_msaa_surface(vc4, &submit.msaa_color_write,
-                                          vc4->msaa_color_write);
-        vc4_submit_setup_rcl_msaa_surface(vc4, &submit.msaa_zs_write,
-                                          vc4->msaa_zs_write);
+        if (job->resolve & PIPE_CLEAR_COLOR) {
+                if (!(job->cleared & PIPE_CLEAR_COLOR)) {
+                        vc4_submit_setup_rcl_surface(job, &submit.color_read,
+                                                     job->color_read,
+                                                     false, false);
+                }
+                vc4_submit_setup_rcl_render_config_surface(job,
+                                                           &submit.color_write,
+                                                           job->color_write);
+                vc4_submit_setup_rcl_msaa_surface(job,
+                                                  &submit.msaa_color_write,
+                                                  job->msaa_color_write);
+        }
+        if (job->resolve & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) {
+                if (!(job->cleared & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))) {
+                        vc4_submit_setup_rcl_surface(job, &submit.zs_read,
+                                                     job->zs_read, true, false);
+                }
+                vc4_submit_setup_rcl_surface(job, &submit.zs_write,
+                                             job->zs_write, true, true);
+                vc4_submit_setup_rcl_msaa_surface(job, &submit.msaa_zs_write,
+                                                  job->msaa_zs_write);
+        }
 
-        if (vc4->msaa) {
+        if (job->msaa) {
                 /* This bit controls how many pixels the general
                  * (i.e. subsampled) loads/stores are iterating over
                  * (multisample loads replicate out to the other samples).
@@ -207,29 +433,29 @@ vc4_job_submit(struct vc4_context *vc4)
                 submit.color_write.bits |= VC4_RENDER_CONFIG_DECIMATE_MODE_4X;
         }
 
-        submit.bo_handles = (uintptr_t)vc4->bo_handles.base;
-        submit.bo_handle_count = cl_offset(&vc4->bo_handles) / 4;
-        submit.bin_cl = (uintptr_t)vc4->bcl.base;
-        submit.bin_cl_size = cl_offset(&vc4->bcl);
-        submit.shader_rec = (uintptr_t)vc4->shader_rec.base;
-        submit.shader_rec_size = cl_offset(&vc4->shader_rec);
-        submit.shader_rec_count = vc4->shader_rec_count;
-        submit.uniforms = (uintptr_t)vc4->uniforms.base;
-        submit.uniforms_size = cl_offset(&vc4->uniforms);
+        submit.bo_handles = (uintptr_t)job->bo_handles.base;
+        submit.bo_handle_count = cl_offset(&job->bo_handles) / 4;
+        submit.bin_cl = (uintptr_t)job->bcl.base;
+        submit.bin_cl_size = cl_offset(&job->bcl);
+        submit.shader_rec = (uintptr_t)job->shader_rec.base;
+        submit.shader_rec_size = cl_offset(&job->shader_rec);
+        submit.shader_rec_count = job->shader_rec_count;
+        submit.uniforms = (uintptr_t)job->uniforms.base;
+        submit.uniforms_size = cl_offset(&job->uniforms);
 
-        assert(vc4->draw_min_x != ~0 && vc4->draw_min_y != ~0);
-        submit.min_x_tile = vc4->draw_min_x / vc4->tile_width;
-        submit.min_y_tile = vc4->draw_min_y / vc4->tile_height;
-        submit.max_x_tile = (vc4->draw_max_x - 1) / vc4->tile_width;
-        submit.max_y_tile = (vc4->draw_max_y - 1) / vc4->tile_height;
-        submit.width = vc4->draw_width;
-        submit.height = vc4->draw_height;
-        if (vc4->cleared) {
+        assert(job->draw_min_x != ~0 && job->draw_min_y != ~0);
+        submit.min_x_tile = job->draw_min_x / job->tile_width;
+        submit.min_y_tile = job->draw_min_y / job->tile_height;
+        submit.max_x_tile = (job->draw_max_x - 1) / job->tile_width;
+        submit.max_y_tile = (job->draw_max_y - 1) / job->tile_height;
+        submit.width = job->draw_width;
+        submit.height = job->draw_height;
+        if (job->cleared) {
                 submit.flags |= VC4_SUBMIT_CL_USE_CLEAR_COLOR;
-                submit.clear_color[0] = vc4->clear_color[0];
-                submit.clear_color[1] = vc4->clear_color[1];
-                submit.clear_z = vc4->clear_depth;
-                submit.clear_s = vc4->clear_stencil;
+                submit.clear_color[0] = job->clear_color[0];
+                submit.clear_color[1] = job->clear_color[1];
+                submit.clear_z = job->clear_depth;
+                submit.clear_s = job->clear_stencil;
         }
 
         if (!(vc4_debug & VC4_DEBUG_NORAST)) {
@@ -238,7 +464,7 @@ vc4_job_submit(struct vc4_context *vc4)
 #ifndef USE_VC4_SIMULATOR
                 ret = drmIoctl(vc4->fd, DRM_IOCTL_VC4_SUBMIT_CL, &submit);
 #else
-                ret = vc4_simulator_flush(vc4, &submit);
+                ret = vc4_simulator_flush(vc4, &submit, job);
 #endif
                 static bool warned = false;
                 if (ret && !warned) {
@@ -267,5 +493,30 @@ vc4_job_submit(struct vc4_context *vc4)
                 }
         }
 
-        vc4_job_reset(vc4);
+done:
+        vc4_job_free(vc4, job);
 }
+
+static bool
+vc4_job_compare(const void *a, const void *b)
+{
+        return memcmp(a, b, sizeof(struct vc4_job_key)) == 0;
+}
+
+static uint32_t
+vc4_job_hash(const void *key)
+{
+        return _mesa_hash_data(key, sizeof(struct vc4_job_key));
+}
+
+void
+vc4_job_init(struct vc4_context *vc4)
+{
+        vc4->jobs = _mesa_hash_table_create(vc4,
+                                            vc4_job_hash,
+                                            vc4_job_compare);
+        vc4->write_jobs = _mesa_hash_table_create(vc4,
+                                                  _mesa_hash_pointer,
+                                                  _mesa_key_pointer_equal);
+}
+

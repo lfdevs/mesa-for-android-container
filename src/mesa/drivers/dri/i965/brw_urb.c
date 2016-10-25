@@ -115,7 +115,7 @@ static bool check_urb_layout(struct brw_context *brw)
 static void recalculate_urb_fence( struct brw_context *brw )
 {
    GLuint csize = brw->curbe.total_size;
-   GLuint vsize = brw->vs.prog_data->base.urb_entry_size;
+   GLuint vsize = brw_vue_prog_data(brw->vs.base.prog_data)->urb_entry_size;
    GLuint sfsize = brw->sf.prog_data->urb_entry_size;
 
    if (csize < limits[CS].min_entry_size)

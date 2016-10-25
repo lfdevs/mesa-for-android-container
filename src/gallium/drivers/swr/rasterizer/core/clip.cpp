@@ -179,26 +179,29 @@ void Clip(const float *pTriangle, const float *pAttribs, int numAttribs, float *
     return;
 }
 
-void ClipTriangles(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId)
+void ClipTriangles(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx)
 {
-    RDTSC_START(FEClipTriangles);
+    SWR_CONTEXT *pContext = pDC->pContext;
+    AR_BEGIN(FEClipTriangles, pDC->drawId);
     Clipper<3> clipper(workerId, pDC);
-    clipper.ExecuteStage(pa, prims, primMask, primId);
-    RDTSC_STOP(FEClipTriangles, 1, 0);
+    clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx);
+    AR_END(FEClipTriangles, 1);
 }
 
-void ClipLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId)
+void ClipLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx)
 {
-    RDTSC_START(FEClipLines);
+    SWR_CONTEXT *pContext = pDC->pContext;
+    AR_BEGIN(FEClipLines, pDC->drawId);
     Clipper<2> clipper(workerId, pDC);
-    clipper.ExecuteStage(pa, prims, primMask, primId);
-    RDTSC_STOP(FEClipLines, 1, 0);
+    clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx);
+    AR_END(FEClipLines, 1);
 }
-void ClipPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId)
+void ClipPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx)
 {
-    RDTSC_START(FEClipPoints);
+    SWR_CONTEXT *pContext = pDC->pContext;
+    AR_BEGIN(FEClipPoints, pDC->drawId);
     Clipper<1> clipper(workerId, pDC);
-    clipper.ExecuteStage(pa, prims, primMask, primId);
-    RDTSC_STOP(FEClipPoints, 1, 0);
+    clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx);
+    AR_END(FEClipPoints, 1);
 }
 

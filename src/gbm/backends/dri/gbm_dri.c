@@ -239,11 +239,13 @@ struct dri_extension_match {
    const char *name;
    int version;
    int offset;
+   int optional;
 };
 
 static struct dri_extension_match dri_core_extensions[] = {
    { __DRI2_FLUSH, 1, offsetof(struct gbm_dri_device, flush) },
    { __DRI_IMAGE, 1, offsetof(struct gbm_dri_device, image) },
+   { __DRI2_FENCE, 2, offsetof(struct gbm_dri_device, fence), 1 },
    { NULL, 0, 0 }
 };
 
@@ -279,7 +281,7 @@ dri_bind_extensions(struct gbm_dri_device *dri,
 
    for (j = 0; matches[j].name; j++) {
       field = ((char *) dri + matches[j].offset);
-      if (*(const __DRIextension **) field == NULL) {
+      if ((*(const __DRIextension **) field == NULL) && !matches[j].optional) {
          ret = -1;
       }
    }
@@ -437,19 +439,19 @@ dri_screen_create_dri2(struct gbm_dri_device *dri, char *driver_name)
       return ret;
    };
 
-   dri->extensions = gbm_dri_screen_extensions;
+   dri->loader_extensions = gbm_dri_screen_extensions;
 
    if (dri->dri2 == NULL)
       return -1;
 
    if (dri->dri2->base.version >= 4) {
       dri->screen = dri->dri2->createNewScreen2(0, dri->base.base.fd,
-                                                dri->extensions,
+                                                dri->loader_extensions,
                                                 dri->driver_extensions,
                                                 &dri->driver_configs, dri);
    } else {
       dri->screen = dri->dri2->createNewScreen(0, dri->base.base.fd,
-                                               dri->extensions,
+                                               dri->loader_extensions,
                                                &dri->driver_configs, dri);
    }
    if (dri->screen == NULL)
@@ -487,17 +489,17 @@ dri_screen_create_swrast(struct gbm_dri_device *dri)
       return ret;
    }
 
-   dri->extensions = gbm_dri_screen_extensions;
+   dri->loader_extensions = gbm_dri_screen_extensions;
 
    if (dri->swrast == NULL)
       return -1;
 
    if (dri->swrast->base.version >= 4) {
-      dri->screen = dri->swrast->createNewScreen2(0, dri->extensions,
+      dri->screen = dri->swrast->createNewScreen2(0, dri->loader_extensions,
                                                   dri->driver_extensions,
                                                   &dri->driver_configs, dri);
    } else {
-      dri->screen = dri->swrast->createNewScreen(0, dri->extensions,
+      dri->screen = dri->swrast->createNewScreen(0, dri->loader_extensions,
                                                  &dri->driver_configs, dri);
    }
    if (dri->screen == NULL)
@@ -514,7 +516,7 @@ dri_screen_create(struct gbm_dri_device *dri)
 {
    char *driver_name;
 
-   driver_name = loader_get_driver_for_fd(dri->base.base.fd, 0);
+   driver_name = loader_get_driver_for_fd(dri->base.base.fd);
    if (!driver_name)
       return -1;
 
@@ -589,7 +591,8 @@ gbm_dri_bo_get_fd(struct gbm_bo *_bo)
    if (bo->image == NULL)
       return -1;
 
-   dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_FD, &fd);
+   if (!dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_FD, &fd))
+      return -1;
 
    return fd;
 }
@@ -867,8 +870,14 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    bo->base.base.format = format;
 
    switch (format) {
+   case GBM_FORMAT_R8:
+      dri_format = __DRI_IMAGE_FORMAT_R8;
+      break;
+   case GBM_FORMAT_GR88:
+      dri_format = __DRI_IMAGE_FORMAT_GR88;
+      break;
    case GBM_FORMAT_RGB565:
-      dri_format =__DRI_IMAGE_FORMAT_RGB565;
+      dri_format = __DRI_IMAGE_FORMAT_RGB565;
       break;
    case GBM_FORMAT_XRGB8888:
    case GBM_BO_FORMAT_XRGB8888:
@@ -941,7 +950,7 @@ gbm_dri_bo_map(struct gbm_bo *_bo,
       return *map_data;
    }
 
-   if (!dri->image || dri->image->base.version < 12) {
+   if (!dri->image || dri->image->base.version < 12 || !dri->image->mapImage) {
       errno = ENOSYS;
       return NULL;
    }
@@ -972,7 +981,8 @@ gbm_dri_bo_unmap(struct gbm_bo *_bo, void *map_data)
       return;
    }
 
-   if (!dri->context || !dri->image || dri->image->base.version < 12)
+   if (!dri->context || !dri->image ||
+       dri->image->base.version < 12 || !dri->image->unmapImage)
       return;
 
    dri->image->unmapImage(dri->context, bo->image, map_data);

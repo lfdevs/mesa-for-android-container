@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2016 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -73,14 +73,19 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
     static std::mutex m;
     std::lock_guard<std::mutex> l(m);
 
-    static SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX buffer[KNOB_MAX_NUM_THREADS];
-    DWORD bufSize = sizeof(buffer);
+    DWORD bufSize = 0;
 
-    BOOL ret = GetLogicalProcessorInformationEx(RelationProcessorCore, buffer, &bufSize);
+    BOOL ret = GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &bufSize);
+    SWR_ASSERT(ret == FALSE && GetLastError() == ERROR_INSUFFICIENT_BUFFER);
+
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX pBufferMem = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)malloc(bufSize);
+    SWR_ASSERT(pBufferMem);
+
+    ret = GetLogicalProcessorInformationEx(RelationProcessorCore, pBufferMem, &bufSize);
     SWR_ASSERT(ret != FALSE, "Failed to get Processor Topology Information");
 
-    uint32_t count = bufSize / buffer->Size;
-    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX pBuffer = buffer;
+    uint32_t count = bufSize / pBufferMem->Size;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX pBuffer = pBufferMem;
 
     for (uint32_t i = 0; i < count; ++i)
     {
@@ -149,6 +154,8 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
         }
         pBuffer = PtrAdd(pBuffer, pBuffer->Size);
     }
+
+    free(pBufferMem);
 
 
 #elif defined(__linux__) || defined (__gnu_linux__)
@@ -221,16 +228,6 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
         }
     }
 
-#elif defined(__CYGWIN__)
-
-    // Dummy data just to compile
-    NumaNode node;
-    Core core;
-    core.threadIds.push_back(0);
-    node.cores.push_back(core);
-    out_nodes.push_back(node);
-    out_numThreadsPerProcGroup = 1;
-
 #else
 
 #error Unsupported platform
@@ -239,10 +236,10 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
 }
 
 
-void bindThread(uint32_t threadId, uint32_t procGroupId = 0, bool bindProcGroup=false)
+void bindThread(SWR_CONTEXT* pContext, uint32_t threadId, uint32_t procGroupId = 0, bool bindProcGroup=false)
 {
     // Only bind threads when MAX_WORKER_THREADS isn't set.
-    if (KNOB_MAX_WORKER_THREADS && bindProcGroup == false)
+    if (pContext->threadInfo.MAX_WORKER_THREADS && bindProcGroup == false)
     {
         return;
     }
@@ -267,19 +264,15 @@ void bindThread(uint32_t threadId, uint32_t procGroupId = 0, bool bindProcGroup=
     else
 #endif
     {
-        // If KNOB_MAX_WORKER_THREADS is set, only bind to the proc group,
+        // If MAX_WORKER_THREADS is set, only bind to the proc group,
         // Not the individual HW thread.
-        if (!KNOB_MAX_WORKER_THREADS)
+        if (!pContext->threadInfo.MAX_WORKER_THREADS)
         {
             affinity.Mask = KAFFINITY(1) << threadId;
         }
     }
 
     SetThreadGroupAffinity(GetCurrentThread(), &affinity, nullptr);
-
-#elif defined(__CYGWIN__)
-
-    // do nothing
 
 #else
 
@@ -294,32 +287,79 @@ void bindThread(uint32_t threadId, uint32_t procGroupId = 0, bool bindProcGroup=
 }
 
 INLINE
-uint64_t GetEnqueuedDraw(SWR_CONTEXT *pContext)
+uint32_t GetEnqueuedDraw(SWR_CONTEXT *pContext)
 {
     return pContext->dcRing.GetHead();
 }
 
 INLINE
-DRAW_CONTEXT *GetDC(SWR_CONTEXT *pContext, uint64_t drawId)
+DRAW_CONTEXT *GetDC(SWR_CONTEXT *pContext, uint32_t drawId)
 {
     return &pContext->dcRing[(drawId-1) % KNOB_MAX_DRAWS_IN_FLIGHT];
 }
 
+INLINE
+bool IDComparesLess(uint32_t a, uint32_t b)
+{
+    // Use signed delta to ensure that wrap-around to 0 is correctly handled.
+    int32_t delta = int32_t(a - b);
+    return (delta < 0);
+}
+
 // returns true if dependency not met
 INLINE
-bool CheckDependency(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint64_t lastRetiredDraw)
+bool CheckDependency(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t lastRetiredDraw)
 {
-    return (pDC->dependency > lastRetiredDraw);
+    return pDC->dependent && IDComparesLess(lastRetiredDraw, pDC->drawId - 1);
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Update client stats.
+INLINE void UpdateClientStats(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEXT* pDC)
+{
+    if ((pContext->pfnUpdateStats == nullptr) || (GetApiState(pDC).enableStats == false))
+    {
+        return;
+    }
+
+    DRAW_DYNAMIC_STATE& dynState = pDC->dynState;
+    SWR_STATS stats{ 0 };
+
+    // Sum up stats across all workers before sending to client.
+    for (uint32_t i = 0; i < pContext->NumWorkerThreads; ++i)
+    {
+        stats.DepthPassCount += dynState.pStats[i].DepthPassCount;
+
+        stats.PsInvocations  += dynState.pStats[i].PsInvocations;
+        stats.CsInvocations  += dynState.pStats[i].CsInvocations;
+    }
+
+
+    pContext->pfnUpdateStats(GetPrivateState(pDC), &stats);
+}
+
+INLINE void ExecuteCallbacks(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEXT* pDC)
+{
+    UpdateClientStats(pContext, workerId, pDC);
+
+    if (pDC->retireCallback.pfnCallbackFunc)
+    {
+        pDC->retireCallback.pfnCallbackFunc(pDC->retireCallback.userData,
+            pDC->retireCallback.userData2,
+            pDC->retireCallback.userData3);
+    }
 }
 
 // inlined-only version
-INLINE int64_t CompleteDrawContextInl(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC)
+INLINE int32_t CompleteDrawContextInl(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEXT* pDC)
 {
-    int64_t result = InterlockedDecrement64(&pDC->threadsDone);
+    int32_t result = InterlockedDecrement((volatile LONG*)&pDC->threadsDone);
     SWR_ASSERT(result >= 0);
 
     if (result == 0)
     {
+        ExecuteCallbacks(pContext, workerId, pDC);
+
         // Cleanup memory allocations
         pDC->pArena->Reset(true);
         if (!pDC->isCompute)
@@ -340,16 +380,16 @@ INLINE int64_t CompleteDrawContextInl(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC)
 }
 
 // available to other translation modules
-int64_t CompleteDrawContext(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC)
+int32_t CompleteDrawContext(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC)
 {
-    return CompleteDrawContextInl(pContext, pDC);
+    return CompleteDrawContextInl(pContext, 0, pDC);
 }
 
-INLINE bool FindFirstIncompleteDraw(SWR_CONTEXT* pContext, uint64_t& curDrawBE, uint64_t& drawEnqueued)
+INLINE bool FindFirstIncompleteDraw(SWR_CONTEXT* pContext, uint32_t workerId, uint32_t& curDrawBE, uint32_t& drawEnqueued)
 {
     // increment our current draw id to the first incomplete draw
     drawEnqueued = GetEnqueuedDraw(pContext);
-    while (curDrawBE < drawEnqueued)
+    while (IDComparesLess(curDrawBE, drawEnqueued))
     {
         DRAW_CONTEXT *pDC = &pContext->dcRing[curDrawBE % KNOB_MAX_DRAWS_IN_FLIGHT];
 
@@ -363,7 +403,7 @@ INLINE bool FindFirstIncompleteDraw(SWR_CONTEXT* pContext, uint64_t& curDrawBE, 
         if (isWorkComplete)
         {
             curDrawBE++;
-            CompleteDrawContextInl(pContext, pDC);
+            CompleteDrawContextInl(pContext, workerId, pDC);
         }
         else
         {
@@ -372,7 +412,7 @@ INLINE bool FindFirstIncompleteDraw(SWR_CONTEXT* pContext, uint64_t& curDrawBE, 
     }
 
     // If there are no more incomplete draws then return false.
-    return (curDrawBE >= drawEnqueued) ? false : true;
+    return IDComparesLess(curDrawBE, drawEnqueued);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -389,23 +429,26 @@ INLINE bool FindFirstIncompleteDraw(SWR_CONTEXT* pContext, uint64_t& curDrawBE, 
 ///                      still have work pending in a previous draw. Additionally, the lockedTiles is
 ///                      hueristic that can steer a worker back to the same macrotile that it had been
 ///                      working on in a previous draw.
-void WorkOnFifoBE(
+/// @returns        true if worker thread should shutdown
+bool WorkOnFifoBE(
     SWR_CONTEXT *pContext,
     uint32_t workerId,
-    uint64_t &curDrawBE,
+    uint32_t &curDrawBE,
     TileSet& lockedTiles,
     uint32_t numaNode,
     uint32_t numaMask)
 {
+    bool bShutdown = false;
+
     // Find the first incomplete draw that has pending work. If no such draw is found then
     // return. FindFirstIncompleteDraw is responsible for incrementing the curDrawBE.
-    uint64_t drawEnqueued = 0;
-    if (FindFirstIncompleteDraw(pContext, curDrawBE, drawEnqueued) == false)
+    uint32_t drawEnqueued = 0;
+    if (FindFirstIncompleteDraw(pContext, workerId, curDrawBE, drawEnqueued) == false)
     {
-        return;
+        return false;
     }
 
-    uint64_t lastRetiredDraw = pContext->dcRing[curDrawBE % KNOB_MAX_DRAWS_IN_FLIGHT].drawId - 1;
+    uint32_t lastRetiredDraw = pContext->dcRing[curDrawBE % KNOB_MAX_DRAWS_IN_FLIGHT].drawId - 1;
 
     // Reset our history for locked tiles. We'll have to re-learn which tiles are locked.
     lockedTiles.clear();
@@ -415,29 +458,31 @@ void WorkOnFifoBE(
     //   2. If we're trying to work on draws after curDrawBE, we are restricted to 
     //      working on those macrotiles that are known to be complete in the prior draw to
     //      maintain order. The locked tiles provides the history to ensures this.
-    for (uint64_t i = curDrawBE; i < drawEnqueued; ++i)
+    for (uint32_t i = curDrawBE; IDComparesLess(i, drawEnqueued); ++i)
     {
         DRAW_CONTEXT *pDC = &pContext->dcRing[i % KNOB_MAX_DRAWS_IN_FLIGHT];
 
-        if (pDC->isCompute) return; // We don't look at compute work.
+        if (pDC->isCompute) return false; // We don't look at compute work.
 
         // First wait for FE to be finished with this draw. This keeps threading model simple
         // but if there are lots of bubbles between draws then serializing FE and BE may
         // need to be revisited.
-        if (!pDC->doneFE) return;
+        if (!pDC->doneFE) return false;
         
         // If this draw is dependent on a previous draw then we need to bail.
         if (CheckDependency(pContext, pDC, lastRetiredDraw))
         {
-            return;
+            return false;
         }
 
         // Grab the list of all dirty macrotiles. A tile is dirty if it has work queued to it.
-        std::vector<uint32_t> &macroTiles = pDC->pTileMgr->getDirtyTiles();
+        auto &macroTiles = pDC->pTileMgr->getDirtyTiles();
 
-        for (uint32_t tileID : macroTiles)
+        for (auto tile : macroTiles)
         {
-            // Only work on tiles for for this numa node
+            uint32_t tileID = tile->mId;
+
+            // Only work on tiles for this numa node
             uint32_t x, y;
             pDC->pTileMgr->getTileIndices(tileID, x, y);
             if (((x ^ y) & numaMask) != numaNode)
@@ -445,9 +490,7 @@ void WorkOnFifoBE(
                 continue;
             }
 
-            MacroTileQueue &tile = pDC->pTileMgr->getMacroTileQueue(tileID);
-            
-            if (!tile.getNumQueued())
+            if (!tile->getNumQueued())
             {
                 continue;
             }
@@ -458,28 +501,32 @@ void WorkOnFifoBE(
                 continue;
             }
 
-            if (tile.tryLock())
+            if (tile->tryLock())
             {
                 BE_WORK *pWork;
 
-                RDTSC_START(WorkerFoundWork);
+                AR_BEGIN(WorkerFoundWork, pDC->drawId);
 
-                uint32_t numWorkItems = tile.getNumQueued();
+                uint32_t numWorkItems = tile->getNumQueued();
                 SWR_ASSERT(numWorkItems);
 
-                pWork = tile.peek();
+                pWork = tile->peek();
                 SWR_ASSERT(pWork);
                 if (pWork->type == DRAW)
                 {
-                    pContext->pHotTileMgr->InitializeHotTiles(pContext, pDC, tileID);
+                    pContext->pHotTileMgr->InitializeHotTiles(pContext, pDC, workerId, tileID);
+                }
+                else if (pWork->type == SHUTDOWN)
+                {
+                    bShutdown = true;
                 }
 
-                while ((pWork = tile.peek()) != nullptr)
+                while ((pWork = tile->peek()) != nullptr)
                 {
                     pWork->pfnWork(pDC, workerId, tileID, &pWork->desc);
-                    tile.dequeue();
+                    tile->dequeue();
                 }
-                RDTSC_STOP(WorkerFoundWork, numWorkItems, pDC->drawId);
+                AR_END(WorkerFoundWork, numWorkItems);
 
                 _ReadWriteBarrier();
 
@@ -487,15 +534,20 @@ void WorkOnFifoBE(
 
                 // Optimization: If the draw is complete and we're the last one to have worked on it then
                 // we can reset the locked list as we know that all previous draws before the next are guaranteed to be complete.
-                if ((curDrawBE == i) && pDC->pTileMgr->isWorkComplete())
+                if ((curDrawBE == i) && (bShutdown || pDC->pTileMgr->isWorkComplete()))
                 {
                     // We can increment the current BE and safely move to next draw since we know this draw is complete.
                     curDrawBE++;
-                    CompleteDrawContextInl(pContext, pDC);
+                    CompleteDrawContextInl(pContext, workerId, pDC);
 
                     lastRetiredDraw++;
 
                     lockedTiles.clear();
+                    break;
+                }
+
+                if (bShutdown)
+                {
                     break;
                 }
             }
@@ -506,19 +558,57 @@ void WorkOnFifoBE(
             }
         }
     }
+
+    return bShutdown;
 }
 
-void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint64_t &curDrawFE)
+//////////////////////////////////////////////////////////////////////////
+/// @brief Called when FE work is complete for this DC.
+INLINE void CompleteDrawFE(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEXT* pDC)
+{
+    if (pContext->pfnUpdateStatsFE && GetApiState(pDC).enableStats)
+    {
+        SWR_STATS_FE& stats = pDC->dynState.statsFE;
+
+        AR_EVENT(FrontendStatsEvent(pDC->drawId,
+            stats.IaVertices, stats.IaPrimitives, stats.VsInvocations, stats.HsInvocations,
+            stats.DsInvocations, stats.GsInvocations, stats.GsPrimitives, stats.CInvocations, stats.CPrimitives,
+            stats.SoPrimStorageNeeded[0], stats.SoPrimStorageNeeded[1], stats.SoPrimStorageNeeded[2], stats.SoPrimStorageNeeded[3],
+            stats.SoNumPrimsWritten[0], stats.SoNumPrimsWritten[1], stats.SoNumPrimsWritten[2], stats.SoNumPrimsWritten[3]
+        ));
+
+        pContext->pfnUpdateStatsFE(GetPrivateState(pDC), &stats);
+    }
+
+    if (pContext->pfnUpdateSoWriteOffset)
+    {
+        for (uint32_t i = 0; i < MAX_SO_BUFFERS; ++i)
+        {
+            if ((pDC->dynState.SoWriteOffsetDirty[i]) &&
+                (pDC->pState->state.soBuffer[i].soWriteEnable))
+            {
+                pContext->pfnUpdateSoWriteOffset(GetPrivateState(pDC), i, pDC->dynState.SoWriteOffset[i]);
+            }
+        }
+    }
+
+    // Ensure all streaming writes are globally visible before marking this FE done
+    _mm_mfence();
+    pDC->doneFE = true;
+    InterlockedDecrement((volatile LONG*)&pContext->drawsOutstandingFE);
+}
+
+void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawFE)
 {
     // Try to grab the next DC from the ring
-    uint64_t drawEnqueued = GetEnqueuedDraw(pContext);
-    while (curDrawFE < drawEnqueued)
+    uint32_t drawEnqueued = GetEnqueuedDraw(pContext);
+    while (IDComparesLess(curDrawFE, drawEnqueued))
     {
         uint32_t dcSlot = curDrawFE % KNOB_MAX_DRAWS_IN_FLIGHT;
         DRAW_CONTEXT *pDC = &pContext->dcRing[dcSlot];
         if (pDC->isCompute || pDC->doneFE || pDC->FeLock)
         {
-            CompleteDrawContextInl(pContext, pDC);
+            CompleteDrawContextInl(pContext, workerId, pDC);
             curDrawFE++;
         }
         else
@@ -527,8 +617,8 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint64_t &curDrawFE)
         }
     }
 
-    uint64_t curDraw = curDrawFE;
-    while (curDraw < drawEnqueued)
+    uint32_t curDraw = curDrawFE;
+    while (IDComparesLess(curDraw, drawEnqueued))
     {
         uint32_t dcSlot = curDraw % KNOB_MAX_DRAWS_IN_FLIGHT;
         DRAW_CONTEXT *pDC = &pContext->dcRing[dcSlot];
@@ -541,8 +631,7 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint64_t &curDrawFE)
                 // successfully grabbed the DC, now run the FE
                 pDC->FeWork.pfnWork(pContext, pDC, workerId, &pDC->FeWork.desc);
 
-                _ReadWriteBarrier();
-                pDC->doneFE = true;
+                CompleteDrawFE(pContext, workerId, pDC);
             }
         }
         curDraw++;
@@ -559,17 +648,17 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint64_t &curDrawFE)
 void WorkOnCompute(
     SWR_CONTEXT *pContext,
     uint32_t workerId,
-    uint64_t& curDrawBE)
+    uint32_t& curDrawBE)
 {
-    uint64_t drawEnqueued = 0;
-    if (FindFirstIncompleteDraw(pContext, curDrawBE, drawEnqueued) == false)
+    uint32_t drawEnqueued = 0;
+    if (FindFirstIncompleteDraw(pContext, workerId, curDrawBE, drawEnqueued) == false)
     {
         return;
     }
 
-    uint64_t lastRetiredDraw = pContext->dcRing[curDrawBE % KNOB_MAX_DRAWS_IN_FLIGHT].drawId - 1;
+    uint32_t lastRetiredDraw = pContext->dcRing[curDrawBE % KNOB_MAX_DRAWS_IN_FLIGHT].drawId - 1;
 
-    for (uint64_t i = curDrawBE; curDrawBE < drawEnqueued; ++i)
+    for (uint64_t i = curDrawBE; IDComparesLess(i, drawEnqueued); ++i)
     {
         DRAW_CONTEXT *pDC = &pContext->dcRing[i % KNOB_MAX_DRAWS_IN_FLIGHT];
         if (pDC->isCompute == false) return;
@@ -590,10 +679,12 @@ void WorkOnCompute(
             uint32_t threadGroupId = 0;
             while (queue.getWork(threadGroupId))
             {
-                ProcessComputeBE(pDC, workerId, threadGroupId, pSpillFillBuffer);
-
+                queue.dispatch(pDC, workerId, threadGroupId, pSpillFillBuffer);
                 queue.finishedWork();
             }
+
+            // Ensure all streaming writes are globally visible before moving onto the next draw
+            _mm_mfence();
         }
     }
 }
@@ -606,7 +697,7 @@ DWORD workerThreadMain(LPVOID pData)
     uint32_t threadId = pThreadData->threadId;
     uint32_t workerId = pThreadData->workerId;
 
-    bindThread(threadId, pThreadData->procGroupId, pThreadData->forceBindProcGroup); 
+    bindThread(pContext, threadId, pThreadData->procGroupId, pThreadData->forceBindProcGroup); 
 
     RDTSC_INIT(threadId);
 
@@ -639,13 +730,20 @@ DWORD workerThreadMain(LPVOID pData)
     //    the worker can safely increment its oldestDraw counter and move on to the next draw.
     std::unique_lock<std::mutex> lock(pContext->WaitLock, std::defer_lock);
 
-    auto threadHasWork = [&](uint64_t curDraw) { return curDraw != pContext->dcRing.GetHead(); };
+    auto threadHasWork = [&](uint32_t curDraw) { return curDraw != pContext->dcRing.GetHead(); };
 
-    uint64_t curDrawBE = 0;
-    uint64_t curDrawFE = 0;
+    uint32_t curDrawBE = 0;
+    uint32_t curDrawFE = 0;
 
-    while (pContext->threadPool.inThreadShutdown == false)
+    bool bShutdown = false;
+
+    while (true)
     {
+        if (bShutdown && !threadHasWork(curDrawBE))
+        {
+            break;
+        }
+
         uint32_t loop = 0;
         while (loop++ < KNOB_WORKER_SPIN_LOOP_COUNT && !threadHasWork(curDrawBE))
         {
@@ -663,30 +761,15 @@ DWORD workerThreadMain(LPVOID pData)
                 continue;
             }
 
-            if (pContext->threadPool.inThreadShutdown)
-            {
-                lock.unlock();
-                break;
-            }
-
-            RDTSC_START(WorkerWaitForThreadEvent);
-
             pContext->FifosNotEmpty.wait(lock);
             lock.unlock();
-
-            RDTSC_STOP(WorkerWaitForThreadEvent, 0, 0);
-
-            if (pContext->threadPool.inThreadShutdown)
-            {
-                break;
-            }
         }
 
         if (IsBEThread)
         {
-            RDTSC_START(WorkerWorkOnFifoBE);
-            WorkOnFifoBE(pContext, workerId, curDrawBE, lockedTiles, numaNode, numaMask);
-            RDTSC_STOP(WorkerWorkOnFifoBE, 0, 0);
+            AR_BEGIN(WorkerWorkOnFifoBE, 0);
+            bShutdown |= WorkOnFifoBE(pContext, workerId, curDrawBE, lockedTiles, numaNode, numaMask);
+            AR_END(WorkerWorkOnFifoBE, 0);
 
             WorkOnCompute(pContext, workerId, curDrawBE);
         }
@@ -727,9 +810,13 @@ DWORD workerThreadInit(LPVOID pData)
 }
 template<> DWORD workerThreadInit<false, false>(LPVOID pData) = delete;
 
-void CreateThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
+//////////////////////////////////////////////////////////////////////////
+/// @brief Creates thread pool info but doesn't launch threads.
+/// @param pContext - pointer to context
+/// @param pPool - pointer to thread pool object.
+void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
 {
-    bindThread(0);
+    bindThread(pContext, 0);
 
     CPUNumaNodes nodes;
     uint32_t numThreadsPerProcGroup = 0;
@@ -754,33 +841,23 @@ void CreateThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
     uint32_t numCoresPerNode    = numHWCoresPerNode;
     uint32_t numHyperThreads    = numHWHyperThreads;
 
-    if (KNOB_MAX_WORKER_THREADS)
+    if (pContext->threadInfo.MAX_NUMA_NODES)
     {
-        SET_KNOB(HYPERTHREADED_FE, false);
+        numNodes = std::min(numNodes, pContext->threadInfo.MAX_NUMA_NODES);
     }
 
-    if (KNOB_HYPERTHREADED_FE)
+    if (pContext->threadInfo.MAX_CORES_PER_NUMA_NODE)
     {
-        SET_KNOB(MAX_THREADS_PER_CORE, 0);
+        numCoresPerNode = std::min(numCoresPerNode, pContext->threadInfo.MAX_CORES_PER_NUMA_NODE);
     }
 
-    if (KNOB_MAX_NUMA_NODES)
+    if (pContext->threadInfo.MAX_THREADS_PER_CORE)
     {
-        numNodes = std::min(numNodes, KNOB_MAX_NUMA_NODES);
-    }
-
-    if (KNOB_MAX_CORES_PER_NUMA_NODE)
-    {
-        numCoresPerNode = std::min(numCoresPerNode, KNOB_MAX_CORES_PER_NUMA_NODE);
-    }
-
-    if (KNOB_MAX_THREADS_PER_CORE)
-    {
-        numHyperThreads = std::min(numHyperThreads, KNOB_MAX_THREADS_PER_CORE);
+        numHyperThreads = std::min(numHyperThreads, pContext->threadInfo.MAX_THREADS_PER_CORE);
     }
 
 #if defined(_WIN32) && !defined(_WIN64)
-    if (!KNOB_MAX_WORKER_THREADS)
+    if (!pContext->threadInfo.MAX_WORKER_THREADS)
     {
         // Limit 32-bit windows to bindable HW threads only
         if ((numCoresPerNode * numHWHyperThreads) > 32)
@@ -790,26 +867,14 @@ void CreateThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
     }
 #endif
 
-    if (numHyperThreads < 2)
-    {
-        SET_KNOB(HYPERTHREADED_FE, false);
-    }
-
     // Calculate numThreads
     uint32_t numThreads = numNodes * numCoresPerNode * numHyperThreads;
     numThreads = std::min(numThreads, numHWThreads);
 
-    if (KNOB_MAX_WORKER_THREADS)
+    if (pContext->threadInfo.MAX_WORKER_THREADS)
     {
         uint32_t maxHWThreads = numHWNodes * numHWCoresPerNode * numHWHyperThreads;
-        numThreads = std::min(KNOB_MAX_WORKER_THREADS, maxHWThreads);
-    }
-
-    if (numThreads > KNOB_MAX_NUM_THREADS)
-    {
-        printf("WARNING: system thread count %u exceeds max %u, "
-            "performance will be degraded\n",
-            numThreads, KNOB_MAX_NUM_THREADS);
+        numThreads = std::min(pContext->threadInfo.MAX_WORKER_THREADS, maxHWThreads);
     }
 
     uint32_t numAPIReservedThreads = 1;
@@ -833,9 +898,7 @@ void CreateThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
         }
         else
         {
-            pPool->numThreads = 0;
-            SET_KNOB(SINGLE_THREADED, true);
-            return;
+            pContext->threadInfo.SINGLE_THREADED = true;
         }
     }
     else
@@ -851,14 +914,37 @@ void CreateThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
         }
     }
 
+    if (pContext->threadInfo.SINGLE_THREADED)
+    {
+        numThreads = 1;
+    }
+
+    // Initialize DRAW_CONTEXT's per-thread stats
+    for (uint32_t dc = 0; dc < KNOB_MAX_DRAWS_IN_FLIGHT; ++dc)
+    {
+        pContext->dcRing[dc].dynState.pStats = new SWR_STATS[numThreads];
+        memset(pContext->dcRing[dc].dynState.pStats, 0, sizeof(SWR_STATS) * numThreads);
+    }
+
+    if (pContext->threadInfo.SINGLE_THREADED)
+    {
+        pContext->NumWorkerThreads = 1;
+        pContext->NumFEThreads = 1;
+        pContext->NumBEThreads = 1;
+        pPool->numThreads = 0;
+
+        return;
+    }
+
     pPool->numThreads = numThreads;
     pContext->NumWorkerThreads = pPool->numThreads;
 
-    pPool->inThreadShutdown = false;
     pPool->pThreadData = (THREAD_DATA *)malloc(pPool->numThreads * sizeof(THREAD_DATA));
     pPool->numaMask = 0;
 
-    if (KNOB_MAX_WORKER_THREADS)
+    pPool->pThreads = new THREAD_PTR[pPool->numThreads];
+
+    if (pContext->threadInfo.MAX_WORKER_THREADS)
     {
         bool bForceBindProcGroup = (numThreads > numThreadsPerProcGroup);
         uint32_t numProcGroups = (numThreads + numThreadsPerProcGroup - 1) / numThreadsPerProcGroup;
@@ -874,7 +960,6 @@ void CreateThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
             pPool->pThreadData[workerId].htId = 0;
             pPool->pThreadData[workerId].pContext = pContext;
             pPool->pThreadData[workerId].forceBindProcGroup = bForceBindProcGroup;
-            pPool->threads[workerId] = new std::thread(workerThreadInit<true, true>, &pPool->pThreadData[workerId]);
 
             pContext->NumBEThreads++;
             pContext->NumFEThreads++;
@@ -920,50 +1005,55 @@ void CreateThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
                     pPool->pThreadData[workerId].htId = t;
                     pPool->pThreadData[workerId].pContext = pContext;
 
-                    if (KNOB_HYPERTHREADED_FE)
-                    {
-                        if (t == 0)
-                        {
-                            pContext->NumBEThreads++;
-                            pPool->threads[workerId] = new std::thread(workerThreadInit<false, true>, &pPool->pThreadData[workerId]);
-                        }
-                        else
-                        {
-                            pContext->NumFEThreads++;
-                            pPool->threads[workerId] = new std::thread(workerThreadInit<true, false>, &pPool->pThreadData[workerId]);
-                        }
-                    }
-                    else
-                    {
-                        pPool->threads[workerId] = new std::thread(workerThreadInit<true, true>, &pPool->pThreadData[workerId]);
-                        pContext->NumBEThreads++;
-                        pContext->NumFEThreads++;
-                    }
+                    pContext->NumBEThreads++;
+                    pContext->NumFEThreads++;
 
                     ++workerId;
                 }
             }
         }
+        SWR_ASSERT(workerId == pContext->NumWorkerThreads);
     }
 }
 
+//////////////////////////////////////////////////////////////////////////
+/// @brief Launches worker threads in thread pool.
+/// @param pContext - pointer to context
+/// @param pPool - pointer to thread pool object.
+void StartThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
+{
+    if (pContext->threadInfo.SINGLE_THREADED)
+    {
+        return;
+    }
+
+    for (uint32_t workerId = 0; workerId < pContext->NumWorkerThreads; ++workerId)
+    {
+        pPool->pThreads[workerId] = new std::thread(workerThreadInit<true, true>, &pPool->pThreadData[workerId]);
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Destroys thread pool.
+/// @param pContext - pointer to context
+/// @param pPool - pointer to thread pool object.
 void DestroyThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
 {
-    if (!KNOB_SINGLE_THREADED)
+    if (!pContext->threadInfo.SINGLE_THREADED)
     {
-        // Inform threads to finish up
-        std::unique_lock<std::mutex> lock(pContext->WaitLock);
-        pPool->inThreadShutdown = true;
-        _mm_mfence();
-        pContext->FifosNotEmpty.notify_all();
-        lock.unlock();
+        // Wait for all threads to finish
+        SwrWaitForIdle(pContext);
 
         // Wait for threads to finish and destroy them
         for (uint32_t t = 0; t < pPool->numThreads; ++t)
         {
-            pPool->threads[t]->join();
-            delete(pPool->threads[t]);
+            // Detach from thread.  Cannot join() due to possibility (in Windows) of code
+            // in some DLLMain(THREAD_DETATCH case) blocking the thread until after this returns.
+            pPool->pThreads[t]->detach();
+            delete(pPool->pThreads[t]);
         }
+
+        delete [] pPool->pThreads;
 
         // Clean up data used by threads
         free(pPool->pThreadData);

@@ -162,7 +162,7 @@ static void copy_flatshaded_attributes(struct brw_sf_compile *c,
    int i;
 
    for (i = 0; i < c->vue_map.num_slots; i++) {
-      if (c->key.interpolation_mode.mode[i] == INTERP_QUALIFIER_FLAT) {
+      if (c->key.interpolation_mode.mode[i] == INTERP_MODE_FLAT) {
          brw_MOV(p,
                  get_vue_slot(c, dst, i),
                  get_vue_slot(c, src, i));
@@ -176,7 +176,7 @@ static int count_flatshaded_attributes(struct brw_sf_compile *c)
    int count = 0;
 
    for (i = 0; i < c->vue_map.num_slots; i++)
-      if (c->key.interpolation_mode.mode[i] == INTERP_QUALIFIER_FLAT)
+      if (c->key.interpolation_mode.mode[i] == INTERP_MODE_FLAT)
          count++;
 
    return count;
@@ -336,17 +336,17 @@ calculate_masks(struct brw_sf_compile *c,
                 GLushort *pc_linear)
 {
    bool is_last_attr = (reg == c->nr_setup_regs - 1);
-   enum glsl_interp_qualifier interp;
+   enum glsl_interp_mode interp;
 
    *pc_persp = 0;
    *pc_linear = 0;
    *pc = 0xf;
 
    interp = c->key.interpolation_mode.mode[vert_reg_to_vue_slot(c, reg, 0)];
-   if (interp == INTERP_QUALIFIER_SMOOTH) {
+   if (interp == INTERP_MODE_SMOOTH) {
       *pc_linear = 0xf;
       *pc_persp = 0xf;
-   } else if (interp == INTERP_QUALIFIER_NOPERSPECTIVE)
+   } else if (interp == INTERP_MODE_NOPERSPECTIVE)
       *pc_linear = 0xf;
 
    /* Maybe only processs one attribute on the final round:
@@ -355,10 +355,10 @@ calculate_masks(struct brw_sf_compile *c,
       *pc |= 0xf0;
 
       interp = c->key.interpolation_mode.mode[vert_reg_to_vue_slot(c, reg, 1)];
-      if (interp == INTERP_QUALIFIER_SMOOTH) {
+      if (interp == INTERP_MODE_SMOOTH) {
          *pc_linear |= 0xf0;
          *pc_persp |= 0xf0;
-      } else if (interp == INTERP_QUALIFIER_NOPERSPECTIVE)
+      } else if (interp == INTERP_MODE_NOPERSPECTIVE)
          *pc_linear |= 0xf0;
    }
 

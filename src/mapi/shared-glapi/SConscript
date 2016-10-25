@@ -26,10 +26,11 @@ def mapi_objects(env, printer, mode):
     header_name = '%s-tmp.h' % (printer)
 
     # generate ABI header
+    GLAPI = '../glapi/'
     header = env.CodeGenerate(
         target = header_name,
         script = '../mapi_abi.py',
-        source = '../glapi/gen/gl_and_es_API.xml',
+        source = [GLAPI + 'gen/gl_and_es_API.xml'] + env.Glob(GLAPI + 'gen/*.xml'),
         command = python_cmd + ' $SCRIPT ' + \
                 '--printer %s --mode lib $SOURCE > $TARGET' % (printer),
     )

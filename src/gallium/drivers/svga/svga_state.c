@@ -202,6 +202,8 @@ svga_update_state(struct svga_context *svga, unsigned max_level)
    enum pipe_error ret = PIPE_OK;
    unsigned i;
 
+   SVGA_STATS_TIME_PUSH(screen->sws, SVGA_STATS_TIME_UPDATESTATE);
+
    /* Check for updates to bound textures.  This can't be done in an
     * atom as there is no flag which could provoke this test, and we
     * cannot create one.
@@ -219,7 +221,7 @@ svga_update_state(struct svga_context *svga, unsigned max_level)
                              state_levels[i], 
                              &svga->dirty );
          if (ret != PIPE_OK)
-            return ret;
+            goto done;
 
          svga->state.dirty[i] = 0;
       }
@@ -232,7 +234,9 @@ svga_update_state(struct svga_context *svga, unsigned max_level)
 
    svga->hud.num_validations++;
 
-   return PIPE_OK;
+done:
+   SVGA_STATS_TIME_POP(screen->sws);
+   return ret;
 }
 
 

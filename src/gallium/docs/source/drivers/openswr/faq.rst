@@ -5,7 +5,7 @@ Why another software rasterizer?
 --------------------------------
 
 Good question, given there are already three (swrast, softpipe,
-llvmpipe) in the Mesa3D tree. Two important reasons for this:
+llvmpipe) in the Mesa tree. Two important reasons for this:
 
  * Architecture - given our focus on scientific visualization, our
    workloads are much different than the typical game; we have heavy
@@ -16,7 +16,7 @@ llvmpipe) in the Mesa3D tree. Two important reasons for this:
  * Historical - Intel had developed a high performance software
    graphics stack for internal purposes.  Later we adapted this
    graphics stack for use in visualization and decided to move forward
-   with Mesa3D to provide a high quality API layer while at the same
+   with Mesa to provide a high quality API layer while at the same
    time benefiting from the excellent performance the software
    rasterizerizer gives us.
 

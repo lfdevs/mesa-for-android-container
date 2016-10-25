@@ -76,13 +76,13 @@ emit_vertexbufs(struct fd_context *ctx)
 	// NOTE I believe the 0x78 (or 0x9c in solid_vp) relates to the
 	// CONST(20,0) (or CONST(26,0) in soliv_vp)
 
-	fd2_emit_vertex_bufs(ctx->ring, 0x78, bufs, vtx->num_elements);
+	fd2_emit_vertex_bufs(ctx->batch->draw, 0x78, bufs, vtx->num_elements);
 }
 
 static bool
 fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = ctx->batch->draw;
 
 	if (ctx->dirty & FD_DIRTY_VTXBUF)
 		emit_vertexbufs(ctx);
@@ -107,7 +107,7 @@ fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 	OUT_RING(ring, info->max_index);        /* VGT_MAX_VTX_INDX */
 	OUT_RING(ring, info->min_index);        /* VGT_MIN_VTX_INDX */
 
-	fd_draw_emit(ctx, ring, ctx->primtypes[info->mode],
+	fd_draw_emit(ctx->batch, ring, ctx->primtypes[info->mode],
 				 IGNORE_VISIBILITY, info);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -125,8 +125,8 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 		const union pipe_color_union *color, double depth, unsigned stencil)
 {
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
-	struct fd_ringbuffer *ring = ctx->ring;
-	struct pipe_framebuffer_state *fb = &ctx->framebuffer;
+	struct fd_ringbuffer *ring = ctx->batch->draw;
+	struct pipe_framebuffer_state *fb = &ctx->batch->framebuffer;
 	uint32_t reg, colr = 0;
 
 	if ((buffers & PIPE_CLEAR_COLOR) && fb->nr_cbufs)
@@ -266,7 +266,7 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 	OUT_RING(ring, 3);                 /* VGT_MAX_VTX_INDX */
 	OUT_RING(ring, 0);                 /* VGT_MIN_VTX_INDX */
 
-	fd_draw(ctx, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
+	fd_draw(ctx->batch, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
 			DI_SRC_SEL_AUTO_INDEX, 3, 0, INDEX_SIZE_IGN, 0, 0, NULL);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);

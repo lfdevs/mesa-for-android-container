@@ -46,6 +46,7 @@ is_direct_copy(vec4_instruction *inst)
    return (inst->opcode == BRW_OPCODE_MOV &&
 	   !inst->predicate &&
 	   inst->dst.file == VGRF &&
+	   inst->dst.offset % REG_SIZE == 0 &&
 	   !inst->dst.reladdr &&
 	   !inst->src[0].reladdr &&
 	   (inst->dst.type == inst->src[0].type ||
@@ -72,7 +73,8 @@ is_channel_updated(vec4_instruction *inst, src_reg *values[4], int ch)
    if (!src || src->file != VGRF)
       return false;
 
-   return (src->in_range(inst->dst, inst->regs_written) &&
+   return regions_overlap(*src, REG_SIZE, inst->dst, inst->size_written) &&
+          (inst->dst.offset != src->offset ||
            inst->dst.writemask & (1 << BRW_GET_SWZ(src->swizzle, ch)));
 }
 
@@ -130,7 +132,7 @@ get_copy_value(const copy_entry &entry, unsigned readmask)
 }
 
 static bool
-try_constant_propagate(const struct brw_device_info *devinfo,
+try_constant_propagate(const struct gen_device_info *devinfo,
                        vec4_instruction *inst,
                        int arg, const copy_entry *entry)
 {
@@ -281,7 +283,7 @@ try_constant_propagate(const struct brw_device_info *devinfo,
 }
 
 static bool
-try_copy_propagate(const struct brw_device_info *devinfo,
+try_copy_propagate(const struct gen_device_info *devinfo,
                    vec4_instruction *inst, int arg,
                    const copy_entry *entry, int attributes_per_reg)
 {
@@ -436,12 +438,13 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 	     inst->src[i].reladdr)
 	    continue;
 
-         /* We only handle single-register copies. */
-         if (inst->regs_read(i) != 1)
+         /* We only handle register-aligned single GRF copies. */
+         if (inst->size_read(i) != REG_SIZE ||
+             inst->src[i].offset % REG_SIZE)
             continue;
 
          const unsigned reg = (alloc.offsets[inst->src[i].nr] +
-                                inst->src[i].reg_offset);
+                               inst->src[i].offset / REG_SIZE);
          const copy_entry &entry = entries[reg];
 
          if (do_constant_prop && try_constant_propagate(devinfo, inst, i, &entry))
@@ -453,7 +456,7 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
       /* Track available source registers. */
       if (inst->dst.file == VGRF) {
 	 const int reg =
-            alloc.offsets[inst->dst.nr] + inst->dst.reg_offset;
+            alloc.offsets[inst->dst.nr] + inst->dst.offset / REG_SIZE;
 
 	 /* Update our destination's current channel values.  For a direct copy,
 	  * the value is the newly propagated source.  Otherwise, we don't know

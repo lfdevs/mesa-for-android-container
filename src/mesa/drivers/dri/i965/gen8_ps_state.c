@@ -32,7 +32,6 @@ void
 gen8_upload_ps_extra(struct brw_context *brw,
                      const struct brw_wm_prog_data *prog_data)
 {
-   struct gl_context *ctx = &brw->ctx;
    uint32_t dw1 = 0;
 
    dw1 |= GEN8_PSX_PIXEL_SHADER_VALID;
@@ -95,8 +94,8 @@ gen8_upload_ps_extra(struct brw_context *brw,
     *
     * BRW_NEW_FS_PROG_DATA | BRW_NEW_FRAGMENT_PROGRAM | _NEW_BUFFERS | _NEW_COLOR
     */
-   if ((_mesa_active_fragment_shader_has_side_effects(ctx) ||
-        prog_data->uses_kill) && !brw_color_buffer_write_enabled(brw))
+   if ((prog_data->has_side_effects || prog_data->uses_kill) &&
+       !brw_color_buffer_write_enabled(brw))
       dw1 |= GEN8_PSX_SHADER_HAS_UAV;
 
    if (prog_data->computed_stencil) {
@@ -114,9 +113,7 @@ static void
 upload_ps_extra(struct brw_context *brw)
 {
    /* BRW_NEW_FS_PROG_DATA */
-   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
-
-   gen8_upload_ps_extra(brw, prog_data);
+   gen8_upload_ps_extra(brw, brw_wm_prog_data(brw->wm.base.prog_data));
 }
 
 const struct brw_tracked_state gen8_ps_extra = {
@@ -124,6 +121,7 @@ const struct brw_tracked_state gen8_ps_extra = {
       .mesa  = _NEW_BUFFERS | _NEW_COLOR,
       .brw   = BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
+               BRW_NEW_FRAGMENT_PROGRAM |
                BRW_NEW_FS_PROG_DATA,
    },
    .emit = upload_ps_extra,
@@ -134,6 +132,10 @@ upload_wm_state(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    uint32_t dw1 = 0;
+
+   /* BRW_NEW_FS_PROG_DATA */
+   const struct brw_wm_prog_data *wm_prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
 
    dw1 |= GEN7_WM_STATISTICS_ENABLE;
    dw1 |= GEN7_WM_LINE_AA_WIDTH_1_0;
@@ -148,14 +150,13 @@ upload_wm_state(struct brw_context *brw)
    if (ctx->Polygon.StippleFlag)
       dw1 |= GEN7_WM_POLYGON_STIPPLE_ENABLE;
 
-   /* BRW_NEW_FS_PROG_DATA */
-   dw1 |= brw->wm.prog_data->barycentric_interp_modes <<
+   dw1 |= wm_prog_data->barycentric_interp_modes <<
       GEN7_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT;
 
    /* BRW_NEW_FS_PROG_DATA */
-   if (brw->wm.prog_data->early_fragment_tests)
+   if (wm_prog_data->early_fragment_tests)
       dw1 |= GEN7_WM_EARLY_DS_CONTROL_PREPS;
-   else if (_mesa_active_fragment_shader_has_side_effects(&brw->ctx))
+   else if (wm_prog_data->has_side_effects)
       dw1 |= GEN7_WM_EARLY_DS_CONTROL_PSEXEC;
 
    BEGIN_BATCH(2);
@@ -274,7 +275,8 @@ static void
 upload_ps_state(struct brw_context *brw)
 {
    /* BRW_NEW_FS_PROG_DATA */
-   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
+   const struct brw_wm_prog_data *prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
    gen8_upload_ps_state(brw, &brw->wm.base, prog_data, brw->wm.fast_clear_op);
 }
 
@@ -283,7 +285,6 @@ const struct brw_tracked_state gen8_ps_state = {
       .mesa  = _NEW_MULTISAMPLE,
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_BLORP |
-               BRW_NEW_FRAGMENT_PROGRAM |
                BRW_NEW_FS_PROG_DATA,
    },
    .emit = upload_ps_state,

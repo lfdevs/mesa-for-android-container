@@ -32,17 +32,20 @@
 static void
 upload_vs_state(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    const struct brw_stage_state *stage_state = &brw->vs.base;
    uint32_t floating_point_mode = 0;
 
    /* BRW_NEW_VS_PROG_DATA */
-   const struct brw_vue_prog_data *prog_data = &brw->vs.prog_data->base;
+   const struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   const struct brw_vue_prog_data *vue_prog_data =
+      brw_vue_prog_data(stage_state->prog_data);
 
-   assert(prog_data->dispatch_mode == DISPATCH_MODE_SIMD8 ||
-          prog_data->dispatch_mode == DISPATCH_MODE_4X2_DUAL_OBJECT);
+   assert(vue_prog_data->dispatch_mode == DISPATCH_MODE_SIMD8 ||
+          vue_prog_data->dispatch_mode == DISPATCH_MODE_4X2_DUAL_OBJECT);
 
-   if (prog_data->base.use_alt_mode)
+   if (prog_data->use_alt_mode)
       floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
 
    BEGIN_BATCH(9);
@@ -52,10 +55,10 @@ upload_vs_state(struct brw_context *brw)
    OUT_BATCH(floating_point_mode |
              ((ALIGN(stage_state->sampler_count, 4) / 4) <<
                GEN6_VS_SAMPLER_COUNT_SHIFT) |
-             ((prog_data->base.binding_table.size_bytes / 4) <<
+             ((prog_data->binding_table.size_bytes / 4) <<
                GEN6_VS_BINDING_TABLE_ENTRY_COUNT_SHIFT));
 
-   if (prog_data->base.total_scratch) {
+   if (prog_data->total_scratch) {
       OUT_RELOC64(stage_state->scratch_bo,
                   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                   ffs(stage_state->per_thread_scratch) - 11);
@@ -64,20 +67,22 @@ upload_vs_state(struct brw_context *brw)
       OUT_BATCH(0);
    }
 
-   OUT_BATCH((prog_data->base.dispatch_grf_start_reg <<
+   OUT_BATCH((prog_data->dispatch_grf_start_reg <<
               GEN6_VS_DISPATCH_START_GRF_SHIFT) |
-             (prog_data->urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
+             (vue_prog_data->urb_read_length <<
+              GEN6_VS_URB_READ_LENGTH_SHIFT) |
              (0 << GEN6_VS_URB_ENTRY_READ_OFFSET_SHIFT));
 
-   uint32_t simd8_enable = prog_data->dispatch_mode == DISPATCH_MODE_SIMD8 ?
+   uint32_t simd8_enable =
+      vue_prog_data->dispatch_mode == DISPATCH_MODE_SIMD8 ?
       GEN8_VS_SIMD8_ENABLE : 0;
-   OUT_BATCH(((brw->max_vs_threads - 1) << HSW_VS_MAX_THREADS_SHIFT) |
+   OUT_BATCH(((devinfo->max_vs_threads - 1) << HSW_VS_MAX_THREADS_SHIFT) |
              GEN6_VS_STATISTICS_ENABLE |
              simd8_enable |
              GEN6_VS_ENABLE);
 
    /* _NEW_TRANSFORM */
-   OUT_BATCH(prog_data->cull_distance_mask |
+   OUT_BATCH(vue_prog_data->cull_distance_mask |
              (ctx->Transform.ClipPlanesEnabled <<
               GEN8_VS_USER_CLIP_DISTANCE_SHIFT));
    ADVANCE_BATCH();

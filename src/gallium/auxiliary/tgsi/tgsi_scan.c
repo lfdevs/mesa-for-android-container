@@ -102,6 +102,7 @@ scan_instruction(struct tgsi_shader_info *info,
 {
    unsigned i;
    bool is_mem_inst = false;
+   bool is_interp_instruction = false;
 
    assert(fullinst->Instruction.Opcode < TGSI_OPCODE_LAST);
    info->opcode_count[fullinst->Instruction.Opcode]++;
@@ -126,6 +127,8 @@ scan_instruction(struct tgsi_shader_info *info,
        fullinst->Instruction.Opcode == TGSI_OPCODE_INTERP_SAMPLE) {
       const struct tgsi_full_src_register *src0 = &fullinst->Src[0];
       unsigned input;
+
+      is_interp_instruction = true;
 
       if (src0->Register.Indirect && src0->Indirect.ArrayID)
          input = info->input_array_first[src0->Indirect.ArrayID];
@@ -190,12 +193,16 @@ scan_instruction(struct tgsi_shader_info *info,
             info->input_usage_mask[ind] |= usage_mask;
          }
 
-         if (info->processor == PIPE_SHADER_FRAGMENT &&
-             !src->Register.Indirect) {
-            unsigned name =
-               info->input_semantic_name[src->Register.Index];
-            unsigned index =
-               info->input_semantic_index[src->Register.Index];
+         if (info->processor == PIPE_SHADER_FRAGMENT) {
+            unsigned name, index, input;
+
+            if (src->Register.Indirect && src->Indirect.ArrayID)
+               input = info->input_array_first[src->Indirect.ArrayID];
+            else
+               input = src->Register.Index;
+
+            name = info->input_semantic_name[input];
+            index = info->input_semantic_index[input];
 
             if (name == TGSI_SEMANTIC_POSITION &&
                 (src->Register.SwizzleX == TGSI_SWIZZLE_Z ||
@@ -212,6 +219,50 @@ scan_instruction(struct tgsi_shader_info *info,
                   (1 << src->Register.SwizzleW);
 
                info->colors_read |= mask << (index * 4);
+            }
+
+            /* Process only interpolated varyings. Don't include POSITION.
+             * Don't include integer varyings, because they are not
+             * interpolated. Don't process inputs interpolated by INTERP
+             * opcodes. Those are tracked separately.
+             */
+            if ((!is_interp_instruction || i != 0) &&
+                (name == TGSI_SEMANTIC_GENERIC ||
+                 name == TGSI_SEMANTIC_TEXCOORD ||
+                 name == TGSI_SEMANTIC_COLOR ||
+                 name == TGSI_SEMANTIC_BCOLOR ||
+                 name == TGSI_SEMANTIC_FOG ||
+                 name == TGSI_SEMANTIC_CLIPDIST)) {
+               switch (info->input_interpolate[input]) {
+               case TGSI_INTERPOLATE_COLOR:
+               case TGSI_INTERPOLATE_PERSPECTIVE:
+                  switch (info->input_interpolate_loc[input]) {
+                  case TGSI_INTERPOLATE_LOC_CENTER:
+                     info->uses_persp_center = TRUE;
+                     break;
+                  case TGSI_INTERPOLATE_LOC_CENTROID:
+                     info->uses_persp_centroid = TRUE;
+                     break;
+                  case TGSI_INTERPOLATE_LOC_SAMPLE:
+                     info->uses_persp_sample = TRUE;
+                     break;
+                  }
+                  break;
+               case TGSI_INTERPOLATE_LINEAR:
+                  switch (info->input_interpolate_loc[input]) {
+                  case TGSI_INTERPOLATE_LOC_CENTER:
+                     info->uses_linear_center = TRUE;
+                     break;
+                  case TGSI_INTERPOLATE_LOC_CENTROID:
+                     info->uses_linear_centroid = TRUE;
+                     break;
+                  case TGSI_INTERPOLATE_LOC_SAMPLE:
+                     info->uses_linear_sample = TRUE;
+                     break;
+                  }
+                  break;
+                  /* TGSI_INTERPOLATE_CONSTANT doesn't do any interpolation. */
+               }
             }
          }
       }
@@ -350,54 +401,7 @@ scan_declaration(struct tgsi_shader_info *info,
          info->input_cylindrical_wrap[reg] = (ubyte)fulldecl->Interp.CylindricalWrap;
 
          /* Vertex shaders can have inputs with holes between them. */
-         if (info->processor == PIPE_SHADER_VERTEX)
-            info->num_inputs = MAX2(info->num_inputs, reg + 1);
-         else {
-            info->num_inputs++;
-            assert(reg < info->num_inputs);
-         }
-
-         /* Only interpolated varyings. Don't include POSITION.
-          * Don't include integer varyings, because they are not
-          * interpolated.
-          */
-         if (semName == TGSI_SEMANTIC_GENERIC ||
-             semName == TGSI_SEMANTIC_TEXCOORD ||
-             semName == TGSI_SEMANTIC_COLOR ||
-             semName == TGSI_SEMANTIC_BCOLOR ||
-             semName == TGSI_SEMANTIC_FOG ||
-             semName == TGSI_SEMANTIC_CLIPDIST) {
-            switch (fulldecl->Interp.Interpolate) {
-            case TGSI_INTERPOLATE_COLOR:
-            case TGSI_INTERPOLATE_PERSPECTIVE:
-               switch (fulldecl->Interp.Location) {
-               case TGSI_INTERPOLATE_LOC_CENTER:
-                  info->uses_persp_center = TRUE;
-                  break;
-               case TGSI_INTERPOLATE_LOC_CENTROID:
-                  info->uses_persp_centroid = TRUE;
-                  break;
-               case TGSI_INTERPOLATE_LOC_SAMPLE:
-                  info->uses_persp_sample = TRUE;
-                  break;
-               }
-               break;
-            case TGSI_INTERPOLATE_LINEAR:
-               switch (fulldecl->Interp.Location) {
-               case TGSI_INTERPOLATE_LOC_CENTER:
-                  info->uses_linear_center = TRUE;
-                  break;
-               case TGSI_INTERPOLATE_LOC_CENTROID:
-                  info->uses_linear_centroid = TRUE;
-                  break;
-               case TGSI_INTERPOLATE_LOC_SAMPLE:
-                  info->uses_linear_sample = TRUE;
-                  break;
-               }
-               break;
-               /* TGSI_INTERPOLATE_CONSTANT doesn't do any interpolation. */
-            }
-         }
+         info->num_inputs = MAX2(info->num_inputs, reg + 1);
 
          if (semName == TGSI_SEMANTIC_PRIMID)
             info->uses_primid = TRUE;
@@ -447,8 +451,7 @@ scan_declaration(struct tgsi_shader_info *info,
       else if (file == TGSI_FILE_OUTPUT) {
          info->output_semantic_name[reg] = (ubyte) semName;
          info->output_semantic_index[reg] = (ubyte) semIndex;
-         info->num_outputs++;
-         assert(reg < info->num_outputs);
+         info->num_outputs = MAX2(info->num_outputs, reg + 1);
 
          if (semName == TGSI_SEMANTIC_COLOR)
             info->colors_written |= 1 << semIndex;
@@ -497,13 +500,17 @@ scan_declaration(struct tgsi_shader_info *info,
          info->samplers_declared |= 1u << reg;
       } else if (file == TGSI_FILE_SAMPLER_VIEW) {
          unsigned target = fulldecl->SamplerView.Resource;
+         unsigned type = fulldecl->SamplerView.ReturnTypeX;
+
          assert(target < TGSI_TEXTURE_UNKNOWN);
          if (info->sampler_targets[reg] == TGSI_TEXTURE_UNKNOWN) {
             /* Save sampler target for this sampler index */
             info->sampler_targets[reg] = target;
+            info->sampler_type[reg] = type;
          } else {
             /* if previously declared, make sure targets agree */
             assert(info->sampler_targets[reg] == target);
+            assert(info->sampler_type[reg] == type);
          }
       } else if (file == TGSI_FILE_IMAGE) {
          if (fulldecl->Image.Resource == TGSI_TEXTURE_BUFFER)
@@ -635,6 +642,82 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
    tgsi_parse_free(&parse);
 }
 
+/**
+ * Collect information about the arrays of a given register file.
+ *
+ * @param tokens TGSI shader
+ * @param file the register file to scan through
+ * @param max_array_id number of entries in @p arrays; should be equal to the
+ *                     highest array id, i.e. tgsi_shader_info::array_max[file].
+ * @param arrays info for array of each ID will be written to arrays[ID - 1].
+ */
+void
+tgsi_scan_arrays(const struct tgsi_token *tokens,
+                 unsigned file,
+                 unsigned max_array_id,
+                 struct tgsi_array_info *arrays)
+{
+   struct tgsi_parse_context parse;
+
+   if (tgsi_parse_init(&parse, tokens) != TGSI_PARSE_OK) {
+      debug_printf("tgsi_parse_init() failed in tgsi_scan_arrays()!\n");
+      return;
+   }
+
+   memset(arrays, 0, sizeof(arrays[0]) * max_array_id);
+
+   while (!tgsi_parse_end_of_tokens(&parse)) {
+      struct tgsi_full_instruction *inst;
+
+      tgsi_parse_token(&parse);
+
+      if (parse.FullToken.Token.Type == TGSI_TOKEN_TYPE_DECLARATION) {
+         struct tgsi_full_declaration *decl = &parse.FullToken.FullDeclaration;
+
+         if (decl->Declaration.Array && decl->Declaration.File == file &&
+             decl->Array.ArrayID > 0 && decl->Array.ArrayID <= max_array_id) {
+            struct tgsi_array_info *array = &arrays[decl->Array.ArrayID - 1];
+            assert(!array->declared);
+            array->declared = true;
+            array->range = decl->Range;
+         }
+      }
+
+      if (parse.FullToken.Token.Type != TGSI_TOKEN_TYPE_INSTRUCTION)
+         continue;
+
+      inst = &parse.FullToken.FullInstruction;
+      for (unsigned i = 0; i < inst->Instruction.NumDstRegs; i++) {
+         const struct tgsi_full_dst_register *dst = &inst->Dst[i];
+         if (dst->Register.File != file)
+            continue;
+
+         if (dst->Register.Indirect) {
+            if (dst->Indirect.ArrayID > 0 &&
+                dst->Indirect.ArrayID <= max_array_id) {
+               arrays[dst->Indirect.ArrayID - 1].writemask |= dst->Register.WriteMask;
+            } else {
+               /* Indirect writes without an ArrayID can write anywhere. */
+               for (unsigned j = 0; j < max_array_id; ++j)
+                  arrays[j].writemask |= dst->Register.WriteMask;
+            }
+         } else {
+            /* Check whether the write falls into any of the arrays anyway. */
+            for (unsigned j = 0; j < max_array_id; ++j) {
+               struct tgsi_array_info *array = &arrays[j];
+               if (array->declared &&
+                   dst->Register.Index >= array->range.First &&
+                   dst->Register.Index <= array->range.Last)
+                  array->writemask |= dst->Register.WriteMask;
+            }
+         }
+      }
+   }
+
+   tgsi_parse_free(&parse);
+
+   return;
+}
 
 
 /**

@@ -482,16 +482,16 @@ nv84_create_decoder(struct pipe_context *context,
       mip.base.domain = NOUVEAU_BO_VRAM;
       mip.base.bo = dec->mbring;
       mip.base.address = dec->mbring->offset;
-      context->clear_render_target(context, &surf.base, &color, 0, 0, 64, 4760);
+      context->clear_render_target(context, &surf.base, &color, 0, 0, 64, 4760, false);
       surf.offset = dec->vpring->size / 2 - 0x1000;
       surf.width = 1024;
       surf.height = 1;
       mip.level[0].pitch = surf.width * 4;
       mip.base.bo = dec->vpring;
       mip.base.address = dec->vpring->offset;
-      context->clear_render_target(context, &surf.base, &color, 0, 0, 1024, 1);
+      context->clear_render_target(context, &surf.base, &color, 0, 0, 1024, 1, false);
       surf.offset = dec->vpring->size - 0x1000;
-      context->clear_render_target(context, &surf.base, &color, 0, 0, 1024, 1);
+      context->clear_render_target(context, &surf.base, &color, 0, 0, 1024, 1, false);
 
       PUSH_SPACE(screen->pushbuf, 5);
       PUSH_REFN(screen->pushbuf, dec->fence, NOUVEAU_BO_VRAM | NOUVEAU_BO_RDWR);

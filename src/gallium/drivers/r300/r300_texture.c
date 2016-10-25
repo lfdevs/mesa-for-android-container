@@ -1036,6 +1036,7 @@ static void r300_texture_destroy(struct pipe_screen *screen,
 }
 
 boolean r300_resource_get_handle(struct pipe_screen* screen,
+                                 struct pipe_context *ctx,
                                  struct pipe_resource *texture,
                                  struct winsys_handle *whandle,
                                  unsigned usage)
@@ -1058,7 +1059,6 @@ static const struct u_resource_vtbl r300_texture_vtbl =
     r300_texture_transfer_map,      /* transfer_map */
     NULL,                           /* transfer_flush_region */
     r300_texture_transfer_unmap,    /* transfer_unmap */
-    NULL /* transfer_inline_write */
 };
 
 /* The common texture constructor. */
@@ -1114,7 +1114,7 @@ r300_texture_create_object(struct r300_screen *rscreen,
     /* Create the backing buffer if needed. */
     if (!tex->buf) {
         tex->buf = rws->buffer_create(rws, tex->tex.size_in_bytes, 2048,
-                                      tex->domain, 0);
+                                      tex->domain, RADEON_FLAG_HANDLE);
 
         if (!tex->buf) {
             goto fail;

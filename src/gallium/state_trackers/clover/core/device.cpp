@@ -193,6 +193,12 @@ device::subgroup_size() const {
                                       PIPE_COMPUTE_CAP_SUBGROUP_SIZE)[0];
 }
 
+cl_uint
+device::address_bits() const {
+   return get_compute_param<uint32_t>(pipe, ir_format(),
+                                      PIPE_COMPUTE_CAP_ADDRESS_BITS)[0];
+}
+
 std::string
 device::device_name() const {
    return pipe->get_name(pipe);

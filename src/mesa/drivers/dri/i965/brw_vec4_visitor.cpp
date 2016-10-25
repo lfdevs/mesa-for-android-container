@@ -46,7 +46,7 @@ vec4_instruction::vec4_instruction(enum opcode opcode, const dst_reg &dst,
    this->predicate = BRW_PREDICATE_NONE;
    this->predicate_inverse = false;
    this->target = 0;
-   this->regs_written = (dst.file == BAD_FILE ? 0 : 1);
+   this->size_written = (dst.file == BAD_FILE ? 0 : REG_SIZE);
    this->shadow_compare = false;
    this->ir = NULL;
    this->urb_write_flags = BRW_URB_WRITE_NO_FLAGS;
@@ -183,6 +183,7 @@ ALU3(MAD)
 ALU2_ACC(ADDC)
 ALU2_ACC(SUBB)
 ALU2(MAC)
+ALU1(DIM)
 
 /** Gen4 predicated IF. */
 vec4_instruction *
@@ -585,7 +586,7 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4)
       if (type->is_matrix()) {
          const glsl_type *col_type = type->column_type();
          unsigned col_slots =
-            (as_vec4 && col_type->is_dual_slot_double()) ? 2 : 1;
+            (as_vec4 && col_type->is_dual_slot()) ? 2 : 1;
          return type->matrix_columns * col_slots;
       } else {
          /* Regardless of size of vector, it gets a vec4. This is bad
@@ -593,7 +594,7 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4)
           * mess.  Hopefully a later pass over the code can pack scalars
           * down if appropriate.
           */
-         return (as_vec4 && type->is_dual_slot_double()) ? 2 : 1;
+         return (as_vec4 && type->is_dual_slot()) ? 2 : 1;
       }
    case GLSL_TYPE_ARRAY:
       assert(type->length > 0);
@@ -906,10 +907,8 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
                            uint32_t constant_offset,
                            src_reg offset_value,
                            src_reg mcs,
-                           bool is_cube_array,
                            uint32_t surface,
                            src_reg surface_reg,
-                           uint32_t sampler,
                            src_reg sampler_reg)
 {
    /* The sampler can only meaningfully compute LOD for fragment shader
@@ -1094,16 +1093,10 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
    /* fixup num layers (z) for cube arrays: hardware returns faces * layers;
     * spec requires layers.
     */
-   if (op == ir_txs) {
-      if (is_cube_array) {
-         emit_math(SHADER_OPCODE_INT_QUOTIENT,
-                   writemask(inst->dst, WRITEMASK_Z),
-                   src_reg(inst->dst), brw_imm_d(6));
-      } else if (devinfo->gen < 7) {
-         /* Gen4-6 return 0 instead of 1 for single layer surfaces. */
-         emit_minmax(BRW_CONDITIONAL_GE, writemask(inst->dst, WRITEMASK_Z),
-                     src_reg(inst->dst), brw_imm_d(1));
-      }
+   if (op == ir_txs && devinfo->gen < 7) {
+      /* Gen4-6 return 0 instead of 1 for single layer surfaces. */
+      emit_minmax(BRW_CONDITIONAL_GE, writemask(inst->dst, WRITEMASK_Z),
+                  src_reg(inst->dst), brw_imm_d(1));
    }
 
    if (devinfo->gen == 6 && op == ir_tg4) {
@@ -1147,7 +1140,7 @@ vec4_visitor::emit_gen6_gather_wa(uint8_t wa, dst_reg dst)
 }
 
 void
-vec4_visitor::gs_emit_vertex(int stream_id)
+vec4_visitor::gs_emit_vertex(int /* stream_id */)
 {
    unreachable("not reached");
 }
@@ -1278,10 +1271,32 @@ vec4_visitor::emit_generic_urb_slot(dst_reg reg, int varying)
    assert(varying < VARYING_SLOT_MAX);
    assert(output_reg[varying].type == reg.type);
    current_annotation = output_reg_annotation[varying];
-   if (output_reg[varying].file != BAD_FILE)
+   if (output_reg[varying].file != BAD_FILE) {
       return emit(MOV(reg, src_reg(output_reg[varying])));
-   else
+   } else
       return NULL;
+}
+
+void
+vec4_visitor::emit_generic_urb_slot(dst_reg reg, int varying, int component)
+{
+   assert(varying < VARYING_SLOT_MAX);
+   assert(varying >= VARYING_SLOT_VAR0);
+   varying = varying - VARYING_SLOT_VAR0;
+
+   unsigned num_comps = output_generic_num_components[varying][component];
+   if (num_comps == 0)
+      return;
+
+   assert(output_generic_reg[varying][component].type == reg.type);
+   current_annotation = output_reg_annotation[varying];
+   if (output_generic_reg[varying][component].file != BAD_FILE) {
+      src_reg src = src_reg(output_generic_reg[varying][component]);
+      src.swizzle = BRW_SWZ_COMP_OUTPUT(component);
+      reg.writemask =
+         brw_writemask_for_component_packing(num_comps, component);
+      emit(MOV(reg, src));
+   }
 }
 
 void
@@ -1323,13 +1338,19 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
       /* No need to write to this slot */
       break;
    default:
-      emit_generic_urb_slot(reg, varying);
+      if (varying >= VARYING_SLOT_VAR0) {
+         for (int i = 0; i < 4; i++) {
+            emit_generic_urb_slot(reg, varying, i);
+         }
+      } else {
+         emit_generic_urb_slot(reg, varying);
+      }
       break;
    }
 }
 
 static int
-align_interleaved_urb_mlen(const struct brw_device_info *devinfo, int mlen)
+align_interleaved_urb_mlen(const struct gen_device_info *devinfo, int mlen)
 {
    if (devinfo->gen >= 6) {
       /* URB data written (does not include the message header reg) must
@@ -1459,7 +1480,8 @@ vec4_visitor::emit_scratch_read(bblock_t *block, vec4_instruction *inst,
 				dst_reg temp, src_reg orig_src,
 				int base_offset)
 {
-   int reg_offset = base_offset + orig_src.reg_offset;
+   assert(orig_src.offset % REG_SIZE == 0);
+   int reg_offset = base_offset + orig_src.offset / REG_SIZE;
    src_reg index = get_scratch_offset(block, inst, orig_src.reladdr,
                                       reg_offset);
 
@@ -1476,7 +1498,8 @@ void
 vec4_visitor::emit_scratch_write(bblock_t *block, vec4_instruction *inst,
                                  int base_offset)
 {
-   int reg_offset = base_offset + inst->dst.reg_offset;
+   assert(inst->dst.offset % REG_SIZE == 0);
+   int reg_offset = base_offset + inst->dst.offset / REG_SIZE;
    src_reg index = get_scratch_offset(block, inst, inst->dst.reladdr,
                                       reg_offset);
 
@@ -1501,7 +1524,7 @@ vec4_visitor::emit_scratch_write(bblock_t *block, vec4_instruction *inst,
 
    inst->dst.file = temp.file;
    inst->dst.nr = temp.nr;
-   inst->dst.reg_offset = temp.reg_offset;
+   inst->dst.offset %= REG_SIZE;
    inst->dst.reladdr = NULL;
 }
 
@@ -1531,7 +1554,7 @@ vec4_visitor::emit_resolve_reladdr(int scratch_loc[], bblock_t *block,
       dst_reg temp = dst_reg(this, glsl_type::vec4_type);
       emit_scratch_read(block, inst, temp, src, scratch_loc[src.nr]);
       src.nr = temp.nr;
-      src.reg_offset = temp.reg_offset;
+      src.offset %= REG_SIZE;
       src.reladdr = NULL;
    }
 
@@ -1627,7 +1650,8 @@ vec4_visitor::emit_pull_constant_load(bblock_t *block, vec4_instruction *inst,
 				      dst_reg temp, src_reg orig_src,
                                       int base_offset, src_reg indirect)
 {
-   int reg_offset = base_offset + orig_src.reg_offset;
+   assert(orig_src.offset % 16 == 0);
+   int reg_offset = base_offset + orig_src.offset / 16;
    const unsigned index = prog_data->base.binding_table.pull_constants_start;
 
    src_reg offset;
@@ -1688,7 +1712,7 @@ vec4_visitor::move_uniform_array_access_to_pull_constants()
           inst->src[0].file != UNIFORM)
          continue;
 
-      int uniform_nr = inst->src[0].nr + inst->src[0].reg_offset;
+      int uniform_nr = inst->src[0].nr + inst->src[0].offset / 16;
 
       for (unsigned j = 0; j < DIV_ROUND_UP(inst->src[2].ud, 16); j++)
          pull_constant_loc[uniform_nr + j] = 0;
@@ -1718,7 +1742,7 @@ vec4_visitor::move_uniform_array_access_to_pull_constants()
           inst->src[0].file != UNIFORM)
          continue;
 
-      int uniform_nr = inst->src[0].nr + inst->src[0].reg_offset;
+      int uniform_nr = inst->src[0].nr + inst->src[0].offset / 16;
 
       assert(inst->src[0].swizzle == BRW_SWIZZLE_NOOP);
 
@@ -1770,6 +1794,9 @@ vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,
    this->base_ir = NULL;
    this->current_annotation = NULL;
    memset(this->output_reg_annotation, 0, sizeof(this->output_reg_annotation));
+
+   memset(this->output_generic_num_components, 0,
+          sizeof(this->output_generic_num_components));
 
    this->virtual_grf_start = NULL;
    this->virtual_grf_end = NULL;

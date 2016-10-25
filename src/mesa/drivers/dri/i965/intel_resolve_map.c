@@ -35,7 +35,7 @@ void
 intel_resolve_map_set(struct exec_list *resolve_map,
 		      uint32_t level,
 		      uint32_t layer,
-		      enum gen6_hiz_op need)
+		      enum blorp_hiz_op need)
 {
    foreach_list_typed(struct intel_resolve_map, map, link, resolve_map) {
       if (map->level == level && map->layer == layer) {

@@ -32,7 +32,8 @@
 
 #include "gallium/drivers/radeon/radeon_winsys.h"
 #include "pipebuffer/pb_cache.h"
-#include "os/os_thread.h"
+#include "pipebuffer/pb_slab.h"
+#include "util/u_queue.h"
 #include "util/list.h"
 #include <radeon_drm.h>
 
@@ -62,17 +63,24 @@ enum radeon_generation {
     DRV_SI
 };
 
+#define RADEON_SLAB_MIN_SIZE_LOG2 9
+#define RADEON_SLAB_MAX_SIZE_LOG2 14
+
 struct radeon_drm_winsys {
     struct radeon_winsys base;
     struct pipe_reference reference;
     struct pb_cache bo_cache;
+    struct pb_slabs bo_slabs;
 
     int fd; /* DRM file descriptor */
     int num_cs; /* The number of command streams created. */
     uint64_t allocated_vram;
     uint64_t allocated_gtt;
+    uint64_t mapped_vram;
+    uint64_t mapped_gtt;
     uint64_t buffer_wait_time; /* time spent in buffer_wait in ns */
     uint64_t num_cs_flushes;
+    uint32_t next_bo_hash;
 
     enum radeon_generation gen;
     struct radeon_info info;
@@ -88,9 +96,11 @@ struct radeon_drm_winsys {
     struct util_hash_table *bo_vas;
     pipe_mutex bo_handles_mutex;
     pipe_mutex bo_va_mutex;
+    pipe_mutex bo_fence_lock;
 
     uint64_t va_offset;
     struct list_head va_holes;
+    bool check_vm;
 
     struct radeon_surface_manager *surf_man;
 
@@ -101,13 +111,8 @@ struct radeon_drm_winsys {
     struct radeon_drm_cs *cmask_owner;
     pipe_mutex cmask_owner_mutex;
 
-    /* rings submission thread */
-    pipe_mutex cs_stack_lock;
-    pipe_semaphore cs_queued;
-    pipe_thread thread;
-    int kill_thread;
-    int ncs;
-    struct radeon_drm_cs *cs_stack[RING_LAST];
+    /* multithreaded command submission */
+    struct util_queue cs_queue;
 };
 
 static inline struct radeon_drm_winsys *
@@ -116,7 +121,6 @@ radeon_drm_winsys(struct radeon_winsys *base)
     return (struct radeon_drm_winsys*)base;
 }
 
-void radeon_drm_ws_queue_cs(struct radeon_drm_winsys *ws, struct radeon_drm_cs *cs);
 void radeon_surface_init_functions(struct radeon_drm_winsys *ws);
 
 #endif

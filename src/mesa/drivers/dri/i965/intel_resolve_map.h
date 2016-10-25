@@ -24,28 +24,12 @@
 #pragma once
 
 #include <stdint.h>
+#include "blorp/blorp.h"
 #include "compiler/glsl/list.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/**
- * For an overview of the HiZ operations, see the following sections of the
- * Sandy Bridge PRM, Volume 1, Part2:
- *   - 7.5.3.1 Depth Buffer Clear
- *   - 7.5.3.2 Depth Buffer Resolve
- *   - 7.5.3.3 Hierarchical Depth Buffer Resolve
- *
- * Of these, two get entered in the resolve map as needing to be done to the
- * buffer: depth resolve and hiz resolve.
- */
-enum gen6_hiz_op {
-   GEN6_HIZ_OP_DEPTH_CLEAR,
-   GEN6_HIZ_OP_DEPTH_RESOLVE,
-   GEN6_HIZ_OP_HIZ_RESOLVE,
-   GEN6_HIZ_OP_NONE,
-};
 
 /**
  * \brief Map of miptree slices to needed resolves.
@@ -78,14 +62,14 @@ struct intel_resolve_map {
 
    uint32_t level;
    uint32_t layer;
-   enum gen6_hiz_op need;
+   enum blorp_hiz_op need;
 };
 
 void
 intel_resolve_map_set(struct exec_list *resolve_map,
 		      uint32_t level,
 		      uint32_t layer,
-		      enum gen6_hiz_op need);
+		      enum blorp_hiz_op need);
 
 struct intel_resolve_map *
 intel_resolve_map_get(struct exec_list *resolve_map,

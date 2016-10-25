@@ -26,9 +26,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "brw_device_info.h"
-#include "isl.h"
-#include "isl_priv.h"
+#include "common/gen_device_info.h"
+#include "isl/isl.h"
+#include "isl/isl_priv.h"
 
 #define BDW_GT2_DEVID 0x161a
 
@@ -124,9 +124,11 @@ test_bdw_2d_r8g8b8a8_unorm_512x512_array01_samples01_noaux_tiley0(void)
 {
    bool ok;
 
+   struct gen_device_info devinfo;
+   t_assert(gen_get_device_info(BDW_GT2_DEVID, &devinfo));
+
    struct isl_device dev;
-   isl_device_init(&dev, brw_get_device_info(BDW_GT2_DEVID),
-                   /*bit6_swizzle*/ false);
+   isl_device_init(&dev, &devinfo, /*bit6_swizzle*/ false);
 
    struct isl_surf surf;
    ok = isl_surf_init(&dev, &surf,
@@ -170,9 +172,11 @@ test_bdw_2d_r8g8b8a8_unorm_1024x1024_array06_samples01_noaux_tiley0(void)
 {
    bool ok;
 
+   struct gen_device_info devinfo;
+   t_assert(gen_get_device_info(BDW_GT2_DEVID, &devinfo));
+
    struct isl_device dev;
-   isl_device_init(&dev, brw_get_device_info(BDW_GT2_DEVID),
-                   /*bit6_swizzle*/ false);
+   isl_device_init(&dev, &devinfo, /*bit6_swizzle*/ false);
 
    struct isl_surf surf;
    ok = isl_surf_init(&dev, &surf,
@@ -229,9 +233,11 @@ test_bdw_3d_r8g8b8a8_unorm_256x256x256_levels09_tiley0(void)
 {
    bool ok;
 
+   struct gen_device_info devinfo;
+   t_assert(gen_get_device_info(BDW_GT2_DEVID, &devinfo));
+
    struct isl_device dev;
-   isl_device_init(&dev, brw_get_device_info(BDW_GT2_DEVID),
-                   /*bit6_swizzle*/ false);
+   isl_device_init(&dev, &devinfo, /*bit6_swizzle*/ false);
 
    struct isl_surf surf;
    ok = isl_surf_init(&dev, &surf,

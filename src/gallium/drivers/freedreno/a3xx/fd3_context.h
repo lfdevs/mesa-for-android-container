@@ -41,37 +41,12 @@
 struct fd3_context {
 	struct fd_context base;
 
-	/* Keep track of writes to RB_RENDER_CONTROL which need to be patched
-	 * once we know whether or not to use GMEM, and GMEM tile pitch.
-	 */
-	struct util_dynarray rbrc_patches;
-
 	struct fd_bo *vs_pvt_mem, *fs_pvt_mem;
 
 	/* This only needs to be 4 * num_of_pipes bytes (ie. 32 bytes).  We
 	 * could combine it with another allocation.
 	 */
 	struct fd_bo *vsc_size_mem;
-
-	/* vertex buf used for clear/gmem->mem vertices, and mem->gmem
-	 * vertices:
-	 */
-	struct pipe_resource *solid_vbuf;
-
-	/* vertex buf used for mem->gmem tex coords:
-	 */
-	struct pipe_resource *blit_texcoord_vbuf;
-
-	/* vertex state for solid_vbuf:
-	 *    - solid_vbuf / 12 / R32G32B32_FLOAT
-	 */
-	struct fd_vertex_state solid_vbuf_state;
-
-	/* vertex state for blit_prog:
-	 *    - blit_texcoord_vbuf / 8 / R32G32_FLOAT
-	 *    - solid_vbuf / 12 / R32G32B32_FLOAT
-	 */
-	struct fd_vertex_state blit_vbuf_state;
 
 	struct u_upload_mgr *border_color_uploader;
 	struct pipe_resource *border_color_buf;

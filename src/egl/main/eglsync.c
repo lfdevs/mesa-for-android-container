@@ -26,6 +26,7 @@
  **************************************************************************/
 
 
+#include <inttypes.h>
 #include <string.h>
 
 #include "eglsync.h"
@@ -38,45 +39,17 @@
  * Parse the list of sync attributes and return the proper error code.
  */
 static EGLint
-_eglParseSyncAttribList(_EGLSync *sync, const EGLint *attrib_list)
+_eglParseSyncAttribList(_EGLSync *sync, const EGLAttrib *attrib_list)
 {
-   EGLint i, err = EGL_SUCCESS;
+   EGLint i;
 
    if (!attrib_list)
       return EGL_SUCCESS;
 
    for (i = 0; attrib_list[i] != EGL_NONE; i++) {
-      EGLint attr = attrib_list[i++];
-      EGLint val = attrib_list[i];
-
-      switch (attr) {
-      default:
-         (void) val;
-         err = EGL_BAD_ATTRIBUTE;
-         break;
-      }
-
-      if (err != EGL_SUCCESS) {
-         _eglLog(_EGL_DEBUG, "bad sync attribute 0x%04x", attr);
-         break;
-      }
-   }
-
-   return err;
-}
-
-
-static EGLint
-_eglParseSyncAttribList64(_EGLSync *sync, const EGLAttrib *attrib_list)
-{
-   EGLint i, err = EGL_SUCCESS;
-
-   if (!attrib_list)
-      return EGL_SUCCESS;
-
-   for (i = 0; attrib_list[i] != EGL_NONE; i++) {
-      EGLint attr = attrib_list[i++];
-      EGLint val = attrib_list[i];
+      EGLAttrib attr = attrib_list[i++];
+      EGLAttrib val = attrib_list[i];
+      EGLint err = EGL_SUCCESS;
 
       switch (attr) {
       case EGL_CL_EVENT_HANDLE_KHR:
@@ -92,26 +65,20 @@ _eglParseSyncAttribList64(_EGLSync *sync, const EGLAttrib *attrib_list)
       }
 
       if (err != EGL_SUCCESS) {
-         _eglLog(_EGL_DEBUG, "bad sync attribute 0x%04x", attr);
-         break;
+         _eglLog(_EGL_DEBUG, "bad sync attribute 0x%" PRIxPTR, attr);
+         return err;
       }
    }
 
-   return err;
+   return EGL_SUCCESS;
 }
 
 
 EGLBoolean
 _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
-             const EGLint *attrib_list, const EGLAttrib *attrib_list64)
+             const EGLAttrib *attrib_list)
 {
    EGLint err;
-
-   if (!(type == EGL_SYNC_REUSABLE_KHR && dpy->Extensions.KHR_reusable_sync) &&
-       !(type == EGL_SYNC_FENCE_KHR && dpy->Extensions.KHR_fence_sync) &&
-       !(type == EGL_SYNC_CL_EVENT_KHR && dpy->Extensions.KHR_cl_event2 &&
-         attrib_list64))
-      return _eglError(EGL_BAD_ATTRIBUTE, "eglCreateSyncKHR");
 
    _eglInitResource(&sync->Resource, sizeof(*sync), dpy);
    sync->Type = type;
@@ -125,11 +92,7 @@ _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
       sync->SyncCondition = EGL_SYNC_PRIOR_COMMANDS_COMPLETE_KHR;
    }
 
-   if (attrib_list64)
-      err = _eglParseSyncAttribList64(sync, attrib_list64);
-   else
-      err = _eglParseSyncAttribList(sync, attrib_list);
-
+   err = _eglParseSyncAttribList(sync, attrib_list);
    if (err != EGL_SUCCESS)
       return _eglError(err, "eglCreateSyncKHR");
 

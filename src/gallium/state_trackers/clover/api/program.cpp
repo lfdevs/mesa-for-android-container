@@ -28,12 +28,12 @@
 using namespace clover;
 
 namespace {
-   void validate_build_program_common(const program &prog, cl_uint num_devs,
-                                      const cl_device_id *d_devs,
-                                      void (*pfn_notify)(cl_program, void *),
-                                      void *user_data) {
-
-      if ((!pfn_notify && user_data))
+   void
+   validate_build_common(const program &prog, cl_uint num_devs,
+                         const cl_device_id *d_devs,
+                         void (*pfn_notify)(cl_program, void *),
+                         void *user_data) {
+      if (!pfn_notify && user_data)
          throw error(CL_INVALID_VALUE);
 
       if (prog.kernel_ref_count())
@@ -179,15 +179,16 @@ clBuildProgram(cl_program d_prog, cl_uint num_devs,
                 ref_vector<device>(prog.context().devices()));
    auto opts = (p_opts ? p_opts : "");
 
-   validate_build_program_common(prog, num_devs, d_devs, pfn_notify, user_data);
+   validate_build_common(prog, num_devs, d_devs, pfn_notify, user_data);
 
-   prog.build(devs, opts);
+   if (prog.has_source) {
+      prog.compile(devs, opts);
+      prog.link(devs, opts, { prog });
+   }
+
    return CL_SUCCESS;
+
 } catch (error &e) {
-   if (e.get() == CL_INVALID_COMPILER_OPTIONS)
-      return CL_INVALID_BUILD_OPTIONS;
-   if (e.get() == CL_COMPILE_PROGRAM_FAILURE)
-      return CL_BUILD_PROGRAM_FAILURE;
    return e.get();
 }
 
@@ -204,14 +205,13 @@ clCompileProgram(cl_program d_prog, cl_uint num_devs,
    auto opts = (p_opts ? p_opts : "");
    header_map headers;
 
-   validate_build_program_common(prog, num_devs, d_devs, pfn_notify, user_data);
+   validate_build_common(prog, num_devs, d_devs, pfn_notify, user_data);
 
    if (bool(num_headers) != bool(header_names))
       throw error(CL_INVALID_VALUE);
 
    if (!prog.has_source)
       throw error(CL_INVALID_OPERATION);
-
 
    for_each([&](const char *name, const program &header) {
          if (!header.has_source)
@@ -224,20 +224,78 @@ clCompileProgram(cl_program d_prog, cl_uint num_devs,
       range(header_names, num_headers),
       objs<allow_empty_tag>(d_header_progs, num_headers));
 
-   prog.build(devs, opts, headers);
+   prog.compile(devs, opts, headers);
    return CL_SUCCESS;
+
+} catch (invalid_build_options_error &e) {
+   return CL_INVALID_COMPILER_OPTIONS;
+
+} catch (build_error &e) {
+   return CL_COMPILE_PROGRAM_FAILURE;
 
 } catch (error &e) {
    return e.get();
 }
 
+namespace {
+   ref_vector<device>
+   validate_link_devices(const ref_vector<program> &progs,
+                         const ref_vector<device> &all_devs) {
+      std::vector<device *> devs;
+
+      for (auto &dev : all_devs) {
+         const auto has_binary = [&](const program &prog) {
+            return !prog.build(dev).binary.secs.empty();
+         };
+
+         // According to the CL 1.2 spec, when "all programs specified [..]
+         // contain a compiled binary or library for the device [..] a link is
+         // performed",
+         if (all_of(has_binary, progs))
+            devs.push_back(&dev);
+
+         // otherwise if "none of the programs contain a compiled binary or
+         // library for that device [..] no link is performed.  All other
+         // cases will return a CL_INVALID_OPERATION error."
+         else if (any_of(has_binary, progs))
+            throw error(CL_INVALID_OPERATION);
+      }
+
+      return map(derefs(), devs);
+   }
+}
+
 CLOVER_API cl_program
 clLinkProgram(cl_context d_ctx, cl_uint num_devs, const cl_device_id *d_devs,
               const char *p_opts, cl_uint num_progs, const cl_program *d_progs,
-              void (*pfn_notify)(cl_program, void *), void *user_data,
-              cl_int *r_errcode) {
-   CLOVER_NOT_SUPPORTED_UNTIL("1.2");
-   ret_error(r_errcode, CL_LINKER_NOT_AVAILABLE);
+              void (*pfn_notify) (cl_program, void *), void *user_data,
+              cl_int *r_errcode) try {
+   auto &ctx = obj(d_ctx);
+   auto opts = (p_opts ? p_opts : "");
+   auto progs = objs(d_progs, num_progs);
+   auto prog = create<program>(ctx);
+   auto devs = validate_link_devices(progs,
+                                     (d_devs ? objs(d_devs, num_devs) :
+                                      ref_vector<device>(ctx.devices())));
+
+   validate_build_common(prog, num_devs, d_devs, pfn_notify, user_data);
+
+   try {
+      prog().link(devs, opts, progs);
+      ret_error(r_errcode, CL_SUCCESS);
+
+   } catch (build_error &e) {
+      ret_error(r_errcode, CL_LINK_PROGRAM_FAILURE);
+   }
+
+   return ret_object(prog);
+
+} catch (invalid_build_options_error &e) {
+   ret_error(r_errcode, CL_INVALID_LINKER_OPTIONS);
+   return NULL;
+
+} catch (error &e) {
+   ret_error(r_errcode, e);
    return NULL;
 }
 
@@ -284,7 +342,7 @@ clGetProgramInfo(cl_program d_prog, cl_program_info param,
 
    case CL_PROGRAM_BINARY_SIZES:
       buf.as_vector<size_t>() = map([&](const device &dev) {
-            return prog.binary(dev).size();
+            return prog.build(dev).binary.size();
          },
          prog.devices());
       break;
@@ -293,7 +351,7 @@ clGetProgramInfo(cl_program d_prog, cl_program_info param,
       buf.as_matrix<unsigned char>() = map([&](const device &dev) {
             std::stringbuf bin;
             std::ostream s(&bin);
-            prog.binary(dev).serialize(s);
+            prog.build(dev).binary.serialize(s);
             return bin.str();
          },
          prog.devices());
@@ -332,15 +390,15 @@ clGetProgramBuildInfo(cl_program d_prog, cl_device_id d_dev,
 
    switch (param) {
    case CL_PROGRAM_BUILD_STATUS:
-      buf.as_scalar<cl_build_status>() = prog.build_status(dev);
+      buf.as_scalar<cl_build_status>() = prog.build(dev).status();
       break;
 
    case CL_PROGRAM_BUILD_OPTIONS:
-      buf.as_string() = prog.build_opts(dev);
+      buf.as_string() = prog.build(dev).opts;
       break;
 
    case CL_PROGRAM_BUILD_LOG:
-      buf.as_string() = prog.build_log(dev);
+      buf.as_string() = prog.build(dev).log;
       break;
 
    default:

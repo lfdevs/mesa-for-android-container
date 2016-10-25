@@ -37,7 +37,8 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 	if (radeon_emitted(ctx->b.dma.cs, 0))
 		ctx->b.dma.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 
-	if (!ctx->b.ws->cs_memory_below_limit(ctx->b.gfx.cs, ctx->b.vram, ctx->b.gtt)) {
+	if (!radeon_cs_memory_below_limit(ctx->b.screen, ctx->b.gfx.cs,
+					  ctx->b.vram, ctx->b.gtt)) {
 		ctx->b.gtt = 0;
 		ctx->b.vram = 0;
 		ctx->b.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
@@ -47,9 +48,7 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 	ctx->b.gtt = 0;
 	ctx->b.vram = 0;
 
-	/* The number of dwords we already used in the CS so far. */
-	num_dw += ctx->b.gfx.cs->cdw;
-
+	/* Check available space in CS. */
 	if (count_draw_in) {
 		uint64_t mask;
 
@@ -82,7 +81,7 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 	num_dw += 10;
 
 	/* Flush if there's not enough space. */
-	if (num_dw > ctx->b.gfx.cs->max_dw) {
+	if (!ctx->b.ws->cs_check_space(ctx->b.gfx.cs, num_dw)) {
 		ctx->b.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 	}
 }
@@ -96,6 +95,10 @@ void r600_flush_emit(struct r600_context *rctx)
 	if (!rctx->b.flags) {
 		return;
 	}
+
+	/* Ensure coherency between streamout and shaders. */
+	if (rctx->b.flags & R600_CONTEXT_STREAMOUT_FLUSH)
+		rctx->b.flags |= r600_get_flush_flags(R600_COHERENCY_SHADER);
 
 	if (rctx->b.flags & R600_CONTEXT_WAIT_3D_IDLE) {
 		wait_until |= S_008040_WAIT_3D_IDLE(1);
@@ -250,8 +253,12 @@ void r600_context_gfx_flush(void *context, unsigned flags,
 {
 	struct r600_context *ctx = context;
 	struct radeon_winsys_cs *cs = ctx->b.gfx.cs;
+	struct radeon_winsys *ws = ctx->b.ws;
 
-	if (!radeon_emitted(cs, ctx->b.initial_gfx_cs_size) && !fence)
+	if (!radeon_emitted(cs, ctx->b.initial_gfx_cs_size))
+		return;
+
+	if (r600_check_device_reset(&ctx->b))
 		return;
 
 	r600_preflush_suspend_features(&ctx->b);
@@ -272,11 +279,11 @@ void r600_context_gfx_flush(void *context, unsigned flags,
 		radeon_set_context_reg(cs, R_028350_SX_MISC, 0);
 	}
 
-	/* force to keep tiling flags */
-	flags |= RADEON_FLUSH_KEEP_TILING_FLAGS;
-
 	/* Flush the CS. */
-	ctx->b.ws->cs_flush(cs, flags, fence);
+	ws->cs_flush(cs, flags, &ctx->b.last_gfx_fence);
+	if (fence)
+		ws->fence_reference(fence, ctx->b.last_gfx_fence);
+	ctx->b.num_gfx_cs_flushes++;
 
 	r600_begin_new_cs(ctx);
 }
@@ -308,6 +315,7 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	ctx->b.scissors.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
 	r600_mark_atom_dirty(ctx, &ctx->b.scissors.atom);
 	ctx->b.viewports.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+	ctx->b.viewports.depth_range_dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
 	r600_mark_atom_dirty(ctx, &ctx->b.viewports.atom);
 	if (ctx->b.chip_class <= EVERGREEN) {
 		r600_mark_atom_dirty(ctx, &ctx->config_state.atom);
@@ -362,7 +370,68 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	ctx->last_primitive_type = -1;
 	ctx->last_start_instance = -1;
 
-	ctx->b.initial_gfx_cs_size = ctx->b.gfx.cs->cdw;
+	assert(!ctx->b.gfx.cs->prev_dw);
+	ctx->b.initial_gfx_cs_size = ctx->b.gfx.cs->current.cdw;
+}
+
+void r600_emit_pfp_sync_me(struct r600_context *rctx)
+{
+	struct radeon_winsys_cs *cs = rctx->b.gfx.cs;
+
+	if (rctx->b.chip_class >= EVERGREEN &&
+	    rctx->b.screen->info.drm_minor >= 46) {
+		radeon_emit(cs, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
+		radeon_emit(cs, 0);
+	} else {
+		/* Emulate PFP_SYNC_ME by writing a value to memory in ME and
+		 * waiting for it in PFP.
+		 */
+		struct r600_resource *buf = NULL;
+		unsigned offset, reloc;
+		uint64_t va;
+
+		/* 16-byte address alignment is required by WAIT_REG_MEM. */
+		u_suballocator_alloc(rctx->b.allocator_zeroed_memory, 4, 16,
+				     &offset, (struct pipe_resource**)&buf);
+		if (!buf) {
+			/* This is too heavyweight, but will work. */
+			rctx->b.gfx.flush(rctx, RADEON_FLUSH_ASYNC, NULL);
+			return;
+		}
+
+		reloc = radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx, buf,
+						  RADEON_USAGE_READWRITE,
+						  RADEON_PRIO_FENCE);
+
+		va = buf->gpu_address + offset;
+		assert(va % 16 == 0);
+
+		/* Write 1 to memory in ME. */
+		radeon_emit(cs, PKT3(PKT3_MEM_WRITE, 3, 0));
+		radeon_emit(cs, va);
+		radeon_emit(cs, ((va >> 32) & 0xff) | MEM_WRITE_32_BITS);
+		radeon_emit(cs, 1);
+		radeon_emit(cs, 0);
+
+		radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
+		radeon_emit(cs, reloc);
+
+		/* Wait in PFP (PFP can only do GEQUAL against memory). */
+		radeon_emit(cs, PKT3(PKT3_WAIT_REG_MEM, 5, 0));
+		radeon_emit(cs, WAIT_REG_MEM_GEQUAL |
+			        WAIT_REG_MEM_MEMORY |
+			        WAIT_REG_MEM_PFP);
+		radeon_emit(cs, va);
+		radeon_emit(cs, va >> 32);
+		radeon_emit(cs, 1); /* reference value */
+		radeon_emit(cs, 0xffffffff); /* mask */
+		radeon_emit(cs, 4); /* poll interval */
+
+		radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
+		radeon_emit(cs, reloc);
+
+		r600_resource_reference(&buf, NULL);
+	}
 }
 
 /* The max number of bytes to copy per packet. */
@@ -388,15 +457,7 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 	src_offset += r600_resource(src)->gpu_address;
 
 	/* Flush the caches where the resources are bound. */
-	rctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE |
-			 R600_CONTEXT_INV_VERTEX_CACHE |
-			 R600_CONTEXT_INV_TEX_CACHE |
-			 R600_CONTEXT_FLUSH_AND_INV |
-			 R600_CONTEXT_FLUSH_AND_INV_CB |
-			 R600_CONTEXT_FLUSH_AND_INV_DB |
-			 R600_CONTEXT_FLUSH_AND_INV_CB_META |
-			 R600_CONTEXT_FLUSH_AND_INV_DB_META |
-			 R600_CONTEXT_STREAMOUT_FLUSH |
+	rctx->b.flags |= r600_get_flush_flags(R600_COHERENCY_SHADER) |
 			 R600_CONTEXT_WAIT_3D_IDLE;
 
 	/* There are differences between R700 and EG in CP DMA,
@@ -406,7 +467,9 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 		unsigned byte_count = MIN2(size, CP_DMA_MAX_BYTE_COUNT);
 		unsigned src_reloc, dst_reloc;
 
-		r600_need_cs_space(rctx, 10 + (rctx->b.flags ? R600_MAX_FLUSH_CS_DWORDS : 0), FALSE);
+		r600_need_cs_space(rctx,
+				   10 + (rctx->b.flags ? R600_MAX_FLUSH_CS_DWORDS : 0) +
+				   3 + R600_MAX_PFP_SYNC_ME_DWORDS, FALSE);
 
 		/* Flush the caches for the first copy only. */
 		if (rctx->b.flags) {
@@ -441,10 +504,17 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 		dst_offset += byte_count;
 	}
 
-	/* Invalidate the read caches. */
-	rctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE |
-			 R600_CONTEXT_INV_VERTEX_CACHE |
-			 R600_CONTEXT_INV_TEX_CACHE;
+	/* CP_DMA_CP_SYNC doesn't wait for idle on R6xx, but this does. */
+	if (rctx->b.chip_class == R600)
+		radeon_set_config_reg(cs, R_008040_WAIT_UNTIL,
+				      S_008040_WAIT_CP_DMA_IDLE(1));
+
+	/* CP DMA is executed in ME, but index buffers are read by PFP.
+	 * This ensures that ME (CP DMA) is idle before PFP starts fetching
+	 * indices. If we wanted to execute CP DMA in PFP, this packet
+	 * should precede it.
+	 */
+	r600_emit_pfp_sync_me(rctx);
 }
 
 void r600_dma_copy_buffer(struct r600_context *rctx,

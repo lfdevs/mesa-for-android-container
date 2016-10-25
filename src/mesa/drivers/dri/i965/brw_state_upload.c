@@ -61,6 +61,7 @@ static const struct brw_tracked_state *gen4_atoms[] =
    &brw_vs_pull_constants,
    &brw_wm_pull_constants,
    &brw_renderbuffer_surfaces,
+   &brw_renderbuffer_read_surfaces,
    &brw_texture_surfaces,
    &brw_vs_binding_table,
    &brw_wm_binding_table,
@@ -130,6 +131,7 @@ static const struct brw_tracked_state *gen6_atoms[] =
    &brw_wm_pull_constants,
    &brw_wm_ubo_surfaces,
    &gen6_renderbuffer_surfaces,
+   &brw_renderbuffer_read_surfaces,
    &brw_texture_surfaces,
    &gen6_sol_surface,
    &brw_vs_binding_table,
@@ -214,6 +216,7 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &brw_wm_ubo_surfaces,
    &brw_wm_abo_surfaces,
    &gen6_renderbuffer_surfaces,
+   &brw_renderbuffer_read_surfaces,
    &brw_texture_surfaces,
    &brw_vs_binding_table,
    &brw_tcs_binding_table,
@@ -234,7 +237,7 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &gen7_ds_state,
    &gen7_gs_state,
    &gen7_sol_state,
-   &gen7_clip_state,
+   &gen6_clip_state,
    &gen7_sbe_state,
    &gen7_sf_state,
    &gen7_wm_state,
@@ -317,6 +320,7 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &brw_wm_ubo_surfaces,
    &brw_wm_abo_surfaces,
    &gen6_renderbuffer_surfaces,
+   &brw_renderbuffer_read_surfaces,
    &brw_texture_surfaces,
    &brw_vs_binding_table,
    &brw_tcs_binding_table,
@@ -651,6 +655,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_URB_SIZE),
    DEFINE_BIT(BRW_NEW_CC_STATE),
    DEFINE_BIT(BRW_NEW_BLORP),
+   DEFINE_BIT(BRW_NEW_VIEWPORT_COUNT),
    {0, 0, 0}
 };
 
@@ -668,7 +673,7 @@ brw_print_dirty_count(struct dirty_bit_map *bit_map)
 {
    for (int i = 0; bit_map[i].bit != 0; i++) {
       if (bit_map[i].count > 1) {
-         fprintf(stderr, "0x%016lx: %12d (%s)\n",
+         fprintf(stderr, "0x%016"PRIx64": %12d (%s)\n",
                  bit_map[i].bit, bit_map[i].count, bit_map[i].name);
       }
    }
@@ -678,26 +683,10 @@ static inline void
 brw_upload_tess_programs(struct brw_context *brw)
 {
    if (brw->tess_eval_program) {
-      uint64_t per_vertex_slots = brw->tess_eval_program->Base.InputsRead;
-      uint32_t per_patch_slots =
-         brw->tess_eval_program->Base.PatchInputsRead;
-
-      /* The TCS may have additional outputs which aren't read by the
-       * TES (possibly for cross-thread communication).  These need to
-       * be stored in the Patch URB Entry as well.
-       */
-      if (brw->tess_ctrl_program) {
-         per_vertex_slots |= brw->tess_ctrl_program->Base.OutputsWritten;
-         per_patch_slots |=
-            brw->tess_ctrl_program->Base.PatchOutputsWritten;
-      }
-
-      brw_upload_tcs_prog(brw, per_vertex_slots, per_patch_slots);
-      brw_upload_tes_prog(brw, per_vertex_slots, per_patch_slots);
+      brw_upload_tcs_prog(brw);
+      brw_upload_tes_prog(brw);
    } else {
-      brw->tcs.prog_data = NULL;
       brw->tcs.base.prog_data = NULL;
-      brw->tes.prog_data = NULL;
       brw->tes.base.prog_data = NULL;
    }
 }
@@ -706,6 +695,8 @@ static inline void
 brw_upload_programs(struct brw_context *brw,
                     enum brw_pipeline pipeline)
 {
+   struct gl_context *ctx = &brw->ctx;
+
    if (pipeline == BRW_RENDER_PIPELINE) {
       brw_upload_vs_prog(brw);
       brw_upload_tess_programs(brw);
@@ -720,17 +711,28 @@ brw_upload_programs(struct brw_context *brw,
        */
       GLbitfield64 old_slots = brw->vue_map_geom_out.slots_valid;
       bool old_separate = brw->vue_map_geom_out.separate;
+      struct brw_vue_prog_data *vue_prog_data;
       if (brw->geometry_program)
-         brw->vue_map_geom_out = brw->gs.prog_data->base.vue_map;
+         vue_prog_data = brw_vue_prog_data(brw->gs.base.prog_data);
       else if (brw->tess_eval_program)
-         brw->vue_map_geom_out = brw->tes.prog_data->base.vue_map;
+         vue_prog_data = brw_vue_prog_data(brw->tes.base.prog_data);
       else
-         brw->vue_map_geom_out = brw->vs.prog_data->base.vue_map;
+         vue_prog_data = brw_vue_prog_data(brw->vs.base.prog_data);
+
+      brw->vue_map_geom_out = vue_prog_data->vue_map;
 
       /* If the layout has changed, signal BRW_NEW_VUE_MAP_GEOM_OUT. */
       if (old_slots != brw->vue_map_geom_out.slots_valid ||
           old_separate != brw->vue_map_geom_out.separate)
          brw->ctx.NewDriverState |= BRW_NEW_VUE_MAP_GEOM_OUT;
+
+      if ((old_slots ^ brw->vue_map_geom_out.slots_valid) &
+          VARYING_BIT_VIEWPORT) {
+         ctx->NewDriverState |= BRW_NEW_VIEWPORT_COUNT;
+         brw->clip.viewport_count =
+            (brw->vue_map_geom_out.slots_valid & VARYING_BIT_VIEWPORT) ?
+            ctx->Const.MaxViewports : 1;
+      }
 
       if (brw->gen < 6) {
          brw_setup_vue_interpolation(brw);

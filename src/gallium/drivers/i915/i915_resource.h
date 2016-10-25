@@ -129,4 +129,10 @@ struct pipe_resource *
 i915_buffer_create(struct pipe_screen *screen,
 		   const struct pipe_resource *template);
 
+void
+i915_buffer_subdata(struct pipe_context *rm_ctx,
+                    struct pipe_resource *resource,
+                    unsigned usage, unsigned offset,
+                    unsigned size, const void *data);
+
 #endif /* I915_RESOURCE_H */

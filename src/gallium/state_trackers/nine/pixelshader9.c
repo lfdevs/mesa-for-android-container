@@ -59,6 +59,7 @@ NinePixelShader9_ctor( struct NinePixelShader9 *This,
     info.sampler_ps1xtypes = 0x0;
     info.fog_enable = 0;
     info.projected = 0;
+    info.process_vertices = false;
 
     hr = nine_translate_shader(device, &info);
     if (FAILED(hr))
@@ -162,6 +163,7 @@ NinePixelShader9_GetVariant( struct NinePixelShader9 *This )
         info.fog_mode = device->state.rs[D3DRS_FOGTABLEMODE];
         info.force_color_in_centroid = key >> 34 & 1;
         info.projected = (key >> 48) & 0xffff;
+        info.process_vertices = false;
 
         hr = nine_translate_shader(This->base.device, &info);
         if (FAILED(hr))

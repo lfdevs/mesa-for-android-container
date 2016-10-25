@@ -525,7 +525,7 @@ dri_flush(__DRIcontext *cPriv,
 
       fence = swap_fences_pop_front(drawable);
       if (fence) {
-         (void) screen->fence_finish(screen, fence, PIPE_TIMEOUT_INFINITE);
+         (void) screen->fence_finish(screen, NULL, fence, PIPE_TIMEOUT_INFINITE);
          screen->fence_reference(screen, &fence, NULL);
       }
 

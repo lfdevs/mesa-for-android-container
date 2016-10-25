@@ -111,6 +111,8 @@ static void print_export_comment(uint32_t num, enum shader_t type)
 		case 0:  name = "gl_FragColor"; break;
 		}
 		break;
+	case SHADER_COMPUTE:
+		unreachable("not reached");
 	}
 	/* if we had a symbol table here, we could look
 	 * up the name of the varying..

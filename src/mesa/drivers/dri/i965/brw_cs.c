@@ -35,7 +35,7 @@
 #include "compiler/glsl/ir_uniform.h"
 
 static void
-assign_cs_binding_table_offsets(const struct brw_device_info *devinfo,
+assign_cs_binding_table_offsets(const struct gen_device_info *devinfo,
                                 const struct gl_shader_program *shader_prog,
                                 const struct gl_program *prog,
                                 struct brw_cs_prog_data *prog_data)
@@ -57,6 +57,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
                     struct brw_compute_program *cp,
                     struct brw_cs_prog_key *key)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    const GLuint *program;
    void *mem_ctx = ralloc_context(NULL);
@@ -84,7 +85,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
       prog_data.base.total_shared = prog->Comp.SharedSize;
    }
 
-   assign_cs_binding_table_offsets(brw->intelScreen->devinfo, prog,
+   assign_cs_binding_table_offsets(devinfo, prog,
                                    &cp->program.Base, &prog_data);
 
    /* Allocate the references to the uniforms that will end up in the
@@ -124,7 +125,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
       st_index = brw_get_shader_time_index(brw, prog, &cp->program.Base, ST_CS);
 
    char *error_str;
-   program = brw_compile_cs(brw->intelScreen->compiler, brw, mem_ctx,
+   program = brw_compile_cs(brw->screen->compiler, brw, mem_ctx,
                             key, &prog_data, cp->program.Base.nir,
                             st_index, &program_size, &error_str);
    if (program == NULL) {
@@ -148,7 +149,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
       }
    }
 
-   const unsigned subslices = MAX2(brw->intelScreen->subslice_total, 1);
+   const unsigned subslices = MAX2(brw->screen->subslice_total, 1);
 
    /* WaCSScratchSize:hsw
     *
@@ -166,7 +167,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
     * number of threads per subslice.
     */
    const unsigned scratch_ids_per_subslice =
-      brw->is_haswell ? 16 * 8 : brw->max_cs_threads;
+      brw->is_haswell ? 16 * 8 : devinfo->max_cs_threads;
 
    brw_alloc_stage_scratch(brw, &brw->cs.base,
                            prog_data.base.total_scratch,
@@ -179,7 +180,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
                     key, sizeof(*key),
                     program, program_size,
                     &prog_data, sizeof(prog_data),
-                    &brw->cs.base.prog_offset, &brw->cs.prog_data);
+                    &brw->cs.base.prog_offset, &brw->cs.base.prog_data);
    ralloc_free(mem_ctx);
 
    return true;
@@ -198,8 +199,7 @@ brw_cs_populate_key(struct brw_context *brw, struct brw_cs_prog_key *key)
    memset(key, 0, sizeof(*key));
 
    /* _NEW_TEXTURE */
-   brw_populate_sampler_prog_key_data(ctx, prog, brw->cs.base.sampler_count,
-                                      &key->tex);
+   brw_populate_sampler_prog_key_data(ctx, prog, &key->tex);
 
    /* The unique compute program ID */
    key->program_string_id = cp->id;
@@ -221,13 +221,14 @@ brw_upload_cs_prog(struct brw_context *brw)
       return;
 
    brw->cs.base.sampler_count =
-      _mesa_fls(ctx->ComputeProgram._Current->Base.SamplersUsed);
+      util_last_bit(ctx->ComputeProgram._Current->Base.SamplersUsed);
 
    brw_cs_populate_key(brw, &key);
 
    if (!brw_search_cache(&brw->cache, BRW_CACHE_CS_PROG,
                          &key, sizeof(key),
-                         &brw->cs.base.prog_offset, &brw->cs.prog_data)) {
+                         &brw->cs.base.prog_offset,
+                         &brw->cs.base.prog_data)) {
       bool success =
          brw_codegen_cs_prog(brw,
                              ctx->Shader.CurrentProgram[MESA_SHADER_COMPUTE],
@@ -235,7 +236,6 @@ brw_upload_cs_prog(struct brw_context *brw)
       (void) success;
       assert(success);
    }
-   brw->cs.base.prog_data = &brw->cs.prog_data->base;
 }
 
 
@@ -256,12 +256,12 @@ brw_cs_precompile(struct gl_context *ctx,
    brw_setup_tex_for_precompile(brw, &key.tex, prog);
 
    uint32_t old_prog_offset = brw->cs.base.prog_offset;
-   struct brw_cs_prog_data *old_prog_data = brw->cs.prog_data;
+   struct brw_stage_prog_data *old_prog_data = brw->cs.base.prog_data;
 
    bool success = brw_codegen_cs_prog(brw, shader_prog, bcp, &key);
 
    brw->cs.base.prog_offset = old_prog_offset;
-   brw->cs.prog_data = old_prog_data;
+   brw->cs.base.prog_data = old_prog_data;
 
    return success;
 }

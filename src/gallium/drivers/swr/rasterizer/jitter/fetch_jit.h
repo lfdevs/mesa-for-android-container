@@ -80,11 +80,13 @@ enum ComponentEnable
 
 enum ComponentControl
 {
-    NoStore     = 0,
-    StoreSrc    = 1,
-    Store0      = 2,
-    Store1Fp    = 3,
-    Store1Int   = 4,
+    NoStore         = 0,
+    StoreSrc        = 1,
+    Store0          = 2,
+    Store1Fp        = 3,
+    Store1Int       = 4,
+    StoreVertexId   = 5,
+    StoreInstanceId = 6
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -97,17 +99,11 @@ struct FETCH_COMPILE_STATE
     SWR_FORMAT indexType;
     uint32_t cutIndex{ 0xffffffff };
 
-    bool                InstanceIdEnable;
-    uint32_t            InstanceIdElementOffset;
-    uint32_t            InstanceIdComponentNumber;
-    bool                VertexIdEnable;
-    uint32_t            VertexIdElementOffset;
-    uint32_t            VertexIdComponentNumber;
-
     // Options that effect the JIT'd code
-    bool bDisableVGATHER;           // if enabled, FetchJit will generate loads/shuffles instead of VGATHERs
-    bool bDisableIndexOOBCheck;     // if enabled, FetchJit will exclude index OOB check
-    bool bEnableCutIndex{ false };  // compares indices with the cut index and returns a cut mask
+    bool bDisableVGATHER;                   // If enabled, FetchJit will generate loads/shuffles instead of VGATHERs
+    bool bDisableIndexOOBCheck;             // If enabled, FetchJit will exclude index OOB check
+    bool bEnableCutIndex{ false };          // Compares indices with the cut index and returns a cut mask
+    bool bVertexIDOffsetEnable{ false };    // Offset vertexID by StartVertex for non-indexed draws or BaseVertex for indexed draws
 
     FETCH_COMPILE_STATE(bool disableVGATHER = false, bool diableIndexOOBCheck = false):
         bDisableVGATHER(disableVGATHER), bDisableIndexOOBCheck(diableIndexOOBCheck){ };
@@ -120,19 +116,7 @@ struct FETCH_COMPILE_STATE
         if (bDisableIndexOOBCheck != other.bDisableIndexOOBCheck) return false;
         if (bEnableCutIndex != other.bEnableCutIndex) return false;
         if (cutIndex != other.cutIndex) return false;
-
-        if (InstanceIdEnable != other.InstanceIdEnable) return false;
-        if (InstanceIdEnable)
-        {
-            if (InstanceIdComponentNumber != other.InstanceIdComponentNumber) return false;
-            if (InstanceIdElementOffset != other.InstanceIdElementOffset) return false;
-        }
-        if (VertexIdEnable != other.VertexIdEnable) return false;
-        if (VertexIdEnable)
-        {
-            if (VertexIdComponentNumber != other.VertexIdComponentNumber) return false;
-            if (VertexIdElementOffset != other.VertexIdElementOffset) return false;
-        }
+        if (bVertexIDOffsetEnable != other.bVertexIDOffsetEnable) return false;
 
         for(uint32_t i = 0; i < numAttribs; ++i)
         {

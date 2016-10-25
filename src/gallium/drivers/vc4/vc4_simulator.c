@@ -32,6 +32,8 @@
 #include "vc4_simulator_validate.h"
 #include "simpenrose/simpenrose.h"
 
+static mtx_t exec_mutex = _MTX_INITIALIZER_NP;
+
 /* A marker placed just after each BO, then checked after rendering to make
  * sure it's still there.
  */
@@ -74,11 +76,11 @@ drm_gem_cma_create(struct drm_device *dev, size_t size)
 }
 
 static int
-vc4_simulator_pin_bos(struct drm_device *dev, struct vc4_exec_info *exec)
+vc4_simulator_pin_bos(struct drm_device *dev, struct vc4_job *job,
+                      struct vc4_exec_info *exec)
 {
         struct drm_vc4_submit_cl *args = exec->args;
-        struct vc4_context *vc4 = dev->vc4;
-        struct vc4_bo **bos = vc4->bo_pointers.base;
+        struct vc4_bo **bos = job->bo_pointers.base;
 
         exec->bo_count = args->bo_handle_count;
         exec->bo = calloc(exec->bo_count, sizeof(void *));
@@ -219,7 +221,8 @@ vc4_dump_to_file(struct vc4_exec_info *exec)
 }
 
 int
-vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
+vc4_simulator_flush(struct vc4_context *vc4,
+                    struct drm_vc4_submit_cl *args, struct vc4_job *job)
 {
         struct vc4_screen *screen = vc4->screen;
         struct vc4_surface *csurf = vc4_surface(vc4->framebuffer.cbufs[0]);
@@ -256,7 +259,7 @@ vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
 
         exec.args = args;
 
-        ret = vc4_simulator_pin_bos(dev, &exec);
+        ret = vc4_simulator_pin_bos(dev, job, &exec);
         if (ret)
                 return ret;
 
@@ -317,12 +320,27 @@ vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
         return 0;
 }
 
+static void *sim_mem_base = NULL;
+static int sim_mem_refcount = 0;
+static ssize_t sim_mem_size = 256 * 1024 * 1024;
+
 void
 vc4_simulator_init(struct vc4_screen *screen)
 {
-        screen->simulator_mem_size = 256 * 1024 * 1024;
-        screen->simulator_mem_base = ralloc_size(screen,
-                                                 screen->simulator_mem_size);
+        mtx_lock(&exec_mutex);
+        if (sim_mem_refcount++) {
+                screen->simulator_mem_size = sim_mem_size;
+                screen->simulator_mem_base = sim_mem_base;
+                mtx_unlock(&exec_mutex);
+                return;
+        }
+
+        sim_mem_base = calloc(sim_mem_size, 1);
+        if (!sim_mem_base)
+                abort();
+
+        screen->simulator_mem_size = sim_mem_size;
+        screen->simulator_mem_base = sim_mem_base;
 
         /* We supply our own memory so that we can have more aperture
          * available (256MB instead of simpenrose's default 64MB).
@@ -338,6 +356,19 @@ vc4_simulator_init(struct vc4_screen *screen)
          * flush), so it had better be big.
          */
         simpenrose_supply_overflow_mem(0, OVERFLOW_SIZE);
+
+        mtx_unlock(&exec_mutex);
+}
+
+void
+vc4_simulator_destroy(struct vc4_screen *screen)
+{
+        mtx_lock(&exec_mutex);
+        if (!--sim_mem_refcount) {
+                free(sim_mem_base);
+                sim_mem_base = NULL;
+        }
+        mtx_unlock(&exec_mutex);
 }
 
 #endif /* USE_VC4_SIMULATOR */

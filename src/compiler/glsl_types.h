@@ -47,6 +47,9 @@ _mesa_glsl_release_types(void);
 #endif
 
 enum glsl_base_type {
+   /* Note: GLSL_TYPE_UINT, GLSL_TYPE_INT, and GLSL_TYPE_FLOAT must be 0, 1,
+    * and 2 so that they will fit in the 2 bits of glsl_type::sampled_type.
+    */
    GLSL_TYPE_UINT = 0,
    GLSL_TYPE_INT,
    GLSL_TYPE_FLOAT,
@@ -64,6 +67,11 @@ enum glsl_base_type {
    GLSL_TYPE_ERROR
 };
 
+static inline bool glsl_base_type_is_64bit(enum glsl_base_type type)
+{
+   return type == GLSL_TYPE_DOUBLE;
+}
+
 enum glsl_sampler_dim {
    GLSL_SAMPLER_DIM_1D = 0,
    GLSL_SAMPLER_DIM_2D,
@@ -72,7 +80,8 @@ enum glsl_sampler_dim {
    GLSL_SAMPLER_DIM_RECT,
    GLSL_SAMPLER_DIM_BUF,
    GLSL_SAMPLER_DIM_EXTERNAL,
-   GLSL_SAMPLER_DIM_MS
+   GLSL_SAMPLER_DIM_MS,
+   GLSL_SAMPLER_DIM_SUBPASS, /* for vulkan input attachments */
 };
 
 enum glsl_interface_packing {
@@ -119,7 +128,7 @@ struct glsl_type {
    GLenum gl_type;
    glsl_base_type base_type;
 
-   unsigned sampler_dimensionality:3; /**< \see glsl_sampler_dim */
+   unsigned sampler_dimensionality:4; /**< \see glsl_sampler_dim */
    unsigned sampler_shadow:1;
    unsigned sampler_array:1;
    unsigned sampled_type:2;    /**< Type of data returned using this
@@ -490,11 +499,19 @@ struct glsl_type {
    }
 
    /**
-    * Query whether a double takes two slots.
+    * Query whether a 64-bit type takes two slots.
     */
-   bool is_dual_slot_double() const
+   bool is_dual_slot() const
    {
-      return base_type == GLSL_TYPE_DOUBLE && vector_elements > 2;
+      return is_64bit() && vector_elements > 2;
+   }
+
+   /**
+    * Query whether or not a type is 64-bit
+    */
+   bool is_64bit() const
+   {
+      return glsl_base_type_is_64bit(base_type);
    }
 
    /**
@@ -744,6 +761,14 @@ struct glsl_type {
     * same struct is defined in a block which has a location set on it.
     */
    bool record_compare(const glsl_type *b, bool match_locations = true) const;
+
+   /**
+    * Get the type interface packing.
+    */
+   enum glsl_interface_packing get_interface_packing() const
+   {
+      return (enum glsl_interface_packing)interface_packing;
+   }
 
 private:
 

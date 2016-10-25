@@ -118,9 +118,10 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libfreedreno_la_LIBADD =
-am__objects_1 = freedreno_context.lo freedreno_draw.lo \
-	freedreno_fence.lo freedreno_gmem.lo freedreno_program.lo \
-	freedreno_query.lo freedreno_query_hw.lo freedreno_query_sw.lo \
+am__objects_1 = freedreno_batch.lo freedreno_batch_cache.lo \
+	freedreno_context.lo freedreno_draw.lo freedreno_fence.lo \
+	freedreno_gmem.lo freedreno_program.lo freedreno_query.lo \
+	freedreno_query_hw.lo freedreno_query_sw.lo \
 	freedreno_resource.lo freedreno_screen.lo freedreno_state.lo \
 	freedreno_surface.lo freedreno_texture.lo freedreno_util.lo
 am__dirstamp = $(am__leading_dot)dirstamp
@@ -348,11 +349,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -448,6 +448,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -483,6 +485,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -549,6 +552,10 @@ C_SOURCES := \
 	adreno_common.xml.h \
 	adreno_pm4.xml.h \
 	disasm.h \
+	freedreno_batch.c \
+	freedreno_batch.h \
+	freedreno_batch_cache.c \
+	freedreno_batch_cache.h \
 	freedreno_context.c \
 	freedreno_context.h \
 	freedreno_draw.c \
@@ -966,6 +973,8 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_batch.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_batch_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_fence.Plo@am__quote@

@@ -153,7 +153,7 @@ st_context_validate(struct st_context *st,
                     struct st_framebuffer *stread)
 {
     if (stdraw && stdraw->stamp != st->draw_stamp) {
-       st->dirty.st |= ST_NEW_FRAMEBUFFER;
+       st->dirty |= ST_NEW_FRAMEBUFFER;
        _mesa_resize_framebuffer(st->ctx, &stdraw->Base,
                                 stdraw->Base.Width,
                                 stdraw->Base.Height);
@@ -162,7 +162,7 @@ st_context_validate(struct st_context *st,
 
     if (stread && stread->stamp != st->read_stamp) {
        if (stread != stdraw) {
-          st->dirty.st |= ST_NEW_FRAMEBUFFER;
+          st->dirty |= ST_NEW_FRAMEBUFFER;
           _mesa_resize_framebuffer(st->ctx, &stread->Base,
                                    stread->Base.Width,
                                    stread->Base.Height);
@@ -654,7 +654,6 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    default:
       *error = ST_CONTEXT_ERROR_BAD_API;
       return NULL;
-      break;
    }
 
    if (attribs->flags & ST_CONTEXT_FLAG_ROBUST_ACCESS)
@@ -682,15 +681,17 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
 
       st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_DEBUG_BIT;
 
-      st_enable_debug_output(st, TRUE);
+      st_update_debug_callback(st);
    }
 
    if (attribs->flags & ST_CONTEXT_FLAG_FORWARD_COMPATIBLE)
       st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
    if (attribs->flags & ST_CONTEXT_FLAG_ROBUST_ACCESS)
       st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT_ARB;
-   if (attribs->flags & ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED)
+   if (attribs->flags & ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED) {
       st->ctx->Const.ResetStrategy = GL_LOSE_CONTEXT_ON_RESET_ARB;
+      st_install_device_reset_callback(st);
+   }
 
    /* need to perform version check */
    if (attribs->major > 1 || attribs->minor > 0) {
@@ -802,12 +803,6 @@ st_api_make_current(struct st_api *stapi, struct st_context_iface *stctxi,
    return ret;
 }
 
-static st_proc_t
-st_api_get_proc_address(struct st_api *stapi, const char *procname)
-{
-   return (st_proc_t) _glapi_get_proc_address(procname);
-}
-
 static void
 st_api_destroy(struct st_api *stapi)
 {
@@ -852,6 +847,7 @@ st_manager_get_egl_image_surface(struct st_context *st, void *eglimg)
       return NULL;
 
    u_surface_default_template(&surf_tmpl, stimg.texture);
+   surf_tmpl.format = stimg.format;
    surf_tmpl.u.tex.level = stimg.level;
    surf_tmpl.u.tex.first_layer = stimg.layer;
    surf_tmpl.u.tex.last_layer = stimg.layer;
@@ -958,20 +954,19 @@ st_api_query_versions(struct st_api *stapi, struct st_manager *sm,
 }
 
 static const struct st_api st_gl_api = {
-   "Mesa " PACKAGE_VERSION,
-   ST_API_OPENGL,
-   ST_PROFILE_DEFAULT_MASK |
-   ST_PROFILE_OPENGL_CORE_MASK |
-   ST_PROFILE_OPENGL_ES1_MASK |
-   ST_PROFILE_OPENGL_ES2_MASK |
-   0,
-   ST_API_FEATURE_MS_VISUALS_MASK,
-   st_api_destroy,
-   st_api_query_versions,
-   st_api_get_proc_address,
-   st_api_create_context,
-   st_api_make_current,
-   st_api_get_current,
+   .name = "Mesa " PACKAGE_VERSION,
+   .api = ST_API_OPENGL,
+   .profile_mask = ST_PROFILE_DEFAULT_MASK |
+                   ST_PROFILE_OPENGL_CORE_MASK |
+                   ST_PROFILE_OPENGL_ES1_MASK |
+                   ST_PROFILE_OPENGL_ES2_MASK |
+                   0,
+   .feature_mask = ST_API_FEATURE_MS_VISUALS_MASK,
+   .destroy = st_api_destroy,
+   .query_versions = st_api_query_versions,
+   .create_context = st_api_create_context,
+   .make_current = st_api_make_current,
+   .get_current = st_api_get_current,
 };
 
 struct st_api *

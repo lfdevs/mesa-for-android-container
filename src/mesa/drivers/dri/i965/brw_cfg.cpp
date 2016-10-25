@@ -177,9 +177,10 @@ cfg_t::cfg_t(exec_list *instructions)
       /* set_next_block wants the post-incremented ip */
       ip++;
 
+      inst->exec_node::remove();
+
       switch (inst->opcode) {
       case BRW_OPCODE_IF:
-         inst->exec_node::remove();
          cur->instructions.push_tail(inst);
 
 	 /* Push our information onto a stack so we can recover from
@@ -202,7 +203,6 @@ cfg_t::cfg_t(exec_list *instructions)
 	 break;
 
       case BRW_OPCODE_ELSE:
-         inst->exec_node::remove();
          cur->instructions.push_tail(inst);
 
          cur_else = cur;
@@ -226,7 +226,6 @@ cfg_t::cfg_t(exec_list *instructions)
             set_next_block(&cur, cur_endif, ip - 1);
          }
 
-         inst->exec_node::remove();
          cur->instructions.push_tail(inst);
 
          if (cur_else) {
@@ -267,12 +266,10 @@ cfg_t::cfg_t(exec_list *instructions)
             set_next_block(&cur, cur_do, ip - 1);
          }
 
-         inst->exec_node::remove();
          cur->instructions.push_tail(inst);
 	 break;
 
       case BRW_OPCODE_CONTINUE:
-         inst->exec_node::remove();
          cur->instructions.push_tail(inst);
 
          assert(cur_do != NULL);
@@ -286,7 +283,6 @@ cfg_t::cfg_t(exec_list *instructions)
 	 break;
 
       case BRW_OPCODE_BREAK:
-         inst->exec_node::remove();
          cur->instructions.push_tail(inst);
 
          assert(cur_while != NULL);
@@ -300,7 +296,6 @@ cfg_t::cfg_t(exec_list *instructions)
 	 break;
 
       case BRW_OPCODE_WHILE:
-         inst->exec_node::remove();
          cur->instructions.push_tail(inst);
 
          assert(cur_do != NULL && cur_while != NULL);
@@ -317,7 +312,6 @@ cfg_t::cfg_t(exec_list *instructions)
 	 break;
 
       default:
-         inst->exec_node::remove();
          cur->instructions.push_tail(inst);
 	 break;
       }

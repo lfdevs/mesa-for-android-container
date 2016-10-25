@@ -44,7 +44,7 @@
 
 static void brw_clip_line_alloc_regs( struct brw_clip_compile *c )
 {
-   const struct brw_device_info *devinfo = c->func.devinfo;
+   const struct gen_device_info *devinfo = c->func.devinfo;
    GLuint i = 0,j;
 
    /* Register usage is static, precompute here:

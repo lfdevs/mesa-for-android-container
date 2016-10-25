@@ -265,6 +265,8 @@ wayland_drm_init(struct wl_display *display, char *device_name,
 	struct wl_drm *drm;
 
 	drm = malloc(sizeof *drm);
+	if (!drm)
+		return NULL;
 
 	drm->display = display;
 	drm->device_name = strdup(device_name);

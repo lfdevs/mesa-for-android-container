@@ -329,7 +329,7 @@ void radeonTexUpdateParameters(struct gl_context *ctx, GLuint unit)
 
 static void radeonTexParameter( struct gl_context *ctx,
 				struct gl_texture_object *texObj,
-				GLenum pname, const GLfloat *params )
+				GLenum pname )
 {
    radeonTexObj* t = radeon_tex_obj(texObj);
 

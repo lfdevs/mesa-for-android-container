@@ -57,6 +57,7 @@ enum operation
    OP_MAD,
    OP_FMA,
    OP_SAD, // abs(src0 - src1) + src2
+   OP_SHLADD,
    OP_ABS,
    OP_NEG,
    OP_NOT,
@@ -412,6 +413,8 @@ enum ImgFormat
    FMT_R16_SNORM,
    FMT_R8_SNORM,
 
+   FMT_BGRA8,
+
    IMG_FORMAT_COUNT,
 };
 
@@ -461,6 +464,7 @@ enum SVSemantic
    SV_BASEVERTEX,
    SV_BASEINSTANCE,
    SV_DRAWID,
+   SV_WORK_DIM,
    SV_UNDEFINED,
    SV_LAST
 };
@@ -831,6 +835,10 @@ public:
    bool isActionEqual(const Instruction *) const;
    bool isResultEqual(const Instruction *) const;
 
+   // check whether the defs interfere with srcs and defs of another instruction
+   bool canCommuteDefDef(const Instruction *) const;
+   bool canCommuteDefSrc(const Instruction *) const;
+
    void print() const;
 
    inline CmpInstruction *asCmp();
@@ -966,6 +974,7 @@ public:
       uint8_t components;
       uint8_t bits[4];
       ImgType type;
+      bool bgra;
    };
 
    static const struct ImgFormatDesc formatTable[IMG_FORMAT_COUNT];

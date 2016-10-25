@@ -161,7 +161,7 @@ nir_variable_create(nir_shader *shader, nir_variable_mode mode,
 
    if ((mode == nir_var_shader_in && shader->stage != MESA_SHADER_VERTEX) ||
        (mode == nir_var_shader_out && shader->stage != MESA_SHADER_FRAGMENT))
-      var->data.interpolation = INTERP_QUALIFIER_SMOOTH;
+      var->data.interpolation = INTERP_MODE_SMOOTH;
 
    if (mode == nir_var_shader_in || mode == nir_var_uniform)
       var->data.read_only = true;
@@ -534,6 +534,22 @@ nir_tex_instr_create(nir_shader *shader, unsigned num_srcs)
    instr->sampler = NULL;
 
    return instr;
+}
+
+void
+nir_tex_instr_remove_src(nir_tex_instr *tex, unsigned src_idx)
+{
+   assert(src_idx < tex->num_srcs);
+
+   /* First rewrite the source to NIR_SRC_INIT */
+   nir_instr_rewrite_src(&tex->instr, &tex->src[src_idx].src, NIR_SRC_INIT);
+
+   /* Now, move all of the other sources down */
+   for (unsigned i = src_idx + 1; i < tex->num_srcs; i++) {
+      tex->src[i-1].src_type = tex->src[i].src_type;
+      nir_instr_move_src(&tex->instr, &tex->src[i-1].src, &tex->src[i].src);
+   }
+   tex->num_srcs--;
 }
 
 nir_phi_instr *
@@ -1630,10 +1646,10 @@ nir_block_cf_tree_next(nir_block *block)
    case nir_cf_node_if: {
       /* Are we at the end of the if? Go to the beginning of the else */
       nir_if *if_stmt = nir_cf_node_as_if(parent);
-      if (&block->cf_node == nir_if_last_then_node(if_stmt))
-         return nir_cf_node_as_block(nir_if_first_else_node(if_stmt));
+      if (block == nir_if_last_then_block(if_stmt))
+         return nir_if_first_else_block(if_stmt);
 
-      assert(&block->cf_node == nir_if_last_else_node(if_stmt));
+      assert(block == nir_if_last_else_block(if_stmt));
       /* fall through */
    }
 
@@ -1666,10 +1682,10 @@ nir_block_cf_tree_prev(nir_block *block)
    case nir_cf_node_if: {
       /* Are we at the beginning of the else? Go to the end of the if */
       nir_if *if_stmt = nir_cf_node_as_if(parent);
-      if (&block->cf_node == nir_if_first_else_node(if_stmt))
-         return nir_cf_node_as_block(nir_if_last_then_node(if_stmt));
+      if (block == nir_if_first_else_block(if_stmt))
+         return nir_if_last_then_block(if_stmt);
 
-      assert(&block->cf_node == nir_if_first_then_node(if_stmt));
+      assert(block == nir_if_first_then_block(if_stmt));
       /* fall through */
    }
 
@@ -1694,12 +1710,12 @@ nir_block *nir_cf_node_cf_tree_first(nir_cf_node *node)
 
    case nir_cf_node_if: {
       nir_if *if_stmt = nir_cf_node_as_if(node);
-      return nir_cf_node_as_block(nir_if_first_then_node(if_stmt));
+      return nir_if_first_then_block(if_stmt);
    }
 
    case nir_cf_node_loop: {
       nir_loop *loop = nir_cf_node_as_loop(node);
-      return nir_cf_node_as_block(nir_loop_first_cf_node(loop));
+      return nir_loop_first_block(loop);
    }
 
    case nir_cf_node_block: {
@@ -1721,12 +1737,12 @@ nir_block *nir_cf_node_cf_tree_last(nir_cf_node *node)
 
    case nir_cf_node_if: {
       nir_if *if_stmt = nir_cf_node_as_if(node);
-      return nir_cf_node_as_block(nir_if_last_else_node(if_stmt));
+      return nir_if_last_else_block(if_stmt);
    }
 
    case nir_cf_node_loop: {
       nir_loop *loop = nir_cf_node_as_loop(node);
-      return nir_cf_node_as_block(nir_loop_last_cf_node(loop));
+      return nir_loop_last_block(loop);
    }
 
    case nir_cf_node_block: {

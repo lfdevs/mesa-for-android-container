@@ -485,6 +485,7 @@ no_lpr:
 
 static boolean
 llvmpipe_resource_get_handle(struct pipe_screen *screen,
+                             struct pipe_context *ctx,
                             struct pipe_resource *pt,
                             struct winsys_handle *whandle,
                              unsigned usage)
@@ -542,14 +543,14 @@ llvmpipe_transfer_map( struct pipe_context *pipe,
       }
    }
 
-   /* Check if we're mapping the current constant buffer */
+   /* Check if we're mapping a current constant buffer */
    if ((usage & PIPE_TRANSFER_WRITE) &&
        (resource->bind & PIPE_BIND_CONSTANT_BUFFER)) {
       unsigned i;
       for (i = 0; i < ARRAY_SIZE(llvmpipe->constants[PIPE_SHADER_FRAGMENT]); ++i) {
          if (resource == llvmpipe->constants[PIPE_SHADER_FRAGMENT][i].buffer) {
             /* constants may have changed */
-            llvmpipe->dirty |= LP_NEW_CONSTANTS;
+            llvmpipe->dirty |= LP_NEW_FS_CONSTANTS;
             break;
          }
       }
@@ -640,13 +641,6 @@ llvmpipe_is_resource_referenced( struct pipe_context *pipe,
                                  unsigned level)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
-
-   /*
-    * XXX checking only resources with the right bind flags
-    * is unsafe since with opengl state tracker we can end up
-    * with resources bound to places they weren't supposed to be
-    * (buffers bound as sampler views is one possibility here).
-    */
    if (!(presource->bind & (PIPE_BIND_DEPTH_STENCIL |
                             PIPE_BIND_RENDER_TARGET |
                             PIPE_BIND_SAMPLER_VIEW)))
@@ -687,6 +681,7 @@ llvmpipe_get_format_alignment( enum pipe_format format )
 
 /**
  * Create buffer which wraps user-space data.
+ * XXX unreachable.
  */
 struct pipe_resource *
 llvmpipe_user_buffer_create(struct pipe_screen *screen,
@@ -822,5 +817,6 @@ llvmpipe_init_context_resource_funcs(struct pipe_context *pipe)
    pipe->transfer_unmap = llvmpipe_transfer_unmap;
 
    pipe->transfer_flush_region = u_default_transfer_flush_region;
-   pipe->transfer_inline_write = u_default_transfer_inline_write;
+   pipe->buffer_subdata = u_default_buffer_subdata;
+   pipe->texture_subdata = u_default_texture_subdata;
 }

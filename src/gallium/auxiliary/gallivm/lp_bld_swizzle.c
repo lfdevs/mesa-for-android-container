@@ -467,7 +467,7 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
       LLVMValueRef res;
       struct lp_type type4;
       unsigned cond = 0;
-      unsigned chan;
+      int chan;
       int shift;
 
       /*

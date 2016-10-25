@@ -40,7 +40,8 @@ pack_header = """%(license)s
  * This file has been generated, do not hand edit.
  */
 
-#pragma once
+#ifndef %(guard)s
+#define %(guard)s
 
 #include <stdio.h>
 #include <stdint.h>
@@ -485,11 +486,20 @@ class Parser(object):
         self.structs = {}
         self.registers = {}
 
+    def gen_prefix(self, name):
+        if name[0] == "_":
+            return 'GEN%s%s' % (self.gen, name)
+        else:
+            return 'GEN%s_%s' % (self.gen, name)
+
+    def gen_guard(self):
+        return self.gen_prefix("PACK_H")
+
     def start_element(self, name, attrs):
         if name == "genxml":
             self.platform = attrs["name"]
             self.gen = attrs["gen"].replace('.', '')
-            print(pack_header % {'license': license, 'platform': self.platform})
+            print(pack_header % {'license': license, 'platform': self.platform, 'guard': self.gen_guard()})
         elif name in ("instruction", "struct", "register"):
             if name == "instruction":
                 self.instruction = safe_name(attrs["name"])
@@ -548,12 +558,8 @@ class Parser(object):
         elif name  == "enum":
             self.emit_enum()
             self.enum = None
-
-    def gen_prefix(self, name):
-        if name[0] == "_":
-            return 'GEN%s%s' % (self.gen, name)
-        else:
-            return 'GEN%s_%s' % (self.gen, name)
+        elif name == "genxml":
+            print('#endif /* %s */' % self.gen_guard())
 
     def emit_template_struct(self, name, group):
         print("struct %s {" % self.gen_prefix(name))

@@ -135,7 +135,7 @@ get_input_source(struct combiner_state *rc, int source)
 /* Get the RC input mapping for the specified texture_env_combine
  * operand, possibly inverted or biased. */
 #define INVERT 0x1
-#define HALF_BIAS 0x2
+#define NORMALIZE 0x2
 
 static uint32_t
 get_input_mapping(struct combiner_state *rc, int operand, int flags)
@@ -148,12 +148,12 @@ get_input_mapping(struct combiner_state *rc, int operand, int flags)
 		map |= RC_IN_USAGE(ALPHA);
 
 	if (is_negative_operand(operand) == !(flags & INVERT))
-		map |= flags & HALF_BIAS ?
-			RC_IN_MAPPING(HALF_BIAS_NEGATE) :
+		map |= flags & NORMALIZE ?
+			RC_IN_MAPPING(EXPAND_NEGATE) :
 			RC_IN_MAPPING(UNSIGNED_INVERT);
 	else
-		map |= flags & HALF_BIAS ?
-			RC_IN_MAPPING(HALF_BIAS_NORMAL) :
+		map |= flags & NORMALIZE ?
+			RC_IN_MAPPING(EXPAND_NORMAL) :
 			RC_IN_MAPPING(UNSIGNED_IDENTITY);
 
 	return map;
@@ -270,12 +270,24 @@ setup_combiner(struct combiner_state *rc)
 
 	case GL_DOT3_RGB:
 	case GL_DOT3_RGBA:
-		INPUT_ARG(rc, A, 0, HALF_BIAS);
-		INPUT_ARG(rc, B, 1, HALF_BIAS);
+		INPUT_ARG(rc, A, 0, NORMALIZE);
+		INPUT_ARG(rc, B, 1, NORMALIZE);
 
-		rc->out = RC_OUT_DOT_AB | RC_OUT_SCALE_4;
+		rc->out = RC_OUT_DOT_AB;
+		break;
 
-		assert(!rc->logscale);
+	case GL_DOT3_RGB_EXT:
+	case GL_DOT3_RGBA_EXT:
+		INPUT_ARG(rc, A, 0, NORMALIZE);
+		INPUT_ARG(rc, B, 1, NORMALIZE);
+
+		rc->out = RC_OUT_DOT_AB;
+
+		/* The EXT version of the DOT3 extension does not support the
+		 * scale factor, but the ARB version (and the version in
+		 * OpenGL 1.3) does.
+		 */
+		rc->logscale = 0;
 		break;
 
 	default:
@@ -307,7 +319,7 @@ nv10_get_general_combiner(struct gl_context *ctx, int i,
 	if (ctx->Texture.Unit[i]._Current) {
 		INIT_COMBINER(RGB, ctx, &rc_c, i);
 
-		if (rc_c.mode == GL_DOT3_RGBA)
+		if (rc_c.mode == GL_DOT3_RGBA || rc_c.mode == GL_DOT3_RGBA_EXT)
 			rc_a = rc_c;
 		else
 			INIT_COMBINER(A, ctx, &rc_a, i);

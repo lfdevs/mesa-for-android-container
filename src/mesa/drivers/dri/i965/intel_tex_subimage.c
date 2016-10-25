@@ -199,10 +199,13 @@ intelTexSubImage(struct gl_context * ctx,
                  const GLvoid * pixels,
                  const struct gl_pixelstore_attrib *packing)
 {
-   struct intel_texture_image *intelImage = intel_texture_image(texImage);
+   struct intel_mipmap_tree *mt = intel_texture_image(texImage)->mt;
    bool ok;
 
-   bool tex_busy = intelImage->mt && drm_intel_bo_busy(intelImage->mt->bo);
+   bool tex_busy = mt && drm_intel_bo_busy(mt->bo);
+
+   if (mt && mt->format == MESA_FORMAT_S_UINT8)
+      mt->r8stencil_needs_update = true;
 
    DBG("%s mesa_format %s target %s format %s type %s level %d %dx%dx%d\n",
        __func__, _mesa_get_format_name(texImage->TexFormat),

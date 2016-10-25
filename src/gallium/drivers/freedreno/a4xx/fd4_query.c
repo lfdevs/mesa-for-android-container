@@ -48,10 +48,10 @@ struct fd_rb_samp_ctrs {
  */
 
 static struct fd_hw_sample *
-occlusion_get_sample(struct fd_context *ctx, struct fd_ringbuffer *ring)
+occlusion_get_sample(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
 	struct fd_hw_sample *samp =
-			fd_hw_sample_init(ctx, sizeof(struct fd_rb_samp_ctrs));
+			fd_hw_sample_init(batch, sizeof(struct fd_rb_samp_ctrs));
 
 	/* low bits of sample addr should be zero (since they are control
 	 * flags in RB_SAMPLE_COUNT_CONTROL):
@@ -73,7 +73,7 @@ occlusion_get_sample(struct fd_context *ctx, struct fd_ringbuffer *ring)
 	OUT_RING(ring, 1);             /* NumInstances */
 	OUT_RING(ring, 0);             /* NumIndices */
 
-	fd_event_write(ctx, ring, ZPASS_DONE);
+	fd_event_write(batch, ring, ZPASS_DONE);
 
 	return samp;
 }
@@ -117,24 +117,24 @@ time_elapsed_enable(struct fd_context *ctx, struct fd_ringbuffer *ring)
 	 * just hard coded.  If we start exposing more countables than we
 	 * have counters, we will need to be more clever.
 	 */
-	fd_wfi(ctx, ring);
+	fd_wfi(ctx->batch, ring);
 	OUT_PKT0(ring, REG_A4XX_CP_PERFCTR_CP_SEL_0, 1);
 	OUT_RING(ring, CP_ALWAYS_COUNT);
 }
 
 static struct fd_hw_sample *
-time_elapsed_get_sample(struct fd_context *ctx, struct fd_ringbuffer *ring)
+time_elapsed_get_sample(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
-	struct fd_hw_sample *samp = fd_hw_sample_init(ctx, sizeof(uint64_t));
+	struct fd_hw_sample *samp = fd_hw_sample_init(batch, sizeof(uint64_t));
 
 	/* use unused part of vsc_size_mem as scratch space, to avoid
 	 * extra allocation:
 	 */
-	struct fd_bo *scratch_bo = fd4_context(ctx)->vsc_size_mem;
+	struct fd_bo *scratch_bo = fd4_context(batch->ctx)->vsc_size_mem;
 	const int sample_off = 128;
 	const int addr_off = sample_off + 8;
 
-	debug_assert(ctx->screen->max_freq > 0);
+	debug_assert(batch->ctx->screen->max_freq > 0);
 
 	/* Basic issue is that we need to read counter value to a relative
 	 * destination (with per-tile offset) rather than absolute dest
@@ -161,7 +161,7 @@ time_elapsed_get_sample(struct fd_context *ctx, struct fd_ringbuffer *ring)
 	 * shot, but that's really just polishing a turd..
 	 */
 
-	fd_wfi(ctx, ring);
+	fd_wfi(batch, ring);
 
 	/* copy sample counter _LO and _HI to scratch: */
 	OUT_PKT3(ring, CP_REG_TO_MEM, 2);
@@ -224,6 +224,19 @@ time_elapsed_accumulate_result(struct fd_context *ctx,
 	result->u64 += n * 1000000000 / ctx->screen->max_freq;
 }
 
+static void
+timestamp_accumulate_result(struct fd_context *ctx,
+		const void *start, const void *end,
+		union pipe_query_result *result)
+{
+	/* just return the value from fist tile: */
+	if (result->u64 != 0)
+		return;
+	uint64_t n = *(uint64_t *)start;
+	/* max_freq is in Hz, convert cycle count to ns: */
+	result->u64 = n * 1000000000 / ctx->screen->max_freq;
+}
+
 static const struct fd_hw_sample_provider occlusion_counter = {
 		.query_type = PIPE_QUERY_OCCLUSION_COUNTER,
 		.active = FD_STAGE_DRAW,
@@ -240,10 +253,24 @@ static const struct fd_hw_sample_provider occlusion_predicate = {
 
 static const struct fd_hw_sample_provider time_elapsed = {
 		.query_type = PIPE_QUERY_TIME_ELAPSED,
-		.active = FD_STAGE_DRAW,
+		.active = FD_STAGE_DRAW | FD_STAGE_CLEAR,
 		.enable = time_elapsed_enable,
 		.get_sample = time_elapsed_get_sample,
 		.accumulate_result = time_elapsed_accumulate_result,
+};
+
+/* NOTE: timestamp query isn't going to give terribly sensible results
+ * on a tiler.  But it is needed by qapitrace profile heatmap.  If you
+ * add in a binning pass, the results get even more non-sensical.  So
+ * we just return the timestamp on the first tile and hope that is
+ * kind of good enough.
+ */
+static const struct fd_hw_sample_provider timestamp = {
+		.query_type = PIPE_QUERY_TIMESTAMP,
+		.active = FD_STAGE_ALL,
+		.enable = time_elapsed_enable,
+		.get_sample = time_elapsed_get_sample,
+		.accumulate_result = timestamp_accumulate_result,
 };
 
 void fd4_query_context_init(struct pipe_context *pctx)
@@ -251,4 +278,5 @@ void fd4_query_context_init(struct pipe_context *pctx)
 	fd_hw_query_register_provider(pctx, &occlusion_counter);
 	fd_hw_query_register_provider(pctx, &occlusion_predicate);
 	fd_hw_query_register_provider(pctx, &time_elapsed);
+	fd_hw_query_register_provider(pctx, &timestamp);
 }

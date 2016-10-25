@@ -82,10 +82,27 @@ void virgl_init_screen_resource_functions(struct pipe_screen *screen)
     screen->resource_destroy = u_resource_destroy_vtbl;
 }
 
+static void virgl_buffer_subdata(struct pipe_context *pipe,
+                                 struct pipe_resource *resource,
+                                 unsigned usage, unsigned offset,
+                                 unsigned size, const void *data)
+{
+   struct pipe_box box;
+
+   if (offset == 0 && size == resource->width0)
+      usage |= PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
+   else
+      usage |= PIPE_TRANSFER_DISCARD_RANGE;
+
+   u_box_1d(offset, size, &box);
+   virgl_transfer_inline_write(pipe, resource, 0, usage, &box, data, 0, 0);
+}
+
 void virgl_init_context_resource_functions(struct pipe_context *ctx)
 {
     ctx->transfer_map = u_transfer_map_vtbl;
     ctx->transfer_flush_region = u_transfer_flush_region_vtbl;
     ctx->transfer_unmap = u_transfer_unmap_vtbl;
-    ctx->transfer_inline_write = u_transfer_inline_write_vtbl;
+    ctx->buffer_subdata = virgl_buffer_subdata;
+    ctx->texture_subdata = u_default_texture_subdata;
 }

@@ -21,27 +21,31 @@
  *  IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef ISL_GEN4_H
+#define ISL_GEN4_H
 
-#include "isl_priv.h"
+#include "isl.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 bool
-gen4_choose_msaa_layout(const struct isl_device *dev,
-                        const struct isl_surf_init_info *info,
-                        enum isl_tiling tiling,
-                        enum isl_msaa_layout *msaa_layout);
+isl_gen4_choose_msaa_layout(const struct isl_device *dev,
+                            const struct isl_surf_init_info *info,
+                            enum isl_tiling tiling,
+                            enum isl_msaa_layout *msaa_layout);
 
 void
-gen4_choose_image_alignment_el(const struct isl_device *dev,
-                               const struct isl_surf_init_info *restrict info,
-                               enum isl_tiling tiling,
-                               enum isl_msaa_layout msaa_layout,
-                               struct isl_extent3d *image_align_el);
+isl_gen4_choose_image_alignment_el(const struct isl_device *dev,
+                                   const struct isl_surf_init_info *restrict info,
+                                   enum isl_tiling tiling,
+                                   enum isl_dim_layout dim_layout,
+                                   enum isl_msaa_layout msaa_layout,
+                                   struct isl_extent3d *image_align_el);
 
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* ISL_GEN4_H */

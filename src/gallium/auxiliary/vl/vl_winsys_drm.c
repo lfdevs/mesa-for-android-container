@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include <assert.h>
+#include <fcntl.h>
 
 #include "pipe/p_screen.h"
 #include "pipe-loader/pipe_loader.h"
@@ -47,7 +48,7 @@ vl_drm_screen_create(int fd)
    if (!vscreen)
       return NULL;
 
-   if (fd < 0 || (new_fd = dup(fd)) < 0)
+   if (fd < 0 || (new_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3)) < 0)
       goto free_screen;
 
    if (pipe_loader_drm_probe_fd(&vscreen->dev, new_fd))

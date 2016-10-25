@@ -24,7 +24,7 @@
 #include <assert.h>
 
 #include "isl.h"
-#include "brw_device_info.h"
+#include "common/gen_device_info.h"
 
 struct surface_format_info {
    bool exists;
@@ -218,8 +218,8 @@ static const struct surface_format_info format_info[] = {
    SF(50, 50,  x,  x,  x,  x,  x,  x,  x,    x,   P8A8_UNORM_PALETTE1)
    SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   A1B5G5R5_UNORM)
    SF(90, 90,  x,  x, 90,  x,  x,  x,  x,    x,   A4B4G4R4_UNORM)
-   SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8A8_UINT)
-   SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8A8_SINT)
+   SF(90,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8A8_UINT)
+   SF(90,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8A8_SINT)
    SF( Y,  Y,  x, 45,  Y,  Y,  Y,  x,  x,    x,   R8_UNORM)
    SF( Y,  Y,  x,  x,  Y, 60,  Y,  x,  x,    x,   R8_SNORM)
    SF( Y,  x,  x,  x,  Y,  x,  Y,  x,  x,    x,   R8_SINT)
@@ -237,10 +237,10 @@ static const struct surface_format_info format_info[] = {
    SF(45, 45,  x,  x,  x,  x,  x,  x,  x,    x,   P4A4_UNORM_PALETTE1)
    SF(45, 45,  x,  x,  x,  x,  x,  x,  x,    x,   A4P4_UNORM_PALETTE1)
    SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   Y8_UNORM)
-   SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8_UINT)
-   SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8_SINT)
-   SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   I8_UINT)
-   SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   I8_SINT)
+   SF(90,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8_UINT)
+   SF(90,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8_SINT)
+   SF(90,  x,  x,  x,  x,  x,  x,  x,  x,    x,   I8_UINT)
+   SF(90,  x,  x,  x,  x,  x,  x,  x,  x,    x,   I8_SINT)
    SF(45, 45,  x,  x,  x,  x,  x,  x,  x,    x,   DXT1_RGB_SRGB)
    SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   R1_UNORM)
    SF( Y,  Y,  x,  Y,  Y,  x,  x,  x, 60,    x,   YCRCB_NORMAL)
@@ -261,8 +261,8 @@ static const struct surface_format_info format_info[] = {
    SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   DXT1_RGB)
 /* smpl filt shad CK  RT  AB  VB  SO  color ccs_e */
    SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   FXT1)
-   SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R8G8B8_UNORM)
-   SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R8G8B8_SNORM)
+   SF(75, 75,  x,  x,  x,  x,  Y,  x,  x,    x,   R8G8B8_UNORM)
+   SF(75, 75,  x,  x,  x,  x,  Y,  x,  x,    x,   R8G8B8_SNORM)
    SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R8G8B8_SSCALED)
    SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R8G8B8_USCALED)
    SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R64G64B64A64_FLOAT)
@@ -270,8 +270,8 @@ static const struct surface_format_info format_info[] = {
    SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   BC4_SNORM)
    SF( Y,  Y,  x,  x,  x,  x,  x,  x,  x,    x,   BC5_SNORM)
    SF(50, 50,  x,  x,  x,  x, 60,  x,  x,    x,   R16G16B16_FLOAT)
-   SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R16G16B16_UNORM)
-   SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R16G16B16_SNORM)
+   SF(75, 75,  x,  x,  x,  x,  Y,  x,  x,    x,   R16G16B16_UNORM)
+   SF(75, 75,  x,  x,  x,  x,  Y,  x,  x,    x,   R16G16B16_SNORM)
    SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R16G16B16_SSCALED)
    SF( x,  x,  x,  x,  x,  x,  Y,  x,  x,    x,   R16G16B16_USCALED)
    SF(70, 70,  x,  x,  x,  x,  x,  x,  x,    x,   BC6H_SF16)
@@ -279,7 +279,7 @@ static const struct surface_format_info format_info[] = {
    SF(70, 70,  x,  x,  x,  x,  x,  x,  x,    x,   BC7_UNORM_SRGB)
    SF(70, 70,  x,  x,  x,  x,  x,  x,  x,    x,   BC6H_UF16)
    SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   PLANAR_420_8)
-   SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   R8G8B8_UNORM_SRGB)
+   SF(75, 75,  x,  x,  x,  x,  x,  x,  x,    x,   R8G8B8_UNORM_SRGB)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ETC1_RGB8)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ETC2_RGB8)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   EAC_R11)
@@ -287,8 +287,8 @@ static const struct surface_format_info format_info[] = {
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   EAC_SIGNED_R11)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   EAC_SIGNED_RG11)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ETC2_SRGB8)
-   SF( x,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R16G16B16_UINT)
-   SF( x,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R16G16B16_SINT)
+   SF(90,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R16G16B16_UINT)
+   SF(90,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R16G16B16_SINT)
    SF( x,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R32_SFIXED)
    SF( x,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R10G10B10A2_SNORM)
    SF( x,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R10G10B10A2_USCALED)
@@ -305,8 +305,8 @@ static const struct surface_format_info format_info[] = {
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ETC2_SRGB8_PTA)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ETC2_EAC_RGBA8)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ETC2_EAC_SRGB8_A8)
-   SF( x,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R8G8B8_UINT)
-   SF( x,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R8G8B8_SINT)
+   SF(90,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R8G8B8_UINT)
+   SF(90,  x,  x,  x,  x,  x, 75,  x,  x,    x,   R8G8B8_SINT)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ASTC_LDR_2D_4X4_FLT16)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ASTC_LDR_2D_5X4_FLT16)
    SF(80, 80,  x,  x,  x,  x,  x,  x,  x,    x,   ASTC_LDR_2D_5X5_FLT16)
@@ -340,13 +340,13 @@ static const struct surface_format_info format_info[] = {
 #undef Y
 
 static unsigned
-format_gen(const struct brw_device_info *devinfo)
+format_gen(const struct gen_device_info *devinfo)
 {
    return devinfo->gen * 10 + (devinfo->is_g4x || devinfo->is_haswell) * 5;
 }
 
 bool
-isl_format_supports_rendering(const struct brw_device_info *devinfo,
+isl_format_supports_rendering(const struct gen_device_info *devinfo,
                               enum isl_format format)
 {
    if (!format_info[format].exists)
@@ -356,7 +356,7 @@ isl_format_supports_rendering(const struct brw_device_info *devinfo,
 }
 
 bool
-isl_format_supports_alpha_blending(const struct brw_device_info *devinfo,
+isl_format_supports_alpha_blending(const struct gen_device_info *devinfo,
                                    enum isl_format format)
 {
    if (!format_info[format].exists)
@@ -366,27 +366,45 @@ isl_format_supports_alpha_blending(const struct brw_device_info *devinfo,
 }
 
 bool
-isl_format_supports_sampling(const struct brw_device_info *devinfo,
+isl_format_supports_sampling(const struct gen_device_info *devinfo,
                              enum isl_format format)
 {
    if (!format_info[format].exists)
       return false;
 
+   if (devinfo->is_baytrail) {
+      const struct isl_format_layout *fmtl = isl_format_get_layout(format);
+      /* Support for ETC1 and ETC2 exists on Bay Trail even though big-core
+       * GPUs didn't get it until Broadwell.
+       */
+      if (fmtl->txc == ISL_TXC_ETC1 || fmtl->txc == ISL_TXC_ETC2)
+         return true;
+   }
+
    return format_gen(devinfo) >= format_info[format].sampling;
 }
 
 bool
-isl_format_supports_filtering(const struct brw_device_info *devinfo,
+isl_format_supports_filtering(const struct gen_device_info *devinfo,
                               enum isl_format format)
 {
    if (!format_info[format].exists)
       return false;
 
+   if (devinfo->is_baytrail) {
+      const struct isl_format_layout *fmtl = isl_format_get_layout(format);
+      /* Support for ETC1 and ETC2 exists on Bay Trail even though big-core
+       * GPUs didn't get it until Broadwell.
+       */
+      if (fmtl->txc == ISL_TXC_ETC1 || fmtl->txc == ISL_TXC_ETC2)
+         return true;
+   }
+
    return format_gen(devinfo) >= format_info[format].filtering;
 }
 
 bool
-isl_format_supports_vertex_fetch(const struct brw_device_info *devinfo,
+isl_format_supports_vertex_fetch(const struct gen_device_info *devinfo,
                                  enum isl_format format)
 {
    if (!format_info[format].exists)
@@ -402,13 +420,48 @@ isl_format_supports_vertex_fetch(const struct brw_device_info *devinfo,
 }
 
 bool
-isl_format_supports_lossless_compression(const struct brw_device_info *devinfo,
+isl_format_supports_lossless_compression(const struct gen_device_info *devinfo,
                                          enum isl_format format)
 {
    if (!format_info[format].exists)
       return false;
 
    return format_gen(devinfo) >= format_info[format].lossless_compression;
+}
+
+bool
+isl_format_supports_multisampling(const struct gen_device_info *devinfo,
+                                  enum isl_format format)
+{
+   /* From the Sandybridge PRM, Volume 4 Part 1 p72, SURFACE_STATE, Surface
+    * Format:
+    *
+    *    If Number of Multisamples is set to a value other than
+    *    MULTISAMPLECOUNT_1, this field cannot be set to the following
+    *    formats:
+    *
+    *       - any format with greater than 64 bits per element
+    *       - any compressed texture format (BC*)
+    *       - any YCRCB* format
+    *
+    * The restriction on the format's size is removed on Broadwell.  Also,
+    * there is an exception for HiZ which we treat as a compressed format and
+    * is allowed to be multisampled on Broadwell and earlier.
+    */
+   if (format == ISL_FORMAT_HIZ) {
+      /* On SKL+, HiZ is always single-sampled even when the primary surface
+       * is multisampled.  See also isl_surf_get_hiz_surf().
+       */
+      return devinfo->gen <= 8;
+   } else if (devinfo->gen < 8 && isl_format_get_layout(format)->bpb > 64) {
+      return false;
+   } else if (isl_format_is_compressed(format)) {
+      return false;
+   } else if (isl_format_is_yuv(format)) {
+      return false;
+   } else {
+      return true;
+   }
 }
 
 static inline bool
@@ -474,6 +527,30 @@ isl_format_get_num_channels(enum isl_format fmt)
           (fmtl->channels.a.bits > 0) +
           (fmtl->channels.l.bits > 0) +
           (fmtl->channels.i.bits > 0);
+}
+
+uint32_t
+isl_format_get_depth_format(enum isl_format fmt, bool has_stencil)
+{
+   switch (fmt) {
+   default:
+      unreachable("bad isl depth format");
+   case ISL_FORMAT_R32_FLOAT_X8X24_TYPELESS:
+      assert(has_stencil);
+      return 0; /* D32_FLOAT_S8X24_UINT */
+   case ISL_FORMAT_R32_FLOAT:
+      assert(!has_stencil);
+      return 1; /* D32_FLOAT */
+   case ISL_FORMAT_R24_UNORM_X8_TYPELESS:
+      if (has_stencil) {
+         return 2; /* D24_UNORM_S8_UINT */
+      } else {
+         return 3; /* D24_UNORM_X8_UINT */
+      }
+   case ISL_FORMAT_R16_UNORM:
+      assert(!has_stencil);
+      return 5; /* D16_UNORM */
+   }
 }
 
 enum isl_format

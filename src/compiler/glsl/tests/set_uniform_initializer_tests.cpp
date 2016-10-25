@@ -25,6 +25,7 @@
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "util/ralloc.h"
+#include "util/string_to_uint_map.h"
 #include "uniform_initializer_utils.h"
 
 namespace linker {
@@ -108,6 +109,7 @@ establish_uniform_storage(struct gl_shader_program *prog, unsigned num_storage,
 					       + type->components()));
    const unsigned red_zone_components = total_components - data_components;
 
+   prog->UniformHash = new string_to_uint_map;
    prog->UniformStorage = rzalloc_array(prog, struct gl_uniform_storage,
 					num_storage);
    prog->NumUniformStorage = num_storage;
@@ -127,6 +129,9 @@ establish_uniform_storage(struct gl_shader_program *prog, unsigned num_storage,
    fill_storage_array_with_sentinels(prog->UniformStorage[index_to_set].storage,
 				     data_components,
 				     red_zone_components);
+
+   prog->UniformHash->put(index_to_set,
+                          prog->UniformStorage[index_to_set].name);
 
    for (unsigned i = 0; i < num_storage; i++) {
       if (i == index_to_set)

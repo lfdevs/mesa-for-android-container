@@ -176,7 +176,7 @@
 //                         string.
 //
 // Integer types:
-//   TypeWithSize   - maps an integer to a int type.
+//   TypeWithSize   - maps an integer to an int type.
 //   Int32, UInt32, Int64, UInt64, TimeInMillis
 //                  - integers of known sizes.
 //   BiggestInt     - the biggest signed integer type.

@@ -22,7 +22,8 @@
 
 #include <sstream>
 
-#include "core/compiler.hpp"
+#include "tgsi/invocation.hpp"
+#include "core/error.hpp"
 
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_text.h"
@@ -47,7 +48,7 @@ namespace {
 
          if (!(ts >> offset)) {
             r_log = "invalid kernel start address";
-            throw compile_error();
+            throw build_error();
          }
 
          while (ts >> tok) {
@@ -71,7 +72,7 @@ namespace {
                args.push_back({ module::argument::sampler, 0 });
             else {
                r_log = "invalid kernel argument";
-               throw compile_error();
+               throw build_error();
             }
          }
 
@@ -85,7 +86,7 @@ namespace {
 
       if (!tgsi_text_translate(source, prog, ARRAY_SIZE(prog))) {
          r_log = "translate failed";
-         throw compile_error();
+         throw build_error();
       }
 
       unsigned sz = tgsi_num_tokens(prog) * sizeof(tgsi_token);
@@ -95,11 +96,11 @@ namespace {
 }
 
 module
-clover::compile_program_tgsi(const std::string &source, std::string &r_log) {
+clover::tgsi::compile_program(const std::string &source, std::string &r_log) {
    const size_t body_pos = source.find("COMP\n");
    if (body_pos == std::string::npos) {
       r_log = "invalid source";
-      throw compile_error();
+      throw build_error();
    }
 
    const char *body = &source[body_pos];
@@ -109,4 +110,11 @@ clover::compile_program_tgsi(const std::string &source, std::string &r_log) {
    read_body(body, m, r_log);
 
    return m;
+}
+
+module
+clover::tgsi::link_program(const std::vector<module> &modules)
+{
+   assert(modules.size() == 1 && "Not implemented");
+   return modules[0];
 }

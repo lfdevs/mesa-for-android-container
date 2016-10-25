@@ -89,7 +89,10 @@ struct swr_draw_context {
    swr_jit_texture texturesFS[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    swr_jit_sampler samplersFS[PIPE_MAX_SAMPLERS];
 
+   float userClipPlanes[PIPE_MAX_CLIP_PLANES][4];
+
    SWR_SURFACE_STATE renderTargets[SWR_NUM_ATTACHMENTS];
+   void *pStats;
 };
 
 /* gen_llvm_types FINI */
@@ -118,6 +121,7 @@ struct swr_context {
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
    struct pipe_scissor_state scissor;
+   SWR_RECT swr_scissor;
    struct pipe_sampler_view *
       sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
@@ -165,10 +169,13 @@ swr_context(struct pipe_context *pipe)
 }
 
 static INLINE void
-swr_update_draw_context(struct swr_context *ctx)
+swr_update_draw_context(struct swr_context *ctx,
+      struct swr_query_result *pqr = nullptr)
 {
    swr_draw_context *pDC =
       (swr_draw_context *)SwrGetPrivateContextState(ctx->swrContext);
+   if (pqr)
+      ctx->swrDC.pStats = pqr;
    memcpy(pDC, &ctx->swrDC, sizeof(swr_draw_context));
 }
 

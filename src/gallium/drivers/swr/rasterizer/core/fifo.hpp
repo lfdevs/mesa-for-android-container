@@ -55,13 +55,11 @@ struct QUEUE
         mHead = 0;
         mTail = 0;
         mBlocks.clear();
-        T* pNewBlock = (T*)arena.Alloc(sizeof(T)*mBlockSize);
+        T* pNewBlock = (T*)arena.AllocAligned(sizeof(T)*mBlockSize, KNOB_SIMD_WIDTH*4);
         mBlocks.push_back(pNewBlock);
         mCurBlock = pNewBlock;
         mCurBlockIdx = 0;
-
         mNumEntries = 0;
-        _ReadWriteBarrier();
         mLock = 0;
     }
 
@@ -106,7 +104,20 @@ struct QUEUE
     template <typename ArenaT>
     bool enqueue_try_nosync(ArenaT& arena, const T* entry)
     {
-        memcpy(&mCurBlock[mTail], entry, sizeof(T));
+        const float* pSrc = (const float*)entry;
+        float* pDst = (float*)&mCurBlock[mTail];
+
+        auto lambda = [&](int32_t i)
+        {
+            __m256 vSrc = _simd_load_ps(pSrc + i*KNOB_SIMD_WIDTH);
+            _simd_stream_ps(pDst + i*KNOB_SIMD_WIDTH, vSrc);
+        };
+            
+        const uint32_t numSimdLines = sizeof(T) / (KNOB_SIMD_WIDTH*4);
+        static_assert(numSimdLines * KNOB_SIMD_WIDTH * 4 == sizeof(T),
+            "FIFO element size should be multiple of SIMD width.");
+
+        UnrollerL<0, numSimdLines, 1>::step(lambda);
 
         mTail ++;
         if (mTail == mBlockSize)
@@ -117,7 +128,7 @@ struct QUEUE
             }
             else
             {
-                T* newBlock = (T*)arena.Alloc(sizeof(T)*mBlockSize);
+                T* newBlock = (T*)arena.AllocAligned(sizeof(T)*mBlockSize, KNOB_SIMD_WIDTH*4);
                 SWR_ASSERT(newBlock);
 
                 mBlocks.push_back(newBlock);

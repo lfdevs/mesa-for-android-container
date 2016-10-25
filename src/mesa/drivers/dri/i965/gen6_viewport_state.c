@@ -42,10 +42,13 @@ gen6_upload_clip_vp(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    struct brw_clipper_viewport *vp;
 
-   vp = brw_state_batch(brw, AUB_TRACE_CLIP_VP_STATE,
-                        sizeof(*vp) * ctx->Const.MaxViewports, 32, &brw->clip.vp_offset);
+   /* BRW_NEW_VIEWPORT_COUNT */
+   const unsigned viewport_count = brw->clip.viewport_count;
 
-   for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
+   vp = brw_state_batch(brw, AUB_TRACE_CLIP_VP_STATE,
+                        sizeof(*vp) * viewport_count, 32, &brw->clip.vp_offset);
+
+   for (unsigned i = 0; i < viewport_count; i++) {
       /* According to the "Vertex X,Y Clamping and Quantization" section of the
        * Strips and Fans documentation, objects must not have a screen-space
        * extents of over 8192 pixels, or they may be mis-rasterized.  The maximum
@@ -74,7 +77,8 @@ const struct brw_tracked_state gen6_clip_vp = {
    .dirty = {
       .mesa = _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP,
+             BRW_NEW_BLORP |
+             BRW_NEW_VIEWPORT_COUNT,
    },
    .emit = gen6_upload_clip_vp,
 };
@@ -87,10 +91,13 @@ gen6_upload_sf_vp(struct brw_context *brw)
    GLfloat y_scale, y_bias;
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
 
+   /* BRW_NEW_VIEWPORT_COUNT */
+   const unsigned viewport_count = brw->clip.viewport_count;
+
    sfv = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
-                         sizeof(*sfv) * ctx->Const.MaxViewports,
+                         sizeof(*sfv) * viewport_count,
                          32, &brw->sf.vp_offset);
-   memset(sfv, 0, sizeof(*sfv) * ctx->Const.MaxViewports);
+   memset(sfv, 0, sizeof(*sfv) * viewport_count);
 
    /* _NEW_BUFFERS */
    if (render_to_fbo) {
@@ -101,7 +108,7 @@ gen6_upload_sf_vp(struct brw_context *brw)
       y_bias = (float)_mesa_geometric_height(ctx->DrawBuffer);
    }
 
-   for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
+   for (unsigned i = 0; i < viewport_count; i++) {
       float scale[3], translate[3];
 
       /* _NEW_VIEWPORT */
@@ -123,7 +130,8 @@ const struct brw_tracked_state gen6_sf_vp = {
       .mesa = _NEW_BUFFERS |
               _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP,
+             BRW_NEW_BLORP |
+             BRW_NEW_VIEWPORT_COUNT,
    },
    .emit = gen6_upload_sf_vp,
 };

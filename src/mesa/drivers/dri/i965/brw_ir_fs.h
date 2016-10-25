@@ -49,15 +49,6 @@ public:
     */
    unsigned component_size(unsigned width) const;
 
-   /** Smear a channel of the reg to all channels. */
-   fs_reg &set_smear(unsigned subreg);
-
-   /**
-    * Offset in bytes from the start of the register.  Values up to a
-    * backend_reg::reg_offset unit are valid.
-    */
-   int subreg_offset;
-
    /** Register region horizontal stride */
    uint8_t stride;
 };
@@ -85,17 +76,13 @@ byte_offset(fs_reg reg, unsigned delta)
       break;
    case VGRF:
    case ATTR:
-   case UNIFORM: {
-      const unsigned reg_size = (reg.file == UNIFORM ? 4 : REG_SIZE);
-      const unsigned suboffset = reg.subreg_offset + delta;
-      reg.reg_offset += suboffset / reg_size;
-      reg.subreg_offset = suboffset % reg_size;
+   case UNIFORM:
+      reg.offset += delta;
       break;
-   }
    case MRF: {
-      const unsigned suboffset = reg.subreg_offset + delta;
+      const unsigned suboffset = reg.offset + delta;
       reg.nr += suboffset / REG_SIZE;
-      reg.subreg_offset = suboffset % REG_SIZE;
+      reg.offset = suboffset % REG_SIZE;
       break;
    }
    case ARF:
@@ -192,8 +179,23 @@ reg_space(const fs_reg &r)
 static inline unsigned
 reg_offset(const fs_reg &r)
 {
-   return ((r.file == VGRF || r.file == IMM ? 0 : r.nr) + r.reg_offset) *
-          (r.file == UNIFORM ? 4 : REG_SIZE) + r.subreg_offset;
+   return (r.file == VGRF || r.file == IMM ? 0 : r.nr) *
+          (r.file == UNIFORM ? 4 : REG_SIZE) + r.offset +
+          (r.file == ARF || r.file == FIXED_GRF ? r.subnr : 0);
+}
+
+/**
+ * Return the amount of padding in bytes left unused between individual
+ * components of register \p r due to a (horizontal) stride value greater than
+ * one, or zero if components are tightly packed in the register file.
+ */
+static inline unsigned
+reg_padding(const fs_reg &r)
+{
+   const unsigned stride = ((r.file != ARF && r.file != FIXED_GRF) ? r.stride :
+                            r.hstride == 0 ? 0 :
+                            1 << (r.hstride - 1));
+   return (MAX2(1, stride) - 1) * type_sz(r.type);
 }
 
 /**
@@ -221,6 +223,19 @@ regions_overlap(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
              !(reg_offset(r) + dr <= reg_offset(s) ||
                reg_offset(s) + ds <= reg_offset(r));
    }
+}
+
+/**
+ * Check that the register region given by r [r.offset, r.offset + dr[
+ * is fully contained inside the register region given by s
+ * [s.offset, s.offset + ds[.
+ */
+static inline bool
+region_contained_in(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
+{
+   return reg_space(r) == reg_space(s) &&
+          reg_offset(r) >= reg_offset(s) &&
+          reg_offset(r) + dr <= reg_offset(s) + ds;
 }
 
 /**
@@ -325,13 +340,12 @@ public:
    void resize_sources(uint8_t num_sources);
 
    bool equals(fs_inst *inst) const;
-   bool overwrites_reg(const fs_reg &reg) const;
    bool is_send_from_grf() const;
    bool is_partial_write() const;
    bool is_copy_payload(const brw::simple_allocator &grf_alloc) const;
    unsigned components_read(unsigned i) const;
-   int regs_read(int arg) const;
-   bool can_do_source_mods(const struct brw_device_info *devinfo);
+   unsigned size_read(int arg) const;
+   bool can_do_source_mods(const struct gen_device_info *devinfo);
    bool can_change_types() const;
    bool has_side_effects() const;
    bool has_source_and_destination_hazard() const;
@@ -340,7 +354,7 @@ public:
     * Return the subset of flag registers read by the instruction as a bitset
     * with byte granularity.
     */
-   unsigned flags_read(const brw_device_info *devinfo) const;
+   unsigned flags_read(const gen_device_info *devinfo) const;
 
    /**
     * Return the subset of flag registers updated by the instruction (either
@@ -415,6 +429,39 @@ set_saturate(bool saturate, fs_inst *inst)
 {
    inst->saturate = saturate;
    return inst;
+}
+
+/**
+ * Return the number of dataflow registers written by the instruction (either
+ * fully or partially) counted from 'floor(reg_offset(inst->dst) /
+ * register_size)'.  The somewhat arbitrary register size unit is 4B for the
+ * UNIFORM and IMM files and 32B for all other files.
+ */
+inline unsigned
+regs_written(const fs_inst *inst)
+{
+   assert(inst->dst.file != UNIFORM && inst->dst.file != IMM);
+   return DIV_ROUND_UP(reg_offset(inst->dst) % REG_SIZE +
+                       inst->size_written -
+                       MIN2(inst->size_written, reg_padding(inst->dst)),
+                       REG_SIZE);
+}
+
+/**
+ * Return the number of dataflow registers read by the instruction (either
+ * fully or partially) counted from 'floor(reg_offset(inst->src[i]) /
+ * register_size)'.  The somewhat arbitrary register size unit is 4B for the
+ * UNIFORM and IMM files and 32B for all other files.
+ */
+inline unsigned
+regs_read(const fs_inst *inst, unsigned i)
+{
+   const unsigned reg_size =
+      inst->src[i].file == UNIFORM || inst->src[i].file == IMM ? 4 : REG_SIZE;
+   return DIV_ROUND_UP(reg_offset(inst->src[i]) % reg_size +
+                       inst->size_read(i) -
+                       MIN2(inst->size_read(i), reg_padding(inst->src[i])),
+                       reg_size);
 }
 
 #endif

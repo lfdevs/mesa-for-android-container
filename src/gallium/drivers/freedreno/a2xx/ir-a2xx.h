@@ -158,7 +158,7 @@ static inline struct ir2_instruction *
 ir2_instr_create_vtx_fetch(struct ir2_cf *cf, int ci, int cis,
 		enum a2xx_sq_surfaceformat fmt, bool is_signed, int stride)
 {
-	struct ir2_instruction *instr = instr = ir2_instr_create(cf, IR2_FETCH);
+	struct ir2_instruction *instr = ir2_instr_create(cf, IR2_FETCH);
 	instr->fetch.opc = VTX_FETCH;
 	instr->fetch.const_idx = ci;
 	instr->fetch.const_idx_sel = cis;
@@ -170,7 +170,7 @@ ir2_instr_create_vtx_fetch(struct ir2_cf *cf, int ci, int cis,
 static inline struct ir2_instruction *
 ir2_instr_create_tex_fetch(struct ir2_cf *cf, int ci)
 {
-	struct ir2_instruction *instr = instr = ir2_instr_create(cf, IR2_FETCH);
+	struct ir2_instruction *instr = ir2_instr_create(cf, IR2_FETCH);
 	instr->fetch.opc = TEX_FETCH;
 	instr->fetch.const_idx = ci;
 	return instr;

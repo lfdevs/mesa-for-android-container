@@ -27,8 +27,9 @@ void
 vc4_emit_state(struct pipe_context *pctx)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
+        struct vc4_job *job = vc4->job;
 
-        struct vc4_cl_out *bcl = cl_start(&vc4->bcl);
+        struct vc4_cl_out *bcl = cl_start(&job->bcl);
         if (vc4->dirty & (VC4_DIRTY_SCISSOR | VC4_DIRTY_VIEWPORT |
                           VC4_DIRTY_RASTERIZER)) {
                 float *vpscale = vc4->viewport.scale;
@@ -50,8 +51,8 @@ vc4_emit_state(struct pipe_context *pctx)
                 if (!vc4->rasterizer->base.scissor) {
                         minx = MAX2(vp_minx, 0);
                         miny = MAX2(vp_miny, 0);
-                        maxx = MIN2(vp_maxx, vc4->draw_width);
-                        maxy = MIN2(vp_maxy, vc4->draw_height);
+                        maxx = MIN2(vp_maxx, job->draw_width);
+                        maxy = MIN2(vp_maxy, job->draw_height);
                 } else {
                         minx = MAX2(vp_minx, vc4->scissor.minx);
                         miny = MAX2(vp_miny, vc4->scissor.miny);
@@ -65,10 +66,10 @@ vc4_emit_state(struct pipe_context *pctx)
                 cl_u16(&bcl, maxx - minx);
                 cl_u16(&bcl, maxy - miny);
 
-                vc4->draw_min_x = MIN2(vc4->draw_min_x, minx);
-                vc4->draw_min_y = MIN2(vc4->draw_min_y, miny);
-                vc4->draw_max_x = MAX2(vc4->draw_max_x, maxx);
-                vc4->draw_max_y = MAX2(vc4->draw_max_y, maxy);
+                job->draw_min_x = MIN2(job->draw_min_x, minx);
+                job->draw_min_y = MIN2(job->draw_min_y, miny);
+                job->draw_max_x = MAX2(job->draw_max_x, maxx);
+                job->draw_max_y = MAX2(job->draw_max_y, maxy);
         }
 
         if (vc4->dirty & (VC4_DIRTY_RASTERIZER |
@@ -85,7 +86,7 @@ vc4_emit_state(struct pipe_context *pctx)
                  * was seeing bad rendering on glxgears -samples 4 even in
                  * that case.
                  */
-                if (vc4->msaa || vc4->prog.fs->disable_early_z)
+                if (job->msaa || vc4->prog.fs->disable_early_z)
                         ez_enable_mask_out &= ~VC4_CONFIG_BITS_EARLY_Z;
 
                 cl_u8(&bcl, VC4_PACKET_CONFIGURATION_BITS);
@@ -132,5 +133,5 @@ vc4_emit_state(struct pipe_context *pctx)
                        vc4->prog.fs->color_inputs : 0);
         }
 
-        cl_end(&vc4->bcl, bcl);
+        cl_end(&job->bcl, bcl);
 }

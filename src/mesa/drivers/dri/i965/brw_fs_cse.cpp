@@ -71,6 +71,7 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case BRW_OPCODE_PLN:
    case BRW_OPCODE_MAD:
    case BRW_OPCODE_LRP:
+   case FS_OPCODE_FB_READ_LOGICAL:
    case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
    case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL:
    case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7:
@@ -184,12 +185,13 @@ instructions_match(fs_inst *a, fs_inst *b, bool *negate)
           a->dst.type == b->dst.type &&
           a->offset == b->offset &&
           a->mlen == b->mlen &&
-          a->regs_written == b->regs_written &&
+          a->size_written == b->size_written &&
           a->base_mrf == b->base_mrf &&
           a->eot == b->eot &&
           a->header_size == b->header_size &&
           a->shadow_compare == b->shadow_compare &&
           a->pi_noperspective == b->pi_noperspective &&
+          a->target == b->target &&
           a->sources == b->sources &&
           operands_match(a, b, negate);
 }
@@ -197,8 +199,8 @@ instructions_match(fs_inst *a, fs_inst *b, bool *negate)
 static void
 create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
 {
-   int written = inst->regs_written;
-   int dst_width =
+   unsigned written = regs_written(inst);
+   unsigned dst_width =
       DIV_ROUND_UP(inst->dst.component_size(inst->exec_size), REG_SIZE);
    fs_inst *copy;
 
@@ -219,7 +221,7 @@ create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
       payload = ralloc_array(bld.shader->mem_ctx, fs_reg, sources);
       for (int i = 0; i < header_size; i++) {
          payload[i] = src;
-         src.reg_offset++;
+         src.offset += REG_SIZE;
       }
       for (int i = header_size; i < sources; i++) {
          payload[i] = src;
@@ -232,7 +234,7 @@ create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
       copy->force_writemask_all = inst->force_writemask_all;
       copy->src[0].negate = negate;
    }
-   assert(copy->regs_written == written);
+   assert(regs_written(copy) == written);
 }
 
 bool
@@ -282,7 +284,7 @@ fs_visitor::opt_cse_local(bblock_t *block)
             if (no_existing_temp && !entry->generator->dst.is_null()) {
                const fs_builder ibld = fs_builder(this, block, entry->generator)
                                        .at(block, entry->generator->next);
-               int written = entry->generator->regs_written;
+               int written = regs_written(entry->generator);
 
                entry->tmp = fs_reg(VGRF, alloc.allocate(written),
                                    entry->generator->dst.type);
@@ -294,7 +296,7 @@ fs_visitor::opt_cse_local(bblock_t *block)
 
             /* dest <- temp */
             if (!inst->dst.is_null()) {
-               assert(inst->regs_written == entry->generator->regs_written);
+               assert(inst->size_written == entry->generator->size_written);
                assert(inst->dst.type == entry->tmp.type);
                const fs_builder ibld(this, block, inst);
 
@@ -333,7 +335,9 @@ fs_visitor::opt_cse_local(bblock_t *block)
             /* Kill all AEB entries that use the destination we just
              * overwrote.
              */
-            if (inst->overwrites_reg(entry->generator->src[i])) {
+            if (regions_overlap(inst->dst, inst->size_written,
+                                entry->generator->src[i],
+                                entry->generator->size_read(i))) {
                entry->remove();
                ralloc_free(entry);
                break;

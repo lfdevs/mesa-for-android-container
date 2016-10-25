@@ -55,9 +55,6 @@ struct NineVolume9
     unsigned lock_count;
 
     struct pipe_context *pipe;
-
-    /* for [GS]etPrivateData/FreePrivateData */
-    struct util_hash_table *pdata;
 };
 static inline struct NineVolume9 *
 NineVolume9( void *data )
@@ -99,23 +96,6 @@ NineVolume9_UploadSelf( struct NineVolume9 *This,
 
 
 /*** Direct3D public ***/
-
-HRESULT NINE_WINAPI
-NineVolume9_SetPrivateData( struct NineVolume9 *This,
-                            REFGUID refguid,
-                            const void *pData,
-                            DWORD SizeOfData,
-                            DWORD Flags );
-
-HRESULT NINE_WINAPI
-NineVolume9_GetPrivateData( struct NineVolume9 *This,
-                            REFGUID refguid,
-                            void *pData,
-                            DWORD *pSizeOfData );
-
-HRESULT NINE_WINAPI
-NineVolume9_FreePrivateData( struct NineVolume9 *This,
-                             REFGUID refguid );
 
 HRESULT NINE_WINAPI
 NineVolume9_GetContainer( struct NineVolume9 *This,

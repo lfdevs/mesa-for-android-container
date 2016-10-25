@@ -142,9 +142,6 @@ NineTexture9_ctor( struct NineTexture9 *This,
 
     if (Usage & D3DUSAGE_DYNAMIC) {
         info->usage = PIPE_USAGE_DYNAMIC;
-        info->bind |=
-            PIPE_BIND_TRANSFER_READ |
-            PIPE_BIND_TRANSFER_WRITE;
     }
 
     if (Usage & D3DUSAGE_SOFTWAREPROCESSING)
@@ -247,6 +244,8 @@ NineTexture9_GetLevelDesc( struct NineTexture9 *This,
                            UINT Level,
                            D3DSURFACE_DESC *pDesc )
 {
+    DBG("This=%p Level=%d pDesc=%p\n", This, Level, pDesc);
+
     user_assert(Level <= This->base.base.info.last_level, D3DERR_INVALIDCALL);
     user_assert(Level == 0 || !(This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP),
                 D3DERR_INVALIDCALL);
@@ -261,6 +260,8 @@ NineTexture9_GetSurfaceLevel( struct NineTexture9 *This,
                               UINT Level,
                               IDirect3DSurface9 **ppSurfaceLevel )
 {
+    DBG("This=%p Level=%d ppSurfaceLevel=%p\n", This, Level, ppSurfaceLevel);
+
     user_assert(Level <= This->base.base.info.last_level, D3DERR_INVALIDCALL);
     user_assert(Level == 0 || !(This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP),
                 D3DERR_INVALIDCALL);
@@ -344,9 +345,9 @@ IDirect3DTexture9Vtbl NineTexture9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)NineResource9_SetPrivateData,
-    (void *)NineResource9_GetPrivateData,
-    (void *)NineResource9_FreePrivateData,
+    (void *)NineUnknown_SetPrivateData,
+    (void *)NineUnknown_GetPrivateData,
+    (void *)NineUnknown_FreePrivateData,
     (void *)NineResource9_SetPriority,
     (void *)NineResource9_GetPriority,
     (void *)NineBaseTexture9_PreLoad,

@@ -30,7 +30,7 @@ void LoadHotTile(
     UINT x, UINT y, uint32_t renderTargetArrayIndex,
     uint8_t *pDstHotTile);
 
-void StoreHotTile(
+void StoreHotTileToSurface(
     SWR_SURFACE_STATE *pDstSurface,
     SWR_FORMAT srcFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
@@ -69,7 +69,7 @@ swr_StoreHotTile(HANDLE hPrivateContext,
    swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
    SWR_SURFACE_STATE *pDstSurface = &pDC->renderTargets[renderTargetIndex];
 
-   StoreHotTile(pDstSurface, srcFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pSrcHotTile);
+   StoreHotTileToSurface(pDstSurface, srcFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pSrcHotTile);
 }
 
 INLINE void

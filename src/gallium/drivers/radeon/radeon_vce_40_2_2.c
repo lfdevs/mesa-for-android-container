@@ -59,11 +59,11 @@ static void task_info(struct rvce_encoder *enc, uint32_t op,
 	RVCE_BEGIN(0x00000002); // task info
 	if (op == 0x3) {
 		if (enc->task_info_idx) {
-			uint32_t offs = enc->cs->cdw - enc->task_info_idx + 3;
+			uint32_t offs = enc->cs->current.cdw - enc->task_info_idx + 3;
 			// Update offsetOfNextTaskInfo
-			enc->cs->buf[enc->task_info_idx] = offs;
+			enc->cs->current.buf[enc->task_info_idx] = offs;
 		}
-		enc->task_info_idx = enc->cs->cdw;
+		enc->task_info_idx = enc->cs->current.cdw;
 	}
 	RVCE_CS(0xffffffff); // offsetOfNextTaskInfo
 	RVCE_CS(op); // taskOperation
@@ -429,6 +429,10 @@ static void destroy(struct rvce_encoder *enc)
 
 	RVCE_BEGIN(0x02000001); // destroy
 	RVCE_END();
+}
+
+void radeon_vce_40_2_2_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_desc *pic)
+{
 }
 
 void radeon_vce_40_2_2_init(struct rvce_encoder *enc)

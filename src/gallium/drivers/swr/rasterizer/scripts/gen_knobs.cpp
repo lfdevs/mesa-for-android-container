@@ -37,8 +37,8 @@ GlobalKnobs g_GlobalKnobs;
 //========================================================
 GlobalKnobs::GlobalKnobs()
 {
+    InitKnob(ENABLE_ASSERT_DIALOGS);
     InitKnob(SINGLE_THREADED);
-    InitKnob(HYPERTHREADED_FE);
     InitKnob(DUMP_SHADER_IR);
     InitKnob(USE_GENERIC_STORETILE);
     InitKnob(FAST_CLEAR);
@@ -52,7 +52,7 @@ GlobalKnobs::GlobalKnobs()
     InitKnob(MAX_DRAWS_IN_FLIGHT);
     InitKnob(MAX_PRIMS_PER_DRAW);
     InitKnob(MAX_TESS_PRIMS_PER_DRAW);
-    InitKnob(BUCKETS_ENABLE_THREADVIZ);
+    InitKnob(DEBUG_OUTPUT_DIR);
     InitKnob(TOSS_DRAW);
     InitKnob(TOSS_QUEUE_FE);
     InitKnob(TOSS_FETCH);
@@ -73,10 +73,10 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
 
     if (optPerLinePrefix == nullptr) { optPerLinePrefix = ""; }
 
+    str << optPerLinePrefix << "KNOB_ENABLE_ASSERT_DIALOGS:      ";
+    str << (KNOB_ENABLE_ASSERT_DIALOGS ? "+\n" : "-\n");
     str << optPerLinePrefix << "KNOB_SINGLE_THREADED:            ";
     str << (KNOB_SINGLE_THREADED ? "+\n" : "-\n");
-    str << optPerLinePrefix << "KNOB_HYPERTHREADED_FE:           ";
-    str << (KNOB_HYPERTHREADED_FE ? "+\n" : "-\n");
     str << optPerLinePrefix << "KNOB_DUMP_SHADER_IR:             ";
     str << (KNOB_DUMP_SHADER_IR ? "+\n" : "-\n");
     str << optPerLinePrefix << "KNOB_USE_GENERIC_STORETILE:      ";
@@ -113,8 +113,8 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
     str << optPerLinePrefix << "KNOB_MAX_TESS_PRIMS_PER_DRAW:    ";
     str << std::hex << std::setw(11) << std::left << KNOB_MAX_TESS_PRIMS_PER_DRAW;
     str << std::dec << KNOB_MAX_TESS_PRIMS_PER_DRAW << "\n";
-    str << optPerLinePrefix << "KNOB_BUCKETS_ENABLE_THREADVIZ:   ";
-    str << (KNOB_BUCKETS_ENABLE_THREADVIZ ? "+\n" : "-\n");
+    str << optPerLinePrefix << "KNOB_DEBUG_OUTPUT_DIR:           ";
+    str << KNOB_DEBUG_OUTPUT_DIR << "\n";
     str << optPerLinePrefix << "KNOB_TOSS_DRAW:                  ";
     str << (KNOB_TOSS_DRAW ? "+\n" : "-\n");
     str << optPerLinePrefix << "KNOB_TOSS_QUEUE_FE:              ";

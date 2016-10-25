@@ -77,7 +77,7 @@ r300_buffer_transfer_map( struct pipe_context *context,
     struct pipe_transfer *transfer;
     uint8_t *map;
 
-    transfer = util_slab_alloc(&r300->pool_transfers);
+    transfer = slab_alloc(&r300->pool_transfers);
     transfer->resource = resource;
     transfer->level = level;
     transfer->usage = usage;
@@ -129,7 +129,7 @@ r300_buffer_transfer_map( struct pipe_context *context,
     map = rws->buffer_map(rbuf->buf, r300->cs, usage);
 
     if (!map) {
-        util_slab_free(&r300->pool_transfers, transfer);
+        slab_free(&r300->pool_transfers, transfer);
         return NULL;
     }
 
@@ -142,7 +142,7 @@ static void r300_buffer_transfer_unmap( struct pipe_context *pipe,
 {
     struct r300_context *r300 = r300_context(pipe);
 
-    util_slab_free(&r300->pool_transfers, transfer);
+    slab_free(&r300->pool_transfers, transfer);
 }
 
 static const struct u_resource_vtbl r300_buffer_vtbl =
@@ -152,7 +152,6 @@ static const struct u_resource_vtbl r300_buffer_vtbl =
    r300_buffer_transfer_map,           /* transfer_map */
    NULL,                               /* transfer_flush_region */
    r300_buffer_transfer_unmap,         /* transfer_unmap */
-   NULL   /* transfer_inline_write */
 };
 
 struct pipe_resource *r300_buffer_create(struct pipe_screen *screen,

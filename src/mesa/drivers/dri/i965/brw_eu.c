@@ -221,7 +221,7 @@ brw_set_default_compression_control(struct brw_codegen *p,
  * the currently selected channel enable group untouched.
  */
 void
-brw_inst_set_compression(const struct brw_device_info *devinfo,
+brw_inst_set_compression(const struct gen_device_info *devinfo,
                          brw_inst *inst, bool on)
 {
    if (devinfo->gen >= 6) {
@@ -253,7 +253,7 @@ brw_set_default_compression(struct brw_codegen *p, bool on)
  * [group, group + exec_size) to the instruction passed as argument.
  */
 void
-brw_inst_set_group(const struct brw_device_info *devinfo,
+brw_inst_set_group(const struct gen_device_info *devinfo,
                    brw_inst *inst, unsigned group)
 {
    if (devinfo->gen >= 7) {
@@ -318,7 +318,7 @@ void brw_pop_insn_state( struct brw_codegen *p )
 /***********************************************************************
  */
 void
-brw_init_codegen(const struct brw_device_info *devinfo,
+brw_init_codegen(const struct gen_device_info *devinfo,
                  struct brw_codegen *p, void *mem_ctx)
 {
    memset(p, 0, sizeof(*p));
@@ -366,7 +366,7 @@ const unsigned *brw_get_program( struct brw_codegen *p,
 }
 
 void
-brw_disassemble(const struct brw_device_info *devinfo,
+brw_disassemble(const struct gen_device_info *devinfo,
                 void *assembly, int start, int end, FILE *out)
 {
    bool dump_hex = (INTEL_DEBUG & DEBUG_HEX) != 0;
@@ -421,7 +421,7 @@ enum gen {
 #define GEN_LE(gen) (GEN_LT(gen) | (gen))
 
 static const struct opcode_desc opcode_10_descs[] = {
-   { .name = "dim",   .nsrc = 0, .ndst = 0, .gens = GEN75 },
+   { .name = "dim",   .nsrc = 1, .ndst = 1, .gens = GEN75 },
    { .name = "smov",  .nsrc = 0, .ndst = 0, .gens = GEN_GE(GEN8) },
 };
 
@@ -680,7 +680,7 @@ static const struct opcode_desc opcode_descs[128] = {
 };
 
 static enum gen
-gen_from_devinfo(const struct brw_device_info *devinfo)
+gen_from_devinfo(const struct gen_device_info *devinfo)
 {
    switch (devinfo->gen) {
    case 4: return devinfo->is_g4x ? GEN45 : GEN4;
@@ -698,7 +698,7 @@ gen_from_devinfo(const struct brw_device_info *devinfo)
  * hardware generation, or NULL if the opcode is not supported by the device.
  */
 const struct opcode_desc *
-brw_opcode_desc(const struct brw_device_info *devinfo, enum opcode opcode)
+brw_opcode_desc(const struct gen_device_info *devinfo, enum opcode opcode)
 {
    if (opcode >= ARRAY_SIZE(opcode_descs))
       return NULL;

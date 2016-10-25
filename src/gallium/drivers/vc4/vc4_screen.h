@@ -28,6 +28,7 @@
 #include "os/os_thread.h"
 #include "state_tracker/drm_driver.h"
 #include "util/list.h"
+#include "util/slab.h"
 
 struct vc4_bo;
 
@@ -50,6 +51,10 @@ struct vc4_screen {
         struct pipe_screen base;
         int fd;
 
+        int v3d_ver;
+
+        const char *name;
+
         void *simulator_mem_base;
         uint32_t simulator_mem_size;
 
@@ -59,6 +64,8 @@ struct vc4_screen {
          * if we know the job's already done.
          */
         uint64_t finished_seqno;
+
+        struct slab_parent_pool transfer_pool;
 
         struct vc4_bo_cache {
                 /** List of struct vc4_bo freed, by age. */
@@ -78,6 +85,7 @@ struct vc4_screen {
 
         uint32_t bo_size;
         uint32_t bo_count;
+        bool has_control_flow;
 };
 
 static inline struct vc4_screen *
@@ -94,6 +102,10 @@ boolean vc4_screen_bo_get_handle(struct pipe_screen *pscreen,
 struct vc4_bo *
 vc4_screen_bo_from_handle(struct pipe_screen *pscreen,
                           struct winsys_handle *whandle);
+
+const void *
+vc4_screen_get_compiler_options(struct pipe_screen *pscreen,
+                                enum pipe_shader_ir ir, unsigned shader);
 
 extern uint32_t vc4_debug;
 

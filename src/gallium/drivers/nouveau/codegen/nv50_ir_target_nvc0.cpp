@@ -105,6 +105,7 @@ static const struct opProperties _initProps[] =
    { OP_MAX,    0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    { OP_MIN,    0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    { OP_MAD,    0x7, 0x0, 0x0, 0x8, 0x6, 0x2 | 0x8 }, // special c[] constraint
+   { OP_SHLADD, 0x5, 0x0, 0x0, 0x0, 0x4, 0x6 },
    { OP_MADSP,  0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
    { OP_ABS,    0x0, 0x0, 0x0, 0x0, 0x1, 0x0 },
    { OP_NEG,    0x0, 0x1, 0x0, 0x0, 0x1, 0x0 },
@@ -156,14 +157,15 @@ void TargetNVC0::initOpInfo()
 
    static const uint32_t commutative[(OP_LAST + 31) / 32] =
    {
-      // ADD, MAD, MUL, AND, OR, XOR, MAX, MIN
-      0x0670ca00, 0x0000003f, 0x00000000, 0x00000000
+      // ADD, MUL, MAD, FMA, AND, OR, XOR, MAX, MIN, SET_AND, SET_OR, SET_XOR,
+      // SET, SELP, SLCT
+      0x0ce0ca00, 0x0000007e, 0x00000000, 0x00000000
    };
 
    static const uint32_t shortForm[(OP_LAST + 31) / 32] =
    {
-      // ADD, MAD, MUL, AND, OR, XOR, PRESIN, PREEX2, SFN, CVT, PINTERP, MOV
-      0x0670ca00, 0x00000000, 0x00000000, 0x00000000
+      // ADD, MUL, MAD, FMA, AND, OR, XOR, MAX, MIN
+      0x0ce0ca00, 0x00000000, 0x00000000, 0x00000000
    };
 
    static const operation noDest[] =
@@ -295,6 +297,7 @@ TargetNVC0::getSVAddress(DataFile shaderFile, const Symbol *sym) const
    case SV_NTID:           return kepler ? (0x00 + idx * 4) : ~0;
    case SV_NCTAID:         return kepler ? (0x0c + idx * 4) : ~0;
    case SV_GRIDID:         return kepler ? 0x18 : ~0;
+   case SV_WORK_DIM:       return 0x1c;
    case SV_SAMPLE_INDEX:   return 0;
    case SV_SAMPLE_POS:     return 0;
    case SV_SAMPLE_MASK:    return 0;
@@ -330,6 +333,8 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
    for (int k = 0; i->srcExists(k); ++k) {
       if (i->src(k).getFile() == FILE_IMMEDIATE) {
          if (k == 2 && i->op == OP_SUCLAMP) // special case
+            continue;
+         if (k == 1 && i->op == OP_SHLADD) // special case
             continue;
          if (i->getSrc(k)->reg.data.u64 != 0)
             return false;
@@ -448,6 +453,12 @@ TargetNVC0::isModSupported(const Instruction *insn, int s, Modifier mod) const
       case OP_SUB:
          if (s == 0)
             return insn->src(1).mod.neg() ? false : true;
+         break;
+      case OP_SHLADD:
+         if (s == 1)
+            return false;
+         if (insn->src(s ? 0 : 2).mod.neg())
+            return false;
          break;
       default:
          return false;
@@ -614,13 +625,29 @@ bool TargetNVC0::canDualIssue(const Instruction *a, const Instruction *b) const
       // not if the 2nd instruction isn't necessarily executed
       if (clA == OPCLASS_TEXTURE || clA == OPCLASS_FLOW)
          return false;
+
+      // Check that a and b don't write to the same sources, nor that b reads
+      // anything that a writes.
+      if (!a->canCommuteDefDef(b) || !a->canCommuteDefSrc(b))
+         return false;
+
       // anything with MOV
       if (a->op == OP_MOV || b->op == OP_MOV)
          return true;
       if (clA == clB) {
-         // only F32 arith or integer additions
-         if (clA != OPCLASS_ARITH)
+         switch (clA) {
+         // there might be more
+         case OPCLASS_COMPARE:
+            if ((a->op == OP_MIN || a->op == OP_MAX) &&
+                (b->op == OP_MIN || b->op == OP_MAX))
+               break;
             return false;
+         case OPCLASS_ARITH:
+            break;
+         default:
+            return false;
+         }
+         // only F32 arith or integer additions
          return (a->dType == TYPE_F32 || a->op == OP_ADD ||
                  b->dType == TYPE_F32 || b->op == OP_ADD);
       }

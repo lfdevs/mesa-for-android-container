@@ -51,7 +51,7 @@ kernel::launch(command_queue &q,
                const std::vector<size_t> &grid_offset,
                const std::vector<size_t> &grid_size,
                const std::vector<size_t> &block_size) {
-   const auto m = program().binary(q.device());
+   const auto m = program().build(q.device()).binary;
    const auto reduced_grid_size =
       map(divides(), grid_size, block_size);
    void *st = exec.bind(&q, grid_offset);
@@ -76,6 +76,7 @@ kernel::launch(command_queue &q,
                               exec.g_buffers.data(), g_handles.data());
 
    // Fill information for the launch_grid() call.
+   info.work_dim = grid_size.size();
    copy(pad_vector(q, block_size, 1), info.block);
    copy(pad_vector(q, reduced_grid_size, 1), info.grid);
    info.pc = find(name_equals(_name), m.syms).offset;
@@ -141,7 +142,7 @@ kernel::args() const {
 
 const module &
 kernel::module(const command_queue &q) const {
-   return program().binary(q.device());
+   return program().build(q.device()).binary;
 }
 
 kernel::exec_context::exec_context(kernel &kern) :
@@ -159,7 +160,7 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
    std::swap(q, _q);
 
    // Bind kernel arguments.
-   auto &m = kern.program().binary(q->device());
+   auto &m = kern.program().build(q->device()).binary;
    auto margs = find(name_equals(kern.name()), m.syms).args;
    auto msec = find(type_equals(module::section::text), m.secs);
    auto explicit_arg = kern._args.begin();

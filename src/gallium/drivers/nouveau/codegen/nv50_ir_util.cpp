@@ -297,8 +297,8 @@ void BitSet::fill(uint32_t val)
    unsigned int i;
    for (i = 0; i < (size + 31) / 32; ++i)
       data[i] = val;
-   if (val)
-      data[i] &= ~(0xffffffff << (size % 32)); // BE ?
+   if (val && i)
+      data[i - 1] &= (1 << (size % 32)) - 1;
 }
 
 void BitSet::setOr(BitSet *pA, BitSet *pB)

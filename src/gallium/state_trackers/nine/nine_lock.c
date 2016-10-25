@@ -122,6 +122,44 @@ IDirect3DAuthenticatedChannel9Vtbl LockAuthenticatedChannel9_vtable = {
     (void *)LockAuthenticatedChannel9_Configure
 };
 
+static HRESULT NINE_WINAPI
+LockUnknown_SetPrivateData( struct NineUnknown *This,
+                            REFGUID refguid,
+                            const void *pData,
+                            DWORD SizeOfData,
+                            DWORD Flags )
+{
+    HRESULT r;
+    pipe_mutex_lock(d3dlock_global);
+    r = NineUnknown_SetPrivateData(This, refguid, pData, SizeOfData, Flags);
+    pipe_mutex_unlock(d3dlock_global);
+    return r;
+}
+
+static HRESULT NINE_WINAPI
+LockUnknown_GetPrivateData( struct NineUnknown *This,
+                            REFGUID refguid,
+                            void *pData,
+                            DWORD *pSizeOfData )
+{
+    HRESULT r;
+    pipe_mutex_lock(d3dlock_global);
+    r = NineUnknown_GetPrivateData(This, refguid, pData, pSizeOfData);
+    pipe_mutex_unlock(d3dlock_global);
+    return r;
+}
+
+static HRESULT NINE_WINAPI
+LockUnknown_FreePrivateData( struct NineUnknown *This,
+                             REFGUID refguid )
+{
+    HRESULT r;
+    pipe_mutex_lock(d3dlock_global);
+    r = NineUnknown_FreePrivateData(This, refguid);
+    pipe_mutex_unlock(d3dlock_global);
+    return r;
+}
+
 #if 0
 static HRESULT NINE_WINAPI
 LockResource9_GetDevice( struct NineResource9 *This,
@@ -134,44 +172,6 @@ LockResource9_GetDevice( struct NineResource9 *This,
     return r;
 }
 #endif
-
-static HRESULT NINE_WINAPI
-LockResource9_SetPrivateData( struct NineResource9 *This,
-                              REFGUID refguid,
-                              const void *pData,
-                              DWORD SizeOfData,
-                              DWORD Flags )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
-    r = NineResource9_SetPrivateData(This, refguid, pData, SizeOfData, Flags);
-    pipe_mutex_unlock(d3dlock_global);
-    return r;
-}
-
-static HRESULT NINE_WINAPI
-LockResource9_GetPrivateData( struct NineResource9 *This,
-                              REFGUID refguid,
-                              void *pData,
-                              DWORD *pSizeOfData )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
-    r = NineResource9_GetPrivateData(This, refguid, pData, pSizeOfData);
-    pipe_mutex_unlock(d3dlock_global);
-    return r;
-}
-
-static HRESULT NINE_WINAPI
-LockResource9_FreePrivateData( struct NineResource9 *This,
-                               REFGUID refguid )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
-    r = NineResource9_FreePrivateData(This, refguid);
-    pipe_mutex_unlock(d3dlock_global);
-    return r;
-}
 
 static DWORD NINE_WINAPI
 LockResource9_SetPriority( struct NineResource9 *This,
@@ -483,9 +483,9 @@ IDirect3DCubeTexture9Vtbl LockCubeTexture9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)LockResource9_SetPrivateData,
-    (void *)LockResource9_GetPrivateData,
-    (void *)LockResource9_FreePrivateData,
+    (void *)LockUnknown_SetPrivateData,
+    (void *)LockUnknown_GetPrivateData,
+    (void *)LockUnknown_FreePrivateData,
     (void *)LockResource9_SetPriority,
     (void *)LockResource9_GetPriority,
     (void *)LockBaseTexture9_PreLoad,
@@ -2495,9 +2495,9 @@ IDirect3DIndexBuffer9Vtbl LockIndexBuffer9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)LockResource9_SetPrivateData,
-    (void *)LockResource9_GetPrivateData,
-    (void *)LockResource9_FreePrivateData,
+    (void *)LockUnknown_SetPrivateData,
+    (void *)LockUnknown_GetPrivateData,
+    (void *)LockUnknown_FreePrivateData,
     (void *)LockResource9_SetPriority,
     (void *)LockResource9_GetPriority,
     (void *)NineResource9_PreLoad, /* nop */
@@ -2729,9 +2729,9 @@ IDirect3DSurface9Vtbl LockSurface9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)LockResource9_SetPrivateData,
-    (void *)LockResource9_GetPrivateData,
-    (void *)LockResource9_FreePrivateData,
+    (void *)LockUnknown_SetPrivateData,
+    (void *)LockUnknown_GetPrivateData,
+    (void *)LockUnknown_FreePrivateData,
     (void *)LockResource9_SetPriority,
     (void *)LockResource9_GetPriority,
     (void *)NineResource9_PreLoad, /* nop */
@@ -2961,9 +2961,9 @@ IDirect3DTexture9Vtbl LockTexture9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)LockResource9_SetPrivateData,
-    (void *)LockResource9_GetPrivateData,
-    (void *)LockResource9_FreePrivateData,
+    (void *)LockUnknown_SetPrivateData,
+    (void *)LockUnknown_GetPrivateData,
+    (void *)LockUnknown_FreePrivateData,
     (void *)LockResource9_SetPriority,
     (void *)LockResource9_GetPriority,
     (void *)LockBaseTexture9_PreLoad,
@@ -3023,9 +3023,9 @@ IDirect3DVertexBuffer9Vtbl LockVertexBuffer9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)LockResource9_SetPrivateData,
-    (void *)LockResource9_GetPrivateData,
-    (void *)LockResource9_FreePrivateData,
+    (void *)LockUnknown_SetPrivateData,
+    (void *)LockUnknown_GetPrivateData,
+    (void *)LockUnknown_FreePrivateData,
     (void *)LockResource9_SetPriority,
     (void *)LockResource9_GetPriority,
     (void *)NineResource9_PreLoad, /* nop */
@@ -3115,44 +3115,6 @@ LockVolume9_GetDevice( struct NineVolume9 *This,
 #endif
 
 static HRESULT NINE_WINAPI
-LockVolume9_SetPrivateData( struct NineVolume9 *This,
-                            REFGUID refguid,
-                            const void *pData,
-                            DWORD SizeOfData,
-                            DWORD Flags )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
-    r = NineVolume9_SetPrivateData(This, refguid, pData, SizeOfData, Flags);
-    pipe_mutex_unlock(d3dlock_global);
-    return r;
-}
-
-static HRESULT NINE_WINAPI
-LockVolume9_GetPrivateData( struct NineVolume9 *This,
-                            REFGUID refguid,
-                            void *pData,
-                            DWORD *pSizeOfData )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
-    r = NineVolume9_GetPrivateData(This, refguid, pData, pSizeOfData);
-    pipe_mutex_unlock(d3dlock_global);
-    return r;
-}
-
-static HRESULT NINE_WINAPI
-LockVolume9_FreePrivateData( struct NineVolume9 *This,
-                             REFGUID refguid )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
-    r = NineVolume9_FreePrivateData(This, refguid);
-    pipe_mutex_unlock(d3dlock_global);
-    return r;
-}
-
-static HRESULT NINE_WINAPI
 LockVolume9_GetContainer( struct NineVolume9 *This,
                           REFIID riid,
                           void **ppContainer )
@@ -3205,9 +3167,9 @@ IDirect3DVolume9Vtbl LockVolume9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Volume9 iface */
-    (void *)LockVolume9_SetPrivateData,
-    (void *)LockVolume9_GetPrivateData,
-    (void *)LockVolume9_FreePrivateData,
+    (void *)NineUnknown_SetPrivateData,
+    (void *)NineUnknown_GetPrivateData,
+    (void *)NineUnknown_FreePrivateData,
     (void *)LockVolume9_GetContainer,
     (void *)NineVolume9_GetDesc, /* immutable */
     (void *)LockVolume9_LockBox,
@@ -3283,9 +3245,9 @@ IDirect3DVolumeTexture9Vtbl LockVolumeTexture9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)LockResource9_SetPrivateData,
-    (void *)LockResource9_GetPrivateData,
-    (void *)LockResource9_FreePrivateData,
+    (void *)LockUnknown_SetPrivateData,
+    (void *)LockUnknown_GetPrivateData,
+    (void *)LockUnknown_FreePrivateData,
     (void *)LockResource9_SetPriority,
     (void *)LockResource9_GetPriority,
     (void *)LockBaseTexture9_PreLoad,

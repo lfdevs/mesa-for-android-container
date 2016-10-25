@@ -159,8 +159,9 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	draw/draw_vertex.h draw/draw_vs.c draw/draw_vs_exec.c \
 	draw/draw_vs.h draw/draw_vs_variant.c hud/font.c hud/font.h \
 	hud/hud_context.c hud/hud_context.h hud/hud_cpu.c \
-	hud/hud_driver_query.c hud/hud_fps.c hud/hud_private.h \
-	indices/u_indices.h indices/u_indices_priv.h \
+	hud/hud_nic.c hud/hud_cpufreq.c hud/hud_diskstat.c \
+	hud/hud_sensors_temp.c hud/hud_driver_query.c hud/hud_fps.c \
+	hud/hud_private.h indices/u_indices.h indices/u_indices_priv.h \
 	indices/u_primconvert.c indices/u_primconvert.h \
 	os/os_memory_aligned.h os/os_memory_debug.h \
 	os/os_memory_stdc.h os/os_memory.h os/os_misc.c os/os_misc.h \
@@ -172,7 +173,8 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	pipebuffer/pb_bufmgr.h pipebuffer/pb_bufmgr_mm.c \
 	pipebuffer/pb_bufmgr_ondemand.c pipebuffer/pb_bufmgr_pool.c \
 	pipebuffer/pb_bufmgr_slab.c pipebuffer/pb_cache.c \
-	pipebuffer/pb_cache.h pipebuffer/pb_validate.c \
+	pipebuffer/pb_cache.h pipebuffer/pb_slab.c \
+	pipebuffer/pb_slab.h pipebuffer/pb_validate.c \
 	pipebuffer/pb_validate.h postprocess/filters.h \
 	postprocess/postprocess.h postprocess/pp_celshade.c \
 	postprocess/pp_celshade.h postprocess/pp_colors.c \
@@ -203,10 +205,10 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	tgsi/tgsi_util.c tgsi/tgsi_util.h translate/translate.c \
 	translate/translate.h translate/translate_cache.c \
 	translate/translate_cache.h translate/translate_generic.c \
-	translate/translate_sse.c util/dbghelp.h util/u_bitmask.c \
-	util/u_bitmask.h util/u_blend.h util/u_blit.c util/u_blit.h \
-	util/u_blitter.c util/u_blitter.h util/u_box.h util/u_cache.c \
-	util/u_cache.h util/u_caps.c util/u_caps.h util/u_clear.h \
+	translate/translate_sse.c util/dbghelp.h util/u_bitcast.h \
+	util/u_bitmask.c util/u_bitmask.h util/u_blend.h util/u_blit.c \
+	util/u_blit.h util/u_blitter.c util/u_blitter.h util/u_box.h \
+	util/u_cache.c util/u_cache.h util/u_caps.c util/u_caps.h \
 	util/u_cpu_detect.c util/u_cpu_detect.h util/u_debug.c \
 	util/u_debug.h util/u_debug_describe.c util/u_debug_describe.h \
 	util/u_debug_flush.c util/u_debug_flush.h util/u_debug_image.c \
@@ -221,8 +223,7 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_fifo.h util/u_format.c util/u_format.h \
 	util/u_format_etc.c util/u_format_etc.h util/u_format_latc.c \
 	util/u_format_latc.h util/u_format_other.c \
-	util/u_format_other.h util/u_format_r11g11b10f.h \
-	util/u_format_rgb9e5.h util/u_format_rgtc.c \
+	util/u_format_other.h util/u_format_rgtc.c \
 	util/u_format_rgtc.h util/u_format_s3tc.c util/u_format_s3tc.h \
 	util/u_format_tests.c util/u_format_tests.h \
 	util/u_format_yuv.c util/u_format_yuv.h util/u_format_zs.c \
@@ -237,18 +238,18 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_network.c util/u_network.h util/u_pack_color.h \
 	util/u_pointer.h util/u_prim.h util/u_prim_restart.c \
 	util/u_prim_restart.h util/u_pstipple.c util/u_pstipple.h \
-	util/u_pwr8.h util/u_range.h util/u_rect.h util/u_resource.c \
-	util/u_resource.h util/u_ringbuffer.c util/u_ringbuffer.h \
-	util/u_sampler.c util/u_sampler.h util/u_simple_shaders.c \
-	util/u_simple_shaders.h util/u_slab.c util/u_slab.h \
-	util/u_split_prim.h util/u_sse.h util/u_staging.c \
-	util/u_staging.h util/u_string.h util/u_suballoc.c \
-	util/u_suballoc.h util/u_surface.c util/u_surface.h \
-	util/u_surfaces.c util/u_surfaces.h util/u_tests.c \
-	util/u_tests.h util/u_texture.c util/u_texture.h util/u_tile.c \
-	util/u_tile.h util/u_time.h util/u_transfer.c \
-	util/u_transfer.h util/u_upload_mgr.c util/u_upload_mgr.h \
-	util/u_vbuf.c util/u_vbuf.h util/u_video.h util/u_viewport.h \
+	util/u_pwr8.h util/u_queue.c util/u_queue.h util/u_range.h \
+	util/u_rect.h util/u_resource.c util/u_resource.h \
+	util/u_ringbuffer.c util/u_ringbuffer.h util/u_sampler.c \
+	util/u_sampler.h util/u_simple_shaders.c \
+	util/u_simple_shaders.h util/u_split_prim.h util/u_sse.h \
+	util/u_string.h util/u_suballoc.c util/u_suballoc.h \
+	util/u_surface.c util/u_surface.h util/u_surfaces.c \
+	util/u_surfaces.h util/u_tests.c util/u_tests.h \
+	util/u_texture.c util/u_texture.h util/u_tile.c util/u_tile.h \
+	util/u_time.h util/u_transfer.c util/u_transfer.h \
+	util/u_upload_mgr.c util/u_upload_mgr.h util/u_vbuf.c \
+	util/u_vbuf.h util/u_video.h util/u_viewport.h \
 	nir/tgsi_to_nir.c nir/tgsi_to_nir.h indices/u_indices_gen.c \
 	indices/u_unfilled_gen.c util/u_format_table.c \
 	gallivm/lp_bld_arit.c gallivm/lp_bld_arit.h \
@@ -301,27 +302,30 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	draw/draw_pt_so_emit.lo draw/draw_pt_util.lo \
 	draw/draw_pt_vsplit.lo draw/draw_vertex.lo draw/draw_vs.lo \
 	draw/draw_vs_exec.lo draw/draw_vs_variant.lo hud/font.lo \
-	hud/hud_context.lo hud/hud_cpu.lo hud/hud_driver_query.lo \
-	hud/hud_fps.lo indices/u_primconvert.lo os/os_misc.lo \
-	os/os_process.lo os/os_time.lo pipebuffer/pb_buffer_fenced.lo \
+	hud/hud_context.lo hud/hud_cpu.lo hud/hud_nic.lo \
+	hud/hud_cpufreq.lo hud/hud_diskstat.lo hud/hud_sensors_temp.lo \
+	hud/hud_driver_query.lo hud/hud_fps.lo \
+	indices/u_primconvert.lo os/os_misc.lo os/os_process.lo \
+	os/os_time.lo pipebuffer/pb_buffer_fenced.lo \
 	pipebuffer/pb_buffer_malloc.lo pipebuffer/pb_bufmgr_alt.lo \
 	pipebuffer/pb_bufmgr_cache.lo pipebuffer/pb_bufmgr_debug.lo \
 	pipebuffer/pb_bufmgr_mm.lo pipebuffer/pb_bufmgr_ondemand.lo \
 	pipebuffer/pb_bufmgr_pool.lo pipebuffer/pb_bufmgr_slab.lo \
-	pipebuffer/pb_cache.lo pipebuffer/pb_validate.lo \
-	postprocess/pp_celshade.lo postprocess/pp_colors.lo \
-	postprocess/pp_init.lo postprocess/pp_mlaa.lo \
-	postprocess/pp_program.lo postprocess/pp_run.lo \
-	rbug/rbug_connection.lo rbug/rbug_context.lo rbug/rbug_core.lo \
-	rbug/rbug_demarshal.lo rbug/rbug_shader.lo \
-	rbug/rbug_texture.lo rtasm/rtasm_cpu.lo rtasm/rtasm_execmem.lo \
-	rtasm/rtasm_x86sse.lo tgsi/tgsi_aa_point.lo tgsi/tgsi_build.lo \
-	tgsi/tgsi_dump.lo tgsi/tgsi_exec.lo tgsi/tgsi_emulate.lo \
-	tgsi/tgsi_info.lo tgsi/tgsi_iterate.lo tgsi/tgsi_lowering.lo \
-	tgsi/tgsi_parse.lo tgsi/tgsi_point_sprite.lo \
-	tgsi/tgsi_sanity.lo tgsi/tgsi_scan.lo tgsi/tgsi_strings.lo \
-	tgsi/tgsi_text.lo tgsi/tgsi_transform.lo tgsi/tgsi_two_side.lo \
-	tgsi/tgsi_ureg.lo tgsi/tgsi_util.lo translate/translate.lo \
+	pipebuffer/pb_cache.lo pipebuffer/pb_slab.lo \
+	pipebuffer/pb_validate.lo postprocess/pp_celshade.lo \
+	postprocess/pp_colors.lo postprocess/pp_init.lo \
+	postprocess/pp_mlaa.lo postprocess/pp_program.lo \
+	postprocess/pp_run.lo rbug/rbug_connection.lo \
+	rbug/rbug_context.lo rbug/rbug_core.lo rbug/rbug_demarshal.lo \
+	rbug/rbug_shader.lo rbug/rbug_texture.lo rtasm/rtasm_cpu.lo \
+	rtasm/rtasm_execmem.lo rtasm/rtasm_x86sse.lo \
+	tgsi/tgsi_aa_point.lo tgsi/tgsi_build.lo tgsi/tgsi_dump.lo \
+	tgsi/tgsi_exec.lo tgsi/tgsi_emulate.lo tgsi/tgsi_info.lo \
+	tgsi/tgsi_iterate.lo tgsi/tgsi_lowering.lo tgsi/tgsi_parse.lo \
+	tgsi/tgsi_point_sprite.lo tgsi/tgsi_sanity.lo \
+	tgsi/tgsi_scan.lo tgsi/tgsi_strings.lo tgsi/tgsi_text.lo \
+	tgsi/tgsi_transform.lo tgsi/tgsi_two_side.lo tgsi/tgsi_ureg.lo \
+	tgsi/tgsi_util.lo translate/translate.lo \
 	translate/translate_cache.lo translate/translate_generic.lo \
 	translate/translate_sse.lo util/u_bitmask.lo util/u_blit.lo \
 	util/u_blitter.lo util/u_cache.lo util/u_caps.lo \
@@ -338,12 +342,12 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	util/u_handle_table.lo util/u_hash.lo util/u_hash_table.lo \
 	util/u_helpers.lo util/u_index_modify.lo util/u_keymap.lo \
 	util/u_linear.lo util/u_math.lo util/u_mm.lo util/u_network.lo \
-	util/u_prim_restart.lo util/u_pstipple.lo util/u_resource.lo \
-	util/u_ringbuffer.lo util/u_sampler.lo \
-	util/u_simple_shaders.lo util/u_slab.lo util/u_staging.lo \
-	util/u_suballoc.lo util/u_surface.lo util/u_surfaces.lo \
-	util/u_tests.lo util/u_texture.lo util/u_tile.lo \
-	util/u_transfer.lo util/u_upload_mgr.lo util/u_vbuf.lo
+	util/u_prim_restart.lo util/u_pstipple.lo util/u_queue.lo \
+	util/u_resource.lo util/u_ringbuffer.lo util/u_sampler.lo \
+	util/u_simple_shaders.lo util/u_suballoc.lo util/u_surface.lo \
+	util/u_surfaces.lo util/u_tests.lo util/u_texture.lo \
+	util/u_tile.lo util/u_transfer.lo util/u_upload_mgr.lo \
+	util/u_vbuf.lo
 am__objects_2 = nir/tgsi_to_nir.lo
 am__objects_3 = indices/u_indices_gen.lo indices/u_unfilled_gen.lo \
 	util/u_format_table.lo
@@ -375,19 +379,25 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+libgallium_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
+	$(AM_CXXFLAGS) $(CXXFLAGS) $(libgallium_la_LDFLAGS) $(LDFLAGS) \
+	-o $@
 libgalliumvl_la_LIBADD =
-am__libgalliumvl_la_SOURCES_DIST = vl/vl_compositor.c \
-	vl/vl_compositor.h vl/vl_csc.c vl/vl_csc.h vl/vl_decoder.c \
-	vl/vl_decoder.h vl/vl_defines.h vl/vl_deint_filter.c \
-	vl/vl_deint_filter.h vl/vl_idct.c vl/vl_idct.h \
-	vl/vl_matrix_filter.c vl/vl_matrix_filter.h vl/vl_mc.c \
-	vl/vl_mc.h vl/vl_median_filter.c vl/vl_median_filter.h \
+am__libgalliumvl_la_SOURCES_DIST = vl/vl_bicubic_filter.c \
+	vl/vl_bicubic_filter.h vl/vl_compositor.c vl/vl_compositor.h \
+	vl/vl_csc.c vl/vl_csc.h vl/vl_decoder.c vl/vl_decoder.h \
+	vl/vl_defines.h vl/vl_deint_filter.c vl/vl_deint_filter.h \
+	vl/vl_idct.c vl/vl_idct.h vl/vl_matrix_filter.c \
+	vl/vl_matrix_filter.h vl/vl_mc.c vl/vl_mc.h \
+	vl/vl_median_filter.c vl/vl_median_filter.h \
 	vl/vl_mpeg12_bitstream.c vl/vl_mpeg12_bitstream.h \
 	vl/vl_mpeg12_decoder.c vl/vl_mpeg12_decoder.h vl/vl_rbsp.h \
 	vl/vl_types.h vl/vl_vertex_buffers.c vl/vl_vertex_buffers.h \
 	vl/vl_video_buffer.c vl/vl_video_buffer.h vl/vl_vlc.h \
 	vl/vl_winsys.h vl/vl_zscan.c vl/vl_zscan.h
-am__objects_6 = vl/libgalliumvl_la-vl_compositor.lo \
+am__objects_6 = vl/libgalliumvl_la-vl_bicubic_filter.lo \
+	vl/libgalliumvl_la-vl_compositor.lo \
 	vl/libgalliumvl_la-vl_csc.lo vl/libgalliumvl_la-vl_decoder.lo \
 	vl/libgalliumvl_la-vl_deint_filter.lo \
 	vl/libgalliumvl_la-vl_idct.lo \
@@ -613,11 +623,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -713,6 +722,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -748,6 +759,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -874,6 +886,10 @@ C_SOURCES := \
 	hud/hud_context.c \
 	hud/hud_context.h \
 	hud/hud_cpu.c \
+	hud/hud_nic.c \
+	hud/hud_cpufreq.c \
+	hud/hud_diskstat.c \
+	hud/hud_sensors_temp.c \
 	hud/hud_driver_query.c \
 	hud/hud_fps.c \
 	hud/hud_private.h \
@@ -907,6 +923,8 @@ C_SOURCES := \
 	pipebuffer/pb_bufmgr_slab.c \
 	pipebuffer/pb_cache.c \
 	pipebuffer/pb_cache.h \
+	pipebuffer/pb_slab.c \
+	pipebuffer/pb_slab.h \
 	pipebuffer/pb_validate.c \
 	pipebuffer/pb_validate.h \
 	postprocess/filters.h \
@@ -987,6 +1005,7 @@ C_SOURCES := \
 	translate/translate_generic.c \
 	translate/translate_sse.c \
 	util/dbghelp.h \
+	util/u_bitcast.h \
 	util/u_bitmask.c \
 	util/u_bitmask.h \
 	util/u_blend.h \
@@ -999,7 +1018,6 @@ C_SOURCES := \
 	util/u_cache.h \
 	util/u_caps.c \
 	util/u_caps.h \
-	util/u_clear.h \
 	util/u_cpu_detect.c \
 	util/u_cpu_detect.h \
 	util/u_debug.c \
@@ -1039,8 +1057,6 @@ C_SOURCES := \
 	util/u_format_latc.h \
 	util/u_format_other.c \
 	util/u_format_other.h \
-	util/u_format_r11g11b10f.h \
-	util/u_format_rgb9e5.h \
 	util/u_format_rgtc.c \
 	util/u_format_rgtc.h \
 	util/u_format_s3tc.c \
@@ -1086,6 +1102,8 @@ C_SOURCES := \
 	util/u_pstipple.c \
 	util/u_pstipple.h \
 	util/u_pwr8.h \
+	util/u_queue.c \
+	util/u_queue.h \
 	util/u_range.h \
 	util/u_rect.h \
 	util/u_resource.c \
@@ -1096,12 +1114,8 @@ C_SOURCES := \
 	util/u_sampler.h \
 	util/u_simple_shaders.c \
 	util/u_simple_shaders.h \
-	util/u_slab.c \
-	util/u_slab.h \
 	util/u_split_prim.h \
 	util/u_sse.h \
-	util/u_staging.c \
-	util/u_staging.h \
 	util/u_string.h \
 	util/u_suballoc.c \
 	util/u_suballoc.h \
@@ -1130,6 +1144,8 @@ NIR_SOURCES := \
 	nir/tgsi_to_nir.h
 
 VL_SOURCES := \
+	vl/vl_bicubic_filter.c \
+	vl/vl_bicubic_filter.h \
 	vl/vl_compositor.c \
 	vl/vl_compositor.h \
 	vl/vl_csc.c \
@@ -1322,6 +1338,7 @@ AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS) $(MSVC2013_COMPAT_CXXFLAGS) \
 	$(am__append_4)
 libgallium_la_SOURCES = $(C_SOURCES) $(NIR_SOURCES) \
 	$(GENERATED_SOURCES) $(am__append_5)
+libgallium_la_LDFLAGS = $(LIBSENSORS_LDFLAGS)
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 libgalliumvl_stub_la_SOURCES = \
@@ -1493,6 +1510,11 @@ hud/$(DEPDIR)/$(am__dirstamp):
 hud/font.lo: hud/$(am__dirstamp) hud/$(DEPDIR)/$(am__dirstamp)
 hud/hud_context.lo: hud/$(am__dirstamp) hud/$(DEPDIR)/$(am__dirstamp)
 hud/hud_cpu.lo: hud/$(am__dirstamp) hud/$(DEPDIR)/$(am__dirstamp)
+hud/hud_nic.lo: hud/$(am__dirstamp) hud/$(DEPDIR)/$(am__dirstamp)
+hud/hud_cpufreq.lo: hud/$(am__dirstamp) hud/$(DEPDIR)/$(am__dirstamp)
+hud/hud_diskstat.lo: hud/$(am__dirstamp) hud/$(DEPDIR)/$(am__dirstamp)
+hud/hud_sensors_temp.lo: hud/$(am__dirstamp) \
+	hud/$(DEPDIR)/$(am__dirstamp)
 hud/hud_driver_query.lo: hud/$(am__dirstamp) \
 	hud/$(DEPDIR)/$(am__dirstamp)
 hud/hud_fps.lo: hud/$(am__dirstamp) hud/$(DEPDIR)/$(am__dirstamp)
@@ -1538,6 +1560,8 @@ pipebuffer/pb_bufmgr_pool.lo: pipebuffer/$(am__dirstamp) \
 pipebuffer/pb_bufmgr_slab.lo: pipebuffer/$(am__dirstamp) \
 	pipebuffer/$(DEPDIR)/$(am__dirstamp)
 pipebuffer/pb_cache.lo: pipebuffer/$(am__dirstamp) \
+	pipebuffer/$(DEPDIR)/$(am__dirstamp)
+pipebuffer/pb_slab.lo: pipebuffer/$(am__dirstamp) \
 	pipebuffer/$(DEPDIR)/$(am__dirstamp)
 pipebuffer/pb_validate.lo: pipebuffer/$(am__dirstamp) \
 	pipebuffer/$(DEPDIR)/$(am__dirstamp)
@@ -1711,6 +1735,7 @@ util/u_prim_restart.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_pstipple.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
+util/u_queue.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_resource.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_ringbuffer.lo: util/$(am__dirstamp) \
@@ -1718,8 +1743,6 @@ util/u_ringbuffer.lo: util/$(am__dirstamp) \
 util/u_sampler.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_simple_shaders.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
-util/u_slab.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
-util/u_staging.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_suballoc.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_surface.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
@@ -1831,13 +1854,15 @@ draw/draw_vs_llvm.lo: draw/$(am__dirstamp) \
 	draw/$(DEPDIR)/$(am__dirstamp)
 
 libgallium.la: $(libgallium_la_OBJECTS) $(libgallium_la_DEPENDENCIES) $(EXTRA_libgallium_la_DEPENDENCIES) 
-	$(AM_V_CXXLD)$(CXXLINK)  $(libgallium_la_OBJECTS) $(libgallium_la_LIBADD) $(LIBS)
+	$(AM_V_CXXLD)$(libgallium_la_LINK)  $(libgallium_la_OBJECTS) $(libgallium_la_LIBADD) $(LIBS)
 vl/$(am__dirstamp):
 	@$(MKDIR_P) vl
 	@: > vl/$(am__dirstamp)
 vl/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) vl/$(DEPDIR)
 	@: > vl/$(DEPDIR)/$(am__dirstamp)
+vl/libgalliumvl_la-vl_bicubic_filter.lo: vl/$(am__dirstamp) \
+	vl/$(DEPDIR)/$(am__dirstamp)
 vl/libgalliumvl_la-vl_compositor.lo: vl/$(am__dirstamp) \
 	vl/$(DEPDIR)/$(am__dirstamp)
 vl/libgalliumvl_la-vl_csc.lo: vl/$(am__dirstamp) \
@@ -1996,8 +2021,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/font.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/hud_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/hud_cpu.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/hud_cpufreq.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/hud_diskstat.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/hud_driver_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/hud_fps.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/hud_nic.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@hud/$(DEPDIR)/hud_sensors_temp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@indices/$(DEPDIR)/u_indices_gen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@indices/$(DEPDIR)/u_primconvert.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@indices/$(DEPDIR)/u_unfilled_gen.Plo@am__quote@
@@ -2015,6 +2044,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@pipebuffer/$(DEPDIR)/pb_bufmgr_pool.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@pipebuffer/$(DEPDIR)/pb_bufmgr_slab.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@pipebuffer/$(DEPDIR)/pb_cache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@pipebuffer/$(DEPDIR)/pb_slab.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@pipebuffer/$(DEPDIR)/pb_validate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@postprocess/$(DEPDIR)/pp_celshade.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@postprocess/$(DEPDIR)/pp_colors.Plo@am__quote@
@@ -2096,12 +2126,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_network.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_prim_restart.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_pstipple.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_resource.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_ringbuffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_sampler.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_simple_shaders.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_slab.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_staging.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_suballoc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_surface.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_surfaces.Plo@am__quote@
@@ -2111,6 +2140,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_transfer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_upload_mgr.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_vbuf.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvl_la-vl_bicubic_filter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvl_la-vl_compositor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvl_la-vl_csc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvl_la-vl_decoder.Plo@am__quote@
@@ -2152,6 +2182,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+vl/libgalliumvl_la-vl_bicubic_filter.lo: vl/vl_bicubic_filter.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvl_la_CFLAGS) $(CFLAGS) -MT vl/libgalliumvl_la-vl_bicubic_filter.lo -MD -MP -MF vl/$(DEPDIR)/libgalliumvl_la-vl_bicubic_filter.Tpo -c -o vl/libgalliumvl_la-vl_bicubic_filter.lo `test -f 'vl/vl_bicubic_filter.c' || echo '$(srcdir)/'`vl/vl_bicubic_filter.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) vl/$(DEPDIR)/libgalliumvl_la-vl_bicubic_filter.Tpo vl/$(DEPDIR)/libgalliumvl_la-vl_bicubic_filter.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vl/vl_bicubic_filter.c' object='vl/libgalliumvl_la-vl_bicubic_filter.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvl_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvl_la-vl_bicubic_filter.lo `test -f 'vl/vl_bicubic_filter.c' || echo '$(srcdir)/'`vl/vl_bicubic_filter.c
 
 vl/libgalliumvl_la-vl_compositor.lo: vl/vl_compositor.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvl_la_CFLAGS) $(CFLAGS) -MT vl/libgalliumvl_la-vl_compositor.lo -MD -MP -MF vl/$(DEPDIR)/libgalliumvl_la-vl_compositor.Tpo -c -o vl/libgalliumvl_la-vl_compositor.lo `test -f 'vl/vl_compositor.c' || echo '$(srcdir)/'`vl/vl_compositor.c

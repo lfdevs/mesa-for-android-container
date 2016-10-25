@@ -47,17 +47,22 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glBindVertexBuffer@Base 0
  glBindVertexBuffers@Base 0
  glBitmap@Base 0
+ glBlendBarrier@Base 13.0.0~
  glBlendColor@Base 0
  glBlendColorEXT@Base 0
  glBlendEquation@Base 0
  glBlendEquationEXT@Base 0
  glBlendEquationSeparate@Base 0
+ glBlendEquationSeparatei@Base 13.0.0~
  glBlendEquationSeparateiARB@Base 0
+ glBlendEquationi@Base 13.0.0~
  glBlendEquationiARB@Base 0
  glBlendFunc@Base 0
  glBlendFuncSeparate@Base 0
  glBlendFuncSeparateEXT@Base 0
+ glBlendFuncSeparatei@Base 13.0.0~
  glBlendFuncSeparateiARB@Base 0
+ glBlendFunci@Base 13.0.0~
  glBlendFunciARB@Base 0
  glBlitFramebuffer@Base 0
  glBufferData@Base 0
@@ -386,6 +391,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glGetFramebufferAttachmentParameteriv@Base 0
  glGetFramebufferAttachmentParameterivEXT@Base 0
  glGetFramebufferParameteriv@Base 12.0.1
+ glGetGraphicsResetStatus@Base 13.0.0~
  glGetGraphicsResetStatusARB@Base 0
  glGetHandleARB@Base 0
  glGetHistogram@Base 0
@@ -512,8 +518,11 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glGetnSeparableFilterARB@Base 0
  glGetnTexImageARB@Base 0
  glGetnUniformdvARB@Base 0
+ glGetnUniformfv@Base 13.0.0~
  glGetnUniformfvARB@Base 0
+ glGetnUniformiv@Base 13.0.0~
  glGetnUniformivARB@Base 0
+ glGetnUniformuiv@Base 13.0.0~
  glGetnUniformuivARB@Base 0
  glHint@Base 0
  glHistogram@Base 0
@@ -721,6 +730,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glOrthof@Base 0
  glOrthox@Base 0
  glPassThrough@Base 0
+ glPatchParameteri@Base 13.0.0~
  glPauseTransformFeedback@Base 0
  glPixelMapfv@Base 0
  glPixelMapuiv@Base 0
@@ -752,6 +762,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glPopDebugGroup@Base 0
  glPopMatrix@Base 0
  glPopName@Base 0
+ glPrimitiveBoundingBox@Base 13.0.0~
  glPrimitiveRestartIndex@Base 0
  glPrimitiveRestartIndexNV@Base 0
  glPrimitiveRestartNV@Base 0
@@ -834,6 +845,7 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glRasterPos4sv@Base 0
  glReadBuffer@Base 0
  glReadPixels@Base 0
+ glReadnPixels@Base 13.0.0~
  glReadnPixelsARB@Base 0
  glRectd@Base 0
  glRectdv@Base 0

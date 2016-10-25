@@ -30,7 +30,8 @@ static bool
 is_input(nir_intrinsic_instr *intrin)
 {
    return intrin->intrinsic == nir_intrinsic_load_input ||
-          intrin->intrinsic == nir_intrinsic_load_per_vertex_input;
+          intrin->intrinsic == nir_intrinsic_load_per_vertex_input ||
+          intrin->intrinsic == nir_intrinsic_load_interpolated_input;
 }
 
 static bool
@@ -190,7 +191,6 @@ remap_patch_urb_offsets(nir_block *block, nir_builder *b,
 
 void
 brw_nir_lower_vs_inputs(nir_shader *nir,
-                        const struct brw_device_info *devinfo,
                         bool is_scalar,
                         bool use_legacy_snorm_formula,
                         const uint8_t *vs_attrib_wa_flags)
@@ -204,7 +204,7 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
     * loaded as one vec4 or dvec4 per element (or matrix column), depending on
     * whether it is a double-precision type or not.
     */
-   nir_lower_io(nir, nir_var_shader_in, type_size_vs_input);
+   nir_lower_io(nir, nir_var_shader_in, type_size_vs_input, 0);
 
    /* This pass needs actual constants */
    nir_opt_constant_folding(nir);
@@ -236,7 +236,7 @@ brw_nir_lower_vue_inputs(nir_shader *nir, bool is_scalar,
    }
 
    /* Inputs are stored in vec4 slots, so use type_size_vec4(). */
-   nir_lower_io(nir, nir_var_shader_in, type_size_vec4);
+   nir_lower_io(nir, nir_var_shader_in, type_size_vec4, 0);
 
    if (is_scalar || nir->stage != MESA_SHADER_GEOMETRY) {
       /* This pass needs actual constants */
@@ -261,7 +261,7 @@ brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue_map)
       var->data.driver_location = var->data.location;
    }
 
-   nir_lower_io(nir, nir_var_shader_in, type_size_vec4);
+   nir_lower_io(nir, nir_var_shader_in, type_size_vec4, 0);
 
    /* This pass needs actual constants */
    nir_opt_constant_folding(nir);
@@ -280,10 +280,47 @@ brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue_map)
 }
 
 void
-brw_nir_lower_fs_inputs(nir_shader *nir)
+brw_nir_lower_fs_inputs(nir_shader *nir,
+                        const struct gen_device_info *devinfo,
+                        const struct brw_wm_prog_key *key)
 {
-   nir_assign_var_locations(&nir->inputs, &nir->num_inputs, type_size_scalar);
-   nir_lower_io(nir, nir_var_shader_in, type_size_scalar);
+   foreach_list_typed(nir_variable, var, node, &nir->inputs) {
+      var->data.driver_location = var->data.location;
+
+      /* Apply default interpolation mode.
+       *
+       * Everything defaults to smooth except for the legacy GL color
+       * built-in variables, which might be flat depending on API state.
+       */
+      if (var->data.interpolation == INTERP_MODE_NONE) {
+         const bool flat = key->flat_shade &&
+            (var->data.location == VARYING_SLOT_COL0 ||
+             var->data.location == VARYING_SLOT_COL1);
+
+         var->data.interpolation = flat ? INTERP_MODE_FLAT
+                                        : INTERP_MODE_SMOOTH;
+      }
+
+      /* On Ironlake and below, there is only one interpolation mode.
+       * Centroid interpolation doesn't mean anything on this hardware --
+       * there is no multisampling.
+       */
+      if (devinfo->gen < 6) {
+         var->data.centroid = false;
+         var->data.sample = false;
+      }
+   }
+
+   nir_lower_io_options lower_io_options = 0;
+   if (key->persample_interp)
+      lower_io_options |= nir_lower_io_force_sample_interpolation;
+
+   nir_lower_io(nir, nir_var_shader_in, type_size_vec4, lower_io_options);
+
+   /* This pass needs actual constants */
+   nir_opt_constant_folding(nir);
+
+   add_const_offset_to_base(nir, nir_var_shader_in);
 }
 
 void
@@ -292,12 +329,13 @@ brw_nir_lower_vue_outputs(nir_shader *nir,
 {
    if (is_scalar) {
       nir_assign_var_locations(&nir->outputs, &nir->num_outputs,
+                               VARYING_SLOT_VAR0,
                                type_size_vec4_times_4);
-      nir_lower_io(nir, nir_var_shader_out, type_size_vec4_times_4);
+      nir_lower_io(nir, nir_var_shader_out, type_size_vec4_times_4, 0);
    } else {
       nir_foreach_variable(var, &nir->outputs)
          var->data.driver_location = var->data.location;
-      nir_lower_io(nir, nir_var_shader_out, type_size_vec4);
+      nir_lower_io(nir, nir_var_shader_out, type_size_vec4, 0);
    }
 }
 
@@ -308,7 +346,7 @@ brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue_map)
       var->data.driver_location = var->data.location;
    }
 
-   nir_lower_io(nir, nir_var_shader_out, type_size_vec4);
+   nir_lower_io(nir, nir_var_shader_out, type_size_vec4, 0);
 
    /* This pass needs actual constants */
    nir_opt_constant_folding(nir);
@@ -329,17 +367,21 @@ brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue_map)
 void
 brw_nir_lower_fs_outputs(nir_shader *nir)
 {
-   nir_assign_var_locations(&nir->outputs, &nir->num_outputs,
-                            type_size_scalar);
-   nir_lower_io(nir, nir_var_shader_out, type_size_scalar);
+   nir_foreach_variable(var, &nir->outputs) {
+      var->data.driver_location =
+         SET_FIELD(var->data.index, BRW_NIR_FRAG_OUTPUT_INDEX) |
+         SET_FIELD(var->data.location, BRW_NIR_FRAG_OUTPUT_LOCATION);
+   }
+
+   nir_lower_io(nir, nir_var_shader_out, type_size_dvec4, 0);
 }
 
 void
 brw_nir_lower_cs_shared(nir_shader *nir)
 {
-   nir_assign_var_locations(&nir->shared, &nir->num_shared,
+   nir_assign_var_locations(&nir->shared, &nir->num_shared, 0,
                             type_size_scalar_bytes);
-   nir_lower_io(nir, nir_var_shared, type_size_scalar_bytes);
+   nir_lower_io(nir, nir_var_shared, type_size_scalar_bytes, 0);
 }
 
 #define OPT(pass, ...) ({                                  \
@@ -361,19 +403,19 @@ nir_optimize(nir_shader *nir, bool is_scalar)
       OPT_V(nir_lower_vars_to_ssa);
 
       if (is_scalar) {
-         OPT_V(nir_lower_alu_to_scalar);
+         OPT(nir_lower_alu_to_scalar);
       }
 
       OPT(nir_copy_prop);
 
       if (is_scalar) {
-         OPT_V(nir_lower_phis_to_scalar);
+         OPT(nir_lower_phis_to_scalar);
       }
 
       OPT(nir_copy_prop);
       OPT(nir_opt_dce);
       OPT(nir_opt_cse);
-      OPT(nir_opt_peephole_select);
+      OPT(nir_opt_peephole_select, 0);
       OPT(nir_opt_algebraic);
       OPT(nir_opt_constant_folding);
       OPT(nir_opt_dead_cf);
@@ -419,6 +461,8 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
 
    static const nir_lower_tex_options tex_options = {
       .lower_txp = ~0,
+      .lower_txf_offset = true,
+      .lower_rect_offset = true,
    };
 
    OPT(nir_lower_tex, &tex_options);
@@ -454,7 +498,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
  */
 nir_shader *
 brw_postprocess_nir(nir_shader *nir,
-                    const struct brw_device_info *devinfo,
+                    const struct gen_device_info *devinfo,
                     bool is_scalar)
 {
    bool debug_enabled =
@@ -518,7 +562,7 @@ brw_postprocess_nir(nir_shader *nir,
 
 nir_shader *
 brw_nir_apply_sampler_key(nir_shader *nir,
-                          const struct brw_device_info *devinfo,
+                          const struct gen_device_info *devinfo,
                           const struct brw_sampler_prog_key_data *key_tex,
                           bool is_scalar)
 {

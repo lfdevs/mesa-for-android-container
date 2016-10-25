@@ -835,7 +835,7 @@ nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
 
    /* Queue things up to let the macros write params to the driver constbuf */
    BEGIN_NVC0(push, NVC0_3D(CB_SIZE), 3);
-   PUSH_DATA (push, 2048);
+   PUSH_DATA (push, NVC0_CB_AUX_SIZE);
    PUSH_DATAh(push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(0));
    PUSH_DATA (push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(0));
    BEGIN_NVC0(push, NVC0_3D(CB_POS), 1);
@@ -979,7 +979,7 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (nvc0->vertprog->vp.need_draw_parameters) {
       PUSH_SPACE(push, 9);
       BEGIN_NVC0(push, NVC0_3D(CB_SIZE), 3);
-      PUSH_DATA (push, 2048);
+      PUSH_DATA (push, NVC0_CB_AUX_SIZE);
       PUSH_DATAh(push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(0));
       PUSH_DATA (push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(0));
       if (!info->indirect) {

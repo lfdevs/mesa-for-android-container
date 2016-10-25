@@ -25,13 +25,11 @@
 #include "isl_priv.h"
 
 bool
-gen7_choose_msaa_layout(const struct isl_device *dev,
-                        const struct isl_surf_init_info *info,
-                        enum isl_tiling tiling,
-                        enum isl_msaa_layout *msaa_layout)
+isl_gen7_choose_msaa_layout(const struct isl_device *dev,
+                            const struct isl_surf_init_info *info,
+                            enum isl_tiling tiling,
+                            enum isl_msaa_layout *msaa_layout)
 {
-   const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
-
    bool require_array = false;
    bool require_interleaved = false;
 
@@ -43,19 +41,7 @@ gen7_choose_msaa_layout(const struct isl_device *dev,
       return true;
    }
 
-   /* From the Ivybridge PRM, Volume 4 Part 1 p63, SURFACE_STATE, Surface
-    * Format:
-    *
-    *    If Number of Multisamples is set to a value other than
-    *    MULTISAMPLECOUNT_1, this field cannot be set to the following
-    *    formats: any format with greater than 64 bits per element, any
-    *    compressed texture format (BC*), and any YCRCB* format.
-    */
-   if (fmtl->bs > 8)
-      return false;
-   if (isl_format_is_compressed(info->format))
-      return false;
-   if (isl_format_is_yuv(info->format))
+   if (!isl_format_supports_multisampling(dev->info, info->format))
       return false;
 
    /* From the Ivybridge PRM, Volume 4 Part 1 p73, SURFACE_STATE, Number of
@@ -111,7 +97,8 @@ gen7_choose_msaa_layout(const struct isl_device *dev,
     * In the table above, MSFMT_MSS refers to ISL_MSAA_LAYOUT_ARRAY, and
     * MSFMT_DEPTH_STENCIL refers to ISL_MSAA_LAYOUT_INTERLEAVED.
     */
-   if (isl_surf_usage_is_depth_or_stencil(info->usage))
+   if (isl_surf_usage_is_depth_or_stencil(info->usage) ||
+       (info->usage & ISL_SURF_USAGE_HIZ_BIT))
       require_interleaved = true;
 
    /* From the Ivybridge PRM, Volume 4 Part 1 p72, SURFACE_STATE, Multisampled
@@ -168,9 +155,7 @@ static bool
 gen7_format_needs_valign2(const struct isl_device *dev,
                           enum isl_format format)
 {
-   /* This workaround applies only to gen7 */
-   if (ISL_DEV_GEN(dev) > 7)
-      return false;
+   assert(ISL_DEV_GEN(dev) == 7);
 
    /* From the Ivybridge PRM (2012-05-31), Volume 4, Part 1, Section 2.12.1,
     * RENDER_SURFACE_STATE Surface Vertical Alignment:
@@ -197,9 +182,9 @@ gen7_format_needs_valign2(const struct isl_device *dev,
  * flags except ISL_TILING_X_BIT and ISL_TILING_LINEAR_BIT.
  */
 void
-gen7_filter_tiling(const struct isl_device *dev,
-                   const struct isl_surf_init_info *restrict info,
-                   isl_tiling_flags_t *flags)
+isl_gen6_filter_tiling(const struct isl_device *dev,
+                       const struct isl_surf_init_info *restrict info,
+                       isl_tiling_flags_t *flags)
 {
    /* IVB+ requires separate stencil */
    assert(ISL_DEV_USE_SEPARATE_STENCIL(dev));
@@ -230,6 +215,10 @@ gen7_filter_tiling(const struct isl_device *dev,
       *flags &= ~ISL_TILING_W_BIT;
    }
 
+   /* MCS buffers are always Y-tiled */
+   if (isl_format_get_layout(info->format)->txc == ISL_TXC_MCS)
+      *flags &= ISL_TILING_Y0_BIT;
+
    if (info->usage & (ISL_SURF_USAGE_DISPLAY_ROTATE_90_BIT |
                       ISL_SURF_USAGE_DISPLAY_ROTATE_180_BIT |
                       ISL_SURF_USAGE_DISPLAY_ROTATE_270_BIT)) {
@@ -258,9 +247,13 @@ gen7_filter_tiling(const struct isl_device *dev,
        *   For multisample render targets, this field must be 1 (true). MSRTs
        *   can only be tiled.
        *
-       * Multisample surfaces never require X tiling, and Y tiling generally
-       * performs better than X. So choose Y. (Unless it's stencil, then it
-       * must be W).
+       * From the Broadwell PRM >> Volume2d: Command Structures >>
+       * RENDER_SURFACE_STATE Tile Mode:
+       *
+       *   If Number of Multisamples is not MULTISAMPLECOUNT_1, this field
+       *   must be YMAJOR.
+       *
+       * As usual, though, stencil is special and requires W-tiling.
        */
       *flags &= (ISL_TILING_ANY_Y_MASK | ISL_TILING_W_BIT);
    }
@@ -278,6 +271,16 @@ gen7_filter_tiling(const struct isl_device *dev,
        */
       *flags &= ~ISL_TILING_Y0_BIT;
    }
+
+   /* From the Sandybridge PRM, Volume 1, Part 2, page 32:
+    *
+    *    "NOTE: 128BPE Format Color Buffer ( render target ) MUST be either
+    *     TileX or Linear."
+    *
+    * This is necessary all the way back to 965, but is permitted on Gen7+.
+    */
+   if (ISL_DEV_GEN(dev) < 7 && isl_format_get_layout(info->format)->bpb >= 128)
+      *flags &= ~ISL_TILING_Y0_BIT;
 }
 
 /**
@@ -335,7 +338,8 @@ gen7_choose_valign_el(const struct isl_device *dev,
     */
    if (isl_surf_usage_is_depth(info->usage) ||
        info->samples > 1 ||
-       tiling == ISL_TILING_Y0) {
+       ((info->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT) &&
+        tiling == ISL_TILING_Y0)) {
       require_valign4 = true;
    }
 
@@ -378,12 +382,18 @@ gen7_choose_valign_el(const struct isl_device *dev,
 }
 
 void
-gen7_choose_image_alignment_el(const struct isl_device *dev,
-                               const struct isl_surf_init_info *restrict info,
-                               enum isl_tiling tiling,
-                               enum isl_msaa_layout msaa_layout,
-                               struct isl_extent3d *image_align_el)
+isl_gen7_choose_image_alignment_el(const struct isl_device *dev,
+                                   const struct isl_surf_init_info *restrict info,
+                                   enum isl_tiling tiling,
+                                   enum isl_dim_layout dim_layout,
+                                   enum isl_msaa_layout msaa_layout,
+                                   struct isl_extent3d *image_align_el)
 {
+   assert(ISL_DEV_GEN(dev) == 7);
+
+   /* Handled by isl_choose_image_alignment_el */
+   assert(info->format != ISL_FORMAT_HIZ);
+
    /* IVB+ does not support combined depthstencil. */
    assert(!isl_surf_usage_is_depth_and_stencil(info->usage));
 

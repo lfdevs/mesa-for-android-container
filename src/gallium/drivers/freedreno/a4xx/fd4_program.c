@@ -121,6 +121,12 @@ emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 		OUT_RELOC(ring, so->bo, 0,
 				CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER), 0);
 	}
+
+	/* for how clever coverity is, it is sometimes rather dull, and
+	 * doesn't realize that the only case where bin==NULL, sz==0:
+	 */
+	assume(bin || (sz == 0));
+
 	for (i = 0; i < sz; i++) {
 		OUT_RING(ring, bin[i]);
 	}
@@ -514,7 +520,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			 */
 			uint32_t inloc = s[FS].v->inputs[j].inloc - 8;
 
-			if ((s[FS].v->inputs[j].interpolate == INTERP_QUALIFIER_FLAT) ||
+			if ((s[FS].v->inputs[j].interpolate == INTERP_MODE_FLAT) ||
 					(s[FS].v->inputs[j].rasterflat && emit->rasterflat)) {
 				uint32_t loc = inloc;
 

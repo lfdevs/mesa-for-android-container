@@ -36,7 +36,7 @@
 #include "fd4_format.h"
 
 static enum a4xx_tex_clamp
-tex_clamp(unsigned wrap, bool clamp_to_edge)
+tex_clamp(unsigned wrap, bool clamp_to_edge, bool *needs_border)
 {
 	/* Hardware does not support _CLAMP, but we emulate it: */
 	if (wrap == PIPE_TEX_WRAP_CLAMP) {
@@ -50,6 +50,7 @@ tex_clamp(unsigned wrap, bool clamp_to_edge)
 	case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
 		return A4XX_TEX_CLAMP_TO_EDGE;
 	case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
+		*needs_border = true;
 		return A4XX_TEX_CLAMP_TO_BORDER;
 	case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
 		/* only works for PoT.. need to emulate otherwise! */
@@ -113,14 +114,15 @@ fd4_sampler_state_create(struct pipe_context *pctx,
 		so->saturate_r = (cso->wrap_r == PIPE_TEX_WRAP_CLAMP);
 	}
 
+	so->needs_border = false;
 	so->texsamp0 =
 		COND(miplinear, A4XX_TEX_SAMP_0_MIPFILTER_LINEAR_NEAR) |
 		A4XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter, aniso)) |
 		A4XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter, aniso)) |
 		A4XX_TEX_SAMP_0_ANISO(aniso) |
-		A4XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, clamp_to_edge)) |
-		A4XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, clamp_to_edge)) |
-		A4XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, clamp_to_edge));
+		A4XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, clamp_to_edge, &so->needs_border)) |
+		A4XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, clamp_to_edge, &so->needs_border)) |
+		A4XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, clamp_to_edge, &so->needs_border));
 
 	so->texsamp1 =
 //		COND(miplinear, A4XX_TEX_SAMP_1_MIPFILTER_LINEAR_FAR) |
@@ -142,7 +144,7 @@ fd4_sampler_state_create(struct pipe_context *pctx,
 
 static void
 fd4_sampler_states_bind(struct pipe_context *pctx,
-		unsigned shader, unsigned start,
+		enum pipe_shader_type shader, unsigned start,
 		unsigned nr, void **hwcso)
 {
 	struct fd_context *ctx = fd_context(pctx);
@@ -247,8 +249,8 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	}
 
 	if (cso->target == PIPE_BUFFER) {
-		unsigned elements = cso->u.buf.last_element -
-			cso->u.buf.first_element + 1;
+		unsigned elements = cso->u.buf.size / util_format_get_blocksize(cso->format);
+
 		lvl = 0;
 		so->texconst1 =
 			A4XX_TEX_CONST_1_WIDTH(elements) |
@@ -256,8 +258,7 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		so->texconst2 =
 			A4XX_TEX_CONST_2_FETCHSIZE(fd4_pipe2fetchsize(cso->format)) |
 			A4XX_TEX_CONST_2_PITCH(elements * rsc->cpp);
-		so->offset = cso->u.buf.first_element *
-			util_format_get_blocksize(cso->format);
+		so->offset = cso->u.buf.offset;
 	} else {
 		unsigned miplevels;
 
@@ -307,7 +308,7 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 }
 
 static void
-fd4_set_sampler_views(struct pipe_context *pctx, unsigned shader,
+fd4_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
 		unsigned start, unsigned nr,
 		struct pipe_sampler_view **views)
 {

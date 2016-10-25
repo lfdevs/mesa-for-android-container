@@ -966,6 +966,9 @@ OSMesaDestroyContext( OSMesaContext osmesa )
  * If the context's viewport hasn't been initialized yet, it will now be
  * initialized to (0,0,width,height).
  *
+ * If both the context and the buffer are null, the current context will be
+ * unbound.
+ *
  * Input:  osmesa - the rendering context
  *         buffer - the image buffer memory
  *         type - data type for pixel components
@@ -983,6 +986,10 @@ GLAPI GLboolean GLAPIENTRY
 OSMesaMakeCurrent( OSMesaContext osmesa, void *buffer, GLenum type,
                    GLsizei width, GLsizei height )
 {
+   if (!osmesa && !buffer) {
+      return _mesa_make_current(NULL, NULL, NULL);
+   }
+
    if (!osmesa || !buffer ||
        width < 1 || height < 1 ||
        width > SWRAST_MAX_WIDTH || height > SWRAST_MAX_HEIGHT) {

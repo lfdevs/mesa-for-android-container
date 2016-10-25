@@ -134,7 +134,7 @@ static void lower_bgnloop(
 	} else {
 		fc_state->PredStack[fc_state->LoopDepth] =
 						fc_state->PredicateReg;
-		/* Copy the the current predicate value to this loop's
+		/* Copy the current predicate value to this loop's
 		 * predicate register */
 
 		/* Use the old predicate value for src0 */

@@ -22,6 +22,7 @@
  */
 
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "vc4_drm_public.h"
 
@@ -30,5 +31,5 @@
 struct pipe_screen *
 vc4_drm_screen_create(int fd)
 {
-	return vc4_screen_create(dup(fd));
+	return vc4_screen_create(fcntl(fd, F_DUPFD_CLOEXEC, 3));
 }

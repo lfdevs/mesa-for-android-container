@@ -79,6 +79,17 @@ objects. They all follow simple, one-method binding calls, e.g.
   should be the same as the number of set viewports and can be up to
   PIPE_MAX_VIEWPORTS.
 * ``set_viewport_states``
+* ``set_window_rectangles`` sets the window rectangles to be used for
+  rendering, as defined by GL_EXT_window_rectangles. There are two
+  modes - include and exclude, which define whether the supplied
+  rectangles are to be used for including fragments or excluding
+  them. All of the rectangles are ORed together, so in exclude mode,
+  any fragment inside any rectangle would be culled, while in include
+  mode, any fragment outside all rectangles would be culled. xmin/ymin
+  are inclusive, while xmax/ymax are exclusive (same as scissor states
+  above). Note that this only applies to draws, not clears or
+  blits. (Blits have their own way to pass the requisite rectangles
+  in.)
 * ``set_tess_state`` configures the default tessellation parameters:
   * ``default_outer_level`` is the default value for the outer tessellation
     levels. This corresponds to GL's ``PATCH_DEFAULT_OUTER_LEVEL``.
@@ -220,12 +231,16 @@ If a surface includes several layers then all layers will be cleared.
 ``clear_render_target`` clears a single color rendertarget with the specified
 color value. While it is only possible to clear one surface at a time (which can
 include several layers), this surface need not be bound to the framebuffer.
+If render_condition_enabled is false, any current rendering condition is ignored
+and the clear will be unconditional.
 
 ``clear_depth_stencil`` clears a single depth, stencil or depth/stencil surface
 with the specified depth and stencil values (for combined depth/stencil buffers,
-is is also possible to only clear one or the other part). While it is only
+it is also possible to only clear one or the other part). While it is only
 possible to clear one surface at a time (which can include several layers),
 this surface need not be bound to the framebuffer.
+If render_condition_enabled is false, any current rendering condition is ignored
+and the clear will be unconditional.
 
 ``clear_texture`` clears a non-PIPE_BUFFER resource's specified level
 and bounding box with a clear value provided in that resource's native
@@ -417,9 +432,10 @@ A drawing command can be skipped depending on the outcome of a query
 (typically an occlusion query, or streamout overflow predicate).
 The ``render_condition`` function specifies the query which should be checked
 prior to rendering anything. Functions always honoring render_condition include
-(and are limited to) draw_vbo, clear, clear_render_target, clear_depth_stencil.
-The blit function (but not resource_copy_region, which seems inconsistent)
-can also optionally honor the current render condition.
+(and are limited to) draw_vbo and clear.
+The blit, clear_render_target and clear_depth_stencil functions (but
+not resource_copy_region, which seems inconsistent) can also optionally honor
+the current render condition.
 
 If ``render_condition`` is called with ``query`` = NULL, conditional
 rendering is disabled and drawing takes place normally.
@@ -451,6 +467,14 @@ Flushing
 ^^^^^^^^
 
 ``flush``
+
+PIPE_FLUSH_END_OF_FRAME: Whether the flush marks the end of frame.
+
+PIPE_FLUSH_DEFERRED: It is not required to flush right away, but it is required
+to return a valid fence. If fence_finish is called with the returned fence
+and the context is still unflushed, and the ctx parameter of fence_finish is
+equal to the context where the fence was created, fence_finish will flush
+the context.
 
 
 ``flush_resource``
@@ -492,9 +516,9 @@ This can be considered the equivalent of a CPU memcpy.
 
 ``blit`` blits a region of a resource to a region of another resource, including
 scaling, format conversion, and up-/downsampling, as well as a destination clip
-rectangle (scissors). It can also optionally honor the current render condition
-(but either way the blit itself never contributes anything to queries currently
-gathering data).
+rectangle (scissors) and window rectangles. It can also optionally honor the
+current render condition (but either way the blit itself never contributes
+anything to queries currently gathering data).
 As opposed to manually drawing a textured quad, this lets the pipe driver choose
 the optimal method for blitting (like using a special 2D engine), and usually
 offers, for example, accelerated stencil-only copies even where
@@ -517,8 +541,9 @@ to the transfer object remains unchanged (i.e. it can be non-NULL).
 the transfer object. The pointer into the resource should be considered
 invalid and discarded.
 
-``transfer_inline_write`` performs a simplified transfer for simple writes.
-Basically transfer_map, data write, and transfer_unmap all in one.
+``texture_subdata`` and ``buffer_subdata`` perform a simplified
+transfer for simple writes. Basically transfer_map, data write, and
+transfer_unmap all in one.
 
 
 The box parameter to some of these functions defines a 1D, 2D or 3D
@@ -667,3 +692,18 @@ last_level for layers range from first_layer through last_layer.
 It returns TRUE if mipmap generation succeeds, otherwise it
 returns FALSE. Mipmap generation may fail when it is not supported
 for particular texture types or formats.
+
+Device resets
+^^^^^^^^^^^^^
+
+The state tracker can query or request notifications of when the GPU
+is reset for whatever reason (application error, driver error). When
+a GPU reset happens, the context becomes unusable and all related state
+should be considered lost and undefined. Despite that, context
+notifications are single-shot, i.e. subsequent calls to
+``get_device_reset_status`` will return PIPE_NO_RESET.
+
+* ``get_device_reset_status`` queries whether a device reset has happened
+  since the last call or since the last notification by callback.
+* ``set_device_reset_callback`` sets a callback which will be called when
+  a device reset is detected. The callback is only called synchronously.

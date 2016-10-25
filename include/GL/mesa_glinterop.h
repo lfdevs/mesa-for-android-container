@@ -58,8 +58,8 @@ extern "C" {
 #endif
 
 /* Forward declarations to avoid inclusion of GL/glx.h */
-typedef struct _XDisplay Display;
-typedef struct __GLXcontextRec *GLXContext;
+struct _XDisplay;
+struct __GLXcontextRec;
 
 /* Forward declarations to avoid inclusion of EGL/egl.h */
 typedef void *EGLDisplay;
@@ -97,7 +97,7 @@ struct mesa_glinterop_device_info {
    /* The callee will overwrite it if it supports a lower version.
     *
     * The caller should check the value and access up-to the version supported
-    * by the the callee.
+    * by the callee.
     */
    /* NOTE: Do not use the MESA_GLINTEROP_DEVICE_INFO_VERSION macro */
    uint32_t version;
@@ -125,7 +125,7 @@ struct mesa_glinterop_export_in {
    /* The callee will overwrite it if it supports a lower version.
     *
     * The caller should check the value and access up-to the version supported
-    * by the the callee.
+    * by the callee.
     */
    /* NOTE: Do not use the MESA_GLINTEROP_EXPORT_IN_VERSION macro */
    uint32_t version;
@@ -190,7 +190,7 @@ struct mesa_glinterop_export_out {
    /* The callee will overwrite it if it supports a lower version.
     *
     * The caller should check the value and access up-to the version supported
-    * by the the callee.
+    * by the callee.
     */
    /* NOTE: Do not use the MESA_GLINTEROP_EXPORT_OUT_VERSION macro */
    uint32_t version;
@@ -246,7 +246,7 @@ struct mesa_glinterop_export_out {
  * \return MESA_GLINTEROP_SUCCESS or MESA_GLINTEROP_* != 0 on error
  */
 int
-MesaGLInteropGLXQueryDeviceInfo(Display *dpy, GLXContext context,
+MesaGLInteropGLXQueryDeviceInfo(struct _XDisplay *dpy, struct __GLXcontextRec *context,
                                 struct mesa_glinterop_device_info *out);
 
 
@@ -271,7 +271,7 @@ MesaGLInteropEGLQueryDeviceInfo(EGLDisplay dpy, EGLContext context,
  * \return MESA_GLINTEROP_SUCCESS or MESA_GLINTEROP_* != 0 on error
  */
 int
-MesaGLInteropGLXExportObject(Display *dpy, GLXContext context,
+MesaGLInteropGLXExportObject(struct _XDisplay *dpy, struct __GLXcontextRec *context,
                              struct mesa_glinterop_export_in *in,
                              struct mesa_glinterop_export_out *out);
 
@@ -286,11 +286,11 @@ MesaGLInteropEGLExportObject(EGLDisplay dpy, EGLContext context,
                              struct mesa_glinterop_export_out *out);
 
 
-typedef int (PFNMESAGLINTEROPGLXQUERYDEVICEINFOPROC)(Display *dpy, GLXContext context,
+typedef int (PFNMESAGLINTEROPGLXQUERYDEVICEINFOPROC)(struct _XDisplay *dpy, struct __GLXcontextRec *context,
                                                      struct mesa_glinterop_device_info *out);
 typedef int (PFNMESAGLINTEROPEGLQUERYDEVICEINFOPROC)(EGLDisplay dpy, EGLContext context,
                                                      struct mesa_glinterop_device_info *out);
-typedef int (PFNMESAGLINTEROPGLXEXPORTOBJECTPROC)(Display *dpy, GLXContext context,
+typedef int (PFNMESAGLINTEROPGLXEXPORTOBJECTPROC)(struct _XDisplay *dpy, struct __GLXcontextRec *context,
                                                   struct mesa_glinterop_export_in *in,
                                                   struct mesa_glinterop_export_out *out);
 typedef int (PFNMESAGLINTEROPEGLEXPORTOBJECTPROC)(EGLDisplay dpy, EGLContext context,

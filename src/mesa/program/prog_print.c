@@ -151,6 +151,8 @@ arb_input_attrib_string(GLuint index, GLenum progType)
       "fragment.(twenty-five)", /* VARYING_SLOT_TESS_LEVEL_INNER */
       "fragment.(twenty-six)", /* VARYING_SLOT_CULL_DIST0 */
       "fragment.(twenty-seven)", /* VARYING_SLOT_CULL_DIST1 */
+      "fragment.(twenty-eight)", /* VARYING_SLOT_BOUNDING_BOX0 */
+      "fragment.(twenty-nine)", /* VARYING_SLOT_BOUNDING_BOX1 */
       "fragment.varying[0]",
       "fragment.varying[1]",
       "fragment.varying[2]",
@@ -280,6 +282,8 @@ arb_output_attrib_string(GLuint index, GLenum progType)
       "result.(twenty-five)", /* VARYING_SLOT_TESS_LEVEL_INNER */
       "result.(twenty-six)", /* VARYING_SLOT_CULL_DIST0 */
       "result.(twenty-seven)", /* VARYING_SLOT_CULL_DIST1 */
+      "result.(twenty-eight)", /* VARYING_SLOT_BOUNDING_BOX0 */
+      "result.(twenty-nine)", /* VARYING_SLOT_BOUNDING_BOX1 */
       "result.varying[0]",
       "result.varying[1]",
       "result.varying[2]",
@@ -994,16 +998,6 @@ _mesa_write_shader_to_file(const struct gl_shader *shader)
    if (shader->InfoLog) {
       fputs(shader->InfoLog, f);
    }
-   if (shader->CompileStatus && shader->Program) {
-      fprintf(f, "/* GPU code */\n");
-      fprintf(f, "/*\n");
-      _mesa_fprint_program_opt(f, shader->Program, PROG_PRINT_DEBUG, GL_TRUE);
-      fprintf(f, "*/\n");
-      fprintf(f, "/* Parameters / constants */\n");
-      fprintf(f, "/*\n");
-      _mesa_fprint_parameter_list(f, shader->Program->Parameters);
-      fprintf(f, "*/\n");
-   }
 
    fclose(f);
 }
@@ -1015,7 +1009,7 @@ _mesa_write_shader_to_file(const struct gl_shader *shader)
  * _mesa_write_shader_to_file function.
  */
 void
-_mesa_append_uniforms_to_file(const struct gl_shader *shader)
+_mesa_append_uniforms_to_file(const struct gl_linked_shader *shader)
 {
    const struct gl_program *const prog = shader->Program;
    const char *type;
@@ -1027,7 +1021,7 @@ _mesa_append_uniforms_to_file(const struct gl_shader *shader)
    else
       type = "vert";
 
-   _mesa_snprintf(filename, sizeof(filename), "shader_%u.%s", shader->Name, type);
+   _mesa_snprintf(filename, sizeof(filename), "shader.%s", type);
    f = fopen(filename, "a"); /* append */
    if (!f) {
       fprintf(stderr, "Unable to open %s for appending\n", filename);

@@ -72,6 +72,8 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u32[0] +
                           instr->const_index[0] + offset->u32[0],
                     type);
+      src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
+
       /* gl_PointSize is passed in the .w component of the VUE header */
       if (instr->const_index[0] == VARYING_SLOT_PSIZ)
          src.swizzle = BRW_SWIZZLE_WWWW;

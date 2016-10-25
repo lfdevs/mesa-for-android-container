@@ -45,10 +45,11 @@ d = 'd'
 # however, be used for backend-requested lowering operations as those need to
 # happen regardless of precision.
 #
-# Variable names are specified as "[#]name[@type]" where "#" inicates that
-# the given variable will only match constants and the type indicates that
+# Variable names are specified as "[#]name[@type][(cond)]" where "#" inicates
+# that the given variable will only match constants and the type indicates that
 # the given variable will only match values from ALU instructions with the
-# given output type.
+# given output type, and (cond) specifies an additional condition function
+# (see nir_search_helpers.h).
 #
 # For constants, you have to be careful to make sure that it is the right
 # type because python is unaware of the source and destination types of the
@@ -62,10 +63,19 @@ d = 'd'
 # constructed value should have that bit-size.
 
 optimizations = [
+
+   (('imul', a, '#b@32(is_pos_power_of_two)'), ('ishl', a, ('find_lsb', b))),
+   (('imul', a, '#b@32(is_neg_power_of_two)'), ('ineg', ('ishl', a, ('find_lsb', ('iabs', b))))),
+   (('udiv', a, '#b@32(is_pos_power_of_two)'), ('ushr', a, ('find_lsb', b))),
+   (('idiv', a, '#b@32(is_pos_power_of_two)'), ('imul', ('isign', a), ('ushr', ('iabs', a), ('find_lsb', b))), 'options->lower_idiv'),
+   (('idiv', a, '#b@32(is_neg_power_of_two)'), ('ineg', ('imul', ('isign', a), ('ushr', ('iabs', a), ('find_lsb', ('iabs', b))))), 'options->lower_idiv'),
+   (('umod', a, '#b(is_pos_power_of_two)'),    ('iand', a, ('isub', b, 1))),
+
    (('fneg', ('fneg', a)), a),
    (('ineg', ('ineg', a)), a),
    (('fabs', ('fabs', a)), ('fabs', a)),
    (('fabs', ('fneg', a)), ('fabs', a)),
+   (('fabs', ('u2f', a)), ('u2f', a)),
    (('iabs', ('iabs', a)), ('iabs', a)),
    (('iabs', ('ineg', a)), ('iabs', a)),
    (('~fadd', a, 0.0), a),
@@ -109,6 +119,17 @@ optimizations = [
    (('~fadd@64', a, ('fmul',         c , ('fadd', b, ('fneg', a)))), ('flrp', a, b, c), '!options->lower_flrp64'),
    (('ffma', a, b, c), ('fadd', ('fmul', a, b), c), 'options->lower_ffma'),
    (('~fadd', ('fmul', a, b), c), ('ffma', a, b, c), 'options->fuse_ffma'),
+
+   # (a * #b + #c) << #d
+   # ((a * #b) << #d) + (#c << #d)
+   # (a * (#b << #d)) + (#c << #d)
+   (('ishl', ('iadd', ('imul', a, '#b'), '#c'), '#d'),
+    ('iadd', ('imul', a, ('ishl', b, d)), ('ishl', c, d))),
+
+   # (a * #b) << #c
+   # a * (#b << #c)
+   (('ishl', ('imul', a, '#b'), '#c'), ('imul', a, ('ishl', b, c))),
+
    # Comparison simplifications
    (('~inot', ('flt', a, b)), ('fge', a, b)),
    (('~inot', ('fge', a, b)), ('flt', a, b)),
@@ -134,7 +155,7 @@ optimizations = [
    (('fge', ('fneg', ('fabs', a)), 0.0), ('feq', a, 0.0)),
    (('bcsel', ('flt', b, a), b, a), ('fmin', a, b)),
    (('bcsel', ('flt', a, b), b, a), ('fmax', a, b)),
-   (('bcsel', ('inot', 'a@bool'), b, c), ('bcsel', a, c, b)),
+   (('bcsel', ('inot', a), b, c), ('bcsel', a, c, b)),
    (('bcsel', a, ('bcsel', a, b, c), d), ('bcsel', a, b, d)),
    (('bcsel', a, True, 'b@bool'), ('ior', a, b)),
    (('fmin', a, a), a),
@@ -188,6 +209,7 @@ optimizations = [
    (('iand', a, 0), 0),
    (('ior', a, a), a),
    (('ior', a, 0), a),
+   (('ior', a, True), True),
    (('fxor', a, a), 0.0),
    (('ixor', a, a), 0),
    (('ixor', a, 0), a),
@@ -237,8 +259,8 @@ optimizations = [
    (('ine', 'a@bool', True), ('inot', a)),
    (('ine', 'a@bool', False), a),
    (('ieq', 'a@bool', False), ('inot', 'a')),
-   (('bcsel', a, True, False), ('ine', a, 0)),
-   (('bcsel', a, False, True), ('ieq', a, 0)),
+   (('bcsel', a, True, False), a),
+   (('bcsel', a, False, True), ('inot', a)),
    (('bcsel', True, b, c), b),
    (('bcsel', False, b, c), c),
    # The result of this should be hit by constant propagation and, in the

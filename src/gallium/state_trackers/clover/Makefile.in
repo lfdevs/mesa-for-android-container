@@ -113,7 +113,10 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libclllvm_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_1 = llvm/libclllvm_la-invocation.lo
+am__objects_1 = llvm/codegen/libclllvm_la-bitcode.lo \
+	llvm/codegen/libclllvm_la-common.lo \
+	llvm/codegen/libclllvm_la-native.lo \
+	llvm/libclllvm_la-invocation.lo
 am_libclllvm_la_OBJECTS = $(am__objects_1)
 libclllvm_la_OBJECTS = $(am_libclllvm_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -373,11 +376,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -473,6 +475,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -508,6 +512,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -585,7 +590,6 @@ CPP_SOURCES := \
 	api/sampler.cpp \
 	api/transfer.cpp \
 	api/util.hpp \
-	core/compiler.hpp \
 	core/context.cpp \
 	core/context.hpp \
 	core/device.cpp \
@@ -626,10 +630,19 @@ CPP_SOURCES := \
 	util/tuple.hpp
 
 LLVM_SOURCES := \
-	llvm/invocation.cpp
+	llvm/codegen/bitcode.cpp \
+	llvm/codegen/common.cpp \
+	llvm/codegen/native.cpp \
+	llvm/codegen.hpp \
+	llvm/compat.hpp \
+	llvm/invocation.cpp \
+	llvm/invocation.hpp \
+	llvm/metadata.hpp \
+	llvm/util.hpp
 
 TGSI_SOURCES := \
-	tgsi/compiler.cpp
+	tgsi/compiler.cpp \
+	tgsi/invocation.hpp
 
 AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
@@ -723,6 +736,18 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+llvm/codegen/$(am__dirstamp):
+	@$(MKDIR_P) llvm/codegen
+	@: > llvm/codegen/$(am__dirstamp)
+llvm/codegen/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) llvm/codegen/$(DEPDIR)
+	@: > llvm/codegen/$(DEPDIR)/$(am__dirstamp)
+llvm/codegen/libclllvm_la-bitcode.lo: llvm/codegen/$(am__dirstamp) \
+	llvm/codegen/$(DEPDIR)/$(am__dirstamp)
+llvm/codegen/libclllvm_la-common.lo: llvm/codegen/$(am__dirstamp) \
+	llvm/codegen/$(DEPDIR)/$(am__dirstamp)
+llvm/codegen/libclllvm_la-native.lo: llvm/codegen/$(am__dirstamp) \
+	llvm/codegen/$(DEPDIR)/$(am__dirstamp)
 llvm/$(am__dirstamp):
 	@$(MKDIR_P) llvm
 	@: > llvm/$(am__dirstamp)
@@ -819,6 +844,8 @@ mostlyclean-compile:
 	-rm -f core/*.lo
 	-rm -f llvm/*.$(OBJEXT)
 	-rm -f llvm/*.lo
+	-rm -f llvm/codegen/*.$(OBJEXT)
+	-rm -f llvm/codegen/*.lo
 	-rm -f tgsi/*.$(OBJEXT)
 	-rm -f tgsi/*.lo
 
@@ -851,6 +878,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/libclover_la-sampler.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/libclover_la-timestamp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@llvm/$(DEPDIR)/libclllvm_la-invocation.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@llvm/codegen/$(DEPDIR)/libclllvm_la-bitcode.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@llvm/codegen/$(DEPDIR)/libclllvm_la-common.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@llvm/codegen/$(DEPDIR)/libclllvm_la-native.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/libcltgsi_la-compiler.Plo@am__quote@
 
 .cpp.o:
@@ -876,6 +906,27 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
+
+llvm/codegen/libclllvm_la-bitcode.lo: llvm/codegen/bitcode.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclllvm_la_CXXFLAGS) $(CXXFLAGS) -MT llvm/codegen/libclllvm_la-bitcode.lo -MD -MP -MF llvm/codegen/$(DEPDIR)/libclllvm_la-bitcode.Tpo -c -o llvm/codegen/libclllvm_la-bitcode.lo `test -f 'llvm/codegen/bitcode.cpp' || echo '$(srcdir)/'`llvm/codegen/bitcode.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) llvm/codegen/$(DEPDIR)/libclllvm_la-bitcode.Tpo llvm/codegen/$(DEPDIR)/libclllvm_la-bitcode.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='llvm/codegen/bitcode.cpp' object='llvm/codegen/libclllvm_la-bitcode.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclllvm_la_CXXFLAGS) $(CXXFLAGS) -c -o llvm/codegen/libclllvm_la-bitcode.lo `test -f 'llvm/codegen/bitcode.cpp' || echo '$(srcdir)/'`llvm/codegen/bitcode.cpp
+
+llvm/codegen/libclllvm_la-common.lo: llvm/codegen/common.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclllvm_la_CXXFLAGS) $(CXXFLAGS) -MT llvm/codegen/libclllvm_la-common.lo -MD -MP -MF llvm/codegen/$(DEPDIR)/libclllvm_la-common.Tpo -c -o llvm/codegen/libclllvm_la-common.lo `test -f 'llvm/codegen/common.cpp' || echo '$(srcdir)/'`llvm/codegen/common.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) llvm/codegen/$(DEPDIR)/libclllvm_la-common.Tpo llvm/codegen/$(DEPDIR)/libclllvm_la-common.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='llvm/codegen/common.cpp' object='llvm/codegen/libclllvm_la-common.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclllvm_la_CXXFLAGS) $(CXXFLAGS) -c -o llvm/codegen/libclllvm_la-common.lo `test -f 'llvm/codegen/common.cpp' || echo '$(srcdir)/'`llvm/codegen/common.cpp
+
+llvm/codegen/libclllvm_la-native.lo: llvm/codegen/native.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclllvm_la_CXXFLAGS) $(CXXFLAGS) -MT llvm/codegen/libclllvm_la-native.lo -MD -MP -MF llvm/codegen/$(DEPDIR)/libclllvm_la-native.Tpo -c -o llvm/codegen/libclllvm_la-native.lo `test -f 'llvm/codegen/native.cpp' || echo '$(srcdir)/'`llvm/codegen/native.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) llvm/codegen/$(DEPDIR)/libclllvm_la-native.Tpo llvm/codegen/$(DEPDIR)/libclllvm_la-native.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='llvm/codegen/native.cpp' object='llvm/codegen/libclllvm_la-native.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclllvm_la_CXXFLAGS) $(CXXFLAGS) -c -o llvm/codegen/libclllvm_la-native.lo `test -f 'llvm/codegen/native.cpp' || echo '$(srcdir)/'`llvm/codegen/native.cpp
 
 llvm/libclllvm_la-invocation.lo: llvm/invocation.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclllvm_la_CXXFLAGS) $(CXXFLAGS) -MT llvm/libclllvm_la-invocation.lo -MD -MP -MF llvm/$(DEPDIR)/libclllvm_la-invocation.Tpo -c -o llvm/libclllvm_la-invocation.lo `test -f 'llvm/invocation.cpp' || echo '$(srcdir)/'`llvm/invocation.cpp
@@ -1074,6 +1125,7 @@ clean-libtool:
 	-rm -rf api/.libs api/_libs
 	-rm -rf core/.libs core/_libs
 	-rm -rf llvm/.libs llvm/_libs
+	-rm -rf llvm/codegen/.libs llvm/codegen/_libs
 	-rm -rf tgsi/.libs tgsi/_libs
 install-clHEADERS: $(cl_HEADERS)
 	@$(NORMAL_INSTALL)
@@ -1218,6 +1270,8 @@ distclean-generic:
 	-rm -f core/$(am__dirstamp)
 	-rm -f llvm/$(DEPDIR)/$(am__dirstamp)
 	-rm -f llvm/$(am__dirstamp)
+	-rm -f llvm/codegen/$(DEPDIR)/$(am__dirstamp)
+	-rm -f llvm/codegen/$(am__dirstamp)
 	-rm -f tgsi/$(DEPDIR)/$(am__dirstamp)
 	-rm -f tgsi/$(am__dirstamp)
 
@@ -1230,7 +1284,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf api/$(DEPDIR) core/$(DEPDIR) llvm/$(DEPDIR) tgsi/$(DEPDIR)
+	-rm -rf api/$(DEPDIR) core/$(DEPDIR) llvm/$(DEPDIR) llvm/codegen/$(DEPDIR) tgsi/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -1276,7 +1330,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf api/$(DEPDIR) core/$(DEPDIR) llvm/$(DEPDIR) tgsi/$(DEPDIR)
+	-rm -rf api/$(DEPDIR) core/$(DEPDIR) llvm/$(DEPDIR) llvm/codegen/$(DEPDIR) tgsi/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

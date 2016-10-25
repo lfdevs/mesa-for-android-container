@@ -345,6 +345,9 @@ void r600_test_dma(struct r600_common_screen *rscreen)
 					dstx = rand() % (tdst.width0 - width + 1) & ~0x7;
 					dsty = rand() % (tdst.height0 - height + 1) & ~0x7;
 				} else {
+					/* just make sure that it doesn't divide by zero */
+					assert(max_width > 0 && max_height > 0);
+
 					width = (rand() % max_width) + 1;
 					height = (rand() % max_height) + 1;
 

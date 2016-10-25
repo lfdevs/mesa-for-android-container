@@ -89,10 +89,8 @@ static inline struct intel_renderbuffer *
 intel_renderbuffer(struct gl_renderbuffer *rb)
 {
    struct intel_renderbuffer *irb = (struct intel_renderbuffer *) rb;
-   if (irb && irb->Base.Base.ClassID == INTEL_RB_CLASS) {
-      /*_mesa_warning(NULL, "Returning non-intel Rb\n");*/
+   if (irb && irb->Base.Base.ClassID == INTEL_RB_CLASS)
       return irb;
-   }
    else
       return NULL;
 }

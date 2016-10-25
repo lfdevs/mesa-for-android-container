@@ -37,6 +37,7 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 #include "brw_wm.h"
+#include "compiler/nir/nir.h"
 
 /***********************************************************************
  * WM unit - fragment programs and rasterization
@@ -53,11 +54,11 @@ brw_color_buffer_write_enabled(struct brw_context *brw)
    /* _NEW_BUFFERS */
    for (i = 0; i < ctx->DrawBuffer->_NumColorDrawBuffers; i++) {
       struct gl_renderbuffer *rb = ctx->DrawBuffer->_ColorDrawBuffers[i];
+      uint64_t outputs_written = fp->Base.nir->info.outputs_written;
 
       /* _NEW_COLOR */
-      if (rb &&
-	  (fp->Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_COLOR) ||
-	   fp->Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DATA0 + i)) &&
+      if (rb && (outputs_written & BITFIELD64_BIT(FRAG_RESULT_COLOR) ||
+	         outputs_written & BITFIELD64_BIT(FRAG_RESULT_DATA0 + i)) &&
 	  (ctx->Color.ColorMask[i][0] ||
 	   ctx->Color.ColorMask[i][1] ||
 	   ctx->Color.ColorMask[i][2] ||
@@ -75,11 +76,13 @@ brw_color_buffer_write_enabled(struct brw_context *brw)
 static void
 brw_upload_wm_unit(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FRAGMENT_PROGRAM */
    const struct gl_fragment_program *fp = brw->fragment_program;
    /* BRW_NEW_FS_PROG_DATA */
-   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
+   const struct brw_wm_prog_data *prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
    struct brw_wm_unit_state *wm;
 
    wm = brw_state_batch(brw, AUB_TRACE_WM_STATE,
@@ -165,7 +168,7 @@ brw_upload_wm_unit(struct brw_context *brw)
 
    /* BRW_NEW_FRAGMENT_PROGRAM */
    wm->wm5.program_uses_depth = prog_data->uses_src_depth;
-   wm->wm5.program_computes_depth = (fp->Base.OutputsWritten &
+   wm->wm5.program_computes_depth = (fp->Base.nir->info.outputs_written &
 				     BITFIELD64_BIT(FRAG_RESULT_DEPTH)) != 0;
    /* _NEW_BUFFERS
     * Override for NULL depthbuffer case, required by the Pixel Shader Computed
@@ -178,7 +181,7 @@ brw_upload_wm_unit(struct brw_context *brw)
    wm->wm5.program_uses_killpixel =
       prog_data->uses_kill || ctx->Color.AlphaEnabled;
 
-   wm->wm5.max_threads = brw->max_wm_threads - 1;
+   wm->wm5.max_threads = devinfo->max_wm_threads - 1;
 
    /* _NEW_BUFFERS | _NEW_COLOR */
    if (brw_color_buffer_write_enabled(brw) ||
@@ -270,4 +273,3 @@ const struct brw_tracked_state brw_wm_unit = {
    },
    .emit = brw_upload_wm_unit,
 };
-

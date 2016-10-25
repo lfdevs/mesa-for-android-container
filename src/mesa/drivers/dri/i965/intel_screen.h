@@ -33,16 +33,18 @@
 
 #include "dri_util.h"
 #include "intel_bufmgr.h"
-#include "brw_device_info.h"
+#include "common/gen_device_info.h"
 #include "i915_drm.h"
 #include "xmlconfig.h"
 
 struct intel_screen
 {
    int deviceID;
-   const struct brw_device_info *devinfo;
+   struct gen_device_info devinfo;
 
    __DRIscreen *driScrnPriv;
+
+   uint64_t max_gtt_map_object_size;
 
    bool no_hw;
 

@@ -46,7 +46,7 @@
 #ifdef DEBUG
 
 #define BEGIN_CS(size) do { \
-    assert(size <= (cs_copy->max_dw - cs_copy->cdw)); \
+    assert(size <= (cs_copy->current.max_dw - cs_copy->current.cdw)); \
     cs_count = size; \
 } while (0)
 
@@ -72,7 +72,7 @@
  */
 
 #define OUT_CS(value) do { \
-    cs_copy->buf[cs_copy->cdw++] = (value); \
+    cs_copy->current.buf[cs_copy->current.cdw++] = (value); \
     CS_USED_DW(1); \
 } while (0)
 
@@ -96,8 +96,8 @@
     OUT_CS(CP_PACKET3(op, count))
 
 #define OUT_CS_TABLE(values, count) do { \
-    memcpy(cs_copy->buf + cs_copy->cdw, (values), (count) * 4); \
-    cs_copy->cdw += (count); \
+    memcpy(cs_copy->current.buf + cs_copy->current.cdw, (values), (count) * 4); \
+    cs_copy->current.cdw += (count); \
     CS_USED_DW(count); \
 } while (0)
 
@@ -120,8 +120,8 @@
 
 #define WRITE_CS_TABLE(values, count) do { \
     assert(cs_count == 0); \
-    memcpy(cs_copy->buf + cs_copy->cdw, (values), (count) * 4); \
-    cs_copy->cdw += (count); \
+    memcpy(cs_copy->current.buf + cs_copy->current.cdw, (values), (count) * 4); \
+    cs_copy->current.cdw += (count); \
 } while (0)
 
 #endif /* R300_CS_H */

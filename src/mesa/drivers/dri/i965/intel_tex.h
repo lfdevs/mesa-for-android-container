@@ -51,7 +51,7 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
 				  struct intel_texture_image *intelImage,
                                   uint32_t layout_flags);
 
-GLuint intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit);
+void intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit);
 
 bool
 intel_texsubimage_tiled_memcpy(struct gl_context *ctx,

@@ -115,7 +115,8 @@ nv30_transfer_rect_fragprog(struct nv30_context *nv30)
    struct pipe_context *pipe = &nv30->base.pipe;
 
    if (!fp) {
-      nv30->blit_fp = pipe_buffer_create(pipe->screen, 0, 0, 12 * 4);
+      nv30->blit_fp =
+         pipe_buffer_create(pipe->screen, 0, PIPE_USAGE_STAGING, 12 * 4);
       if (nv30->blit_fp) {
          struct pipe_transfer *transfer;
          u32 *map = pipe_buffer_map(pipe, nv30->blit_fp,
@@ -663,8 +664,7 @@ nv30_transfer_rect(struct nv30_context *nv30, enum nv30_transfer_filter filter,
       {}
    };
 
-   method = methods - 1;
-   while ((++method)->possible) {
+   for (method = methods; method->possible; method++) {
       if (method->possible(nv30, filter, src, dst)) {
          method->execute(nv30, filter, src, dst);
          return;

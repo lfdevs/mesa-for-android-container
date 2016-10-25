@@ -35,7 +35,8 @@
  *    - functions
  */
 
-#pragma once
+#ifndef ISL_H
+#define ISL_H
 
 #include <assert.h>
 #include <stdbool.h>
@@ -48,7 +49,7 @@
 extern "C" {
 #endif
 
-struct brw_device_info;
+struct gen_device_info;
 struct brw_image_param;
 
 #ifndef ISL_DEV_GEN
@@ -65,6 +66,10 @@ struct brw_image_param;
    (assert(ISL_DEV_GEN(__dev) == (__dev)->info->gen))
 #endif
 
+#ifndef ISL_DEV_IS_G4X
+#define ISL_DEV_IS_G4X(__dev) ((__dev)->info->is_g4x)
+#endif
+
 #ifndef ISL_DEV_IS_HASWELL
 /**
  * @brief Get the hardware generation of isl_device.
@@ -73,6 +78,10 @@ struct brw_image_param;
  * `gcc -DISL_DEV_GEN(dev)=9 ...`.
  */
 #define ISL_DEV_IS_HASWELL(__dev) ((__dev)->info->is_haswell)
+#endif
+
+#ifndef ISL_DEV_IS_BAYTRAIL
+#define ISL_DEV_IS_BAYTRAIL(__dev) ((__dev)->info->is_baytrail)
 #endif
 
 #ifndef ISL_DEV_USE_SEPARATE_STENCIL
@@ -345,6 +354,27 @@ enum isl_format {
    ISL_FORMAT_ASTC_LDR_2D_12X10_FLT16 =                        638,
    ISL_FORMAT_ASTC_LDR_2D_12X12_FLT16 =                        639,
 
+   /* The formats that follow are internal to ISL and as such don't have an
+    * explicit number.  We'll just let the C compiler assign it for us.  Any
+    * actual hardware formats *must* come before these in the list.
+    */
+
+   /* Formats for auxiliary surfaces */
+   ISL_FORMAT_HIZ,
+   ISL_FORMAT_MCS_2X,
+   ISL_FORMAT_MCS_4X,
+   ISL_FORMAT_MCS_8X,
+   ISL_FORMAT_MCS_16X,
+   ISL_FORMAT_GEN7_CCS_32BPP_X,
+   ISL_FORMAT_GEN7_CCS_64BPP_X,
+   ISL_FORMAT_GEN7_CCS_128BPP_X,
+   ISL_FORMAT_GEN7_CCS_32BPP_Y,
+   ISL_FORMAT_GEN7_CCS_64BPP_Y,
+   ISL_FORMAT_GEN7_CCS_128BPP_Y,
+   ISL_FORMAT_GEN9_CCS_32BPP,
+   ISL_FORMAT_GEN9_CCS_64BPP,
+   ISL_FORMAT_GEN9_CCS_128BPP,
+
    /* Hardware doesn't understand this out-of-band value */
    ISL_FORMAT_UNSUPPORTED =                             UINT16_MAX,
 };
@@ -392,6 +422,11 @@ enum isl_txc {
    ISL_TXC_ETC1,
    ISL_TXC_ETC2,
    ISL_TXC_ASTC,
+
+   /* Used for auxiliary surface formats */
+   ISL_TXC_HIZ,
+   ISL_TXC_MCS,
+   ISL_TXC_CCS,
 };
 
 /**
@@ -410,6 +445,8 @@ enum isl_tiling {
    ISL_TILING_Y0, /**< Legacy Y tiling */
    ISL_TILING_Yf, /**< Standard 4K tiling. The 'f' means "four". */
    ISL_TILING_Ys, /**< Standard 64K tiling. The 's' means "sixty-four". */
+   ISL_TILING_HIZ, /**< Tiling format for HiZ surfaces */
+   ISL_TILING_CCS, /**< Tiling format for CCS surfaces */
 };
 
 /**
@@ -423,6 +460,8 @@ typedef uint32_t isl_tiling_flags_t;
 #define ISL_TILING_Y0_BIT                 (1u << ISL_TILING_Y0)
 #define ISL_TILING_Yf_BIT                 (1u << ISL_TILING_Yf)
 #define ISL_TILING_Ys_BIT                 (1u << ISL_TILING_Ys)
+#define ISL_TILING_HIZ_BIT                (1u << ISL_TILING_HIZ)
+#define ISL_TILING_CCS_BIT                (1u << ISL_TILING_CCS)
 #define ISL_TILING_ANY_MASK               (~0u)
 #define ISL_TILING_NON_LINEAR_MASK        (~ISL_TILING_LINEAR_BIT)
 
@@ -481,6 +520,32 @@ enum isl_dim_layout {
    ISL_DIM_LAYOUT_GEN9_1D,
 };
 
+enum isl_aux_usage {
+   /** No Auxiliary surface is used */
+   ISL_AUX_USAGE_NONE,
+
+   /** The primary surface is a depth surface and the auxiliary surface is HiZ */
+   ISL_AUX_USAGE_HIZ,
+
+   /** The auxiliary surface is an MCS
+    *
+    * @invariant isl_surf::samples > 1
+    */
+   ISL_AUX_USAGE_MCS,
+
+   /** The auxiliary surface is a fast-clear-only compression surface
+    *
+    * @invariant isl_surf::samples == 1
+    */
+   ISL_AUX_USAGE_CCS_D,
+
+   /** The auxiliary surface provides full lossless color compression
+    *
+    * @invariant isl_surf::samples == 1
+    */
+   ISL_AUX_USAGE_CCS_E,
+};
+
 /* TODO(chadv): Explain */
 enum isl_array_pitch_span {
    ISL_ARRAY_PITCH_SPAN_FULL,
@@ -505,6 +570,9 @@ typedef uint64_t isl_surf_usage_flags_t;
 #define ISL_SURF_USAGE_DISPLAY_FLIP_X_BIT      (1u << 10)
 #define ISL_SURF_USAGE_DISPLAY_FLIP_Y_BIT      (1u << 11)
 #define ISL_SURF_USAGE_STORAGE_BIT             (1u << 12)
+#define ISL_SURF_USAGE_HIZ_BIT                 (1u << 13)
+#define ISL_SURF_USAGE_MCS_BIT                 (1u << 14)
+#define ISL_SURF_USAGE_CCS_BIT                 (1u << 15)
 /** @} */
 
 /**
@@ -600,7 +668,7 @@ enum isl_msaa_layout {
 
 
 struct isl_device {
-   const struct brw_device_info *info;
+   const struct gen_device_info *info;
    bool use_separate_stencil;
    bool has_bit6_swizzling;
 };
@@ -639,7 +707,7 @@ struct isl_format_layout {
    enum isl_format format;
    const char *name;
 
-   uint8_t bs; /**< Block size, in bytes, rounded towards 0 */
+   uint16_t bpb; /**< Bits per block */
    uint8_t bw; /**< Block width, in pixels */
    uint8_t bh; /**< Block height, in pixels */
    uint8_t bd; /**< Block depth, in pixels */
@@ -660,9 +728,47 @@ struct isl_format_layout {
 
 struct isl_tile_info {
    enum isl_tiling tiling;
-   uint32_t width; /**< in bytes */
-   uint32_t height; /**< in rows of memory */
-   uint32_t size; /**< in bytes */
+
+   /* The size (in bits per block) of a single surface element
+    *
+    * For surfaces with power-of-two formats, this is the same as
+    * isl_format_layout::bpb.  For non-power-of-two formats it may be smaller.
+    * The logical_extent_el field is in terms of elements of this size.
+    *
+    * For example, consider ISL_FORMAT_R32G32B32_FLOAT for which
+    * isl_format_layout::bpb is 96 (a non-power-of-two).  In this case, none
+    * of the tiling formats can actually hold an integer number of 96-bit
+    * surface elements so isl_tiling_get_info returns an isl_tile_info for a
+    * 32-bit element size.  It is the responsibility of the caller to
+    * recognize that 32 != 96 ad adjust accordingly.  For instance, to compute
+    * the width of a surface in tiles, you would do:
+    *
+    * width_tl = DIV_ROUND_UP(width_el * (format_bpb / tile_info.format_bpb),
+    *                         tile_info.logical_extent_el.width);
+    */
+   uint32_t format_bpb;
+
+   /** The logical size of the tile in units of format_bpb size elements
+    *
+    * This field determines how a given surface is cut up into tiles.  It is
+    * used to compute the size of a surface in tiles and can be used to
+    * determine the location of the tile containing any given surface element.
+    * The exact value of this field depends heavily on the bits-per-block of
+    * the format being used.
+    */
+   struct isl_extent2d logical_extent_el;
+
+   /** The physical size of the tile in bytes and rows of bytes
+    *
+    * This field determines how the tiles of a surface are physically layed
+    * out in memory.  The logical and physical tile extent are frequently the
+    * same but this is not always the case.  For instance, a W-tile (which is
+    * always used with ISL_FORMAT_R8) has a logical size of 64el x 64el but
+    * its physical size is 128B x 32rows, the same as a Y-tile.
+    *
+    * @see isl_surf::row_pitch
+    */
+   struct isl_extent2d phys_extent_B;
 };
 
 /**
@@ -743,7 +849,17 @@ struct isl_surf {
    uint32_t alignment;
 
    /**
-    * Pitch between vertically adjacent surface elements, in bytes.
+    * The interpretation of this field depends on the value of
+    * isl_tile_info::physical_extent_B.  In particular, the width of the
+    * surface in tiles is row_pitch / isl_tile_info::physical_extent_B.width
+    * and the distance in bytes between vertically adjacent tiles in the image
+    * is given by row_pitch * isl_tile_info::physical_extent_B.height.
+    *
+    * For linear images where isl_tile_info::physical_extent_B.height == 1,
+    * this cleanly reduces to being the distance, in bytes, between vertically
+    * adjacent surface elements.
+    *
+    * @see isl_tile_info::phys_extent_B;
     */
    uint32_t row_pitch;
 
@@ -757,6 +873,22 @@ struct isl_surf {
    /** Copy of isl_surf_init_info::usage. */
    isl_surf_usage_flags_t usage;
 };
+
+struct isl_swizzle {
+   enum isl_channel_select r:4;
+   enum isl_channel_select g:4;
+   enum isl_channel_select b:4;
+   enum isl_channel_select a:4;
+};
+
+#define ISL_SWIZZLE(R, G, B, A) ((struct isl_swizzle) { \
+      .r = ISL_CHANNEL_SELECT_##R, \
+      .g = ISL_CHANNEL_SELECT_##G, \
+      .b = ISL_CHANNEL_SELECT_##B, \
+      .a = ISL_CHANNEL_SELECT_##A, \
+   })
+
+#define ISL_SWIZZLE_IDENTITY ISL_SWIZZLE(RED, GREEN, BLUE, ALPHA)
 
 struct isl_view {
    /**
@@ -783,11 +915,17 @@ struct isl_view {
     *
     * For cube maps, both base_array_layer and array_len should be
     * specified in terms of 2-D layers and must be a multiple of 6.
+    *
+    * 3-D textures are effectively treated as 2-D arrays when used as a
+    * storage image or render target.  If `usage` contains
+    * ISL_SURF_USAGE_RENDER_TARGET_BIT or ISL_SURF_USAGE_STORAGE_BIT then
+    * base_array_layer and array_len are applied.  If the surface is only used
+    * for texturing, they are ignored.
     */
    uint32_t base_array_layer;
    uint32_t array_len;
 
-   enum isl_channel_select channel_select[4];
+   struct isl_swizzle swizzle;
 };
 
 union isl_color_value {
@@ -813,11 +951,21 @@ struct isl_surf_fill_state_info {
    uint32_t mocs;
 
    /**
+    * The auxilary surface or NULL if no auxilary surface is to be used.
+    */
+   const struct isl_surf *aux_surf;
+   enum isl_aux_usage aux_usage;
+   uint64_t aux_address;
+
+   /**
     * The clear color for this surface
     *
     * Valid values depend on hardware generation.
     */
    union isl_color_value clear_color;
+
+   /* Intra-tile offset */
+   uint16_t x_offset_sa, y_offset_sa;
 };
 
 struct isl_buffer_fill_state_info {
@@ -853,7 +1001,7 @@ extern const struct isl_format_layout isl_format_layouts[];
 
 void
 isl_device_init(struct isl_device *dev,
-                const struct brw_device_info *info,
+                const struct gen_device_info *info,
                 bool has_bit6_swizzling);
 
 isl_sample_count_mask_t ATTRIBUTE_CONST
@@ -871,18 +1019,20 @@ isl_format_get_name(enum isl_format fmt)
    return isl_format_layouts[fmt].name;
 }
 
-bool isl_format_supports_rendering(const struct brw_device_info *devinfo,
+bool isl_format_supports_rendering(const struct gen_device_info *devinfo,
                                    enum isl_format format);
-bool isl_format_supports_alpha_blending(const struct brw_device_info *devinfo,
+bool isl_format_supports_alpha_blending(const struct gen_device_info *devinfo,
                                         enum isl_format format);
-bool isl_format_supports_sampling(const struct brw_device_info *devinfo,
+bool isl_format_supports_sampling(const struct gen_device_info *devinfo,
                                   enum isl_format format);
-bool isl_format_supports_filtering(const struct brw_device_info *devinfo,
+bool isl_format_supports_filtering(const struct gen_device_info *devinfo,
                                    enum isl_format format);
-bool isl_format_supports_vertex_fetch(const struct brw_device_info *devinfo,
+bool isl_format_supports_vertex_fetch(const struct gen_device_info *devinfo,
                                       enum isl_format format);
-bool isl_format_supports_lossless_compression(const struct brw_device_info *devinfo,
+bool isl_format_supports_lossless_compression(const struct gen_device_info *devinfo,
                                               enum isl_format format);
+bool isl_format_supports_multisampling(const struct gen_device_info *devinfo,
+                                       enum isl_format format);
 
 bool isl_format_has_unorm_channel(enum isl_format fmt) ATTRIBUTE_CONST;
 bool isl_format_has_snorm_channel(enum isl_format fmt) ATTRIBUTE_CONST;
@@ -914,6 +1064,8 @@ isl_format_has_int_channel(enum isl_format fmt)
 
 unsigned isl_format_get_num_channels(enum isl_format fmt);
 
+uint32_t isl_format_get_depth_format(enum isl_format fmt, bool has_stencil);
+
 static inline bool
 isl_format_is_compressed(enum isl_format fmt)
 {
@@ -939,6 +1091,11 @@ isl_format_has_bc_compression(enum isl_format fmt)
    case ISL_TXC_ETC2:
    case ISL_TXC_ASTC:
       return false;
+
+   case ISL_TXC_HIZ:
+   case ISL_TXC_MCS:
+   case ISL_TXC_CCS:
+      unreachable("Should not be called on an aux surface");
    }
 
    unreachable("bad texture compression mode");
@@ -976,14 +1133,14 @@ enum isl_format isl_format_rgb_to_rgbx(enum isl_format rgb) ATTRIBUTE_CONST;
 bool isl_is_storage_image_format(enum isl_format fmt);
 
 enum isl_format
-isl_lower_storage_image_format(const struct brw_device_info *devinfo,
+isl_lower_storage_image_format(const struct gen_device_info *devinfo,
                                enum isl_format fmt);
 
 /* Returns true if this hardware supports typed load/store on a format with
  * the same size as the given format.
  */
 bool
-isl_has_matching_typed_storage_image_format(const struct brw_device_info *devinfo,
+isl_has_matching_typed_storage_image_format(const struct gen_device_info *devinfo,
                                             enum isl_format fmt);
 
 static inline bool
@@ -998,21 +1155,8 @@ isl_tiling_is_std_y(enum isl_tiling tiling)
    return (1u << tiling) & ISL_TILING_STD_Y_MASK;
 }
 
-bool
-isl_tiling_get_info(const struct isl_device *dev,
-                    enum isl_tiling tiling,
-                    uint32_t format_block_size,
-                    struct isl_tile_info *info);
-
-void
-isl_tiling_get_extent(const struct isl_device *dev,
-                      enum isl_tiling tiling,
-                      uint32_t format_block_size,
-                      struct isl_extent2d *e);
-bool
-isl_surf_choose_tiling(const struct isl_device *dev,
-                       const struct isl_surf_init_info *restrict info,
-                       enum isl_tiling *tiling);
+struct isl_extent2d ATTRIBUTE_CONST
+isl_get_interleaved_msaa_px_size_sa(uint32_t samples);
 
 static inline bool
 isl_surf_usage_is_display(isl_surf_usage_flags_t usage)
@@ -1110,6 +1254,21 @@ isl_surf_get_tile_info(const struct isl_device *dev,
                        const struct isl_surf *surf,
                        struct isl_tile_info *tile_info);
 
+void
+isl_surf_get_hiz_surf(const struct isl_device *dev,
+                      const struct isl_surf *surf,
+                      struct isl_surf *hiz_surf);
+
+void
+isl_surf_get_mcs_surf(const struct isl_device *dev,
+                      const struct isl_surf *surf,
+                      struct isl_surf *mcs_surf);
+
+bool
+isl_surf_get_ccs_surf(const struct isl_device *dev,
+                      const struct isl_surf *surf,
+                      struct isl_surf *ccs_surf);
+
 #define isl_surf_fill_state(dev, state, ...) \
    isl_surf_fill_state_s((dev), (state), \
                          &(struct isl_surf_fill_state_info) {  __VA_ARGS__ });
@@ -1179,8 +1338,8 @@ isl_surf_get_row_pitch_el(const struct isl_surf *surf)
 {
    const struct isl_format_layout *fmtl = isl_format_get_layout(surf->format);
 
-   assert(surf->row_pitch % fmtl->bs == 0);
-   return surf->row_pitch / fmtl->bs;
+   assert(surf->row_pitch % (fmtl->bpb / 8) == 0);
+   return surf->row_pitch / (fmtl->bpb / 8);
 }
 
 /**
@@ -1222,6 +1381,22 @@ isl_surf_get_array_pitch(const struct isl_surf *surf)
 }
 
 /**
+ * Calculate the offset, in units of surface samples, to a subimage in the
+ * surface.
+ *
+ * @invariant level < surface levels
+ * @invariant logical_array_layer < logical array length of surface
+ * @invariant logical_z_offset_px < logical depth of surface at level
+ */
+void
+isl_surf_get_image_offset_sa(const struct isl_surf *surf,
+                             uint32_t level,
+                             uint32_t logical_array_layer,
+                             uint32_t logical_z_offset_px,
+                             uint32_t *x_offset_sa,
+                             uint32_t *y_offset_sa);
+
+/**
  * Calculate the offset, in units of surface elements, to a subimage in the
  * surface.
  *
@@ -1252,11 +1427,43 @@ isl_tiling_get_intratile_offset_el(const struct isl_device *dev,
                                    enum isl_tiling tiling,
                                    uint8_t bs,
                                    uint32_t row_pitch,
-                                   uint32_t total_x_offset_B,
-                                   uint32_t total_y_offset_rows,
+                                   uint32_t total_x_offset_el,
+                                   uint32_t total_y_offset_el,
                                    uint32_t *base_address_offset,
-                                   uint32_t *x_offset_B,
-                                   uint32_t *y_offset_rows);
+                                   uint32_t *x_offset_el,
+                                   uint32_t *y_offset_el);
+
+static inline void
+isl_tiling_get_intratile_offset_sa(const struct isl_device *dev,
+                                   enum isl_tiling tiling,
+                                   enum isl_format format,
+                                   uint32_t row_pitch,
+                                   uint32_t total_x_offset_sa,
+                                   uint32_t total_y_offset_sa,
+                                   uint32_t *base_address_offset,
+                                   uint32_t *x_offset_sa,
+                                   uint32_t *y_offset_sa)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(format);
+
+   assert(fmtl->bpb % 8 == 0);
+
+   /* For computing the intratile offsets, we actually want a strange unit
+    * which is samples for multisampled surfaces but elements for compressed
+    * surfaces.
+    */
+   assert(total_x_offset_sa % fmtl->bw == 0);
+   assert(total_y_offset_sa % fmtl->bh == 0);
+   const uint32_t total_x_offset = total_x_offset_sa / fmtl->bw;
+   const uint32_t total_y_offset = total_y_offset_sa / fmtl->bh;
+
+   isl_tiling_get_intratile_offset_el(dev, tiling, fmtl->bpb / 8, row_pitch,
+                                      total_x_offset, total_y_offset,
+                                      base_address_offset,
+                                      x_offset_sa, y_offset_sa);
+   *x_offset_sa *= fmtl->bw;
+   *y_offset_sa *= fmtl->bh;
+}
 
 /**
  * @brief Get value of 3DSTATE_DEPTH_BUFFER.SurfaceFormat
@@ -1271,3 +1478,5 @@ isl_surf_get_depth_format(const struct isl_device *dev,
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* ISL_H */

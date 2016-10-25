@@ -47,6 +47,7 @@
 #include <assert.h>
 
 #include "main/mtypes.h"
+#include "isl/isl.h"
 #include "intel_bufmgr.h"
 #include "intel_resolve_map.h"
 #include <GL/internal/dri_interface.h>
@@ -614,6 +615,18 @@ struct intel_mipmap_tree
    struct intel_mipmap_tree *stencil_mt;
 
    /**
+    * \brief Stencil texturing miptree for sampling from a stencil texture
+    *
+    * Some hardware doesn't support sampling from the stencil texture as
+    * required by the GL_ARB_stencil_texturing extenion. To workaround this we
+    * blit the texture into a new texture that can be sampled.
+    *
+    * \see intel_update_r8stencil()
+    */
+   struct intel_mipmap_tree *r8stencil_mt;
+   bool r8stencil_needs_update;
+
+   /**
     * \brief MCS miptree.
     *
     * This miptree contains the "multisample control surface", which stores
@@ -696,11 +709,8 @@ intel_miptree_supports_lossless_compressed(struct brw_context *brw,
 
 bool
 intel_miptree_alloc_non_msrt_mcs(struct brw_context *brw,
-                                 struct intel_mipmap_tree *mt);
-
-void
-intel_miptree_prepare_mcs(struct brw_context *brw,
-                          struct intel_mipmap_tree *mt);
+                                 struct intel_mipmap_tree *mt,
+                                 bool is_lossless_compressed);
 
 enum {
    MIPTREE_LAYOUT_ACCELERATED_UPLOAD       = 1 << 0,
@@ -796,13 +806,33 @@ intel_miptree_get_image_offset(const struct intel_mipmap_tree *mt,
 			       GLuint level, GLuint slice,
 			       GLuint *x, GLuint *y);
 
+enum isl_surf_dim
+get_isl_surf_dim(GLenum target);
+
+enum isl_dim_layout
+get_isl_dim_layout(const struct gen_device_info *devinfo, uint32_t tiling,
+                   GLenum target);
+
+void
+intel_miptree_get_isl_surf(struct brw_context *brw,
+                           const struct intel_mipmap_tree *mt,
+                           struct isl_surf *surf);
+void
+intel_miptree_get_aux_isl_surf(struct brw_context *brw,
+                               const struct intel_mipmap_tree *mt,
+                               struct isl_surf *surf,
+                               enum isl_aux_usage *usage);
+
+union isl_color_value
+intel_miptree_get_isl_clear_color(struct brw_context *brw,
+                                  const struct intel_mipmap_tree *mt);
+
 void
 intel_get_image_dims(struct gl_texture_image *image,
                      int *width, int *height, int *depth);
 
 void
 intel_get_tile_masks(uint32_t tiling, uint32_t tr_mode, uint32_t cpp,
-                     bool map_stencil_as_y_tiled,
                      uint32_t *mask_x, uint32_t *mask_y);
 
 void
@@ -927,7 +957,7 @@ intel_miptree_used_for_rendering(struct intel_mipmap_tree *mt)
  */
 #define INTEL_MIPTREE_IGNORE_CCS_E (1 << 0)
 
-void
+bool
 intel_miptree_resolve_color(struct brw_context *brw,
                             struct intel_mipmap_tree *mt,
                             int flags);
@@ -940,6 +970,10 @@ void
 intel_miptree_updownsample(struct brw_context *brw,
                            struct intel_mipmap_tree *src,
                            struct intel_mipmap_tree *dst);
+
+void
+intel_update_r8stencil(struct brw_context *brw,
+                       struct intel_mipmap_tree *mt);
 
 /**
  * Horizontal distance from one slice to the next in the two-dimensional
@@ -985,7 +1019,7 @@ intel_miptree_unmap(struct brw_context *brw,
 
 void
 intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
-	       unsigned int level, unsigned int layer, enum gen6_hiz_op op);
+	       unsigned int level, unsigned int layer, enum blorp_hiz_op op);
 
 #ifdef __cplusplus
 }

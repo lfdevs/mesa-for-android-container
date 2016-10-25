@@ -28,6 +28,7 @@
 
 #include "pipe/p_state.h"
 #include "util/u_string.h"
+#include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_format.h"
@@ -84,6 +85,20 @@ fd3_vp_state_delete(struct pipe_context *pctx, void *hwcso)
 	struct fd3_shader_stateobj *so = hwcso;
 	delete_shader_stateobj(so);
 }
+
+bool
+fd3_needs_manual_clipping(const struct fd3_shader_stateobj *so,
+						  const struct pipe_rasterizer_state *rast)
+{
+	uint64_t outputs = ir3_shader_outputs(so->shader);
+
+	return (!rast->depth_clip ||
+			util_bitcount(rast->clip_plane_enable) > 6 ||
+			outputs & ((1ULL << VARYING_SLOT_CLIP_VERTEX) |
+					   (1ULL << VARYING_SLOT_CLIP_DIST0) |
+					   (1ULL << VARYING_SLOT_CLIP_DIST1)));
+}
+
 
 static void
 emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
@@ -392,7 +407,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 			 */
 			uint32_t inloc = fp->inputs[j].inloc - 8;
 
-			if ((fp->inputs[j].interpolate == INTERP_QUALIFIER_FLAT) ||
+			if ((fp->inputs[j].interpolate == INTERP_MODE_FLAT) ||
 					(fp->inputs[j].rasterflat && emit->rasterflat)) {
 				uint32_t loc = inloc;
 

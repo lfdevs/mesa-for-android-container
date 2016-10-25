@@ -56,7 +56,6 @@ brw_file_from_reg(fs_reg *reg)
 static struct brw_reg
 brw_reg_from_fs_reg(fs_inst *inst, fs_reg *reg, unsigned gen, bool compressed)
 {
-   assert(reg->reg_offset == 0);
    struct brw_reg brw_reg;
 
    switch (reg->file) {
@@ -97,14 +96,14 @@ brw_reg_from_fs_reg(fs_inst *inst, fs_reg *reg, unsigned gen, bool compressed)
       }
 
       brw_reg = retype(brw_reg, reg->type);
-      brw_reg = byte_offset(brw_reg, reg->subreg_offset);
+      brw_reg = byte_offset(brw_reg, reg->offset);
       brw_reg.abs = reg->abs;
       brw_reg.negate = reg->negate;
       break;
    case ARF:
    case FIXED_GRF:
    case IMM:
-      assert(reg->subreg_offset == 0);
+      assert(reg->offset == 0);
       brw_reg = reg->as_brw_reg();
       break;
    case BAD_FILE:
@@ -199,7 +198,7 @@ fs_generator::fire_fb_write(fs_inst *inst,
 {
    uint32_t msg_control;
 
-   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
+   struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
 
    if (devinfo->gen < 6) {
       brw_push_insn_state(p);
@@ -247,7 +246,7 @@ fs_generator::fire_fb_write(fs_inst *inst,
 void
 fs_generator::generate_fb_write(fs_inst *inst, struct brw_reg payload)
 {
-   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
+   struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
    const brw_wm_prog_key * const key = (brw_wm_prog_key * const) this->key;
    struct brw_reg implied_header;
 
@@ -354,6 +353,22 @@ fs_generator::generate_fb_write(fs_inst *inst, struct brw_reg payload)
 }
 
 void
+fs_generator::generate_fb_read(fs_inst *inst, struct brw_reg dst,
+                               struct brw_reg payload)
+{
+   assert(inst->size_written % REG_SIZE == 0);
+   struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
+   const unsigned surf_index =
+      prog_data->binding_table.render_target_start + inst->target;
+
+   gen9_fb_READ(p, dst, payload, surf_index,
+                inst->header_size, inst->size_written / REG_SIZE,
+                prog_data->persample_dispatch);
+
+   brw_mark_surface_used(&prog_data->base, surf_index);
+}
+
+void
 fs_generator::generate_mov_indirect(fs_inst *inst,
                                     struct brw_reg dst,
                                     struct brw_reg reg,
@@ -436,6 +451,7 @@ fs_generator::generate_urb_read(fs_inst *inst,
                                 struct brw_reg dst,
                                 struct brw_reg header)
 {
+   assert(inst->size_written % REG_SIZE == 0);
    assert(header.file == BRW_GENERAL_REGISTER_FILE);
    assert(header.type == BRW_REGISTER_TYPE_UD);
 
@@ -451,7 +467,7 @@ fs_generator::generate_urb_read(fs_inst *inst,
       brw_inst_set_urb_per_slot_offset(p->devinfo, send, true);
 
    brw_inst_set_mlen(p->devinfo, send, inst->mlen);
-   brw_inst_set_rlen(p->devinfo, send, inst->regs_written);
+   brw_inst_set_rlen(p->devinfo, send, inst->size_written / REG_SIZE);
    brw_inst_set_header_present(p->devinfo, send, true);
    brw_inst_set_urb_global_offset(p->devinfo, send, inst->offset);
 }
@@ -609,6 +625,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
                            struct brw_reg surface_index,
                            struct brw_reg sampler_index)
 {
+   assert(inst->size_written % REG_SIZE == 0);
    int msg_type = -1;
    uint32_t simd_mode;
    uint32_t return_format;
@@ -879,7 +896,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
                  surface + base_binding_table_index,
                  sampler % 16,
                  msg_type,
-                 inst->regs_written,
+                 inst->size_written / REG_SIZE,
                  inst->mlen,
                  inst->header_size != 0,
                  simd_mode,
@@ -916,7 +933,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
                               0 /* surface */,
                               0 /* sampler */,
                               msg_type,
-                              inst->regs_written,
+                              inst->size_written / REG_SIZE,
                               inst->mlen /* mlen */,
                               inst->header_size != 0 /* header */,
                               simd_mode,
@@ -1053,11 +1070,7 @@ fs_generator::generate_discard_jump(fs_inst *inst)
     * current block (or the program).
     */
    this->discard_halt_patches.push_tail(new(mem_ctx) ip_record(p->nr_insn));
-
-   brw_push_insn_state(p);
-   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
    gen6_HALT(p);
-   brw_pop_insn_state(p);
 }
 
 void
@@ -1251,7 +1264,7 @@ fs_generator::generate_varying_pull_constant_load_gen4(fs_inst *inst,
        */
       msg_type = BRW_SAMPLER_MESSAGE_SIMD16_LD;
       assert(inst->mlen == 3);
-      assert(inst->regs_written == 8);
+      assert(inst->size_written == 8 * REG_SIZE);
       rlen = 8;
       simd_mode = BRW_SAMPLER_SIMD_MODE_SIMD16;
    }
@@ -1387,6 +1400,7 @@ fs_generator::generate_pixel_interpolator_query(fs_inst *inst,
                                                 struct brw_reg msg_data,
                                                 unsigned msg_type)
 {
+   assert(inst->size_written % REG_SIZE == 0);
    assert(msg_data.type == BRW_REGISTER_TYPE_UD);
 
    brw_pixel_interpolator_query(p,
@@ -1396,7 +1410,7 @@ fs_generator::generate_pixel_interpolator_query(fs_inst *inst,
          msg_type,
          msg_data,
          inst->mlen,
-         inst->regs_written);
+         inst->size_written / REG_SIZE);
 }
 
 
@@ -1649,7 +1663,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
       brw_set_default_acc_write_control(p, inst->writes_accumulator);
       brw_set_default_exec_size(p, cvt(inst->exec_size) - 1);
 
-      assert(inst->force_writemask_all || inst->exec_size >= 8);
+      assert(inst->force_writemask_all || inst->exec_size >= 4);
       assert(inst->force_writemask_all || inst->group % inst->exec_size == 0);
       assert(inst->base_mrf + inst->mlen <= BRW_MAX_MRF(devinfo->gen));
       assert(inst->mlen <= BRW_MAX_MSG_LENGTH);
@@ -1760,6 +1774,9 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          assert(devinfo->gen >= 7);
          /* FBL only supports UD type for dst. */
          brw_FBL(p, retype(dst, BRW_REGISTER_TYPE_UD), src[0]);
+         break;
+      case BRW_OPCODE_LZD:
+         brw_LZD(p, dst, src[0]);
          break;
       case BRW_OPCODE_CBIT:
          assert(devinfo->gen >= 7);
@@ -1966,6 +1983,10 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
 	 generate_fb_write(inst, src[0]);
 	 break;
 
+      case FS_OPCODE_FB_READ:
+         generate_fb_read(inst, dst, src[0]);
+         break;
+
       case FS_OPCODE_MOV_DISPATCH_TO_FLAGS:
          generate_mov_dispatch_to_flags(inst);
          break;
@@ -2021,9 +2042,15 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          generate_set_simd4x2_offset(inst, dst, src[0]);
          break;
 
-      case SHADER_OPCODE_FIND_LIVE_CHANNEL:
-         brw_find_live_channel(p, dst);
+      case SHADER_OPCODE_FIND_LIVE_CHANNEL: {
+         const struct brw_reg mask =
+            brw_stage_has_packed_dispatch(devinfo, stage,
+                                          prog_data) ? brw_imm_ud(~0u) :
+            stage == MESA_SHADER_FRAGMENT ? brw_vmask_reg() :
+            brw_dmask_reg();
+         brw_find_live_channel(p, dst, mask);
          break;
+      }
 
       case SHADER_OPCODE_BROADCAST:
          assert(inst->force_writemask_all);
@@ -2054,11 +2081,6 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          }
          break;
 
-      case FS_OPCODE_INTERPOLATE_AT_CENTROID:
-         generate_pixel_interpolator_query(inst, dst, src[0], src[1],
-                                           GEN7_PIXEL_INTERPOLATOR_LOC_CENTROID);
-         break;
-
       case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
          generate_pixel_interpolator_query(inst, dst, src[0], src[1],
                                            GEN7_PIXEL_INTERPOLATOR_LOC_SAMPLE);
@@ -2081,6 +2103,13 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
       case SHADER_OPCODE_BARRIER:
 	 generate_barrier(inst, src[0]);
 	 break;
+
+      case BRW_OPCODE_DIM:
+         assert(devinfo->is_haswell);
+         assert(src[0].type == BRW_REGISTER_TYPE_DF);
+         assert(dst.type == BRW_REGISTER_TYPE_DF);
+         brw_DIM(p, dst, retype(src[0], BRW_REGISTER_TYPE_F));
+         break;
 
       default:
          unreachable("Unsupported opcode");
@@ -2106,7 +2135,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
       }
    }
 
-   brw_set_uip_jip(p);
+   brw_set_uip_jip(p, start_offset);
    annotation_finalize(&annotation, p->next_insn_offset);
 
 #ifndef NDEBUG

@@ -89,4 +89,41 @@ struct BLEND_COMPILE_STATE
     {
         return memcmp(this, &other, sizeof(BLEND_COMPILE_STATE)) == 0;
     }
+
+    // Canonicalize state to reduce unnecessary JIT compiles
+    void Canonicalize()
+    {
+        if (!desc.alphaTestEnable)
+        {
+            alphaTestFormat = (ALPHA_TEST_FORMAT)0;
+            alphaTestFunction = (SWR_ZFUNCTION)0;
+        }
+
+        if (!blendState.blendEnable)
+        {
+            blendState.sourceAlphaBlendFactor = (SWR_BLEND_FACTOR)0;
+            blendState.destAlphaBlendFactor = (SWR_BLEND_FACTOR)0;
+            blendState.sourceBlendFactor = (SWR_BLEND_FACTOR)0;
+            blendState.destBlendFactor = (SWR_BLEND_FACTOR)0;
+            blendState.colorBlendFunc = (SWR_BLEND_OP)0;
+            blendState.alphaBlendFunc = (SWR_BLEND_OP)0;
+        }
+
+        if (!blendState.logicOpEnable)
+        {
+            blendState.logicOpFunc = (SWR_LOGIC_OP)0;
+        }
+
+        if (!blendState.blendEnable && !blendState.logicOpEnable)
+        {
+            format = (SWR_FORMAT)0;
+        }
+
+        if (!desc.independentAlphaBlendEnable)
+        {
+            blendState.sourceAlphaBlendFactor = (SWR_BLEND_FACTOR)0;
+            blendState.destAlphaBlendFactor = (SWR_BLEND_FACTOR)0;
+            blendState.alphaBlendFunc = (SWR_BLEND_OP)0;
+        }
+    }
 };

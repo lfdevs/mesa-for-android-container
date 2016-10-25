@@ -33,8 +33,8 @@ static void
 assign(unsigned int *reg_hw_locations, backend_reg *reg)
 {
    if (reg->file == VGRF) {
-      reg->nr = reg_hw_locations[reg->nr] + reg->reg_offset;
-      reg->reg_offset = 0;
+      reg->nr = reg_hw_locations[reg->nr] + reg->offset / REG_SIZE;
+      reg->offset %= REG_SIZE;
    }
 }
 
@@ -392,7 +392,8 @@ vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
              */
             if (!can_use_scratch_for_source(inst, i, inst->src[i].nr)) {
                spill_costs[inst->src[i].nr] += loop_scale;
-               if (inst->src[i].reladdr)
+               if (inst->src[i].reladdr ||
+                   inst->src[i].offset % REG_SIZE != 0)
                   no_spill[inst->src[i].nr] = true;
             }
          }
@@ -400,7 +401,7 @@ vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
 
       if (inst->dst.file == VGRF) {
          spill_costs[inst->dst.nr] += loop_scale;
-         if (inst->dst.reladdr)
+         if (inst->dst.reladdr || inst->dst.offset % REG_SIZE != 0)
             no_spill[inst->dst.nr] = true;
       }
 

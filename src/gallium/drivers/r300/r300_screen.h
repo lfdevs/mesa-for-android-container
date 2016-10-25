@@ -27,7 +27,7 @@
 #include "r300_chipset.h"
 #include "radeon/radeon_winsys.h"
 #include "pipe/p_screen.h"
-#include "util/u_slab.h"
+#include "util/slab.h"
 #include "os/os_thread.h"
 #include <stdio.h>
 
@@ -43,6 +43,8 @@ struct r300_screen {
 
     /** Combination of DBG_xxx flags */
     unsigned debug;
+
+    struct slab_parent_pool pool_transfers;
 
     /* The MSAA texture with CMASK access; */
     struct pipe_resource *cmask_resource;

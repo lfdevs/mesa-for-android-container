@@ -85,6 +85,12 @@ enum gbm_bo_format {
 /* color index */
 #define GBM_FORMAT_C8		__gbm_fourcc_code('C', '8', ' ', ' ') /* [7:0] C */
 
+/* 8 bpp Red */
+#define GBM_FORMAT_R8		__gbm_fourcc_code('R', '8', ' ', ' ') /* [7:0] R */
+
+/* 16 bpp RG */
+#define GBM_FORMAT_GR88		__gbm_fourcc_code('G', 'R', '8', '8') /* [15:0] G:R 8:8 little endian */
+
 /* 8 bpp RGB */
 #define GBM_FORMAT_RGB332	__gbm_fourcc_code('R', 'G', 'B', '8') /* [7:0] R:G:B 3:3:2 */
 #define GBM_FORMAT_BGR233	__gbm_fourcc_code('B', 'G', 'R', '8') /* [7:0] B:G:R 2:3:3 */
@@ -207,7 +213,7 @@ enum gbm_bo_flags {
    GBM_BO_USE_RENDERING    = (1 << 2),
    /**
     * Buffer can be used for gbm_bo_write.  This is guaranteed to work
-    * with GBM_BO_USE_CURSOR. but may not work for other combinations.
+    * with GBM_BO_USE_CURSOR, but may not work for other combinations.
     */
    GBM_BO_USE_WRITE    = (1 << 3),
    /**

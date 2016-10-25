@@ -51,9 +51,6 @@ static bool
 vc4_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
-        bool old_msaa = vc4->msaa;
-        int old_tile_width = vc4->tile_width;
-        int old_tile_height = vc4->tile_height;
         bool msaa = (info->src.resource->nr_samples > 1 ||
                      info->dst.resource->nr_samples > 1);
         int tile_width = msaa ? 32 : 64;
@@ -114,8 +111,6 @@ vc4_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         if (info->dst.resource->format != info->src.resource->format)
                 return false;
 
-        vc4_flush(pctx);
-
         if (false) {
                 fprintf(stderr, "RCL blit from %d,%d to %d,%d (%d,%d)\n",
                         info->src.box.x,
@@ -131,34 +126,34 @@ vc4_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         struct pipe_surface *src_surf =
                 vc4_get_blit_surface(pctx, info->src.resource, info->src.level);
 
-        pipe_surface_reference(&vc4->color_read, src_surf);
-        pipe_surface_reference(&vc4->color_write,
-                               dst_surf->texture->nr_samples > 1 ?
-                               NULL : dst_surf);
-        pipe_surface_reference(&vc4->msaa_color_write,
-                               dst_surf->texture->nr_samples > 1 ?
-                               dst_surf : NULL);
-        pipe_surface_reference(&vc4->zs_read, NULL);
-        pipe_surface_reference(&vc4->zs_write, NULL);
-        pipe_surface_reference(&vc4->msaa_zs_write, NULL);
+        vc4_flush_jobs_reading_resource(vc4, info->src.resource);
 
-        vc4->draw_min_x = info->dst.box.x;
-        vc4->draw_min_y = info->dst.box.y;
-        vc4->draw_max_x = info->dst.box.x + info->dst.box.width;
-        vc4->draw_max_y = info->dst.box.y + info->dst.box.height;
-        vc4->draw_width = dst_surf->width;
-        vc4->draw_height = dst_surf->height;
+        struct vc4_job *job = vc4_get_job(vc4, dst_surf, NULL);
+        pipe_surface_reference(&job->color_read, src_surf);
 
-        vc4->tile_width = tile_width;
-        vc4->tile_height = tile_height;
-        vc4->msaa = msaa;
-        vc4->needs_flush = true;
+        /* If we're resolving from MSAA to single sample, we still need to run
+         * the engine in MSAA mode for the load.
+         */
+        if (!job->msaa && info->src.resource->nr_samples > 1) {
+                job->msaa = true;
+                job->tile_width = 32;
+                job->tile_height = 32;
+        }
 
-        vc4_job_submit(vc4);
+        job->draw_min_x = info->dst.box.x;
+        job->draw_min_y = info->dst.box.y;
+        job->draw_max_x = info->dst.box.x + info->dst.box.width;
+        job->draw_max_y = info->dst.box.y + info->dst.box.height;
+        job->draw_width = dst_surf->width;
+        job->draw_height = dst_surf->height;
 
-        vc4->msaa = old_msaa;
-        vc4->tile_width = old_tile_width;
-        vc4->tile_height = old_tile_height;
+        job->tile_width = tile_width;
+        job->tile_height = tile_height;
+        job->msaa = msaa;
+        job->needs_flush = true;
+        job->resolve |= PIPE_CLEAR_COLOR;
+
+        vc4_job_submit(vc4, job);
 
         pipe_surface_reference(&dst_surf, NULL);
         pipe_surface_reference(&src_surf, NULL);
@@ -166,18 +161,9 @@ vc4_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         return true;
 }
 
-static bool
-vc4_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
+void
+vc4_blitter_save(struct vc4_context *vc4)
 {
-        struct vc4_context *vc4 = vc4_context(ctx);
-
-        if (!util_blitter_is_blit_supported(vc4->blitter, info)) {
-                fprintf(stderr, "blit unsupported %s -> %s\n",
-                    util_format_short_name(info->src.resource->format),
-                    util_format_short_name(info->dst.resource->format));
-                return false;
-        }
-
         util_blitter_save_vertex_buffer_slot(vc4->blitter, vc4->vertexbuf.vb);
         util_blitter_save_vertex_elements(vc4->blitter, vc4->vtx);
         util_blitter_save_vertex_shader(vc4->blitter, vc4->prog.bind_vs);
@@ -195,7 +181,21 @@ vc4_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                         (void **)vc4->fragtex.samplers);
         util_blitter_save_fragment_sampler_views(vc4->blitter,
                         vc4->fragtex.num_textures, vc4->fragtex.textures);
+}
 
+static bool
+vc4_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
+{
+        struct vc4_context *vc4 = vc4_context(ctx);
+
+        if (!util_blitter_is_blit_supported(vc4->blitter, info)) {
+                fprintf(stderr, "blit unsupported %s -> %s\n",
+                    util_format_short_name(info->src.resource->format),
+                    util_format_short_name(info->dst.resource->format));
+                return false;
+        }
+
+        vc4_blitter_save(vc4);
         util_blitter_blit(vc4->blitter, info);
 
         return true;

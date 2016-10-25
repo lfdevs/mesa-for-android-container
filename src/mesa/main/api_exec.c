@@ -41,6 +41,7 @@
 #include "main/blit.h"
 #include "main/bufferobj.h"
 #include "main/arrayobj.h"
+#include "main/bbox.h"
 #include "main/buffers.h"
 #include "main/clear.h"
 #include "main/clip.h"
@@ -96,7 +97,7 @@
 #include "main/texparam.h"
 #include "main/texstate.h"
 #include "main/texstorage.h"
-#include "main/texturebarrier.h"
+#include "main/barrier.h"
 #include "main/textureview.h"
 #include "main/transformfeedback.h"
 #include "main/mtypes.h"
@@ -132,6 +133,11 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
 
    vbo_initialize_exec_dispatch(ctx, exec);
 
+   if ((ctx->API == API_OPENGLES2 && ctx->Version >= 31)) {
+      SET_DepthRangeArrayfvOES(exec, _mesa_DepthRangeArrayfvOES);
+      SET_DepthRangeIndexedfOES(exec, _mesa_DepthRangeIndexedfOES);
+      SET_PrimitiveBoundingBox(exec, _mesa_PrimitiveBoundingBox);
+   }
    if (_mesa_is_desktop_gl(ctx)) {
       SET_AttachObjectARB(exec, _mesa_AttachObjectARB);
       SET_BeginConditionalRender(exec, _mesa_BeginConditionalRender);
@@ -164,6 +170,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_DepthBoundsEXT(exec, _mesa_DepthBoundsEXT);
       SET_DepthRange(exec, _mesa_DepthRange);
       SET_DetachObjectARB(exec, _mesa_DetachObjectARB);
+      SET_DispatchComputeGroupSizeARB(exec, _mesa_DispatchComputeGroupSizeARB);
       SET_DrawBuffer(exec, _mesa_DrawBuffer);
       SET_EndConditionalRender(exec, _mesa_EndConditionalRender);
       SET_EndPerfMonitorAMD(exec, _mesa_EndPerfMonitorAMD);
@@ -178,7 +185,6 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetCompressedTextureSubImage(exec, _mesa_GetCompressedTextureSubImage);
       SET_GetDoublei_v(exec, _mesa_GetDoublei_v);
       SET_GetDoublev(exec, _mesa_GetDoublev);
-      SET_GetFloati_v(exec, _mesa_GetFloati_v);
       SET_GetHandleARB(exec, _mesa_GetHandleARB);
       SET_GetInfoLogARB(exec, _mesa_GetInfoLogARB);
       SET_GetObjectParameterfvARB(exec, _mesa_GetObjectParameterfvARB);
@@ -403,6 +409,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_VertexAttribDivisor(exec, _mesa_VertexAttribDivisor);
       SET_VertexAttribIPointer(exec, _mesa_VertexAttribIPointer);
       SET_WaitSync(exec, _mesa_WaitSync);
+      SET_WindowRectanglesEXT(exec, _mesa_WindowRectanglesEXT);
    }
    if (_mesa_is_desktop_gl(ctx) || (ctx->API == API_OPENGLES2 && ctx->Version >= 31)) {
       SET_BindImageTexture(exec, _mesa_BindImageTexture);
@@ -411,6 +418,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_DispatchCompute(exec, _mesa_DispatchCompute);
       SET_DispatchComputeIndirect(exec, _mesa_DispatchComputeIndirect);
       SET_GetBooleani_v(exec, _mesa_GetBooleani_v);
+      SET_GetFloati_v(exec, _mesa_GetFloati_v);
       SET_GetFramebufferParameteriv(exec, _mesa_GetFramebufferParameteriv);
       SET_GetMultisamplefv(exec, _mesa_GetMultisamplefv);
       SET_GetProgramInterfaceiv(exec, _mesa_GetProgramInterfaceiv);
@@ -423,6 +431,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetTexLevelParameteriv(exec, _mesa_GetTexLevelParameteriv);
       SET_MemoryBarrier(exec, _mesa_MemoryBarrier);
       SET_MemoryBarrierByRegion(exec, _mesa_MemoryBarrierByRegion);
+      SET_PatchParameteri(exec, _mesa_PatchParameteri);
       SET_SampleMaski(exec, _mesa_SampleMaski);
       SET_TexStorage2DMultisample(exec, _mesa_TexStorage2DMultisample);
       SET_TexStorage3DMultisample(exec, _mesa_TexStorage3DMultisample);
@@ -430,9 +439,6 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_VertexAttribFormat(exec, _mesa_VertexAttribFormat);
       SET_VertexAttribIFormat(exec, _mesa_VertexAttribIFormat);
       SET_VertexBindingDivisor(exec, _mesa_VertexBindingDivisor);
-   }
-   if (_mesa_is_desktop_gl(ctx) || (ctx->API == API_OPENGLES2 && ctx->Version >= 32)) {
-      SET_PatchParameteri(exec, _mesa_PatchParameteri);
    }
    if (_mesa_is_desktop_gl(ctx) || ctx->API == API_OPENGLES) {
       SET_LogicOp(exec, _mesa_LogicOp);
@@ -543,6 +549,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_BindAttribLocation(exec, _mesa_BindAttribLocation);
       SET_BindProgramPipeline(exec, _mesa_BindProgramPipeline);
       SET_BindVertexArray(exec, _mesa_BindVertexArray);
+      SET_BlendBarrier(exec, _mesa_BlendBarrier);
       SET_BlendColor(exec, _mesa_BlendColor);
       SET_CompileShader(exec, _mesa_CompileShader);
       SET_CompressedTexImage3D(exec, _mesa_CompressedTexImage3D);
@@ -1246,9 +1253,6 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_NamedFramebufferTextureLayer(exec, _mesa_NamedFramebufferTextureLayer);
       SET_NamedRenderbufferStorage(exec, _mesa_NamedRenderbufferStorage);
       SET_NamedRenderbufferStorageMultisample(exec, _mesa_NamedRenderbufferStorageMultisample);
-      SET_ScissorArrayv(exec, _mesa_ScissorArrayv);
-      SET_ScissorIndexed(exec, _mesa_ScissorIndexed);
-      SET_ScissorIndexedv(exec, _mesa_ScissorIndexedv);
       SET_TextureBuffer(exec, _mesa_TextureBuffer);
       SET_TextureBufferRange(exec, _mesa_TextureBufferRange);
       SET_TextureParameterIiv(exec, _mesa_TextureParameterIiv);
@@ -1303,14 +1307,17 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_VertexAttribL4d(exec, _mesa_VertexAttribL4d);
       SET_VertexAttribL4dv(exec, _mesa_VertexAttribL4dv);
       SET_VertexAttribLPointer(exec, _mesa_VertexAttribLPointer);
-      SET_ViewportArrayv(exec, _mesa_ViewportArrayv);
-      SET_ViewportIndexedf(exec, _mesa_ViewportIndexedf);
-      SET_ViewportIndexedfv(exec, _mesa_ViewportIndexedfv);
    }
    if (ctx->API == API_OPENGL_CORE || (ctx->API == API_OPENGLES2 && ctx->Version >= 31)) {
       SET_FramebufferTexture(exec, _mesa_FramebufferTexture);
+      SET_ScissorArrayv(exec, _mesa_ScissorArrayv);
+      SET_ScissorIndexed(exec, _mesa_ScissorIndexed);
+      SET_ScissorIndexedv(exec, _mesa_ScissorIndexedv);
       SET_TexBuffer(exec, _mesa_TexBuffer);
       SET_TexBufferRange(exec, _mesa_TexBufferRange);
+      SET_ViewportArrayv(exec, _mesa_ViewportArrayv);
+      SET_ViewportIndexedf(exec, _mesa_ViewportIndexedf);
+      SET_ViewportIndexedfv(exec, _mesa_ViewportIndexedfv);
    }
 
 }

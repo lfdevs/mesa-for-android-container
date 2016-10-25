@@ -117,14 +117,14 @@ simdscalar QuantizeDepth(simdscalar depth)
 
 INLINE
 simdscalar DepthStencilTest(const API_STATE* pState,
-                 bool frontFacing, simdscalar interpZ, uint8_t* pDepthBase, simdscalar coverageMask, uint8_t *pStencilBase,
-                 simdscalar* pStencilMask)
+                 bool frontFacing, uint32_t viewportIndex, simdscalar interpZ, uint8_t* pDepthBase, simdscalar coverageMask,
+                 uint8_t *pStencilBase, simdscalar* pStencilMask)
 {
     static_assert(KNOB_DEPTH_HOT_TILE_FORMAT == R32_FLOAT, "Unsupported depth hot tile format");
     static_assert(KNOB_STENCIL_HOT_TILE_FORMAT == R8_UINT, "Unsupported stencil hot tile format");
 
     const SWR_DEPTH_STENCIL_STATE* pDSState = &pState->depthStencilState;
-    const SWR_VIEWPORT* pViewport = &pState->vp[0];
+    const SWR_VIEWPORT* pViewport = &pState->vp[viewportIndex];
 
     simdscalar depthResult = _simd_set1_ps(-1.0f);
     simdscalar zbuf;

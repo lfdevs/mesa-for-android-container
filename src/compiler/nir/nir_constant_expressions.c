@@ -7573,7 +7573,7 @@ evaluate_pack_uvec2_to_uint(unsigned num_components, unsigned bit_size,
          struct uint32_vec dst;
 
             
-dst.x = (src0.x & 0xffff) | (src0.y >> 16);
+dst.x = (src0.x & 0xffff) | (src0.y << 16);
 
 
                _dst_val.u32[0] = dst.x;
@@ -7592,7 +7592,7 @@ dst.x = (src0.x & 0xffff) | (src0.y >> 16);
          struct uint32_vec dst;
 
             
-dst.x = (src0.x & 0xffff) | (src0.y >> 16);
+dst.x = (src0.x & 0xffff) | (src0.y << 16);
 
 
                _dst_val.u32[0] = dst.x;

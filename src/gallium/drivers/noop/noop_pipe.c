@@ -36,26 +36,26 @@ DEBUG_GET_ONCE_BOOL_OPTION(noop, "GALLIUM_NOOP", FALSE)
 void noop_init_state_functions(struct pipe_context *ctx);
 
 struct noop_pipe_screen {
-	struct pipe_screen	pscreen;
-	struct pipe_screen	*oscreen;
+   struct pipe_screen	pscreen;
+   struct pipe_screen	*oscreen;
 };
 
 /*
  * query
  */
 struct noop_query {
-	unsigned	query;
+   unsigned	query;
 };
 static struct pipe_query *noop_create_query(struct pipe_context *ctx, unsigned query_type, unsigned index)
 {
-	struct noop_query *query = CALLOC_STRUCT(noop_query);
+   struct noop_query *query = CALLOC_STRUCT(noop_query);
 
-	return (struct pipe_query *)query;
+   return (struct pipe_query *)query;
 }
 
 static void noop_destroy_query(struct pipe_context *ctx, struct pipe_query *query)
 {
-	FREE(query);
+   FREE(query);
 }
 
 static boolean noop_begin_query(struct pipe_context *ctx, struct pipe_query *query)
@@ -69,14 +69,14 @@ static bool noop_end_query(struct pipe_context *ctx, struct pipe_query *query)
 }
 
 static boolean noop_get_query_result(struct pipe_context *ctx,
-					struct pipe_query *query,
-					boolean wait,
-					union pipe_query_result *vresult)
+                                     struct pipe_query *query,
+                                     boolean wait,
+                                     union pipe_query_result *vresult)
 {
-	uint64_t *result = (uint64_t*)vresult;
+   uint64_t *result = (uint64_t*)vresult;
 
-	*result = 0;
-	return TRUE;
+   *result = 0;
+   return TRUE;
 }
 
 static void
@@ -89,66 +89,79 @@ noop_set_active_query_state(struct pipe_context *pipe, boolean enable)
  * resource
  */
 struct noop_resource {
-	struct pipe_resource	base;
-	unsigned		size;
-	char			*data;
-	struct sw_displaytarget	*dt;
+   struct pipe_resource	base;
+   unsigned		size;
+   char			*data;
+   struct sw_displaytarget	*dt;
 };
 
 static struct pipe_resource *noop_resource_create(struct pipe_screen *screen,
-						const struct pipe_resource *templ)
+                                                  const struct pipe_resource *templ)
 {
-	struct noop_resource *nresource;
-	unsigned stride;
+   struct noop_resource *nresource;
+   unsigned stride;
 
-	nresource = CALLOC_STRUCT(noop_resource);
-	if (!nresource)
-		return NULL;
+   nresource = CALLOC_STRUCT(noop_resource);
+   if (!nresource)
+      return NULL;
 
-	stride = util_format_get_stride(templ->format, templ->width0);
-	nresource->base = *templ;
-	nresource->base.screen = screen;
-	nresource->size = stride * templ->height0 * templ->depth0;
-	nresource->data = MALLOC(nresource->size);
-	pipe_reference_init(&nresource->base.reference, 1);
-	if (nresource->data == NULL) {
-		FREE(nresource);
-		return NULL;
-	}
-	return &nresource->base;
+   stride = util_format_get_stride(templ->format, templ->width0);
+   nresource->base = *templ;
+   nresource->base.screen = screen;
+   nresource->size = stride * templ->height0 * templ->depth0;
+   nresource->data = MALLOC(nresource->size);
+   pipe_reference_init(&nresource->base.reference, 1);
+   if (nresource->data == NULL) {
+      FREE(nresource);
+      return NULL;
+   }
+   return &nresource->base;
 }
 
 static struct pipe_resource *noop_resource_from_handle(struct pipe_screen *screen,
-							const struct pipe_resource *templ,
-							struct winsys_handle *handle,
+                                                       const struct pipe_resource *templ,
+                                                       struct winsys_handle *handle,
                                                        unsigned usage)
 {
-	struct noop_pipe_screen *noop_screen = (struct noop_pipe_screen*)screen;
-	struct pipe_screen *oscreen = noop_screen->oscreen;
-	struct pipe_resource *result;
-	struct pipe_resource *noop_resource;
+   struct noop_pipe_screen *noop_screen = (struct noop_pipe_screen*)screen;
+   struct pipe_screen *oscreen = noop_screen->oscreen;
+   struct pipe_resource *result;
+   struct pipe_resource *noop_resource;
 
-	result = oscreen->resource_from_handle(oscreen, templ, handle, usage);
-	noop_resource = noop_resource_create(screen, result);
-	pipe_resource_reference(&result, NULL);
-	return noop_resource;
+   result = oscreen->resource_from_handle(oscreen, templ, handle, usage);
+   noop_resource = noop_resource_create(screen, result);
+   pipe_resource_reference(&result, NULL);
+   return noop_resource;
 }
 
-static boolean noop_resource_get_handle(struct pipe_screen *screen,
-					struct pipe_resource *resource,
-					struct winsys_handle *handle,
+static boolean noop_resource_get_handle(struct pipe_screen *pscreen,
+                                        struct pipe_context *ctx,
+                                        struct pipe_resource *resource,
+                                        struct winsys_handle *handle,
                                         unsigned usage)
 {
-	return FALSE;
+   struct noop_pipe_screen *noop_screen = (struct noop_pipe_screen*)pscreen;
+   struct pipe_screen *screen = noop_screen->oscreen;
+   struct pipe_resource *tex;
+   bool result;
+
+   /* resource_get_handle musn't fail. Just create something and return it. */
+   tex = screen->resource_create(screen, resource);
+   if (!tex)
+      return false;
+
+   result = screen->resource_get_handle(screen, NULL, tex, handle, usage);
+   pipe_resource_reference(&tex, NULL);
+   return result;
 }
 
 static void noop_resource_destroy(struct pipe_screen *screen,
-					struct pipe_resource *resource)
+                                  struct pipe_resource *resource)
 {
-	struct noop_resource *nresource = (struct noop_resource *)resource;
+   struct noop_resource *nresource = (struct noop_resource *)resource;
 
-	FREE(nresource->data);
-	FREE(resource);
+   FREE(nresource->data);
+   FREE(resource);
 }
 
 
@@ -167,7 +180,7 @@ static void *noop_transfer_map(struct pipe_context *pipe,
 
    transfer = CALLOC_STRUCT(pipe_transfer);
    if (!transfer)
-           return NULL;
+      return NULL;
    pipe_resource_reference(&transfer->resource, resource);
    transfer->level = level;
    transfer->usage = usage;
@@ -180,26 +193,33 @@ static void *noop_transfer_map(struct pipe_context *pipe,
 }
 
 static void noop_transfer_flush_region(struct pipe_context *pipe,
-					struct pipe_transfer *transfer,
-					const struct pipe_box *box)
+                                       struct pipe_transfer *transfer,
+                                       const struct pipe_box *box)
 {
 }
 
 static void noop_transfer_unmap(struct pipe_context *pipe,
-				struct pipe_transfer *transfer)
+                                struct pipe_transfer *transfer)
 {
    pipe_resource_reference(&transfer->resource, NULL);
    FREE(transfer);
 }
 
-static void noop_transfer_inline_write(struct pipe_context *pipe,
-					struct pipe_resource *resource,
-					unsigned level,
-					unsigned usage,
-					const struct pipe_box *box,
-					const void *data,
-					unsigned stride,
-					unsigned layer_stride)
+static void noop_buffer_subdata(struct pipe_context *pipe,
+                                struct pipe_resource *resource,
+                                unsigned usage, unsigned offset,
+                                unsigned size, const void *data)
+{
+}
+
+static void noop_texture_subdata(struct pipe_context *pipe,
+                                 struct pipe_resource *resource,
+                                 unsigned level,
+                                 unsigned usage,
+                                 const struct pipe_box *box,
+                                 const void *data,
+                                 unsigned stride,
+                                 unsigned layer_stride)
 {
 }
 
@@ -208,35 +228,37 @@ static void noop_transfer_inline_write(struct pipe_context *pipe,
  * clear/copy
  */
 static void noop_clear(struct pipe_context *ctx, unsigned buffers,
-		       const union pipe_color_union *color, double depth, unsigned stencil)
+                       const union pipe_color_union *color, double depth, unsigned stencil)
 {
 }
 
 static void noop_clear_render_target(struct pipe_context *ctx,
-				     struct pipe_surface *dst,
-				     const union pipe_color_union *color,
-				     unsigned dstx, unsigned dsty,
-				     unsigned width, unsigned height)
+                                     struct pipe_surface *dst,
+                                     const union pipe_color_union *color,
+                                     unsigned dstx, unsigned dsty,
+                                     unsigned width, unsigned height,
+                                     bool render_condition_enabled)
 {
 }
 
 static void noop_clear_depth_stencil(struct pipe_context *ctx,
-				     struct pipe_surface *dst,
-				     unsigned clear_flags,
-				     double depth,
-				     unsigned stencil,
-				     unsigned dstx, unsigned dsty,
-				     unsigned width, unsigned height)
+                                     struct pipe_surface *dst,
+                                     unsigned clear_flags,
+                                     double depth,
+                                     unsigned stencil,
+                                     unsigned dstx, unsigned dsty,
+                                     unsigned width, unsigned height,
+                                     bool render_condition_enabled)
 {
 }
 
 static void noop_resource_copy_region(struct pipe_context *ctx,
-				      struct pipe_resource *dst,
-				      unsigned dst_level,
-				      unsigned dstx, unsigned dsty, unsigned dstz,
-				      struct pipe_resource *src,
-				      unsigned src_level,
-				      const struct pipe_box *src_box)
+                                      struct pipe_resource *dst,
+                                      unsigned dst_level,
+                                      unsigned dstx, unsigned dsty, unsigned dstz,
+                                      struct pipe_resource *src,
+                                      unsigned src_level,
+                                      const struct pipe_box *src_box)
 {
 }
 
@@ -261,43 +283,58 @@ static void noop_flush(struct pipe_context *ctx,
                        struct pipe_fence_handle **fence,
                        unsigned flags)
 {
+   if (fence)
+      *fence = NULL;
 }
 
 static void noop_destroy_context(struct pipe_context *ctx)
 {
-	FREE(ctx);
+   FREE(ctx);
+}
+
+static boolean noop_generate_mipmap(struct pipe_context *ctx,
+                                    struct pipe_resource *resource,
+                                    enum pipe_format format,
+                                    unsigned base_level,
+                                    unsigned last_level,
+                                    unsigned first_layer,
+                                    unsigned last_layer)
+{
+   return true;
 }
 
 static struct pipe_context *noop_create_context(struct pipe_screen *screen,
                                                 void *priv, unsigned flags)
 {
-	struct pipe_context *ctx = CALLOC_STRUCT(pipe_context);
+   struct pipe_context *ctx = CALLOC_STRUCT(pipe_context);
 
-	if (!ctx)
-		return NULL;
-	ctx->screen = screen;
-	ctx->priv = priv;
-	ctx->destroy = noop_destroy_context;
-	ctx->flush = noop_flush;
-	ctx->clear = noop_clear;
-	ctx->clear_render_target = noop_clear_render_target;
-	ctx->clear_depth_stencil = noop_clear_depth_stencil;
-	ctx->resource_copy_region = noop_resource_copy_region;
-	ctx->blit = noop_blit;
-	ctx->flush_resource = noop_flush_resource;
-	ctx->create_query = noop_create_query;
-	ctx->destroy_query = noop_destroy_query;
-	ctx->begin_query = noop_begin_query;
-	ctx->end_query = noop_end_query;
-	ctx->get_query_result = noop_get_query_result;
-	ctx->set_active_query_state = noop_set_active_query_state;
-	ctx->transfer_map = noop_transfer_map;
-	ctx->transfer_flush_region = noop_transfer_flush_region;
-	ctx->transfer_unmap = noop_transfer_unmap;
-	ctx->transfer_inline_write = noop_transfer_inline_write;
-	noop_init_state_functions(ctx);
+   if (!ctx)
+      return NULL;
+   ctx->screen = screen;
+   ctx->priv = priv;
+   ctx->destroy = noop_destroy_context;
+   ctx->flush = noop_flush;
+   ctx->clear = noop_clear;
+   ctx->clear_render_target = noop_clear_render_target;
+   ctx->clear_depth_stencil = noop_clear_depth_stencil;
+   ctx->resource_copy_region = noop_resource_copy_region;
+   ctx->generate_mipmap = noop_generate_mipmap;
+   ctx->blit = noop_blit;
+   ctx->flush_resource = noop_flush_resource;
+   ctx->create_query = noop_create_query;
+   ctx->destroy_query = noop_destroy_query;
+   ctx->begin_query = noop_begin_query;
+   ctx->end_query = noop_end_query;
+   ctx->get_query_result = noop_get_query_result;
+   ctx->set_active_query_state = noop_set_active_query_state;
+   ctx->transfer_map = noop_transfer_map;
+   ctx->transfer_flush_region = noop_transfer_flush_region;
+   ctx->transfer_unmap = noop_transfer_unmap;
+   ctx->buffer_subdata = noop_buffer_subdata;
+   ctx->texture_subdata = noop_texture_subdata;
+   noop_init_state_functions(ctx);
 
-	return ctx;
+   return ctx;
 }
 
 
@@ -305,105 +342,142 @@ static struct pipe_context *noop_create_context(struct pipe_screen *screen,
  * pipe_screen
  */
 static void noop_flush_frontbuffer(struct pipe_screen *_screen,
-				   struct pipe_resource *resource,
-				   unsigned level, unsigned layer,
-				   void *context_private, struct pipe_box *box)
+                                   struct pipe_resource *resource,
+                                   unsigned level, unsigned layer,
+                                   void *context_private, struct pipe_box *box)
 {
 }
 
 static const char *noop_get_vendor(struct pipe_screen* pscreen)
 {
-	return "X.Org";
+   return "X.Org";
 }
 
 static const char *noop_get_device_vendor(struct pipe_screen* pscreen)
 {
-	return "NONE";
+   return "NONE";
 }
 
 static const char *noop_get_name(struct pipe_screen* pscreen)
 {
-	return "NOOP";
+   return "NOOP";
 }
 
 static int noop_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 {
-	struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
+   struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
 
-	return screen->get_param(screen, param);
+   return screen->get_param(screen, param);
 }
 
 static float noop_get_paramf(struct pipe_screen* pscreen,
-			     enum pipe_capf param)
+                             enum pipe_capf param)
 {
-	struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
+   struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
 
-	return screen->get_paramf(screen, param);
+   return screen->get_paramf(screen, param);
 }
 
 static int noop_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enum pipe_shader_cap param)
 {
-	struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
+   struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
 
-	return screen->get_shader_param(screen, shader, param);
+   return screen->get_shader_param(screen, shader, param);
+}
+
+static int noop_get_compute_param(struct pipe_screen *pscreen,
+                                  enum pipe_shader_ir ir_type,
+                                  enum pipe_compute_cap param,
+                                  void *ret)
+{
+   struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
+
+   return screen->get_compute_param(screen, ir_type, param, ret);
 }
 
 static boolean noop_is_format_supported(struct pipe_screen* pscreen,
-					enum pipe_format format,
-					enum pipe_texture_target target,
-					unsigned sample_count,
+                                        enum pipe_format format,
+                                        enum pipe_texture_target target,
+                                        unsigned sample_count,
                                         unsigned usage)
 {
-	struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
+   struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
 
-	return screen->is_format_supported(screen, format, target, sample_count, usage);
+   return screen->is_format_supported(screen, format, target, sample_count, usage);
 }
 
 static uint64_t noop_get_timestamp(struct pipe_screen *pscreen)
 {
-	return 0;
+   return 0;
 }
 
 static void noop_destroy_screen(struct pipe_screen *screen)
 {
-	struct noop_pipe_screen *noop_screen = (struct noop_pipe_screen*)screen;
-	struct pipe_screen *oscreen = noop_screen->oscreen;
+   struct noop_pipe_screen *noop_screen = (struct noop_pipe_screen*)screen;
+   struct pipe_screen *oscreen = noop_screen->oscreen;
 
-	oscreen->destroy(oscreen);
-	FREE(screen);
+   oscreen->destroy(oscreen);
+   FREE(screen);
+}
+
+static void noop_fence_reference(struct pipe_screen *screen,
+                          struct pipe_fence_handle **ptr,
+                          struct pipe_fence_handle *fence)
+{
+}
+
+static boolean noop_fence_finish(struct pipe_screen *screen,
+                                 struct pipe_context *ctx,
+                                 struct pipe_fence_handle *fence,
+                                 uint64_t timeout)
+{
+   return true;
+}
+
+static void noop_query_memory_info(struct pipe_screen *pscreen,
+                                   struct pipe_memory_info *info)
+{
+   struct noop_pipe_screen *noop_screen = (struct noop_pipe_screen*)pscreen;
+   struct pipe_screen *screen = noop_screen->oscreen;
+
+   screen->query_memory_info(screen, info);
 }
 
 struct pipe_screen *noop_screen_create(struct pipe_screen *oscreen)
 {
-	struct noop_pipe_screen *noop_screen;
-	struct pipe_screen *screen;
+   struct noop_pipe_screen *noop_screen;
+   struct pipe_screen *screen;
 
-	if (!debug_get_option_noop()) {
-		return oscreen;
-	}
+   if (!debug_get_option_noop()) {
+      return oscreen;
+   }
 
-	noop_screen = CALLOC_STRUCT(noop_pipe_screen);
-	if (!noop_screen) {
-		return NULL;
-	}
-	noop_screen->oscreen = oscreen;
-	screen = &noop_screen->pscreen;
+   noop_screen = CALLOC_STRUCT(noop_pipe_screen);
+   if (!noop_screen) {
+      return NULL;
+   }
+   noop_screen->oscreen = oscreen;
+   screen = &noop_screen->pscreen;
 
-	screen->destroy = noop_destroy_screen;
-	screen->get_name = noop_get_name;
-	screen->get_vendor = noop_get_vendor;
-	screen->get_device_vendor = noop_get_device_vendor;
-	screen->get_param = noop_get_param;
-	screen->get_shader_param = noop_get_shader_param;
-	screen->get_paramf = noop_get_paramf;
-	screen->is_format_supported = noop_is_format_supported;
-	screen->context_create = noop_create_context;
-	screen->resource_create = noop_resource_create;
-	screen->resource_from_handle = noop_resource_from_handle;
-	screen->resource_get_handle = noop_resource_get_handle;
-	screen->resource_destroy = noop_resource_destroy;
-	screen->flush_frontbuffer = noop_flush_frontbuffer;
-        screen->get_timestamp = noop_get_timestamp;
+   screen->destroy = noop_destroy_screen;
+   screen->get_name = noop_get_name;
+   screen->get_vendor = noop_get_vendor;
+   screen->get_device_vendor = noop_get_device_vendor;
+   screen->get_param = noop_get_param;
+   screen->get_shader_param = noop_get_shader_param;
+   screen->get_compute_param = noop_get_compute_param;
+   screen->get_paramf = noop_get_paramf;
+   screen->is_format_supported = noop_is_format_supported;
+   screen->context_create = noop_create_context;
+   screen->resource_create = noop_resource_create;
+   screen->resource_from_handle = noop_resource_from_handle;
+   screen->resource_get_handle = noop_resource_get_handle;
+   screen->resource_destroy = noop_resource_destroy;
+   screen->flush_frontbuffer = noop_flush_frontbuffer;
+   screen->get_timestamp = noop_get_timestamp;
+   screen->fence_reference = noop_fence_reference;
+   screen->fence_finish = noop_fence_finish;
+   screen->query_memory_info = noop_query_memory_info;
 
-	return screen;
+   return screen;
 }

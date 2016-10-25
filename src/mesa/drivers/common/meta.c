@@ -85,6 +85,7 @@
 #include "drivers/common/meta.h"
 #include "main/enums.h"
 #include "main/glformats.h"
+#include "util/bitscan.h"
 #include "util/ralloc.h"
 
 /** Return offset in bytes of the field within a vertex struct */
@@ -121,14 +122,14 @@ _mesa_meta_framebuffer_texture_image(struct gl_context *ctx,
                              level, layer, false, __func__);
 }
 
-struct gl_shader *
-_mesa_meta_compile_shader_with_debug(struct gl_context *ctx, GLenum target,
-                                     const GLcharARB *source)
+static struct gl_shader *
+meta_compile_shader_with_debug(struct gl_context *ctx, gl_shader_stage stage,
+                               const GLcharARB *source)
 {
    const GLuint name = ~0;
    struct gl_shader *sh;
 
-   sh = ctx->Driver.NewShader(ctx, name, target);
+   sh = _mesa_new_shader(name, stage);
    sh->Source = strdup(source);
    sh->CompileStatus = false;
    _mesa_compile_shader(ctx, sh);
@@ -183,9 +184,9 @@ _mesa_meta_compile_and_link_program(struct gl_context *ctx,
    sh_prog->NumShaders = 2;
    sh_prog->Shaders = malloc(2 * sizeof(struct gl_shader *));
    sh_prog->Shaders[0] =
-      _mesa_meta_compile_shader_with_debug(ctx, GL_VERTEX_SHADER, vs_source);
+      meta_compile_shader_with_debug(ctx, MESA_SHADER_VERTEX, vs_source);
    sh_prog->Shaders[1] =
-      _mesa_meta_compile_shader_with_debug(ctx, GL_FRAGMENT_SHADER, fs_source);
+      meta_compile_shader_with_debug(ctx, MESA_SHADER_FRAGMENT, fs_source);
 
    _mesa_meta_link_program_with_debug(ctx, sh_prog);
 
@@ -682,12 +683,12 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
    }
 
    if (state & MESA_META_CLIP) {
+      GLbitfield mask;
       save->ClipPlanesEnabled = ctx->Transform.ClipPlanesEnabled;
-      if (ctx->Transform.ClipPlanesEnabled) {
-         GLuint i;
-         for (i = 0; i < ctx->Const.MaxClipPlanes; i++) {
-            _mesa_set_enable(ctx, GL_CLIP_PLANE0 + i, GL_FALSE);
-         }
+      mask = ctx->Transform.ClipPlanesEnabled;
+      while (mask) {
+         const int i = u_bit_scan(&mask);
+         _mesa_set_enable(ctx, GL_CLIP_PLANE0 + i, GL_FALSE);
       }
    }
 
@@ -1090,13 +1091,10 @@ _mesa_meta_end(struct gl_context *ctx)
    }
 
    if (state & MESA_META_CLIP) {
-      if (save->ClipPlanesEnabled) {
-         GLuint i;
-         for (i = 0; i < ctx->Const.MaxClipPlanes; i++) {
-            if (save->ClipPlanesEnabled & (1 << i)) {
-               _mesa_set_enable(ctx, GL_CLIP_PLANE0 + i, GL_TRUE);
-            }
-         }
+      GLbitfield mask = save->ClipPlanesEnabled;
+      while (mask) {
+         const int i = u_bit_scan(&mask);
+         _mesa_set_enable(ctx, GL_CLIP_PLANE0 + i, GL_TRUE);
       }
    }
 
@@ -1752,7 +1750,7 @@ meta_clear(struct gl_context *ctx, GLbitfield buffers, bool glsl)
       z = invert_z(ctx->Depth.Clear);
    }
 
-   if (fb->_IntegerColor) {
+   if (fb->_IntegerBuffers) {
       assert(glsl);
       _mesa_meta_use_program(ctx, clear->IntegerShaderProg);
       _mesa_Uniform4iv(0, 1, ctx->Color.ClearColor.i);

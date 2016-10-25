@@ -152,6 +152,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
     list_inithead(&This->managed_textures);
 
     This->screen = pScreen;
+    This->screen_sw = pCTX->ref;
     This->caps = *pCaps;
     This->d3d9 = pD3D9;
     This->params = *pCreationParameters;
@@ -165,16 +166,43 @@ NineDevice9_ctor( struct NineDevice9 *This,
     if (!(This->params.BehaviorFlags & D3DCREATE_FPU_PRESERVE))
         nine_setup_fpu();
 
-    if (This->params.BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING)
-        DBG("Application asked full Software Vertex Processing. Ignoring.\n");
-    if (This->params.BehaviorFlags & D3DCREATE_MIXED_VERTEXPROCESSING)
-        DBG("Application asked mixed Software Vertex Processing. Ignoring.\n");
+    if (This->params.BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING) {
+        DBG("Application asked full Software Vertex Processing.\n");
+        This->swvp = true;
+        This->may_swvp = true;
+    } else
+        This->swvp = false;
+    if (This->params.BehaviorFlags & D3DCREATE_MIXED_VERTEXPROCESSING) {
+        DBG("Application asked mixed Software Vertex Processing.\n");
+        This->may_swvp = true;
+    }
+    /* TODO: check if swvp is resetted by device Resets */
+
+    if (This->may_swvp &&
+        (This->screen->get_shader_param(This->screen, PIPE_SHADER_VERTEX,
+                                        PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE)
+                                     < (NINE_MAX_CONST_F_SWVP/2) * sizeof(float[4]) ||
+         This->screen->get_shader_param(This->screen, PIPE_SHADER_VERTEX,
+                                        PIPE_SHADER_CAP_MAX_CONST_BUFFERS) < 5)) {
+        /* Note: We just go on, some apps never use the abilities of
+         * swvp, and just set more constants than allowed at init.
+         * Only cards we support that are affected are the r500 */
+        WARN("Card unable to handle Software Vertex Processing. Game may fail\n");
+    }
+
+    /* When may_swvp, SetConstant* limits are different */
+    if (This->may_swvp)
+        This->caps.MaxVertexShaderConst = NINE_MAX_CONST_F_SWVP;
 
     This->pipe = This->screen->context_create(This->screen, NULL, 0);
     if (!This->pipe) { return E_OUTOFMEMORY; } /* guess */
+    This->pipe_sw = This->screen_sw->context_create(This->screen_sw, NULL, 0);
+    if (!This->pipe_sw) { return E_OUTOFMEMORY; }
 
     This->cso = cso_create_context(This->pipe);
     if (!This->cso) { return E_OUTOFMEMORY; } /* also a guess */
+    This->cso_sw = cso_create_context(This->pipe_sw);
+    if (!This->cso_sw) { return E_OUTOFMEMORY; }
 
     /* Create first, it messes up our state. */
     This->hud = hud_create(This->pipe, This->cso); /* NULL result is fine */
@@ -236,7 +264,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
         NineUnknown_ConvertRefToBind(NineUnknown(This->state.rt[i]));
     }
 
-    /* Initialize a dummy VBO to be used when a a vertex declaration does not
+    /* Initialize a dummy VBO to be used when a vertex declaration does not
      * specify all the inputs needed by vertex shader, on win default behavior
      * is to pass 0,0,0,0 to the shader */
     {
@@ -245,6 +273,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
         struct pipe_box box;
         unsigned char *data;
 
+        memset(&tmpl, 0, sizeof(tmpl));
         tmpl.target = PIPE_BUFFER;
         tmpl.format = PIPE_FORMAT_R8_UNORM;
         tmpl.width0 = 16; /* 4 floats */
@@ -254,7 +283,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
         tmpl.last_level = 0;
         tmpl.nr_samples = 0;
         tmpl.usage = PIPE_USAGE_DEFAULT;
-        tmpl.bind = PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_TRANSFER_WRITE;
+        tmpl.bind = PIPE_BIND_VERTEX_BUFFER;
         tmpl.flags = 0;
         This->dummy_vbo = pScreen->resource_create(pScreen, &tmpl);
 
@@ -277,6 +306,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
     This->cursor.hotspot.y = -1;
     {
         struct pipe_resource tmpl;
+        memset(&tmpl, 0, sizeof(tmpl));
         tmpl.target = PIPE_TEXTURE_2D;
         tmpl.format = PIPE_FORMAT_R8G8B8A8_UNORM;
         tmpl.width0 = 64;
@@ -296,7 +326,6 @@ NineDevice9_ctor( struct NineDevice9 *This,
 
     /* Create constant buffers. */
     {
-        struct pipe_resource tmpl;
         unsigned max_const_vs, max_const_ps;
 
         /* vs 3.0: >= 256 float constants, but for cards with exactly 256 slots,
@@ -317,41 +346,31 @@ NineDevice9_ctor( struct NineDevice9 *This,
         This->vs_const_size = max_const_vs * sizeof(float[4]);
         This->ps_const_size = max_const_ps * sizeof(float[4]);
         /* Include space for I,B constants for user constbuf. */
+        if (This->may_swvp) {
+            This->state.vs_const_f_swvp = CALLOC(NINE_MAX_CONST_F_SWVP * sizeof(float[4]),1);
+            if (!This->state.vs_const_f_swvp)
+                return E_OUTOFMEMORY;
+            This->state.vs_lconstf_temp = CALLOC(NINE_MAX_CONST_F_SWVP * sizeof(float[4]),1);
+            This->state.vs_const_i = CALLOC(NINE_MAX_CONST_I_SWVP * sizeof(int[4]), 1);
+            This->state.vs_const_b = CALLOC(NINE_MAX_CONST_B_SWVP * sizeof(BOOL), 1);
+        } else {
+            This->state.vs_const_f_swvp = NULL;
+            This->state.vs_lconstf_temp = CALLOC(This->vs_const_size,1);
+            This->state.vs_const_i = CALLOC(NINE_MAX_CONST_I * sizeof(int[4]), 1);
+            This->state.vs_const_b = CALLOC(NINE_MAX_CONST_B * sizeof(BOOL), 1);
+        }
         This->state.vs_const_f = CALLOC(This->vs_const_size, 1);
         This->state.ps_const_f = CALLOC(This->ps_const_size, 1);
-        This->state.vs_lconstf_temp = CALLOC(This->vs_const_size,1);
         This->state.ps_lconstf_temp = CALLOC(This->ps_const_size,1);
         if (!This->state.vs_const_f || !This->state.ps_const_f ||
-            !This->state.vs_lconstf_temp || !This->state.ps_lconstf_temp)
+            !This->state.vs_lconstf_temp || !This->state.ps_lconstf_temp ||
+            !This->state.vs_const_i || !This->state.vs_const_b)
             return E_OUTOFMEMORY;
 
         if (strstr(pScreen->get_name(pScreen), "AMD") ||
             strstr(pScreen->get_name(pScreen), "ATI")) {
             This->driver_bugs.buggy_barycentrics = TRUE;
         }
-
-        /* Disable NV path for now, needs some fixes */
-        This->prefer_user_constbuf = TRUE;
-
-        tmpl.target = PIPE_BUFFER;
-        tmpl.format = PIPE_FORMAT_R8_UNORM;
-        tmpl.height0 = 1;
-        tmpl.depth0 = 1;
-        tmpl.array_size = 1;
-        tmpl.last_level = 0;
-        tmpl.nr_samples = 0;
-        tmpl.usage = PIPE_USAGE_DYNAMIC;
-        tmpl.bind = PIPE_BIND_CONSTANT_BUFFER;
-        tmpl.flags = 0;
-
-        tmpl.width0 = This->vs_const_size;
-        This->constbuf_vs = pScreen->resource_create(pScreen, &tmpl);
-
-        tmpl.width0 = This->ps_const_size;
-        This->constbuf_ps = pScreen->resource_create(pScreen, &tmpl);
-
-        if (!This->constbuf_vs || !This->constbuf_ps)
-            return E_OUTOFMEMORY;
     }
 
     /* allocate dummy texture/sampler for when there are missing ones bound */
@@ -359,6 +378,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
         struct pipe_resource tmplt;
         struct pipe_sampler_view templ;
         struct pipe_sampler_state samp;
+        memset(&tmplt, 0, sizeof(tmplt));
         memset(&samp, 0, sizeof(samp));
 
         tmplt.target = PIPE_TEXTURE_2D;
@@ -402,7 +422,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
         samp.compare_mode = PIPE_TEX_COMPARE_NONE;
         samp.compare_func = PIPE_FUNC_LEQUAL;
         samp.normalized_coords = 1;
-        samp.seamless_cube_map = 1;
+        samp.seamless_cube_map = 0;
         This->dummy_sampler_state = samp;
     }
 
@@ -411,10 +431,14 @@ NineDevice9_ctor( struct NineDevice9 *This,
     This->driver_caps.user_vbufs = GET_PCAP(USER_VERTEX_BUFFERS);
     This->driver_caps.user_ibufs = GET_PCAP(USER_INDEX_BUFFERS);
     This->driver_caps.user_cbufs = GET_PCAP(USER_CONSTANT_BUFFERS);
+    This->driver_caps.user_sw_vbufs = This->screen_sw->get_param(This->screen_sw, PIPE_CAP_USER_VERTEX_BUFFERS);
+    This->driver_caps.user_sw_cbufs = This->screen_sw->get_param(This->screen_sw, PIPE_CAP_USER_CONSTANT_BUFFERS);
 
     if (!This->driver_caps.user_vbufs)
         This->vertex_uploader = u_upload_create(This->pipe, 65536,
                                                 PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STREAM);
+    This->vertex_sw_uploader = u_upload_create(This->pipe_sw, 65536,
+                                            PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STREAM);
     if (!This->driver_caps.user_ibufs)
         This->index_uploader = u_upload_create(This->pipe, 128 * 1024,
                                                PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_STREAM);
@@ -424,9 +448,13 @@ NineDevice9_ctor( struct NineDevice9 *This,
                                                   PIPE_BIND_CONSTANT_BUFFER, PIPE_USAGE_STREAM);
     }
 
+    This->constbuf_sw_uploader = u_upload_create(This->pipe_sw, 128 * 1024,
+                                                 PIPE_BIND_CONSTANT_BUFFER, PIPE_USAGE_STREAM);
+
     This->driver_caps.window_space_position_support = GET_PCAP(TGSI_VS_WINDOW_SPACE_POSITION);
     This->driver_caps.vs_integer = pScreen->get_shader_param(pScreen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_INTEGERS);
     This->driver_caps.ps_integer = pScreen->get_shader_param(pScreen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_INTEGERS);
+    This->driver_caps.offset_units_unscaled = GET_PCAP(POLYGON_OFFSET_UNITS_UNSCALED);
 
     nine_ff_init(This); /* initialize fixed function code */
 
@@ -440,6 +468,8 @@ NineDevice9_ctor( struct NineDevice9 *This,
 
     This->update = &This->state;
     nine_update_state(This);
+
+    nine_state_init_sw(This);
 
     ID3DPresentGroup_Release(This->present);
 
@@ -457,6 +487,7 @@ NineDevice9_dtor( struct NineDevice9 *This )
     if (This->pipe && This->cso)
         nine_pipe_context_clear(This);
     nine_ff_fini(This);
+    nine_state_destroy_sw(This);
     nine_state_clear(&This->state, TRUE);
 
     if (This->vertex_uploader)
@@ -465,18 +496,23 @@ NineDevice9_dtor( struct NineDevice9 *This )
         u_upload_destroy(This->index_uploader);
     if (This->constbuf_uploader)
         u_upload_destroy(This->constbuf_uploader);
+    if (This->vertex_sw_uploader)
+        u_upload_destroy(This->vertex_sw_uploader);
+    if (This->constbuf_sw_uploader)
+        u_upload_destroy(This->constbuf_sw_uploader);
 
     nine_bind(&This->record, NULL);
 
     pipe_sampler_view_reference(&This->dummy_sampler_view, NULL);
     pipe_resource_reference(&This->dummy_texture, NULL);
-    pipe_resource_reference(&This->constbuf_vs, NULL);
-    pipe_resource_reference(&This->constbuf_ps, NULL);
     pipe_resource_reference(&This->dummy_vbo, NULL);
     FREE(This->state.vs_const_f);
     FREE(This->state.ps_const_f);
     FREE(This->state.vs_lconstf_temp);
     FREE(This->state.ps_lconstf_temp);
+    FREE(This->state.vs_const_i);
+    FREE(This->state.vs_const_b);
+    FREE(This->state.vs_const_f_swvp);
 
     if (This->swapchains) {
         for (i = 0; i < This->nswapchains; ++i)
@@ -485,13 +521,11 @@ NineDevice9_dtor( struct NineDevice9 *This )
         FREE(This->swapchains);
     }
 
-    /* state stuff */
-    if (This->pipe) {
-        if (This->cso) {
-            cso_destroy_context(This->cso);
-        }
-        if (This->pipe->destroy) { This->pipe->destroy(This->pipe); }
-    }
+    /* Destroy cso first */
+    if (This->cso) { cso_destroy_context(This->cso); }
+    if (This->cso_sw) { cso_destroy_context(This->cso_sw); }
+    if (This->pipe && This->pipe->destroy) { This->pipe->destroy(This->pipe); }
+    if (This->pipe_sw && This->pipe_sw->destroy) { This->pipe_sw->destroy(This->pipe_sw); }
 
     if (This->present) { ID3DPresentGroup_Release(This->present); }
     if (This->d3d9) { IDirect3D9_Release(This->d3d9); }
@@ -1100,11 +1134,8 @@ create_zs_or_rt_surface(struct NineDevice9 *This,
                         HANDLE *pSharedHandle)
 {
     struct NineSurface9 *surface;
-    struct pipe_screen *screen = This->screen;
-    struct pipe_resource *resource = NULL;
     HRESULT hr;
     D3DSURFACE_DESC desc;
-    struct pipe_resource templ;
 
     DBG("This=%p type=%u Pool=%s Width=%u Height=%u Format=%s MS=%u Quality=%u "
         "Discard_or_Lockable=%i ppSurface=%p pSharedHandle=%p\n",
@@ -1118,30 +1149,6 @@ create_zs_or_rt_surface(struct NineDevice9 *This,
     user_assert(Width && Height, D3DERR_INVALIDCALL);
     user_assert(Pool != D3DPOOL_MANAGED, D3DERR_INVALIDCALL);
 
-    templ.target = PIPE_TEXTURE_2D;
-    templ.width0 = Width;
-    templ.height0 = Height;
-    templ.depth0 = 1;
-    templ.array_size = 1;
-    templ.last_level = 0;
-    templ.nr_samples = (unsigned)MultiSample;
-    templ.usage = PIPE_USAGE_DEFAULT;
-    templ.flags = 0;
-    templ.bind = PIPE_BIND_SAMPLER_VIEW; /* StretchRect */
-    switch (type) {
-    case 0: templ.bind |= PIPE_BIND_RENDER_TARGET; break;
-    case 1: templ.bind = d3d9_get_pipe_depth_format_bindings(Format); break;
-    default:
-        assert(type == 2);
-        break;
-    }
-    templ.format = d3d9_to_pipe_format_checked(screen, Format, templ.target,
-                                               templ.nr_samples, templ.bind,
-                                               FALSE, Pool == D3DPOOL_SCRATCH);
-
-    if (templ.format == PIPE_FORMAT_NONE && Format != D3DFMT_NULL)
-        return D3DERR_INVALIDCALL;
-
     desc.Format = Format;
     desc.Type = D3DRTYPE_SURFACE;
     desc.Usage = 0;
@@ -1153,31 +1160,17 @@ create_zs_or_rt_surface(struct NineDevice9 *This,
     switch (type) {
     case 0: desc.Usage = D3DUSAGE_RENDERTARGET; break;
     case 1: desc.Usage = D3DUSAGE_DEPTHSTENCIL; break;
-    default: break;
+    default: assert(type == 2); break;
     }
 
-    if (compressed_format(Format)) {
-        const unsigned w = util_format_get_blockwidth(templ.format);
-        const unsigned h = util_format_get_blockheight(templ.format);
-
-        user_assert(!(Width % w) && !(Height % h), D3DERR_INVALIDCALL);
-    }
-
-    if (Pool == D3DPOOL_DEFAULT && Format != D3DFMT_NULL) {
-        /* resource_create doesn't return an error code, so check format here */
-        user_assert(templ.format != PIPE_FORMAT_NONE, D3DERR_INVALIDCALL);
-        resource = screen->resource_create(screen, &templ);
-        user_assert(resource, D3DERR_OUTOFVIDEOMEMORY);
-        if (Discard_or_Lockable && (desc.Usage & D3DUSAGE_RENDERTARGET))
-            resource->flags |= NINE_RESOURCE_FLAG_LOCKABLE;
-    } else {
-        resource = NULL;
-    }
-    hr = NineSurface9_new(This, NULL, resource, NULL, 0, 0, 0, &desc, &surface);
-    pipe_resource_reference(&resource, NULL);
-
-    if (SUCCEEDED(hr))
+    hr = NineSurface9_new(This, NULL, NULL, NULL, 0, 0, 0, &desc, &surface);
+    if (SUCCEEDED(hr)) {
         *ppSurface = (IDirect3DSurface9 *)surface;
+
+        if (surface->base.resource && Discard_or_Lockable && (type != 1))
+            surface->base.resource->flags |= NINE_RESOURCE_FLAG_LOCKABLE;
+    }
+
     return hr;
 }
 
@@ -1462,6 +1455,8 @@ NineDevice9_GetRenderTargetData( struct NineDevice9 *This,
     DBG("This=%p pRenderTarget=%p pDestSurface=%p\n",
         This, pRenderTarget, pDestSurface);
 
+    user_assert(pRenderTarget && pDestSurface, D3DERR_INVALIDCALL);
+
     user_assert(dst->desc.Pool == D3DPOOL_SYSTEMMEM, D3DERR_INVALIDCALL);
     user_assert(src->desc.Pool == D3DPOOL_DEFAULT, D3DERR_INVALIDCALL);
 
@@ -1470,6 +1465,8 @@ NineDevice9_GetRenderTargetData( struct NineDevice9 *This,
 
     user_assert(src->desc.Width == dst->desc.Width, D3DERR_INVALIDCALL);
     user_assert(src->desc.Height == dst->desc.Height, D3DERR_INVALIDCALL);
+
+    user_assert(src->desc.Format != D3DFMT_NULL, D3DERR_INVALIDCALL);
 
     NineSurface9_CopyDefaultToMem(dst, src);
 
@@ -1660,7 +1657,8 @@ NineDevice9_StretchRect( struct NineDevice9 *This,
         clamped = !!xy;
     }
 
-    ms = (dst->desc.MultiSampleType | 1) != (src->desc.MultiSampleType | 1);
+    ms = (dst->desc.MultiSampleType != src->desc.MultiSampleType) ||
+         (dst->desc.MultiSampleQuality != src->desc.MultiSampleQuality);
 
     if (clamped || scaled || (blit.dst.format != blit.src.format) || ms) {
         DBG("using pipe->blit()\n");
@@ -1751,7 +1749,7 @@ NineDevice9_ColorFill( struct NineDevice9 *This,
     }
 
     if (!fallback) {
-        pipe->clear_render_target(pipe, psurf, &rgba, x, y, w, h);
+        pipe->clear_render_target(pipe, psurf, &rgba, x, y, w, h, false);
     } else {
         D3DLOCKED_RECT lock;
         union util_color uc;
@@ -1833,6 +1831,11 @@ NineDevice9_SetRenderTarget( struct NineDevice9 *This,
         This->state.scissor.maxy = rt->desc.Height;
 
         This->state.changed.group |= NINE_STATE_VIEWPORT | NINE_STATE_SCISSOR | NINE_STATE_MULTISAMPLE;
+
+        if (This->state.rt[0] &&
+            (This->state.rt[0]->desc.MultiSampleType == D3DMULTISAMPLE_NONMASKABLE) !=
+            (rt->desc.MultiSampleType == D3DMULTISAMPLE_NONMASKABLE))
+            This->state.changed.group |= NINE_STATE_SAMPLE_MASK;
     }
 
     if (This->state.rt[i] != NineSurface9(pRenderTarget)) {
@@ -2036,7 +2039,7 @@ NineDevice9_Clear( struct NineDevice9 *This,
 
             DBG("Clearing (%u..%u)x(%u..%u)\n", x1, x2, y1, y2);
             pipe->clear_render_target(pipe, cbuf, &rgba,
-                                      x1, y1, x2 - x1, y2 - y1);
+                                      x1, y1, x2 - x1, y2 - y1, false);
         }
     }
     if (!(bufs & PIPE_CLEAR_DEPTHSTENCIL))
@@ -2063,7 +2066,7 @@ NineDevice9_Clear( struct NineDevice9 *This,
         zsbuf = NineSurface9_GetSurface(zsbuf_surf, 0);
         assert(zsbuf);
         pipe->clear_depth_stencil(pipe, zsbuf, bufs, Z, Stencil,
-                                  x1, y1, x2 - x1, y2 - y1);
+                                  x1, y1, x2 - x1, y2 - y1, false);
     }
     return D3D_OK;
 }
@@ -2502,10 +2505,12 @@ NineDevice9_CreateStateBlock( struct NineDevice9 *This,
        /* TODO: texture/sampler state */
        memcpy(dst->changed.rs,
               nine_render_states_vertex, sizeof(dst->changed.rs));
-       nine_ranges_insert(&dst->changed.vs_const_f, 0, This->max_vs_const_f,
+       nine_ranges_insert(&dst->changed.vs_const_f, 0, This->may_swvp ? NINE_MAX_CONST_F_SWVP : This->max_vs_const_f,
                           &This->range_pool);
-       dst->changed.vs_const_i = 0xffff;
-       dst->changed.vs_const_b = 0xffff;
+       nine_ranges_insert(&dst->changed.vs_const_i, 0, This->may_swvp ? NINE_MAX_CONST_I_SWVP : NINE_MAX_CONST_I,
+                          &This->range_pool);
+       nine_ranges_insert(&dst->changed.vs_const_b, 0, This->may_swvp ? NINE_MAX_CONST_B_SWVP : NINE_MAX_CONST_B,
+                          &This->range_pool);
        for (s = 0; s < NINE_MAX_SAMPLERS; ++s)
            dst->changed.sampler[s] |= 1 << D3DSAMP_DMAPOFFSET;
        if (This->state.ff.num_lights) {
@@ -2714,10 +2719,10 @@ NineDevice9_SetTextureStageState( struct NineDevice9 *This,
     case D3DTSS_BUMPENVMAT00:
         bumpmap_index = 4 * Stage;
         break;
-    case D3DTSS_BUMPENVMAT10:
+    case D3DTSS_BUMPENVMAT01:
         bumpmap_index = 4 * Stage + 1;
         break;
-    case D3DTSS_BUMPENVMAT01:
+    case D3DTSS_BUMPENVMAT10:
         bumpmap_index = 4 * Stage + 2;
         break;
     case D3DTSS_BUMPENVMAT11:
@@ -2898,20 +2903,25 @@ HRESULT NINE_WINAPI
 NineDevice9_SetSoftwareVertexProcessing( struct NineDevice9 *This,
                                          BOOL bSoftware )
 {
-    STUB(D3DERR_INVALIDCALL);
+    if (This->params.BehaviorFlags & D3DCREATE_MIXED_VERTEXPROCESSING) {
+        This->swvp = bSoftware;
+        This->state.changed.group |= NINE_STATE_SWVP;
+        return D3D_OK;
+    } else
+        return D3DERR_INVALIDCALL; /* msdn. TODO: check in practice */
 }
 
 BOOL NINE_WINAPI
 NineDevice9_GetSoftwareVertexProcessing( struct NineDevice9 *This )
 {
-    return !!(This->params.BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING);
+    return This->swvp;
 }
 
 HRESULT NINE_WINAPI
 NineDevice9_SetNPatchMode( struct NineDevice9 *This,
                            float nSegments )
 {
-    STUB(D3DERR_INVALIDCALL);
+    return D3D_OK; /* Nothing to do because we don't advertise NPatch support */
 }
 
 float NINE_WINAPI
@@ -2934,6 +2944,7 @@ init_draw_info(struct pipe_draw_info *info,
     info->restart_index = 0;
     info->count_from_stream_output = NULL;
     info->indirect = NULL;
+    info->indirect_params = NULL;
 }
 
 HRESULT NINE_WINAPI
@@ -3140,9 +3151,6 @@ NineDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
     return D3D_OK;
 }
 
-/* TODO: Write to pDestBuffer directly if vertex declaration contains
- * only f32 formats.
- */
 HRESULT NINE_WINAPI
 NineDevice9_ProcessVertices( struct NineDevice9 *This,
                              UINT SrcStartIndex,
@@ -3152,35 +3160,72 @@ NineDevice9_ProcessVertices( struct NineDevice9 *This,
                              IDirect3DVertexDeclaration9 *pVertexDecl,
                              DWORD Flags )
 {
-    struct pipe_screen *screen = This->screen;
+    struct pipe_screen *screen_sw = This->screen_sw;
+    struct pipe_context *pipe_sw = This->pipe_sw;
     struct NineVertexDeclaration9 *vdecl = NineVertexDeclaration9(pVertexDecl);
+    struct NineVertexBuffer9 *dst = NineVertexBuffer9(pDestBuffer);
     struct NineVertexShader9 *vs;
     struct pipe_resource *resource;
+    struct pipe_transfer *transfer = NULL;
+    struct pipe_stream_output_info so;
     struct pipe_stream_output_target *target;
     struct pipe_draw_info draw;
+    struct pipe_box box;
+    unsigned offsets[1] = {0};
     HRESULT hr;
-    unsigned buffer_offset, buffer_size;
+    unsigned buffer_size;
+    void *map;
 
     DBG("This=%p SrcStartIndex=%u DestIndex=%u VertexCount=%u "
         "pDestBuffer=%p pVertexDecl=%p Flags=%d\n",
         This, SrcStartIndex, DestIndex, VertexCount, pDestBuffer,
         pVertexDecl, Flags);
 
-    if (!screen->get_param(screen, PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS))
-        STUB(D3DERR_INVALIDCALL);
+    if (!screen_sw->get_param(screen_sw, PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS)) {
+        DBG("ProcessVertices not supported\n");
+        return D3DERR_INVALIDCALL;
+    }
 
-    nine_update_state(This);
 
-    /* TODO: Create shader with stream output. */
-    STUB(D3DERR_INVALIDCALL);
-    struct NineVertexBuffer9 *dst = NineVertexBuffer9(pDestBuffer);
+    vs = This->state.programmable_vs ? This->state.vs : This->ff.vs;
+    /* Note: version is 0 for ff */
+    user_assert(vdecl || (vs->byte_code.version < 0x30 && dst->desc.FVF),
+                D3DERR_INVALIDCALL);
+    if (!vdecl) {
+        DWORD FVF = dst->desc.FVF;
+        vdecl = util_hash_table_get(This->ff.ht_fvf, &FVF);
+        if (!vdecl) {
+            hr = NineVertexDeclaration9_new_from_fvf(This, FVF, &vdecl);
+            if (FAILED(hr))
+                return hr;
+            vdecl->fvf = FVF;
+            util_hash_table_set(This->ff.ht_fvf, &vdecl->fvf, vdecl);
+            NineUnknown_ConvertRefToBind(NineUnknown(vdecl));
+        }
+    }
 
-    vs = This->state.vs ? This->state.vs : This->ff.vs;
+    /* Flags: Can be 0 or D3DPV_DONOTCOPYDATA, and/or lock flags
+     * D3DPV_DONOTCOPYDATA -> Has effect only for ff. In particular
+     * if not set, everything from src will be used, and dst
+     * must match exactly the ff vs outputs.
+     * TODO: Handle all the checks, etc for ff */
+    user_assert(vdecl->position_t || This->state.programmable_vs,
+                D3DERR_INVALIDCALL);
 
-    buffer_size = VertexCount * vs->so->stride[0];
-    if (1) {
+    /* TODO: Support vs < 3 and ff */
+    user_assert(vs->byte_code.version == 0x30,
+                D3DERR_INVALIDCALL);
+    /* TODO: Not hardcode the constant buffers for swvp */
+    user_assert(This->may_swvp,
+                D3DERR_INVALIDCALL);
+
+    nine_state_prepare_draw_sw(This, vdecl, SrcStartIndex, VertexCount, &so);
+
+    buffer_size = VertexCount * so.stride[0] * 4;
+    {
         struct pipe_resource templ;
 
+        memset(&templ, 0, sizeof(templ));
         templ.target = PIPE_BUFFER;
         templ.format = PIPE_FORMAT_R8_UNORM;
         templ.width0 = buffer_size;
@@ -3190,49 +3235,50 @@ NineDevice9_ProcessVertices( struct NineDevice9 *This,
         templ.height0 = templ.depth0 = templ.array_size = 1;
         templ.last_level = templ.nr_samples = 0;
 
-        resource = This->screen->resource_create(This->screen, &templ);
+        resource = screen_sw->resource_create(screen_sw, &templ);
         if (!resource)
             return E_OUTOFMEMORY;
-        buffer_offset = 0;
-    } else {
-        /* SO matches vertex declaration */
-        resource = NineVertexBuffer9_GetResource(dst);
-        buffer_offset = DestIndex * vs->so->stride[0];
     }
-    target = This->pipe->create_stream_output_target(This->pipe, resource,
-                                                     buffer_offset,
-                                                     buffer_size);
+    target = pipe_sw->create_stream_output_target(pipe_sw, resource,
+                                                  0, buffer_size);
     if (!target) {
         pipe_resource_reference(&resource, NULL);
         return D3DERR_DRIVERINTERNALERROR;
     }
 
-    if (!vdecl) {
-        hr = NineVertexDeclaration9_new_from_fvf(This, dst->desc.FVF, &vdecl);
-        if (FAILED(hr))
-            goto out;
-    }
-
     init_draw_info(&draw, This, D3DPT_POINTLIST, VertexCount);
     draw.instance_count = 1;
     draw.indexed = FALSE;
-    draw.start = SrcStartIndex;
+    draw.start = 0;
     draw.index_bias = 0;
-    draw.min_index = SrcStartIndex;
-    draw.max_index = SrcStartIndex + VertexCount - 1;
+    draw.min_index = 0;
+    draw.max_index = VertexCount - 1;
 
-    This->pipe->set_stream_output_targets(This->pipe, 1, &target, 0);
-    This->pipe->draw_vbo(This->pipe, &draw);
-    This->pipe->set_stream_output_targets(This->pipe, 0, NULL, 0);
-    This->pipe->stream_output_target_destroy(This->pipe, target);
+
+    pipe_sw->set_stream_output_targets(pipe_sw, 1, &target, offsets);
+
+    pipe_sw->draw_vbo(pipe_sw, &draw);
+
+    pipe_sw->set_stream_output_targets(pipe_sw, 0, NULL, 0);
+    pipe_sw->stream_output_target_destroy(pipe_sw, target);
+
+    u_box_1d(0, VertexCount * so.stride[0] * 4, &box);
+    map = pipe_sw->transfer_map(pipe_sw, resource, 0, PIPE_TRANSFER_READ, &box,
+                                &transfer);
+    if (!map) {
+        hr = D3DERR_DRIVERINTERNALERROR;
+        goto out;
+    }
 
     hr = NineVertexDeclaration9_ConvertStreamOutput(vdecl,
                                                     dst, DestIndex, VertexCount,
-                                                    resource, vs->so);
+                                                    map, &so);
+    if (transfer)
+        pipe_sw->transfer_unmap(pipe_sw, transfer);
+
 out:
+    nine_state_after_draw_sw(This);
     pipe_resource_reference(&resource, NULL);
-    if (!pVertexDecl)
-        NineUnknown_Release(NineUnknown(vdecl));
     return hr;
 }
 
@@ -3380,6 +3426,7 @@ NineDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
                                       UINT Vector4fCount )
 {
     struct nine_state *state = This->update;
+    float *vs_const_f = This->may_swvp ? state->vs_const_f_swvp : state->vs_const_f;
 
     DBG("This=%p StartRegister=%u pConstantData=%p Vector4fCount=%u\n",
         This, StartRegister, pConstantData, Vector4fCount);
@@ -3392,18 +3439,26 @@ NineDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     if (!This->is_recording) {
-        if (!memcmp(&state->vs_const_f[StartRegister * 4], pConstantData,
+        if (!memcmp(&vs_const_f[StartRegister * 4], pConstantData,
                     Vector4fCount * 4 * sizeof(state->vs_const_f[0])))
             return D3D_OK;
     }
 
-    memcpy(&state->vs_const_f[StartRegister * 4],
+    memcpy(&vs_const_f[StartRegister * 4],
            pConstantData,
            Vector4fCount * 4 * sizeof(state->vs_const_f[0]));
 
     nine_ranges_insert(&state->changed.vs_const_f,
                        StartRegister, StartRegister + Vector4fCount,
                        &This->range_pool);
+
+    if (This->may_swvp) {
+        Vector4fCount = MIN2(StartRegister + Vector4fCount, NINE_MAX_CONST_F) - StartRegister;
+        if (StartRegister < NINE_MAX_CONST_F)
+            memcpy(&state->vs_const_f[StartRegister * 4],
+                   pConstantData,
+                   Vector4fCount * 4 * sizeof(state->vs_const_f[0]));
+    }
 
     state->changed.group |= NINE_STATE_VS_CONST;
 
@@ -3417,13 +3472,14 @@ NineDevice9_GetVertexShaderConstantF( struct NineDevice9 *This,
                                       UINT Vector4fCount )
 {
     const struct nine_state *state = &This->state;
+    float *vs_const_f = This->may_swvp ? state->vs_const_f_swvp : state->vs_const_f;
 
     user_assert(StartRegister                  < This->caps.MaxVertexShaderConst, D3DERR_INVALIDCALL);
     user_assert(StartRegister + Vector4fCount <= This->caps.MaxVertexShaderConst, D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     memcpy(pConstantData,
-           &state->vs_const_f[StartRegister * 4],
+           &vs_const_f[StartRegister * 4],
            Vector4fCount * 4 * sizeof(state->vs_const_f[0]));
 
     return D3D_OK;
@@ -3441,29 +3497,33 @@ NineDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
     DBG("This=%p StartRegister=%u pConstantData=%p Vector4iCount=%u\n",
         This, StartRegister, pConstantData, Vector4iCount);
 
-    user_assert(StartRegister                  < NINE_MAX_CONST_I, D3DERR_INVALIDCALL);
-    user_assert(StartRegister + Vector4iCount <= NINE_MAX_CONST_I, D3DERR_INVALIDCALL);
+    user_assert(StartRegister < (This->may_swvp ? NINE_MAX_CONST_I_SWVP : NINE_MAX_CONST_I),
+                D3DERR_INVALIDCALL);
+    user_assert(StartRegister + Vector4iCount <= (This->may_swvp ? NINE_MAX_CONST_I_SWVP : NINE_MAX_CONST_I),
+                D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     if (This->driver_caps.vs_integer) {
         if (!This->is_recording) {
-            if (!memcmp(&state->vs_const_i[StartRegister][0], pConstantData,
-                        Vector4iCount * sizeof(state->vs_const_i[0])))
+            if (!memcmp(&state->vs_const_i[4 * StartRegister], pConstantData,
+                        Vector4iCount * sizeof(int[4])))
                 return D3D_OK;
         }
-        memcpy(&state->vs_const_i[StartRegister][0],
+        memcpy(&state->vs_const_i[4 * StartRegister],
                pConstantData,
-               Vector4iCount * sizeof(state->vs_const_i[0]));
+               Vector4iCount * sizeof(int[4]));
     } else {
         for (i = 0; i < Vector4iCount; i++) {
-            state->vs_const_i[StartRegister+i][0] = fui((float)(pConstantData[4*i]));
-            state->vs_const_i[StartRegister+i][1] = fui((float)(pConstantData[4*i+1]));
-            state->vs_const_i[StartRegister+i][2] = fui((float)(pConstantData[4*i+2]));
-            state->vs_const_i[StartRegister+i][3] = fui((float)(pConstantData[4*i+3]));
+            state->vs_const_i[4 * (StartRegister + i)] = fui((float)(pConstantData[4 * i]));
+            state->vs_const_i[4 * (StartRegister + i) + 1] = fui((float)(pConstantData[4 * i + 1]));
+            state->vs_const_i[4 * (StartRegister + i) + 2] = fui((float)(pConstantData[4 * i + 2]));
+            state->vs_const_i[4 * (StartRegister + i) + 3] = fui((float)(pConstantData[4 * i + 3]));
         }
     }
 
-    state->changed.vs_const_i |= ((1 << Vector4iCount) - 1) << StartRegister;
+    nine_ranges_insert(&state->changed.vs_const_i,
+                       StartRegister, StartRegister + Vector4iCount,
+                       &This->range_pool);
     state->changed.group |= NINE_STATE_VS_CONST;
 
     return D3D_OK;
@@ -3478,20 +3538,22 @@ NineDevice9_GetVertexShaderConstantI( struct NineDevice9 *This,
     const struct nine_state *state = &This->state;
     int i;
 
-    user_assert(StartRegister                  < NINE_MAX_CONST_I, D3DERR_INVALIDCALL);
-    user_assert(StartRegister + Vector4iCount <= NINE_MAX_CONST_I, D3DERR_INVALIDCALL);
+    user_assert(StartRegister < (This->may_swvp ? NINE_MAX_CONST_I_SWVP : NINE_MAX_CONST_I),
+                D3DERR_INVALIDCALL);
+    user_assert(StartRegister + Vector4iCount <= (This->may_swvp ? NINE_MAX_CONST_I_SWVP : NINE_MAX_CONST_I),
+                D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     if (This->driver_caps.vs_integer) {
         memcpy(pConstantData,
-               &state->vs_const_i[StartRegister][0],
-               Vector4iCount * sizeof(state->vs_const_i[0]));
+               &state->vs_const_i[4 * StartRegister],
+               Vector4iCount * sizeof(int[4]));
     } else {
         for (i = 0; i < Vector4iCount; i++) {
-            pConstantData[4*i] = (int32_t) uif(state->vs_const_i[StartRegister+i][0]);
-            pConstantData[4*i+1] = (int32_t) uif(state->vs_const_i[StartRegister+i][1]);
-            pConstantData[4*i+2] = (int32_t) uif(state->vs_const_i[StartRegister+i][2]);
-            pConstantData[4*i+3] = (int32_t) uif(state->vs_const_i[StartRegister+i][3]);
+            pConstantData[4 * i] = (int32_t) uif(state->vs_const_i[4 * (StartRegister + i)]);
+            pConstantData[4 * i + 1] = (int32_t) uif(state->vs_const_i[4 * (StartRegister + i) + 1]);
+            pConstantData[4 * i + 2] = (int32_t) uif(state->vs_const_i[4 * (StartRegister + i) + 2]);
+            pConstantData[4 * i + 3] = (int32_t) uif(state->vs_const_i[4 * (StartRegister + i) + 3]);
         }
     }
 
@@ -3511,8 +3573,10 @@ NineDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
     DBG("This=%p StartRegister=%u pConstantData=%p BoolCount=%u\n",
         This, StartRegister, pConstantData, BoolCount);
 
-    user_assert(StartRegister              < NINE_MAX_CONST_B, D3DERR_INVALIDCALL);
-    user_assert(StartRegister + BoolCount <= NINE_MAX_CONST_B, D3DERR_INVALIDCALL);
+    user_assert(StartRegister < (This->may_swvp ? NINE_MAX_CONST_B_SWVP : NINE_MAX_CONST_B),
+                D3DERR_INVALIDCALL);
+    user_assert(StartRegister + BoolCount <= (This->may_swvp ? NINE_MAX_CONST_B_SWVP : NINE_MAX_CONST_B),
+                D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     if (!This->is_recording) {
@@ -3528,7 +3592,9 @@ NineDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
     for (i = 0; i < BoolCount; i++)
         state->vs_const_b[StartRegister + i] = pConstantData[i] ? bool_true : 0;
 
-    state->changed.vs_const_b |= ((1 << BoolCount) - 1) << StartRegister;
+    nine_ranges_insert(&state->changed.vs_const_b,
+                       StartRegister, StartRegister + BoolCount,
+                       &This->range_pool);
     state->changed.group |= NINE_STATE_VS_CONST;
 
     return D3D_OK;
@@ -3543,8 +3609,10 @@ NineDevice9_GetVertexShaderConstantB( struct NineDevice9 *This,
     const struct nine_state *state = &This->state;
     int i;
 
-    user_assert(StartRegister              < NINE_MAX_CONST_B, D3DERR_INVALIDCALL);
-    user_assert(StartRegister + BoolCount <= NINE_MAX_CONST_B, D3DERR_INVALIDCALL);
+    user_assert(StartRegister < (This->may_swvp ? NINE_MAX_CONST_B_SWVP : NINE_MAX_CONST_B),
+                D3DERR_INVALIDCALL);
+    user_assert(StartRegister + BoolCount <= (This->may_swvp ? NINE_MAX_CONST_B_SWVP : NINE_MAX_CONST_B),
+                D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     for (i = 0; i < BoolCount; i++)

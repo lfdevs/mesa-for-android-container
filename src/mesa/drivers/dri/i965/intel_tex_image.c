@@ -40,19 +40,34 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
 {
    GLuint lastLevel;
    int width, height, depth;
-   GLuint i;
 
    intel_get_image_dims(&intelImage->base.Base, &width, &height, &depth);
 
    DBG("%s\n", __func__);
 
    /* Figure out image dimensions at start level. */
-   for (i = intelImage->base.Base.Level; i > 0; i--) {
-      width <<= 1;
-      if (height != 1)
-         height <<= 1;
-      if (intelObj->base.Target == GL_TEXTURE_3D)
-         depth <<= 1;
+   switch(intelObj->base.Target) {
+   case GL_TEXTURE_2D_MULTISAMPLE:
+   case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
+   case GL_TEXTURE_RECTANGLE:
+   case GL_TEXTURE_EXTERNAL_OES:
+      assert(intelImage->base.Base.Level == 0);
+      break;
+   case GL_TEXTURE_3D:
+      depth <<= intelImage->base.Base.Level;
+      /* Fall through */
+   case GL_TEXTURE_2D:
+   case GL_TEXTURE_2D_ARRAY:
+   case GL_TEXTURE_CUBE_MAP:
+   case GL_TEXTURE_CUBE_MAP_ARRAY:
+      height <<= intelImage->base.Base.Level;
+      /* Fall through */
+   case GL_TEXTURE_1D:
+   case GL_TEXTURE_1D_ARRAY:
+      width <<= intelImage->base.Base.Level;
+      break;
+   default:
+      unreachable("Unexpected target");
    }
 
    /* Guess a reasonable value for lastLevel.  This is probably going
@@ -107,6 +122,9 @@ intelTexImage(struct gl_context * ctx,
    }
 
    assert(intelImage->mt);
+
+   if (intelImage->mt->format == MESA_FORMAT_S_UINT8)
+      intelImage->mt->r8stencil_needs_update = true;
 
    ok = _mesa_meta_pbo_TexSubImage(ctx, dims, texImage, 0, 0, 0,
                                    texImage->Width, texImage->Height,
@@ -366,12 +384,11 @@ intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
 {
    struct brw_context *brw = brw_context(ctx);
    struct intel_mipmap_tree *mt;
-   __DRIscreen *screen;
+   __DRIscreen *dri_screen = brw->screen->driScrnPriv;
    __DRIimage *image;
 
-   screen = brw->intelScreen->driScrnPriv;
-   image = screen->dri2.image->lookupEGLImage(screen, image_handle,
-					      screen->loaderPrivate);
+   image = dri_screen->dri2.image->lookupEGLImage(dri_screen, image_handle,
+                                                  dri_screen->loaderPrivate);
    if (image == NULL)
       return;
 

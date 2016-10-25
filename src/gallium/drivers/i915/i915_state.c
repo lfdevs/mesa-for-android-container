@@ -358,7 +358,8 @@ static void i915_bind_fragment_sampler_states(struct pipe_context *pipe,
 
 
 static void
-i915_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
+i915_bind_sampler_states(struct pipe_context *pipe,
+                         enum pipe_shader_type shader,
                          unsigned start, unsigned num_samplers,
                          void **samplers)
 {
@@ -675,7 +676,7 @@ static void i915_delete_vs_state(struct pipe_context *pipe, void *shader)
 
 static void i915_set_constant_buffer(struct pipe_context *pipe,
                                      uint shader, uint index,
-                                     struct pipe_constant_buffer *cb)
+                                     const struct pipe_constant_buffer *cb)
 {
    struct i915_context *i915 = i915_context(pipe);
    struct pipe_resource *buf = cb ? cb->buffer : NULL;
@@ -793,7 +794,7 @@ i915_set_vertex_sampler_views(struct pipe_context *pipe,
 
 
 static void
-i915_set_sampler_views(struct pipe_context *pipe, unsigned shader,
+i915_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
                        unsigned start, unsigned num,
                        struct pipe_sampler_view **views)
 {

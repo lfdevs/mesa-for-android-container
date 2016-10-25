@@ -197,6 +197,8 @@ bool PaTriList1(PA_STATE_OPT& pa, uint32_t slot, simdvector verts[])
 
 bool PaTriList2(PA_STATE_OPT& pa, uint32_t slot, simdvector verts[])
 {
+#if KNOB_ARCH == KNOB_ARCH_AVX
+
     simdvector& a = PaGetSimdVector(pa, 0, slot);
     simdvector& b = PaGetSimdVector(pa, 1, slot);
     simdvector& c = PaGetSimdVector(pa, 2, slot);
@@ -207,7 +209,7 @@ bool PaTriList2(PA_STATE_OPT& pa, uint32_t slot, simdvector verts[])
     //  v1 -> 1 4 7 10 13 16 19 22
     //  v2 -> 2 5 8 11 14 17 20 23
 
-    for(int i = 0; i < 4; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         simdvector& v0 = verts[0];
         v0[i] = _simd_blend_ps(a[i], b[i], 0x92);
@@ -230,6 +232,38 @@ bool PaTriList2(PA_STATE_OPT& pa, uint32_t slot, simdvector verts[])
         s = _mm256_permute2f128_ps(v2[i], v2[i], 0x21);
         v2[i] = _simd_blend_ps(v2[i], s, 0x22);
     }
+
+#elif KNOB_ARCH >= KNOB_ARCH_AVX2
+
+    simdvector &a = PaGetSimdVector(pa, 0, slot);
+    simdvector &b = PaGetSimdVector(pa, 1, slot);
+    simdvector &c = PaGetSimdVector(pa, 2, slot);
+
+    //  v0 -> a0 a3 a6 b1 b4 b7 c2 c5
+    //  v1 -> a1 a4 a7 b2 b5 c0 c3 c6
+    //  v2 -> a2 a5 b0 b3 b6 c1 c4 c7
+
+    const simdscalari perm0 = _simd_set_epi32(5, 2, 7, 4, 1, 6, 3, 0);
+    const simdscalari perm1 = _simd_set_epi32(6, 3, 0, 5, 2, 7, 4, 1);
+    const simdscalari perm2 = _simd_set_epi32(7, 4, 1, 6, 3, 0, 5, 2);
+
+    simdvector &v0 = verts[0];
+    simdvector &v1 = verts[1];
+    simdvector &v2 = verts[2];
+
+    for (int i = 0; i < 4; ++i)
+    {
+        v0[i] = _simd_blend_ps(_simd_blend_ps(a[i], b[i], 0x92), c[i], 0x24);
+        v0[i] = _mm256_permutevar8x32_ps(v0[i], perm0);
+
+        v1[i] = _simd_blend_ps(_simd_blend_ps(a[i], b[i], 0x24), c[i], 0x49);
+        v1[i] = _mm256_permutevar8x32_ps(v1[i], perm1);
+
+        v2[i] = _simd_blend_ps(_simd_blend_ps(a[i], b[i], 0x49), c[i], 0x92);
+        v2[i] = _mm256_permutevar8x32_ps(v2[i], perm2);
+    }
+
+#endif
 
     SetNextPaState(pa, PaTriList0, PaTriListSingle0, 0, KNOB_SIMD_WIDTH, true);
     return true;

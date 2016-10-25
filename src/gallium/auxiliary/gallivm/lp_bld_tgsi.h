@@ -52,7 +52,7 @@
 extern "C" {
 #endif
 
-#define LP_CHAN_ALL ~0
+#define LP_CHAN_ALL ~0u
 
 #define LP_MAX_INSTRUCTIONS 256
 
@@ -337,6 +337,10 @@ struct lp_build_tgsi_context
    struct lp_build_context int_bld;
 
    struct lp_build_context dbl_bld;
+
+   struct lp_build_context uint64_bld;
+   struct lp_build_context int64_bld;
+
    /** This array stores functions that are used to transform TGSI opcodes to
      * LLVM instructions.
      */

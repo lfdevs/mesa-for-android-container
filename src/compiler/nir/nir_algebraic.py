@@ -76,6 +76,7 @@ class Value(object):
          return Constant(val, name_base)
 
    __template = mako.template.Template("""
+#include "compiler/nir/nir_search_helpers.h"
 static const ${val.c_type} ${val.name} = {
    { ${val.type_enum}, ${val.bit_size} },
 % if isinstance(val, Constant):
@@ -84,6 +85,7 @@ static const ${val.c_type} ${val.name} = {
    ${val.index}, /* ${val.var_name} */
    ${'true' if val.is_constant else 'false'},
    ${val.type() or 'nir_type_invalid' },
+   ${val.cond if val.cond else 'NULL'},
 % elif isinstance(val, Expression):
    ${'true' if val.inexact else 'false'},
    nir_op_${val.opcode},
@@ -113,7 +115,7 @@ static const ${val.c_type} ${val.name} = {
                                     Variable=Variable,
                                     Expression=Expression)
 
-_constant_re = re.compile(r"(?P<value>[^@]+)(?:@(?P<bits>\d+))?")
+_constant_re = re.compile(r"(?P<value>[^@\(]+)(?:@(?P<bits>\d+))?")
 
 class Constant(Value):
    def __init__(self, val, name):
@@ -150,7 +152,8 @@ class Constant(Value):
          return "nir_type_float"
 
 _var_name_re = re.compile(r"(?P<const>#)?(?P<name>\w+)"
-                          r"(?:@(?P<type>int|uint|bool|float)?(?P<bits>\d+)?)?")
+                          r"(?:@(?P<type>int|uint|bool|float)?(?P<bits>\d+)?)?"
+                          r"(?P<cond>\([^\)]+\))?")
 
 class Variable(Value):
    def __init__(self, val, name, varset):
@@ -161,6 +164,7 @@ class Variable(Value):
 
       self.var_name = m.group('name')
       self.is_constant = m.group('const') is not None
+      self.cond = m.group('cond')
       self.required_type = m.group('type')
       self.bit_size = int(m.group('bits')) if m.group('bits') else 0
 

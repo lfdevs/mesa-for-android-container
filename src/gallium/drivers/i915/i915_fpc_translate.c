@@ -585,7 +585,7 @@ i915_translate_instruction(struct i915_fp_compile *p,
   case TGSI_OPCODE_DDX:
   case TGSI_OPCODE_DDY:
       /* XXX We just output 0 here */
-      debug_printf("Punting DDX/DDX\n");
+      debug_printf("Punting DDX/DDY\n");
       src0 = get_result_vector(p, &inst->Dst[0]);
       i915_emit_arith(p,
                       A0_MOV,

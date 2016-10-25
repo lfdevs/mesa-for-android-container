@@ -88,6 +88,7 @@
 #define		WAIT_REG_MEM_EQUAL		3
 #define PKT3_MEM_WRITE                         0x3D
 #define PKT3_INDIRECT_BUFFER                   0x32
+#define PKT3_PFP_SYNC_ME		       0x42
 #define PKT3_SURFACE_SYNC                      0x43
 #define PKT3_ME_INITIALIZE                     0x44
 #define PKT3_COND_WRITE                        0x45
@@ -1862,8 +1863,8 @@
 #define R_0283F8_SQ_VTX_SEMANTIC_30                  0x000283F8
 #define R_0283FC_SQ_VTX_SEMANTIC_31                  0x000283FC
 #define R_0288F0_SQ_VTX_SEMANTIC_CLEAR               0x000288F0
-#define R_0282D0_PA_SC_VPORT_ZMIN_0                  0x000282D0
-#define R_0282D4_PA_SC_VPORT_ZMAX_0                  0x000282D4
+#define R_0282D0_PA_SC_VPORT_ZMIN_0                  0x0282D0
+#define R_0282D4_PA_SC_VPORT_ZMAX_0                  0x0282D4
 #define R_028400_VGT_MAX_VTX_INDX                    0x00028400
 #define R_028404_VGT_MIN_VTX_INDX                    0x00028404
 #define R_028408_VGT_INDX_OFFSET                     0x00028408

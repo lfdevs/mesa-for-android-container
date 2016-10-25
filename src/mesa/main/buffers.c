@@ -36,6 +36,7 @@
 #include "enums.h"
 #include "fbobject.h"
 #include "mtypes.h"
+#include "util/bitscan.h"
 
 
 #define BAD_MASK ~0u
@@ -172,12 +173,22 @@ draw_buffer_enum_to_bitmask(const struct gl_context *ctx, GLenum buffer)
  * return -1 for an invalid buffer.
  */
 static gl_buffer_index
-read_buffer_enum_to_index(GLenum buffer)
+read_buffer_enum_to_index(const struct gl_context *ctx, GLenum buffer)
 {
    switch (buffer) {
       case GL_FRONT:
          return BUFFER_FRONT_LEFT;
       case GL_BACK:
+         if (_mesa_is_gles(ctx)) {
+            /* In draw_buffer_enum_to_bitmask, when GLES contexts draw to
+             * GL_BACK with a single-buffered configuration, we actually end
+             * up drawing to the sole front buffer in our internal
+             * representation.  For consistency, we must read from that
+             * front left buffer too.
+             */
+            if (!ctx->DrawBuffer->Visual.doubleBufferMode)
+               return BUFFER_FRONT_LEFT;
+         }
          return BUFFER_BACK_LEFT;
       case GL_RIGHT:
          return BUFFER_FRONT_RIGHT;
@@ -595,13 +606,12 @@ _mesa_drawbuffers(struct gl_context *ctx, struct gl_framebuffer *fb,
    if (n > 0 && _mesa_bitcount(destMask[0]) > 1) {
       GLuint count = 0, destMask0 = destMask[0];
       while (destMask0) {
-         GLint bufIndex = ffs(destMask0) - 1;
+         const int bufIndex = u_bit_scan(&destMask0);
          if (fb->_ColorDrawBufferIndexes[count] != bufIndex) {
             updated_drawbuffers(ctx, fb);
             fb->_ColorDrawBufferIndexes[count] = bufIndex;
          }
          count++;
-         destMask0 &= ~(1 << bufIndex);
       }
       fb->ColorDrawBuffer[0] = buffers[0];
       fb->_NumColorDrawBuffers = count;
@@ -724,7 +734,7 @@ read_buffer(struct gl_context *ctx, struct gl_framebuffer *fb,
       if (_mesa_is_gles3(ctx) && !is_legal_es3_readbuffer_enum(buffer))
          srcBuffer = -1;
       else
-         srcBuffer = read_buffer_enum_to_index(buffer);
+         srcBuffer = read_buffer_enum_to_index(ctx, buffer);
 
       if (srcBuffer == -1) {
          _mesa_error(ctx, GL_INVALID_ENUM,

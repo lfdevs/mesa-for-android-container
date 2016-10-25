@@ -49,6 +49,7 @@
 #include "intel_screen.h"
 #include "intel_tex.h"
 #include "brw_context.h"
+#include "brw_defines.h"
 
 #define FILE_DEBUG_FLAG DEBUG_FBO
 
@@ -281,7 +282,7 @@ intel_alloc_private_renderbuffer_storage(struct gl_context * ctx, struct gl_rend
                                          GLuint width, GLuint height)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct intel_screen *screen = brw->intelScreen;
+   struct intel_screen *screen = brw->screen;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
 
    assert(rb->Format != MESA_FORMAT_NONE);
@@ -331,12 +332,11 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct intel_renderbuffer *irb;
-   __DRIscreen *screen;
+   __DRIscreen *dri_screen = brw->screen->driScrnPriv;
    __DRIimage *image;
 
-   screen = brw->intelScreen->driScrnPriv;
-   image = screen->dri2.image->lookupEGLImage(screen, image_handle,
-					      screen->loaderPrivate);
+   image = dri_screen->dri2.image->lookupEGLImage(dri_screen, image_handle,
+                                                  dri_screen->loaderPrivate);
    if (image == NULL)
       return;
 
@@ -841,6 +841,14 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
             return mask;
          }
 
+         if (ctx->Color.sRGBEnabled &&
+             _mesa_get_format_color_encoding(src_irb->mt->format) !=
+             _mesa_get_format_color_encoding(dst_irb->mt->format)) {
+            perf_debug("glBlitFramebuffer() with sRGB conversion cannot be "
+                       "handled by BLT path.\n");
+            return mask;
+         }
+
          if (!intel_miptree_blit(brw,
                                  src_irb->mt,
                                  src_irb->mt_level, src_irb->mt_layer,
@@ -1074,14 +1082,6 @@ brw_render_cache_set_check_flush(struct brw_context *brw, drm_intel_bo *bo)
       return;
 
    if (brw->gen >= 6) {
-      if (brw->gen == 6) {
-         /* [Dev-SNB{W/A}]: Before a PIPE_CONTROL with Write Cache
-          * Flush Enable = 1, a PIPE_CONTROL with any non-zero
-          * post-sync-op is required.
-          */
-         brw_emit_post_sync_nonzero_flush(brw);
-      }
-
       brw_emit_pipe_control_flush(brw,
                                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
                                   PIPE_CONTROL_RENDER_TARGET_FLUSH |

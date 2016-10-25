@@ -71,6 +71,10 @@ void brw_wm_debug_recompile(struct brw_context *brw,
 void
 brw_upload_wm_prog(struct brw_context *brw);
 
+void
+brw_wm_populate_key(struct brw_context *brw,
+                    struct brw_wm_prog_key *key);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

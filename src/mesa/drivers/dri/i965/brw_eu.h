@@ -66,7 +66,7 @@ struct brw_codegen {
    brw_inst *current;
 
    bool single_program_flow;
-   const struct brw_device_info *devinfo;
+   const struct gen_device_info *devinfo;
 
    /* Control flow stacks:
     * - if_stack contains IF and ELSE instructions which must be patched
@@ -100,10 +100,10 @@ void brw_set_default_exec_size(struct brw_codegen *p, unsigned value);
 void brw_set_default_mask_control( struct brw_codegen *p, unsigned value );
 void brw_set_default_saturate( struct brw_codegen *p, bool enable );
 void brw_set_default_access_mode( struct brw_codegen *p, unsigned access_mode );
-void brw_inst_set_compression(const struct brw_device_info *devinfo,
+void brw_inst_set_compression(const struct gen_device_info *devinfo,
                               brw_inst *inst, bool on);
 void brw_set_default_compression(struct brw_codegen *p, bool on);
-void brw_inst_set_group(const struct brw_device_info *devinfo,
+void brw_inst_set_group(const struct gen_device_info *devinfo,
                         brw_inst *inst, unsigned group);
 void brw_set_default_group(struct brw_codegen *p, unsigned group);
 void brw_set_default_compression_control(struct brw_codegen *p, enum brw_compression c);
@@ -112,9 +112,9 @@ void brw_set_default_predicate_inverse(struct brw_codegen *p, bool predicate_inv
 void brw_set_default_flag_reg(struct brw_codegen *p, int reg, int subreg);
 void brw_set_default_acc_write_control(struct brw_codegen *p, unsigned value);
 
-void brw_init_codegen(const struct brw_device_info *, struct brw_codegen *p,
+void brw_init_codegen(const struct gen_device_info *, struct brw_codegen *p,
 		      void *mem_ctx);
-void brw_disassemble(const struct brw_device_info *devinfo, void *assembly,
+void brw_disassemble(const struct gen_device_info *devinfo, void *assembly,
                      int start, int end, FILE *out);
 const unsigned *brw_get_program( struct brw_codegen *p, unsigned *sz );
 
@@ -157,6 +157,7 @@ ALU2(OR)
 ALU2(XOR)
 ALU2(SHR)
 ALU2(SHL)
+ALU1(DIM)
 ALU2(ASR)
 ALU1(F32TO16)
 ALU1(F16TO32)
@@ -291,6 +292,14 @@ void brw_fb_WRITE(struct brw_codegen *p,
 		   bool last_render_target,
 		   bool header_present);
 
+brw_inst *gen9_fb_READ(struct brw_codegen *p,
+                       struct brw_reg dst,
+                       struct brw_reg payload,
+                       unsigned binding_table_index,
+                       unsigned msg_length,
+                       unsigned response_length,
+                       bool per_sample);
+
 void brw_SAMPLE(struct brw_codegen *p,
 		struct brw_reg dest,
 		unsigned msg_reg_nr,
@@ -357,7 +366,7 @@ void brw_shader_time_add(struct brw_codegen *p,
  * instruction.
  */
 static inline unsigned
-brw_jump_scale(const struct brw_device_info *devinfo)
+brw_jump_scale(const struct gen_device_info *devinfo)
 {
    /* Broadwell measures jump targets in bytes. */
    if (devinfo->gen >= 8)
@@ -479,7 +488,8 @@ brw_pixel_interpolator_query(struct brw_codegen *p,
 
 void
 brw_find_live_channel(struct brw_codegen *p,
-                      struct brw_reg dst);
+                      struct brw_reg dst,
+                      struct brw_reg mask);
 
 void
 brw_broadcast(struct brw_codegen *p,
@@ -517,21 +527,21 @@ void brw_math_invert( struct brw_codegen *p,
 
 void brw_set_src1(struct brw_codegen *p, brw_inst *insn, struct brw_reg reg);
 
-void brw_set_uip_jip(struct brw_codegen *p);
+void brw_set_uip_jip(struct brw_codegen *p, int start_offset);
 
 enum brw_conditional_mod brw_negate_cmod(uint32_t cmod);
 enum brw_conditional_mod brw_swap_cmod(uint32_t cmod);
 
 /* brw_eu_compact.c */
-void brw_init_compaction_tables(const struct brw_device_info *devinfo);
+void brw_init_compaction_tables(const struct gen_device_info *devinfo);
 void brw_compact_instructions(struct brw_codegen *p, int start_offset,
                               int num_annotations, struct annotation *annotation);
-void brw_uncompact_instruction(const struct brw_device_info *devinfo,
+void brw_uncompact_instruction(const struct gen_device_info *devinfo,
                                brw_inst *dst, brw_compact_inst *src);
-bool brw_try_compact_instruction(const struct brw_device_info *devinfo,
+bool brw_try_compact_instruction(const struct gen_device_info *devinfo,
                                  brw_compact_inst *dst, brw_inst *src);
 
-void brw_debug_compact_uncompact(const struct brw_device_info *devinfo,
+void brw_debug_compact_uncompact(const struct gen_device_info *devinfo,
                                  brw_inst *orig, brw_inst *uncompacted);
 
 /* brw_eu_validate.c */
@@ -539,7 +549,7 @@ bool brw_validate_instructions(const struct brw_codegen *p, int start_offset,
                                struct annotation_info *annotation);
 
 static inline int
-next_offset(const struct brw_device_info *devinfo, void *store, int offset)
+next_offset(const struct gen_device_info *devinfo, void *store, int offset)
 {
    brw_inst *insn = (brw_inst *)((char *)store + offset);
 
@@ -574,10 +584,10 @@ struct opcode_desc {
 };
 
 const struct opcode_desc *
-brw_opcode_desc(const struct brw_device_info *devinfo, enum opcode opcode);
+brw_opcode_desc(const struct gen_device_info *devinfo, enum opcode opcode);
 
 static inline bool
-is_3src(const struct brw_device_info *devinfo, enum opcode opcode)
+is_3src(const struct gen_device_info *devinfo, enum opcode opcode)
 {
    const struct opcode_desc *desc = brw_opcode_desc(devinfo, opcode);
    return desc && desc->nsrc == 3;

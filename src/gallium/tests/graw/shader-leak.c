@@ -192,6 +192,7 @@ static void init( void )
    if (ctx == NULL)
       exit(3);
 
+   memset(&templat, 0, sizeof(templat));
    templat.target = PIPE_TEXTURE_2D;
    templat.format = formats[i];
    templat.width0 = WIDTH;

@@ -39,7 +39,7 @@ get_image_offset(const struct softpipe_resource *spr,
    int base_layer = 0;
 
    if (spr->base.target == PIPE_BUFFER)
-      return iview->u.buf.first_element * util_format_get_blocksize(format);
+      return iview->u.buf.offset;
 
    if (spr->base.target == PIPE_TEXTURE_1D_ARRAY ||
        spr->base.target == PIPE_TEXTURE_2D_ARRAY ||
@@ -153,7 +153,7 @@ get_dimensions(const struct pipe_image_view *iview,
                unsigned *depth)
 {
    if (tgsi_tex_instr == TGSI_TEXTURE_BUFFER) {
-      *width = iview->u.buf.last_element - iview->u.buf.first_element + 1;
+      *width = iview->u.buf.size / util_format_get_blocksize(pformat);
       *height = 1;
       *depth = 1;
       /*
@@ -752,7 +752,7 @@ sp_tgsi_get_dims(const struct tgsi_image *image,
       return;
 
    if (params->tgsi_tex_instr == TGSI_TEXTURE_BUFFER) {
-      dims[0] = iview->u.buf.last_element - iview->u.buf.first_element + 1;
+      dims[0] = iview->u.buf.size / util_format_get_blocksize(iview->format);
       dims[1] = dims[2] = dims[3] = 0;
       return;
    }

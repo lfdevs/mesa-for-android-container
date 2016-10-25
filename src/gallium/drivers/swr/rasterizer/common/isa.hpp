@@ -30,7 +30,11 @@
 #include <string>
 #include <algorithm>
 
-#if defined(_WIN32)
+// Clang for Windows does supply an intrin.h with __cpuid intrinsics, however...
+// It seems to not realize that a write to "b" (ebx) will kill the value in rbx.
+// This attempts to use the "native" clang / gcc intrinsics instead of the windows
+// compatible ones.
+#if defined(_MSC_VER) && !defined(__clang__)
 #include <intrin.h>
 #else
 #include <string.h>
@@ -128,7 +132,7 @@ private:
 
             // Calling __cpuid with 0x0 as the function_id argument
             // gets the number of the highest valid function ID.
-#if defined(_WIN32)
+#if defined(_MSC_VER) && !defined(__clang__)
             __cpuid(cpui.data(), 0);
             nIds_ = cpui[0];
 #else
@@ -137,7 +141,7 @@ private:
 
             for (int i = 0; i <= nIds_; ++i)
             {
-#if defined(_WIN32)
+#if defined(_MSC_VER) && !defined(__clang__)
                 __cpuidex(cpui.data(), i, 0);
 #else
                 int *data = cpui.data();
@@ -178,7 +182,7 @@ private:
 
             // Calling __cpuid with 0x80000000 as the function_id argument
             // gets the number of the highest valid extended ID.
-#if defined(_WIN32)
+#if defined(_MSC_VER) && !defined(__clang__)
             __cpuid(cpui.data(), 0x80000000);
             nExIds_ = cpui[0];
 #else
@@ -190,7 +194,7 @@ private:
 
             for (unsigned i = 0x80000000; i <= nExIds_; ++i)
             {
-#if defined(_WIN32)
+#if defined(_MSC_VER) && !defined(__clang__)
                 __cpuidex(cpui.data(), i, 0);
 #else
                 int *data = cpui.data();

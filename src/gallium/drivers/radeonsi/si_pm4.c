@@ -103,11 +103,18 @@ void si_pm4_add_bo(struct si_pm4_state *state,
 	state->bo_priority[idx] = priority;
 }
 
-void si_pm4_free_state_simple(struct si_pm4_state *state)
+void si_pm4_clear_state(struct si_pm4_state *state)
 {
 	for (int i = 0; i < state->nbo; ++i)
 		r600_resource_reference(&state->bo[i], NULL);
 	r600_resource_reference(&state->indirect_buffer, NULL);
+	state->nbo = 0;
+	state->ndw = 0;
+}
+
+void si_pm4_free_state_simple(struct si_pm4_state *state)
+{
+	si_pm4_clear_state(state);
 	FREE(state);
 }
 

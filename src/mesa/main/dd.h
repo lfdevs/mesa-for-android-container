@@ -308,9 +308,10 @@ struct dd_function_table {
     * \return GL_TRUE if the image is OK, GL_FALSE if too large
     */
    GLboolean (*TestProxyTexImage)(struct gl_context *ctx, GLenum target,
-                                  GLint level, mesa_format format,
+                                  GLuint numLevels, GLint level,
+                                  mesa_format format, GLuint numSamples,
                                   GLint width, GLint height,
-                                  GLint depth, GLint border);
+                                  GLint depth);
    /*@}*/
 
    
@@ -609,10 +610,9 @@ struct dd_function_table {
    /** Set texture environment parameters */
    void (*TexEnv)(struct gl_context *ctx, GLenum target, GLenum pname,
                   const GLfloat *param);
-   /** Set texture parameters */
+   /** Set texture parameter (callee gets param value from the texObj) */
    void (*TexParameter)(struct gl_context *ctx,
-                        struct gl_texture_object *texObj,
-                        GLenum pname, const GLfloat *params);
+                        struct gl_texture_object *texObj, GLenum pname);
    /** Set the viewport */
    void (*Viewport)(struct gl_context *ctx);
    /*@}*/
@@ -783,9 +783,7 @@ struct dd_function_table {
     * \name GLSL-related functions (ARB extensions and OpenGL 2.x)
     */
    /*@{*/
-   struct gl_shader *(*NewShader)(struct gl_context *ctx,
-                                  GLuint name, GLenum type);
-   void (*UseProgram)(struct gl_context *ctx, struct gl_shader_program *shProg);
+   struct gl_linked_shader *(*NewShader)(gl_shader_stage stage);
    /*@}*/
 
    /**
@@ -959,11 +957,32 @@ struct dd_function_table {
    /** @} */
 
    /**
+    * GL_MESA_shader_framebuffer_fetch_non_coherent rendering barrier.
+    *
+    * On return from this function any framebuffer contents written by
+    * previous draw commands are guaranteed to be visible from subsequent
+    * fragment shader invocations using the
+    * MESA_shader_framebuffer_fetch_non_coherent interface.
+    */
+   /** @{ */
+   void (*BlendBarrier)(struct gl_context *ctx);
+   /** @} */
+
+   /**
     * \name GL_ARB_compute_shader interface
     */
    /*@{*/
    void (*DispatchCompute)(struct gl_context *ctx, const GLuint *num_groups);
    void (*DispatchComputeIndirect)(struct gl_context *ctx, GLintptr indirect);
+   /*@}*/
+
+   /**
+    * \name GL_ARB_compute_variable_group_size interface
+    */
+   /*@{*/
+   void (*DispatchComputeGroupSize)(struct gl_context *ctx,
+                                    const GLuint *num_groups,
+                                    const GLuint *group_size);
    /*@}*/
 
    /**

@@ -115,13 +115,10 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libamdgpuwinsys_la_LIBADD =
-am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_1 = addrlib/addrinterface.lo addrlib/core/addrelemlib.lo \
-	addrlib/core/addrlib.lo addrlib/core/addrobject.lo \
-	addrlib/r800/ciaddrlib.lo addrlib/r800/egbaddrlib.lo \
-	addrlib/r800/siaddrlib.lo amdgpu_bo.lo amdgpu_cs.lo \
-	amdgpu_surface.lo amdgpu_winsys.lo
+libamdgpuwinsys_la_DEPENDENCIES =  \
+	$(top_builddir)/src/amd/addrlib/libamdgpu_addrlib.la
+am__objects_1 = amdgpu_bo.lo amdgpu_cs.lo amdgpu_surface.lo \
+	amdgpu_winsys.lo
 am_libamdgpuwinsys_la_OBJECTS = $(am__objects_1)
 libamdgpuwinsys_la_OBJECTS = $(am_libamdgpuwinsys_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -162,24 +159,6 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
-	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
-LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
-	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
-	$(AM_CXXFLAGS) $(CXXFLAGS)
-AM_V_CXX = $(am__v_CXX_@AM_V@)
-am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
-am__v_CXX_0 = @echo "  CXX     " $@;
-am__v_CXX_1 = 
-CXXLD = $(CXX)
-CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
-	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
-am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
-am__v_CXXLD_0 = @echo "  CXXLD   " $@;
-am__v_CXXLD_1 = 
 SOURCES = $(libamdgpuwinsys_la_SOURCES)
 DIST_SOURCES = $(libamdgpuwinsys_la_SOURCES)
 am__can_run_installinfo = \
@@ -311,11 +290,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -411,6 +389,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -446,6 +426,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -509,30 +490,10 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 C_SOURCES := \
-	addrlib/addrinterface.cpp \
-	addrlib/addrinterface.h \
-	addrlib/addrtypes.h \
-	addrlib/core/addrcommon.h \
-	addrlib/core/addrelemlib.cpp \
-	addrlib/core/addrelemlib.h \
-	addrlib/core/addrlib.cpp \
-	addrlib/core/addrlib.h \
-	addrlib/core/addrobject.cpp \
-	addrlib/core/addrobject.h \
-	addrlib/inc/chip/r800/si_gb_reg.h \
-	addrlib/inc/lnx_common_defs.h \
-	addrlib/r800/chip/si_ci_vi_merged_enum.h \
-	addrlib/r800/ciaddrlib.cpp \
-	addrlib/r800/ciaddrlib.h \
-	addrlib/r800/egbaddrlib.cpp \
-	addrlib/r800/egbaddrlib.h \
-	addrlib/r800/siaddrlib.cpp \
-	addrlib/r800/siaddrlib.h \
 	amdgpu_bo.c \
 	amdgpu_bo.h \
 	amdgpu_cs.c \
 	amdgpu_cs.h \
-	amdgpu_id.h \
 	amdgpu_public.h \
 	amdgpu_surface.c \
 	amdgpu_winsys.c \
@@ -606,19 +567,16 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 AM_CFLAGS = \
 	$(GALLIUM_WINSYS_CFLAGS) \
 	$(AMDGPU_CFLAGS) \
-	-I$(srcdir)/addrlib \
-	-I$(srcdir)/addrlib/core \
-	-I$(srcdir)/addrlib/inc/chip/r800 \
-	-I$(srcdir)/addrlib/r800/chip \
-	-DBRAHMA_BUILD=1
+	-I$(top_srcdir)/src/amd/
 
 AM_CXXFLAGS = $(AM_CFLAGS)
 noinst_LTLIBRARIES = libamdgpuwinsys.la
+libamdgpuwinsys_la_LIBADD = $(top_builddir)/src/amd/addrlib/libamdgpu_addrlib.la
 libamdgpuwinsys_la_SOURCES = $(C_SOURCES)
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .cpp .lo .o .obj
+.SUFFIXES: .c .lo .o .obj
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/Makefile.sources $(top_srcdir)/src/gallium/Automake.inc $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -660,50 +618,12 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
-addrlib/$(am__dirstamp):
-	@$(MKDIR_P) addrlib
-	@: > addrlib/$(am__dirstamp)
-addrlib/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) addrlib/$(DEPDIR)
-	@: > addrlib/$(DEPDIR)/$(am__dirstamp)
-addrlib/addrinterface.lo: addrlib/$(am__dirstamp) \
-	addrlib/$(DEPDIR)/$(am__dirstamp)
-addrlib/core/$(am__dirstamp):
-	@$(MKDIR_P) addrlib/core
-	@: > addrlib/core/$(am__dirstamp)
-addrlib/core/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) addrlib/core/$(DEPDIR)
-	@: > addrlib/core/$(DEPDIR)/$(am__dirstamp)
-addrlib/core/addrelemlib.lo: addrlib/core/$(am__dirstamp) \
-	addrlib/core/$(DEPDIR)/$(am__dirstamp)
-addrlib/core/addrlib.lo: addrlib/core/$(am__dirstamp) \
-	addrlib/core/$(DEPDIR)/$(am__dirstamp)
-addrlib/core/addrobject.lo: addrlib/core/$(am__dirstamp) \
-	addrlib/core/$(DEPDIR)/$(am__dirstamp)
-addrlib/r800/$(am__dirstamp):
-	@$(MKDIR_P) addrlib/r800
-	@: > addrlib/r800/$(am__dirstamp)
-addrlib/r800/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) addrlib/r800/$(DEPDIR)
-	@: > addrlib/r800/$(DEPDIR)/$(am__dirstamp)
-addrlib/r800/ciaddrlib.lo: addrlib/r800/$(am__dirstamp) \
-	addrlib/r800/$(DEPDIR)/$(am__dirstamp)
-addrlib/r800/egbaddrlib.lo: addrlib/r800/$(am__dirstamp) \
-	addrlib/r800/$(DEPDIR)/$(am__dirstamp)
-addrlib/r800/siaddrlib.lo: addrlib/r800/$(am__dirstamp) \
-	addrlib/r800/$(DEPDIR)/$(am__dirstamp)
 
 libamdgpuwinsys.la: $(libamdgpuwinsys_la_OBJECTS) $(libamdgpuwinsys_la_DEPENDENCIES) $(EXTRA_libamdgpuwinsys_la_DEPENDENCIES) 
-	$(AM_V_CXXLD)$(CXXLINK)  $(libamdgpuwinsys_la_OBJECTS) $(libamdgpuwinsys_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(LINK)  $(libamdgpuwinsys_la_OBJECTS) $(libamdgpuwinsys_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
-	-rm -f addrlib/*.$(OBJEXT)
-	-rm -f addrlib/*.lo
-	-rm -f addrlib/core/*.$(OBJEXT)
-	-rm -f addrlib/core/*.lo
-	-rm -f addrlib/r800/*.$(OBJEXT)
-	-rm -f addrlib/r800/*.lo
 
 distclean-compile:
 	-rm -f *.tab.c
@@ -712,13 +632,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/amdgpu_cs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/amdgpu_surface.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/amdgpu_winsys.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@addrlib/$(DEPDIR)/addrinterface.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@addrlib/core/$(DEPDIR)/addrelemlib.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@addrlib/core/$(DEPDIR)/addrlib.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@addrlib/core/$(DEPDIR)/addrobject.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@addrlib/r800/$(DEPDIR)/ciaddrlib.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@addrlib/r800/$(DEPDIR)/egbaddrlib.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@addrlib/r800/$(DEPDIR)/siaddrlib.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -744,38 +657,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
-.cpp.o:
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
-
-.cpp.obj:
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
-
-.cpp.lo:
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
-
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
-	-rm -rf addrlib/.libs addrlib/_libs
-	-rm -rf addrlib/core/.libs addrlib/core/_libs
-	-rm -rf addrlib/r800/.libs addrlib/r800/_libs
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -889,12 +775,6 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
-	-rm -f addrlib/$(DEPDIR)/$(am__dirstamp)
-	-rm -f addrlib/$(am__dirstamp)
-	-rm -f addrlib/core/$(DEPDIR)/$(am__dirstamp)
-	-rm -f addrlib/core/$(am__dirstamp)
-	-rm -f addrlib/r800/$(DEPDIR)/$(am__dirstamp)
-	-rm -f addrlib/r800/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -905,7 +785,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR) addrlib/$(DEPDIR) addrlib/core/$(DEPDIR) addrlib/r800/$(DEPDIR)
+	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -951,7 +831,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR) addrlib/$(DEPDIR) addrlib/core/$(DEPDIR) addrlib/r800/$(DEPDIR)
+	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

@@ -34,6 +34,9 @@
 
 struct stw_framebuffer;
 
+bool
+stw_own_mutex(const CRITICAL_SECTION *cs);
+
 struct st_api *
 stw_st_create_api(void);
 

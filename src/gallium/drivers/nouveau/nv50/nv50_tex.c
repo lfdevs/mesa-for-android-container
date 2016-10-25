@@ -131,11 +131,11 @@ nv50_create_texture_view(struct pipe_context *pipe,
 
    if (unlikely(!nouveau_bo_memtype(nv04_resource(texture)->bo))) {
       if (target == PIPE_BUFFER) {
-         addr += view->pipe.u.buf.first_element * desc->block.bits / 8;
+         addr += view->pipe.u.buf.offset;
          tic[2] |= G80_TIC_2_LAYOUT_PITCH | G80_TIC_2_TEXTURE_TYPE_ONE_D_BUFFER;
          tic[3] = 0;
          tic[4] = /* width */
-            view->pipe.u.buf.last_element - view->pipe.u.buf.first_element + 1;
+            view->pipe.u.buf.size / (desc->block.bits / 8);
          tic[5] = 0;
       } else {
          tic[2] |= G80_TIC_2_LAYOUT_PITCH | G80_TIC_2_TEXTURE_TYPE_TWO_D_NO_MIPMAP;
@@ -224,8 +224,7 @@ nv50_update_tic(struct nv50_context *nv50, struct nv50_tic_entry *tic,
    uint64_t address = res->address;
    if (res->base.target != PIPE_BUFFER)
       return;
-   address += tic->pipe.u.buf.first_element *
-      util_format_get_blocksize(tic->pipe.format);
+   address += tic->pipe.u.buf.offset;
    if (tic->tic[1] == (uint32_t)address &&
        (tic->tic[2] & 0xff) == address >> 32)
       return;

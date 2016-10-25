@@ -83,8 +83,8 @@ var_from_reg(const simple_allocator &alloc, const src_reg &reg,
              unsigned c = 0)
 {
    assert(reg.file == VGRF && reg.nr < alloc.count &&
-          reg.reg_offset < alloc.sizes[reg.nr] && c < 4);
-   return (4 * (alloc.offsets[reg.nr] + reg.reg_offset) +
+          reg.offset / REG_SIZE < alloc.sizes[reg.nr] && c < 4);
+   return (4 * (alloc.offsets[reg.nr] + reg.offset / REG_SIZE) +
            BRW_GET_SWZ(reg.swizzle, c));
 }
 
@@ -93,8 +93,8 @@ var_from_reg(const simple_allocator &alloc, const dst_reg &reg,
              unsigned c = 0)
 {
    assert(reg.file == VGRF && reg.nr < alloc.count &&
-          reg.reg_offset < alloc.sizes[reg.nr] && c < 4);
-   return 4 * (alloc.offsets[reg.nr] + reg.reg_offset) + c;
+          reg.offset / REG_SIZE < alloc.sizes[reg.nr] && c < 4);
+   return 4 * (alloc.offsets[reg.nr] + reg.offset / REG_SIZE) + c;
 }
 
 } /* namespace brw */

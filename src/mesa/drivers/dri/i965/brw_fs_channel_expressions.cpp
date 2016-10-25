@@ -433,6 +433,11 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_frexp_sig:
    case ir_unop_frexp_exp:
       unreachable("should have been lowered by lower_instructions");
+
+   case ir_unop_vote_any:
+   case ir_unop_vote_all:
+   case ir_unop_vote_eq:
+      unreachable("unsupported");
    }
 
    ir->remove();

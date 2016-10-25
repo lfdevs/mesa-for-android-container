@@ -596,7 +596,7 @@ struct r300_context {
     unsigned nr_vertex_buffers;
     struct u_upload_mgr *uploader;
 
-    struct util_slab_mempool pool_transfers;
+    struct slab_child_pool pool_transfers;
 
     /* Stat counter. */
     uint64_t flush_counter;

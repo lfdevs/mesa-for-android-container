@@ -33,6 +33,8 @@
 #include "util/u_hash_table.h"
 #include "util/ralloc.h"
 
+#include <xf86drm.h>
+#include "vc4_drm.h"
 #include "vc4_screen.h"
 #include "vc4_context.h"
 #include "vc4_resource.h"
@@ -71,7 +73,16 @@ uint32_t vc4_debug;
 static const char *
 vc4_screen_get_name(struct pipe_screen *pscreen)
 {
-        return "VC4";
+        struct vc4_screen *screen = vc4_screen(pscreen);
+
+        if (!screen->name) {
+                screen->name = ralloc_asprintf(screen,
+                                               "VC4 V3D %d.%d",
+                                               screen->v3d_ver / 10,
+                                               screen->v3d_ver % 10);
+        }
+
+        return screen->name;
 }
 
 static const char *
@@ -87,6 +98,12 @@ vc4_screen_destroy(struct pipe_screen *pscreen)
 
         util_hash_table_destroy(screen->bo_handles);
         vc4_bufmgr_destroy(pscreen);
+        slab_destroy_parent(&screen->transfer_pool);
+
+#if USE_VC4_SIMULATOR
+        vc4_simulator_destroy(screen);
+#endif
+
         close(screen->fd);
         ralloc_free(pscreen);
 }
@@ -130,6 +147,7 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return 1;
 
         case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
+        case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
                 return 1;
 
                 /* Unsupported features. */
@@ -216,6 +234,11 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
         case PIPE_CAP_CULL_DISTANCE:
         case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
+        case PIPE_CAP_TGSI_VOTE:
+        case PIPE_CAP_MAX_WINDOW_RECTANGLES:
+        case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
+        case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
+        case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
                 return 0;
 
                 /* Stream output. */
@@ -328,8 +351,10 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
         case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
                 return 16384;
+
         case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
-                return 0;
+                return vc4_screen(pscreen)->has_control_flow;
+
         case PIPE_SHADER_CAP_MAX_INPUTS:
                 if (shader == PIPE_SHADER_FRAGMENT)
                         return 8;
@@ -369,7 +394,7 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
                 return VC4_MAX_TEXTURE_SAMPLERS;
         case PIPE_SHADER_CAP_PREFERRED_IR:
-                return PIPE_SHADER_IR_TGSI;
+                return PIPE_SHADER_IR_NIR;
         case PIPE_SHADER_CAP_SUPPORTED_IRS:
                 return 0;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
@@ -476,11 +501,6 @@ vc4_screen_is_format_supported(struct pipe_screen *pscreen,
                 retval |= PIPE_BIND_INDEX_BUFFER;
         }
 
-        if (usage & PIPE_BIND_TRANSFER_READ)
-                retval |= PIPE_BIND_TRANSFER_READ;
-        if (usage & PIPE_BIND_TRANSFER_WRITE)
-                retval |= PIPE_BIND_TRANSFER_WRITE;
-
 #if 0
         if (retval != usage) {
                 fprintf(stderr,
@@ -505,6 +525,76 @@ static int handle_compare(void *key1, void *key2)
     return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
 }
 
+static bool
+vc4_supports_branches(struct vc4_screen *screen)
+{
+#if USE_VC4_SIMULATOR
+        return true;
+#endif
+
+        struct drm_vc4_get_param p = {
+                .param = DRM_VC4_PARAM_SUPPORTS_BRANCHES,
+        };
+        int ret = drmIoctl(screen->fd, DRM_IOCTL_VC4_GET_PARAM, &p);
+
+        if (ret != 0)
+                return false;
+
+        return p.value;
+}
+
+static bool
+vc4_get_chip_info(struct vc4_screen *screen)
+{
+#if USE_VC4_SIMULATOR
+        screen->v3d_ver = 21;
+        return true;
+#endif
+
+        struct drm_vc4_get_param ident0 = {
+                .param = DRM_VC4_PARAM_V3D_IDENT0,
+        };
+        struct drm_vc4_get_param ident1 = {
+                .param = DRM_VC4_PARAM_V3D_IDENT1,
+        };
+        int ret;
+
+        ret = drmIoctl(screen->fd, DRM_IOCTL_VC4_GET_PARAM, &ident0);
+        if (ret != 0) {
+                if (errno == EINVAL) {
+                        /* Backwards compatibility with 2835 kernels which
+                         * only do V3D 2.1.
+                         */
+                        screen->v3d_ver = 21;
+                        return true;
+                } else {
+                        fprintf(stderr, "Couldn't get V3D IDENT0: %s\n",
+                                strerror(errno));
+                        return false;
+                }
+        }
+        ret = drmIoctl(screen->fd, DRM_IOCTL_VC4_GET_PARAM, &ident1);
+        if (ret != 0) {
+                fprintf(stderr, "Couldn't get V3D IDENT1: %s\n",
+                        strerror(errno));
+                return false;
+        }
+
+        uint32_t major = (ident0.value >> 24) & 0xff;
+        uint32_t minor = (ident1.value >> 0) & 0xf;
+        screen->v3d_ver = major * 10 + minor;
+
+        if (screen->v3d_ver != 21) {
+                fprintf(stderr,
+                        "V3D %d.%d not supported by this version of Mesa.\n",
+                        screen->v3d_ver / 10,
+                        screen->v3d_ver % 10);
+                return false;
+        }
+
+        return true;
+}
+
 struct pipe_screen *
 vc4_screen_create(int fd)
 {
@@ -525,6 +615,14 @@ vc4_screen_create(int fd)
         pipe_mutex_init(screen->bo_handles_mutex);
         screen->bo_handles = util_hash_table_create(handle_hash, handle_compare);
 
+        if (vc4_supports_branches(screen))
+                screen->has_control_flow = true;
+
+        if (!vc4_get_chip_info(screen))
+                goto fail;
+
+        slab_create_parent(&screen->transfer_pool, sizeof(struct vc4_transfer), 16);
+
         vc4_fence_init(screen);
 
         vc4_debug = debug_get_option_vc4_debug();
@@ -540,8 +638,14 @@ vc4_screen_create(int fd)
         pscreen->get_name = vc4_screen_get_name;
         pscreen->get_vendor = vc4_screen_get_vendor;
         pscreen->get_device_vendor = vc4_screen_get_vendor;
+        pscreen->get_compiler_options = vc4_screen_get_compiler_options;
 
         return pscreen;
+
+fail:
+        close(fd);
+        ralloc_free(pscreen);
+        return NULL;
 }
 
 boolean

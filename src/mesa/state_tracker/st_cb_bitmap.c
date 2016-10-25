@@ -45,6 +45,7 @@
 #include "st_draw.h"
 #include "st_program.h"
 #include "st_cb_bitmap.h"
+#include "st_sampler_view.h"
 #include "st_texture.h"
 
 #include "pipe/p_context.h"
@@ -212,7 +213,7 @@ setup_render_state(struct gl_context *ctx,
       COPY_4V(colorSave, ctx->Current.Attrib[VERT_ATTRIB_COLOR0]);
       COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], color);
       st_upload_constants(st, st->fp->Base.Base.Parameters,
-                          PIPE_SHADER_FRAGMENT);
+                          MESA_SHADER_FRAGMENT);
       COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], colorSave);
    }
 
@@ -347,7 +348,7 @@ draw_bitmap_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    restore_render_state(ctx);
 
    /* We uploaded modified constants, need to invalidate them. */
-   st->dirty.mesa |= _NEW_PROGRAM_CONSTANTS;
+   st->dirty |= ST_NEW_FS_CONSTANTS;
 }
 
 
@@ -636,16 +637,19 @@ st_Bitmap(struct gl_context *ctx, GLint x, GLint y,
    assert(width > 0);
    assert(height > 0);
 
+   st_invalidate_readpix_cache(st);
+
    if (!st->bitmap.cache) {
       init_bitmap_state(st);
    }
 
-   /* We only need to validate state of the st dirty flags are set or
-    * any non-_NEW_PROGRAM_CONSTANTS mesa flags are set.  The VS we use
+   /* We only need to validate any non-ST_NEW_CONSTANTS state. The VS we use
     * for bitmap drawing uses no constants and the FS constants are
     * explicitly uploaded in the draw_bitmap_quad() function.
     */
-   if ((st->dirty.mesa & ~_NEW_PROGRAM_CONSTANTS) || st->dirty.st) {
+   if ((st->dirty | ctx->NewDriverState) & ~ST_NEW_CONSTANTS &
+       ST_PIPELINE_RENDER_STATE_MASK ||
+       st->gfx_shaders_may_be_dirty) {
       st_validate_state(st, ST_PIPELINE_RENDER);
    }
 
@@ -702,6 +706,7 @@ st_DrawAtlasBitmaps(struct gl_context *ctx,
    st_flush_bitmap_cache(st);
 
    st_validate_state(st, ST_PIPELINE_RENDER);
+   st_invalidate_readpix_cache(st);
 
    sv = st_create_texture_sampler_view(pipe, stObj->pt);
    if (!sv) {
@@ -800,7 +805,7 @@ st_DrawAtlasBitmaps(struct gl_context *ctx,
    pipe_sampler_view_reference(&sv, NULL);
 
    /* We uploaded modified constants, need to invalidate them. */
-   st->dirty.mesa |= _NEW_PROGRAM_CONSTANTS;
+   st->dirty |= ST_NEW_FS_CONSTANTS;
 }
 
 

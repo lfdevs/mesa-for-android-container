@@ -68,6 +68,17 @@ namespace clover {
          *p = desc(v());
       }
    }
+
+   ///
+   /// Return an API object from an intrusive reference to a Clover object,
+   /// incrementing the reference count of the object.
+   ///
+   template<typename T>
+   typename T::descriptor_type *
+   ret_object(const intrusive_ref<T> &v) {
+      v().retain();
+      return desc(v());
+   }
 }
 
 #endif

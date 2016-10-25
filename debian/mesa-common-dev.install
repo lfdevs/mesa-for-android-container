@@ -6,5 +6,4 @@ usr/include/GL/glx.h
 usr/include/GL/glxext.h
 usr/include/GL/glx_mangle.h
 usr/include/GL/internal/dri_interface.h
-usr/include/GL/mesa_glinterop.h
 usr/lib/*/pkgconfig/dri.pc

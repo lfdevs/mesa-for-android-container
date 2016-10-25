@@ -32,6 +32,7 @@
  */
 
 
+#include "util/u_bitcast.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
 
@@ -90,7 +91,7 @@ draw_viewport_index(struct draw_context *draw,
       unsigned viewport_index_output =
          draw_current_shader_viewport_index_output(draw);
       unsigned viewport_index =
-         *((unsigned*)leading_vertex->data[viewport_index_output]);
+         u_bitcast_f2u(leading_vertex->data[viewport_index_output][0]);
       return draw_clamp_viewport_idx(viewport_index);
    } else {
       return 0;

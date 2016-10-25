@@ -274,10 +274,10 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
 	  */
          GLuint interp = c->key.interpolation_mode.mode[slot];
 
-         if (interp != INTERP_QUALIFIER_FLAT) {
+         if (interp != INTERP_MODE_FLAT) {
             struct brw_reg tmp = get_tmp(c);
             struct brw_reg t =
-               interp == INTERP_QUALIFIER_NOPERSPECTIVE ? t_nopersp : t0;
+               interp == INTERP_MODE_NOPERSPECTIVE ? t_nopersp : t0;
 
             brw_MUL(p,
                   vec4(brw_null_reg()),
@@ -406,7 +406,7 @@ void brw_clip_copy_flatshaded_attributes( struct brw_clip_compile *c,
    struct brw_codegen *p = &c->func;
 
    for (int i = 0; i < c->vue_map.num_slots; i++) {
-      if (c->key.interpolation_mode.mode[i] == INTERP_QUALIFIER_FLAT) {
+      if (c->key.interpolation_mode.mode[i] == INTERP_MODE_FLAT) {
          brw_MOV(p,
                  byte_offset(c->reg.vertex[to], brw_vue_slot_to_offset(i)),
                  byte_offset(c->reg.vertex[from], brw_vue_slot_to_offset(i)));

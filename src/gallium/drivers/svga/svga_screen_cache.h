@@ -95,12 +95,13 @@ struct svga_host_surface_cache_entry
  * A cache entry can be in the following stages:
  * 1. empty (entry->handle = NULL)
  * 2. holding a buffer in a validate list
- * 3. holding a flushed buffer (not in any validate list) with an active fence
- * 4. holding a flushed buffer with an expired fence
+ * 3. holding a buffer in an invalidate list
+ * 4. holding a flushed buffer (not in any validate list) with an active fence
+ * 5. holding a flushed buffer with an expired fence
  * 
- * An entry progresses from 1 -> 2 -> 3 -> 4. When we need an entry to put a 
+ * An entry progresses from 1 -> 2 -> 3 -> 4 -> 5. When we need an entry to put a 
  * buffer into we preferentially take from 1, or from the least recently used 
- * buffer from 3/4.
+ * buffer from 4/5.
  */
 struct svga_host_surface_cache 
 {
@@ -113,8 +114,11 @@ struct svga_host_surface_cache
     * (3 and 4) */
    struct list_head unused;
    
-   /* Entries with buffers still in validate lists (2) */
+   /* Entries with buffers still in validate list (2) */
    struct list_head validated;
+   
+   /* Entries with buffers still in invalidate list (3) */
+   struct list_head invalidated;
    
    /** Empty entries (1) */
    struct list_head empty;

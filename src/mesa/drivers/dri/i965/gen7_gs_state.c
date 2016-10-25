@@ -29,13 +29,18 @@
 static void
 upload_gs_state(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_stage_state *stage_state = &brw->gs.base;
    const int max_threads_shift = brw->is_haswell ?
       HSW_GS_MAX_THREADS_SHIFT : GEN6_GS_MAX_THREADS_SHIFT;
    /* BRW_NEW_GEOMETRY_PROGRAM */
    bool active = brw->geometry_program;
    /* BRW_NEW_GS_PROG_DATA */
-   const struct brw_vue_prog_data *prog_data = &brw->gs.prog_data->base;
+   const struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   const struct brw_vue_prog_data *vue_prog_data =
+      brw_vue_prog_data(stage_state->prog_data);
+   const struct brw_gs_prog_data *gs_prog_data =
+      brw_gs_prog_data(stage_state->prog_data);
 
    /**
     * From Graphics BSpec: 3D-Media-GPGPU Engine > 3D Pipeline Stages >
@@ -58,10 +63,10 @@ upload_gs_state(struct brw_context *brw)
       OUT_BATCH(stage_state->prog_offset);
       OUT_BATCH(((ALIGN(stage_state->sampler_count, 4)/4) <<
                  GEN6_GS_SAMPLER_COUNT_SHIFT) |
-                ((brw->gs.prog_data->base.base.binding_table.size_bytes / 4) <<
+                ((prog_data->binding_table.size_bytes / 4) <<
                  GEN6_GS_BINDING_TABLE_ENTRY_COUNT_SHIFT));
 
-      if (brw->gs.prog_data->base.base.total_scratch) {
+      if (prog_data->total_scratch) {
          OUT_RELOC(stage_state->scratch_bo,
                    I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                    ffs(stage_state->per_thread_scratch) - 11);
@@ -70,14 +75,13 @@ upload_gs_state(struct brw_context *brw)
       }
 
       uint32_t dw4 =
-         ((brw->gs.prog_data->output_vertex_size_hwords * 2 - 1) <<
+         ((gs_prog_data->output_vertex_size_hwords * 2 - 1) <<
           GEN7_GS_OUTPUT_VERTEX_SIZE_SHIFT) |
-         (brw->gs.prog_data->output_topology <<
-          GEN7_GS_OUTPUT_TOPOLOGY_SHIFT) |
-         (prog_data->urb_read_length <<
+         (gs_prog_data->output_topology << GEN7_GS_OUTPUT_TOPOLOGY_SHIFT) |
+         (vue_prog_data->urb_read_length <<
           GEN6_GS_URB_READ_LENGTH_SHIFT) |
          (0 << GEN6_GS_URB_ENTRY_READ_OFFSET_SHIFT) |
-         (prog_data->base.dispatch_grf_start_reg <<
+         (prog_data->dispatch_grf_start_reg <<
           GEN6_GS_DISPATCH_START_GRF_SHIFT);
 
       /* Note: the meaning of the GEN7_GS_REORDER_TRAILING bit changes between
@@ -107,24 +111,24 @@ upload_gs_state(struct brw_context *brw)
        * Bridge this will get the order close to correct but not perfect.
        */
       uint32_t dw5 =
-         ((brw->max_gs_threads - 1) << max_threads_shift) |
-         (brw->gs.prog_data->control_data_header_size_hwords <<
+         ((devinfo->max_gs_threads - 1) << max_threads_shift) |
+         (gs_prog_data->control_data_header_size_hwords <<
           GEN7_GS_CONTROL_DATA_HEADER_SIZE_SHIFT) |
-         ((brw->gs.prog_data->invocations - 1) <<
+         ((gs_prog_data->invocations - 1) <<
           GEN7_GS_INSTANCE_CONTROL_SHIFT) |
-         SET_FIELD(prog_data->dispatch_mode, GEN7_GS_DISPATCH_MODE) |
+         SET_FIELD(vue_prog_data->dispatch_mode, GEN7_GS_DISPATCH_MODE) |
          GEN6_GS_STATISTICS_ENABLE |
-         (brw->gs.prog_data->include_primitive_id ?
+         (gs_prog_data->include_primitive_id ?
           GEN7_GS_INCLUDE_PRIMITIVE_ID : 0) |
          GEN7_GS_REORDER_TRAILING |
          GEN7_GS_ENABLE;
       uint32_t dw6 = 0;
 
       if (brw->is_haswell) {
-         dw6 |= brw->gs.prog_data->control_data_format <<
+         dw6 |= gs_prog_data->control_data_format <<
             HSW_GS_CONTROL_DATA_FORMAT_SHIFT;
       } else {
-         dw5 |= brw->gs.prog_data->control_data_format <<
+         dw5 |= gs_prog_data->control_data_format <<
             IVB_GS_CONTROL_DATA_FORMAT_SHIFT;
       }
 

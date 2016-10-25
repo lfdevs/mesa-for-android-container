@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2016 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -32,16 +32,80 @@
 #include "common/os.h"
 
 #include <assert.h>
-#include <vector>
+#include <algorithm>
 
 #include "common/simdintrin.h"
 #include "common/formats.h"
-#include "core/utils.h"
 #include "core/state.h"
 
-///@todo place all the API functions into the 'swr' namespace.
-
 typedef void(SWR_API *PFN_CALLBACK_FUNC)(uint64_t data, uint64_t data2, uint64_t data3);
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Rectangle structure
+struct SWR_RECT
+{
+    int32_t xmin; ///< inclusive
+    int32_t ymin; ///< inclusive
+    int32_t xmax; ///< exclusive
+    int32_t ymax; ///< exclusive 
+
+    bool operator == (const SWR_RECT& rhs)
+    {
+        return (this->ymin == rhs.ymin &&
+            this->ymax == rhs.ymax &&
+            this->xmin == rhs.xmin &&
+            this->xmax == rhs.xmax);
+    }
+
+    bool operator != (const SWR_RECT& rhs)
+    {
+        return !(*this == rhs);
+    }
+
+    SWR_RECT& Intersect(const SWR_RECT& other)
+    {
+        this->xmin = std::max(this->xmin, other.xmin);
+        this->ymin = std::max(this->ymin, other.ymin);
+        this->xmax = std::min(this->xmax, other.xmax);
+        this->ymax = std::min(this->ymax, other.ymax);
+
+        if (xmax - xmin < 0 ||
+            ymax - ymin < 0)
+        {
+            // Zero area
+            ymin = ymax = xmin = xmax = 0;
+        }
+
+        return *this;
+    }
+    SWR_RECT& operator &= (const SWR_RECT& other)
+    {
+        return Intersect(other);
+    }
+
+    SWR_RECT& Union(const SWR_RECT& other)
+    {
+        this->xmin = std::min(this->xmin, other.xmin);
+        this->ymin = std::min(this->ymin, other.ymin);
+        this->xmax = std::max(this->xmax, other.xmax);
+        this->ymax = std::max(this->ymax, other.ymax);
+
+        return *this;
+    }
+
+    SWR_RECT& operator |= (const SWR_RECT& other)
+    {
+        return Union(other);
+    }
+
+    void Translate(int32_t x, int32_t y)
+    {
+        xmin += x;
+        ymin += y;
+        xmax += x;
+        ymax += y;
+    }
+};
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Function signature for load hot tiles
@@ -67,6 +131,7 @@ typedef void(SWR_API *PFN_STORE_TILE)(HANDLE hPrivateContext, SWR_FORMAT srcForm
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
     uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex, uint8_t *pSrcHotTile);
 
+//////////////////////////////////////////////////////////////////////////
 /// @brief Function signature for clearing from the hot tiles clear value
 /// @param hPrivateContext - handle to private data
 /// @param renderTargetIndex - render target to store, can be color, depth or stencil
@@ -77,7 +142,50 @@ typedef void(SWR_API *PFN_CLEAR_TILE)(HANDLE hPrivateContext,
     SWR_RENDERTARGET_ATTACHMENT rtIndex,
     uint32_t x, uint32_t y, const float* pClearColor);
 
+//////////////////////////////////////////////////////////////////////////
+/// @brief Callback to allow driver to update their copy of streamout write offset.
+///        This is call is made for any draw operation that has streamout enabled
+///        and has updated the write offset.
+/// @param hPrivateContext - handle to private data
+/// @param soBufferSlot - buffer slot for write offset
+/// @param soWriteOffset - update value for so write offset.
+typedef void(SWR_API *PFN_UPDATE_SO_WRITE_OFFSET)(HANDLE hPrivateContext,
+    uint32_t soBufferSlot, uint32_t soWriteOffset);
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Callback to allow driver to update their copy of stats.
+/// @param hPrivateContext - handle to private data
+/// @param pStats - pointer to draw stats
+typedef void(SWR_API *PFN_UPDATE_STATS)(HANDLE hPrivateContext,
+    const SWR_STATS* pStats);
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Callback to allow driver to update their copy of FE stats.
+/// @note Its optimal to have a separate callback for FE stats since
+///       there is only one DC per FE thread. This means we do not have
+///       to sum up the stats across all of the workers.
+/// @param hPrivateContext - handle to private data
+/// @param pStats - pointer to draw stats
+typedef void(SWR_API *PFN_UPDATE_STATS_FE)(HANDLE hPrivateContext,
+    const SWR_STATS_FE* pStats);
+
+//////////////////////////////////////////////////////////////////////////
+/// BucketManager
+/// Forward Declaration (see rdtsc_buckets.h for full definition)
+/////////////////////////////////////////////////////////////////////////
 class BucketManager;
+
+//////////////////////////////////////////////////////////////////////////
+/// SWR_THREADING_INFO
+/////////////////////////////////////////////////////////////////////////
+struct SWR_THREADING_INFO
+{
+    uint32_t    MAX_WORKER_THREADS;
+    uint32_t    MAX_NUMA_NODES;
+    uint32_t    MAX_CORES_PER_NUMA_NODE;
+    uint32_t    MAX_THREADS_PER_CORE;
+    bool        SINGLE_THREADED;
+};
 
 //////////////////////////////////////////////////////////////////////////
 /// SWR_CREATECONTEXT_INFO
@@ -90,10 +198,13 @@ struct SWR_CREATECONTEXT_INFO
     // Use SwrGetPrivateContextState() to access private state.
     uint32_t privateStateSize;
 
-    // Tile manipulation functions
-    PFN_LOAD_TILE pfnLoadTile;
-    PFN_STORE_TILE pfnStoreTile;
-    PFN_CLEAR_TILE pfnClearTile;
+    // Callback functions
+    PFN_LOAD_TILE               pfnLoadTile;
+    PFN_STORE_TILE              pfnStoreTile;
+    PFN_CLEAR_TILE              pfnClearTile;
+    PFN_UPDATE_SO_WRITE_OFFSET  pfnUpdateSoWriteOffset;
+    PFN_UPDATE_STATS            pfnUpdateStats;
+    PFN_UPDATE_STATS_FE         pfnUpdateStatsFE;
 
     // Pointer to rdtsc buckets mgr returned to the caller.
     // Only populated when KNOB_ENABLE_RDTSC is set
@@ -101,17 +212,9 @@ struct SWR_CREATECONTEXT_INFO
 
     // Output: size required memory passed to for SwrSaveState / SwrRestoreState
     size_t  contextSaveSize;
-};
 
-//////////////////////////////////////////////////////////////////////////
-/// SWR_RECT
-/////////////////////////////////////////////////////////////////////////
-struct SWR_RECT
-{
-    uint32_t left;
-    uint32_t right;
-    uint32_t top;
-    uint32_t bottom;
+    // Input (optional): Threading info that overrides any set KNOB values.
+    SWR_THREADING_INFO* pThreadInfo;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -163,6 +266,12 @@ void SWR_API SwrSync(
 /// @brief Blocks until all rendering has been completed.
 /// @param hContext - Handle passed back from SwrCreateContext
 void SWR_API SwrWaitForIdle(
+    HANDLE hContext);
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Blocks until all FE rendering has been completed.
+/// @param hContext - Handle passed back from SwrCreateContext
+void SWR_API SwrWaitForIdleFE(
     HANDLE hContext);
 
 //////////////////////////////////////////////////////////////////////////
@@ -304,6 +413,14 @@ void SWR_API SwrSetBackendState(
     SWR_BACKEND_STATE *pState);
 
 //////////////////////////////////////////////////////////////////////////
+/// @brief Set depth bounds state
+/// @param hContext - Handle passed back from SwrCreateContext
+/// @param pState - Pointer to state.
+void SWR_API SwrSetDepthBoundsState(
+    HANDLE hContext,
+    SWR_DEPTH_BOUNDS_STATE *pState);
+
+//////////////////////////////////////////////////////////////////////////
 /// @brief Set pixel shader state
 /// @param hContext - Handle passed back from SwrCreateContext
 /// @param pState - Pointer to state.
@@ -328,19 +445,6 @@ void SWR_API SwrSetBlendFunc(
     HANDLE hContext,
     uint32_t renderTarget,
     PFN_BLEND_JIT_FUNC pfnBlendFunc);
-
-//////////////////////////////////////////////////////////////////////////
-/// @brief Set linkage mask
-/// @param hContext - Handle passed back from SwrCreateContext
-/// @param mask - Specifies which vertex outputs are are needed by PS.
-/// @param pMap - (Optional)Linkage map to specify where FE attributes are
-///               gathered from to supply PS attribute values.  The length
-///               of the map buffer needs to match the number of set bits
-///               in "mask".
-void SWR_API SwrSetLinkage(
-    HANDLE hContext,
-    uint32_t mask,
-    const uint8_t* pMap);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief SwrDraw
@@ -406,19 +510,23 @@ void SWR_API SwrDrawIndexedInstanced(
 /// @brief SwrInvalidateTiles
 /// @param hContext - Handle passed back from SwrCreateContext
 /// @param attachmentMask - The mask specifies which surfaces attached to the hottiles to invalidate.
+/// @param invalidateRect - The pixel-coordinate rectangle to invalidate.  This will be expanded to
+///                         be hottile size-aligned.
 void SWR_API SwrInvalidateTiles(
     HANDLE hContext,
-    uint32_t attachmentMask);
+    uint32_t attachmentMask,
+    const SWR_RECT& invalidateRect);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief SwrDiscardRect
 /// @param hContext - Handle passed back from SwrCreateContext
 /// @param attachmentMask - The mask specifies which surfaces attached to the hottiles to discard.
-/// @param rect - if rect is all zeros, the entire attachment surface will be discarded
+/// @param rect - The pixel-coordinate rectangle to discard.  Only fully-covered hottiles will be
+///               discarded.
 void SWR_API SwrDiscardRect(
     HANDLE hContext,
     uint32_t attachmentMask,
-    SWR_RECT rect);
+    const SWR_RECT& rect);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief SwrDispatch
@@ -443,16 +551,31 @@ enum SWR_TILE_STATE
 /// @todo Add a good description for what attachments are and when and why you would use the different SWR_TILE_STATEs.
 void SWR_API SwrStoreTiles(
     HANDLE hContext,
-    SWR_RENDERTARGET_ATTACHMENT attachment,
-    SWR_TILE_STATE postStoreTileState);
+    uint32_t attachmentMask,
+    SWR_TILE_STATE postStoreTileState,
+    const SWR_RECT& storeRect);
 
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief SwrClearRenderTarget - Clear attached render targets / depth / stencil
+/// @param hContext - Handle passed back from SwrCreateContext
+/// @param clearMask - combination of SWR_CLEAR_COLOR / SWR_CLEAR_DEPTH / SWR_CLEAR_STENCIL flags (or SWR_CLEAR_NONE)
+/// @param clearColor - color use for clearing render targets
+/// @param z - depth value use for clearing depth buffer
+/// @param stencil - stencil value used for clearing stencil buffer
+/// @param clearRect - The pixel-coordinate rectangle to clear in all cleared buffers
 void SWR_API SwrClearRenderTarget(
     HANDLE hContext,
     uint32_t clearMask,
     const float clearColor[4],
     float z,
-    uint8_t stencil);
+    uint8_t stencil,
+    const SWR_RECT& clearRect);
 
+//////////////////////////////////////////////////////////////////////////
+/// @brief SwrSetRastState
+/// @param hContext - Handle passed back from SwrCreateContext
+/// @param pRastState - New SWR_RASTSTATE used for SwrDraw* commands
 void SWR_API SwrSetRastState(
     HANDLE hContext,
     const SWR_RASTSTATE *pRastState);
@@ -467,7 +590,7 @@ void SWR_API SwrSetViewports(
     HANDLE hContext,
     uint32_t numViewports,
     const SWR_VIEWPORT* pViewports,
-    const SWR_VIEWPORT_MATRIX* pMatrices);
+    const SWR_VIEWPORT_MATRICES* pMatrices);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief SwrSetScissorRects
@@ -477,7 +600,7 @@ void SWR_API SwrSetViewports(
 void SWR_API SwrSetScissorRects(
     HANDLE hContext,
     uint32_t numScissors,
-    const BBOX* pScissors);
+    const SWR_RECT* pScissors);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Returns a pointer to the private context state for the current
@@ -504,17 +627,6 @@ VOID* SWR_API SwrAllocDrawContextMemory(
     uint32_t align);
 
 //////////////////////////////////////////////////////////////////////////
-/// @brief Returns pointer to SWR stats.
-/// @note The counters are incremented by multiple threads.
-///       When calling this, you need to ensure all previous operations
-///       have completed.
-/// @param hContext - Handle passed back from SwrCreateContext
-/// @param pStats - SWR will fill this out for caller.
-void SWR_API SwrGetStats(
-    HANDLE hContext,
-    SWR_STATS* pStats);
-
-//////////////////////////////////////////////////////////////////////////
 /// @brief Enables stats counting
 /// @param hContext - Handle passed back from SwrCreateContext
 /// @param enable - If true then counts are incremented.
@@ -527,4 +639,5 @@ void SWR_API SwrEnableStats(
 /// @param hContext - Handle passed back from SwrCreateContext
 void SWR_API SwrEndFrame(
     HANDLE hContext);
+
 #endif//__SWR_API_H__

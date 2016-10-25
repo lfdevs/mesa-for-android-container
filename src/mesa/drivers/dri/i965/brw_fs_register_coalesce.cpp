@@ -50,10 +50,12 @@ is_nop_mov(const fs_inst *inst)
    if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
       fs_reg dst = inst->dst;
       for (int i = 0; i < inst->sources; i++) {
-         dst.reg_offset = i;
          if (!dst.equals(inst->src[i])) {
             return false;
          }
+         dst.offset += (i < inst->header_size ? REG_SIZE :
+                        inst->exec_size * dst.stride *
+                        type_sz(inst->src[i].type));
       }
       return true;
    } else if (inst->opcode == BRW_OPCODE_MOV) {
@@ -136,8 +138,10 @@ can_coalesce_vars(brw::fs_live_variables *live_intervals,
          if (scan_ip > end_ip)
             return true; /* registers do not interfere */
 
-         if (scan_inst->overwrites_reg(inst->dst) ||
-             scan_inst->overwrites_reg(inst->src[0]))
+         if (regions_overlap(scan_inst->dst, scan_inst->size_written,
+                             inst->dst, inst->size_written) ||
+             regions_overlap(scan_inst->dst, scan_inst->size_written,
+                             inst->src[0], inst->size_read(0)))
             return false; /* registers interfere */
       }
    }
@@ -190,9 +194,9 @@ fs_visitor::register_coalesce()
             dst_reg_offset[i] = i;
          }
          mov[0] = inst;
-         channels_remaining -= inst->regs_written;
+         channels_remaining -= regs_written(inst);
       } else {
-         const int offset = inst->src[0].reg_offset;
+         const int offset = inst->src[0].offset / REG_SIZE;
          if (mov[offset]) {
             /* This is the second time that this offset in the register has
              * been set.  This means, in particular, that inst->dst was
@@ -203,11 +207,11 @@ fs_visitor::register_coalesce()
             channels_remaining = -1;
             continue;
          }
-         dst_reg_offset[offset] = inst->dst.reg_offset;
-         if (inst->regs_written > 1)
-            dst_reg_offset[offset + 1] = inst->dst.reg_offset + 1;
+         dst_reg_offset[offset] = inst->dst.offset / REG_SIZE;
+         if (inst->size_written > REG_SIZE)
+            dst_reg_offset[offset + 1] = inst->dst.offset / REG_SIZE + 1;
          mov[offset] = inst;
-         channels_remaining -= inst->regs_written;
+         channels_remaining -= regs_written(inst);
       }
 
       if (channels_remaining)
@@ -253,16 +257,16 @@ fs_visitor::register_coalesce()
          if (scan_inst->dst.file == VGRF &&
              scan_inst->dst.nr == src_reg) {
             scan_inst->dst.nr = dst_reg;
-            scan_inst->dst.reg_offset =
-               dst_reg_offset[scan_inst->dst.reg_offset];
+            scan_inst->dst.offset = scan_inst->dst.offset % REG_SIZE +
+               dst_reg_offset[scan_inst->dst.offset / REG_SIZE] * REG_SIZE;
          }
 
          for (int j = 0; j < scan_inst->sources; j++) {
             if (scan_inst->src[j].file == VGRF &&
                 scan_inst->src[j].nr == src_reg) {
                scan_inst->src[j].nr = dst_reg;
-               scan_inst->src[j].reg_offset =
-                  dst_reg_offset[scan_inst->src[j].reg_offset];
+               scan_inst->src[j].offset = scan_inst->src[j].offset % REG_SIZE +
+                  dst_reg_offset[scan_inst->src[j].offset / REG_SIZE] * REG_SIZE;
             }
          }
       }

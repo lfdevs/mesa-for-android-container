@@ -111,6 +111,7 @@ swr_fence_reference(struct pipe_screen *screen,
  */
 boolean
 swr_fence_finish(struct pipe_screen *screen,
+                 struct pipe_context *ctx,
                  struct pipe_fence_handle *fence_handle,
                  uint64_t timeout)
 {

@@ -1409,6 +1409,9 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
    LLVMValueRef mipoff1 = NULL;
    LLVMValueRef colors0;
    LLVMValueRef colors1;
+   boolean use_floats = util_cpu_caps.has_avx &&
+                        !util_cpu_caps.has_avx2 &&
+                        bld->coord_type.length > 4;
 
    /* sample the first mipmap level */
    lp_build_mipmap_level_sizes(bld, ilevel0,
@@ -1423,7 +1426,7 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
       mipoff0 = lp_build_get_mip_offsets(bld, ilevel0);
    }
 
-   if (util_cpu_caps.has_avx && bld->coord_type.length > 4) {
+   if (use_floats) {
       if (img_filter == PIPE_TEX_FILTER_NEAREST) {
          lp_build_sample_image_nearest_afloat(bld,
                                               size0,
@@ -1514,7 +1517,7 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
             mipoff1 = lp_build_get_mip_offsets(bld, ilevel1);
          }
 
-         if (util_cpu_caps.has_avx && bld->coord_type.length > 4) {
+         if (use_floats) {
             if (img_filter == PIPE_TEX_FILTER_NEAREST) {
                lp_build_sample_image_nearest_afloat(bld,
                                                     size1,

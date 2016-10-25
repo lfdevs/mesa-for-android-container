@@ -67,7 +67,7 @@ NineBuffer9_ctor( struct NineBuffer9 *This,
 
     /* Note: WRITEONLY is just tip for resource placement, the resource
      * can still be read (but slower). */
-    info->bind = PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_TRANSFER_READ;
+    info->bind = PIPE_BIND_VERTEX_BUFFER;
 
     /* It is hard to find clear information on where to place the buffer in
      * memory depending on the flag.
@@ -106,9 +106,10 @@ NineBuffer9_ctor( struct NineBuffer9 *This,
     /* if (pDesc->Usage & D3DUSAGE_NPATCHES) { } */
     /* if (pDesc->Usage & D3DUSAGE_POINTS) { } */
     /* if (pDesc->Usage & D3DUSAGE_RTPATCHES) { } */
+    /* The buffer must be usable with both sw and hw
+     * vertex processing. It is expected to be slower with hw. */
     if (Usage & D3DUSAGE_SOFTWAREPROCESSING)
-        DBG("Application asked for Software Vertex Processing, "
-            "but this is unimplemented\n");
+        info->usage = PIPE_USAGE_STAGING;
     /* if (pDesc->Usage & D3DUSAGE_TEXTAPI) { } */
 
     info->height0 = 1;

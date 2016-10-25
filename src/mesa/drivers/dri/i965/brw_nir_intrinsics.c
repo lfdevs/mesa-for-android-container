@@ -82,8 +82,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
           *       cs_thread_local_id + channel_num;
           */
          nir_ssa_def *thread_local_id = read_thread_local_id(state);
-         nir_ssa_def *channel =
-            nir_load_system_value(b, nir_intrinsic_load_channel_num, 0);
+         nir_ssa_def *channel = nir_load_channel_num(b);
          sysval = nir_iadd(b, channel, thread_local_id);
          break;
       }
@@ -105,8 +104,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
           */
          unsigned *size = nir->info.cs.local_size;
 
-         nir_ssa_def *local_index =
-            nir_load_system_value(b, nir_intrinsic_load_local_invocation_index, 0);
+         nir_ssa_def *local_index = nir_load_local_invocation_index(b);
 
          nir_const_value uvec3;
          uvec3.u32[0] = 1;

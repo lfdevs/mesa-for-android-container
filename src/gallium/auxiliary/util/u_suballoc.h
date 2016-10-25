@@ -34,8 +34,7 @@
 struct u_suballocator;
 
 struct u_suballocator *
-u_suballocator_create(struct pipe_context *pipe, unsigned size,
-                      unsigned alignment, unsigned bind,
+u_suballocator_create(struct pipe_context *pipe, unsigned size, unsigned bind,
                       enum pipe_resource_usage usage,
 		      boolean zero_buffer_memory);
 
@@ -44,6 +43,7 @@ u_suballocator_destroy(struct u_suballocator *allocator);
 
 void
 u_suballocator_alloc(struct u_suballocator *allocator, unsigned size,
-                     unsigned *out_offset, struct pipe_resource **outbuf);
+                     unsigned alignment, unsigned *out_offset,
+                     struct pipe_resource **outbuf);
 
 #endif

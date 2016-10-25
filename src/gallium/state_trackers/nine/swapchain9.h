@@ -55,9 +55,9 @@ struct NineSwapChain9
     BOOL implicit;
 
     /* buffer handles */
-    struct NineSurface9 **buffers; /* 0 to BackBufferCount-1 : the back buffers. BackBufferCount : additional buffer */
-    struct pipe_resource **present_buffers;
-    D3DWindowBuffer **present_handles;
+    struct NineSurface9 *buffers[D3DPRESENT_BACK_BUFFERS_MAX_EX + 1]; /* 0 to BackBufferCount-1 : the back buffers. BackBufferCount : additional buffer */
+    struct pipe_resource *present_buffers[D3DPRESENT_BACK_BUFFERS_MAX_EX + 1];
+    D3DWindowBuffer *present_handles[D3DPRESENT_BACK_BUFFERS_MAX_EX + 1];
 
     struct pipe_fence_handle *swap_fences[DRI_SWAP_FENCES_MAX];
     unsigned int cur_fences;
@@ -72,7 +72,7 @@ struct NineSwapChain9
     D3DGAMMARAMP gamma;
 
     struct threadpool *pool;
-    struct threadpool_task **tasks;
+    struct threadpool_task *tasks[D3DPRESENT_BACK_BUFFERS_MAX_EX + 1];
     BOOL enable_threadpool;
 };
 

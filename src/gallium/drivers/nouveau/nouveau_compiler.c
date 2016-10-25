@@ -142,7 +142,7 @@ main(int argc, char *argv[])
    const char *filename = NULL;
    FILE *f;
    char text[65536] = {0};
-   unsigned size, *code;
+   unsigned size = 0, *code = NULL;
 
    for (i = 1; i < argc; i++) {
       if (!strcmp(argv[i], "-a"))

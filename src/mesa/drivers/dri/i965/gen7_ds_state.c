@@ -25,6 +25,7 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
+#include "main/shaderapi.h"
 
 static void
 gen7_upload_tes_push_constants(struct brw_context *brw)
@@ -36,7 +37,8 @@ gen7_upload_tes_push_constants(struct brw_context *brw)
 
    if (tep) {
       /* BRW_NEW_TES_PROG_DATA */
-      const struct brw_stage_prog_data *prog_data = &brw->tes.prog_data->base.base;
+      const struct brw_stage_prog_data *prog_data = brw->tes.base.prog_data;
+      _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_TESS_EVAL);
       gen6_upload_push_constants(brw, &tep->program.Base, prog_data,
                                       stage_state, AUB_TRACE_VS_CONSTANTS);
    }
@@ -59,16 +61,19 @@ const struct brw_tracked_state gen7_tes_push_constants = {
 static void
 gen7_upload_ds_state(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_stage_state *stage_state = &brw->tes.base;
    /* BRW_NEW_TESS_PROGRAMS */
    bool active = brw->tess_eval_program;
 
    /* BRW_NEW_TES_PROG_DATA */
-   const struct brw_tes_prog_data *tes_prog_data = brw->tes.prog_data;
-   const struct brw_vue_prog_data *vue_prog_data = &tes_prog_data->base;
-   const struct brw_stage_prog_data *prog_data = &vue_prog_data->base;
+   const struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   const struct brw_vue_prog_data *vue_prog_data =
+      brw_vue_prog_data(stage_state->prog_data);
+   const struct brw_tes_prog_data *tes_prog_data =
+      brw_tes_prog_data(stage_state->prog_data);
 
-   const unsigned thread_count = (brw->max_ds_threads - 1) <<
+   const unsigned thread_count = (devinfo->max_tes_threads - 1) <<
       (brw->is_haswell ? HSW_DS_MAX_THREADS_SHIFT : GEN7_DS_MAX_THREADS_SHIFT);
 
    if (active) {

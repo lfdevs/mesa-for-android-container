@@ -166,6 +166,7 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else {
+      stencil_mt->r8stencil_needs_update = true;
       const int enabled = brw->is_haswell ? HSW_STENCIL_ENABLED : 0;
 
       BEGIN_BATCH(3);

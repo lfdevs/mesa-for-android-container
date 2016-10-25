@@ -99,6 +99,7 @@ const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT] =
    "HELPER_INVOCATION",
    "BASEINSTANCE",
    "DRAWID",
+   "WORK_DIM",
 };
 
 const char *tgsi_texture_names[TGSI_TEXTURE_COUNT] =

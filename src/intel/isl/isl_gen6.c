@@ -25,37 +25,20 @@
 #include "isl_priv.h"
 
 bool
-gen6_choose_msaa_layout(const struct isl_device *dev,
-                  const struct isl_surf_init_info *info,
-                  enum isl_tiling tiling,
-                  enum isl_msaa_layout *msaa_layout)
+isl_gen6_choose_msaa_layout(const struct isl_device *dev,
+                            const struct isl_surf_init_info *info,
+                            enum isl_tiling tiling,
+                            enum isl_msaa_layout *msaa_layout)
 {
-   const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
-
    assert(ISL_DEV_GEN(dev) == 6);
    assert(info->samples >= 1);
 
    if (info->samples == 1) {
       *msaa_layout = ISL_MSAA_LAYOUT_NONE;
-      return false;
+      return true;
    }
 
-   /* From the Sandybridge PRM, Volume 4 Part 1 p72, SURFACE_STATE, Surface
-    * Format:
-    *
-    *    If Number of Multisamples is set to a value other than
-    *    MULTISAMPLECOUNT_1, this field cannot be set to the following
-    *    formats:
-    *
-    *       - any format with greater than 64 bits per element
-    *       - any compressed texture format (BC*)
-    *       - any YCRCB* format
-    */
-   if (fmtl->bs > 8)
-      return false;
-   if (isl_format_is_compressed(info->format))
-      return false;
-   if (isl_format_is_yuv(info->format))
+   if (!isl_format_supports_multisampling(dev->info, info->format))
       return false;
 
    /* From the Sandybridge PRM, Volume 4 Part 1 p85, SURFACE_STATE, Number of
@@ -83,12 +66,16 @@ gen6_choose_msaa_layout(const struct isl_device *dev,
 }
 
 void
-gen6_choose_image_alignment_el(const struct isl_device *dev,
-                               const struct isl_surf_init_info *restrict info,
-                               enum isl_tiling tiling,
-                               enum isl_msaa_layout msaa_layout,
-                               struct isl_extent3d *image_align_el)
+isl_gen6_choose_image_alignment_el(const struct isl_device *dev,
+                                   const struct isl_surf_init_info *restrict info,
+                                   enum isl_tiling tiling,
+                                   enum isl_dim_layout dim_layout,
+                                   enum isl_msaa_layout msaa_layout,
+                                   struct isl_extent3d *image_align_el)
 {
+   /* Handled by isl_choose_image_alignment_el */
+   assert(info->format != ISL_FORMAT_HIZ);
+
    /* Note that the surface's horizontal image alignment is not programmable
     * on Sandybridge.
     *

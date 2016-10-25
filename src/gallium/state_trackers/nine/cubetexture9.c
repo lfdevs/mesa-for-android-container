@@ -101,9 +101,6 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
 
     if (Usage & D3DUSAGE_DYNAMIC) {
         info->usage = PIPE_USAGE_DYNAMIC;
-        info->bind |=
-            PIPE_BIND_TRANSFER_READ |
-            PIPE_BIND_TRANSFER_WRITE;
     }
     if (Usage & D3DUSAGE_SOFTWAREPROCESSING)
         DBG("Application asked for Software Vertex Processing, "
@@ -305,9 +302,9 @@ IDirect3DCubeTexture9Vtbl NineCubeTexture9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)NineResource9_SetPrivateData,
-    (void *)NineResource9_GetPrivateData,
-    (void *)NineResource9_FreePrivateData,
+    (void *)NineUnknown_SetPrivateData,
+    (void *)NineUnknown_GetPrivateData,
+    (void *)NineUnknown_FreePrivateData,
     (void *)NineResource9_SetPriority,
     (void *)NineResource9_GetPriority,
     (void *)NineBaseTexture9_PreLoad,

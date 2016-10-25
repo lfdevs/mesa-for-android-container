@@ -653,17 +653,14 @@ i915_update_sprite_point_enable(struct gl_context *ctx)
    const GLbitfield64 inputsRead = p->FragProg.Base.InputsRead;
    struct i915_context *i915 = i915_context(ctx);
    GLuint s4 = i915->state.Ctx[I915_CTXREG_LIS4] & ~S4_VFMT_MASK;
-   int i;
    GLuint coord_replace_bits = 0x0;
-   GLuint tex_coord_unit_bits = 0x0;
 
-   for (i = 0; i < ctx->Const.MaxTextureCoordUnits; i++) {
-      /* _NEW_POINT */
-      if (ctx->Point.CoordReplace[i] && ctx->Point.PointSprite)
-         coord_replace_bits |= (1 << i);
-      if (inputsRead & VARYING_BIT_TEX(i))
-         tex_coord_unit_bits |= (1 << i);
-   }
+   /* _NEW_POINT */
+   if (ctx->Point.PointSprite)
+      coord_replace_bits = ctx->Point.CoordReplace;
+
+   GLuint tex_coord_unit_bits =
+      (GLuint)((inputsRead & VARYING_BITS_TEX_ANY) >> VARYING_SLOT_TEX0);
 
    /*
     * Here we can't enable the SPRITE_POINT_ENABLE bit when the mis-match

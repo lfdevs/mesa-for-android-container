@@ -200,7 +200,7 @@ int test_optpass(int argc, char **argv)
    struct gl_context *ctx = &local_ctx;
    initialize_context_to_defaults(ctx, API_OPENGL_COMPAT);
 
-   ctx->Driver.NewShader = _mesa_new_shader;
+   ctx->Driver.NewShader = _mesa_new_linked_shader;
    ir_variable::temporaries_allocate_names = true;
 
    struct gl_shader *shader = rzalloc(NULL, struct gl_shader);
@@ -220,7 +220,7 @@ int test_optpass(int argc, char **argv)
       shader->Source = input.c_str();
       const char *source = shader->Source;
       state->error = glcpp_preprocess(state, &source, &state->info_log,
-                                state->extensions, ctx) != 0;
+                                      NULL, NULL, ctx) != 0;
 
       if (!state->error) {
          _mesa_glsl_lexer_ctor(state, source);

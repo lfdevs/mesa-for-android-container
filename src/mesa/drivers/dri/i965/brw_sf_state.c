@@ -245,7 +245,7 @@ static void upload_sf_unit( struct brw_context *brw )
        * Chipset Graphics Controller Programmer's Reference Manual,
        * Volume 2: 3D/Media", Revision 1.0b as of January 2008,
        * available at
-       *     http://intellinuxgraphics.org/documentation.html
+       *     https://01.org/linuxgraphics/documentation/hardware-specification-prms
        * at the time of this writing).
        *
        * It does work on at least some devices, if not all;

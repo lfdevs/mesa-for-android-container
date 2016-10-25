@@ -26,7 +26,7 @@
 #include "main/macros.h"
 #include "util/ralloc.h"
 #include "ir.h"
-#include "program/hash_table.h"
+#include "util/hash_table.h"
 
 /**
  * \file varyings_test.cpp
@@ -92,11 +92,13 @@ link_varyings::SetUp()
    this->mem_ctx = ralloc_context(NULL);
    this->ir.make_empty();
 
-   this->consumer_inputs
-      = hash_table_ctor(0, hash_table_string_hash, hash_table_string_compare);
+   this->consumer_inputs =
+         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+                                 _mesa_key_string_equal);
 
-   this->consumer_interface_inputs
-      = hash_table_ctor(0, hash_table_string_hash, hash_table_string_compare);
+   this->consumer_interface_inputs =
+         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+                                 _mesa_key_string_equal);
 }
 
 void
@@ -105,45 +107,10 @@ link_varyings::TearDown()
    ralloc_free(this->mem_ctx);
    this->mem_ctx = NULL;
 
-   hash_table_dtor(this->consumer_inputs);
+   _mesa_hash_table_destroy(this->consumer_inputs, NULL);
    this->consumer_inputs = NULL;
-   hash_table_dtor(this->consumer_interface_inputs);
+   _mesa_hash_table_destroy(this->consumer_interface_inputs, NULL);
    this->consumer_interface_inputs = NULL;
-}
-
-/**
- * Hash table callback function that counts the elements in the table
- *
- * \sa num_elements
- */
-static void
-ht_count_callback(const void *, void *, void *closure)
-{
-   unsigned int *counter = (unsigned int *) closure;
-
-   (*counter)++;
-}
-
-/**
- * Helper function to count the number of elements in a hash table.
- */
-static unsigned
-num_elements(hash_table *ht)
-{
-   unsigned int counter = 0;
-
-   hash_table_call_foreach(ht, ht_count_callback, (void *) &counter);
-
-   return counter;
-}
-
-/**
- * Helper function to determine whether a hash table is empty.
- */
-static bool
-is_empty(hash_table *ht)
-{
-   return num_elements(ht) == 0;
 }
 
 TEST_F(link_varyings, single_simple_input)
@@ -162,9 +129,10 @@ TEST_F(link_varyings, single_simple_input)
                                         consumer_interface_inputs,
                                         junk);
 
-   EXPECT_EQ((void *) v, hash_table_find(consumer_inputs, "a"));
-   EXPECT_EQ(1u, num_elements(consumer_inputs));
-   EXPECT_TRUE(is_empty(consumer_interface_inputs));
+   hash_entry *entry = _mesa_hash_table_search(consumer_inputs, "a");
+   EXPECT_EQ((void *) v, entry->data);
+   EXPECT_EQ(1u, consumer_inputs->entries);
+   EXPECT_TRUE(consumer_interface_inputs->entries == 0);
 }
 
 TEST_F(link_varyings, gl_ClipDistance)
@@ -190,8 +158,8 @@ TEST_F(link_varyings, gl_ClipDistance)
                                         junk);
 
    EXPECT_EQ(clipdistance, junk[VARYING_SLOT_CLIP_DIST0]);
-   EXPECT_TRUE(is_empty(consumer_inputs));
-   EXPECT_TRUE(is_empty(consumer_interface_inputs));
+   EXPECT_TRUE(consumer_inputs->entries == 0);
+   EXPECT_TRUE(consumer_interface_inputs->entries == 0);
 }
 
 TEST_F(link_varyings, gl_CullDistance)
@@ -217,8 +185,8 @@ TEST_F(link_varyings, gl_CullDistance)
                                         junk);
 
    EXPECT_EQ(culldistance, junk[VARYING_SLOT_CULL_DIST0]);
-   EXPECT_TRUE(is_empty(consumer_inputs));
-   EXPECT_TRUE(is_empty(consumer_interface_inputs));
+   EXPECT_TRUE(consumer_inputs->entries == 0);
+   EXPECT_TRUE(consumer_interface_inputs->entries == 0);
 }
 
 TEST_F(link_varyings, single_interface_input)
@@ -239,9 +207,11 @@ TEST_F(link_varyings, single_interface_input)
                                         junk);
    char *const full_name = interface_field_name(simple_interface);
 
-   EXPECT_EQ((void *) v, hash_table_find(consumer_interface_inputs, full_name));
-   EXPECT_EQ(1u, num_elements(consumer_interface_inputs));
-   EXPECT_TRUE(is_empty(consumer_inputs));
+   hash_entry *entry = _mesa_hash_table_search(consumer_interface_inputs,
+                                               full_name);
+   EXPECT_EQ((void *) v, entry->data);
+   EXPECT_EQ(1u, consumer_interface_inputs->entries);
+   EXPECT_TRUE(consumer_inputs->entries == 0);
 }
 
 TEST_F(link_varyings, one_interface_and_one_simple_input)
@@ -271,12 +241,14 @@ TEST_F(link_varyings, one_interface_and_one_simple_input)
 
    char *const iface_field_name = interface_field_name(simple_interface);
 
-   EXPECT_EQ((void *) iface, hash_table_find(consumer_interface_inputs,
-                                             iface_field_name));
-   EXPECT_EQ(1u, num_elements(consumer_interface_inputs));
+   hash_entry *entry = _mesa_hash_table_search(consumer_interface_inputs,
+                                               iface_field_name);
+   EXPECT_EQ((void *) iface, entry->data);
+   EXPECT_EQ(1u, consumer_interface_inputs->entries);
 
-   EXPECT_EQ((void *) v, hash_table_find(consumer_inputs, "a"));
-   EXPECT_EQ(1u, num_elements(consumer_inputs));
+   entry = _mesa_hash_table_search(consumer_inputs, "a");
+   EXPECT_EQ((void *) v, entry->data);
+   EXPECT_EQ(1u, consumer_inputs->entries);
 }
 
 TEST_F(link_varyings, interface_field_doesnt_match_noninterface)

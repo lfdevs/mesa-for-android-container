@@ -43,12 +43,12 @@ static bool
 brw_shader_precompile(struct gl_context *ctx,
                       struct gl_shader_program *sh_prog)
 {
-   struct gl_shader *vs = sh_prog->_LinkedShaders[MESA_SHADER_VERTEX];
-   struct gl_shader *tcs = sh_prog->_LinkedShaders[MESA_SHADER_TESS_CTRL];
-   struct gl_shader *tes = sh_prog->_LinkedShaders[MESA_SHADER_TESS_EVAL];
-   struct gl_shader *gs = sh_prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
-   struct gl_shader *fs = sh_prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
-   struct gl_shader *cs = sh_prog->_LinkedShaders[MESA_SHADER_COMPUTE];
+   struct gl_linked_shader *vs = sh_prog->_LinkedShaders[MESA_SHADER_VERTEX];
+   struct gl_linked_shader *tcs = sh_prog->_LinkedShaders[MESA_SHADER_TESS_CTRL];
+   struct gl_linked_shader *tes = sh_prog->_LinkedShaders[MESA_SHADER_TESS_EVAL];
+   struct gl_linked_shader *gs = sh_prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
+   struct gl_linked_shader *fs = sh_prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
+   struct gl_linked_shader *cs = sh_prog->_LinkedShaders[MESA_SHADER_COMPUTE];
 
    if (fs && !brw_fs_precompile(ctx, sh_prog, fs->Program))
       return false;
@@ -73,7 +73,6 @@ brw_shader_precompile(struct gl_context *ctx,
 
 static void
 brw_lower_packing_builtins(struct brw_context *brw,
-                           gl_shader_stage shader_type,
                            exec_list *ir)
 {
    /* Gens < 7 don't have instructions to convert to or from half-precision,
@@ -86,13 +85,12 @@ brw_lower_packing_builtins(struct brw_context *brw,
 }
 
 static void
-process_glsl_ir(gl_shader_stage stage,
-                struct brw_context *brw,
+process_glsl_ir(struct brw_context *brw,
                 struct gl_shader_program *shader_prog,
-                struct gl_shader *shader)
+                struct gl_linked_shader *shader)
 {
    struct gl_context *ctx = &brw->ctx;
-   const struct brw_compiler *compiler = brw->intelScreen->compiler;
+   const struct brw_compiler *compiler = brw->screen->compiler;
    const struct gl_shader_compiler_options *options =
       &ctx->Const.ShaderCompilerOptions[shader->Stage];
 
@@ -101,19 +99,27 @@ process_glsl_ir(gl_shader_stage stage,
 
    ralloc_adopt(mem_ctx, shader->ir);
 
+   lower_blend_equation_advanced(shader);
+
    /* lower_packing_builtins() inserts arithmetic instructions, so it
     * must precede lower_instructions().
     */
-   brw_lower_packing_builtins(brw, shader->Stage, shader->ir);
+   brw_lower_packing_builtins(brw, shader->ir);
    do_mat_op_to_vec(shader->ir);
-   lower_instructions(shader->ir,
-                      DIV_TO_MUL_RCP |
-                      SUB_TO_ADD_NEG |
-                      EXP_TO_EXP2 |
-                      LOG_TO_LOG2 |
-                      DFREXP_DLDEXP_TO_ARITH |
-                      CARRY_TO_ARITH |
-                      BORROW_TO_ARITH);
+
+   unsigned instructions_to_lower = (DIV_TO_MUL_RCP |
+                                     SUB_TO_ADD_NEG |
+                                     EXP_TO_EXP2 |
+                                     LOG_TO_LOG2 |
+                                     DFREXP_DLDEXP_TO_ARITH);
+   if (brw->gen < 7) {
+      instructions_to_lower |= BIT_COUNT_TO_MATH |
+                               EXTRACT_TO_SHIFTS |
+                               INSERT_TO_SHIFTS |
+                               REVERSE_TO_SHIFTS;
+   }
+
+   lower_instructions(shader->ir, instructions_to_lower);
 
    /* Pre-gen6 HW can only nest if-statements 16 deep.  Beyond this,
     * if-statements need to be flattened.
@@ -126,15 +132,13 @@ process_glsl_ir(gl_shader_stage stage,
    do_vec_index_to_cond_assign(shader->ir);
    lower_vector_insert(shader->ir, true);
    lower_offset_arrays(shader->ir);
-   brw_do_lower_unnormalized_offset(shader->ir);
    lower_noise(shader->ir);
    lower_quadop_vector(shader->ir, false);
 
    do_copy_propagation(shader->ir);
 
    bool lowered_variable_indexing =
-      lower_variable_index_to_cond_assign((gl_shader_stage)stage,
-                                          shader->ir,
+      lower_variable_index_to_cond_assign(shader->Stage, shader->ir,
                                           options->EmitNoIndirectInput,
                                           options->EmitNoIndirectOutput,
                                           options->EmitNoIndirectTemp,
@@ -178,25 +182,28 @@ process_glsl_ir(gl_shader_stage stage,
 
    if (ctx->_Shader->Flags & GLSL_DUMP) {
       fprintf(stderr, "\n");
-      fprintf(stderr, "GLSL IR for linked %s program %d:\n",
-              _mesa_shader_stage_to_string(shader->Stage),
-              shader_prog->Name);
-      _mesa_print_ir(stderr, shader->ir, NULL);
+      if (shader->ir) {
+         fprintf(stderr, "GLSL IR for linked %s program %d:\n",
+                 _mesa_shader_stage_to_string(shader->Stage),
+                 shader_prog->Name);
+         _mesa_print_ir(stderr, shader->ir, NULL);
+      } else {
+         fprintf(stderr, "No GLSL IR for linked %s program %d (shader may be "
+                 "from cache)\n", _mesa_shader_stage_to_string(shader->Stage),
+                 shader_prog->Name);
+      }
       fprintf(stderr, "\n");
    }
 }
 
-extern "C" struct gl_shader *
-brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
+extern "C" struct gl_linked_shader *
+brw_new_shader(gl_shader_stage stage)
 {
    struct brw_shader *shader;
 
    shader = rzalloc(NULL, struct brw_shader);
    if (shader) {
-      shader->base.Type = type;
-      shader->base.Stage = _mesa_shader_enum_to_shader_stage(type);
-      shader->base.Name = name;
-      _mesa_init_shader(ctx, &shader->base);
+      shader->base.Stage = stage;
    }
 
    return &shader->base;
@@ -206,24 +213,24 @@ extern "C" GLboolean
 brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct brw_compiler *compiler = brw->intelScreen->compiler;
+   const struct brw_compiler *compiler = brw->screen->compiler;
    unsigned int stage;
 
    for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
-      struct gl_shader *shader = shProg->_LinkedShaders[stage];
+      struct gl_linked_shader *shader = shProg->_LinkedShaders[stage];
       if (!shader)
-	 continue;
+         continue;
 
       struct gl_program *prog =
-	 ctx->Driver.NewProgram(ctx, _mesa_shader_stage_to_program(stage),
-                                shader->Name);
+         ctx->Driver.NewProgram(ctx, _mesa_shader_stage_to_program(stage),
+                                0);
       if (!prog)
-	return false;
+        return false;
       prog->Parameters = _mesa_new_parameter_list();
 
       _mesa_copy_linked_program_data((gl_shader_stage) stage, shProg, prog);
 
-      process_glsl_ir((gl_shader_stage) stage, brw, shProg, shader);
+      process_glsl_ir(brw, shProg, shader);
 
       /* Make a pass over the IR to add state references for any built-in
        * uniforms that are used.  This has to be done now (during linking).
@@ -233,19 +240,19 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
        * get sent to the shader.
        */
       foreach_in_list(ir_instruction, node, shader->ir) {
-	 ir_variable *var = node->as_variable();
+         ir_variable *var = node->as_variable();
 
-	 if ((var == NULL) || (var->data.mode != ir_var_uniform)
-	     || (strncmp(var->name, "gl_", 3) != 0))
-	    continue;
+         if ((var == NULL) || (var->data.mode != ir_var_uniform)
+             || (strncmp(var->name, "gl_", 3) != 0))
+            continue;
 
-	 const ir_state_slot *const slots = var->get_state_slots();
-	 assert(slots != NULL);
+         const ir_state_slot *const slots = var->get_state_slots();
+         assert(slots != NULL);
 
-	 for (unsigned int i = 0; i < var->get_num_state_slots(); i++) {
-	    _mesa_add_state_reference(prog->Parameters,
-				      (gl_state_index *) slots[i].tokens);
-	 }
+         for (unsigned int i = 0; i < var->get_num_state_slots(); i++) {
+            _mesa_add_state_reference(prog->Parameters,
+                                      (gl_state_index *) slots[i].tokens);
+         }
       }
 
       do_set_program_inouts(shader->ir, prog, shader->Stage);
@@ -282,5 +289,16 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       return false;
 
    build_program_resource_list(ctx, shProg);
+
+   for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
+      struct gl_linked_shader *shader = shProg->_LinkedShaders[stage];
+      if (!shader)
+         continue;
+
+      /* The GLSL IR won't be needed anymore. */
+      ralloc_free(shader->ir);
+      shader->ir = NULL;
+   }
+
    return true;
 }

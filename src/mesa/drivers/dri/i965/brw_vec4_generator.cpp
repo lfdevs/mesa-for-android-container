@@ -112,7 +112,7 @@ generate_tex(struct brw_codegen *p,
              struct brw_reg surface_index,
              struct brw_reg sampler_index)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
    int msg_type = -1;
 
    if (devinfo->gen >= 5) {
@@ -728,7 +728,7 @@ generate_gs_set_primitive_id(struct brw_codegen *p, struct brw_reg dst)
 static void
 generate_tcs_get_instance_id(struct brw_codegen *p, struct brw_reg dst)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
    const bool ivb = devinfo->is_ivybridge || devinfo->is_baytrail;
 
    /* "Instance Count" comes as part of the payload in r0.2 bits 23:17.
@@ -759,7 +759,7 @@ generate_tcs_urb_write(struct brw_codegen *p,
                        vec4_instruction *inst,
                        struct brw_reg urb_header)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
 
    brw_inst *send = brw_next_insn(p, BRW_OPCODE_SEND);
    brw_set_dest(p, send, brw_null_reg());
@@ -929,7 +929,7 @@ generate_vec4_urb_read(struct brw_codegen *p,
                        struct brw_reg dst,
                        struct brw_reg header)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
 
    assert(header.file == BRW_GENERAL_REGISTER_FILE);
    assert(header.type == BRW_REGISTER_TYPE_UD);
@@ -954,7 +954,7 @@ generate_tcs_release_input(struct brw_codegen *p,
                            struct brw_reg vertex,
                            struct brw_reg is_unpaired)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
 
    assert(vertex.file == BRW_IMMEDIATE_VALUE);
    assert(vertex.type == BRW_REGISTER_TYPE_UD);
@@ -1034,7 +1034,7 @@ generate_tcs_create_barrier_header(struct brw_codegen *p,
                                    struct brw_vue_prog_data *prog_data,
                                    struct brw_reg dst)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
    const bool ivb = devinfo->is_ivybridge || devinfo->is_baytrail;
    struct brw_reg m0_2 = get_element_ud(dst, 2);
    unsigned instances = ((struct brw_tcs_prog_data *) prog_data)->instances;
@@ -1123,7 +1123,7 @@ generate_scratch_read(struct brw_codegen *p,
                       struct brw_reg dst,
                       struct brw_reg index)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
    struct brw_reg header = brw_vec8_grf(0, 0);
 
    gen6_resolve_implied_move(p, &header, inst->base_mrf);
@@ -1140,6 +1140,10 @@ generate_scratch_read(struct brw_codegen *p,
    else
       msg_type = BRW_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
 
+   const unsigned target_cache = devinfo->gen >= 7 ?
+      BRW_DATAPORT_READ_TARGET_DATA_CACHE :
+      BRW_DATAPORT_READ_TARGET_RENDER_CACHE;
+
    /* Each of the 8 channel enables is considered for whether each
     * dword is written.
     */
@@ -1151,8 +1155,7 @@ generate_scratch_read(struct brw_codegen *p,
    brw_set_dp_read_message(p, send,
                            brw_scratch_surface_idx(p),
 			   BRW_DATAPORT_OWORD_DUAL_BLOCK_1OWORD,
-			   msg_type,
-			   BRW_DATAPORT_READ_TARGET_RENDER_CACHE,
+			   msg_type, target_cache,
 			   2, /* mlen */
                            true, /* header_present */
 			   1 /* rlen */);
@@ -1165,7 +1168,7 @@ generate_scratch_write(struct brw_codegen *p,
                        struct brw_reg src,
                        struct brw_reg index)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
    struct brw_reg header = brw_vec8_grf(0, 0);
    bool write_commit;
 
@@ -1241,7 +1244,7 @@ generate_pull_constant_load(struct brw_codegen *p,
                             struct brw_reg index,
                             struct brw_reg offset)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
    assert(index.file == BRW_IMMEDIATE_VALUE &&
 	  index.type == BRW_REGISTER_TYPE_UD);
    uint32_t surf_index = index.ud;
@@ -1469,12 +1472,13 @@ generate_code(struct brw_codegen *p,
               struct brw_vue_prog_data *prog_data,
               const struct cfg_t *cfg)
 {
-   const struct brw_device_info *devinfo = p->devinfo;
+   const struct gen_device_info *devinfo = p->devinfo;
    const char *stage_abbrev = _mesa_shader_stage_to_abbrev(nir->stage);
    bool debug_flag = INTEL_DEBUG &
       intel_debug_flag_for_shader_stage(nir->stage);
    struct annotation_info annotation;
    memset(&annotation, 0, sizeof(annotation));
+   int spill_count = 0, fill_count = 0;
    int loop_count = 0;
 
    foreach_block_and_inst (block, vec4_instruction, inst, cfg) {
@@ -1499,34 +1503,6 @@ generate_code(struct brw_codegen *p,
       assert(inst->mlen <= BRW_MAX_MSG_LENGTH);
 
       unsigned pre_emit_nr_insn = p->nr_insn;
-      bool fix_exec_size = false;
-
-      if (dst.width == BRW_WIDTH_4) {
-         /* This happens in attribute fixups for "dual instanced" geometry
-          * shaders, since they use attributes that are vec4's.  Since the exec
-          * width is only 4, it's essential that the caller set
-          * force_writemask_all in order to make sure the instruction is executed
-          * regardless of which channels are enabled.
-          */
-         assert(inst->force_writemask_all);
-
-         /* Fix up any <8;8,1> or <0;4,1> source registers to <4;4,1> to satisfy
-          * the following register region restrictions (from Graphics BSpec:
-          * 3D-Media-GPGPU Engine > EU Overview > Registers and Register Regions
-          * > Register Region Restrictions)
-          *
-          *     1. ExecSize must be greater than or equal to Width.
-          *
-          *     2. If ExecSize = Width and HorzStride != 0, VertStride must be set
-          *        to Width * HorzStride."
-          */
-         for (int i = 0; i < 3; i++) {
-            if (src[i].file == BRW_GENERAL_REGISTER_FILE)
-               src[i] = stride(src[i], 4, 4, 1);
-         }
-         brw_set_default_exec_size(p, BRW_EXECUTE_4);
-         fix_exec_size = true;
-      }
 
       switch (inst->opcode) {
       case VEC4_OPCODE_UNPACK_UNIFORM:
@@ -1636,6 +1612,9 @@ generate_code(struct brw_codegen *p,
          assert(devinfo->gen >= 7);
          /* FBL only supports UD type for dst. */
          brw_FBL(p, retype(dst, BRW_REGISTER_TYPE_UD), src[0]);
+         break;
+      case BRW_OPCODE_LZD:
+         brw_LZD(p, dst, src[0]);
          break;
       case BRW_OPCODE_CBIT:
          assert(devinfo->gen >= 7);
@@ -1755,10 +1734,12 @@ generate_code(struct brw_codegen *p,
 
       case SHADER_OPCODE_GEN4_SCRATCH_READ:
          generate_scratch_read(p, inst, dst, src[0]);
+         fill_count++;
          break;
 
       case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
          generate_scratch_write(p, inst, dst, src[0], src[1]);
+         spill_count++;
          break;
 
       case VS_OPCODE_PULL_CONSTANT_LOAD:
@@ -1881,9 +1862,14 @@ generate_code(struct brw_codegen *p,
          brw_memory_fence(p, dst);
          break;
 
-      case SHADER_OPCODE_FIND_LIVE_CHANNEL:
-         brw_find_live_channel(p, dst);
+      case SHADER_OPCODE_FIND_LIVE_CHANNEL: {
+         const struct brw_reg mask =
+            brw_stage_has_packed_dispatch(devinfo, nir->stage,
+                                          &prog_data->base) ? brw_imm_ud(~0u) :
+            brw_dmask_reg();
+         brw_find_live_channel(p, dst, mask);
          break;
+      }
 
       case SHADER_OPCODE_BROADCAST:
          assert(inst->force_writemask_all);
@@ -2014,12 +2000,16 @@ generate_code(struct brw_codegen *p,
          generate_mov_indirect(p, inst, dst, src[0], src[1], src[2]);
          break;
 
+      case BRW_OPCODE_DIM:
+         assert(devinfo->is_haswell);
+         assert(src[0].type == BRW_REGISTER_TYPE_DF);
+         assert(dst.type == BRW_REGISTER_TYPE_DF);
+         brw_DIM(p, dst, retype(src[0], BRW_REGISTER_TYPE_F));
+         break;
+
       default:
          unreachable("Unsupported opcode");
       }
-
-      if (fix_exec_size)
-         brw_set_default_exec_size(p, BRW_EXECUTE_8);
 
       if (inst->opcode == VEC4_OPCODE_PACK_BYTES) {
          /* Handled dependency hints in the generator. */
@@ -2039,7 +2029,7 @@ generate_code(struct brw_codegen *p,
       }
    }
 
-   brw_set_uip_jip(p);
+   brw_set_uip_jip(p, 0);
    annotation_finalize(&annotation, p->next_insn_offset);
 
 #ifndef NDEBUG
@@ -2058,10 +2048,10 @@ generate_code(struct brw_codegen *p,
               nir->info.label ? nir->info.label : "unnamed",
               _mesa_shader_stage_to_string(nir->stage), nir->info.name);
 
-      fprintf(stderr, "%s vec4 shader: %d instructions. %d loops. %u cycles."
-                      "Compacted %d to %d bytes (%.0f%%)\n",
-              stage_abbrev,
-              before_size / 16, loop_count, cfg->cycle_count, before_size, after_size,
+      fprintf(stderr, "%s vec4 shader: %d instructions. %d loops. %u cycles. %d:%d "
+                      "spills:fills. Compacted %d to %d bytes (%.0f%%)\n",
+              stage_abbrev, before_size / 16, loop_count, cfg->cycle_count,
+              spill_count, fill_count, before_size, after_size,
               100.0f * (before_size - after_size) / before_size);
 
       dump_assembly(p->store, annotation.ann_count, annotation.ann,
@@ -2072,10 +2062,11 @@ generate_code(struct brw_codegen *p,
 
    compiler->shader_debug_log(log_data,
                               "%s vec4 shader: %d inst, %d loops, %u cycles, "
-                              "compacted %d to %d bytes.",
+                              "%d:%d spills:fills, compacted %d to %d bytes.",
                               stage_abbrev, before_size / 16,
-                              loop_count, cfg->cycle_count,
-                              before_size, after_size);
+                              loop_count, cfg->cycle_count, spill_count,
+                              fill_count, before_size, after_size);
+
 }
 
 extern "C" const unsigned *

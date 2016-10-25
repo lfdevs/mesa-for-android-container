@@ -911,6 +911,7 @@ CodeEmitterNV50::emitINTERP(const Instruction *i)
 
    defId(i->def(0), 2);
    srcAddr8(i->src(0), 16);
+   setAReg16(i, 0);
 
    if (i->encSize != 8 && i->getInterpMode() == NV50_IR_INTERP_FLAT) {
       code[0] |= 1 << 8;
@@ -1264,6 +1265,28 @@ CodeEmitterNV50::emitISAD(const Instruction *i)
    }
 }
 
+static void
+alphatestSet(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+{
+   int loc = entry->loc;
+   int enc;
+
+   switch (data.alphatest) {
+   case PIPE_FUNC_NEVER: enc = 0x0; break;
+   case PIPE_FUNC_LESS: enc = 0x1; break;
+   case PIPE_FUNC_EQUAL: enc = 0x2; break;
+   case PIPE_FUNC_LEQUAL: enc = 0x3; break;
+   case PIPE_FUNC_GREATER: enc = 0x4; break;
+   case PIPE_FUNC_NOTEQUAL: enc = 0x5; break;
+   case PIPE_FUNC_GEQUAL: enc = 0x6; break;
+   default:
+   case PIPE_FUNC_ALWAYS: enc = 0xf; break;
+   }
+
+   code[loc + 1] &= ~(0x1f << 14);
+   code[loc + 1] |= enc << 14;
+}
+
 void
 CodeEmitterNV50::emitSET(const Instruction *i)
 {
@@ -1293,6 +1316,10 @@ CodeEmitterNV50::emitSET(const Instruction *i)
    if (i->src(1).mod.abs()) code[1] |= 0x00080000;
 
    emitForm_MAD(i);
+
+   if (i->subOp == 1) {
+      addInterp(0, 0, alphatestSet);
+   }
 }
 
 void

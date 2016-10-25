@@ -15,6 +15,7 @@ C_SOURCES := \
 	svga_hw_reg.h \
 	svga_link.c \
 	svga_link.h \
+	svga_mksstats.h \
 	svga_pipe_blend.c \
 	svga_pipe_blit.c \
 	svga_pipe_clear.c \

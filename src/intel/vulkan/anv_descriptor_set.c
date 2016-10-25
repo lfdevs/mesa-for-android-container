@@ -58,7 +58,7 @@ VkResult anv_CreateDescriptorSetLayout(
                  (max_binding + 1) * sizeof(set_layout->binding[0]) +
                  immutable_sampler_count * sizeof(struct anv_sampler *);
 
-   set_layout = anv_alloc2(&device->alloc, pAllocator, size, 8,
+   set_layout = vk_alloc2(&device->alloc, pAllocator, size, 8,
                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!set_layout)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -200,7 +200,7 @@ void anv_DestroyDescriptorSetLayout(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_descriptor_set_layout, set_layout, _set_layout);
 
-   anv_free2(&device->alloc, pAllocator, set_layout);
+   vk_free2(&device->alloc, pAllocator, set_layout);
 }
 
 static void
@@ -228,7 +228,7 @@ VkResult anv_CreatePipelineLayout(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
 
-   layout = anv_alloc2(&device->alloc, pAllocator, sizeof(*layout), 8,
+   layout = vk_alloc2(&device->alloc, pAllocator, sizeof(*layout), 8,
                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (layout == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -282,7 +282,7 @@ void anv_DestroyPipelineLayout(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_pipeline_layout, pipeline_layout, _pipelineLayout);
 
-   anv_free2(&device->alloc, pAllocator, pipeline_layout);
+   vk_free2(&device->alloc, pAllocator, pipeline_layout);
 }
 
 /*
@@ -329,7 +329,7 @@ VkResult anv_CreateDescriptorPool(
       descriptor_count * sizeof(struct anv_descriptor) +
       buffer_count * sizeof(struct anv_buffer_view);
 
-   pool = anv_alloc2(&device->alloc, pAllocator, size, 8,
+   pool = vk_alloc2(&device->alloc, pAllocator, size, 8,
                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!pool)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -356,7 +356,7 @@ void anv_DestroyDescriptorPool(
    ANV_FROM_HANDLE(anv_descriptor_pool, pool, _pool);
 
    anv_state_stream_finish(&pool->surface_state_stream);
-   anv_free2(&device->alloc, pAllocator, pool);
+   vk_free2(&device->alloc, pAllocator, pool);
 }
 
 VkResult anv_ResetDescriptorPool(

@@ -162,7 +162,7 @@ compile_vs(struct svga_context *svga,
 static void
 make_vs_key(struct svga_context *svga, struct svga_compile_key *key)
 {
-   const unsigned shader = PIPE_SHADER_VERTEX;
+   const enum pipe_shader_type shader = PIPE_SHADER_VERTEX;
 
    memset(key, 0, sizeof *key);
 
@@ -346,6 +346,8 @@ emit_hw_vs(struct svga_context *svga, unsigned dirty)
    enum pipe_error ret = PIPE_OK;
    struct svga_compile_key key;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_EMITVS);
+
    /* If there is an active geometry shader, and it has stream output
     * defined, then we will skip the stream output from the vertex shader
     */
@@ -381,7 +383,7 @@ emit_hw_vs(struct svga_context *svga, unsigned dirty)
             ret = compile_vs(svga, vs, &key, &variant);
          }
          if (ret != PIPE_OK)
-            return ret;
+            goto done;
 
          /* insert the new variant at head of linked list */
          assert(variant);
@@ -395,7 +397,7 @@ emit_hw_vs(struct svga_context *svga, unsigned dirty)
       if (variant) {
          ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_VS, variant);
          if (ret != PIPE_OK)
-            return ret;
+            goto done;
          svga->rebind.flags.vs = FALSE;
       }
 
@@ -403,7 +405,9 @@ emit_hw_vs(struct svga_context *svga, unsigned dirty)
       svga->state.hw_draw.vs = variant;
    }
 
-   return PIPE_OK;
+done:
+   SVGA_STATS_TIME_POP(svga_sws(svga));
+   return ret;
 }
 
 struct svga_tracked_state svga_hw_vs = 

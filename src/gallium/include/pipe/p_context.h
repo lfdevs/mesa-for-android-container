@@ -47,6 +47,7 @@ struct pipe_clip_state;
 struct pipe_constant_buffer;
 struct pipe_debug_callback;
 struct pipe_depth_stencil_alpha_state;
+struct pipe_device_reset_callback;
 struct pipe_draw_info;
 struct pipe_grid_info;
 struct pipe_fence_handle;
@@ -193,8 +194,9 @@ struct pipe_context {
    void * (*create_sampler_state)(struct pipe_context *,
                                   const struct pipe_sampler_state *);
    void   (*bind_sampler_states)(struct pipe_context *,
-                                 unsigned shader, unsigned start_slot,
-                                 unsigned num_samplers, void **samplers);
+                                 enum pipe_shader_type shader,
+                                 unsigned start_slot, unsigned num_samplers,
+                                 void **samplers);
    void   (*delete_sampler_state)(struct pipe_context *, void *);
 
    void * (*create_rasterizer_state)(struct pipe_context *,
@@ -261,7 +263,7 @@ struct pipe_context {
 
    void (*set_constant_buffer)( struct pipe_context *,
                                 uint shader, uint index,
-                                struct pipe_constant_buffer *buf );
+                                const struct pipe_constant_buffer *buf );
 
    void (*set_framebuffer_state)( struct pipe_context *,
                                   const struct pipe_framebuffer_state * );
@@ -274,12 +276,18 @@ struct pipe_context {
                                unsigned num_scissors,
                                const struct pipe_scissor_state * );
 
+   void (*set_window_rectangles)( struct pipe_context *,
+                                  boolean include,
+                                  unsigned num_rectangles,
+                                  const struct pipe_scissor_state * );
+
    void (*set_viewport_states)( struct pipe_context *,
                                 unsigned start_slot,
                                 unsigned num_viewports,
                                 const struct pipe_viewport_state *);
 
-   void (*set_sampler_views)(struct pipe_context *, unsigned shader,
+   void (*set_sampler_views)(struct pipe_context *,
+                             enum pipe_shader_type shader,
                              unsigned start_slot, unsigned num_views,
                              struct pipe_sampler_view **);
 
@@ -307,9 +315,10 @@ struct pipe_context {
     *                   unless it's NULL, in which case no buffers will
     *                   be bound.
     */
-   void (*set_shader_buffers)(struct pipe_context *, unsigned shader,
+   void (*set_shader_buffers)(struct pipe_context *,
+                              enum pipe_shader_type shader,
                               unsigned start_slot, unsigned count,
-                              struct pipe_shader_buffer *buffers);
+                              const struct pipe_shader_buffer *buffers);
 
    /**
     * Bind an array of images that will be used by a shader.
@@ -324,9 +333,10 @@ struct pipe_context {
     *                   unless it's NULL, in which case no images will
     *                   be bound.
     */
-   void (*set_shader_images)(struct pipe_context *, unsigned shader,
+   void (*set_shader_images)(struct pipe_context *,
+                             enum pipe_shader_type shader,
                              unsigned start_slot, unsigned count,
-                             struct pipe_image_view *images);
+                             const struct pipe_image_view *images);
 
    void (*set_vertex_buffers)( struct pipe_context *,
                                unsigned start_slot,
@@ -411,7 +421,8 @@ struct pipe_context {
                                struct pipe_surface *dst,
                                const union pipe_color_union *color,
                                unsigned dstx, unsigned dsty,
-                               unsigned width, unsigned height);
+                               unsigned width, unsigned height,
+                               bool render_condition_enabled);
 
    /**
     * Clear a depth-stencil surface.
@@ -425,7 +436,8 @@ struct pipe_context {
                                double depth,
                                unsigned stencil,
                                unsigned dstx, unsigned dsty,
-                               unsigned width, unsigned height);
+                               unsigned width, unsigned height,
+                               bool render_condition_enabled);
 
    /**
     * Clear the texture with the specified texel. Not guaranteed to be a
@@ -514,16 +526,23 @@ struct pipe_context {
                           struct pipe_transfer *transfer);
 
    /* One-shot transfer operation with data supplied in a user
-    * pointer.  XXX: strides??
+    * pointer.
     */
-   void (*transfer_inline_write)( struct pipe_context *,
-                                  struct pipe_resource *,
-                                  unsigned level,
-                                  unsigned usage, /* a combination of PIPE_TRANSFER_x */
-                                  const struct pipe_box *,
-                                  const void *data,
-                                  unsigned stride,
-                                  unsigned layer_stride);
+   void (*buffer_subdata)(struct pipe_context *,
+                          struct pipe_resource *,
+                          unsigned usage, /* a combination of PIPE_TRANSFER_x */
+                          unsigned offset,
+                          unsigned size,
+                          const void *data);
+
+   void (*texture_subdata)(struct pipe_context *,
+                           struct pipe_resource *,
+                           unsigned level,
+                           unsigned usage, /* a combination of PIPE_TRANSFER_x */
+                           const struct pipe_box *,
+                           const void *data,
+                           unsigned stride,
+                           unsigned layer_stride);
 
    /**
     * Flush any pending framebuffer writes and invalidate texture caches.
@@ -673,12 +692,19 @@ struct pipe_context {
    enum pipe_reset_status (*get_device_reset_status)(struct pipe_context *ctx);
 
    /**
+    * Sets the reset status callback. If the pointer is null, then no callback
+    * is set, otherwise a copy of the data should be made.
+    */
+   void (*set_device_reset_callback)(struct pipe_context *ctx,
+                                     const struct pipe_device_reset_callback *cb);
+
+   /**
     * Dump driver-specific debug information into a stream. This is
     * used by debugging tools.
     *
     * \param ctx        pipe context
     * \param stream     where the output should be written to
-    * \param flags      a mask of PIPE_DEBUG_* flags
+    * \param flags      a mask of PIPE_DUMP_* flags
     */
    void (*dump_debug_state)(struct pipe_context *ctx, FILE *stream,
                             unsigned flags);

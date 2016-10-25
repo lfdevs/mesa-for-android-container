@@ -141,7 +141,7 @@ hard_event::status() const {
    else if (!_fence)
       return CL_QUEUED;
 
-   else if (!screen->fence_finish(screen, _fence, 0))
+   else if (!screen->fence_finish(screen, NULL, _fence, 0))
       return CL_SUBMITTED;
 
    else
@@ -168,7 +168,7 @@ hard_event::wait() const {
       queue()->flush();
 
    if (!_fence ||
-       !screen->fence_finish(screen, _fence, PIPE_TIMEOUT_INFINITE))
+       !screen->fence_finish(screen, NULL, _fence, PIPE_TIMEOUT_INFINITE))
       throw error(CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST);
 }
 

@@ -34,6 +34,91 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
+
+# Copyright 2015-2016 Intel Corporation
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice (including the next
+# paragraph) shall be included in all copies or substantial portions of the
+# Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+
+# Copyright © 2016 Intel Corporation
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice (including the next
+# paragraph) shall be included in all copies or substantial portions of the
+# Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+
+# Copyright © 2016 Intel Corporation
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice (including the next
+# paragraph) shall be included in all copies or substantial portions of the
+# Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+
+# Copyright 2015-2016 Intel Corporation
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice (including the next
+# paragraph) shall be included in all copies or substantial portions of the
+# Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -109,6 +194,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+check_PROGRAMS = isl/tests/isl_surf_get_image_offset_test$(EXEEXT)
 subdir = src/intel
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -127,6 +213,98 @@ DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
+LTLIBRARIES = $(noinst_LTLIBRARIES)
+blorp_libblorp_la_LIBADD =
+am__dirstamp = $(am__leading_dot)dirstamp
+am__objects_1 = blorp/blorp.lo blorp/blorp_blit.lo \
+	blorp/blorp_clear.lo
+am_blorp_libblorp_la_OBJECTS = $(am__objects_1)
+blorp_libblorp_la_OBJECTS = $(am_blorp_libblorp_la_OBJECTS)
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
+am__v_lt_1 = 
+common_libintel_common_la_LIBADD =
+am__objects_2 = common/gen_device_info.lo common/gen_l3_config.lo
+am_common_libintel_common_la_OBJECTS = $(am__objects_2)
+common_libintel_common_la_OBJECTS =  \
+	$(am_common_libintel_common_la_OBJECTS)
+isl_libisl_gen4_la_LIBADD =
+am__objects_3 = isl/isl_libisl_gen4_la-isl_gen4.lo \
+	isl/isl_libisl_gen4_la-isl_surface_state.lo
+am_isl_libisl_gen4_la_OBJECTS = $(am__objects_3)
+isl_libisl_gen4_la_OBJECTS = $(am_isl_libisl_gen4_la_OBJECTS)
+isl_libisl_gen4_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(isl_libisl_gen4_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+isl_libisl_gen5_la_LIBADD =
+am__objects_4 = isl/isl_libisl_gen5_la-isl_surface_state.lo
+am_isl_libisl_gen5_la_OBJECTS = $(am__objects_4)
+isl_libisl_gen5_la_OBJECTS = $(am_isl_libisl_gen5_la_OBJECTS)
+isl_libisl_gen5_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(isl_libisl_gen5_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+isl_libisl_gen6_la_LIBADD =
+am__objects_5 = isl/isl_libisl_gen6_la-isl_gen6.lo \
+	isl/isl_libisl_gen6_la-isl_surface_state.lo
+am_isl_libisl_gen6_la_OBJECTS = $(am__objects_5)
+isl_libisl_gen6_la_OBJECTS = $(am_isl_libisl_gen6_la_OBJECTS)
+isl_libisl_gen6_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(isl_libisl_gen6_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+isl_libisl_gen7_la_LIBADD =
+am__objects_6 = isl/isl_libisl_gen7_la-isl_gen7.lo \
+	isl/isl_libisl_gen7_la-isl_surface_state.lo
+am_isl_libisl_gen7_la_OBJECTS = $(am__objects_6)
+isl_libisl_gen7_la_OBJECTS = $(am_isl_libisl_gen7_la_OBJECTS)
+isl_libisl_gen7_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(isl_libisl_gen7_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+isl_libisl_gen75_la_LIBADD =
+am__objects_7 = isl/isl_libisl_gen75_la-isl_surface_state.lo
+am_isl_libisl_gen75_la_OBJECTS = $(am__objects_7)
+isl_libisl_gen75_la_OBJECTS = $(am_isl_libisl_gen75_la_OBJECTS)
+isl_libisl_gen75_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(isl_libisl_gen75_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+isl_libisl_gen8_la_LIBADD =
+am__objects_8 = isl/isl_libisl_gen8_la-isl_gen8.lo \
+	isl/isl_libisl_gen8_la-isl_surface_state.lo
+am_isl_libisl_gen8_la_OBJECTS = $(am__objects_8)
+isl_libisl_gen8_la_OBJECTS = $(am_isl_libisl_gen8_la_OBJECTS)
+isl_libisl_gen8_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(isl_libisl_gen8_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+isl_libisl_gen9_la_LIBADD =
+am__objects_9 = isl/isl_libisl_gen9_la-isl_gen9.lo \
+	isl/isl_libisl_gen9_la-isl_surface_state.lo
+am_isl_libisl_gen9_la_OBJECTS = $(am__objects_9)
+isl_libisl_gen9_la_OBJECTS = $(am_isl_libisl_gen9_la_OBJECTS)
+isl_libisl_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(isl_libisl_gen9_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+am__DEPENDENCIES_1 = isl/libisl-gen4.la isl/libisl-gen5.la \
+	isl/libisl-gen6.la isl/libisl-gen7.la isl/libisl-gen75.la \
+	isl/libisl-gen8.la isl/libisl-gen9.la
+isl_libisl_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
+am__objects_10 = isl/isl.lo isl/isl_format.lo isl/isl_storage_image.lo
+am__objects_11 = isl/isl_format_layout.lo
+am_isl_libisl_la_OBJECTS = $(am__objects_10) $(am__objects_11)
+isl_libisl_la_OBJECTS = $(am_isl_libisl_la_OBJECTS)
+isl_tests_isl_surf_get_image_offset_test_SOURCES =  \
+	isl/tests/isl_surf_get_image_offset_test.c
+isl_tests_isl_surf_get_image_offset_test_OBJECTS =  \
+	isl/tests/isl_surf_get_image_offset_test.$(OBJEXT)
+isl_tests_isl_surf_get_image_offset_test_DEPENDENCIES =  \
+	common/libintel_common.la isl/libisl.la \
+	$(top_builddir)/src/mesa/drivers/dri/i965/libi965_compiler.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -139,29 +317,47 @@ AM_V_at = $(am__v_at_@AM_V@)
 am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
 am__v_at_0 = @
 am__v_at_1 = 
-SOURCES =
-DIST_SOURCES =
-RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
-	ctags-recursive dvi-recursive html-recursive info-recursive \
-	install-data-recursive install-dvi-recursive \
-	install-exec-recursive install-html-recursive \
-	install-info-recursive install-pdf-recursive \
-	install-ps-recursive install-recursive installcheck-recursive \
-	installdirs-recursive pdf-recursive ps-recursive \
-	tags-recursive uninstall-recursive
+DEFAULT_INCLUDES = -I.@am__isrc@
+depcomp = $(SHELL) $(top_srcdir)/bin/depcomp
+am__depfiles_maybe = depfiles
+am__mv = mv -f
+COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CFLAGS) $(CFLAGS)
+AM_V_CC = $(am__v_CC_@AM_V@)
+am__v_CC_ = $(am__v_CC_@AM_DEFAULT_V@)
+am__v_CC_0 = @echo "  CC      " $@;
+am__v_CC_1 = 
+CCLD = $(CC)
+LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CCLD = $(am__v_CCLD_@AM_V@)
+am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
+am__v_CCLD_0 = @echo "  CCLD    " $@;
+am__v_CCLD_1 = 
+SOURCES = $(blorp_libblorp_la_SOURCES) \
+	$(common_libintel_common_la_SOURCES) \
+	$(isl_libisl_gen4_la_SOURCES) $(isl_libisl_gen5_la_SOURCES) \
+	$(isl_libisl_gen6_la_SOURCES) $(isl_libisl_gen7_la_SOURCES) \
+	$(isl_libisl_gen75_la_SOURCES) $(isl_libisl_gen8_la_SOURCES) \
+	$(isl_libisl_gen9_la_SOURCES) $(isl_libisl_la_SOURCES) \
+	isl/tests/isl_surf_get_image_offset_test.c
+DIST_SOURCES = $(blorp_libblorp_la_SOURCES) \
+	$(common_libintel_common_la_SOURCES) \
+	$(isl_libisl_gen4_la_SOURCES) $(isl_libisl_gen5_la_SOURCES) \
+	$(isl_libisl_gen6_la_SOURCES) $(isl_libisl_gen7_la_SOURCES) \
+	$(isl_libisl_gen75_la_SOURCES) $(isl_libisl_gen8_la_SOURCES) \
+	$(isl_libisl_gen9_la_SOURCES) $(isl_libisl_la_SOURCES) \
+	isl/tests/isl_surf_get_image_offset_test.c
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
-  distclean-recursive maintainer-clean-recursive
-am__recursive_targets = \
-  $(RECURSIVE_TARGETS) \
-  $(RECURSIVE_CLEAN_TARGETS) \
-  $(am__extra_recursive_targets)
-AM_RECURSIVE_TARGETS = $(am__recursive_targets:-recursive=) TAGS CTAGS \
-	distdir
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -181,34 +377,216 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = $(SUBDIRS)
-am__DIST_COMMON = $(srcdir)/Makefile.in
+am__tty_colors_dummy = \
+  mgn= red= grn= lgn= blu= brg= std=; \
+  am__color_tests=no
+am__tty_colors = { \
+  $(am__tty_colors_dummy); \
+  if test "X$(AM_COLOR_TESTS)" = Xno; then \
+    am__color_tests=no; \
+  elif test "X$(AM_COLOR_TESTS)" = Xalways; then \
+    am__color_tests=yes; \
+  elif test "X$$TERM" != Xdumb && { test -t 1; } 2>/dev/null; then \
+    am__color_tests=yes; \
+  fi; \
+  if test $$am__color_tests = yes; then \
+    red='[0;31m'; \
+    grn='[0;32m'; \
+    lgn='[1;32m'; \
+    blu='[1;34m'; \
+    mgn='[0;35m'; \
+    brg='[1m'; \
+    std='[m'; \
+  fi; \
+}
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+am__recheck_rx = ^[ 	]*:recheck:[ 	]*
+am__global_test_result_rx = ^[ 	]*:global-test-result:[ 	]*
+am__copy_in_global_log_rx = ^[ 	]*:copy-in-global-log:[ 	]*
+# A command that, given a newline-separated list of test names on the
+# standard input, print the name of the tests that are to be re-run
+# upon "make recheck".
+am__list_recheck_tests = $(AWK) '{ \
+  recheck = 1; \
+  while ((rc = (getline line < ($$0 ".trs"))) != 0) \
+    { \
+      if (rc < 0) \
+        { \
+          if ((getline line2 < ($$0 ".log")) < 0) \
+	    recheck = 0; \
+          break; \
+        } \
+      else if (line ~ /$(am__recheck_rx)[nN][Oo]/) \
+        { \
+          recheck = 0; \
+          break; \
+        } \
+      else if (line ~ /$(am__recheck_rx)[yY][eE][sS]/) \
+        { \
+          break; \
+        } \
+    }; \
+  if (recheck) \
+    print $$0; \
+  close ($$0 ".trs"); \
+  close ($$0 ".log"); \
+}'
+# A command that, given a newline-separated list of test names on the
+# standard input, create the global log from their .trs and .log files.
+am__create_global_log = $(AWK) ' \
+function fatal(msg) \
+{ \
+  print "fatal: making $@: " msg | "cat >&2"; \
+  exit 1; \
+} \
+function rst_section(header) \
+{ \
+  print header; \
+  len = length(header); \
+  for (i = 1; i <= len; i = i + 1) \
+    printf "="; \
+  printf "\n\n"; \
+} \
+{ \
+  copy_in_global_log = 1; \
+  global_test_result = "RUN"; \
+  while ((rc = (getline line < ($$0 ".trs"))) != 0) \
+    { \
+      if (rc < 0) \
+         fatal("failed to read from " $$0 ".trs"); \
+      if (line ~ /$(am__global_test_result_rx)/) \
+        { \
+          sub("$(am__global_test_result_rx)", "", line); \
+          sub("[ 	]*$$", "", line); \
+          global_test_result = line; \
+        } \
+      else if (line ~ /$(am__copy_in_global_log_rx)[nN][oO]/) \
+        copy_in_global_log = 0; \
+    }; \
+  if (copy_in_global_log) \
+    { \
+      rst_section(global_test_result ": " $$0); \
+      while ((rc = (getline line < ($$0 ".log"))) != 0) \
+      { \
+        if (rc < 0) \
+          fatal("failed to read from " $$0 ".log"); \
+        print line; \
+      }; \
+      printf "\n"; \
+    }; \
+  close ($$0 ".trs"); \
+  close ($$0 ".log"); \
+}'
+# Restructured Text title.
+am__rst_title = { sed 's/.*/   &   /;h;s/./=/g;p;x;s/ *$$//;p;g' && echo; }
+# Solaris 10 'make', and several other traditional 'make' implementations,
+# pass "-e" to $(SHELL), and POSIX 2008 even requires this.  Work around it
+# by disabling -e (using the XSI extension "set +e") if it's set.
+am__sh_e_setup = case $$- in *e*) set +e;; esac
+# Default flags passed to test drivers.
+am__common_driver_flags = \
+  --color-tests "$$am__color_tests" \
+  --enable-hard-errors "$$am__enable_hard_errors" \
+  --expect-failure "$$am__expect_failure"
+# To be inserted before the command running the test.  Creates the
+# directory for the log if needed.  Stores in $dir the directory
+# containing $f, in $tst the test, in $log the log.  Executes the
+# developer- defined test setup AM_TESTS_ENVIRONMENT (if any), and
+# passes TESTS_ENVIRONMENT.  Set up options for the wrapper that
+# will run the test scripts (or their associated LOG_COMPILER, if
+# thy have one).
+am__check_pre = \
+$(am__sh_e_setup);					\
+$(am__vpath_adj_setup) $(am__vpath_adj)			\
+$(am__tty_colors);					\
+srcdir=$(srcdir); export srcdir;			\
+case "$@" in						\
+  */*) am__odir=`echo "./$@" | sed 's|/[^/]*$$||'`;;	\
+    *) am__odir=.;; 					\
+esac;							\
+test "x$$am__odir" = x"." || test -d "$$am__odir" 	\
+  || $(MKDIR_P) "$$am__odir" || exit $$?;		\
+if test -f "./$$f"; then dir=./;			\
+elif test -f "$$f"; then dir=;				\
+else dir="$(srcdir)/"; fi;				\
+tst=$$dir$$f; log='$@'; 				\
+if test -n '$(DISABLE_HARD_ERRORS)'; then		\
+  am__enable_hard_errors=no; 				\
+else							\
+  am__enable_hard_errors=yes; 				\
+fi; 							\
+case " $(XFAIL_TESTS) " in				\
+  *[\ \	]$$f[\ \	]* | *[\ \	]$$dir$$f[\ \	]*) \
+    am__expect_failure=yes;;				\
+  *)							\
+    am__expect_failure=no;;				\
+esac; 							\
+$(AM_TESTS_ENVIRONMENT) $(TESTS_ENVIRONMENT)
+# A shell command to get the names of the tests scripts with any registered
+# extension removed (i.e., equivalently, the names of the test logs, with
+# the '.log' extension removed).  The result is saved in the shell variable
+# '$bases'.  This honors runtime overriding of TESTS and TEST_LOGS.  Sadly,
+# we cannot use something simpler, involving e.g., "$(TEST_LOGS:.log=)",
+# since that might cause problem with VPATH rewrites for suffix-less tests.
+# See also 'test-harness-vpath-rewrite.sh' and 'test-trs-basic.sh'.
+am__set_TESTS_bases = \
+  bases='$(TEST_LOGS)'; \
+  bases=`for i in $$bases; do echo $$i; done | sed 's/\.log$$//'`; \
+  bases=`echo $$bases`
+RECHECK_LOGS = $(TEST_LOGS)
+AM_RECURSIVE_TARGETS = check recheck
+TEST_SUITE_LOG = test-suite.log
+TEST_EXTENSIONS = @EXEEXT@ .test
+LOG_DRIVER = $(SHELL) $(top_srcdir)/bin/test-driver
+LOG_COMPILE = $(LOG_COMPILER) $(AM_LOG_FLAGS) $(LOG_FLAGS)
+am__set_b = \
+  case '$@' in \
+    */*) \
+      case '$*' in \
+        */*) b='$*';; \
+          *) b=`echo '$@' | sed 's/\.log$$//'`; \
+       esac;; \
+    *) \
+      b='$*';; \
+  esac
+am__test_logs1 = $(TESTS:=.log)
+am__test_logs2 = $(am__test_logs1:@EXEEXT@.log=.log)
+TEST_LOGS = $(am__test_logs2:.test.log=.log)
+TEST_LOG_DRIVER = $(SHELL) $(top_srcdir)/bin/test-driver
+TEST_LOG_COMPILE = $(TEST_LOG_COMPILER) $(AM_TEST_LOG_FLAGS) \
+	$(TEST_LOG_FLAGS)
+am__DIST_COMMON = $(srcdir)/Makefile.blorp.am \
+	$(srcdir)/Makefile.common.am $(srcdir)/Makefile.genxml.am \
+	$(srcdir)/Makefile.in $(srcdir)/Makefile.isl.am \
+	$(srcdir)/Makefile.sources $(top_srcdir)/bin/depcomp \
+	$(top_srcdir)/bin/test-driver
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-am__relativize = \
-  dir0=`pwd`; \
-  sed_first='s,^\([^/]*\)/.*$$,\1,'; \
-  sed_rest='s,^[^/]*/*,,'; \
-  sed_last='s,^.*/\([^/]*\)$$,\1,'; \
-  sed_butlast='s,/*[^/]*$$,,'; \
-  while test -n "$$dir1"; do \
-    first=`echo "$$dir1" | sed -e "$$sed_first"`; \
-    if test "$$first" != "."; then \
-      if test "$$first" = ".."; then \
-        dir2=`echo "$$dir0" | sed -e "$$sed_last"`/"$$dir2"; \
-        dir0=`echo "$$dir0" | sed -e "$$sed_butlast"`; \
-      else \
-        first2=`echo "$$dir2" | sed -e "$$sed_first"`; \
-        if test "$$first2" = "$$first"; then \
-          dir2=`echo "$$dir2" | sed -e "$$sed_rest"`; \
-        else \
-          dir2="../$$dir2"; \
-        fi; \
-        dir0="$$dir0"/"$$first"; \
-      fi; \
-    fi; \
-    dir1=`echo "$$dir1" | sed -e "$$sed_rest"`; \
-  done; \
-  reldir="$$dir2"
 ACLOCAL = @ACLOCAL@
 AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
@@ -310,11 +688,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -410,6 +787,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -445,6 +824,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -507,11 +887,158 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = genxml isl
-all: all-recursive
+BLORP_FILES = \
+	blorp/blorp.c \
+	blorp/blorp.h \
+	blorp/blorp_blit.c \
+	blorp/blorp_clear.c \
+	blorp/blorp_genX_exec.h \
+	blorp/blorp_priv.h
+
+COMMON_FILES = \
+	common/gen_device_info.c \
+	common/gen_device_info.h \
+	common/gen_l3_config.c \
+	common/gen_l3_config.h \
+	common/gen_sample_positions.h
+
+GENXML_GENERATED_FILES = \
+	genxml/gen4_pack.h \
+	genxml/gen45_pack.h \
+	genxml/gen5_pack.h \
+	genxml/gen6_pack.h \
+	genxml/gen7_pack.h \
+	genxml/gen75_pack.h \
+	genxml/gen8_pack.h \
+	genxml/gen9_pack.h
+
+AUBINATOR_GENERATED_FILES = \
+	genxml/gen6_xml.h \
+	genxml/gen7_xml.h \
+	genxml/gen75_xml.h \
+	genxml/gen8_xml.h \
+	genxml/gen9_xml.h
+
+ISL_FILES = \
+	isl/isl.c \
+	isl/isl.h \
+	isl/isl_format.c \
+	isl/isl_priv.h \
+	isl/isl_storage_image.c
+
+ISL_GEN4_FILES = \
+	isl/isl_gen4.c \
+	isl/isl_gen4.h \
+	isl/isl_surface_state.c
+
+ISL_GEN5_FILES = \
+	isl/isl_surface_state.c
+
+ISL_GEN6_FILES = \
+	isl/isl_gen6.c \
+	isl/isl_gen6.h \
+	isl/isl_surface_state.c
+
+ISL_GEN7_FILES = \
+	isl/isl_gen7.c \
+	isl/isl_gen7.h \
+	isl/isl_surface_state.c
+
+ISL_GEN75_FILES = \
+	isl/isl_surface_state.c
+
+ISL_GEN8_FILES = \
+	isl/isl_gen8.c \
+	isl/isl_gen8.h \
+	isl/isl_surface_state.c
+
+ISL_GEN9_FILES = \
+	isl/isl_gen9.c \
+	isl/isl_gen9.h \
+	isl/isl_surface_state.c
+
+ISL_GENERATED_FILES = \
+	isl/isl_format_layout.c
+
+
+# The gallium includes are for the util/u_math.h include from main/macros.h
+AM_CPPFLAGS = \
+	-I$(top_srcdir)/include \
+	-I$(top_builddir)/src \
+	-I$(top_srcdir)/src \
+	-I$(top_builddir)/src/compiler/nir \
+	-I$(top_builddir)/src/intel \
+	-I$(top_srcdir)/src/intel \
+	-I$(top_srcdir)/src/mapi \
+	-I$(top_srcdir)/src/mesa \
+	-I$(top_srcdir)/src/mesa/drivers/dri/i965 \
+	-I$(top_srcdir)/src/gallium/auxiliary \
+	-I$(top_srcdir)/src/gallium/include \
+	$(INTEL_CFLAGS) \
+	$(VALGRIND_CFLAGS) \
+	$(DEFINES)
+
+AM_CFLAGS = \
+	$(VISIBILITY_CFLAGS) \
+	-Wno-override-init
+
+MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+noinst_LTLIBRARIES = blorp/libblorp.la common/libintel_common.la \
+	$(ISL_GEN_LIBS) isl/libisl.la
+TESTS = $(check_PROGRAMS)
+BUILT_SOURCES = $(GENXML_GENERATED_FILES) $(AUBINATOR_GENERATED_FILES) \
+	$(ISL_GENERATED_FILES)
+CLEANFILES = $(BUILT_SOURCES)
+
+# ----------------------------------------------------------------------------
+EXTRA_DIST = $(GENXML_GENERATED_FILES) $(AUBINATOR_GENERATED_FILES) \
+	genxml/gen4.xml genxml/gen45.xml genxml/gen5.xml \
+	genxml/gen6.xml genxml/gen7.xml genxml/gen75.xml \
+	genxml/gen8.xml genxml/gen9.xml genxml/genX_pack.h \
+	genxml/gen_macros.h genxml/gen_pack_header.py genxml/README \
+	isl/gen_format_layout.py isl/isl_format_layout.csv isl/README
+blorp_libblorp_la_SOURCES = $(BLORP_FILES)
+common_libintel_common_la_SOURCES = $(COMMON_FILES)
+SUFFIXES = _pack.h _xml.h .xml
+ISL_GEN_LIBS = \
+	isl/libisl-gen4.la                               \
+	isl/libisl-gen5.la                               \
+	isl/libisl-gen6.la                               \
+	isl/libisl-gen7.la                               \
+	isl/libisl-gen75.la                              \
+	isl/libisl-gen8.la                               \
+	isl/libisl-gen9.la                               \
+	$(NULL)
+
+isl_libisl_la_LIBADD = $(ISL_GEN_LIBS)
+isl_libisl_la_SOURCES = $(ISL_FILES) $(ISL_GENERATED_FILES)
+isl_libisl_gen4_la_SOURCES = $(ISL_GEN4_FILES)
+isl_libisl_gen4_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=40
+isl_libisl_gen5_la_SOURCES = $(ISL_GEN5_FILES)
+isl_libisl_gen5_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=50
+isl_libisl_gen6_la_SOURCES = $(ISL_GEN6_FILES)
+isl_libisl_gen6_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=60
+isl_libisl_gen7_la_SOURCES = $(ISL_GEN7_FILES)
+isl_libisl_gen7_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=70
+isl_libisl_gen75_la_SOURCES = $(ISL_GEN75_FILES)
+isl_libisl_gen75_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=75
+isl_libisl_gen8_la_SOURCES = $(ISL_GEN8_FILES)
+isl_libisl_gen8_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=80
+isl_libisl_gen9_la_SOURCES = $(ISL_GEN9_FILES)
+isl_libisl_gen9_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=90
+isl_tests_isl_surf_get_image_offset_test_LDADD = \
+	common/libintel_common.la \
+	isl/libisl.la \
+	$(top_builddir)/src/mesa/drivers/dri/i965/libi965_compiler.la \
+	-lm
+
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
-$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
+.SUFFIXES: _pack.h _xml.h .xml .c .lo .log .o .obj .test .test$(EXEEXT) .trs
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/Makefile.sources $(srcdir)/Makefile.blorp.am $(srcdir)/Makefile.common.am $(srcdir)/Makefile.genxml.am $(srcdir)/Makefile.isl.am $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -531,6 +1058,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe);; \
 	esac;
+$(srcdir)/Makefile.sources $(srcdir)/Makefile.blorp.am $(srcdir)/Makefile.common.am $(srcdir)/Makefile.genxml.am $(srcdir)/Makefile.isl.am $(am__empty):
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
@@ -541,67 +1069,287 @@ $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; \
+	locs=`for p in $$list; do echo $$p; done | \
+	      sed 's|^[^/]*$$|.|; s|/[^/]*$$||; s|$$|/so_locations|' | \
+	      sort -u`; \
+	test -z "$$locs" || { \
+	  echo rm -f $${locs}; \
+	  rm -f $${locs}; \
+	}
+blorp/$(am__dirstamp):
+	@$(MKDIR_P) blorp
+	@: > blorp/$(am__dirstamp)
+blorp/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) blorp/$(DEPDIR)
+	@: > blorp/$(DEPDIR)/$(am__dirstamp)
+blorp/blorp.lo: blorp/$(am__dirstamp) blorp/$(DEPDIR)/$(am__dirstamp)
+blorp/blorp_blit.lo: blorp/$(am__dirstamp) \
+	blorp/$(DEPDIR)/$(am__dirstamp)
+blorp/blorp_clear.lo: blorp/$(am__dirstamp) \
+	blorp/$(DEPDIR)/$(am__dirstamp)
+
+blorp/libblorp.la: $(blorp_libblorp_la_OBJECTS) $(blorp_libblorp_la_DEPENDENCIES) $(EXTRA_blorp_libblorp_la_DEPENDENCIES) blorp/$(am__dirstamp)
+	$(AM_V_CCLD)$(LINK)  $(blorp_libblorp_la_OBJECTS) $(blorp_libblorp_la_LIBADD) $(LIBS)
+common/$(am__dirstamp):
+	@$(MKDIR_P) common
+	@: > common/$(am__dirstamp)
+common/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) common/$(DEPDIR)
+	@: > common/$(DEPDIR)/$(am__dirstamp)
+common/gen_device_info.lo: common/$(am__dirstamp) \
+	common/$(DEPDIR)/$(am__dirstamp)
+common/gen_l3_config.lo: common/$(am__dirstamp) \
+	common/$(DEPDIR)/$(am__dirstamp)
+
+common/libintel_common.la: $(common_libintel_common_la_OBJECTS) $(common_libintel_common_la_DEPENDENCIES) $(EXTRA_common_libintel_common_la_DEPENDENCIES) common/$(am__dirstamp)
+	$(AM_V_CCLD)$(LINK)  $(common_libintel_common_la_OBJECTS) $(common_libintel_common_la_LIBADD) $(LIBS)
+isl/$(am__dirstamp):
+	@$(MKDIR_P) isl
+	@: > isl/$(am__dirstamp)
+isl/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) isl/$(DEPDIR)
+	@: > isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_libisl_gen4_la-isl_gen4.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_libisl_gen4_la-isl_surface_state.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+
+isl/libisl-gen4.la: $(isl_libisl_gen4_la_OBJECTS) $(isl_libisl_gen4_la_DEPENDENCIES) $(EXTRA_isl_libisl_gen4_la_DEPENDENCIES) isl/$(am__dirstamp)
+	$(AM_V_CCLD)$(isl_libisl_gen4_la_LINK)  $(isl_libisl_gen4_la_OBJECTS) $(isl_libisl_gen4_la_LIBADD) $(LIBS)
+isl/isl_libisl_gen5_la-isl_surface_state.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+
+isl/libisl-gen5.la: $(isl_libisl_gen5_la_OBJECTS) $(isl_libisl_gen5_la_DEPENDENCIES) $(EXTRA_isl_libisl_gen5_la_DEPENDENCIES) isl/$(am__dirstamp)
+	$(AM_V_CCLD)$(isl_libisl_gen5_la_LINK)  $(isl_libisl_gen5_la_OBJECTS) $(isl_libisl_gen5_la_LIBADD) $(LIBS)
+isl/isl_libisl_gen6_la-isl_gen6.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_libisl_gen6_la-isl_surface_state.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+
+isl/libisl-gen6.la: $(isl_libisl_gen6_la_OBJECTS) $(isl_libisl_gen6_la_DEPENDENCIES) $(EXTRA_isl_libisl_gen6_la_DEPENDENCIES) isl/$(am__dirstamp)
+	$(AM_V_CCLD)$(isl_libisl_gen6_la_LINK)  $(isl_libisl_gen6_la_OBJECTS) $(isl_libisl_gen6_la_LIBADD) $(LIBS)
+isl/isl_libisl_gen7_la-isl_gen7.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_libisl_gen7_la-isl_surface_state.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+
+isl/libisl-gen7.la: $(isl_libisl_gen7_la_OBJECTS) $(isl_libisl_gen7_la_DEPENDENCIES) $(EXTRA_isl_libisl_gen7_la_DEPENDENCIES) isl/$(am__dirstamp)
+	$(AM_V_CCLD)$(isl_libisl_gen7_la_LINK)  $(isl_libisl_gen7_la_OBJECTS) $(isl_libisl_gen7_la_LIBADD) $(LIBS)
+isl/isl_libisl_gen75_la-isl_surface_state.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+
+isl/libisl-gen75.la: $(isl_libisl_gen75_la_OBJECTS) $(isl_libisl_gen75_la_DEPENDENCIES) $(EXTRA_isl_libisl_gen75_la_DEPENDENCIES) isl/$(am__dirstamp)
+	$(AM_V_CCLD)$(isl_libisl_gen75_la_LINK)  $(isl_libisl_gen75_la_OBJECTS) $(isl_libisl_gen75_la_LIBADD) $(LIBS)
+isl/isl_libisl_gen8_la-isl_gen8.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_libisl_gen8_la-isl_surface_state.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+
+isl/libisl-gen8.la: $(isl_libisl_gen8_la_OBJECTS) $(isl_libisl_gen8_la_DEPENDENCIES) $(EXTRA_isl_libisl_gen8_la_DEPENDENCIES) isl/$(am__dirstamp)
+	$(AM_V_CCLD)$(isl_libisl_gen8_la_LINK)  $(isl_libisl_gen8_la_OBJECTS) $(isl_libisl_gen8_la_LIBADD) $(LIBS)
+isl/isl_libisl_gen9_la-isl_gen9.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_libisl_gen9_la-isl_surface_state.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+
+isl/libisl-gen9.la: $(isl_libisl_gen9_la_OBJECTS) $(isl_libisl_gen9_la_DEPENDENCIES) $(EXTRA_isl_libisl_gen9_la_DEPENDENCIES) isl/$(am__dirstamp)
+	$(AM_V_CCLD)$(isl_libisl_gen9_la_LINK)  $(isl_libisl_gen9_la_OBJECTS) $(isl_libisl_gen9_la_LIBADD) $(LIBS)
+isl/isl.lo: isl/$(am__dirstamp) isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_format.lo: isl/$(am__dirstamp) isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_storage_image.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+isl/isl_format_layout.lo: isl/$(am__dirstamp) \
+	isl/$(DEPDIR)/$(am__dirstamp)
+
+isl/libisl.la: $(isl_libisl_la_OBJECTS) $(isl_libisl_la_DEPENDENCIES) $(EXTRA_isl_libisl_la_DEPENDENCIES) isl/$(am__dirstamp)
+	$(AM_V_CCLD)$(LINK)  $(isl_libisl_la_OBJECTS) $(isl_libisl_la_LIBADD) $(LIBS)
+
+clean-checkPROGRAMS:
+	@list='$(check_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+isl/tests/$(am__dirstamp):
+	@$(MKDIR_P) isl/tests
+	@: > isl/tests/$(am__dirstamp)
+isl/tests/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) isl/tests/$(DEPDIR)
+	@: > isl/tests/$(DEPDIR)/$(am__dirstamp)
+isl/tests/isl_surf_get_image_offset_test.$(OBJEXT):  \
+	isl/tests/$(am__dirstamp) isl/tests/$(DEPDIR)/$(am__dirstamp)
+
+isl/tests/isl_surf_get_image_offset_test$(EXEEXT): $(isl_tests_isl_surf_get_image_offset_test_OBJECTS) $(isl_tests_isl_surf_get_image_offset_test_DEPENDENCIES) $(EXTRA_isl_tests_isl_surf_get_image_offset_test_DEPENDENCIES) isl/tests/$(am__dirstamp)
+	@rm -f isl/tests/isl_surf_get_image_offset_test$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(isl_tests_isl_surf_get_image_offset_test_OBJECTS) $(isl_tests_isl_surf_get_image_offset_test_LDADD) $(LIBS)
+
+mostlyclean-compile:
+	-rm -f *.$(OBJEXT)
+	-rm -f blorp/*.$(OBJEXT)
+	-rm -f blorp/*.lo
+	-rm -f common/*.$(OBJEXT)
+	-rm -f common/*.lo
+	-rm -f isl/*.$(OBJEXT)
+	-rm -f isl/*.lo
+	-rm -f isl/tests/*.$(OBJEXT)
+
+distclean-compile:
+	-rm -f *.tab.c
+
+@AMDEP_TRUE@@am__include@ @am__quote@blorp/$(DEPDIR)/blorp.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@blorp/$(DEPDIR)/blorp_blit.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@blorp/$(DEPDIR)/blorp_clear.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/gen_device_info.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/gen_l3_config.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_format.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_format_layout.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen4_la-isl_gen4.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen4_la-isl_surface_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen5_la-isl_surface_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen6_la-isl_gen6.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen6_la-isl_surface_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen75_la-isl_surface_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen7_la-isl_gen7.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen7_la-isl_surface_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen8_la-isl_gen8.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen8_la-isl_surface_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen9_la-isl_gen9.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_libisl_gen9_la-isl_surface_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_storage_image.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@isl/tests/$(DEPDIR)/isl_surf_get_image_offset_test.Po@am__quote@
+
+.c.o:
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
+
+.c.obj:
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.c.lo:
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+isl/isl_libisl_gen4_la-isl_gen4.lo: isl/isl_gen4.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen4_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen4_la-isl_gen4.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen4_la-isl_gen4.Tpo -c -o isl/isl_libisl_gen4_la-isl_gen4.lo `test -f 'isl/isl_gen4.c' || echo '$(srcdir)/'`isl/isl_gen4.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen4_la-isl_gen4.Tpo isl/$(DEPDIR)/isl_libisl_gen4_la-isl_gen4.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_gen4.c' object='isl/isl_libisl_gen4_la-isl_gen4.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen4_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen4_la-isl_gen4.lo `test -f 'isl/isl_gen4.c' || echo '$(srcdir)/'`isl/isl_gen4.c
+
+isl/isl_libisl_gen4_la-isl_surface_state.lo: isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen4_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen4_la-isl_surface_state.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen4_la-isl_surface_state.Tpo -c -o isl/isl_libisl_gen4_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen4_la-isl_surface_state.Tpo isl/$(DEPDIR)/isl_libisl_gen4_la-isl_surface_state.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_surface_state.c' object='isl/isl_libisl_gen4_la-isl_surface_state.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen4_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen4_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+
+isl/isl_libisl_gen5_la-isl_surface_state.lo: isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen5_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen5_la-isl_surface_state.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen5_la-isl_surface_state.Tpo -c -o isl/isl_libisl_gen5_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen5_la-isl_surface_state.Tpo isl/$(DEPDIR)/isl_libisl_gen5_la-isl_surface_state.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_surface_state.c' object='isl/isl_libisl_gen5_la-isl_surface_state.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen5_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen5_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+
+isl/isl_libisl_gen6_la-isl_gen6.lo: isl/isl_gen6.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen6_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen6_la-isl_gen6.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen6_la-isl_gen6.Tpo -c -o isl/isl_libisl_gen6_la-isl_gen6.lo `test -f 'isl/isl_gen6.c' || echo '$(srcdir)/'`isl/isl_gen6.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen6_la-isl_gen6.Tpo isl/$(DEPDIR)/isl_libisl_gen6_la-isl_gen6.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_gen6.c' object='isl/isl_libisl_gen6_la-isl_gen6.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen6_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen6_la-isl_gen6.lo `test -f 'isl/isl_gen6.c' || echo '$(srcdir)/'`isl/isl_gen6.c
+
+isl/isl_libisl_gen6_la-isl_surface_state.lo: isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen6_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen6_la-isl_surface_state.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen6_la-isl_surface_state.Tpo -c -o isl/isl_libisl_gen6_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen6_la-isl_surface_state.Tpo isl/$(DEPDIR)/isl_libisl_gen6_la-isl_surface_state.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_surface_state.c' object='isl/isl_libisl_gen6_la-isl_surface_state.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen6_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen6_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+
+isl/isl_libisl_gen7_la-isl_gen7.lo: isl/isl_gen7.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen7_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen7_la-isl_gen7.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen7_la-isl_gen7.Tpo -c -o isl/isl_libisl_gen7_la-isl_gen7.lo `test -f 'isl/isl_gen7.c' || echo '$(srcdir)/'`isl/isl_gen7.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen7_la-isl_gen7.Tpo isl/$(DEPDIR)/isl_libisl_gen7_la-isl_gen7.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_gen7.c' object='isl/isl_libisl_gen7_la-isl_gen7.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen7_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen7_la-isl_gen7.lo `test -f 'isl/isl_gen7.c' || echo '$(srcdir)/'`isl/isl_gen7.c
+
+isl/isl_libisl_gen7_la-isl_surface_state.lo: isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen7_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen7_la-isl_surface_state.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen7_la-isl_surface_state.Tpo -c -o isl/isl_libisl_gen7_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen7_la-isl_surface_state.Tpo isl/$(DEPDIR)/isl_libisl_gen7_la-isl_surface_state.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_surface_state.c' object='isl/isl_libisl_gen7_la-isl_surface_state.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen7_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen7_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+
+isl/isl_libisl_gen75_la-isl_surface_state.lo: isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen75_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen75_la-isl_surface_state.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen75_la-isl_surface_state.Tpo -c -o isl/isl_libisl_gen75_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen75_la-isl_surface_state.Tpo isl/$(DEPDIR)/isl_libisl_gen75_la-isl_surface_state.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_surface_state.c' object='isl/isl_libisl_gen75_la-isl_surface_state.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen75_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen75_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+
+isl/isl_libisl_gen8_la-isl_gen8.lo: isl/isl_gen8.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen8_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen8_la-isl_gen8.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen8_la-isl_gen8.Tpo -c -o isl/isl_libisl_gen8_la-isl_gen8.lo `test -f 'isl/isl_gen8.c' || echo '$(srcdir)/'`isl/isl_gen8.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen8_la-isl_gen8.Tpo isl/$(DEPDIR)/isl_libisl_gen8_la-isl_gen8.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_gen8.c' object='isl/isl_libisl_gen8_la-isl_gen8.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen8_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen8_la-isl_gen8.lo `test -f 'isl/isl_gen8.c' || echo '$(srcdir)/'`isl/isl_gen8.c
+
+isl/isl_libisl_gen8_la-isl_surface_state.lo: isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen8_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen8_la-isl_surface_state.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen8_la-isl_surface_state.Tpo -c -o isl/isl_libisl_gen8_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen8_la-isl_surface_state.Tpo isl/$(DEPDIR)/isl_libisl_gen8_la-isl_surface_state.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_surface_state.c' object='isl/isl_libisl_gen8_la-isl_surface_state.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen8_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen8_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+
+isl/isl_libisl_gen9_la-isl_gen9.lo: isl/isl_gen9.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen9_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen9_la-isl_gen9.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen9_la-isl_gen9.Tpo -c -o isl/isl_libisl_gen9_la-isl_gen9.lo `test -f 'isl/isl_gen9.c' || echo '$(srcdir)/'`isl/isl_gen9.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen9_la-isl_gen9.Tpo isl/$(DEPDIR)/isl_libisl_gen9_la-isl_gen9.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_gen9.c' object='isl/isl_libisl_gen9_la-isl_gen9.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen9_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen9_la-isl_gen9.lo `test -f 'isl/isl_gen9.c' || echo '$(srcdir)/'`isl/isl_gen9.c
+
+isl/isl_libisl_gen9_la-isl_surface_state.lo: isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen9_la_CFLAGS) $(CFLAGS) -MT isl/isl_libisl_gen9_la-isl_surface_state.lo -MD -MP -MF isl/$(DEPDIR)/isl_libisl_gen9_la-isl_surface_state.Tpo -c -o isl/isl_libisl_gen9_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) isl/$(DEPDIR)/isl_libisl_gen9_la-isl_surface_state.Tpo isl/$(DEPDIR)/isl_libisl_gen9_la-isl_surface_state.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='isl/isl_surface_state.c' object='isl/isl_libisl_gen9_la-isl_surface_state.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(isl_libisl_gen9_la_CFLAGS) $(CFLAGS) -c -o isl/isl_libisl_gen9_la-isl_surface_state.lo `test -f 'isl/isl_surface_state.c' || echo '$(srcdir)/'`isl/isl_surface_state.c
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
-
-# This directory's subdirectories are mostly independent; you can cd
-# into them and run 'make' without going through this Makefile.
-# To change the values of 'make' variables: instead of editing Makefiles,
-# (1) if the variable is set in 'config.status', edit 'config.status'
-#     (which will cause the Makefiles to be regenerated when you run 'make');
-# (2) otherwise, pass the desired values on the 'make' command line.
-$(am__recursive_targets):
-	@fail=; \
-	if $(am__make_keepgoing); then \
-	  failcom='fail=yes'; \
-	else \
-	  failcom='exit 1'; \
-	fi; \
-	dot_seen=no; \
-	target=`echo $@ | sed s/-recursive//`; \
-	case "$@" in \
-	  distclean-* | maintainer-clean-*) list='$(DIST_SUBDIRS)' ;; \
-	  *) list='$(SUBDIRS)' ;; \
-	esac; \
-	for subdir in $$list; do \
-	  echo "Making $$target in $$subdir"; \
-	  if test "$$subdir" = "."; then \
-	    dot_seen=yes; \
-	    local_target="$$target-am"; \
-	  else \
-	    local_target="$$target"; \
-	  fi; \
-	  ($(am__cd) $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
-	  || eval $$failcom; \
-	done; \
-	if test "$$dot_seen" = "no"; then \
-	  $(MAKE) $(AM_MAKEFLAGS) "$$target-am" || exit 1; \
-	fi; test -z "$$fail"
+	-rm -rf blorp/.libs blorp/_libs
+	-rm -rf common/.libs common/_libs
+	-rm -rf isl/.libs isl/_libs
+	-rm -rf isl/tests/.libs isl/tests/_libs
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
-tags: tags-recursive
+tags: tags-am
 TAGS: tags
 
 tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
 	set x; \
 	here=`pwd`; \
-	if ($(ETAGS) --etags-include --version) >/dev/null 2>&1; then \
-	  include_option=--etags-include; \
-	  empty_fix=.; \
-	else \
-	  include_option=--include; \
-	  empty_fix=; \
-	fi; \
-	list='$(SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    test ! -f $$subdir/TAGS || \
-	      set "$$@" "$$include_option=$$here/$$subdir/TAGS"; \
-	  fi; \
-	done; \
 	$(am__define_uniq_tagged_files); \
 	shift; \
 	if test -z "$(ETAGS_ARGS)$$*$$unique"; then :; else \
@@ -614,7 +1362,7 @@ tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
 	      $$unique; \
 	  fi; \
 	fi
-ctags: ctags-recursive
+ctags: ctags-am
 
 CTAGS: ctags
 ctags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
@@ -627,7 +1375,7 @@ GTAGS:
 	here=`$(am__cd) $(top_builddir) && pwd` \
 	  && $(am__cd) $(top_srcdir) \
 	  && gtags -i $(GTAGS_ARGS) "$$here"
-cscopelist: cscopelist-recursive
+cscopelist: cscopelist-am
 
 cscopelist-am: $(am__tagged_files)
 	list='$(am__tagged_files)'; \
@@ -645,6 +1393,169 @@ cscopelist-am: $(am__tagged_files)
 
 distclean-tags:
 	-rm -f TAGS ID GTAGS GRTAGS GSYMS GPATH tags
+
+# Recover from deleted '.trs' file; this should ensure that
+# "rm -f foo.log; make foo.trs" re-run 'foo.test', and re-create
+# both 'foo.log' and 'foo.trs'.  Break the recipe in two subshells
+# to avoid problems with "make -n".
+.log.trs:
+	rm -f $< $@
+	$(MAKE) $(AM_MAKEFLAGS) $<
+
+# Leading 'am--fnord' is there to ensure the list of targets does not
+# expand to empty, as could happen e.g. with make check TESTS=''.
+am--fnord $(TEST_LOGS) $(TEST_LOGS:.log=.trs): $(am__force_recheck)
+am--force-recheck:
+	@:
+
+$(TEST_SUITE_LOG): $(TEST_LOGS)
+	@$(am__set_TESTS_bases); \
+	am__f_ok () { test -f "$$1" && test -r "$$1"; }; \
+	redo_bases=`for i in $$bases; do \
+	              am__f_ok $$i.trs && am__f_ok $$i.log || echo $$i; \
+	            done`; \
+	if test -n "$$redo_bases"; then \
+	  redo_logs=`for i in $$redo_bases; do echo $$i.log; done`; \
+	  redo_results=`for i in $$redo_bases; do echo $$i.trs; done`; \
+	  if $(am__make_dryrun); then :; else \
+	    rm -f $$redo_logs && rm -f $$redo_results || exit 1; \
+	  fi; \
+	fi; \
+	if test -n "$$am__remaking_logs"; then \
+	  echo "fatal: making $(TEST_SUITE_LOG): possible infinite" \
+	       "recursion detected" >&2; \
+	elif test -n "$$redo_logs"; then \
+	  am__remaking_logs=yes $(MAKE) $(AM_MAKEFLAGS) $$redo_logs; \
+	fi; \
+	if $(am__make_dryrun); then :; else \
+	  st=0;  \
+	  errmsg="fatal: making $(TEST_SUITE_LOG): failed to create"; \
+	  for i in $$redo_bases; do \
+	    test -f $$i.trs && test -r $$i.trs \
+	      || { echo "$$errmsg $$i.trs" >&2; st=1; }; \
+	    test -f $$i.log && test -r $$i.log \
+	      || { echo "$$errmsg $$i.log" >&2; st=1; }; \
+	  done; \
+	  test $$st -eq 0 || exit 1; \
+	fi
+	@$(am__sh_e_setup); $(am__tty_colors); $(am__set_TESTS_bases); \
+	ws='[ 	]'; \
+	results=`for b in $$bases; do echo $$b.trs; done`; \
+	test -n "$$results" || results=/dev/null; \
+	all=`  grep "^$$ws*:test-result:"           $$results | wc -l`; \
+	pass=` grep "^$$ws*:test-result:$$ws*PASS"  $$results | wc -l`; \
+	fail=` grep "^$$ws*:test-result:$$ws*FAIL"  $$results | wc -l`; \
+	skip=` grep "^$$ws*:test-result:$$ws*SKIP"  $$results | wc -l`; \
+	xfail=`grep "^$$ws*:test-result:$$ws*XFAIL" $$results | wc -l`; \
+	xpass=`grep "^$$ws*:test-result:$$ws*XPASS" $$results | wc -l`; \
+	error=`grep "^$$ws*:test-result:$$ws*ERROR" $$results | wc -l`; \
+	if test `expr $$fail + $$xpass + $$error` -eq 0; then \
+	  success=true; \
+	else \
+	  success=false; \
+	fi; \
+	br='==================='; br=$$br$$br$$br$$br; \
+	result_count () \
+	{ \
+	    if test x"$$1" = x"--maybe-color"; then \
+	      maybe_colorize=yes; \
+	    elif test x"$$1" = x"--no-color"; then \
+	      maybe_colorize=no; \
+	    else \
+	      echo "$@: invalid 'result_count' usage" >&2; exit 4; \
+	    fi; \
+	    shift; \
+	    desc=$$1 count=$$2; \
+	    if test $$maybe_colorize = yes && test $$count -gt 0; then \
+	      color_start=$$3 color_end=$$std; \
+	    else \
+	      color_start= color_end=; \
+	    fi; \
+	    echo "$${color_start}# $$desc $$count$${color_end}"; \
+	}; \
+	create_testsuite_report () \
+	{ \
+	  result_count $$1 "TOTAL:" $$all   "$$brg"; \
+	  result_count $$1 "PASS: " $$pass  "$$grn"; \
+	  result_count $$1 "SKIP: " $$skip  "$$blu"; \
+	  result_count $$1 "XFAIL:" $$xfail "$$lgn"; \
+	  result_count $$1 "FAIL: " $$fail  "$$red"; \
+	  result_count $$1 "XPASS:" $$xpass "$$red"; \
+	  result_count $$1 "ERROR:" $$error "$$mgn"; \
+	}; \
+	{								\
+	  echo "$(PACKAGE_STRING): $(subdir)/$(TEST_SUITE_LOG)" |	\
+	    $(am__rst_title);						\
+	  create_testsuite_report --no-color;				\
+	  echo;								\
+	  echo ".. contents:: :depth: 2";				\
+	  echo;								\
+	  for b in $$bases; do echo $$b; done				\
+	    | $(am__create_global_log);					\
+	} >$(TEST_SUITE_LOG).tmp || exit 1;				\
+	mv $(TEST_SUITE_LOG).tmp $(TEST_SUITE_LOG);			\
+	if $$success; then						\
+	  col="$$grn";							\
+	 else								\
+	  col="$$red";							\
+	  test x"$$VERBOSE" = x || cat $(TEST_SUITE_LOG);		\
+	fi;								\
+	echo "$${col}$$br$${std}"; 					\
+	echo "$${col}Testsuite summary for $(PACKAGE_STRING)$${std}";	\
+	echo "$${col}$$br$${std}"; 					\
+	create_testsuite_report --maybe-color;				\
+	echo "$$col$$br$$std";						\
+	if $$success; then :; else					\
+	  echo "$${col}See $(subdir)/$(TEST_SUITE_LOG)$${std}";		\
+	  if test -n "$(PACKAGE_BUGREPORT)"; then			\
+	    echo "$${col}Please report to $(PACKAGE_BUGREPORT)$${std}";	\
+	  fi;								\
+	  echo "$$col$$br$$std";					\
+	fi;								\
+	$$success || exit 1
+
+check-TESTS:
+	@list='$(RECHECK_LOGS)';           test -z "$$list" || rm -f $$list
+	@list='$(RECHECK_LOGS:.log=.trs)'; test -z "$$list" || rm -f $$list
+	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
+	@set +e; $(am__set_TESTS_bases); \
+	log_list=`for i in $$bases; do echo $$i.log; done`; \
+	trs_list=`for i in $$bases; do echo $$i.trs; done`; \
+	log_list=`echo $$log_list`; trs_list=`echo $$trs_list`; \
+	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) TEST_LOGS="$$log_list"; \
+	exit $$?;
+recheck: all $(check_PROGRAMS)
+	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
+	@set +e; $(am__set_TESTS_bases); \
+	bases=`for i in $$bases; do echo $$i; done \
+	         | $(am__list_recheck_tests)` || exit 1; \
+	log_list=`for i in $$bases; do echo $$i.log; done`; \
+	log_list=`echo $$log_list`; \
+	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) \
+	        am__force_recheck=am--force-recheck \
+	        TEST_LOGS="$$log_list"; \
+	exit $$?
+isl/tests/isl_surf_get_image_offset_test.log: isl/tests/isl_surf_get_image_offset_test$(EXEEXT)
+	@p='isl/tests/isl_surf_get_image_offset_test$(EXEEXT)'; \
+	b='isl/tests/isl_surf_get_image_offset_test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+.test.log:
+	@p='$<'; \
+	$(am__set_b); \
+	$(am__check_pre) $(TEST_LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_TEST_LOG_DRIVER_FLAGS) $(TEST_LOG_DRIVER_FLAGS) -- $(TEST_LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+@am__EXEEXT_TRUE@.test$(EXEEXT).log:
+@am__EXEEXT_TRUE@	@p='$<'; \
+@am__EXEEXT_TRUE@	$(am__set_b); \
+@am__EXEEXT_TRUE@	$(am__check_pre) $(TEST_LOG_DRIVER) --test-name "$$f" \
+@am__EXEEXT_TRUE@	--log-file $$b.log --trs-file $$b.trs \
+@am__EXEEXT_TRUE@	$(am__common_driver_flags) $(AM_TEST_LOG_DRIVER_FLAGS) $(TEST_LOG_DRIVER_FLAGS) -- $(TEST_LOG_COMPILE) \
+@am__EXEEXT_TRUE@	"$$tst" $(AM_TESTS_FD_REDIRECT)
 
 distdir: $(DISTFILES)
 	@srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
@@ -676,45 +1587,23 @@ distdir: $(DISTFILES)
 	    || exit 1; \
 	  fi; \
 	done
-	@list='$(DIST_SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    $(am__make_dryrun) \
-	      || test -d "$(distdir)/$$subdir" \
-	      || $(MKDIR_P) "$(distdir)/$$subdir" \
-	      || exit 1; \
-	    dir1=$$subdir; dir2="$(distdir)/$$subdir"; \
-	    $(am__relativize); \
-	    new_distdir=$$reldir; \
-	    dir1=$$subdir; dir2="$(top_distdir)"; \
-	    $(am__relativize); \
-	    new_top_distdir=$$reldir; \
-	    echo " (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) top_distdir="$$new_top_distdir" distdir="$$new_distdir" \\"; \
-	    echo "     am__remove_distdir=: am__skip_length_check=: am__skip_mode_fix=: distdir)"; \
-	    ($(am__cd) $$subdir && \
-	      $(MAKE) $(AM_MAKEFLAGS) \
-	        top_distdir="$$new_top_distdir" \
-	        distdir="$$new_distdir" \
-		am__remove_distdir=: \
-		am__skip_length_check=: \
-		am__skip_mode_fix=: \
-	        distdir) \
-	      || exit 1; \
-	  fi; \
-	done
 check-am: all-am
-check: check-recursive
-all-am: Makefile
-installdirs: installdirs-recursive
-installdirs-am:
-install: install-recursive
-install-exec: install-exec-recursive
-install-data: install-data-recursive
-uninstall: uninstall-recursive
+	$(MAKE) $(AM_MAKEFLAGS) $(check_PROGRAMS)
+	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-am
+all-am: Makefile $(LTLIBRARIES)
+installdirs:
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-am
+install-exec: install-exec-am
+install-data: install-data-am
+uninstall: uninstall-am
 
 install-am: all-am
 	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
 
-installcheck: installcheck-recursive
+installcheck: installcheck-am
 install-strip:
 	if test -z '$(STRIP)'; then \
 	  $(MAKE) $(AM_MAKEFLAGS) INSTALL_PROGRAM="$(INSTALL_STRIP_PROGRAM)" \
@@ -726,99 +1615,144 @@ install-strip:
 	    "INSTALL_PROGRAM_ENV=STRIPPROG='$(STRIP)'" install; \
 	fi
 mostlyclean-generic:
+	-test -z "$(TEST_LOGS)" || rm -f $(TEST_LOGS)
+	-test -z "$(TEST_LOGS:.log=.trs)" || rm -f $(TEST_LOGS:.log=.trs)
+	-test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f blorp/$(DEPDIR)/$(am__dirstamp)
+	-rm -f blorp/$(am__dirstamp)
+	-rm -f common/$(DEPDIR)/$(am__dirstamp)
+	-rm -f common/$(am__dirstamp)
+	-rm -f isl/$(DEPDIR)/$(am__dirstamp)
+	-rm -f isl/$(am__dirstamp)
+	-rm -f isl/tests/$(DEPDIR)/$(am__dirstamp)
+	-rm -f isl/tests/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-clean: clean-recursive
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
+clean: clean-am
 
-clean-am: clean-generic clean-libtool mostlyclean-am
+clean-am: clean-checkPROGRAMS clean-generic clean-libtool \
+	clean-noinstLTLIBRARIES mostlyclean-am
 
-distclean: distclean-recursive
+distclean: distclean-am
+	-rm -rf blorp/$(DEPDIR) common/$(DEPDIR) isl/$(DEPDIR) isl/tests/$(DEPDIR)
 	-rm -f Makefile
-distclean-am: clean-am distclean-generic distclean-tags
+distclean-am: clean-am distclean-compile distclean-generic \
+	distclean-tags
 
-dvi: dvi-recursive
+dvi: dvi-am
 
 dvi-am:
 
-html: html-recursive
+html: html-am
 
 html-am:
 
-info: info-recursive
+info: info-am
 
 info-am:
 
 install-data-am:
 
-install-dvi: install-dvi-recursive
+install-dvi: install-dvi-am
 
 install-dvi-am:
 
 install-exec-am:
 
-install-html: install-html-recursive
+install-html: install-html-am
 
 install-html-am:
 
-install-info: install-info-recursive
+install-info: install-info-am
 
 install-info-am:
 
 install-man:
 
-install-pdf: install-pdf-recursive
+install-pdf: install-pdf-am
 
 install-pdf-am:
 
-install-ps: install-ps-recursive
+install-ps: install-ps-am
 
 install-ps-am:
 
 installcheck-am:
 
-maintainer-clean: maintainer-clean-recursive
+maintainer-clean: maintainer-clean-am
+	-rm -rf blorp/$(DEPDIR) common/$(DEPDIR) isl/$(DEPDIR) isl/tests/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
-mostlyclean: mostlyclean-recursive
+mostlyclean: mostlyclean-am
 
-mostlyclean-am: mostlyclean-generic mostlyclean-libtool
+mostlyclean-am: mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool
 
-pdf: pdf-recursive
+pdf: pdf-am
 
 pdf-am:
 
-ps: ps-recursive
+ps: ps-am
 
 ps-am:
 
 uninstall-am:
 
-.MAKE: $(am__recursive_targets) install-am install-strip
+.MAKE: all check check-am install install-am install-strip
 
-.PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am check \
-	check-am clean clean-generic clean-libtool cscopelist-am ctags \
-	ctags-am distclean distclean-generic distclean-libtool \
+.PHONY: CTAGS GTAGS TAGS all all-am check check-TESTS check-am clean \
+	clean-checkPROGRAMS clean-generic clean-libtool \
+	clean-noinstLTLIBRARIES cscopelist-am ctags ctags-am distclean \
+	distclean-compile distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
 	install-html-am install-info install-info-am install-man \
 	install-pdf install-pdf-am install-ps install-ps-am \
 	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
-	ps ps-am tags tags-am uninstall uninstall-am
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am recheck tags tags-am uninstall \
+	uninstall-am
 
 .PRECIOUS: Makefile
 
+
+$(GENXML_GENERATED_FILES): genxml/gen_pack_header.py
+
+.xml_pack.h:
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/genxml/gen_pack_header.py $< > $@
+
+# xxd generates variable names based on the path of the input file. We
+# prefer to generate our own name here, so it doesn't vary from
+# in/out-of-tree builds.
+
+$(GENXML_GENERATED_FILES): Makefile
+
+.xml_xml.h:
+	$(MKDIR_GEN)
+	$(AM_V_GEN) echo -n "static const uint8_t " > $@; \
+	echo "$(@F)_xml[] = {" | sed -e 's,_xml.h,,' >> $@; \
+	cat $< | $(XXD) -i >> $@; \
+	echo "};" >> $@
+
+isl/isl_format_layout.c: isl/gen_format_layout.py \
+                         isl/isl_format_layout.csv
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/isl/gen_format_layout.py \
+	    --csv $(srcdir)/isl/isl_format_layout.csv --out $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

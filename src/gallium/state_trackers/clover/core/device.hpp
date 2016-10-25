@@ -68,6 +68,7 @@ namespace clover {
 
       std::vector<size_t> max_block_size() const;
       cl_uint subgroup_size() const;
+      cl_uint address_bits() const;
       std::string device_name() const;
       std::string vendor_name() const;
       enum pipe_shader_ir ir_format() const;

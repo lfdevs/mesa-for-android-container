@@ -49,6 +49,12 @@ lp_build_uadd_overflow(struct gallivm_state *gallivm,
                        LLVMValueRef *ofbit);
 
 LLVMValueRef
+lp_build_usub_overflow(struct gallivm_state *gallivm,
+                       LLVMValueRef a,
+                       LLVMValueRef b,
+                       LLVMValueRef *ofbit);
+
+LLVMValueRef
 lp_build_umul_overflow(struct gallivm_state *gallivm,
                        LLVMValueRef a,
                        LLVMValueRef b,

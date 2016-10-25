@@ -38,6 +38,10 @@
 
 #include "glheader.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct gl_context;
 struct gl_extensions;
 
@@ -85,6 +89,7 @@ enum {
 #define EXT(name_str, ...) MESA_EXTENSION_##name_str,
 #include "extensions_table.h"
 #undef EXT
+MESA_EXTENSION_COUNT
 };
 
 
@@ -101,5 +106,9 @@ _mesa_has_##name_str(const struct gl_context *ctx) \
 
 extern struct gl_extensions _mesa_extension_override_enables;
 extern struct gl_extensions _mesa_extension_override_disables;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

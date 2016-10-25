@@ -133,6 +133,12 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
       if (!buf->derived_surface.transfer || !*pbuff)
          return VA_STATUS_ERROR_INVALID_BUFFER;
 
+      if (buf->type == VAEncCodedBufferType) {
+         ((VACodedBufferSegment*)buf->data)->buf = *pbuff;
+         ((VACodedBufferSegment*)buf->data)->size = buf->coded_size;
+         ((VACodedBufferSegment*)buf->data)->next = NULL;
+         *pbuff = buf->data;
+      }
    } else {
       pipe_mutex_unlock(drv->mutex);
       *pbuff = buf->data;
@@ -192,14 +198,8 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
       return VA_STATUS_ERROR_INVALID_BUFFER;
    }
 
-   if (buf->derived_surface.resource) {
-      if (buf->export_refcount > 0) {
-         pipe_mutex_unlock(drv->mutex);
-         return VA_STATUS_ERROR_INVALID_BUFFER;
-      }
-
+   if (buf->derived_surface.resource)
       pipe_resource_reference(&buf->derived_surface.resource, NULL);
-   }
 
    FREE(buf->data);
    FREE(buf);
@@ -302,7 +302,8 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
          memset(&whandle, 0, sizeof(whandle));
          whandle.type = DRM_API_HANDLE_TYPE_FD;
 
-         if (!screen->resource_get_handle(screen, buf->derived_surface.resource,
+         if (!screen->resource_get_handle(screen, drv->pipe,
+                                          buf->derived_surface.resource,
                                           &whandle, PIPE_HANDLE_USAGE_READ_WRITE))
             return VA_STATUS_ERROR_INVALID_BUFFER;
 

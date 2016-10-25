@@ -1,0 +1,52 @@
+<genxml name="BRW" gen="4">
+  <struct name="RENDER_SURFACE_STATE" length="6">
+    <field name="Surface Type" start="29" end="31" type="uint">
+      <value name="SURFTYPE_1D" value="0"/>
+      <value name="SURFTYPE_2D" value="1"/>
+      <value name="SURFTYPE_3D" value="2"/>
+      <value name="SURFTYPE_CUBE" value="3"/>
+      <value name="SURFTYPE_BUFFER" value="4"/>
+      <value name="SURFTYPE_NULL" value="7"/>
+    </field>
+    <field name="Data Return Format" start="27" end="27" type="uint">
+      <value name="DATA_RETURN_FLOAT32" value="0"/>
+      <value name="DATA_RETURN_S1.14" value="1"/>
+    </field>
+    <field name="Surface Format" start="18" end="26" type="uint"/>
+    <field name="Color Buffer Component Write Disables" start="14" end="17" type="uint">
+      <value name="WRITEDISABLE_ALPHA" value="8"/>
+      <value name="WRITEDISABLE_RED" value="4"/>
+      <value name="WRITEDISABLE_GREEN" value="2"/>
+      <value name="WRITEDISABLE_BLUE" value="1"/>
+    </field>
+    <field name="Color Blend Enable" start="13" end="13" type="bool"/>
+    <field name="Vertical Line Stride" start="12" end="12" type="uint"/>
+    <field name="Vertical Line Stride Offset" start="11" end="11" type="uint"/>
+    <field name="MIP Map Layout Mode" start="10" end="10" type="uint">
+      <value name="MIPLAYOUT_BELOW" value="0"/>
+      <value name="MIPLAYOUT_RIGHT" value="1"/>
+    </field>
+    <field name="Render Cache Read Write Mode" start="8" end="8" type="uint">
+      <value name="WRITE_ONLY" value="0"/>
+      <value name="READ_WRITE" value="1"/>
+    </field>
+    <field name="Media Boundary Pixel Mode" start="6" end="7" type="uint">
+      <value name="NORMAL_MODE" value="0"/>
+    </field>
+    <field name="Cube Face Enables" start="0" end="5" type="uint"/>
+    <field name="Surface Base Address" start="32" end="63" type="address"/>
+    <field name="Height" start="83" end="95" type="uint"/>
+    <field name="Width" start="70" end="82" type="uint"/>
+    <field name="MIP Count / LOD" start="66" end="69" type="uint"/>
+    <field name="Depth" start="117" end="127" type="uint"/>
+    <field name="Surface Pitch" start="99" end="115" type="uint"/>
+    <field name="Tiled Surface" start="97" end="97" type="uint"/>
+    <field name="Tile Walk" start="96" end="96" type="uint">
+      <value name="TILEWALK_XMAJOR" value="0"/>
+      <value name="TILEWALK_YMAJOR" value="1"/>
+    </field>
+    <field name="Surface Min LOD" start="156" end="159" type="uint"/>
+    <field name="Minimum Array Element" start="145" end="155" type="uint"/>
+    <field name="Render Target View Extent" start="136" end="144" type="uint"/>
+  </struct>
+</genxml>

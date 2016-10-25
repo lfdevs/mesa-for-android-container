@@ -280,6 +280,18 @@ vmw_svga_winsys_surface_can_create(struct svga_winsys_screen *sws,
 }
 
 
+static void
+vmw_svga_winsys_surface_invalidate(struct svga_winsys_screen *sws,
+                                   struct svga_winsys_surface *surf)
+{
+   /* this is a noop since surface invalidation is not needed for DMA path.
+    * DMA is enabled when guest-backed surface is not enabled or
+    * guest-backed dma is enabled.  Since guest-backed dma is enabled
+    * when guest-backed surface is enabled, that implies DMA is always enabled;
+    * hence, surface invalidation is not needed.
+    */
+}
+
 static boolean
 vmw_svga_winsys_surface_is_flushed(struct svga_winsys_screen *sws,
                                    struct svga_winsys_surface *surface)
@@ -395,6 +407,22 @@ vmw_svga_winsys_shader_destroy(struct svga_winsys_screen *sws,
    vmw_svga_winsys_shader_reference(&d_shader, NULL);
 }
 
+static void
+vmw_svga_winsys_stats_inc(enum svga_stats_count index)
+{
+}
+
+static void
+vmw_svga_winsys_stats_time_push(enum svga_stats_time index,
+                                struct svga_winsys_stats_timeframe *tf)
+{
+}
+
+static void
+vmw_svga_winsys_stats_time_pop()
+{
+}
+
 boolean
 vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws)
 {
@@ -406,6 +434,7 @@ vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws)
    vws->base.surface_is_flushed = vmw_svga_winsys_surface_is_flushed;
    vws->base.surface_reference = vmw_svga_winsys_surface_ref;
    vws->base.surface_can_create = vmw_svga_winsys_surface_can_create;
+   vws->base.surface_invalidate = vmw_svga_winsys_surface_invalidate;
    vws->base.buffer_create = vmw_svga_winsys_buffer_create;
    vws->base.buffer_map = vmw_svga_winsys_buffer_map;
    vws->base.buffer_unmap = vmw_svga_winsys_buffer_unmap;
@@ -420,6 +449,10 @@ vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws)
    vws->base.query_init = vmw_svga_winsys_query_init;
    vws->base.query_destroy = vmw_svga_winsys_query_destroy;
    vws->base.query_get_result = vmw_svga_winsys_query_get_result;
+
+   vws->base.stats_inc = vmw_svga_winsys_stats_inc;
+   vws->base.stats_time_push = vmw_svga_winsys_stats_time_push;
+   vws->base.stats_time_pop = vmw_svga_winsys_stats_time_pop;
 
    return TRUE;
 }

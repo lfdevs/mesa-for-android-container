@@ -88,6 +88,18 @@ independent_blend_enable
    the first member of the rt array contains valid data.
 rt
    Contains the per-rendertarget blend state.
+alpha_to_coverage
+   If enabled, the fragment's alpha value is used to override the fragment's
+   coverage mask.  The coverage mask will be all zeros if the alpha value is
+   zero.  The coverage mask will be all ones if the alpha value is one.
+   Otherwise, the number of bits set in the coverage mask will be proportional
+   to the alpha value.  Note that this step happens regardless of whether
+   multisample is enabled or the destination buffer is multisampled.
+alpha_to_one
+   If enabled, the fragment's alpha value will be set to one.  As with
+   alpha_to_coverage, this step happens regardless of whether multisample
+   is enabled or the destination buffer is multisampled.
+
 
 Per-rendertarget Members
 ------------------------

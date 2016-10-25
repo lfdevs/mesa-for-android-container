@@ -5,7 +5,6 @@ C_SOURCES := \
 	si_cp_dma.c \
 	si_debug.c \
 	si_descriptors.c \
-	sid.h \
 	si_dma.c \
 	si_hw_context.c \
 	si_pipe.c \
@@ -16,6 +15,9 @@ C_SOURCES := \
 	si_public.h \
 	si_shader.c \
 	si_shader.h \
+	si_shader_internal.h \
+	si_shader_tgsi_alu.c \
+	si_shader_tgsi_setup.c \
 	si_state.c \
 	si_state_draw.c \
 	si_state_shaders.c \

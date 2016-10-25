@@ -2036,7 +2036,7 @@ KEYWORD(130, 300, 130, 0, NOPERSPECTIVE);
 case 73:
 YY_RULE_SETUP
 #line 314 "../../../src/compiler/glsl/glsl_lexer.ll"
-KEYWORD_WITH_ALT(0, 300, 400, 0, yyextra->ARB_tessellation_shader_enable, PATCH);
+KEYWORD_WITH_ALT(0, 300, 400, 320, yyextra->has_tessellation_shader(), PATCH);
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
@@ -2190,22 +2190,22 @@ KEYWORD_WITH_ALT(150, 300, 150, 320, yyextra->ARB_texture_multisample_enable || 
 case 103:
 YY_RULE_SETUP
 #line 351 "../../../src/compiler/glsl/glsl_lexer.ll"
-KEYWORD_WITH_ALT(400, 310, 400, 0, yyextra->ARB_texture_cube_map_array_enable, SAMPLERCUBEARRAY);
+KEYWORD_WITH_ALT(400, 310, 400, 320, yyextra->ARB_texture_cube_map_array_enable || yyextra->OES_texture_cube_map_array_enable || yyextra->EXT_texture_cube_map_array_enable, SAMPLERCUBEARRAY);
 	YY_BREAK
 case 104:
 YY_RULE_SETUP
 #line 352 "../../../src/compiler/glsl/glsl_lexer.ll"
-KEYWORD_WITH_ALT(400, 310, 400, 0, yyextra->ARB_texture_cube_map_array_enable, ISAMPLERCUBEARRAY);
+KEYWORD_WITH_ALT(400, 310, 400, 320, yyextra->ARB_texture_cube_map_array_enable || yyextra->OES_texture_cube_map_array_enable || yyextra->EXT_texture_cube_map_array_enable, ISAMPLERCUBEARRAY);
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
 #line 353 "../../../src/compiler/glsl/glsl_lexer.ll"
-KEYWORD_WITH_ALT(400, 310, 400, 0, yyextra->ARB_texture_cube_map_array_enable, USAMPLERCUBEARRAY);
+KEYWORD_WITH_ALT(400, 310, 400, 320, yyextra->ARB_texture_cube_map_array_enable || yyextra->OES_texture_cube_map_array_enable || yyextra->EXT_texture_cube_map_array_enable, USAMPLERCUBEARRAY);
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
 #line 354 "../../../src/compiler/glsl/glsl_lexer.ll"
-KEYWORD_WITH_ALT(400, 310, 400, 0, yyextra->ARB_texture_cube_map_array_enable, SAMPLERCUBEARRAYSHADOW);
+KEYWORD_WITH_ALT(400, 310, 400, 320, yyextra->ARB_texture_cube_map_array_enable || yyextra->OES_texture_cube_map_array_enable || yyextra->EXT_texture_cube_map_array_enable, SAMPLERCUBEARRAYSHADOW);
 	YY_BREAK
 case 107:
 YY_RULE_SETUP
@@ -2267,7 +2267,7 @@ KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable
 case 117:
 YY_RULE_SETUP
 #line 375 "../../../src/compiler/glsl/glsl_lexer.ll"
-KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGECUBEARRAY);
+KEYWORD_WITH_ALT(130, 300, 420, 320, yyextra->ARB_shader_image_load_store_enable || yyextra->OES_texture_cube_map_array_enable || yyextra->EXT_texture_cube_map_array_enable, IMAGECUBEARRAY);
 	YY_BREAK
 case 118:
 YY_RULE_SETUP
@@ -2322,7 +2322,7 @@ KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable
 case 128:
 YY_RULE_SETUP
 #line 386 "../../../src/compiler/glsl/glsl_lexer.ll"
-KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGECUBEARRAY);
+KEYWORD_WITH_ALT(130, 300, 420, 320, yyextra->ARB_shader_image_load_store_enable || yyextra->OES_texture_cube_map_array_enable || yyextra->EXT_texture_cube_map_array_enable, IIMAGECUBEARRAY);
 	YY_BREAK
 case 129:
 YY_RULE_SETUP
@@ -2377,7 +2377,7 @@ KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable
 case 139:
 YY_RULE_SETUP
 #line 397 "../../../src/compiler/glsl/glsl_lexer.ll"
-KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGECUBEARRAY);
+KEYWORD_WITH_ALT(130, 300, 420, 320, yyextra->ARB_shader_image_load_store_enable || yyextra->OES_texture_cube_map_array_enable || yyextra->EXT_texture_cube_map_array_enable, UIMAGECUBEARRAY);
 	YY_BREAK
 case 140:
 YY_RULE_SETUP

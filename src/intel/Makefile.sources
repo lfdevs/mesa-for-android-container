@@ -1,0 +1,72 @@
+BLORP_FILES = \
+	blorp/blorp.c \
+	blorp/blorp.h \
+	blorp/blorp_blit.c \
+	blorp/blorp_clear.c \
+	blorp/blorp_genX_exec.h \
+	blorp/blorp_priv.h
+
+COMMON_FILES = \
+	common/gen_device_info.c \
+	common/gen_device_info.h \
+	common/gen_l3_config.c \
+	common/gen_l3_config.h \
+	common/gen_sample_positions.h
+
+GENXML_GENERATED_FILES = \
+	genxml/gen4_pack.h \
+	genxml/gen45_pack.h \
+	genxml/gen5_pack.h \
+	genxml/gen6_pack.h \
+	genxml/gen7_pack.h \
+	genxml/gen75_pack.h \
+	genxml/gen8_pack.h \
+	genxml/gen9_pack.h
+
+AUBINATOR_GENERATED_FILES = \
+	genxml/gen6_xml.h \
+	genxml/gen7_xml.h \
+	genxml/gen75_xml.h \
+	genxml/gen8_xml.h \
+	genxml/gen9_xml.h
+
+ISL_FILES = \
+	isl/isl.c \
+	isl/isl.h \
+	isl/isl_format.c \
+	isl/isl_priv.h \
+	isl/isl_storage_image.c
+
+ISL_GEN4_FILES = \
+	isl/isl_gen4.c \
+	isl/isl_gen4.h \
+	isl/isl_surface_state.c
+
+ISL_GEN5_FILES = \
+	isl/isl_surface_state.c
+
+ISL_GEN6_FILES = \
+	isl/isl_gen6.c \
+	isl/isl_gen6.h \
+	isl/isl_surface_state.c
+
+ISL_GEN7_FILES = \
+	isl/isl_gen7.c \
+	isl/isl_gen7.h \
+	isl/isl_surface_state.c
+
+ISL_GEN75_FILES = \
+	isl/isl_surface_state.c
+
+ISL_GEN8_FILES = \
+	isl/isl_gen8.c \
+	isl/isl_gen8.h \
+	isl/isl_surface_state.c
+
+ISL_GEN9_FILES = \
+	isl/isl_gen9.c \
+	isl/isl_gen9.h \
+	isl/isl_surface_state.c
+
+ISL_GENERATED_FILES = \
+	isl/isl_format_layout.c

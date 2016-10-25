@@ -75,14 +75,21 @@ static const struct qir_op_info qir_op_info[] = {
         [QOP_FRAG_Z] = { "frag_z", 1, 0 },
         [QOP_FRAG_W] = { "frag_w", 1, 0 },
 
-        [QOP_TEX_S] = { "tex_s", 0, 2 },
-        [QOP_TEX_T] = { "tex_t", 0, 2 },
-        [QOP_TEX_R] = { "tex_r", 0, 2 },
-        [QOP_TEX_B] = { "tex_b", 0, 2 },
-        [QOP_TEX_DIRECT] = { "tex_direct", 0, 2 },
+        [QOP_TEX_S] = { "tex_s", 0, 2, true },
+        [QOP_TEX_T] = { "tex_t", 0, 2, true },
+        [QOP_TEX_R] = { "tex_r", 0, 2, true },
+        [QOP_TEX_B] = { "tex_b", 0, 2, true },
+        [QOP_TEX_DIRECT] = { "tex_direct", 0, 2, true },
         [QOP_TEX_RESULT] = { "tex_result", 1, 0, true },
 
         [QOP_LOAD_IMM] = { "load_imm", 0, 1 },
+        [QOP_LOAD_IMM_U2] = { "load_imm_u2", 0, 1 },
+        [QOP_LOAD_IMM_I2] = { "load_imm_i2", 0, 1 },
+
+        [QOP_ROT_MUL] = { "rot_mul", 0, 2 },
+
+        [QOP_BRANCH] = { "branch", 0, 0, true },
+        [QOP_UNIFORMS_RESET] = { "uniforms_reset", 0, 2, true },
 };
 
 static const char *
@@ -159,6 +166,7 @@ qir_is_mul(struct qinst *inst)
         case QOP_V8MAX:
         case QOP_V8ADDS:
         case QOP_V8SUBS:
+        case QOP_ROT_MUL:
                 return true;
         default:
                 return false;
@@ -204,8 +212,12 @@ qir_is_tex(struct qinst *inst)
 bool
 qir_depends_on_flags(struct qinst *inst)
 {
-        return (inst->cond != QPU_COND_ALWAYS &&
-                inst->cond != QPU_COND_NEVER);
+        if (inst->op == QOP_BRANCH) {
+                return inst->cond != QPU_COND_BRANCH_ALWAYS;
+        } else {
+                return (inst->cond != QPU_COND_ALWAYS &&
+                        inst->cond != QPU_COND_NEVER);
+        }
 }
 
 bool
@@ -224,6 +236,53 @@ qir_writes_r4(struct qinst *inst)
         }
 }
 
+uint8_t
+qir_channels_written(struct qinst *inst)
+{
+        if (qir_is_mul(inst)) {
+                switch (inst->dst.pack) {
+                case QPU_PACK_MUL_NOP:
+                case QPU_PACK_MUL_8888:
+                        return 0xf;
+                case QPU_PACK_MUL_8A:
+                        return 0x1;
+                case QPU_PACK_MUL_8B:
+                        return 0x2;
+                case QPU_PACK_MUL_8C:
+                        return 0x4;
+                case QPU_PACK_MUL_8D:
+                        return 0x8;
+                }
+        } else {
+                switch (inst->dst.pack) {
+                case QPU_PACK_A_NOP:
+                case QPU_PACK_A_8888:
+                case QPU_PACK_A_8888_SAT:
+                case QPU_PACK_A_32_SAT:
+                        return 0xf;
+                case QPU_PACK_A_8A:
+                case QPU_PACK_A_8A_SAT:
+                        return 0x1;
+                case QPU_PACK_A_8B:
+                case QPU_PACK_A_8B_SAT:
+                        return 0x2;
+                case QPU_PACK_A_8C:
+                case QPU_PACK_A_8C_SAT:
+                        return 0x4;
+                case QPU_PACK_A_8D:
+                case QPU_PACK_A_8D_SAT:
+                        return 0x8;
+                case QPU_PACK_A_16A:
+                case QPU_PACK_A_16A_SAT:
+                        return 0x3;
+                case QPU_PACK_A_16B:
+                case QPU_PACK_A_16B_SAT:
+                        return 0xc;
+                }
+        }
+        unreachable("Bad pack field");
+}
+
 static void
 qir_print_reg(struct vc4_compile *c, struct qreg reg, bool write)
 {
@@ -238,6 +297,7 @@ qir_print_reg(struct vc4_compile *c, struct qreg reg, bool write)
                 [QFILE_FRAG_X] = "frag_x",
                 [QFILE_FRAG_Y] = "frag_y",
                 [QFILE_FRAG_REV_FLAG] = "frag_rev_flag",
+                [QFILE_QPU_ELEMENT] = "elem",
         };
 
         switch (reg.file) {
@@ -290,20 +350,26 @@ void
 qir_dump_inst(struct vc4_compile *c, struct qinst *inst)
 {
         fprintf(stderr, "%s", qir_get_op_name(inst->op));
-        vc4_qpu_disasm_cond(stderr, inst->cond);
+        if (inst->op == QOP_BRANCH)
+                vc4_qpu_disasm_cond_branch(stderr, inst->cond);
+        else
+                vc4_qpu_disasm_cond(stderr, inst->cond);
         if (inst->sf)
                 fprintf(stderr, ".sf");
         fprintf(stderr, " ");
 
-        qir_print_reg(c, inst->dst, true);
-        if (inst->dst.pack) {
+        if (inst->op != QOP_BRANCH) {
+                qir_print_reg(c, inst->dst, true);
                 if (inst->dst.pack) {
-                        if (qir_is_mul(inst))
-                                vc4_qpu_disasm_pack_mul(stderr, inst->dst.pack);
-                        else
-                                vc4_qpu_disasm_pack_a(stderr, inst->dst.pack);
+                        if (inst->dst.pack) {
+                                if (qir_is_mul(inst))
+                                        vc4_qpu_disasm_pack_mul(stderr, inst->dst.pack);
+                                else
+                                        vc4_qpu_disasm_pack_a(stderr, inst->dst.pack);
+                        }
                 }
         }
+
         for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
                 fprintf(stderr, ", ");
                 qir_print_reg(c, inst->src[i], false);
@@ -314,9 +380,65 @@ qir_dump_inst(struct vc4_compile *c, struct qinst *inst)
 void
 qir_dump(struct vc4_compile *c)
 {
-        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
-                qir_dump_inst(c, inst);
-                fprintf(stderr, "\n");
+        int ip = 0;
+
+        qir_for_each_block(block, c) {
+                fprintf(stderr, "BLOCK %d:\n", block->index);
+                qir_for_each_inst(inst, block) {
+                        if (c->temp_start) {
+                                bool first = true;
+
+                                for (int i = 0; i < c->num_temps; i++) {
+                                        if (c->temp_start[i] != ip)
+                                                continue;
+
+                                        if (first) {
+                                                first = false;
+                                        } else {
+                                                fprintf(stderr, ", ");
+                                        }
+                                        fprintf(stderr, "S%4d", i);
+                                }
+
+                                if (first)
+                                        fprintf(stderr, "      ");
+                                else
+                                        fprintf(stderr, " ");
+                        }
+
+                        if (c->temp_end) {
+                                bool first = true;
+
+                                for (int i = 0; i < c->num_temps; i++) {
+                                        if (c->temp_end[i] != ip)
+                                                continue;
+
+                                        if (first) {
+                                                first = false;
+                                        } else {
+                                                fprintf(stderr, ", ");
+                                        }
+                                        fprintf(stderr, "E%4d", i);
+                                }
+
+                                if (first)
+                                        fprintf(stderr, "      ");
+                                else
+                                        fprintf(stderr, " ");
+                        }
+
+                        qir_dump_inst(c, inst);
+                        fprintf(stderr, "\n");
+                        ip++;
+                }
+                if (block->successors[1]) {
+                        fprintf(stderr, "-> BLOCK %d, %d\n",
+                                block->successors[0]->index,
+                                block->successors[1]->index);
+                } else if (block->successors[0]) {
+                        fprintf(stderr, "-> BLOCK %d\n",
+                                block->successors[0]->index);
+                }
         }
 }
 
@@ -376,19 +498,91 @@ qir_inst4(enum qop op, struct qreg dst,
         return inst;
 }
 
-void
+static void
 qir_emit(struct vc4_compile *c, struct qinst *inst)
 {
+        list_addtail(&inst->link, &c->cur_block->instructions);
+}
+
+/* Updates inst to write to a new temporary, emits it, and notes the def. */
+struct qreg
+qir_emit_def(struct vc4_compile *c, struct qinst *inst)
+{
+        assert(inst->dst.file == QFILE_NULL);
+
+        inst->dst = qir_get_temp(c);
+
         if (inst->dst.file == QFILE_TEMP)
                 c->defs[inst->dst.index] = inst;
 
-        qir_emit_nodef(c, inst);
+        qir_emit(c, inst);
+
+        return inst->dst;
+}
+
+struct qinst *
+qir_emit_nondef(struct vc4_compile *c, struct qinst *inst)
+{
+        if (inst->dst.file == QFILE_TEMP)
+                c->defs[inst->dst.index] = NULL;
+
+        qir_emit(c, inst);
+
+        return inst;
 }
 
 bool
 qir_reg_equals(struct qreg a, struct qreg b)
 {
-        return a.file == b.file && a.index == b.index;
+        return a.file == b.file && a.index == b.index && a.pack == b.pack;
+}
+
+struct qblock *
+qir_new_block(struct vc4_compile *c)
+{
+        struct qblock *block = rzalloc(c, struct qblock);
+
+        list_inithead(&block->instructions);
+        list_inithead(&block->qpu_inst_list);
+
+        block->predecessors = _mesa_set_create(block,
+                                               _mesa_hash_pointer,
+                                               _mesa_key_pointer_equal);
+
+        block->index = c->next_block_index++;
+
+        return block;
+}
+
+void
+qir_set_emit_block(struct vc4_compile *c, struct qblock *block)
+{
+        c->cur_block = block;
+        list_addtail(&block->link, &c->blocks);
+}
+
+struct qblock *
+qir_entry_block(struct vc4_compile *c)
+{
+        return list_first_entry(&c->blocks, struct qblock, link);
+}
+
+struct qblock *
+qir_exit_block(struct vc4_compile *c)
+{
+        return list_last_entry(&c->blocks, struct qblock, link);
+}
+
+void
+qir_link_blocks(struct qblock *predecessor, struct qblock *successor)
+{
+        _mesa_set_add(successor->predecessors, predecessor);
+        if (predecessor->successors[0]) {
+                assert(!predecessor->successors[1]);
+                predecessor->successors[1] = successor;
+        } else {
+                predecessor->successors[0] = successor;
+        }
 }
 
 struct vc4_compile *
@@ -396,7 +590,8 @@ qir_compile_init(void)
 {
         struct vc4_compile *c = rzalloc(NULL, struct vc4_compile);
 
-        list_inithead(&c->instructions);
+        list_inithead(&c->blocks);
+        qir_set_emit_block(c, qir_new_block(c));
 
         c->output_position_index = -1;
         c->output_color_index = -1;
@@ -442,10 +637,13 @@ qir_follow_movs(struct vc4_compile *c, struct qreg reg)
 void
 qir_compile_destroy(struct vc4_compile *c)
 {
-        while (!list_empty(&c->instructions)) {
-                struct qinst *qinst =
-                        (struct qinst *)c->instructions.next;
-                qir_remove_instruction(c, qinst);
+        qir_for_each_block(block, c) {
+                while (!list_empty(&block->instructions)) {
+                        struct qinst *qinst =
+                                list_first_entry(&block->instructions,
+                                                 struct qinst, link);
+                        qir_remove_instruction(c, qinst);
+                }
         }
 
         ralloc_free(c);
@@ -499,8 +697,9 @@ void
 qir_SF(struct vc4_compile *c, struct qreg src)
 {
         struct qinst *last_inst = NULL;
-        if (!list_empty(&c->instructions))
-                last_inst = (struct qinst *)c->instructions.prev;
+
+        if (!list_empty(&c->cur_block->instructions))
+                last_inst = (struct qinst *)c->cur_block->instructions.prev;
 
         /* We don't have any way to guess which kind of MOV is implied. */
         assert(!src.pack);
@@ -509,7 +708,7 @@ qir_SF(struct vc4_compile *c, struct qreg src)
             !c->defs[src.index] ||
             last_inst != c->defs[src.index]) {
                 last_inst = qir_MOV_dest(c, qir_reg(QFILE_NULL, 0), src);
-                last_inst = (struct qinst *)c->instructions.prev;
+                last_inst = (struct qinst *)c->cur_block->instructions.prev;
         }
         last_inst->sf = true;
 }
@@ -540,6 +739,7 @@ qir_optimize(struct vc4_compile *c)
                 OPTPASS(qir_opt_algebraic);
                 OPTPASS(qir_opt_constant_folding);
                 OPTPASS(qir_opt_copy_propagation);
+                OPTPASS(qir_opt_peephole_sf);
                 OPTPASS(qir_opt_dead_code);
                 OPTPASS(qir_opt_small_immediates);
                 OPTPASS(qir_opt_vpm);

@@ -278,7 +278,7 @@ enum pipe_transfer_usage
     *
     * See also:
     * - Direct3D's D3DLOCK_DONOTWAIT flag.
-    * - Mesa3D's MESA_MAP_NOWAIT_BIT flag.
+    * - Mesa's MESA_MAP_NOWAIT_BIT flag.
     * - WDDM's D3DDDICB_LOCKFLAGS.DonotWait flag.
     */
    PIPE_TRANSFER_DONTBLOCK = (1 << 9),
@@ -348,13 +348,17 @@ enum pipe_transfer_usage
  */
 enum pipe_flush_flags
 {
-   PIPE_FLUSH_END_OF_FRAME = (1 << 0)
+   PIPE_FLUSH_END_OF_FRAME = (1 << 0),
+   PIPE_FLUSH_DEFERRED = (1 << 1),
 };
 
 /**
  * Flags for pipe_context::dump_debug_state.
  */
-#define PIPE_DEBUG_DEVICE_IS_HUNG      (1 << 0)
+#define PIPE_DUMP_DEVICE_STATUS_REGISTERS    (1 << 0)
+#define PIPE_DUMP_CURRENT_STATES             (1 << 1)
+#define PIPE_DUMP_CURRENT_SHADERS            (1 << 2)
+#define PIPE_DUMP_LAST_COMMAND_BUFFER        (1 << 3)
 
 /**
  * Create a compute-only context. Use in pipe_screen::context_create.
@@ -392,6 +396,7 @@ enum pipe_flush_flags
 #define PIPE_BARRIER_FRAMEBUFFER       (1 << 9)
 #define PIPE_BARRIER_STREAMOUT_BUFFER  (1 << 10)
 #define PIPE_BARRIER_GLOBAL_BUFFER     (1 << 11)
+#define PIPE_BARRIER_ALL               ((1 << 12) - 1)
 
 /**
  * Resource binding flags -- state tracker must specify in advance all
@@ -405,8 +410,7 @@ enum pipe_flush_flags
 #define PIPE_BIND_INDEX_BUFFER         (1 << 5) /* draw_elements */
 #define PIPE_BIND_CONSTANT_BUFFER      (1 << 6) /* set_constant_buffer */
 #define PIPE_BIND_DISPLAY_TARGET       (1 << 7) /* flush_front_buffer */
-#define PIPE_BIND_TRANSFER_WRITE       (1 << 8) /* transfer_map */
-#define PIPE_BIND_TRANSFER_READ        (1 << 9) /* transfer_map */
+/* gap */
 #define PIPE_BIND_STREAM_OUTPUT        (1 << 10) /* set_stream_output_buffers */
 #define PIPE_BIND_CURSOR               (1 << 11) /* mouse cursor */
 #define PIPE_BIND_CUSTOM               (1 << 12) /* state-tracker/winsys usages */
@@ -446,6 +450,7 @@ enum pipe_flush_flags
  */
 #define PIPE_RESOURCE_FLAG_MAP_PERSISTENT (1 << 0)
 #define PIPE_RESOURCE_FLAG_MAP_COHERENT   (1 << 1)
+#define PIPE_RESOURCE_FLAG_TEXTURING_MORE_LIKELY (1 << 2)
 #define PIPE_RESOURCE_FLAG_DRV_PRIV    (1 << 16) /* driver/winsys private */
 #define PIPE_RESOURCE_FLAG_ST_PRIV     (1 << 24) /* state-tracker/winsys private */
 
@@ -728,6 +733,12 @@ enum pipe_cap
    PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR,
    PIPE_CAP_CULL_DISTANCE,
    PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES,
+   PIPE_CAP_TGSI_VOTE,
+   PIPE_CAP_MAX_WINDOW_RECTANGLES,
+   PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED,
+   PIPE_CAP_VIEWPORT_SUBPIXEL_BITS,
+   PIPE_CAP_MIXED_COLOR_DEPTH_BITS,
+   PIPE_CAP_TGSI_ARRAY_COMPONENTS,
 };
 
 #define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 (1 << 0)
@@ -824,6 +835,7 @@ enum pipe_shader_ir
  */
 enum pipe_compute_cap
 {
+   PIPE_COMPUTE_CAP_ADDRESS_BITS,
    PIPE_COMPUTE_CAP_IR_TARGET,
    PIPE_COMPUTE_CAP_GRID_DIMENSION,
    PIPE_COMPUTE_CAP_MAX_GRID_SIZE,
@@ -837,7 +849,8 @@ enum pipe_compute_cap
    PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY,
    PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS,
    PIPE_COMPUTE_CAP_IMAGES_SUPPORTED,
-   PIPE_COMPUTE_CAP_SUBGROUP_SIZE
+   PIPE_COMPUTE_CAP_SUBGROUP_SIZE,
+   PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK,
 };
 
 /**
@@ -955,6 +968,11 @@ enum pipe_driver_query_type
    PIPE_DRIVER_QUERY_TYPE_BYTES,
    PIPE_DRIVER_QUERY_TYPE_MICROSECONDS,
    PIPE_DRIVER_QUERY_TYPE_HZ,
+   PIPE_DRIVER_QUERY_TYPE_DBM,
+   PIPE_DRIVER_QUERY_TYPE_TEMPERATURE,
+   PIPE_DRIVER_QUERY_TYPE_VOLTS,
+   PIPE_DRIVER_QUERY_TYPE_AMPS,
+   PIPE_DRIVER_QUERY_TYPE_WATTS,
 };
 
 /* Whether an average value per frame or a cumulative value should be

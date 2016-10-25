@@ -25,9 +25,6 @@ void
 nine_d3d_matrix_inverse(D3DMATRIX *, const D3DMATRIX *);
 
 void
-nine_d3d_matrix_inverse_3x3(D3DMATRIX *, const D3DMATRIX *);
-
-void
 nine_d3d_matrix_transpose(D3DMATRIX *, const D3DMATRIX *);
 
 #define NINED3DTSS_TCI_DISABLE                       0

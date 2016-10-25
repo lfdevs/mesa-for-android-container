@@ -49,7 +49,8 @@ nvc0_init_resource_functions(struct pipe_context *pcontext)
    pcontext->transfer_map = u_transfer_map_vtbl;
    pcontext->transfer_flush_region = u_transfer_flush_region_vtbl;
    pcontext->transfer_unmap = u_transfer_unmap_vtbl;
-   pcontext->transfer_inline_write = u_transfer_inline_write_vtbl;
+   pcontext->buffer_subdata = u_default_buffer_subdata;
+   pcontext->texture_subdata = u_default_texture_subdata;
    pcontext->create_surface = nvc0_surface_create;
    pcontext->surface_destroy = nv50_surface_destroy;
    pcontext->invalidate_resource = nv50_invalidate_resource;

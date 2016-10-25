@@ -196,7 +196,7 @@ nv30_fragtex_set_sampler_views(struct pipe_context *pipe, unsigned nr,
 
 
 static void
-nv30_set_sampler_views(struct pipe_context *pipe, unsigned shader,
+nv30_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
                        unsigned start, unsigned nr,
                        struct pipe_sampler_view **views)
 {

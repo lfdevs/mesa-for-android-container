@@ -156,12 +156,14 @@ struct intel_screen
 #define intel_get_rb_region                 old_intel_get_rb_region
 #define intel_renderbuffer_set_draw_offset  old_intel_renderbuffer_set_draw_offset
 #define intel_miptree_create_for_image_buffer old_intel_miptree_create_for_image_buffer
+#define intelFenceExtension                 old_intelFenceExtension
 
 extern void intelDestroyContext(__DRIcontext * driContextPriv);
 
 extern GLboolean intelUnbindContext(__DRIcontext * driContextPriv);
 
 const __DRIextension **__driDriverGetExtensions_i915(void);
+extern const __DRI2fenceExtension intelFenceExtension;
 
 extern GLboolean
 intelMakeCurrent(__DRIcontext * driContextPriv,

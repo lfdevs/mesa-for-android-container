@@ -36,7 +36,7 @@ private:
    void handleRCPRSQ(Instruction *); // double precision float recip/rsqrt
    void handleFTZ(Instruction *);
 
-private:
+protected:
    BuildUtil bld;
 };
 
@@ -106,6 +106,7 @@ protected:
    bool handleSUQ(TexInstruction *);
    bool handleATOM(Instruction *);
    bool handleCasExch(Instruction *, bool needCctl);
+   void handleSurfaceOpGM107(TexInstruction *);
    void handleSurfaceOpNVE4(TexInstruction *);
    void handleSurfaceOpNVC0(TexInstruction *);
    void handleSharedATOM(Instruction *);
@@ -126,19 +127,16 @@ private:
    Value *loadResInfo32(Value *ptr, uint32_t off, uint16_t base);
    Value *loadResInfo64(Value *ptr, uint32_t off, uint16_t base);
    Value *loadResLength32(Value *ptr, uint32_t off, uint16_t base);
-   Value *loadSuInfo32(Value *ptr, uint32_t off);
-   Value *loadSuInfo64(Value *ptr, uint32_t off);
-   Value *loadSuLength32(Value *ptr, uint32_t off);
-   Value *loadBufInfo32(Value *ptr, uint32_t off);
+   Value *loadSuInfo32(Value *ptr, int slot, uint32_t off);
    Value *loadBufInfo64(Value *ptr, uint32_t off);
    Value *loadBufLength32(Value *ptr, uint32_t off);
-   Value *loadUboInfo32(Value *ptr, uint32_t off);
    Value *loadUboInfo64(Value *ptr, uint32_t off);
    Value *loadUboLength32(Value *ptr, uint32_t off);
    Value *loadMsInfo32(Value *ptr, uint32_t off);
    Value *loadTexHandle(Value *ptr, unsigned int slot);
 
    void adjustCoordinatesMS(TexInstruction *);
+   void processSurfaceCoordsGM107(TexInstruction *);
    void processSurfaceCoordsNVE4(TexInstruction *);
    void processSurfaceCoordsNVC0(TexInstruction *);
    void convertSurfaceFormat(TexInstruction *);

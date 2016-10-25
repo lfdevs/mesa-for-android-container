@@ -31,7 +31,14 @@
 
 struct radeon_bo_item {
     struct radeon_bo    *bo;
-    uint64_t            priority_usage;
+    union {
+        struct {
+            uint64_t    priority_usage;
+        } real;
+        struct {
+            unsigned    real_idx;
+        } slab;
+    } u;
 };
 
 struct radeon_cs_context {
@@ -44,17 +51,17 @@ struct radeon_cs_context {
     uint32_t                    flags[2];
 
     /* Buffers. */
-    unsigned                    nrelocs;
-    unsigned                    crelocs;
-    unsigned                    validated_crelocs;
+    unsigned                    max_relocs;
+    unsigned                    num_relocs;
+    unsigned                    num_validated_relocs;
     struct radeon_bo_item       *relocs_bo;
     struct drm_radeon_cs_reloc  *relocs;
-    uint64_t                    *priority_usage;
+
+    unsigned                    num_slab_buffers;
+    unsigned                    max_slab_buffers;
+    struct radeon_bo_item       *slab_buffers;
 
     int                         reloc_indices_hashlist[4096];
-
-    uint64_t                    used_vram;
-    uint64_t                    used_gart;
 };
 
 struct radeon_drm_cs {
@@ -78,7 +85,8 @@ struct radeon_drm_cs {
     void (*flush_cs)(void *ctx, unsigned flags, struct pipe_fence_handle **fence);
     void *flush_data;
 
-    pipe_semaphore flush_completed;
+    struct util_queue_fence flush_completed;
+    struct pipe_fence_handle *next_fence;
 };
 
 int radeon_lookup_buffer(struct radeon_cs_context *csc, struct radeon_bo *bo);
@@ -89,7 +97,7 @@ radeon_drm_cs(struct radeon_winsys_cs *base)
     return (struct radeon_drm_cs*)base;
 }
 
-static inline boolean
+static inline bool
 radeon_bo_is_referenced_by_cs(struct radeon_drm_cs *cs,
                               struct radeon_bo *bo)
 {
@@ -98,23 +106,26 @@ radeon_bo_is_referenced_by_cs(struct radeon_drm_cs *cs,
            (num_refs && radeon_lookup_buffer(cs->csc, bo) != -1);
 }
 
-static inline boolean
+static inline bool
 radeon_bo_is_referenced_by_cs_for_write(struct radeon_drm_cs *cs,
                                         struct radeon_bo *bo)
 {
     int index;
 
     if (!bo->num_cs_references)
-        return FALSE;
+        return false;
 
     index = radeon_lookup_buffer(cs->csc, bo);
     if (index == -1)
-        return FALSE;
+        return false;
+
+    if (!bo->handle)
+        index = cs->csc->slab_buffers[index].u.slab.real_idx;
 
     return cs->csc->relocs[index].write_domain != 0;
 }
 
-static inline boolean
+static inline bool
 radeon_bo_is_referenced_by_any_cs(struct radeon_bo *bo)
 {
     return bo->num_cs_references != 0;
@@ -122,6 +133,6 @@ radeon_bo_is_referenced_by_any_cs(struct radeon_bo *bo)
 
 void radeon_drm_cs_sync_flush(struct radeon_winsys_cs *rcs);
 void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws);
-void radeon_drm_cs_emit_ioctl_oneshot(struct radeon_drm_cs *cs, struct radeon_cs_context *csc);
+void radeon_drm_cs_emit_ioctl_oneshot(void *job, int thread_index);
 
 #endif

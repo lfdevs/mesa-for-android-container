@@ -29,15 +29,17 @@
 
 #include <string.h>
 #include <type_traits>
+#include <algorithm>
 #include "common/os.h"
 #include "common/simdintrin.h"
 #include "common/swr_assert.h"
+#include "core/api.h"
 
 #if defined(_WIN64) || defined(__x86_64__)
 #define _MM_INSERT_EPI64 _mm_insert_epi64
 #define _MM_EXTRACT_EPI64 _mm_extract_epi64
 #else
-INLINE INT64 _MM_EXTRACT_EPI64(__m128i a, const int32_t ndx)
+INLINE int64_t _MM_EXTRACT_EPI64(__m128i a, const int32_t ndx)
 {
     OSALIGNLINE(uint32_t) elems[4];
     _mm_store_si128((__m128i*)elems, a);
@@ -55,7 +57,7 @@ INLINE INT64 _MM_EXTRACT_EPI64(__m128i a, const int32_t ndx)
     }
 }
 
-INLINE __m128i  _MM_INSERT_EPI64(__m128i a, INT64 b, const int32_t ndx)
+INLINE __m128i  _MM_INSERT_EPI64(__m128i a, int64_t b, const int32_t ndx)
 {
     OSALIGNLINE(int64_t) elems[2];
     _mm_store_si128((__m128i*)elems, a);
@@ -73,36 +75,12 @@ INLINE __m128i  _MM_INSERT_EPI64(__m128i a, INT64 b, const int32_t ndx)
 }
 #endif
 
-OSALIGNLINE(struct) BBOX
-{
-    int top{ 0 };
-    int bottom{ 0 };
-    int left{ 0 };
-    int right{ 0 };
-
-    BBOX() {}
-    BBOX(int t, int b, int l, int r) : top(t), bottom(b), left(l), right(r) {}
-
-    bool operator==(const BBOX& rhs)
-    {
-        return (this->top == rhs.top &&
-            this->bottom == rhs.bottom &&
-            this->left == rhs.left &&
-            this->right == rhs.right);
-    }
-
-    bool operator!=(const BBOX& rhs)
-    {
-        return !(*this == rhs);
-    }
-};
-
 struct simdBBox
 {
-    simdscalari top;
-    simdscalari bottom;
-    simdscalari left;
-    simdscalari right;
+    simdscalari ymin;
+    simdscalari ymax;
+    simdscalari xmin;
+    simdscalari xmax;
 };
 
 INLINE
@@ -167,7 +145,7 @@ void vTranspose(__m128i &row0, __m128i &row1, __m128i &row2, __m128i &row3)
 #endif
 #endif
 
-#if KNOB_SIMD_WIDTH == 8
+#if KNOB_SIMD_WIDTH == 8 || KNOB_SIMD_WIDTH == 16
 INLINE
 void vTranspose3x8(__m128 (&vDst)[8], __m256 &vSrc0, __m256 &vSrc1, __m256 &vSrc2)
 {
@@ -267,6 +245,13 @@ struct TransposeSingleComponent
     {
         memcpy(pDst, pSrc, (bpp * KNOB_SIMD_WIDTH) / 8);
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        memcpy(pDst, pSrc, (bpp * KNOB_SIMD16_WIDTH) / 8);
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -281,6 +266,7 @@ struct Transpose8_8_8_8
     INLINE static void Transpose(const uint8_t* pSrc, uint8_t* pDst)
     {
         simdscalari src = _simd_load_si((const simdscalari*)pSrc);
+
 #if KNOB_SIMD_WIDTH == 8
 #if KNOB_ARCH == KNOB_ARCH_AVX
         __m128i c0c1 = _mm256_castsi256_si128(src);                                           // rrrrrrrrgggggggg
@@ -302,10 +288,45 @@ struct Transpose8_8_8_8
         simdscalari dst = _mm256_or_si256(dst01, dst23);
         _simd_store_si((simdscalari*)pDst, dst);
 #endif
+#elif KNOB_SIMD_WIDTH == 16
+        simdscalari mask0 = _simd_set_epi32(0x0f078080, 0x0e068080, 0x0d058080, 0x0c048080, 0x80800b03, 0x80800a02, 0x80800901, 0x80800800);
+
+        simdscalari dst01 = _simd_shuffle_epi8(src, mask0);
+
+        simdscalari perm1 = _simd_permute_128(src, src, 1);
+
+        simdscalari mask1 = _simd_set_epi32(0x80800f07, 0x80800e06, 0x80800d05, 0x80800c04, 0x0b038080, 0x0a028080, 0x09018080, 0x08008080);
+
+        simdscalari dst23 = _simd_shuffle_epi8(perm1, mask1);
+
+        simdscalari dst = _simd_or_si(dst01, dst23);
+
+        _simd_store_si(reinterpret_cast<simdscalari *>(pDst), dst);
 #else
 #error Unsupported vector width
 #endif
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        simd16scalari src = _simd16_load_si(reinterpret_cast<const simd16scalari *>(pSrc));
+
+        simd16scalari mask0 = _simd16_set_epi32(0x0f078080, 0x0e068080, 0x0d058080, 0x0c048080, 0x80800b03, 0x80800a02, 0x80800901, 0x80800800);
+
+        simd16scalari dst01 = _simd16_shuffle_epi8(src, mask0);
+
+        simd16scalari perm1 = _simd16_permute2f128_si(src, src, 1);
+
+        simd16scalari mask1 = _simd16_set_epi32(0x80800f07, 0x80800e06, 0x80800d05, 0x80800c04, 0x0b038080, 0x0a028080, 0x09018080, 0x08008080);
+
+        simd16scalari dst23 = _simd16_shuffle_epi8(perm1, mask1);
+
+        simd16scalari dst = _simd16_or_si(dst01, dst23);
+
+        _simd16_store_si(reinterpret_cast<simd16scalari *>(pDst), dst);
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -318,6 +339,10 @@ struct Transpose8_8_8
     /// @param pSrc - source data in SOA form
     /// @param pDst - output data in AOS form
     INLINE static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -331,17 +356,42 @@ struct Transpose8_8
     /// @param pDst - output data in AOS form
     INLINE static void Transpose(const uint8_t* pSrc, uint8_t* pDst)
     {
+#if KNOB_SIMD_WIDTH == 8
         simdscalari src = _simd_load_si((const simdscalari*)pSrc);
 
-#if KNOB_SIMD_WIDTH == 8
         __m128i rg = _mm256_castsi256_si128(src);           // rrrrrrrr gggggggg
         __m128i g = _mm_unpackhi_epi64(rg, rg);             // gggggggg gggggggg
         rg = _mm_unpacklo_epi8(rg, g);
         _mm_store_si128((__m128i*)pDst, rg);
+#elif KNOB_SIMD_WIDTH == 16
+        __m256i src = _mm256_load_si256(reinterpret_cast<const __m256i *>(pSrc));   // rrrrrrrrrrrrrrrrgggggggggggggggg
+
+        __m256i r = _mm256_permute4x64_epi64(src, 0x50);    // 0x50 = 01010000b     // rrrrrrrrxxxxxxxxrrrrrrrrxxxxxxxx
+
+        __m256i g = _mm256_permute4x64_epi64(src, 0xFA);    // 0xFA = 11111010b     // ggggggggxxxxxxxxggggggggxxxxxxxx
+
+        __m256i dst = _mm256_unpacklo_epi8(r, g);                                   // rgrgrgrgrgrgrgrgrgrgrgrgrgrgrgrg
+
+        _mm256_store_si256(reinterpret_cast<__m256i *>(pDst), dst);
 #else
 #error Unsupported vector width
 #endif
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        __m256i src = _mm256_load_si256(reinterpret_cast<const __m256i *>(pSrc));   // rrrrrrrrrrrrrrrrgggggggggggggggg
+
+        __m256i r = _mm256_permute4x64_epi64(src, 0x50);    // 0x50 = 01010000b     // rrrrrrrrxxxxxxxxrrrrrrrrxxxxxxxx
+
+        __m256i g = _mm256_permute4x64_epi64(src, 0xFA);    // 0xFA = 11111010b     // ggggggggxxxxxxxxggggggggxxxxxxxx
+
+        __m256i dst = _mm256_unpacklo_epi8(r, g);                                   // rgrgrgrgrgrgrgrgrgrgrgrgrgrgrgrg
+
+        _mm256_store_si256(reinterpret_cast<__m256i *>(pDst), dst);
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -371,10 +421,85 @@ struct Transpose32_32_32_32
         _mm_store_ps((float*)pDst+20, vDst[5]);
         _mm_store_ps((float*)pDst+24, vDst[6]);
         _mm_store_ps((float*)pDst+28, vDst[7]);
+#elif KNOB_SIMD_WIDTH == 16
+#if ENABLE_AVX512_EMULATION
+        simdscalar src0 = _simd_load_ps(reinterpret_cast<const float*>(pSrc));
+        simdscalar src1 = _simd_load_ps(reinterpret_cast<const float*>(pSrc) + 16);
+        simdscalar src2 = _simd_load_ps(reinterpret_cast<const float*>(pSrc) + 32);
+        simdscalar src3 = _simd_load_ps(reinterpret_cast<const float*>(pSrc) + 48);
+
+        __m128 vDst[8];
+
+        vTranspose4x8(vDst, src0.lo, src1.lo, src2.lo, src3.lo);
+
+        _mm_store_ps(reinterpret_cast<float*>(pDst), vDst[0]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 4, vDst[1]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 8, vDst[2]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 12, vDst[3]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 16, vDst[4]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 20, vDst[5]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 24, vDst[6]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 28, vDst[7]);
+
+        vTranspose4x8(vDst, src0.hi, src1.hi, src2.hi, src3.hi);
+
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 32, vDst[0]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 36, vDst[1]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 40, vDst[2]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 44, vDst[3]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 48, vDst[4]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 52, vDst[5]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 56, vDst[6]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 60, vDst[7]);
+#endif
 #else
 #error Unsupported vector width
 #endif
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        simd16scalar src0 = _simd16_load_ps(reinterpret_cast<const float *>(pSrc));
+        simd16scalar src1 = _simd16_load_ps(reinterpret_cast<const float *>(pSrc) + 16);
+        simd16scalar src2 = _simd16_load_ps(reinterpret_cast<const float *>(pSrc) + 32);
+        simd16scalar src3 = _simd16_load_ps(reinterpret_cast<const float *>(pSrc) + 48);
+
+        __m128 vDst[8];
+
+        vTranspose4x8(vDst, _simd16_extract_ps(src0, 0), _simd16_extract_ps(src1, 0), _simd16_extract_ps(src2, 0), _simd16_extract_ps(src3, 0));
+
+#if 1
+        _simd16_store_ps(reinterpret_cast<float *>(pDst) +  0, reinterpret_cast<simd16scalar *>(vDst)[0]);
+        _simd16_store_ps(reinterpret_cast<float *>(pDst) + 16, reinterpret_cast<simd16scalar *>(vDst)[1]);
+#else
+        _mm_store_ps(reinterpret_cast<float *>(pDst), vDst[0]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 4, vDst[1]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 8, vDst[2]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 12, vDst[3]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 16, vDst[4]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 20, vDst[5]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 24, vDst[6]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 28, vDst[7]);
+#endif
+
+        vTranspose4x8(vDst, _simd16_extract_ps(src0, 1), _simd16_extract_ps(src1, 1), _simd16_extract_ps(src2, 1), _simd16_extract_ps(src3, 1));
+
+#if 1
+        _simd16_store_ps(reinterpret_cast<float *>(pDst) + 32, reinterpret_cast<simd16scalar *>(vDst)[2]);
+        _simd16_store_ps(reinterpret_cast<float *>(pDst) + 48, reinterpret_cast<simd16scalar *>(vDst)[3]);
+#else
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 32, vDst[0]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 36, vDst[1]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 40, vDst[2]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 44, vDst[3]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 48, vDst[4]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 52, vDst[5]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 56, vDst[6]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 60, vDst[7]);
+#endif
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -403,10 +528,83 @@ struct Transpose32_32_32
         _mm_store_ps((float*)pDst + 20, vDst[5]);
         _mm_store_ps((float*)pDst + 24, vDst[6]);
         _mm_store_ps((float*)pDst + 28, vDst[7]);
+#elif KNOB_SIMD_WIDTH == 16
+#if ENABLE_AVX512_EMULATION
+        simdscalar src0 = _simd_load_ps(reinterpret_cast<const float*>(pSrc));
+        simdscalar src1 = _simd_load_ps(reinterpret_cast<const float*>(pSrc) + 16);
+        simdscalar src2 = _simd_load_ps(reinterpret_cast<const float*>(pSrc) + 32);
+
+        __m128 vDst[8];
+
+        vTranspose3x8(vDst, src0.lo, src1.lo, src2.lo);
+
+        _mm_store_ps(reinterpret_cast<float*>(pDst), vDst[0]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 4, vDst[1]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 8, vDst[2]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 12, vDst[3]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 16, vDst[4]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 20, vDst[5]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 24, vDst[6]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 28, vDst[7]);
+
+        vTranspose3x8(vDst, src0.hi, src1.hi, src2.hi);
+
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 32, vDst[0]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 36, vDst[1]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 40, vDst[2]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 44, vDst[3]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 48, vDst[4]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 52, vDst[5]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 56, vDst[6]);
+        _mm_store_ps(reinterpret_cast<float*>(pDst) + 60, vDst[7]);
+#endif
 #else
 #error Unsupported vector width
 #endif
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        simd16scalar src0 = _simd16_load_ps(reinterpret_cast<const float *>(pSrc));
+        simd16scalar src1 = _simd16_load_ps(reinterpret_cast<const float *>(pSrc) + 16);
+        simd16scalar src2 = _simd16_load_ps(reinterpret_cast<const float *>(pSrc) + 32);
+
+        __m128 vDst[8];
+
+        vTranspose3x8(vDst, _simd16_extract_ps(src0, 0), _simd16_extract_ps(src1, 0), _simd16_extract_ps(src2, 0));
+
+#if 1
+        _simd16_store_ps(reinterpret_cast<float *>(pDst) +  0, reinterpret_cast<simd16scalar *>(vDst)[0]);
+        _simd16_store_ps(reinterpret_cast<float *>(pDst) + 16, reinterpret_cast<simd16scalar *>(vDst)[1]);
+#else
+        _mm_store_ps(reinterpret_cast<float *>(pDst), vDst[0]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 4, vDst[1]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 8, vDst[2]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 12, vDst[3]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 16, vDst[4]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 20, vDst[5]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 24, vDst[6]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 28, vDst[7]);
+#endif
+
+        vTranspose3x8(vDst, _simd16_extract_ps(src0, 1), _simd16_extract_ps(src1, 1), _simd16_extract_ps(src2, 1));
+
+#if 1
+        _simd16_store_ps(reinterpret_cast<float *>(pDst) + 32, reinterpret_cast<simd16scalar *>(vDst)[2]);
+        _simd16_store_ps(reinterpret_cast<float *>(pDst) + 48, reinterpret_cast<simd16scalar *>(vDst)[3]);
+#else
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 32, vDst[0]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 36, vDst[1]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 40, vDst[2]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 44, vDst[3]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 48, vDst[4]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 52, vDst[5]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 56, vDst[6]);
+        _mm_store_ps(reinterpret_cast<float *>(pDst) + 60, vDst[7]);
+#endif
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -420,6 +618,7 @@ struct Transpose32_32
     /// @param pDst - output data in AOS form
     INLINE static void Transpose(const uint8_t* pSrc, uint8_t* pDst)
     {
+#if KNOB_SIMD_WIDTH == 8
         const float* pfSrc = (const float*)pSrc;
         __m128 src_r0 = _mm_load_ps(pfSrc + 0);
         __m128 src_r1 = _mm_load_ps(pfSrc + 4);
@@ -436,7 +635,51 @@ struct Transpose32_32
         _mm_store_ps(pfDst + 4, dst1);
         _mm_store_ps(pfDst + 8, dst2);
         _mm_store_ps(pfDst + 12, dst3);
+#elif KNOB_SIMD_WIDTH == 16
+        const float* pfSrc = (const float*)pSrc;
+        __m256 src_r0 = _mm256_load_ps(pfSrc + 0);
+        __m256 src_r1 = _mm256_load_ps(pfSrc + 8);
+        __m256 src_g0 = _mm256_load_ps(pfSrc + 16);
+        __m256 src_g1 = _mm256_load_ps(pfSrc + 24);
+
+        __m256 dst0 = _mm256_unpacklo_ps(src_r0, src_g0);
+        __m256 dst1 = _mm256_unpackhi_ps(src_r0, src_g0);
+        __m256 dst2 = _mm256_unpacklo_ps(src_r1, src_g1);
+        __m256 dst3 = _mm256_unpackhi_ps(src_r1, src_g1);
+
+        float* pfDst = (float*)pDst;
+        _mm256_store_ps(pfDst + 0, dst0);
+        _mm256_store_ps(pfDst + 8, dst1);
+        _mm256_store_ps(pfDst + 16, dst2);
+        _mm256_store_ps(pfDst + 24, dst3);
+#else
+#error Unsupported vector width
+#endif
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        const float *pfSrc = reinterpret_cast<const float *>(pSrc);
+
+        __m256 src_r0 = _mm256_load_ps(pfSrc +  0);
+        __m256 src_r1 = _mm256_load_ps(pfSrc +  8);
+        __m256 src_g0 = _mm256_load_ps(pfSrc + 16);
+        __m256 src_g1 = _mm256_load_ps(pfSrc + 24);
+
+        __m256 dst0 = _mm256_unpacklo_ps(src_r0, src_g0);
+        __m256 dst1 = _mm256_unpackhi_ps(src_r0, src_g0);
+        __m256 dst2 = _mm256_unpacklo_ps(src_r1, src_g1);
+        __m256 dst3 = _mm256_unpackhi_ps(src_r1, src_g1);
+
+        float *pfDst = reinterpret_cast<float *>(pDst);
+
+        _mm256_store_ps(pfDst +  0, dst0);
+        _mm256_store_ps(pfDst +  8, dst1);
+        _mm256_store_ps(pfDst + 16, dst2);
+        _mm256_store_ps(pfDst + 24, dst3);
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -473,10 +716,63 @@ struct Transpose16_16_16_16
         _mm_store_si128(((__m128i*)pDst) + 1, dst1);
         _mm_store_si128(((__m128i*)pDst) + 2, dst2);
         _mm_store_si128(((__m128i*)pDst) + 3, dst3);
+#elif KNOB_SIMD_WIDTH == 16
+#if ENABLE_AVX512_EMULATION
+        simdscalari src_rg = _simd_load_si(reinterpret_cast<const simdscalari*>(pSrc));
+        simdscalari src_ba = _simd_load_si(reinterpret_cast<const simdscalari*>(pSrc + sizeof(simdscalari)));
+
+        __m256i src_r = src_rg.lo;
+        __m256i src_g = src_rg.hi;
+        __m256i src_b = src_ba.lo;
+        __m256i src_a = src_ba.hi;
+
+        __m256i rg0 = _mm256_unpacklo_epi16(src_r, src_g);
+        __m256i rg1 = _mm256_unpackhi_epi16(src_r, src_g);
+        __m256i ba0 = _mm256_unpacklo_epi16(src_b, src_a);
+        __m256i ba1 = _mm256_unpackhi_epi16(src_b, src_a);
+
+        __m256i dst0 = _mm256_unpacklo_epi32(rg0, ba0);
+        __m256i dst1 = _mm256_unpackhi_epi32(rg0, ba0);
+        __m256i dst2 = _mm256_unpacklo_epi32(rg1, ba1);
+        __m256i dst3 = _mm256_unpackhi_epi32(rg1, ba1);
+
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 0, dst0);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 1, dst1);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 2, dst2);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 3, dst3);
+#endif
 #else
 #error Unsupported vector width
 #endif
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        simd16scalari src_rg = _simd16_load_si(reinterpret_cast<const simd16scalari *>(pSrc));
+        simd16scalari src_ba = _simd16_load_si(reinterpret_cast<const simd16scalari *>(pSrc + sizeof(simd16scalari)));
+
+        __m256i src_r = _simd16_extract_si(src_rg, 0);
+        __m256i src_g = _simd16_extract_si(src_rg, 1);
+        __m256i src_b = _simd16_extract_si(src_ba, 0);
+        __m256i src_a = _simd16_extract_si(src_ba, 1);
+
+        __m256i rg0 = _mm256_unpacklo_epi16(src_r, src_g);
+        __m256i rg1 = _mm256_unpackhi_epi16(src_r, src_g);
+        __m256i ba0 = _mm256_unpacklo_epi16(src_b, src_a);
+        __m256i ba1 = _mm256_unpackhi_epi16(src_b, src_a);
+
+        __m256i dst0 = _mm256_unpacklo_epi32(rg0, ba0);
+        __m256i dst1 = _mm256_unpackhi_epi32(rg0, ba0);
+        __m256i dst2 = _mm256_unpacklo_epi32(rg1, ba1);
+        __m256i dst3 = _mm256_unpackhi_epi32(rg1, ba1);
+
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 0, dst0);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 1, dst1);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 2, dst2);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 3, dst3);
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -512,10 +808,61 @@ struct Transpose16_16_16
         _mm_store_si128(((__m128i*)pDst) + 1, dst1);
         _mm_store_si128(((__m128i*)pDst) + 2, dst2);
         _mm_store_si128(((__m128i*)pDst) + 3, dst3);
+#elif KNOB_SIMD_WIDTH == 16
+#if ENABLE_AVX512_EMULATION
+        simdscalari src_rg = _simd_load_si(reinterpret_cast<const simdscalari*>(pSrc));
+
+        __m256i src_r = src_rg.lo;
+        __m256i src_g = src_rg.hi;
+        __m256i src_b = _mm256_load_si256(reinterpret_cast<const __m256i*>(pSrc + sizeof(simdscalari)));
+        __m256i src_a = _mm256_undefined_si256();
+
+        __m256i rg0 = _mm256_unpacklo_epi16(src_r, src_g);
+        __m256i rg1 = _mm256_unpackhi_epi16(src_r, src_g);
+        __m256i ba0 = _mm256_unpacklo_epi16(src_b, src_a);
+        __m256i ba1 = _mm256_unpackhi_epi16(src_b, src_a);
+
+        __m256i dst0 = _mm256_unpacklo_epi32(rg0, ba0);
+        __m256i dst1 = _mm256_unpackhi_epi32(rg0, ba0);
+        __m256i dst2 = _mm256_unpacklo_epi32(rg1, ba1);
+        __m256i dst3 = _mm256_unpackhi_epi32(rg1, ba1);
+
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 0, dst0);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 1, dst1);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 2, dst2);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 3, dst3);
+#endif
 #else
 #error Unsupported vector width
 #endif
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        simd16scalari src_rg = _simd16_load_si(reinterpret_cast<const simd16scalari *>(pSrc));
+
+        __m256i src_r = _simd16_extract_si(src_rg, 0);
+        __m256i src_g = _simd16_extract_si(src_rg, 1);
+        __m256i src_b = _mm256_load_si256(reinterpret_cast<const __m256i *>(pSrc + sizeof(simd16scalari)));
+        __m256i src_a = _mm256_undefined_si256();
+
+        __m256i rg0 = _mm256_unpacklo_epi16(src_r, src_g);
+        __m256i rg1 = _mm256_unpackhi_epi16(src_r, src_g);
+        __m256i ba0 = _mm256_unpacklo_epi16(src_b, src_a);
+        __m256i ba1 = _mm256_unpackhi_epi16(src_b, src_a);
+
+        __m256i dst0 = _mm256_unpacklo_epi32(rg0, ba0);
+        __m256i dst1 = _mm256_unpackhi_epi32(rg0, ba0);
+        __m256i dst2 = _mm256_unpacklo_epi32(rg1, ba1);
+        __m256i dst3 = _mm256_unpackhi_epi32(rg1, ba1);
+
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 0, dst0);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 1, dst1);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 2, dst2);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(pDst) + 3, dst3);
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -529,9 +876,9 @@ struct Transpose16_16
     /// @param pDst - output data in AOS form
     INLINE static void Transpose(const uint8_t* pSrc, uint8_t* pDst)
     {
+#if KNOB_SIMD_WIDTH == 8
         simdscalar src = _simd_load_ps((const float*)pSrc);
 
-#if KNOB_SIMD_WIDTH == 8
         __m128 comp0 = _mm256_castps256_ps128(src);
         __m128 comp1 = _mm256_extractf128_ps(src, 1);
 
@@ -543,10 +890,38 @@ struct Transpose16_16
 
         _mm_store_si128((__m128i*)pDst, resLo);
         _mm_store_si128((__m128i*)pDst + 1, resHi);
+#elif KNOB_SIMD_WIDTH == 16
+#if ENABLE_AVX512_EMULATION
+        simdscalari src = _simd_castps_si(_simd_load_ps(reinterpret_cast<const float*>(pSrc)));
+
+        simdscalari result;
+
+        result.lo = _mm256_unpacklo_epi16(src.lo, src.hi);
+        result.hi = _mm256_unpackhi_epi16(src.lo, src.hi);
+
+        _simd_store_si(reinterpret_cast<simdscalari *>(pDst), result);
+#endif
 #else
 #error Unsupported vector width
 #endif
     }
+#if ENABLE_AVX512_SIMD16
+
+    INLINE static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst)
+    {
+        simd16scalari result = _simd16_setzero_si();
+
+        simd16scalari src = _simd16_castps_si(_simd16_load_ps(reinterpret_cast<const float *>(pSrc)));
+
+        simdscalari srclo = _simd16_extract_si(src, 0);
+        simdscalari srchi = _simd16_extract_si(src, 1);
+
+        result = _simd16_insert_si(result, _mm256_unpacklo_epi16(srclo, srchi), 0);
+        result = _simd16_insert_si(result, _mm256_unpackhi_epi16(srclo, srchi), 1);
+
+        _simd16_store_si(reinterpret_cast<simd16scalari *>(pDst), result);
+    }
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -559,6 +934,10 @@ struct Transpose24_8
     /// @param pSrc - source data in SOA form
     /// @param pDst - output data in AOS form
     static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -571,9 +950,11 @@ struct Transpose32_8_24
     /// @param pSrc - source data in SOA form
     /// @param pDst - output data in AOS form
     static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
 };
-
-
 
 //////////////////////////////////////////////////////////////////////////
 /// Transpose4_4_4_4
@@ -585,6 +966,10 @@ struct Transpose4_4_4_4
     /// @param pSrc - source data in SOA form
     /// @param pDst - output data in AOS form
     static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -597,6 +982,10 @@ struct Transpose5_6_5
     /// @param pSrc - source data in SOA form
     /// @param pDst - output data in AOS form
     static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -609,12 +998,32 @@ struct Transpose9_9_9_5
     /// @param pSrc - source data in SOA form
     /// @param pDst - output data in AOS form
     static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
 /// Transpose5_5_5_1
 //////////////////////////////////////////////////////////////////////////
 struct Transpose5_5_5_1
+{
+    //////////////////////////////////////////////////////////////////////////
+    /// @brief Performs an SOA to AOS conversion for packed 5_5_5_1 data.
+    /// @param pSrc - source data in SOA form
+    /// @param pDst - output data in AOS form
+    static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// Transpose1_5_5_5
+//////////////////////////////////////////////////////////////////////////
+struct Transpose1_5_5_5
 {
     //////////////////////////////////////////////////////////////////////////
     /// @brief Performs an SOA to AOS conversion for packed 5_5_5_1 data.
@@ -633,6 +1042,10 @@ struct Transpose10_10_10_2
     /// @param pSrc - source data in SOA form
     /// @param pDst - output data in AOS form
     static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -645,6 +1058,10 @@ struct Transpose11_11_10
     /// @param pSrc - source data in SOA form
     /// @param pDst - output data in AOS form
     static void Transpose(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#if ENABLE_AVX512_SIMD16
+
+    static void Transpose_16(const uint8_t* pSrc, uint8_t* pDst) = delete;
+#endif
 };
 
 // helper function to unroll loops
@@ -659,6 +1076,26 @@ struct UnrollerL {
 
 template<int End, int Step>
 struct UnrollerL<End, End, Step> {
+    template<typename Lambda>
+    static void step(Lambda& func) {
+    }
+};
+
+// helper function to unroll loops, with mask to skip specific iterations
+template<int Begin, int End, int Step = 1, int Mask = 0x7f>
+struct UnrollerLMask {
+    template<typename Lambda>
+    INLINE static void step(Lambda& func) {
+        if(Mask & (1 << Begin))
+        {
+            func(Begin);
+        }
+        UnrollerL<Begin + Step, End, Step>::step(func);
+    }
+};
+
+template<int End, int Step, int Mask>
+struct UnrollerLMask<End, End, Step, Mask> {
     template<typename Lambda>
     static void step(Lambda& func) {
     }
@@ -822,11 +1259,22 @@ public:
     }
 };
 
+// Ranged integer argument for TemplateArgUnroller
+template <uint32_t TMin, uint32_t TMax>
+struct IntArg
+{
+    uint32_t val;
+};
+
 // Recursive template used to auto-nest conditionals.  Converts dynamic boolean function
 // arguments to static template arguments.
 template <typename TermT, typename... ArgsB>
 struct TemplateArgUnroller
 {
+    //-----------------------------------------
+    // Boolean value
+    //-----------------------------------------
+
     // Last Arg Terminator
     static typename TermT::FuncType GetFunc(bool bArg)
     {
@@ -848,6 +1296,52 @@ struct TemplateArgUnroller
         }
 
         return TemplateArgUnroller<TermT, ArgsB..., std::false_type>::GetFunc(remainingArgs...);
+    }
+
+    //-----------------------------------------
+    // Integer value (within specified range)
+    //-----------------------------------------
+
+    // Last Arg Terminator
+    template <uint32_t TMin, uint32_t TMax>
+    static typename TermT::FuncType GetFunc(IntArg<TMin, TMax> iArg)
+    {
+        if (iArg.val == TMax)
+        {
+            return TermT::template GetFunc<ArgsB..., std::integral_constant<uint32_t, TMax>>();
+        }
+        if (TMax > TMin)
+        {
+            return TemplateArgUnroller<TermT, ArgsB...>::GetFunc(IntArg<TMin, TMax-1>{iArg.val});
+        }
+        SWR_ASSUME(false); return nullptr;
+    }
+    template <uint32_t TVal>
+    static typename TermT::FuncType GetFunc(IntArg<TVal, TVal> iArg)
+    {
+        SWR_ASSERT(iArg.val == TVal);
+        return TermT::template GetFunc<ArgsB..., std::integral_constant<uint32_t, TVal>>();
+    }
+
+    // Recursively parse args
+    template <uint32_t TMin, uint32_t TMax, typename... TArgsT>
+    static typename TermT::FuncType GetFunc(IntArg<TMin, TMax> iArg, TArgsT... remainingArgs)
+    {
+        if (iArg.val == TMax)
+        {
+            return TemplateArgUnroller<TermT, ArgsB..., std::integral_constant<uint32_t, TMax>>::GetFunc(remainingArgs...);
+        }
+        if (TMax > TMin)
+        {
+            return TemplateArgUnroller<TermT, ArgsB...>::GetFunc(IntArg<TMin, TMax - 1>{iArg.val}, remainingArgs...);
+        }
+        SWR_ASSUME(false); return nullptr;
+    }
+    template <uint32_t TVal, typename... TArgsT>
+    static typename TermT::FuncType GetFunc(IntArg<TVal, TVal> iArg, TArgsT... remainingArgs)
+    {
+        SWR_ASSERT(iArg.val == TVal);
+        return TemplateArgUnroller<TermT, ArgsB..., std::integral_constant<uint32_t, TVal>>::GetFunc(remainingArgs...);
     }
 };
 

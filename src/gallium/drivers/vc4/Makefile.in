@@ -136,7 +136,8 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libvc4_la_DEPENDENCIES =
+am__DEPENDENCIES_1 =
+libvc4_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = kernel/vc4_gem.lo kernel/vc4_render_cl.lo \
 	kernel/vc4_validate.lo kernel/vc4_validate_shaders.lo \
@@ -146,13 +147,15 @@ am__objects_1 = kernel/vc4_gem.lo kernel/vc4_render_cl.lo \
 	vc4_nir_lower_io.lo vc4_nir_lower_txf_ms.lo \
 	vc4_opt_algebraic.lo vc4_opt_constant_folding.lo \
 	vc4_opt_copy_propagation.lo vc4_opt_dead_code.lo \
-	vc4_opt_small_immediates.lo vc4_opt_vpm.lo vc4_program.lo \
-	vc4_qir.lo vc4_qir_lower_uniforms.lo vc4_qir_schedule.lo \
-	vc4_qir_validate.lo vc4_qpu.lo vc4_qpu_disasm.lo \
-	vc4_qpu_emit.lo vc4_qpu_schedule.lo vc4_qpu_validate.lo \
-	vc4_query.lo vc4_register_allocate.lo vc4_reorder_uniforms.lo \
-	vc4_resource.lo vc4_screen.lo vc4_simulator.lo vc4_state.lo \
-	vc4_tiling.lo vc4_uniforms.lo
+	vc4_opt_peephole_sf.lo vc4_opt_small_immediates.lo \
+	vc4_opt_vpm.lo vc4_program.lo vc4_qir.lo \
+	vc4_qir_emit_uniform_stream_resets.lo \
+	vc4_qir_live_variables.lo vc4_qir_lower_uniforms.lo \
+	vc4_qir_schedule.lo vc4_qir_validate.lo vc4_qpu.lo \
+	vc4_qpu_disasm.lo vc4_qpu_emit.lo vc4_qpu_schedule.lo \
+	vc4_qpu_validate.lo vc4_query.lo vc4_register_allocate.lo \
+	vc4_reorder_uniforms.lo vc4_resource.lo vc4_screen.lo \
+	vc4_simulator.lo vc4_state.lo vc4_tiling.lo vc4_uniforms.lo
 am_libvc4_la_OBJECTS = $(am__objects_1)
 libvc4_la_OBJECTS = $(am_libvc4_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -327,11 +330,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -427,6 +429,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -462,6 +466,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -540,7 +545,6 @@ C_SOURCES := \
 	vc4_context.c \
 	vc4_context.h \
 	vc4_draw.c \
-	vc4_drm.h \
 	vc4_emit.c \
 	vc4_fence.c \
 	vc4_formats.c \
@@ -552,10 +556,13 @@ C_SOURCES := \
 	vc4_opt_constant_folding.c \
 	vc4_opt_copy_propagation.c \
 	vc4_opt_dead_code.c \
+	vc4_opt_peephole_sf.c \
 	vc4_opt_small_immediates.c \
 	vc4_opt_vpm.c \
 	vc4_program.c \
 	vc4_qir.c \
+	vc4_qir_emit_uniform_stream_resets.c \
+	vc4_qir_live_variables.c \
 	vc4_qir_lower_uniforms.c \
 	vc4_qir_schedule.c \
 	vc4_qir_validate.c \
@@ -651,13 +658,15 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 AM_CFLAGS = \
 	-I$(top_builddir)/src/compiler/nir \
 	$(LIBDRM_CFLAGS) \
+	$(VC4_CFLAGS) \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(SIM_CFLAGS) \
+	$(VALGRIND_CFLAGS) \
 	$()
 
 noinst_LTLIBRARIES = libvc4.la
 libvc4_la_SOURCES = $(C_SOURCES)
-libvc4_la_LIBADD = $(SIM_LIB)
+libvc4_la_LIBADD = $(SIM_LIB) $(VC4_LIBS)
 libvc4_la_LDFLAGS = $(SIM_LDFLAGS)
 all: all-am
 
@@ -747,10 +756,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_constant_folding.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_copy_propagation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_dead_code.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_peephole_sf.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_small_immediates.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_vpm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_program.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir_emit_uniform_stream_resets.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir_live_variables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir_lower_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir_schedule.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir_validate.Plo@am__quote@

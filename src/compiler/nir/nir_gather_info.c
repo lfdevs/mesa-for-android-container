@@ -57,10 +57,6 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
       shader->info.gs.uses_end_primitive = 1;
       break;
 
-   case nir_intrinsic_interp_var_at_offset:
-      shader->info.uses_interp_var_at_offset = 1;
-      break;
-
    default:
       break;
    }

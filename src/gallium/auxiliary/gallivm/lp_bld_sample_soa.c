@@ -42,7 +42,7 @@
 #include "util/u_math.h"
 #include "util/u_format.h"
 #include "util/u_cpu_detect.h"
-#include "util/u_format_rgb9e5.h"
+#include "util/format_rgb9e5.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_type.h"
 #include "lp_bld_const.h"
@@ -2860,12 +2860,13 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
       }
 
       /*
-       * we only try 8-wide sampling with soa as it appears to
-       * be a loss with aos with AVX (but it should work, except
-       * for conformance if min_filter != mag_filter if num_lods > 1).
-       * (It should be faster if we'd support avx2)
+       * we only try 8-wide sampling with soa or if we have AVX2
+       * as it appears to be a loss with just AVX)
        */
-      if (num_quads == 1 || !use_aos) {
+      if (num_quads == 1 || !use_aos ||
+          (util_cpu_caps.has_avx2 &&
+           (bld.num_lods == 1 ||
+            derived_sampler_state.min_img_filter == derived_sampler_state.mag_img_filter))) {
          if (use_aos) {
             /* do sampling/filtering with fixed pt arithmetic */
             lp_build_sample_aos(&bld, sampler_index,

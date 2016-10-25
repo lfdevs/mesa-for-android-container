@@ -392,6 +392,10 @@ __indirect_glCallLists(GLsizei n, GLenum type, const GLvoid * lists)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glCallLists_size(type);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, n));
+    if (0 + safe_pad(safe_mul(compsize, n)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -521,6 +525,10 @@ __indirect_glBitmap(GLsizei width, GLsizei height, GLfloat xorig,
         (bitmap != NULL) ? __glImageSize(width, height, 1, GL_COLOR_INDEX,
                                          GL_BITMAP, 0) : 0;
     const GLuint cmdlen = 48 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -2301,6 +2309,10 @@ __indirect_glFogfv(GLenum pname, const GLfloat * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glFogfv_size(pname);
     const GLuint cmdlen = 8 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_Fogfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&pname), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (params),
@@ -2333,6 +2345,10 @@ __indirect_glFogiv(GLenum pname, const GLint * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glFogiv_size(pname);
     const GLuint cmdlen = 8 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_Fogiv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&pname), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (params),
@@ -2395,6 +2411,10 @@ __indirect_glLightfv(GLenum light, GLenum pname, const GLfloat * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glLightfv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_Lightfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&light), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2429,6 +2449,10 @@ __indirect_glLightiv(GLenum light, GLenum pname, const GLint * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glLightiv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_Lightiv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&light), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2462,6 +2486,10 @@ __indirect_glLightModelfv(GLenum pname, const GLfloat * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glLightModelfv_size(pname);
     const GLuint cmdlen = 8 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_LightModelfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&pname), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (params),
@@ -2494,6 +2522,10 @@ __indirect_glLightModeliv(GLenum pname, const GLint * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glLightModeliv_size(pname);
     const GLuint cmdlen = 8 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_LightModeliv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&pname), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (params),
@@ -2556,6 +2588,10 @@ __indirect_glMaterialfv(GLenum face, GLenum pname, const GLfloat * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glMaterialfv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_Materialfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&face), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2590,6 +2626,10 @@ __indirect_glMaterialiv(GLenum face, GLenum pname, const GLint * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glMaterialiv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_Materialiv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&face), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2639,6 +2679,10 @@ __indirect_glPolygonStipple(const GLubyte *mask)
         (mask != NULL) ? __glImageSize(32, 32, 1, GL_COLOR_INDEX, GL_BITMAP,
                                        0) : 0;
     const GLuint cmdlen = 24 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_PolygonStipple, cmdlen);
     if (compsize > 0) {
         (*gc->fillImage) (gc, 2, 32, 32, 1, GL_COLOR_INDEX, GL_BITMAP, mask,
@@ -2708,6 +2752,10 @@ __indirect_glTexParameterfv(GLenum target, GLenum pname,
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glTexParameterfv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_TexParameterfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2742,6 +2790,10 @@ __indirect_glTexParameteriv(GLenum target, GLenum pname, const GLint * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glTexParameteriv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_TexParameteriv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2763,6 +2815,10 @@ __glx_TexImage_1D2D(unsigned opcode, unsigned dim, GLenum target, GLint level,
     const GLuint compsize =
         __glImageSize(width, height, 1, format, type, target);
     const GLuint cmdlen = 56 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -2852,6 +2908,10 @@ __indirect_glTexEnvfv(GLenum target, GLenum pname, const GLfloat * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glTexEnvfv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_TexEnvfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2886,6 +2946,10 @@ __indirect_glTexEnviv(GLenum target, GLenum pname, const GLint * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glTexEnviv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_TexEnviv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2920,6 +2984,10 @@ __indirect_glTexGendv(GLenum coord, GLenum pname, const GLdouble * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glTexGendv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 8));
+    if (0 + safe_pad(safe_mul(compsize, 8)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_TexGendv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&coord), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2954,6 +3022,10 @@ __indirect_glTexGenfv(GLenum coord, GLenum pname, const GLfloat * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glTexGenfv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_TexGenfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&coord), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -2988,6 +3060,10 @@ __indirect_glTexGeniv(GLenum coord, GLenum pname, const GLint * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glTexGeniv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_TexGeniv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&coord), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -3637,6 +3713,10 @@ __indirect_glPixelMapfv(GLenum map, GLsizei mapsize, const GLfloat * values)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(mapsize, 4));
+    if (0 + safe_pad(safe_mul(mapsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (mapsize < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -3674,6 +3754,10 @@ __indirect_glPixelMapuiv(GLenum map, GLsizei mapsize, const GLuint * values)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(mapsize, 4));
+    if (0 + safe_pad(safe_mul(mapsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (mapsize < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -3711,6 +3795,10 @@ __indirect_glPixelMapusv(GLenum map, GLsizei mapsize, const GLushort * values)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(mapsize, 2));
+    if (0 + safe_pad(safe_mul(mapsize, 2)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (mapsize < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -3833,6 +3921,10 @@ __indirect_glDrawPixels(GLsizei width, GLsizei height, GLenum format,
         (pixels != NULL) ? __glImageSize(width, height, 1, format, type,
                                          0) : 0;
     const GLuint cmdlen = 40 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -5256,6 +5348,10 @@ __indirect_glDeleteTextures(GLsizei n, const GLuint * textures)
 #ifndef USE_XCB
     const GLuint cmdlen = 4 + safe_pad(safe_mul(n, 4));
 #endif
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -5295,6 +5391,10 @@ glDeleteTexturesEXT(GLsizei n, const GLuint * textures)
         struct glx_context *const gc = __glXGetCurrentContext();
         Display *const dpy = gc->currentDpy;
         const GLuint cmdlen = 4 + safe_pad(safe_mul(n, 4));
+        if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+            __glXSetError(gc, GL_INVALID_VALUE);
+            return;
+        }
         if (n < 0) {
             __glXSetError(gc, GL_INVALID_VALUE);
             return;
@@ -5458,6 +5558,10 @@ __indirect_glPrioritizeTextures(GLsizei n, const GLuint * textures,
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen =
         8 + safe_pad(safe_mul(n, 4)) + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -5487,6 +5591,10 @@ __glx_TexSubImage_1D2D(unsigned opcode, unsigned dim, GLenum target,
         (pixels != NULL) ? __glImageSize(width, height, 1, format, type,
                                          target) : 0;
     const GLuint cmdlen = 60 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -5596,6 +5704,10 @@ __indirect_glColorTable(GLenum target, GLenum internalformat, GLsizei width,
         (table != NULL) ? __glImageSize(width, 1, 1, format, type,
                                         target) : 0;
     const GLuint cmdlen = 44 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -5644,6 +5756,10 @@ __indirect_glColorTableParameterfv(GLenum target, GLenum pname,
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glColorTableParameterfv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_ColorTableParameterfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -5663,6 +5779,10 @@ __indirect_glColorTableParameteriv(GLenum target, GLenum pname,
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glColorTableParameteriv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_ColorTableParameteriv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -5941,6 +6061,10 @@ __indirect_glColorSubTable(GLenum target, GLsizei start, GLsizei count,
     const GLuint compsize =
         (data != NULL) ? __glImageSize(count, 1, 1, format, type, target) : 0;
     const GLuint cmdlen = 44 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -6010,6 +6134,10 @@ __glx_ConvolutionFilter_1D2D(unsigned opcode, unsigned dim, GLenum target,
         (image != NULL) ? __glImageSize(width, height, 1, format, type,
                                         target) : 0;
     const GLuint cmdlen = 48 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -6099,6 +6227,10 @@ __indirect_glConvolutionParameterfv(GLenum target, GLenum pname,
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glConvolutionParameterfv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_ConvolutionParameterfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -6134,6 +6266,10 @@ __indirect_glConvolutionParameteriv(GLenum target, GLenum pname,
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glConvolutionParameteriv_size(pname);
     const GLuint cmdlen = 12 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_ConvolutionParameteriv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (&pname), 4);
@@ -6963,6 +7099,10 @@ __glx_TexImage_3D4D(unsigned opcode, unsigned dim, GLenum target, GLint level,
         (pixels != NULL) ? __glImageSize(width, height, depth, format, type,
                                          target) : 0;
     const GLuint cmdlen = 84 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -7040,6 +7180,10 @@ __glx_TexSubImage_3D4D(unsigned opcode, unsigned dim, GLenum target,
         (pixels != NULL) ? __glImageSize(width, height, depth, format, type,
                                          target) : 0;
     const GLuint cmdlen = 92 + safe_pad(compsize);
+    if (0 + safe_pad(compsize) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (__builtin_expect(gc->currentDpy != NULL, 1)) {
         if (cmdlen <= gc->maxSmallRenderCommandSize) {
             if ((gc->pc + cmdlen) > gc->bufEnd) {
@@ -7731,6 +7875,10 @@ __indirect_glPointParameterfv(GLenum pname, const GLfloat * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glPointParameterfv_size(pname);
     const GLuint cmdlen = 8 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_PointParameterfv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&pname), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (params),
@@ -7763,6 +7911,10 @@ __indirect_glPointParameteriv(GLenum pname, const GLint * params)
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint compsize = __glPointParameteriv_size(pname);
     const GLuint cmdlen = 8 + safe_pad(safe_mul(compsize, 4));
+    if (0 + safe_pad(safe_mul(compsize, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     emit_header(gc->pc, X_GLrop_PointParameteriv, cmdlen);
     (void) memcpy((void *) (gc->pc + 4), (void *) (&pname), 4);
     (void) memcpy((void *) (gc->pc + 8), (void *) (params),
@@ -7981,6 +8133,10 @@ __indirect_glDeleteQueries(GLsizei n, const GLuint * ids)
 #ifndef USE_XCB
     const GLuint cmdlen = 4 + safe_pad(safe_mul(n, 4));
 #endif
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -8236,6 +8392,10 @@ __indirect_glDrawBuffers(GLsizei n, const GLenum * bufs)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 8 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -8740,6 +8900,10 @@ __indirect_glDeleteProgramsARB(GLsizei n, const GLuint * programs)
     struct glx_context *const gc = __glXGetCurrentContext();
     Display *const dpy = gc->currentDpy;
     const GLuint cmdlen = 4 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -8996,6 +9160,10 @@ __indirect_glProgramStringARB(GLenum target, GLenum format, GLsizei len,
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 16 + safe_pad(len);
+    if (0 + safe_pad(len) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (len < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -9237,6 +9405,10 @@ __indirect_glDeleteFramebuffers(GLsizei n, const GLuint * framebuffers)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 8 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -9259,6 +9431,10 @@ __indirect_glDeleteRenderbuffers(GLsizei n, const GLuint * renderbuffers)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 8 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -9640,6 +9816,10 @@ __indirect_glAreProgramsResidentNV(GLsizei n, const GLuint * ids,
     Display *const dpy = gc->currentDpy;
     GLboolean retval = (GLboolean) 0;
     const GLuint cmdlen = 4 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return 0;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return 0;
@@ -9848,6 +10028,10 @@ __indirect_glLoadProgramNV(GLenum target, GLuint id, GLsizei len,
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 16 + safe_pad(len);
+    if (0 + safe_pad(len) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (len < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -9872,6 +10056,10 @@ __indirect_glProgramParameters4dvNV(GLenum target, GLuint index, GLsizei num,
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 16 + safe_pad(safe_mul(num, 32));
+    if (0 + safe_pad(safe_mul(num, 32)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (num < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -9897,6 +10085,10 @@ __indirect_glProgramParameters4fvNV(GLenum target, GLuint index, GLsizei num,
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 16 + safe_pad(safe_mul(num, 16));
+    if (0 + safe_pad(safe_mul(num, 16)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (num < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -9921,6 +10113,10 @@ __indirect_glRequestResidentProgramsNV(GLsizei n, const GLuint * ids)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 8 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10376,6 +10572,10 @@ __indirect_glVertexAttribs1dvNV(GLuint index, GLsizei n, const GLdouble * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 8));
+    if (0 + safe_pad(safe_mul(n, 8)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10398,6 +10598,10 @@ __indirect_glVertexAttribs1fvNV(GLuint index, GLsizei n, const GLfloat * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10420,6 +10624,10 @@ __indirect_glVertexAttribs1svNV(GLuint index, GLsizei n, const GLshort * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 2));
+    if (0 + safe_pad(safe_mul(n, 2)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10442,6 +10650,10 @@ __indirect_glVertexAttribs2dvNV(GLuint index, GLsizei n, const GLdouble * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 16));
+    if (0 + safe_pad(safe_mul(n, 16)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10464,6 +10676,10 @@ __indirect_glVertexAttribs2fvNV(GLuint index, GLsizei n, const GLfloat * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 8));
+    if (0 + safe_pad(safe_mul(n, 8)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10486,6 +10702,10 @@ __indirect_glVertexAttribs2svNV(GLuint index, GLsizei n, const GLshort * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10508,6 +10728,10 @@ __indirect_glVertexAttribs3dvNV(GLuint index, GLsizei n, const GLdouble * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 24));
+    if (0 + safe_pad(safe_mul(n, 24)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10530,6 +10754,10 @@ __indirect_glVertexAttribs3fvNV(GLuint index, GLsizei n, const GLfloat * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 12));
+    if (0 + safe_pad(safe_mul(n, 12)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10552,6 +10780,10 @@ __indirect_glVertexAttribs3svNV(GLuint index, GLsizei n, const GLshort * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 6));
+    if (0 + safe_pad(safe_mul(n, 6)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10574,6 +10806,10 @@ __indirect_glVertexAttribs4dvNV(GLuint index, GLsizei n, const GLdouble * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 32));
+    if (0 + safe_pad(safe_mul(n, 32)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10596,6 +10832,10 @@ __indirect_glVertexAttribs4fvNV(GLuint index, GLsizei n, const GLfloat * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 16));
+    if (0 + safe_pad(safe_mul(n, 16)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10618,6 +10858,10 @@ __indirect_glVertexAttribs4svNV(GLuint index, GLsizei n, const GLshort * v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 8));
+    if (0 + safe_pad(safe_mul(n, 8)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10640,6 +10884,10 @@ __indirect_glVertexAttribs4ubvNV(GLuint index, GLsizei n, const GLubyte *v)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 12 + safe_pad(safe_mul(n, 4));
+    if (0 + safe_pad(safe_mul(n, 4)) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (n < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10679,6 +10927,10 @@ __indirect_glGetProgramNamedParameterdvNV(GLuint id, GLsizei len,
     struct glx_context *const gc = __glXGetCurrentContext();
     Display *const dpy = gc->currentDpy;
     const GLuint cmdlen = 8 + safe_pad(len);
+    if (0 + safe_pad(len) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (len < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10707,6 +10959,10 @@ __indirect_glGetProgramNamedParameterfvNV(GLuint id, GLsizei len,
     struct glx_context *const gc = __glXGetCurrentContext();
     Display *const dpy = gc->currentDpy;
     const GLuint cmdlen = 8 + safe_pad(len);
+    if (0 + safe_pad(len) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (len < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10734,6 +10990,10 @@ __indirect_glProgramNamedParameter4dNV(GLuint id, GLsizei len,
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 44 + safe_pad(len);
+    if (0 + safe_pad(len) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (len < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10762,6 +11022,10 @@ __indirect_glProgramNamedParameter4dvNV(GLuint id, GLsizei len,
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 44 + safe_pad(len);
+    if (0 + safe_pad(len) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (len < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10787,6 +11051,10 @@ __indirect_glProgramNamedParameter4fNV(GLuint id, GLsizei len,
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 28 + safe_pad(len);
+    if (0 + safe_pad(len) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (len < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;
@@ -10815,6 +11083,10 @@ __indirect_glProgramNamedParameter4fvNV(GLuint id, GLsizei len,
 {
     struct glx_context *const gc = __glXGetCurrentContext();
     const GLuint cmdlen = 28 + safe_pad(len);
+    if (0 + safe_pad(len) < 0) {
+        __glXSetError(gc, GL_INVALID_VALUE);
+        return;
+    }
     if (len < 0) {
         __glXSetError(gc, GL_INVALID_VALUE);
         return;

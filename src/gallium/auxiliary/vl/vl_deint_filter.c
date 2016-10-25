@@ -447,7 +447,8 @@ vl_deint_filter_render(struct vl_deint_filter *filter,
    struct pipe_sampler_view *sampler_views[4];
    struct pipe_surface **dst_surfaces;
    const unsigned *plane_order;
-   int i, j;
+   int i;
+   unsigned j;
 
    assert(filter && prevprev && prev && cur && next && field <= 1);
 

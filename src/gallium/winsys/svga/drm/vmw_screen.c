@@ -39,6 +39,7 @@
 #endif
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 static struct util_hash_table *dev_hash = NULL;
 
@@ -88,7 +89,7 @@ vmw_winsys_create( int fd )
 
    vws->device = stat_buf.st_rdev;
    vws->open_count = 1;
-   vws->ioctl.drm_fd = dup(fd);
+   vws->ioctl.drm_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
    vws->base.have_gb_dma = TRUE;
    vws->base.need_to_rebind_resources = FALSE;
 

@@ -271,11 +271,14 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
    }
 
    vscreen->set_next_timestamp(vscreen, earliest_presentation_time);
+
+   // flush before calling flush_frontbuffer so that rendering is flushed
+   //  to back buffer so the texture can be copied in flush_frontbuffer
+   pipe->screen->fence_reference(pipe->screen, &surf->fence, NULL);
+   pipe->flush(pipe, &surf->fence, 0);
    pipe->screen->flush_frontbuffer(pipe->screen, tex, 0, 0,
                                    vscreen->get_private(vscreen), NULL);
 
-   pipe->screen->fence_reference(pipe->screen, &surf->fence, NULL);
-   pipe->flush(pipe, &surf->fence, 0);
    pq->last_surf = surf;
 
    if (dump_window == -1) {
@@ -327,7 +330,7 @@ vlVdpPresentationQueueBlockUntilSurfaceIdle(VdpPresentationQueue presentation_qu
    pipe_mutex_lock(pq->device->mutex);
    if (surf->fence) {
       screen = pq->device->vscreen->pscreen;
-      screen->fence_finish(screen, surf->fence, PIPE_TIMEOUT_INFINITE);
+      screen->fence_finish(screen, NULL, surf->fence, PIPE_TIMEOUT_INFINITE);
       screen->fence_reference(screen, &surf->fence, NULL);
    }
    pipe_mutex_unlock(pq->device->mutex);
@@ -369,7 +372,7 @@ vlVdpPresentationQueueQuerySurfaceStatus(VdpPresentationQueue presentation_queue
    } else {
       pipe_mutex_lock(pq->device->mutex);
       screen = pq->device->vscreen->pscreen;
-      if (screen->fence_finish(screen, surf->fence, 0)) {
+      if (screen->fence_finish(screen, NULL, surf->fence, 0)) {
          screen->fence_reference(screen, &surf->fence, NULL);
          *status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
          pipe_mutex_unlock(pq->device->mutex);

@@ -59,10 +59,11 @@ struct RelocInfo
 };
 
 struct FixupData {
-   FixupData(bool force, bool flat) :
-      force_persample_interp(force), flatshade(flat) {}
+   FixupData(bool force, bool flat, uint8_t alphatest) :
+      force_persample_interp(force), flatshade(flat), alphatest(alphatest) {}
    bool force_persample_interp;
    bool flatshade;
+   uint8_t alphatest;
 };
 
 struct FixupEntry;
@@ -174,6 +175,8 @@ public:
 
    virtual void parseDriverInfo(const struct nv50_ir_prog_info *info) {
       threads = info->prop.cp.numThreads;
+      if (threads == 0)
+         threads = info->target >= NVISA_GK104_CHIPSET ? 1024 : 512;
    }
 
    virtual bool runLegalizePass(Program *, CGStage stage) const = 0;

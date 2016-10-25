@@ -50,7 +50,7 @@ namespace brw {
             const fs_reg dst = bld.vgrf(BRW_REGISTER_TYPE_UD, rsize);
             fs_inst *inst = bld.emit(opcode, dst, srcs, ARRAY_SIZE(srcs));
 
-            inst->regs_written = rsize * bld.dispatch_width() / 8;
+            inst->size_written = rsize * dst.component_size(inst->exec_size);
             inst->predicate = pred;
             return dst;
          }
@@ -284,7 +284,7 @@ namespace {
        * Return true if the format conversion boils down to a trivial copy.
        */
       inline bool
-      is_conversion_trivial(const brw_device_info *devinfo, isl_format format)
+      is_conversion_trivial(const gen_device_info *devinfo, isl_format format)
       {
          return (get_bit_widths(format).r == 32 && is_homogeneous(format)) ||
                  format == isl_lower_storage_image_format(devinfo, format);
@@ -295,7 +295,7 @@ namespace {
        * compatible bitfield layout, but possibly different data types.
        */
       inline bool
-      has_supported_bit_layout(const brw_device_info *devinfo,
+      has_supported_bit_layout(const gen_device_info *devinfo,
                                isl_format format)
       {
          const color_u widths = get_bit_widths(format);
@@ -314,7 +314,7 @@ namespace {
        * friends implemented as RGBA16UI).
        */
       inline bool
-      has_split_bit_layout(const brw_device_info *devinfo, isl_format format)
+      has_split_bit_layout(const gen_device_info *devinfo, isl_format format)
       {
          const isl_format lower_format =
             isl_lower_storage_image_format(devinfo, format);
@@ -331,7 +331,7 @@ namespace {
        * significant bits.
        */
       inline bool
-      has_undefined_high_bits(const brw_device_info *devinfo,
+      has_undefined_high_bits(const gen_device_info *devinfo,
                               isl_format format)
       {
          const isl_format lower_format =
@@ -362,7 +362,7 @@ namespace {
       emit_untyped_image_check(const fs_builder &bld, const fs_reg &image,
                                brw_predicate pred)
       {
-         const brw_device_info *devinfo = bld.shader->devinfo;
+         const gen_device_info *devinfo = bld.shader->devinfo;
          const fs_reg stride = offset(image, bld, BRW_IMAGE_PARAM_STRIDE_OFFSET);
 
          if (devinfo->gen == 7 && !devinfo->is_haswell) {
@@ -393,7 +393,7 @@ namespace {
       brw_predicate
       emit_typed_atomic_check(const fs_builder &bld, const fs_reg &image)
       {
-         const brw_device_info *devinfo = bld.shader->devinfo;
+         const gen_device_info *devinfo = bld.shader->devinfo;
          const fs_reg size = offset(image, bld, BRW_IMAGE_PARAM_SIZE_OFFSET);
 
          if (devinfo->gen == 7 && !devinfo->is_haswell) {
@@ -509,7 +509,7 @@ namespace {
       emit_address_calculation(const fs_builder &bld, const fs_reg &image,
                                const fs_reg &coord, unsigned dims)
       {
-         const brw_device_info *devinfo = bld.shader->devinfo;
+         const gen_device_info *devinfo = bld.shader->devinfo;
          const fs_reg off = offset(image, bld, BRW_IMAGE_PARAM_OFFSET_OFFSET);
          const fs_reg stride = offset(image, bld, BRW_IMAGE_PARAM_STRIDE_OFFSET);
          const fs_reg tile = offset(image, bld, BRW_IMAGE_PARAM_TILING_OFFSET);
@@ -962,7 +962,7 @@ namespace brw {
          using namespace image_validity;
          using namespace image_coordinates;
          using namespace surface_access;
-         const brw_device_info *devinfo = bld.shader->devinfo;
+         const gen_device_info *devinfo = bld.shader->devinfo;
          const isl_format format = isl_format_for_gl_format(gl_format);
          const isl_format lower_format =
             isl_lower_storage_image_format(devinfo, format);
@@ -982,7 +982,7 @@ namespace brw {
             /* Untyped surface reads return 32 bits of the surface per
              * component, without any sort of unpacking or type conversion,
              */
-            const unsigned size = isl_format_get_layout(format)->bs / 4;
+            const unsigned size = isl_format_get_layout(format)->bpb / 32;
             /* they don't properly handle out of bounds access, so we have to
              * check manually if the coordinates are valid and predicate the
              * surface read on the result,
@@ -1071,7 +1071,7 @@ namespace brw {
          using namespace image_coordinates;
          using namespace surface_access;
          const isl_format format = isl_format_for_gl_format(gl_format);
-         const brw_device_info *devinfo = bld.shader->devinfo;
+         const gen_device_info *devinfo = bld.shader->devinfo;
 
          /* Transform the image coordinates into actual surface coordinates. */
          const fs_reg saddr =
@@ -1130,7 +1130,7 @@ namespace brw {
                /* Untyped surface writes store 32 bits of the surface per
                 * component, without any sort of packing or type conversion,
                 */
-               const unsigned size = isl_format_get_layout(format)->bs / 4;
+               const unsigned size = isl_format_get_layout(format)->bpb / 32;
 
                /* they don't properly handle out of bounds access, so we have
                 * to check manually if the coordinates are valid and predicate

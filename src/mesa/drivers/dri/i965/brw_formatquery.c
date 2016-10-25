@@ -65,46 +65,6 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
    }
 }
 
-/**
- * Returns a generic GL type from an internal format, so that it can be used
- * together with the base format to obtain a mesa_format by calling
- * mesa_format_from_format_and_type().
- */
-static GLenum
-get_generic_type_for_internal_format(GLenum internalFormat)
-{
-   if (_mesa_is_color_format(internalFormat)) {
-      if (_mesa_is_enum_format_unsigned_int(internalFormat))
-         return GL_UNSIGNED_BYTE;
-      else if (_mesa_is_enum_format_signed_int(internalFormat))
-         return GL_BYTE;
-   } else {
-      switch (internalFormat) {
-      case GL_STENCIL_INDEX:
-      case GL_STENCIL_INDEX8:
-         return GL_UNSIGNED_BYTE;
-      case GL_DEPTH_COMPONENT:
-      case GL_DEPTH_COMPONENT16:
-         return GL_UNSIGNED_SHORT;
-      case GL_DEPTH_COMPONENT24:
-      case GL_DEPTH_COMPONENT32:
-         return GL_UNSIGNED_INT;
-      case GL_DEPTH_COMPONENT32F:
-         return GL_FLOAT;
-      case GL_DEPTH_STENCIL:
-      case GL_DEPTH24_STENCIL8:
-         return GL_UNSIGNED_INT_24_8;
-      case GL_DEPTH32F_STENCIL8:
-         return GL_FLOAT_32_UNSIGNED_INT_24_8_REV;
-      default:
-         /* fall-through */
-         break;
-      }
-   }
-
-   return GL_FLOAT;
-}
-
 void
 brw_query_internal_format(struct gl_context *ctx, GLenum target,
                           GLenum internalFormat, GLenum pname, GLint *params)
@@ -126,37 +86,6 @@ brw_query_internal_format(struct gl_context *ctx, GLenum target,
       num_samples = brw_query_samples_for_format(ctx, target, internalFormat,
                                                  dummy_buffer);
       params[0] = (GLint) num_samples;
-      break;
-   }
-
-   case GL_INTERNALFORMAT_PREFERRED: {
-      params[0] = GL_NONE;
-
-      /* We need to resolve an internal format that is compatible with
-       * the passed internal format, and optimal to the driver. By now,
-       * we just validate that the passed internal format is supported by
-       * the driver, and if so return the same internal format, otherwise
-       * return GL_NONE.
-       *
-       * For validating the internal format, we use the
-       * ctx->TextureFormatSupported map to check that a BRW surface format
-       * exists, that can be derived from the internal format. But this
-       * expects a mesa_format, not an internal format. So we need to "come up"
-       * with a type that is generic enough, to resolve the mesa_format first.
-       */
-      GLenum type = get_generic_type_for_internal_format(internalFormat);
-
-      /* Get a mesa_format from the internal format and type. */
-      GLint base_format = _mesa_base_tex_format(ctx, internalFormat);
-      if (base_format != -1) {
-         mesa_format mesa_format =
-            _mesa_format_from_format_and_type(base_format, type);
-
-         if (mesa_format < MESA_FORMAT_COUNT &&
-             ctx->TextureFormatSupported[mesa_format]) {
-            params[0] = internalFormat;
-         }
-      }
       break;
    }
 

@@ -38,8 +38,6 @@
 ### Lists of source files, included by Makefiles
 
 
-
-
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -143,8 +141,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/VERSION $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(am__gl_HEADERS_DIST) \
-	$(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES = gl.pc
 CONFIG_CLEAN_VPATH_FILES =
@@ -157,8 +154,9 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/api_validate.c main/api_validate.h main/arbprogram.c \
 	main/arbprogram.h main/arrayobj.c main/arrayobj.h \
 	main/atifragshader.c main/atifragshader.h main/attrib.c \
-	main/attrib.h main/blend.c main/blend.h main/blit.c \
-	main/blit.h main/bufferobj.c main/bufferobj.h main/buffers.c \
+	main/attrib.h main/barrier.c main/barrier.h main/bbox.c \
+	main/bbox.h main/blend.c main/blend.h main/blit.c main/blit.h \
+	main/bufferobj.c main/bufferobj.h main/buffers.c \
 	main/buffers.h main/clear.c main/clear.h main/clip.c \
 	main/clip.h main/colormac.h main/colortab.c main/colortab.h \
 	main/compute.c main/compute.h main/compiler.h \
@@ -172,8 +170,9 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/enable.c main/enable.h main/enums.c main/enums.h \
 	main/errors.c main/errors.h main/eval.c main/eval.h \
 	main/execmem.c main/extensions.c main/extensions.h \
-	main/extensions_table.h main/fbobject.c main/fbobject.h \
-	main/feedback.c main/feedback.h main/ff_fragment_shader.cpp \
+	main/extensions_table.c main/extensions_table.h \
+	main/fbobject.c main/fbobject.h main/feedback.c \
+	main/feedback.h main/ff_fragment_shader.cpp \
 	main/ffvertex_prog.c main/ffvertex_prog.h main/fog.c \
 	main/fog.h main/format_info.h main/format_pack.h \
 	main/format_pack.c main/format_unpack.h main/format_unpack.c \
@@ -219,8 +218,7 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/texobj.c main/texobj.h main/texparam.c main/texparam.h \
 	main/texstate.c main/texstate.h main/texstorage.c \
 	main/texstorage.h main/texstore.c main/texstore.h \
-	main/textureview.c main/textureview.h main/texturebarrier.c \
-	main/texturebarrier.h main/transformfeedback.c \
+	main/textureview.c main/textureview.h main/transformfeedback.c \
 	main/transformfeedback.h main/uniform_query.cpp \
 	main/uniforms.c main/uniforms.h main/varray.c main/varray.h \
 	main/vdpau.c main/vdpau.h main/version.c main/version.h \
@@ -280,11 +278,10 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	drivers/common/meta.h x86/common_x86.c x86/x86_xform.c \
 	x86/3dnow.c x86/sse.c x86/rtasm/x86sse.c x86/rtasm/x86sse.h \
 	sparc/sparc.c x86-64/x86-64.c program/arbprogparse.c \
-	program/arbprogparse.h program/hash_table.h \
-	program/ir_to_mesa.cpp program/ir_to_mesa.h program/lex.yy.c \
-	program/prog_cache.c program/prog_cache.h \
-	program/prog_execute.c program/prog_execute.h \
-	program/prog_hash_table.c program/prog_instruction.c \
+	program/arbprogparse.h program/ir_to_mesa.cpp \
+	program/ir_to_mesa.h program/lex.yy.c program/prog_cache.c \
+	program/prog_cache.h program/prog_execute.c \
+	program/prog_execute.h program/prog_instruction.c \
 	program/prog_instruction.h program/prog_noise.c \
 	program/prog_noise.h program/prog_opt_constant_fold.c \
 	program/prog_optimize.c program/prog_optimize.h \
@@ -296,10 +293,9 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	program/program_parse_extra.c program/program_parse.tab.c \
 	program/program_parse.tab.h program/program_parser.h \
 	program/prog_statevars.c program/prog_statevars.h \
-	program/string_to_uint_map.cpp program/symbol_table.c \
-	program/symbol_table.h program/prog_to_nir.c \
-	program/prog_to_nir.h x86-64/x86-64.h x86-64/xform4.S \
-	x86/assyntax.h x86/clip_args.h x86/norm_args.h \
+	program/symbol_table.c program/symbol_table.h \
+	program/prog_to_nir.c program/prog_to_nir.h x86-64/x86-64.h \
+	x86-64/xform4.S x86/assyntax.h x86/clip_args.h x86/norm_args.h \
 	x86/xform_args.h x86/common_x86_asm.S x86/common_x86_asm.h \
 	x86/common_x86_features.h x86/x86_xform.h x86/x86_xform2.S \
 	x86/x86_xform3.S x86/x86_xform4.S x86/x86_cliptest.S x86/mmx.h \
@@ -314,13 +310,14 @@ am__objects_1 = main/es1_conversion.lo
 am__objects_2 = main/accum.lo main/api_arrayelt.lo main/api_exec.lo \
 	main/api_loopback.lo main/api_validate.lo main/arbprogram.lo \
 	main/arrayobj.lo main/atifragshader.lo main/attrib.lo \
-	main/blend.lo main/blit.lo main/bufferobj.lo main/buffers.lo \
-	main/clear.lo main/clip.lo main/colortab.lo main/compute.lo \
-	main/condrender.lo main/context.lo main/convolve.lo \
-	main/copyimage.lo main/cpuinfo.lo main/debug.lo \
-	main/debug_output.lo main/depth.lo main/dlist.lo \
-	main/drawpix.lo main/drawtex.lo main/enable.lo main/enums.lo \
-	main/errors.lo main/eval.lo main/execmem.lo main/extensions.lo \
+	main/barrier.lo main/bbox.lo main/blend.lo main/blit.lo \
+	main/bufferobj.lo main/buffers.lo main/clear.lo main/clip.lo \
+	main/colortab.lo main/compute.lo main/condrender.lo \
+	main/context.lo main/convolve.lo main/copyimage.lo \
+	main/cpuinfo.lo main/debug.lo main/debug_output.lo \
+	main/depth.lo main/dlist.lo main/drawpix.lo main/drawtex.lo \
+	main/enable.lo main/enums.lo main/errors.lo main/eval.lo \
+	main/execmem.lo main/extensions.lo main/extensions_table.lo \
 	main/fbobject.lo main/feedback.lo main/ff_fragment_shader.lo \
 	main/ffvertex_prog.lo main/fog.lo main/format_pack.lo \
 	main/format_unpack.lo main/formatquery.lo main/formats.lo \
@@ -345,10 +342,10 @@ am__objects_2 = main/accum.lo main/api_arrayelt.lo main/api_exec.lo \
 	main/texenv.lo main/texformat.lo main/texgen.lo \
 	main/texgetimage.lo main/teximage.lo main/texobj.lo \
 	main/texparam.lo main/texstate.lo main/texstorage.lo \
-	main/texstore.lo main/textureview.lo main/texturebarrier.lo \
-	main/transformfeedback.lo main/uniform_query.lo \
-	main/uniforms.lo main/varray.lo main/vdpau.lo main/version.lo \
-	main/viewport.lo main/vtxfmt.lo $(am__objects_1)
+	main/texstore.lo main/textureview.lo main/transformfeedback.lo \
+	main/uniform_query.lo main/uniforms.lo main/varray.lo \
+	main/vdpau.lo main/version.lo main/viewport.lo main/vtxfmt.lo \
+	$(am__objects_1)
 am__objects_3 = math/m_debug_clip.lo math/m_debug_norm.lo \
 	math/m_debug_xform.lo math/m_eval.lo math/m_matrix.lo \
 	math/m_translate.lo math/m_vector.lo
@@ -389,14 +386,13 @@ am__objects_11 = $(am__objects_2) $(am__objects_3) $(am__objects_4) \
 	$(am__objects_8) $(am__objects_9) $(am__objects_10)
 am__objects_12 = program/arbprogparse.lo program/ir_to_mesa.lo \
 	program/lex.yy.lo program/prog_cache.lo \
-	program/prog_execute.lo program/prog_hash_table.lo \
-	program/prog_instruction.lo program/prog_noise.lo \
-	program/prog_opt_constant_fold.lo program/prog_optimize.lo \
-	program/prog_parameter.lo program/prog_parameter_layout.lo \
-	program/prog_print.lo program/program.lo program/programopt.lo \
+	program/prog_execute.lo program/prog_instruction.lo \
+	program/prog_noise.lo program/prog_opt_constant_fold.lo \
+	program/prog_optimize.lo program/prog_parameter.lo \
+	program/prog_parameter_layout.lo program/prog_print.lo \
+	program/program.lo program/programopt.lo \
 	program/program_parse_extra.lo program/program_parse.tab.lo \
-	program/prog_statevars.lo program/string_to_uint_map.lo \
-	program/symbol_table.lo
+	program/prog_statevars.lo program/symbol_table.lo
 am__objects_13 = program/prog_to_nir.lo
 am__objects_14 = x86-64/xform4.lo
 @HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__objects_15 =  \
@@ -439,8 +435,9 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/api_validate.c main/api_validate.h main/arbprogram.c \
 	main/arbprogram.h main/arrayobj.c main/arrayobj.h \
 	main/atifragshader.c main/atifragshader.h main/attrib.c \
-	main/attrib.h main/blend.c main/blend.h main/blit.c \
-	main/blit.h main/bufferobj.c main/bufferobj.h main/buffers.c \
+	main/attrib.h main/barrier.c main/barrier.h main/bbox.c \
+	main/bbox.h main/blend.c main/blend.h main/blit.c main/blit.h \
+	main/bufferobj.c main/bufferobj.h main/buffers.c \
 	main/buffers.h main/clear.c main/clear.h main/clip.c \
 	main/clip.h main/colormac.h main/colortab.c main/colortab.h \
 	main/compute.c main/compute.h main/compiler.h \
@@ -454,8 +451,9 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/enable.c main/enable.h main/enums.c main/enums.h \
 	main/errors.c main/errors.h main/eval.c main/eval.h \
 	main/execmem.c main/extensions.c main/extensions.h \
-	main/extensions_table.h main/fbobject.c main/fbobject.h \
-	main/feedback.c main/feedback.h main/ff_fragment_shader.cpp \
+	main/extensions_table.c main/extensions_table.h \
+	main/fbobject.c main/fbobject.h main/feedback.c \
+	main/feedback.h main/ff_fragment_shader.cpp \
 	main/ffvertex_prog.c main/ffvertex_prog.h main/fog.c \
 	main/fog.h main/format_info.h main/format_pack.h \
 	main/format_pack.c main/format_unpack.h main/format_unpack.c \
@@ -501,8 +499,7 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/texobj.c main/texobj.h main/texparam.c main/texparam.h \
 	main/texstate.c main/texstate.h main/texstorage.c \
 	main/texstorage.h main/texstore.c main/texstore.h \
-	main/textureview.c main/textureview.h main/texturebarrier.c \
-	main/texturebarrier.h main/transformfeedback.c \
+	main/textureview.c main/textureview.h main/transformfeedback.c \
 	main/transformfeedback.h main/uniform_query.cpp \
 	main/uniforms.c main/uniforms.h main/varray.c main/varray.h \
 	main/vdpau.c main/vdpau.h main/version.c main/version.h \
@@ -528,7 +525,8 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	state_tracker/st_atom_clip.c state_tracker/st_atom_constbuf.c \
 	state_tracker/st_atom_constbuf.h state_tracker/st_atom_depth.c \
 	state_tracker/st_atom_framebuffer.c state_tracker/st_atom.h \
-	state_tracker/st_atom_image.c state_tracker/st_atom_msaa.c \
+	state_tracker/st_atom_list.h state_tracker/st_atom_image.c \
+	state_tracker/st_atom_msaa.c \
 	state_tracker/st_atom_pixeltransfer.c \
 	state_tracker/st_atom_rasterizer.c \
 	state_tracker/st_atom_sampler.c \
@@ -586,14 +584,19 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	state_tracker/st_mesa_to_tgsi.c \
 	state_tracker/st_mesa_to_tgsi.h state_tracker/st_nir.h \
 	state_tracker/st_nir_lower_builtin.c \
+	state_tracker/st_nir_lower_tex_src_plane.c \
+	state_tracker/st_pbo.c state_tracker/st_pbo.h \
 	state_tracker/st_program.c state_tracker/st_program.h \
-	state_tracker/st_texture.c state_tracker/st_texture.h \
-	state_tracker/st_vdpau.c state_tracker/st_vdpau.h \
-	x86/common_x86.c program/arbprogparse.c program/arbprogparse.h \
-	program/hash_table.h program/ir_to_mesa.cpp \
-	program/ir_to_mesa.h program/lex.yy.c program/prog_cache.c \
-	program/prog_cache.h program/prog_execute.c \
-	program/prog_execute.h program/prog_hash_table.c \
+	state_tracker/st_sampler_view.c \
+	state_tracker/st_sampler_view.h state_tracker/st_scissor.c \
+	state_tracker/st_scissor.h state_tracker/st_texture.c \
+	state_tracker/st_texture.h state_tracker/st_tgsi_lower_yuv.c \
+	state_tracker/st_tgsi_lower_yuv.h state_tracker/st_vdpau.c \
+	state_tracker/st_vdpau.h x86/common_x86.c \
+	program/arbprogparse.c program/arbprogparse.h \
+	program/ir_to_mesa.cpp program/ir_to_mesa.h program/lex.yy.c \
+	program/prog_cache.c program/prog_cache.h \
+	program/prog_execute.c program/prog_execute.h \
 	program/prog_instruction.c program/prog_instruction.h \
 	program/prog_noise.c program/prog_noise.h \
 	program/prog_opt_constant_fold.c program/prog_optimize.c \
@@ -605,10 +608,9 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	program/program_parse_extra.c program/program_parse.tab.c \
 	program/program_parse.tab.h program/program_parser.h \
 	program/prog_statevars.c program/prog_statevars.h \
-	program/string_to_uint_map.cpp program/symbol_table.c \
-	program/symbol_table.h program/prog_to_nir.c \
-	program/prog_to_nir.h x86-64/x86-64.h x86-64/xform4.S \
-	x86/assyntax.h x86/clip_args.h x86/norm_args.h \
+	program/symbol_table.c program/symbol_table.h \
+	program/prog_to_nir.c program/prog_to_nir.h x86-64/x86-64.h \
+	x86-64/xform4.S x86/assyntax.h x86/clip_args.h x86/norm_args.h \
 	x86/xform_args.h x86/common_x86_asm.S x86/common_x86_asm.h \
 	x86/common_x86_features.h x86/x86_xform.h x86/x86_xform2.S \
 	x86/x86_xform3.S x86/x86_xform4.S x86/x86_cliptest.S x86/mmx.h \
@@ -664,7 +666,10 @@ am__objects_22 = state_tracker/st_atifs_to_tgsi.lo \
 	state_tracker/st_glsl_types.lo state_tracker/st_manager.lo \
 	state_tracker/st_mesa_to_tgsi.lo \
 	state_tracker/st_nir_lower_builtin.lo \
-	state_tracker/st_program.lo state_tracker/st_texture.lo \
+	state_tracker/st_nir_lower_tex_src_plane.lo \
+	state_tracker/st_pbo.lo state_tracker/st_program.lo \
+	state_tracker/st_sampler_view.lo state_tracker/st_scissor.lo \
+	state_tracker/st_texture.lo state_tracker/st_tgsi_lower_yuv.lo \
 	state_tracker/st_vdpau.lo
 am__objects_23 = $(am__objects_2) $(am__objects_3) $(am__objects_5) \
 	$(am__objects_22) x86/common_x86.lo
@@ -758,37 +763,6 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
-am__vpath_adj = case $$p in \
-    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
-    *) f=$$p;; \
-  esac;
-am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
-am__install_max = 40
-am__nobase_strip_setup = \
-  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
-am__nobase_strip = \
-  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
-am__nobase_list = $(am__nobase_strip_setup); \
-  for p in $$list; do echo "$$p $$p"; done | \
-  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
-  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
-    if (++n[$$2] == $(am__install_max)) \
-      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
-    END { for (dir in files) print dir, files[dir] }'
-am__base_list = \
-  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
-  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
-am__uninstall_files_from_dir = { \
-  test -z "$$files" \
-    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
-    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
-         $(am__cd) "$$dir" && rm -f $$files; }; \
-  }
-am__installdirs = "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(gldir)"
-DATA = $(pkgconfig_DATA)
-am__gl_HEADERS_DIST = $(top_srcdir)/include/GL/*.h
-HEADERS = $(gl_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 am__recursive_targets = \
@@ -946,11 +920,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -1046,6 +1019,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -1081,6 +1056,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -1144,8 +1120,6 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = . main/tests $(am__append_1) $(am__append_2) $(am__append_3)
-@HAVE_GLX_TRUE@gldir = $(includedir)/GL
-@HAVE_GLX_TRUE@gl_HEADERS = $(top_srcdir)/include/GL/*.h
 
 # this is part of MAIN_FILES
 MAIN_ES_FILES = \
@@ -1171,6 +1145,10 @@ MAIN_FILES = \
 	main/atifragshader.h \
 	main/attrib.c \
 	main/attrib.h \
+	main/barrier.c \
+	main/barrier.h \
+	main/bbox.c \
+	main/bbox.h \
 	main/blend.c \
 	main/blend.h \
 	main/blit.c \
@@ -1226,6 +1204,7 @@ MAIN_FILES = \
 	main/execmem.c \
 	main/extensions.c \
 	main/extensions.h \
+	main/extensions_table.c \
 	main/extensions_table.h \
 	main/fbobject.c \
 	main/fbobject.h \
@@ -1376,8 +1355,6 @@ MAIN_FILES = \
 	main/texstore.h \
 	main/textureview.c \
 	main/textureview.h \
-	main/texturebarrier.c \
-	main/texturebarrier.h \
 	main/transformfeedback.c \
 	main/transformfeedback.h \
 	main/uniform_query.cpp \
@@ -1555,6 +1532,7 @@ STATETRACKER_FILES = \
 	state_tracker/st_atom_depth.c \
 	state_tracker/st_atom_framebuffer.c \
 	state_tracker/st_atom.h \
+	state_tracker/st_atom_list.h \
 	state_tracker/st_atom_image.c \
 	state_tracker/st_atom_msaa.c \
 	state_tracker/st_atom_pixeltransfer.c \
@@ -1648,17 +1626,25 @@ STATETRACKER_FILES = \
 	state_tracker/st_mesa_to_tgsi.h \
 	state_tracker/st_nir.h \
 	state_tracker/st_nir_lower_builtin.c \
+	state_tracker/st_nir_lower_tex_src_plane.c \
+	state_tracker/st_pbo.c \
+	state_tracker/st_pbo.h \
 	state_tracker/st_program.c \
 	state_tracker/st_program.h \
+	state_tracker/st_sampler_view.c \
+	state_tracker/st_sampler_view.h \
+	state_tracker/st_scissor.c \
+	state_tracker/st_scissor.h \
 	state_tracker/st_texture.c \
 	state_tracker/st_texture.h \
+	state_tracker/st_tgsi_lower_yuv.c \
+	state_tracker/st_tgsi_lower_yuv.h \
 	state_tracker/st_vdpau.c \
 	state_tracker/st_vdpau.h
 
 PROGRAM_FILES = \
 	program/arbprogparse.c \
 	program/arbprogparse.h \
-	program/hash_table.h \
 	program/ir_to_mesa.cpp \
 	program/ir_to_mesa.h \
 	program/lex.yy.c \
@@ -1666,7 +1652,6 @@ PROGRAM_FILES = \
 	program/prog_cache.h \
 	program/prog_execute.c \
 	program/prog_execute.h \
-	program/prog_hash_table.c \
 	program/prog_instruction.c \
 	program/prog_instruction.h \
 	program/prog_noise.c \
@@ -1690,7 +1675,6 @@ PROGRAM_FILES = \
 	program/program_parser.h \
 	program/prog_statevars.c \
 	program/prog_statevars.h \
-	program/string_to_uint_map.cpp \
 	program/symbol_table.c \
 	program/symbol_table.h
 
@@ -1792,6 +1776,7 @@ INCLUDE_DIRS = \
 	-I$(top_srcdir)/include \
 	-I$(top_builddir)/src \
 	-I$(top_srcdir)/src \
+	-I$(top_builddir)/src/compiler/glsl \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_builddir)/src/mesa \
 	-I$(top_srcdir)/src/mesa \
@@ -1869,8 +1854,6 @@ libmesa_sse41_la_SOURCES = \
 	$(X86_SSE41_FILES)
 
 libmesa_sse41_la_CFLAGS = $(AM_CFLAGS) $(SSE41_CFLAGS)
-@HAVE_GLX_TRUE@pkgconfigdir = $(libdir)/pkgconfig
-@HAVE_GLX_TRUE@pkgconfig_DATA = gl.pc
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 YACC_GEN = $(AM_V_GEN)$(YACC) $(YFLAGS)
 LEX_GEN = $(AM_V_GEN)$(LEX) $(LFLAGS)
@@ -1953,6 +1936,8 @@ main/arrayobj.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/atifragshader.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/attrib.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
+main/barrier.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
+main/bbox.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/blend.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/blit.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/bufferobj.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
@@ -1980,6 +1965,8 @@ main/errors.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/eval.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/execmem.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/extensions.lo: main/$(am__dirstamp) \
+	main/$(DEPDIR)/$(am__dirstamp)
+main/extensions_table.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/fbobject.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/feedback.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
@@ -2084,8 +2071,6 @@ main/texstorage.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/texstore.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/textureview.lo: main/$(am__dirstamp) \
-	main/$(DEPDIR)/$(am__dirstamp)
-main/texturebarrier.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/transformfeedback.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
@@ -2314,8 +2299,6 @@ program/prog_cache.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
 program/prog_execute.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
-program/prog_hash_table.lo: program/$(am__dirstamp) \
-	program/$(DEPDIR)/$(am__dirstamp)
 program/prog_instruction.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
 program/prog_noise.lo: program/$(am__dirstamp) \
@@ -2339,8 +2322,6 @@ program/program_parse_extra.lo: program/$(am__dirstamp) \
 program/program_parse.tab.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
 program/prog_statevars.lo: program/$(am__dirstamp) \
-	program/$(DEPDIR)/$(am__dirstamp)
-program/string_to_uint_map.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
 program/symbol_table.lo: program/$(am__dirstamp) \
 	program/$(DEPDIR)/$(am__dirstamp)
@@ -2511,9 +2492,20 @@ state_tracker/st_mesa_to_tgsi.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_nir_lower_builtin.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_nir_lower_tex_src_plane.lo:  \
+	state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_pbo.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_program.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_sampler_view.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_scissor.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_texture.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_tgsi_lower_yuv.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_vdpau.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
@@ -2583,6 +2575,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/arrayobj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/atifragshader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/attrib.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/barrier.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/bbox.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/blend.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/bufferobj.Plo@am__quote@
@@ -2609,6 +2603,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/eval.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/execmem.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/extensions.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/extensions_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/fbobject.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/feedback.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/ff_fragment_shader.Plo@am__quote@
@@ -2683,7 +2678,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/texstate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/texstorage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/texstore.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/texturebarrier.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/textureview.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/transformfeedback.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/uniform_query.Plo@am__quote@
@@ -2706,7 +2700,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/lex.yy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/prog_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/prog_execute.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/prog_hash_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/prog_instruction.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/prog_noise.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/prog_opt_constant_fold.Plo@am__quote@
@@ -2720,7 +2713,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/program_parse.tab.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/program_parse_extra.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/programopt.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/string_to_uint_map.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@program/$(DEPDIR)/symbol_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@sparc/$(DEPDIR)/norm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@sparc/$(DEPDIR)/sparc.Plo@am__quote@
@@ -2788,8 +2780,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_manager.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_mesa_to_tgsi.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_nir_lower_builtin.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_nir_lower_tex_src_plane.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_pbo.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_program.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_sampler_view.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_scissor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_texture.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_tgsi_lower_yuv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_vdpau.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@swrast/$(DEPDIR)/s_aaline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@swrast/$(DEPDIR)/s_aatriangle.Plo@am__quote@
@@ -2984,48 +2981,6 @@ clean-libtool:
 	-rm -rf x86/.libs x86/_libs
 	-rm -rf x86-64/.libs x86-64/_libs
 	-rm -rf x86/rtasm/.libs x86/rtasm/_libs
-install-pkgconfigDATA: $(pkgconfig_DATA)
-	@$(NORMAL_INSTALL)
-	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
-	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(pkgconfigdir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(pkgconfigdir)" || exit 1; \
-	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; \
-	done | $(am__base_list) | \
-	while read files; do \
-	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(pkgconfigdir)'"; \
-	  $(INSTALL_DATA) $$files "$(DESTDIR)$(pkgconfigdir)" || exit $$?; \
-	done
-
-uninstall-pkgconfigDATA:
-	@$(NORMAL_UNINSTALL)
-	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
-	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
-	dir='$(DESTDIR)$(pkgconfigdir)'; $(am__uninstall_files_from_dir)
-install-glHEADERS: $(gl_HEADERS)
-	@$(NORMAL_INSTALL)
-	@list='$(gl_HEADERS)'; test -n "$(gldir)" || list=; \
-	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(gldir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(gldir)" || exit 1; \
-	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; \
-	done | $(am__base_list) | \
-	while read files; do \
-	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(gldir)'"; \
-	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(gldir)" || exit $$?; \
-	done
-
-uninstall-glHEADERS:
-	@$(NORMAL_UNINSTALL)
-	@list='$(gl_HEADERS)'; test -n "$(gldir)" || list=; \
-	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
-	dir='$(DESTDIR)$(gldir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -3184,12 +3139,9 @@ check-am: all-am
 	$(MAKE) $(AM_MAKEFLAGS) $(check_LTLIBRARIES)
 check: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) check-recursive
-all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(DATA) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS)
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(gldir)"; do \
-	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
-	done
 install: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) install-recursive
 install-exec: install-exec-recursive
@@ -3272,7 +3224,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am: install-glHEADERS install-pkgconfigDATA
+install-data-am:
 
 install-dvi: install-dvi-recursive
 
@@ -3318,7 +3270,7 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-glHEADERS uninstall-pkgconfigDATA
+uninstall-am:
 
 .MAKE: $(am__recursive_targets) all check check-am install install-am \
 	install-strip
@@ -3330,15 +3282,13 @@ uninstall-am: uninstall-glHEADERS uninstall-pkgconfigDATA
 	distclean-generic distclean-libtool distclean-tags distdir dvi \
 	dvi-am html html-am info info-am install install-am \
 	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-glHEADERS install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-pkgconfigDATA install-ps \
-	install-ps-am install-strip installcheck installcheck-am \
-	installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-am uninstall uninstall-am uninstall-glHEADERS \
-	uninstall-pkgconfigDATA
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am
 
 .PRECIOUS: Makefile
 

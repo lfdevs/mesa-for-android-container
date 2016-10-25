@@ -35,6 +35,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
+
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -110,15 +112,21 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_INTEL_DRIVERS_TRUE@am__append_1 = intel
-@NEED_OPENGL_COMMON_TRUE@am__append_2 = mesa
-@HAVE_DRI_GLX_TRUE@am__append_3 = glx
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = egl/wayland/wayland-drm
-@HAVE_GBM_TRUE@am__append_5 = gbm
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = egl/wayland/wayland-egl
-@HAVE_EGL_TRUE@am__append_7 = egl
-@HAVE_INTEL_VULKAN_TRUE@am__append_8 = intel/vulkan
-@HAVE_GALLIUM_TRUE@am__append_9 = gallium
+@HAVE_AMD_DRIVERS_TRUE@am__append_1 = amd
+@HAVE_INTEL_DRIVERS_TRUE@am__append_2 = intel
+@NEED_OPENGL_COMMON_TRUE@am__append_3 = mesa
+@HAVE_DRI_GLX_TRUE@am__append_4 = glx
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_5 = egl/wayland/wayland-drm
+@HAVE_GBM_TRUE@am__append_6 = gbm
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_7 = egl/wayland/wayland-egl
+@HAVE_EGL_TRUE@am__append_8 = egl
+@HAVE_INTEL_DRIVERS_TRUE@am__append_9 = intel/tools
+@HAVE_VULKAN_COMMON_TRUE@am__append_10 = vulkan/wsi
+@HAVE_INTEL_VULKAN_TRUE@am__append_11 = intel/vulkan
+
+# Requires wayland-drm
+@HAVE_RADEON_VULKAN_TRUE@am__append_12 = amd/common amd/vulkan
+@HAVE_GALLIUM_TRUE@am__append_13 = gallium
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -133,16 +141,18 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/VERSION $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am $(am__gl_HEADERS_DIST) \
+	$(am__glx_HEADERS_DIST) $(am__osmesa_HEADERS_DIST) \
+	$(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libglsl_util_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
-am_libglsl_util_la_OBJECTS = mesa/main/imports.lo \
-	mesa/program/prog_hash_table.lo mesa/program/symbol_table.lo \
-	mesa/program/dummy_errors.lo
+am_libglsl_util_la_OBJECTS = mesa/main/extensions_table.lo \
+	mesa/main/imports.lo mesa/program/prog_parameter.lo \
+	mesa/program/symbol_table.lo mesa/program/dummy_errors.lo
 libglsl_util_la_OBJECTS = $(am_libglsl_util_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -197,6 +207,45 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+am__installdirs = "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(gldir)" \
+	"$(DESTDIR)$(glxdir)" "$(DESTDIR)$(osmesadir)"
+DATA = $(pkgconfig_DATA)
+am__gl_HEADERS_DIST = $(top_srcdir)/include/GL/gl.h \
+	$(top_srcdir)/include/GL/glext.h \
+	$(top_srcdir)/include/GL/glcorearb.h \
+	$(top_srcdir)/include/GL/gl_mangle.h
+am__glx_HEADERS_DIST = $(top_srcdir)/include/GL/glx.h \
+	$(top_srcdir)/include/GL/glxext.h \
+	$(top_srcdir)/include/GL/glx_mangle.h
+am__osmesa_HEADERS_DIST = $(top_srcdir)/include/GL/osmesa.h
+HEADERS = $(gl_HEADERS) $(glx_HEADERS) $(osmesa_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 am__recursive_targets = \
@@ -224,9 +273,10 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = . gtest util mapi/glapi/gen mapi compiler intel mesa \
-	loader glx egl/wayland/wayland-drm gbm egl/wayland/wayland-egl \
-	egl intel/vulkan gallium
+DIST_SUBDIRS = . gtest util mapi/glapi/gen mapi compiler amd intel \
+	mesa loader glx egl/wayland/wayland-drm gbm \
+	egl/wayland/wayland-egl egl intel/tools vulkan/wsi \
+	intel/vulkan amd/common amd/vulkan gallium
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/bin/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -355,11 +405,10 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
 LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
-LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
-LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
@@ -455,6 +504,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -490,6 +541,7 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
+XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
@@ -557,11 +609,30 @@ CLEANFILES = $(BUILT_SOURCES)
 
 # include only conditionally ?
 SUBDIRS = . gtest util mapi/glapi/gen mapi compiler $(am__append_1) \
-	$(am__append_2) loader $(am__append_3) $(am__append_4) \
+	$(am__append_2) $(am__append_3) loader $(am__append_4) \
 	$(am__append_5) $(am__append_6) $(am__append_7) \
-	$(am__append_8) $(am__append_9)
+	$(am__append_8) $(am__append_9) $(am__append_10) \
+	$(am__append_11) $(am__append_12) $(am__append_13)
+@HAVE_OPENGL_TRUE@gldir = $(includedir)/GL
+@HAVE_OPENGL_TRUE@gl_HEADERS = \
+@HAVE_OPENGL_TRUE@  $(top_srcdir)/include/GL/gl.h \
+@HAVE_OPENGL_TRUE@  $(top_srcdir)/include/GL/glext.h \
+@HAVE_OPENGL_TRUE@  $(top_srcdir)/include/GL/glcorearb.h \
+@HAVE_OPENGL_TRUE@  $(top_srcdir)/include/GL/gl_mangle.h
+
+@HAVE_GLX_TRUE@glxdir = $(includedir)/GL
+@HAVE_GLX_TRUE@glx_HEADERS = \
+@HAVE_GLX_TRUE@  $(top_srcdir)/include/GL/glx.h \
+@HAVE_GLX_TRUE@  $(top_srcdir)/include/GL/glxext.h \
+@HAVE_GLX_TRUE@  $(top_srcdir)/include/GL/glx_mangle.h
+
+@HAVE_GLX_TRUE@pkgconfigdir = $(libdir)/pkgconfig
+@HAVE_GLX_TRUE@pkgconfig_DATA = mesa/gl.pc
+@HAVE_COMMON_OSMESA_TRUE@osmesadir = $(includedir)/GL
+@HAVE_COMMON_OSMESA_TRUE@osmesa_HEADERS = $(top_srcdir)/include/GL/osmesa.h
 EXTRA_DIST = \
-	getopt hgl SConscript
+	getopt hgl SConscript \
+	$(top_srcdir)/include/GL/mesa_glinterop.h
 
 AM_CFLAGS = $(VISIBILITY_CFLAGS)
 AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS)
@@ -569,12 +640,15 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/include/ \
 	-I$(top_srcdir)/src/mapi/ \
 	-I$(top_srcdir)/src/mesa/ \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES)
 
 noinst_LTLIBRARIES = libglsl_util.la
 libglsl_util_la_SOURCES = \
+	mesa/main/extensions_table.c \
 	mesa/main/imports.c \
-	mesa/program/prog_hash_table.c \
+	mesa/program/prog_parameter.c \
 	mesa/program/symbol_table.c \
 	mesa/program/dummy_errors.c
 
@@ -629,6 +703,8 @@ mesa/main/$(am__dirstamp):
 mesa/main/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) mesa/main/$(DEPDIR)
 	@: > mesa/main/$(DEPDIR)/$(am__dirstamp)
+mesa/main/extensions_table.lo: mesa/main/$(am__dirstamp) \
+	mesa/main/$(DEPDIR)/$(am__dirstamp)
 mesa/main/imports.lo: mesa/main/$(am__dirstamp) \
 	mesa/main/$(DEPDIR)/$(am__dirstamp)
 mesa/program/$(am__dirstamp):
@@ -637,7 +713,7 @@ mesa/program/$(am__dirstamp):
 mesa/program/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) mesa/program/$(DEPDIR)
 	@: > mesa/program/$(DEPDIR)/$(am__dirstamp)
-mesa/program/prog_hash_table.lo: mesa/program/$(am__dirstamp) \
+mesa/program/prog_parameter.lo: mesa/program/$(am__dirstamp) \
 	mesa/program/$(DEPDIR)/$(am__dirstamp)
 mesa/program/symbol_table.lo: mesa/program/$(am__dirstamp) \
 	mesa/program/$(DEPDIR)/$(am__dirstamp)
@@ -657,9 +733,10 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@mesa/main/$(DEPDIR)/extensions_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@mesa/main/$(DEPDIR)/imports.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@mesa/program/$(DEPDIR)/dummy_errors.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@mesa/program/$(DEPDIR)/prog_hash_table.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@mesa/program/$(DEPDIR)/prog_parameter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@mesa/program/$(DEPDIR)/symbol_table.Plo@am__quote@
 
 .c.o:
@@ -693,6 +770,90 @@ clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf mesa/main/.libs mesa/main/_libs
 	-rm -rf mesa/program/.libs mesa/program/_libs
+install-pkgconfigDATA: $(pkgconfig_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkgconfigdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkgconfigdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(pkgconfigdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(pkgconfigdir)" || exit $$?; \
+	done
+
+uninstall-pkgconfigDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(pkgconfigdir)'; $(am__uninstall_files_from_dir)
+install-glHEADERS: $(gl_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(gl_HEADERS)'; test -n "$(gldir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(gldir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(gldir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(gldir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(gldir)" || exit $$?; \
+	done
+
+uninstall-glHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(gl_HEADERS)'; test -n "$(gldir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(gldir)'; $(am__uninstall_files_from_dir)
+install-glxHEADERS: $(glx_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(glx_HEADERS)'; test -n "$(glxdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(glxdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(glxdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(glxdir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(glxdir)" || exit $$?; \
+	done
+
+uninstall-glxHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(glx_HEADERS)'; test -n "$(glxdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(glxdir)'; $(am__uninstall_files_from_dir)
+install-osmesaHEADERS: $(osmesa_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(osmesa_HEADERS)'; test -n "$(osmesadir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(osmesadir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(osmesadir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(osmesadir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(osmesadir)" || exit $$?; \
+	done
+
+uninstall-osmesaHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(osmesa_HEADERS)'; test -n "$(osmesadir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(osmesadir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -851,9 +1012,12 @@ distdir: $(DISTFILES)
 check-am: all-am
 check: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) check-recursive
-all-am: Makefile $(LTLIBRARIES)
+all-am: Makefile $(LTLIBRARIES) $(DATA) $(HEADERS)
 installdirs: installdirs-recursive
 installdirs-am:
+	for dir in "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(gldir)" "$(DESTDIR)$(glxdir)" "$(DESTDIR)$(osmesadir)"; do \
+	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
+	done
 install: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) install-recursive
 install-exec: install-exec-recursive
@@ -914,7 +1078,8 @@ info: info-recursive
 
 info-am:
 
-install-data-am:
+install-data-am: install-glHEADERS install-glxHEADERS \
+	install-osmesaHEADERS install-pkgconfigDATA
 
 install-dvi: install-dvi-recursive
 
@@ -960,7 +1125,8 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am:
+uninstall-am: uninstall-glHEADERS uninstall-glxHEADERS \
+	uninstall-osmesaHEADERS uninstall-pkgconfigDATA
 
 .MAKE: $(am__recursive_targets) all check install install-am \
 	install-strip
@@ -971,14 +1137,16 @@ uninstall-am:
 	distclean-compile distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
+	install-dvi-am install-exec install-exec-am install-glHEADERS \
+	install-glxHEADERS install-html install-html-am install-info \
+	install-info-am install-man install-osmesaHEADERS install-pdf \
+	install-pdf-am install-pkgconfigDATA install-ps install-ps-am \
 	install-strip installcheck installcheck-am installdirs \
 	installdirs-am maintainer-clean maintainer-clean-generic \
 	mostlyclean mostlyclean-compile mostlyclean-generic \
 	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am
+	uninstall-am uninstall-glHEADERS uninstall-glxHEADERS \
+	uninstall-osmesaHEADERS uninstall-pkgconfigDATA
 
 .PRECIOUS: Makefile
 

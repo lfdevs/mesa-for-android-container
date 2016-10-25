@@ -102,7 +102,7 @@ void fd4_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd4_emit *emit);
 void fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd4_emit *emit);
 
-void fd4_emit_restore(struct fd_context *ctx);
+void fd4_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring);
 
 void fd4_emit_init(struct pipe_context *pctx);
 

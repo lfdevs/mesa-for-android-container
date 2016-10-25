@@ -27,9 +27,22 @@
 #define BRW_DRAW_H
 
 #include "main/mtypes.h"		/* for struct gl_context... */
+#include "intel_bufmgr.h"
 
 struct brw_context;
 
+uint32_t *
+brw_emit_vertex_buffer_state(struct brw_context *brw,
+                             unsigned buffer_nr,
+                             drm_intel_bo *bo,
+                             unsigned start_offset,
+                             unsigned end_offset,
+                             unsigned stride,
+                             unsigned step_rate,
+                             uint32_t *__map);
+
+#define EMIT_VERTEX_BUFFER_STATE(...) __map = \
+   brw_emit_vertex_buffer_state(__VA_ARGS__, __map)
 
 void brw_draw_prims(struct gl_context *ctx,
 		     const struct _mesa_prim *prims,

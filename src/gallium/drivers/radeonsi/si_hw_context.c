@@ -25,6 +25,7 @@
  */
 
 #include "si_pipe.h"
+#include "radeon/r600_cs.h"
 
 static unsigned si_descriptor_list_cs_space(unsigned count, unsigned element_size)
 {
@@ -71,8 +72,8 @@ void si_need_cs_space(struct si_context *ctx)
 	 * that have been added (cs_add_buffer) and two counters in the pipe
 	 * driver for those that haven't been added yet.
 	 */
-	if (unlikely(!ctx->b.ws->cs_memory_below_limit(ctx->b.gfx.cs,
-						       ctx->b.vram, ctx->b.gtt))) {
+	if (unlikely(!radeon_cs_memory_below_limit(ctx->b.screen, ctx->b.gfx.cs,
+						   ctx->b.vram, ctx->b.gtt))) {
 		ctx->b.gtt = 0;
 		ctx->b.vram = 0;
 		ctx->b.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
@@ -84,9 +85,8 @@ void si_need_cs_space(struct si_context *ctx)
 	/* If the CS is sufficiently large, don't count the space needed
 	 * and just flush if there is not enough space left.
 	 */
-	if (unlikely(cs->cdw > cs->max_dw - 2048 ||
-                     (ce_ib && ce_ib->max_dw - ce_ib->cdw <
-                      si_ce_needed_cs_space())))
+	if (!ctx->b.ws->cs_check_space(cs, 2048) ||
+	    (ce_ib && !ctx->b.ws->cs_check_space(ce_ib, si_ce_needed_cs_space())))
 		ctx->b.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 }
 
@@ -100,67 +100,52 @@ void si_context_gfx_flush(void *context, unsigned flags,
 	if (ctx->gfx_flush_in_progress)
 		return;
 
-	ctx->gfx_flush_in_progress = true;
-
-	if (!radeon_emitted(cs, ctx->b.initial_gfx_cs_size) &&
-	    (!fence || ctx->last_gfx_fence)) {
-		if (fence)
-			ws->fence_reference(fence, ctx->last_gfx_fence);
-		if (!(flags & RADEON_FLUSH_ASYNC))
-			ws->cs_sync_flush(cs);
-		ctx->gfx_flush_in_progress = false;
+	if (!radeon_emitted(cs, ctx->b.initial_gfx_cs_size))
 		return;
-	}
+
+	if (r600_check_device_reset(&ctx->b))
+		return;
+
+	ctx->gfx_flush_in_progress = true;
 
 	r600_preflush_suspend_features(&ctx->b);
 
 	ctx->b.flags |= SI_CONTEXT_CS_PARTIAL_FLUSH |
 			SI_CONTEXT_PS_PARTIAL_FLUSH;
-	/* The kernel doesn't flush TC for VI correctly (need TC_WB_ACTION_ENA). */
-	if (ctx->b.chip_class == VI)
+
+	/* DRM 3.1.0 doesn't flush TC for VI correctly. */
+	if (ctx->b.chip_class == VI && ctx->b.screen->info.drm_minor <= 1)
 		ctx->b.flags |= SI_CONTEXT_INV_GLOBAL_L2 |
 				SI_CONTEXT_INV_VMEM_L1;
 
-	si_emit_cache_flush(ctx, NULL);
-
-	/* force to keep tiling flags */
-	flags |= RADEON_FLUSH_KEEP_TILING_FLAGS;
+	si_emit_cache_flush(ctx);
 
 	if (ctx->trace_buf)
 		si_trace_emit(ctx);
 
 	if (ctx->is_debug) {
-		unsigned i;
-
 		/* Save the IB for debug contexts. */
-		free(ctx->last_ib);
-		ctx->last_ib_dw_size = cs->cdw;
-		ctx->last_ib = malloc(cs->cdw * 4);
-		memcpy(ctx->last_ib, cs->buf, cs->cdw * 4);
+		radeon_clear_saved_cs(&ctx->last_gfx);
+		radeon_save_cs(ws, cs, &ctx->last_gfx);
 		r600_resource_reference(&ctx->last_trace_buf, ctx->trace_buf);
 		r600_resource_reference(&ctx->trace_buf, NULL);
-
-		/* Save the buffer list. */
-		if (ctx->last_bo_list) {
-			for (i = 0; i < ctx->last_bo_count; i++)
-				pb_reference(&ctx->last_bo_list[i].buf, NULL);
-			free(ctx->last_bo_list);
-		}
-		ctx->last_bo_count = ws->cs_get_buffer_list(cs, NULL);
-		ctx->last_bo_list = calloc(ctx->last_bo_count,
-					   sizeof(ctx->last_bo_list[0]));
-		ws->cs_get_buffer_list(cs, ctx->last_bo_list);
 	}
 
 	/* Flush the CS. */
-	ws->cs_flush(cs, flags, &ctx->last_gfx_fence);
-
+	ws->cs_flush(cs, flags, &ctx->b.last_gfx_fence);
 	if (fence)
-		ws->fence_reference(fence, ctx->last_gfx_fence);
+		ws->fence_reference(fence, ctx->b.last_gfx_fence);
+	ctx->b.num_gfx_cs_flushes++;
 
 	/* Check VM faults if needed. */
-	if (ctx->screen->b.debug_flags & DBG_CHECK_VM)
-		si_check_vm_faults(ctx);
+	if (ctx->screen->b.debug_flags & DBG_CHECK_VM) {
+		/* Use conservative timeout 800ms, after which we won't wait any
+		 * longer and assume the GPU is hung.
+		 */
+		ctx->b.ws->fence_wait(ctx->b.ws, ctx->b.last_gfx_fence, 800*1000*1000);
+
+		si_check_vm_faults(&ctx->b, &ctx->last_gfx, RING_GFX);
+	}
 
 	si_begin_new_cs(ctx);
 	ctx->gfx_flush_in_progress = false;
@@ -231,22 +216,24 @@ void si_begin_new_cs(struct si_context *ctx)
 
 	ctx->b.scissors.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
 	ctx->b.viewports.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+	ctx->b.viewports.depth_range_dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
 	si_mark_atom_dirty(ctx, &ctx->b.scissors.atom);
 	si_mark_atom_dirty(ctx, &ctx->b.viewports.atom);
 
 	r600_postflush_resume_features(&ctx->b);
 
-	ctx->b.initial_gfx_cs_size = ctx->b.gfx.cs->cdw;
+	assert(!ctx->b.gfx.cs->prev_dw);
+	ctx->b.initial_gfx_cs_size = ctx->b.gfx.cs->current.cdw;
 
 	/* Invalidate various draw states so that they are emitted before
 	 * the first draw call. */
 	si_invalidate_draw_sh_constants(ctx);
+	ctx->last_index_size = -1;
 	ctx->last_primitive_restart_en = -1;
 	ctx->last_restart_index = SI_RESTART_INDEX_UNKNOWN;
 	ctx->last_gs_out_prim = -1;
 	ctx->last_prim = -1;
 	ctx->last_multi_vgt_param = -1;
-	ctx->last_ls_hs_config = -1;
 	ctx->last_rast_prim = -1;
 	ctx->last_sc_line_stipple = ~0;
 	ctx->last_vtx_reuse_depth = -1;

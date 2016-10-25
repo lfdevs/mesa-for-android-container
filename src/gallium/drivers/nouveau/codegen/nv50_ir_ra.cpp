@@ -101,7 +101,7 @@ public:
       return (size < 4) ? u : ((u << unit[f]) / 4);
    }
 
-   void print() const;
+   void print(DataFile f) const;
 
    const bool restrictedGPR16Range;
 
@@ -156,10 +156,10 @@ RegisterSet::intersect(DataFile f, const RegisterSet *set)
 }
 
 void
-RegisterSet::print() const
+RegisterSet::print(DataFile f) const
 {
    INFO("GPR:");
-   bits[FILE_GPR].print();
+   bits[f].print();
    INFO("\n");
 }
 
@@ -771,7 +771,7 @@ private:
    bool coalesce(ArrayList&);
    bool doCoalesce(ArrayList&, unsigned int mask);
    void calculateSpillWeights();
-   void simplify();
+   bool simplify();
    bool selectRegisters();
    void cleanup(const bool success);
 
@@ -969,6 +969,7 @@ GCRA::coalesce(ArrayList& insns)
    case 0x100:
    case 0x110:
    case 0x120:
+   case 0x130:
       ret = doCoalesce(insns, JOIN_MASK_UNION);
       break;
    default:
@@ -1304,7 +1305,7 @@ GCRA::simplifyNode(RIG_Node *node)
             (node->degree < node->degreeLimit) ? "" : "(spill)");
 }
 
-void
+bool
 GCRA::simplify()
 {
    for (;;) {
@@ -1329,11 +1330,11 @@ GCRA::simplify()
          }
          if (isinf(bestScore)) {
             ERROR("no viable spill candidates left\n");
-            break;
+            return false;
          }
          simplifyNode(best);
       } else {
-         break;
+         return true;
       }
    }
 }
@@ -1424,7 +1425,7 @@ GCRA::selectRegisters()
          continue;
       LValue *lval = node->getValue();
       if (prog->dbgFlags & NV50_IR_DEBUG_REG_ALLOC)
-         regs.print();
+         regs.print(node->f);
       bool ret = regs.assign(node->reg, node->f, node->colors);
       if (ret) {
          INFO_DBG(prog->dbgFlags, REG_ALLOC, "assigned reg %i\n", node->reg);
@@ -1492,7 +1493,9 @@ GCRA::allocateRegisters(ArrayList& insns)
 
    buildRIG(insns);
    calculateSpillWeights();
-   simplify();
+   ret = simplify();
+   if (!ret)
+      goto out;
 
    ret = selectRegisters();
    if (!ret) {
@@ -1902,8 +1905,10 @@ GCRA::resolveSplitsAndMerges()
          // their registers should be identical.
          if (v->getInsn()->op == OP_PHI || v->getInsn()->op == OP_UNION) {
             Instruction *phi = v->getInsn();
-            for (int phis = 0; phi->srcExists(phis); ++phis)
+            for (int phis = 0; phi->srcExists(phis); ++phis) {
                phi->getSrc(phis)->join = v;
+               phi->getSrc(phis)->reg.data.id = v->reg.data.id;
+            }
          }
          reg += v->reg.size;
       }
@@ -2092,8 +2097,29 @@ RegAlloc::InsertConstraintsPass::texConstraintGM107(TexInstruction *tex)
       textureMask(tex);
    condenseDefs(tex);
 
-   if (tex->op == OP_SUSTB || tex->op == OP_SUSTP) {
-      condenseSrcs(tex, 3, (3 + typeSizeof(tex->dType) / 4) - 1);
+   if (isSurfaceOp(tex->op)) {
+      int s = tex->tex.target.getDim() +
+         (tex->tex.target.isArray() || tex->tex.target.isCube());
+      int n = 0;
+
+      switch (tex->op) {
+      case OP_SUSTB:
+      case OP_SUSTP:
+         n = 4;
+         break;
+      case OP_SUREDB:
+      case OP_SUREDP:
+         if (tex->subOp == NV50_IR_SUBOP_ATOM_CAS)
+            n = 2;
+         break;
+      default:
+         break;
+      }
+
+      if (s > 1)
+         condenseSrcs(tex, 0, s - 1);
+      if (n > 1)
+         condenseSrcs(tex, 1, n); // do not condense the tex handle
    } else
    if (isTextureOp(tex->op)) {
       if (tex->op != OP_TXQ) {
@@ -2234,6 +2260,7 @@ RegAlloc::InsertConstraintsPass::visit(BasicBlock *bb)
             break;
          case 0x110:
          case 0x120:
+         case 0x130:
             texConstraintGM107(tex);
             break;
          default:

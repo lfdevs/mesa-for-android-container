@@ -61,6 +61,12 @@ struct nvc0_vertex_stateobj {
    struct nvc0_vertex_element element[0];
 };
 
+struct nvc0_window_rect_stateobj {
+   bool inclusive;
+   unsigned rects;
+   struct pipe_scissor_state rect[PIPE_MAX_WINDOW_RECTANGLES];
+};
+
 struct nvc0_so_target {
    struct pipe_stream_output_target pipe;
    struct pipe_query *pq;

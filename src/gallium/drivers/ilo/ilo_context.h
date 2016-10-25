@@ -29,7 +29,7 @@
 #define ILO_CONTEXT_H
 
 #include "pipe/p_context.h"
-#include "util/u_slab.h"
+#include "util/slab.h"
 
 #include "ilo_common.h"
 #include "ilo_cp.h"
@@ -50,7 +50,7 @@ struct ilo_context {
    struct intel_winsys *winsys;
    struct ilo_dev *dev;
 
-   struct util_slab_mempool transfer_mempool;
+   struct slab_mempool transfer_mempool;
 
    struct ilo_cp *cp;
 

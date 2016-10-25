@@ -172,7 +172,7 @@ public:
                                  bool disable_varying_packing,
                                  bool xfb_enabled);
 
-   void run(struct gl_shader *shader);
+   void run(struct gl_linked_shader *shader);
 
 private:
    void bitwise_assign_pack(ir_rvalue *lhs, ir_rvalue *rhs);
@@ -260,7 +260,7 @@ lower_packed_varyings_visitor::lower_packed_varyings_visitor(
 }
 
 void
-lower_packed_varyings_visitor::run(struct gl_shader *shader)
+lower_packed_varyings_visitor::run(struct gl_linked_shader *shader)
 {
    foreach_in_list(ir_instruction, node, shader->ir) {
       ir_variable *var = node->as_variable();
@@ -276,8 +276,8 @@ lower_packed_varyings_visitor::run(struct gl_shader *shader)
        * together when their interpolation mode is "flat".  Treat integers as
        * being flat when the interpolation mode is none.
        */
-      assert(var->data.interpolation == INTERP_QUALIFIER_FLAT ||
-             var->data.interpolation == INTERP_QUALIFIER_NONE ||
+      assert(var->data.interpolation == INTERP_MODE_FLAT ||
+             var->data.interpolation == INTERP_MODE_NONE ||
              !var->type->contains_integer());
 
       /* Clone the variable for program resource list before
@@ -432,7 +432,7 @@ lower_packed_varyings_visitor::lower_rvalue(ir_rvalue *rvalue,
                                             bool gs_input_toplevel,
                                             unsigned vertex_index)
 {
-   unsigned dmul = rvalue->type->is_double() ? 2 : 1;
+   unsigned dmul = rvalue->type->is_64bit() ? 2 : 1;
    /* When gs_input_toplevel is set, we should be looking at a geometry shader
     * input array.
     */
@@ -480,7 +480,7 @@ lower_packed_varyings_visitor::lower_rvalue(ir_rvalue *rvalue,
       char right_swizzle_name[4] = { 0, 0, 0, 0 };
 
       left_components = 4 - fine_location % 4;
-      if (rvalue->type->is_double()) {
+      if (rvalue->type->is_64bit()) {
          /* We might actually end up with 0 left components! */
          left_components /= 2;
       }
@@ -628,7 +628,7 @@ lower_packed_varyings_visitor::get_packed_varying_deref(
       packed_var->data.sample = unpacked_var->data.sample;
       packed_var->data.patch = unpacked_var->data.patch;
       packed_var->data.interpolation = packed_type == glsl_type::ivec4_type
-         ? unsigned(INTERP_QUALIFIER_FLAT) : unpacked_var->data.interpolation;
+         ? unsigned(INTERP_MODE_FLAT) : unpacked_var->data.interpolation;
       packed_var->data.location = location;
       packed_var->data.precision = unpacked_var->data.precision;
       packed_var->data.always_active_io = unpacked_var->data.always_active_io;
@@ -677,7 +677,7 @@ lower_packed_varyings_visitor::needs_lowering(ir_variable *var)
       return false;
 
    type = type->without_array();
-   if (type->vector_elements == 4 && !type->is_double())
+   if (type->vector_elements == 4 && !type->is_64bit())
       return false;
    return true;
 }
@@ -768,7 +768,7 @@ lower_packed_varyings_return_splicer::visit_leave(ir_return *ret)
 void
 lower_packed_varyings(void *mem_ctx, unsigned locations_used,
                       ir_variable_mode mode, unsigned gs_input_vertices,
-                      gl_shader *shader, bool disable_varying_packing,
+                      gl_linked_shader *shader, bool disable_varying_packing,
                       bool xfb_enabled)
 {
    exec_list *instructions = shader->ir;
@@ -792,7 +792,7 @@ lower_packed_varyings(void *mem_ctx, unsigned locations_used,
          lower_packed_varyings_gs_splicer splicer(mem_ctx, &new_instructions);
 
          /* Add all the variables in first. */
-         main_func_sig->body.head->insert_before(&new_variables);
+         main_func_sig->body.get_head_raw()->insert_before(&new_variables);
 
          /* Now update all the EmitVertex instances */
          splicer.run(instructions);
@@ -803,7 +803,7 @@ lower_packed_varyings(void *mem_ctx, unsigned locations_used,
 
          lower_packed_varyings_return_splicer splicer(mem_ctx, &new_instructions);
 
-         main_func_sig->body.head->insert_before(&new_variables);
+         main_func_sig->body.get_head_raw()->insert_before(&new_variables);
 
          splicer.run(instructions);
 
@@ -816,7 +816,7 @@ lower_packed_varyings(void *mem_ctx, unsigned locations_used,
       }
    } else {
       /* Shader inputs need to be lowered at the beginning of main() */
-      main_func_sig->body.head->insert_before(&new_instructions);
-      main_func_sig->body.head->insert_before(&new_variables);
+      main_func_sig->body.get_head_raw()->insert_before(&new_instructions);
+      main_func_sig->body.get_head_raw()->insert_before(&new_variables);
    }
 }

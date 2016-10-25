@@ -387,13 +387,13 @@ _is_target_supported(struct gl_context *ctx, GLenum target)
     *     "if a particular type of <target> is not supported by the
     *     implementation the "unsupported" answer should be given.
     *     This is not an error."
+    *
+    * For OpenGL ES, queries can only be used with GL_RENDERBUFFER or MS.
     */
    switch(target){
+   case GL_TEXTURE_1D:
    case GL_TEXTURE_2D:
    case GL_TEXTURE_3D:
-      break;
-
-   case GL_TEXTURE_1D:
       if (!_mesa_is_desktop_gl(ctx))
          return false;
       break;
@@ -404,12 +404,12 @@ _is_target_supported(struct gl_context *ctx, GLenum target)
       break;
 
    case GL_TEXTURE_2D_ARRAY:
-      if (!(_mesa_has_EXT_texture_array(ctx) || _mesa_is_gles3(ctx)))
+      if (!_mesa_has_EXT_texture_array(ctx))
          return false;
       break;
 
    case GL_TEXTURE_CUBE_MAP:
-      if (!_mesa_has_ARB_texture_cube_map(ctx))
+      if (ctx->API != API_OPENGL_CORE && !_mesa_has_ARB_texture_cube_map(ctx))
          return false;
       break;
 
@@ -419,7 +419,7 @@ _is_target_supported(struct gl_context *ctx, GLenum target)
       break;
 
    case GL_TEXTURE_RECTANGLE:
-      if (!_mesa_has_NV_texture_rectangle(ctx))
+      if (!_mesa_has_ARB_texture_rectangle(ctx))
           return false;
       break;
 
@@ -559,7 +559,7 @@ _is_internalformat_supported(struct gl_context *ctx, GLenum target,
     */
    GLint buffer[1];
 
-   /* At this point a internalformat is valid if it is valid as a texture or
+   /* At this point an internalformat is valid if it is valid as a texture or
     * as a renderbuffer format. The checks are different because those methods
     * return different values when passing non supported internalformats */
    if (_mesa_base_tex_format(ctx, internalformat) < 0 &&
@@ -877,6 +877,9 @@ _mesa_GetInternalformativ(GLenum target, GLenum internalformat, GLenum pname,
        *     "Since multisampling is not supported for signed and unsigned
        *     integer internal formats, the value of NUM_SAMPLE_COUNTS will be
        *     zero for such formats.
+       *
+       * Since OpenGL ES 3.1 adds support for multisampled integer formats, we
+       * have to check the version for 30 exactly.
        */
       if (pname == GL_NUM_SAMPLE_COUNTS && ctx->API == API_OPENGLES2 &&
           ctx->Version == 30 && _mesa_is_enum_format_integer(internalformat)) {
@@ -902,7 +905,10 @@ _mesa_GetInternalformativ(GLenum target, GLenum internalformat, GLenum pname,
        *     format for representing resources of the specified <internalformat> is
        *     returned in <params>.
        *
-       * Therefore, we let the driver answer.
+       * Therefore, we let the driver answer. Note that if we reach this
+       * point, it means that the internalformat is supported, so the driver
+       * is called just to try to get a preferred format. If not supported,
+       * GL_NONE was already returned and the driver is not called.
        */
       ctx->Driver.QueryInternalFormat(ctx, target, internalformat, pname,
                                       buffer);
@@ -962,7 +968,8 @@ _mesa_GetInternalformativ(GLenum target, GLenum internalformat, GLenum pname,
 
       switch (pname) {
       case GL_INTERNALFORMAT_DEPTH_SIZE:
-         if (!_mesa_has_ARB_depth_texture(ctx) &&
+         if (ctx->API != API_OPENGL_CORE &&
+             !_mesa_has_ARB_depth_texture(ctx) &&
              target != GL_RENDERBUFFER &&
              target != GL_TEXTURE_BUFFER)
             goto end;

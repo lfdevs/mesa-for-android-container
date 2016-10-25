@@ -964,7 +964,7 @@ draw_set_mapped_so_targets(struct draw_context *draw,
 
 void
 draw_set_sampler_views(struct draw_context *draw,
-                       unsigned shader_stage,
+                       enum pipe_shader_type shader_stage,
                        struct pipe_sampler_view **views,
                        unsigned num)
 {
@@ -985,7 +985,7 @@ draw_set_sampler_views(struct draw_context *draw,
 
 void
 draw_set_samplers(struct draw_context *draw,
-                  unsigned shader_stage,
+                  enum pipe_shader_type shader_stage,
                   struct pipe_sampler_state **samplers,
                   unsigned num)
 {

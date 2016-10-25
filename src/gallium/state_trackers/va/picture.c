@@ -62,6 +62,8 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
    if (!surf || !surf->buffer)
       return VA_STATUS_ERROR_INVALID_SURFACE;
 
+   context->target_id = render_target;
+   surf->ctx = context_id;
    context->target = surf->buffer;
 
    if (!context->decoder) {
@@ -78,7 +80,8 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
       return VA_STATUS_SUCCESS;
    }
 
-   context->decoder->begin_frame(context->decoder, context->target, &context->desc.base);
+   if (context->decoder->entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE)
+      context->decoder->begin_frame(context->decoder, context->target, &context->desc.base);
 
    return VA_STATUS_SUCCESS;
 }
@@ -92,6 +95,39 @@ vlVaGetReferenceFrame(vlVaDriver *drv, VASurfaceID surface_id,
       *ref_frame = surf->buffer;
    else
       *ref_frame = NULL;
+}
+
+static void
+getEncParamPreset(vlVaContext *context)
+{
+   //motion estimation preset
+   context->desc.h264enc.motion_est.motion_est_quarter_pixel = 0x00000001;
+   context->desc.h264enc.motion_est.lsmvert = 0x00000002;
+   context->desc.h264enc.motion_est.enc_disable_sub_mode = 0x00000078;
+   context->desc.h264enc.motion_est.enc_en_ime_overw_dis_subm = 0x00000001;
+   context->desc.h264enc.motion_est.enc_ime_overw_dis_subm_no = 0x00000001;
+   context->desc.h264enc.motion_est.enc_ime2_search_range_x = 0x00000004;
+   context->desc.h264enc.motion_est.enc_ime2_search_range_y = 0x00000004;
+
+   //pic control preset
+   context->desc.h264enc.pic_ctrl.enc_cabac_enable = 0x00000001;
+   context->desc.h264enc.pic_ctrl.enc_constraint_set_flags = 0x00000040;
+
+   //rate control
+   context->desc.h264enc.rate_ctrl.vbv_buffer_size = 20000000;
+   context->desc.h264enc.rate_ctrl.vbv_buf_lv = 48;
+   context->desc.h264enc.rate_ctrl.fill_data_enable = 1;
+   context->desc.h264enc.rate_ctrl.enforce_hrd = 1;
+   context->desc.h264enc.enable_vui = false;
+   if (context->desc.h264enc.rate_ctrl.frame_rate_num == 0)
+      context->desc.h264enc.rate_ctrl.frame_rate_num = 30;
+   context->desc.h264enc.rate_ctrl.target_bits_picture =
+      context->desc.h264enc.rate_ctrl.target_bitrate / context->desc.h264enc.rate_ctrl.frame_rate_num;
+   context->desc.h264enc.rate_ctrl.peak_bits_picture_integer =
+      context->desc.h264enc.rate_ctrl.peak_bitrate / context->desc.h264enc.rate_ctrl.frame_rate_num;
+   context->desc.h264enc.rate_ctrl.peak_bits_picture_fraction = 0;
+
+   context->desc.h264enc.ref_pic_mode = 0x00000201;
 }
 
 static VAStatus
@@ -278,6 +314,149 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
       num_buffers, (const void * const*)buffers, sizes);
 }
 
+static VAStatus
+handleVAEncMiscParameterTypeRateControl(vlVaContext *context, VAEncMiscParameterBuffer *misc)
+{
+   VAEncMiscParameterRateControl *rc = (VAEncMiscParameterRateControl *)misc->data;
+   if (context->desc.h264enc.rate_ctrl.rate_ctrl_method ==
+       PIPE_H264_ENC_RATE_CONTROL_METHOD_CONSTANT)
+      context->desc.h264enc.rate_ctrl.target_bitrate = rc->bits_per_second;
+   else
+      context->desc.h264enc.rate_ctrl.target_bitrate = rc->bits_per_second * (rc->target_percentage / 100.0);
+   context->desc.h264enc.rate_ctrl.peak_bitrate = rc->bits_per_second;
+   if (context->desc.h264enc.rate_ctrl.target_bitrate < 2000000)
+      context->desc.h264enc.rate_ctrl.vbv_buffer_size = MIN2((context->desc.h264enc.rate_ctrl.target_bitrate * 2.75), 2000000);
+   else
+      context->desc.h264enc.rate_ctrl.vbv_buffer_size = context->desc.h264enc.rate_ctrl.target_bitrate;
+
+   return VA_STATUS_SUCCESS;
+}
+
+static VAStatus
+handleVAEncMiscParameterTypeFrameRate(vlVaContext *context, VAEncMiscParameterBuffer *misc)
+{
+   VAEncMiscParameterFrameRate *fr = (VAEncMiscParameterFrameRate *)misc->data;
+   context->desc.h264enc.rate_ctrl.frame_rate_num = fr->framerate;
+   return VA_STATUS_SUCCESS;
+}
+
+static VAStatus
+handleVAEncSequenceParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
+{
+   VAEncSequenceParameterBufferH264 *h264 = (VAEncSequenceParameterBufferH264 *)buf->data;
+   if (!context->decoder) {
+      context->templat.max_references = h264->max_num_ref_frames;
+      context->templat.level = h264->level_idc;
+      context->decoder = drv->pipe->create_video_codec(drv->pipe, &context->templat);
+      if (!context->decoder)
+         return VA_STATUS_ERROR_ALLOCATION_FAILED;
+   }
+   context->desc.h264enc.gop_size = h264->intra_idr_period;
+   context->desc.h264enc.rate_ctrl.frame_rate_num = h264->time_scale / 2;
+   context->desc.h264enc.rate_ctrl.frame_rate_den = 1;
+   return VA_STATUS_SUCCESS;
+}
+
+static VAStatus
+handleVAEncMiscParameterBufferType(vlVaContext *context, vlVaBuffer *buf)
+{
+   VAStatus vaStatus = VA_STATUS_SUCCESS;
+   VAEncMiscParameterBuffer *misc;
+   misc = buf->data;
+
+   switch (misc->type) {
+   case VAEncMiscParameterTypeRateControl:
+      vaStatus = handleVAEncMiscParameterTypeRateControl(context, misc);
+      break;
+
+   case VAEncMiscParameterTypeFrameRate:
+      vaStatus = handleVAEncMiscParameterTypeFrameRate(context, misc);
+      break;
+
+   default:
+      break;
+   }
+
+   return vaStatus;
+}
+
+static VAStatus
+handleVAEncPictureParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
+{
+   VAEncPictureParameterBufferH264 *h264;
+   vlVaBuffer *coded_buf;
+
+   h264 = buf->data;
+   context->desc.h264enc.frame_num = h264->frame_num;
+   context->desc.h264enc.not_referenced = false;
+   context->desc.h264enc.is_idr = (h264->pic_fields.bits.idr_pic_flag == 1);
+   context->desc.h264enc.pic_order_cnt = h264->CurrPic.TopFieldOrderCnt;
+   if (context->desc.h264enc.is_idr)
+      context->desc.h264enc.i_remain = 1;
+   else
+      context->desc.h264enc.i_remain = 0;
+
+   context->desc.h264enc.p_remain = context->desc.h264enc.gop_size - context->desc.h264enc.gop_cnt - context->desc.h264enc.i_remain;
+
+   coded_buf = handle_table_get(drv->htab, h264->coded_buf);
+   if (!coded_buf->derived_surface.resource)
+      coded_buf->derived_surface.resource = pipe_buffer_create(drv->pipe->screen, PIPE_BIND_VERTEX_BUFFER,
+                                            PIPE_USAGE_STREAM, coded_buf->size);
+   context->coded_buf = coded_buf;
+
+   context->desc.h264enc.frame_idx[h264->CurrPic.picture_id] = h264->frame_num;
+   if (context->desc.h264enc.is_idr)
+      context->desc.h264enc.picture_type = PIPE_H264_ENC_PICTURE_TYPE_IDR;
+   else
+      context->desc.h264enc.picture_type = PIPE_H264_ENC_PICTURE_TYPE_P;
+
+   context->desc.h264enc.quant_i_frames = h264->pic_init_qp;
+   context->desc.h264enc.quant_b_frames = h264->pic_init_qp;
+   context->desc.h264enc.quant_p_frames = h264->pic_init_qp;
+   context->desc.h264enc.frame_num_cnt++;
+   context->desc.h264enc.gop_cnt++;
+   if (context->desc.h264enc.gop_cnt == context->desc.h264enc.gop_size)
+      context->desc.h264enc.gop_cnt = 0;
+
+   return VA_STATUS_SUCCESS;
+}
+
+static VAStatus
+handleVAEncSliceParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
+{
+   VAEncSliceParameterBufferH264 *h264;
+
+   h264 = buf->data;
+   context->desc.h264enc.ref_idx_l0 = VA_INVALID_ID;
+   context->desc.h264enc.ref_idx_l1 = VA_INVALID_ID;
+
+   for (int i = 0; i < 32; i++) {
+      if (h264->RefPicList0[i].picture_id != VA_INVALID_ID) {
+         if (context->desc.h264enc.ref_idx_l0 == VA_INVALID_ID)
+            context->desc.h264enc.ref_idx_l0 = context->desc.h264enc.frame_idx[h264->RefPicList0[i].picture_id];
+      }
+      if (h264->RefPicList1[i].picture_id != VA_INVALID_ID && h264->slice_type == 1) {
+         if (context->desc.h264enc.ref_idx_l1 == VA_INVALID_ID)
+            context->desc.h264enc.ref_idx_l1 = context->desc.h264enc.frame_idx[h264->RefPicList1[i].picture_id];
+      }
+   }
+
+   if (h264->slice_type == 1)
+      context->desc.h264enc.picture_type = PIPE_H264_ENC_PICTURE_TYPE_B;
+   else if (h264->slice_type == 0)
+      context->desc.h264enc.picture_type = PIPE_H264_ENC_PICTURE_TYPE_P;
+   else if (h264->slice_type == 2) {
+      if (context->desc.h264enc.is_idr){
+         context->desc.h264enc.picture_type = PIPE_H264_ENC_PICTURE_TYPE_IDR;
+         context->desc.h264enc.idr_pic_id++;
+	   } else
+         context->desc.h264enc.picture_type = PIPE_H264_ENC_PICTURE_TYPE_I;
+   } else
+      context->desc.h264enc.picture_type = PIPE_H264_ENC_PICTURE_TYPE_SKIP;
+
+   return VA_STATUS_SUCCESS;
+}
+
 VAStatus
 vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buffers, int num_buffers)
 {
@@ -328,6 +507,22 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
          vaStatus = vlVaHandleVAProcPipelineParameterBufferType(drv, context, buf);
          break;
 
+      case VAEncSequenceParameterBufferType:
+         vaStatus = handleVAEncSequenceParameterBufferType(drv, context, buf);
+         break;
+
+      case VAEncMiscParameterBufferType:
+         vaStatus = handleVAEncMiscParameterBufferType(context, buf);
+         break;
+
+      case VAEncPictureParameterBufferType:
+         vaStatus = handleVAEncPictureParameterBufferType(drv, context, buf);
+         break;
+
+      case VAEncSliceParameterBufferType:
+         vaStatus = handleVAEncSliceParameterBufferType(drv, context, buf);
+         break;
+
       default:
          break;
       }
@@ -342,6 +537,9 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
 {
    vlVaDriver *drv;
    vlVaContext *context;
+   vlVaBuffer *coded_buf;
+   vlVaSurface *surf;
+   void *feedback;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -364,8 +562,25 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       return VA_STATUS_SUCCESS;
    }
 
+   pipe_mutex_lock(drv->mutex);
+   surf = handle_table_get(drv->htab, context->target_id);
    context->mpeg4.frame_num++;
-   context->decoder->end_frame(context->decoder, context->target, &context->desc.base);
 
+   if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
+      coded_buf = context->coded_buf;
+      getEncParamPreset(context);
+      context->decoder->begin_frame(context->decoder, context->target, &context->desc.base);
+      context->decoder->encode_bitstream(context->decoder, context->target,
+                                         coded_buf->derived_surface.resource, &feedback);
+      surf->frame_num_cnt = context->desc.h264enc.frame_num_cnt;
+      surf->feedback = feedback;
+      surf->coded_buf = coded_buf;
+   }
+
+   context->decoder->end_frame(context->decoder, context->target, &context->desc.base);
+   if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE &&
+       context->desc.h264enc.p_remain == 1)
+      context->decoder->flush(context->decoder);
+   pipe_mutex_unlock(drv->mutex);
    return VA_STATUS_SUCCESS;
 }

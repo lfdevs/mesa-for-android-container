@@ -29,7 +29,7 @@
 #define TOY_COMPILER_H
 
 #include "genhw/genhw.h"
-#include "util/u_slab.h"
+#include "util/slab.h"
 
 #include "ilo_common.h"
 #include "toy_compiler_reg.h"
@@ -153,7 +153,7 @@ struct toy_compiler {
    const struct ilo_dev *dev;
 
    struct toy_inst templ;
-   struct util_slab_mempool mempool;
+   struct slab_mempool mempool;
    struct list_head instructions;
    struct list_head *iter, *iter_next;
 
@@ -209,7 +209,7 @@ tc_duplicate_inst(struct toy_compiler *tc, const struct toy_inst *inst)
 {
    struct toy_inst *new_inst;
 
-   new_inst = util_slab_alloc(&tc->mempool);
+   new_inst = slab_alloc_st(&tc->mempool);
    if (!new_inst)
       return NULL;
 
@@ -236,7 +236,7 @@ static inline void
 tc_discard_inst(struct toy_compiler *tc, struct toy_inst *inst)
 {
    list_del(&inst->list);
-   util_slab_free(&tc->mempool, inst);
+   slab_free_st(&tc->mempool, inst);
 }
 
 /**

@@ -121,94 +121,6 @@ void genX(CmdBindIndexBuffer)(
    cmd_buffer->state.gen7.index_offset = offset;
 }
 
-static VkResult
-flush_compute_descriptor_set(struct anv_cmd_buffer *cmd_buffer)
-{
-   struct anv_device *device = cmd_buffer->device;
-   struct anv_pipeline *pipeline = cmd_buffer->state.compute_pipeline;
-   struct anv_state surfaces = { 0, }, samplers = { 0, };
-   VkResult result;
-
-   result = anv_cmd_buffer_emit_samplers(cmd_buffer,
-                                         MESA_SHADER_COMPUTE, &samplers);
-   if (result != VK_SUCCESS)
-      return result;
-   result = anv_cmd_buffer_emit_binding_table(cmd_buffer,
-                                              MESA_SHADER_COMPUTE, &surfaces);
-   if (result != VK_SUCCESS)
-      return result;
-
-   struct anv_state push_state = anv_cmd_buffer_cs_push_constants(cmd_buffer);
-
-   const struct brw_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
-   const struct brw_stage_prog_data *prog_data = &cs_prog_data->base;
-
-   if (push_state.alloc_size) {
-      anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_CURBE_LOAD), curbe) {
-         curbe.CURBETotalDataLength    = push_state.alloc_size;
-         curbe.CURBEDataStartAddress   = push_state.offset;
-      }
-   }
-
-   const uint32_t slm_size = encode_slm_size(GEN_GEN, prog_data->total_shared);
-
-   struct anv_state state =
-      anv_state_pool_emit(&device->dynamic_state_pool,
-                          GENX(INTERFACE_DESCRIPTOR_DATA), 64,
-                          .KernelStartPointer = pipeline->cs_simd,
-                          .BindingTablePointer = surfaces.offset,
-                          .SamplerStatePointer = samplers.offset,
-                          .ConstantURBEntryReadLength =
-                             cs_prog_data->push.per_thread.regs,
-#if GEN_IS_HASWELL
-                          .CrossThreadConstantDataReadLength =
-                             cs_prog_data->push.cross_thread.regs,
-#else
-                          .ConstantURBEntryReadOffset = 0,
-#endif
-                          .BarrierEnable = cs_prog_data->uses_barrier,
-                          .SharedLocalMemorySize = slm_size,
-                          .NumberofThreadsinGPGPUThreadGroup =
-                             cs_prog_data->threads);
-
-   const uint32_t size = GENX(INTERFACE_DESCRIPTOR_DATA_length) * sizeof(uint32_t);
-   anv_batch_emit(&cmd_buffer->batch,
-                  GENX(MEDIA_INTERFACE_DESCRIPTOR_LOAD), idl) {
-      idl.InterfaceDescriptorTotalLength        = size;
-      idl.InterfaceDescriptorDataStartAddress = state.offset;
-   }
-
-   return VK_SUCCESS;
-}
-
-void
-genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
-{
-   struct anv_pipeline *pipeline = cmd_buffer->state.compute_pipeline;
-   MAYBE_UNUSED VkResult result;
-
-   assert(pipeline->active_stages == VK_SHADER_STAGE_COMPUTE_BIT);
-
-   genX(cmd_buffer_config_l3)(cmd_buffer, pipeline);
-
-   genX(flush_pipeline_select_gpgpu)(cmd_buffer);
-
-   if (cmd_buffer->state.compute_dirty & ANV_CMD_DIRTY_PIPELINE)
-      anv_batch_emit_batch(&cmd_buffer->batch, &pipeline->batch);
-
-   if ((cmd_buffer->state.descriptors_dirty & VK_SHADER_STAGE_COMPUTE_BIT) ||
-       (cmd_buffer->state.compute_dirty & ANV_CMD_DIRTY_PIPELINE)) {
-      /* FIXME: figure out descriptors for gen7 */
-      result = flush_compute_descriptor_set(cmd_buffer);
-      assert(result == VK_SUCCESS);
-      cmd_buffer->state.descriptors_dirty &= ~VK_SHADER_STAGE_COMPUTE_BIT;
-   }
-
-   cmd_buffer->state.compute_dirty = 0;
-
-   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
-}
-
 void
 genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
 {
@@ -321,6 +233,13 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
    }
 
    cmd_buffer->state.dirty = 0;
+}
+
+void
+genX(cmd_buffer_emit_hz_op)(struct anv_cmd_buffer *cmd_buffer,
+                          enum blorp_hiz_op op)
+{
+   anv_finishme("Implement Gen7 HZ ops");
 }
 
 void genX(CmdSetEvent)(

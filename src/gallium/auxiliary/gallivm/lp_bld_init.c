@@ -420,6 +420,7 @@ lp_build_init(void)
       util_cpu_caps.has_avx = 0;
       util_cpu_caps.has_avx2 = 0;
       util_cpu_caps.has_f16c = 0;
+      util_cpu_caps.has_fma = 0;
    }
 #endif
 
@@ -454,6 +455,12 @@ lp_build_init(void)
       util_cpu_caps.has_avx = 0;
       util_cpu_caps.has_avx2 = 0;
       util_cpu_caps.has_f16c = 0;
+      util_cpu_caps.has_fma = 0;
+   }
+   if (HAVE_LLVM < 0x0304 || !USE_MCJIT) {
+      /* AVX2 support has only been tested with LLVM 3.4, and it requires
+       * MCJIT. */
+      util_cpu_caps.has_avx2 = 0;
    }
 
 #ifdef PIPE_ARCH_PPC_64
@@ -652,13 +659,24 @@ gallivm_jit_function(struct gallivm_state *gallivm,
 {
    void *code;
    func_pointer jit_func;
+   int64_t time_begin = 0;
 
    assert(gallivm->compiled);
    assert(gallivm->engine);
 
+   if (gallivm_debug & GALLIVM_DEBUG_PERF)
+      time_begin = os_time_get();
+
    code = LLVMGetPointerToGlobal(gallivm->engine, func);
    assert(code);
    jit_func = pointer_to_func(code);
+
+   if (gallivm_debug & GALLIVM_DEBUG_PERF) {
+      int64_t time_end = os_time_get();
+      int time_msec = (int)(time_end - time_begin) / 1000;
+      debug_printf("   jitting func %s took %d msec\n",
+                   LLVMGetValueName(func), time_msec);
+   }
 
    return jit_func;
 }

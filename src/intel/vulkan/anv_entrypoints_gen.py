@@ -125,7 +125,7 @@ if opt_header:
     print "   };\n"
     print "};\n"
 
-    print "void anv_set_dispatch_devinfo(const struct brw_device_info *info);\n"
+    print "void anv_set_dispatch_devinfo(const struct gen_device_info *info);\n"
 
     for type, name, args, num, h in entrypoints:
         print_guard_start(name)
@@ -214,22 +214,14 @@ for layer in [ "anv", "gen7", "gen75", "gen8", "gen9" ]:
     print "};\n"
 
 print """
-static const struct brw_device_info *dispatch_devinfo;
-
-void
-anv_set_dispatch_devinfo(const struct brw_device_info *devinfo)
+static void * __attribute__ ((noinline))
+anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
 {
-   dispatch_devinfo = devinfo;
-}
-
-void * __attribute__ ((noinline))
-anv_resolve_entrypoint(uint32_t index)
-{
-   if (dispatch_devinfo == NULL) {
+   if (devinfo == NULL) {
       return anv_layer.entrypoints[index];
    }
 
-   switch (dispatch_devinfo->gen) {
+   switch (devinfo->gen) {
    case 9:
       if (gen9_layer.entrypoints[index])
          return gen9_layer.entrypoints[index];
@@ -239,7 +231,7 @@ anv_resolve_entrypoint(uint32_t index)
          return gen8_layer.entrypoints[index];
       /* fall through */
    case 7:
-      if (dispatch_devinfo->is_haswell && gen75_layer.entrypoints[index])
+      if (devinfo->is_haswell && gen75_layer.entrypoints[index])
          return gen75_layer.entrypoints[index];
 
       if (gen7_layer.entrypoints[index])
@@ -301,7 +293,7 @@ print "};"
 
 print """
 void *
-anv_lookup_entrypoint(const char *name)
+anv_lookup_entrypoint(const struct gen_device_info *devinfo, const char *name)
 {
    static const uint32_t prime_factor = %d;
    static const uint32_t prime_step = %d;
@@ -325,6 +317,6 @@ anv_lookup_entrypoint(const char *name)
    if (strcmp(name, strings + e->name) != 0)
       return NULL;
 
-   return anv_resolve_entrypoint(i);
+   return anv_resolve_entrypoint(devinfo, i);
 }
 """ % (prime_factor, prime_step, hash_mask)

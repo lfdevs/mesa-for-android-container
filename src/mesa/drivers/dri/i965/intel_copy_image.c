@@ -210,30 +210,14 @@ copy_miptrees(struct brw_context *brw,
               int dst_x, int dst_y, int dst_z, unsigned dst_level,
               int src_width, int src_height)
 {
-   struct gl_context *ctx = &brw->ctx;
    unsigned bw, bh;
 
-   if (brw->gen >= 6 &&
-       brw->format_supported_as_render_target[dst_mt->format] &&
-       !_mesa_is_format_compressed(src_mt->format)) {
-
-      /* We'll use the destination format for both images */
-      mesa_format format = dst_mt->format;
-
-      brw_blorp_blit_miptrees(brw,
-                              src_mt, src_level, src_z, format, SWIZZLE_XYZW,
-                              dst_mt, dst_level, dst_z, format,
-                              src_x, src_y,
-                              src_x + src_width, src_y + src_height,
-                              dst_x, dst_y,
-                              dst_x + src_width, dst_y + src_height,
-                              GL_NEAREST, false, false, /* mirror */
-                              false, false);
-      return;
-   }
-
-   if (src_mt->num_samples > 0 || dst_mt->num_samples > 0) {
-      _mesa_problem(ctx, "Failed to copy multisampled texture with BLORP\n");
+   if (brw->gen >= 6) {
+      brw_blorp_copy_miptrees(brw,
+                              src_mt, src_level, src_z,
+                              dst_mt, dst_level, dst_z,
+                              src_x, src_y, dst_x, dst_y,
+                              src_width, src_height);
       return;
    }
 

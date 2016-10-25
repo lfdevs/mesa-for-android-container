@@ -13,7 +13,6 @@ CPP_SOURCES := \
 	api/sampler.cpp \
 	api/transfer.cpp \
 	api/util.hpp \
-	core/compiler.hpp \
 	core/context.cpp \
 	core/context.hpp \
 	core/device.cpp \
@@ -54,7 +53,16 @@ CPP_SOURCES := \
 	util/tuple.hpp
 
 LLVM_SOURCES := \
-	llvm/invocation.cpp
+	llvm/codegen/bitcode.cpp \
+	llvm/codegen/common.cpp \
+	llvm/codegen/native.cpp \
+	llvm/codegen.hpp \
+	llvm/compat.hpp \
+	llvm/invocation.cpp \
+	llvm/invocation.hpp \
+	llvm/metadata.hpp \
+	llvm/util.hpp
 
 TGSI_SOURCES := \
-	tgsi/compiler.cpp
+	tgsi/compiler.cpp \
+	tgsi/invocation.hpp

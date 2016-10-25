@@ -537,6 +537,10 @@ public:
       return this->interface_type;
    }
 
+   enum glsl_interface_packing get_interface_type_packing() const
+   {
+     return this->interface_type->get_interface_packing();
+   }
    /**
     * Get the max_ifc_array_access pointer
     *
@@ -588,7 +592,7 @@ public:
 
    inline bool is_interpolation_flat() const
    {
-      return this->data.interpolation == INTERP_QUALIFIER_FLAT ||
+      return this->data.interpolation == INTERP_MODE_FLAT ||
              this->type->contains_integer() ||
              this->type->contains_double();
    }
@@ -682,7 +686,7 @@ public:
       /**
        * Interpolation mode for shader inputs / outputs
        *
-       * \sa ir_variable_interpolation
+       * \sa glsl_interp_mode
        */
       unsigned interpolation:2;
 
@@ -827,6 +831,14 @@ public:
       unsigned from_ssbo_unsized_array:1; /**< unsized array buffer variable. */
 
       unsigned implicit_sized_array:1;
+
+      /**
+       * Whether this is a fragment shader output implicitly initialized with
+       * the previous contents of the specified render target at the
+       * framebuffer location corresponding to this shader invocation.
+       */
+      unsigned fb_fetch_output:1;
+
       /**
        * Emit a warning if this variable is accessed.
        */
@@ -1001,6 +1013,90 @@ public:
  */
 typedef bool (*builtin_available_predicate)(const _mesa_glsl_parse_state *);
 
+#define MAKE_INTRINSIC_FOR_TYPE(op, t) \
+   ir_intrinsic_generic_ ## op - ir_intrinsic_generic_load + ir_intrinsic_ ## t ## _ ## load
+
+#define MAP_INTRINSIC_TO_TYPE(i, t) \
+   ir_intrinsic_id(int(i) - int(ir_intrinsic_generic_load) + int(ir_intrinsic_ ## t ## _ ## load))
+
+enum ir_intrinsic_id {
+   ir_intrinsic_invalid = 0,
+
+   /**
+    * \name Generic intrinsics
+    *
+    * Each of these intrinsics has a specific version for shared variables and
+    * SSBOs.
+    */
+   /*@{*/
+   ir_intrinsic_generic_load,
+   ir_intrinsic_generic_store,
+   ir_intrinsic_generic_atomic_add,
+   ir_intrinsic_generic_atomic_and,
+   ir_intrinsic_generic_atomic_or,
+   ir_intrinsic_generic_atomic_xor,
+   ir_intrinsic_generic_atomic_min,
+   ir_intrinsic_generic_atomic_max,
+   ir_intrinsic_generic_atomic_exchange,
+   ir_intrinsic_generic_atomic_comp_swap,
+   /*@}*/
+
+   ir_intrinsic_atomic_counter_read,
+   ir_intrinsic_atomic_counter_increment,
+   ir_intrinsic_atomic_counter_predecrement,
+   ir_intrinsic_atomic_counter_add,
+   ir_intrinsic_atomic_counter_and,
+   ir_intrinsic_atomic_counter_or,
+   ir_intrinsic_atomic_counter_xor,
+   ir_intrinsic_atomic_counter_min,
+   ir_intrinsic_atomic_counter_max,
+   ir_intrinsic_atomic_counter_exchange,
+   ir_intrinsic_atomic_counter_comp_swap,
+
+   ir_intrinsic_image_load,
+   ir_intrinsic_image_store,
+   ir_intrinsic_image_atomic_add,
+   ir_intrinsic_image_atomic_and,
+   ir_intrinsic_image_atomic_or,
+   ir_intrinsic_image_atomic_xor,
+   ir_intrinsic_image_atomic_min,
+   ir_intrinsic_image_atomic_max,
+   ir_intrinsic_image_atomic_exchange,
+   ir_intrinsic_image_atomic_comp_swap,
+   ir_intrinsic_image_size,
+   ir_intrinsic_image_samples,
+
+   ir_intrinsic_ssbo_load,
+   ir_intrinsic_ssbo_store = MAKE_INTRINSIC_FOR_TYPE(store, ssbo),
+   ir_intrinsic_ssbo_atomic_add = MAKE_INTRINSIC_FOR_TYPE(atomic_add, ssbo),
+   ir_intrinsic_ssbo_atomic_and = MAKE_INTRINSIC_FOR_TYPE(atomic_and, ssbo),
+   ir_intrinsic_ssbo_atomic_or = MAKE_INTRINSIC_FOR_TYPE(atomic_or, ssbo),
+   ir_intrinsic_ssbo_atomic_xor = MAKE_INTRINSIC_FOR_TYPE(atomic_xor, ssbo),
+   ir_intrinsic_ssbo_atomic_min = MAKE_INTRINSIC_FOR_TYPE(atomic_min, ssbo),
+   ir_intrinsic_ssbo_atomic_max = MAKE_INTRINSIC_FOR_TYPE(atomic_max, ssbo),
+   ir_intrinsic_ssbo_atomic_exchange = MAKE_INTRINSIC_FOR_TYPE(atomic_exchange, ssbo),
+   ir_intrinsic_ssbo_atomic_comp_swap = MAKE_INTRINSIC_FOR_TYPE(atomic_comp_swap, ssbo),
+
+   ir_intrinsic_memory_barrier,
+   ir_intrinsic_shader_clock,
+   ir_intrinsic_group_memory_barrier,
+   ir_intrinsic_memory_barrier_atomic_counter,
+   ir_intrinsic_memory_barrier_buffer,
+   ir_intrinsic_memory_barrier_image,
+   ir_intrinsic_memory_barrier_shared,
+
+   ir_intrinsic_shared_load,
+   ir_intrinsic_shared_store = MAKE_INTRINSIC_FOR_TYPE(store, shared),
+   ir_intrinsic_shared_atomic_add = MAKE_INTRINSIC_FOR_TYPE(atomic_add, shared),
+   ir_intrinsic_shared_atomic_and = MAKE_INTRINSIC_FOR_TYPE(atomic_and, shared),
+   ir_intrinsic_shared_atomic_or = MAKE_INTRINSIC_FOR_TYPE(atomic_or, shared),
+   ir_intrinsic_shared_atomic_xor = MAKE_INTRINSIC_FOR_TYPE(atomic_xor, shared),
+   ir_intrinsic_shared_atomic_min = MAKE_INTRINSIC_FOR_TYPE(atomic_min, shared),
+   ir_intrinsic_shared_atomic_max = MAKE_INTRINSIC_FOR_TYPE(atomic_max, shared),
+   ir_intrinsic_shared_atomic_exchange = MAKE_INTRINSIC_FOR_TYPE(atomic_exchange, shared),
+   ir_intrinsic_shared_atomic_comp_swap = MAKE_INTRINSIC_FOR_TYPE(atomic_comp_swap, shared),
+};
+
 /*@{*/
 /**
  * The representation of a function instance; may be the full definition or
@@ -1094,7 +1190,13 @@ public:
     * Whether or not this function is an intrinsic to be implemented
     * by the driver.
     */
-   bool is_intrinsic;
+   inline bool is_intrinsic() const
+   {
+      return intrinsic_id != ir_intrinsic_invalid;
+   }
+
+   /** Indentifier for this intrinsic. */
+   enum ir_intrinsic_id intrinsic_id;
 
    /** Whether or not a built-in is available for this shader. */
    bool is_builtin_available(const _mesa_glsl_parse_state *state) const;
@@ -1349,316 +1451,9 @@ public:
    unsigned write_mask:4;
 };
 
-/* Update ir_expression::get_num_operands() and operator_strs when
- * updating this list.
- */
-enum ir_expression_operation {
-   ir_unop_bit_not,
-   ir_unop_logic_not,
-   ir_unop_neg,
-   ir_unop_abs,
-   ir_unop_sign,
-   ir_unop_rcp,
-   ir_unop_rsq,
-   ir_unop_sqrt,
-   ir_unop_exp,         /**< Log base e on gentype */
-   ir_unop_log,	        /**< Natural log on gentype */
-   ir_unop_exp2,
-   ir_unop_log2,
-   ir_unop_f2i,         /**< Float-to-integer conversion. */
-   ir_unop_f2u,         /**< Float-to-unsigned conversion. */
-   ir_unop_i2f,         /**< Integer-to-float conversion. */
-   ir_unop_f2b,         /**< Float-to-boolean conversion */
-   ir_unop_b2f,         /**< Boolean-to-float conversion */
-   ir_unop_i2b,         /**< int-to-boolean conversion */
-   ir_unop_b2i,         /**< Boolean-to-int conversion */
-   ir_unop_u2f,         /**< Unsigned-to-float conversion. */
-   ir_unop_i2u,         /**< Integer-to-unsigned conversion. */
-   ir_unop_u2i,         /**< Unsigned-to-integer conversion. */
-   ir_unop_d2f,         /**< Double-to-float conversion. */
-   ir_unop_f2d,         /**< Float-to-double conversion. */
-   ir_unop_d2i,         /**< Double-to-integer conversion. */
-   ir_unop_i2d,         /**< Integer-to-double conversion. */
-   ir_unop_d2u,         /**< Double-to-unsigned conversion. */
-   ir_unop_u2d,         /**< Unsigned-to-double conversion. */
-   ir_unop_d2b,         /**< Double-to-boolean conversion. */
-   ir_unop_bitcast_i2f, /**< Bit-identical int-to-float "conversion" */
-   ir_unop_bitcast_f2i, /**< Bit-identical float-to-int "conversion" */
-   ir_unop_bitcast_u2f, /**< Bit-identical uint-to-float "conversion" */
-   ir_unop_bitcast_f2u, /**< Bit-identical float-to-uint "conversion" */
+#include "ir_expression_operation.h"
 
-   /**
-    * \name Unary floating-point rounding operations.
-    */
-   /*@{*/
-   ir_unop_trunc,
-   ir_unop_ceil,
-   ir_unop_floor,
-   ir_unop_fract,
-   ir_unop_round_even,
-   /*@}*/
-
-   /**
-    * \name Trigonometric operations.
-    */
-   /*@{*/
-   ir_unop_sin,
-   ir_unop_cos,
-   /*@}*/
-
-   /**
-    * \name Partial derivatives.
-    */
-   /*@{*/
-   ir_unop_dFdx,
-   ir_unop_dFdx_coarse,
-   ir_unop_dFdx_fine,
-   ir_unop_dFdy,
-   ir_unop_dFdy_coarse,
-   ir_unop_dFdy_fine,
-   /*@}*/
-
-   /**
-    * \name Floating point pack and unpack operations.
-    */
-   /*@{*/
-   ir_unop_pack_snorm_2x16,
-   ir_unop_pack_snorm_4x8,
-   ir_unop_pack_unorm_2x16,
-   ir_unop_pack_unorm_4x8,
-   ir_unop_pack_half_2x16,
-   ir_unop_unpack_snorm_2x16,
-   ir_unop_unpack_snorm_4x8,
-   ir_unop_unpack_unorm_2x16,
-   ir_unop_unpack_unorm_4x8,
-   ir_unop_unpack_half_2x16,
-   /*@}*/
-
-   /**
-    * \name Bit operations, part of ARB_gpu_shader5.
-    */
-   /*@{*/
-   ir_unop_bitfield_reverse,
-   ir_unop_bit_count,
-   ir_unop_find_msb,
-   ir_unop_find_lsb,
-   /*@}*/
-
-   ir_unop_saturate,
-
-   /**
-    * \name Double packing, part of ARB_gpu_shader_fp64.
-    */
-   /*@{*/
-   ir_unop_pack_double_2x32,
-   ir_unop_unpack_double_2x32,
-   /*@}*/
-
-   ir_unop_frexp_sig,
-   ir_unop_frexp_exp,
-
-   ir_unop_noise,
-
-   ir_unop_subroutine_to_int,
-   /**
-    * Interpolate fs input at centroid
-    *
-    * operand0 is the fs input.
-    */
-   ir_unop_interpolate_at_centroid,
-
-   /**
-    * Ask the driver for the total size of a buffer block.
-    *
-    * operand0 is the ir_constant buffer block index in the linked shader.
-    */
-   ir_unop_get_buffer_size,
-
-   /**
-    * Calculate length of an unsized array inside a buffer block.
-    * This opcode is going to be replaced in a lowering pass inside
-    * the linker.
-    *
-    * operand0 is the unsized array's ir_value for the calculation
-    * of its length.
-    */
-   ir_unop_ssbo_unsized_array_length,
-
-   /**
-    * A sentinel marking the last of the unary operations.
-    */
-   ir_last_unop = ir_unop_ssbo_unsized_array_length,
-
-   ir_binop_add,
-   ir_binop_sub,
-   ir_binop_mul,       /**< Floating-point or low 32-bit integer multiply. */
-   ir_binop_imul_high, /**< Calculates the high 32-bits of a 64-bit multiply. */
-   ir_binop_div,
-
-   /**
-    * Returns the carry resulting from the addition of the two arguments.
-    */
-   /*@{*/
-   ir_binop_carry,
-   /*@}*/
-
-   /**
-    * Returns the borrow resulting from the subtraction of the second argument
-    * from the first argument.
-    */
-   /*@{*/
-   ir_binop_borrow,
-   /*@}*/
-
-   /**
-    * Takes one of two combinations of arguments:
-    *
-    * - mod(vecN, vecN)
-    * - mod(vecN, float)
-    *
-    * Does not take integer types.
-    */
-   ir_binop_mod,
-
-   /**
-    * \name Binary comparison operators which return a boolean vector.
-    * The type of both operands must be equal.
-    */
-   /*@{*/
-   ir_binop_less,
-   ir_binop_greater,
-   ir_binop_lequal,
-   ir_binop_gequal,
-   ir_binop_equal,
-   ir_binop_nequal,
-   /**
-    * Returns single boolean for whether all components of operands[0]
-    * equal the components of operands[1].
-    */
-   ir_binop_all_equal,
-   /**
-    * Returns single boolean for whether any component of operands[0]
-    * is not equal to the corresponding component of operands[1].
-    */
-   ir_binop_any_nequal,
-   /*@}*/
-
-   /**
-    * \name Bit-wise binary operations.
-    */
-   /*@{*/
-   ir_binop_lshift,
-   ir_binop_rshift,
-   ir_binop_bit_and,
-   ir_binop_bit_xor,
-   ir_binop_bit_or,
-   /*@}*/
-
-   ir_binop_logic_and,
-   ir_binop_logic_xor,
-   ir_binop_logic_or,
-
-   ir_binop_dot,
-   ir_binop_min,
-   ir_binop_max,
-
-   ir_binop_pow,
-
-   /**
-    * Load a value the size of a given GLSL type from a uniform block.
-    *
-    * operand0 is the ir_constant uniform block index in the linked shader.
-    * operand1 is a byte offset within the uniform block.
-    */
-   ir_binop_ubo_load,
-
-   /**
-    * \name Multiplies a number by two to a power, part of ARB_gpu_shader5.
-    */
-   /*@{*/
-   ir_binop_ldexp,
-   /*@}*/
-
-   /**
-    * Extract a scalar from a vector
-    *
-    * operand0 is the vector
-    * operand1 is the index of the field to read from operand0
-    */
-   ir_binop_vector_extract,
-
-   /**
-    * Interpolate fs input at offset
-    *
-    * operand0 is the fs input
-    * operand1 is the offset from the pixel center
-    */
-   ir_binop_interpolate_at_offset,
-
-   /**
-    * Interpolate fs input at sample position
-    *
-    * operand0 is the fs input
-    * operand1 is the sample ID
-    */
-   ir_binop_interpolate_at_sample,
-
-   /**
-    * A sentinel marking the last of the binary operations.
-    */
-   ir_last_binop = ir_binop_interpolate_at_sample,
-
-   /**
-    * \name Fused floating-point multiply-add, part of ARB_gpu_shader5.
-    */
-   /*@{*/
-   ir_triop_fma,
-   /*@}*/
-
-   ir_triop_lrp,
-
-   /**
-    * \name Conditional Select
-    *
-    * A vector conditional select instruction (like ?:, but operating per-
-    * component on vectors).
-    *
-    * \see lower_instructions_visitor::ldexp_to_arith
-    */
-   /*@{*/
-   ir_triop_csel,
-   /*@}*/
-
-   ir_triop_bitfield_extract,
-
-   /**
-    * Generate a value with one field of a vector changed
-    *
-    * operand0 is the vector
-    * operand1 is the value to write into the vector result
-    * operand2 is the index in operand0 to be modified
-    */
-   ir_triop_vector_insert,
-
-   /**
-    * A sentinel marking the last of the ternary operations.
-    */
-   ir_last_triop = ir_triop_vector_insert,
-
-   ir_quadop_bitfield_insert,
-
-   ir_quadop_vector,
-
-   /**
-    * A sentinel marking the last of the ternary operations.
-    */
-   ir_last_quadop = ir_quadop_vector,
-
-   /**
-    * A sentinel marking the last of all operations.
-    */
-   ir_last_opcode = ir_quadop_vector
-};
+extern const char *const ir_expression_operation_strings[ir_last_opcode + 1];
 
 class ir_expression : public ir_rvalue {
 public:
@@ -1725,17 +1520,6 @@ public:
              operation == ir_binop_ubo_load ||
              operation == ir_quadop_vector;
    }
-
-   /**
-    * Return a string representing this expression's operator.
-    */
-   const char *operator_string();
-
-   /**
-    * Return a string representing this expression's operator.
-    */
-   static const char *operator_string(ir_expression_operation);
-
 
    /**
     * Do a reverse-lookup to translate the given string into an operator.
@@ -2573,9 +2357,6 @@ _mesa_glsl_initialize_derived_variables(struct gl_context *ctx,
                                         gl_shader *shader);
 
 extern void
-_mesa_glsl_initialize_functions(_mesa_glsl_parse_state *state);
-
-extern void
 _mesa_glsl_initialize_builtin_functions();
 
 extern ir_function_signature *
@@ -2589,25 +2370,13 @@ extern gl_shader *
 _mesa_glsl_get_builtin_function_shader(void);
 
 extern ir_function_signature *
-_mesa_get_main_function_signature(gl_shader *sh);
-
-extern void
-_mesa_glsl_release_functions(void);
+_mesa_get_main_function_signature(glsl_symbol_table *symbols);
 
 extern void
 _mesa_glsl_release_builtin_functions(void);
 
 extern void
 reparent_ir(exec_list *list, void *mem_ctx);
-
-struct glsl_symbol_table;
-
-extern void
-import_prototypes(const exec_list *source, exec_list *dest,
-		  struct glsl_symbol_table *symbols, void *mem_ctx);
-
-extern bool
-ir_has_call(ir_instruction *ir);
 
 extern void
 do_set_program_inouts(exec_list *instructions, struct gl_program *prog,

@@ -1,7 +1,27 @@
+mesa (13.0.0~rc2-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * control, rules: Use llvm/clang 3.9 (Closes: #836913).
+  * control: Bump libclc dependencies.
+  * Bump libdrm-dev build-dep to 2.4.69 per configure.ac.
+  * Remove libudev-dev and libudev1 dependencies per configure.ac.
+  * Enable OpenCL on kfreebsd-* since we don't need udev anymore.
+  * Enable radv vulkan driver.
+  * control: Remove superfluous linux- prefix.
+  * not-installed: wglext.h got dropped from the tarball.
+  * mesa-common-dev: Remove mesa_glinterop.h, upstream doesn't install
+    it anymore.
+  * Update libgles2-mesa.symbols.
+  * Update libgl1-mesa-glx.symbols.
+  * source/local-options: Update extend-diff-ignore.
+  * Update mesa-vulkan-drivers.lintian-overrides.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 25 Oct 2016 10:59:08 +0200
+
 mesa (12.0.3-3) unstable; urgency=medium
 
-  * Limit libgbm1 dependency to any (Closes: #841774).  Thanks, Samuel
-    Thibault!
+  * Limit libgbm1 dependency to !hurd-any (Closes: #841774).  Thanks,
+    Samuel Thibault!
 
  -- Andreas Boll <andreas.boll.dev@gmail.com>  Mon, 24 Oct 2016 10:18:09 +0200
 

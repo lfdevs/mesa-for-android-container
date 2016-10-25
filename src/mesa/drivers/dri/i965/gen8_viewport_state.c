@@ -37,8 +37,11 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
    const float fb_height = (float)_mesa_geometric_height(ctx->DrawBuffer);
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
 
+   /* BRW_NEW_VIEWPORT_COUNT */
+   const unsigned viewport_count = brw->clip.viewport_count;
+
    float *vp = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
-                               16 * 4 * ctx->Const.MaxViewports,
+                               16 * 4 * viewport_count,
                                64, &brw->sf.vp_offset);
    /* Also assign to clip.vp_offset in case something uses it. */
    brw->clip.vp_offset = brw->sf.vp_offset;
@@ -52,7 +55,7 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
       y_bias = fb_height;
    }
 
-   for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
+   for (unsigned i = 0; i < viewport_count; i++) {
       float scale[3], translate[3];
       _mesa_get_viewport_xform(ctx, i, scale, translate);
 
@@ -136,7 +139,8 @@ const struct brw_tracked_state gen8_sf_clip_viewport = {
       .mesa = _NEW_BUFFERS |
               _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP,
+             BRW_NEW_BLORP |
+             BRW_NEW_VIEWPORT_COUNT,
    },
    .emit = gen8_upload_sf_clip_viewport,
 };

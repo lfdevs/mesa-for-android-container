@@ -40,7 +40,8 @@
   <struct name="VERTEX_BUFFER_STATE" length="4">
     <field name="Vertex Buffer Index" start="26" end="31" type="uint"/>
     <field name="Memory Object Control State" start="16" end="22" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="Address Modify Enable" start="14" end="14" type="uint"/>
+    <field name="Vertex Buffer MOCS" start="16" end="22" type="uint"/>
+    <field name="Address Modify Enable" start="14" end="14" type="bool"/>
     <field name="Null Vertex Buffer" start="13" end="13" type="bool"/>
     <field name="Buffer Pitch" start="0" end="11" type="uint"/>
     <field name="Buffer Starting Address" start="32" end="95" type="address"/>
@@ -49,7 +50,7 @@
 
   <struct name="VERTEX_ELEMENT_STATE" length="2">
     <field name="Vertex Buffer Index" start="26" end="31" type="uint"/>
-    <field name="Valid" start="25" end="25" type="uint"/>
+    <field name="Valid" start="25" end="25" type="bool"/>
     <field name="Source Element Format" start="16" end="24" type="uint"/>
     <field name="Edge Flag Enable" start="15" end="15" type="bool"/>
     <field name="Source Element Offset" start="0" end="11" type="uint"/>
@@ -191,7 +192,7 @@
       <value name="Ftz" value="0"/>
       <value name="SetByKernel" value="1"/>
     </field>
-    <field name="Single Program Flow" start="82" end="82" type="uint"/>
+    <field name="Single Program Flow" start="82" end="82" type="bool"/>
     <field name="Thread Priority" start="81" end="81" type="uint">
       <value name="Normal Priority" value="0"/>
       <value name="High Priority" value="1"/>
@@ -213,7 +214,7 @@
     </field>
     <field name="Binding Table Pointer" start="133" end="143" type="offset"/>
     <field name="Binding Table Entry Count" start="128" end="132" type="uint"/>
-    <field name="Constant/Indirect URB Entry Read Length" start="176" end="191" type="uint"/>
+    <field name="Constant URB Entry Read Length" start="176" end="191" type="uint"/>
     <field name="Constant URB Entry Read Offset" start="160" end="175" type="uint"/>
     <field name="Rounding Mode" start="214" end="215" type="uint">
       <value name="RTNE" value="0"/>
@@ -317,8 +318,8 @@
       <value name="MULTISAMPLECOUNT_8" value="3"/>
     </field>
     <field name="Multisample Position Palette Index" start="128" end="130" type="uint"/>
-    <field name="X Offset" start="185" end="191" type="offset"/>
-    <field name="Y Offset" start="181" end="183" type="offset"/>
+    <field name="X Offset" start="185" end="191" type="uint"/>
+    <field name="Y Offset" start="181" end="183" type="uint"/>
     <field name="EWA Disable For Cube" start="180" end="180" type="bool"/>
     <field name="Coherency Type" start="174" end="174" type="uint">
       <value name="GPU coherent" value="0"/>
@@ -355,6 +356,18 @@
 
   <struct name="FILTER_COEFFICIENT" length="1">
     <field name="Filter Coefficient" start="0" end="7" type="s1.6"/>
+  </struct>
+
+  <struct name="SAMPLER_BORDER_COLOR_STATE" length="4">
+    <field name="Border Color Float Red" start="0" end="31" type="float"/>
+    <field name="Border Color Float Green" start="32" end="63" type="float"/>
+    <field name="Border Color Float Blue" start="64" end="95" type="float"/>
+    <field name="Border Color Float Alpha" start="96" end="127" type="float"/>
+
+    <field name="Border Color 32bit Red" start="0" end="31" type="uint"/>
+    <field name="Border Color 32bit Green" start="32" end="63" type="uint"/>
+    <field name="Border Color 32bit Blue" start="64" end="95" type="uint"/>
+    <field name="Border Color 32bit Alpha" start="96" end="127" type="uint"/>
   </struct>
 
   <struct name="SAMPLER_STATE" length="4">
@@ -1216,6 +1229,7 @@
     <field name="Depth" start="181" end="191" type="uint"/>
     <field name="Minimum Array Element" start="170" end="180" type="uint"/>
     <field name="Depth Buffer Object Control State" start="160" end="166" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="Depth Buffer MOCS" start="160" end="166" type="uint"/>
     <field name="Render Target View Extent" start="245" end="255" type="uint"/>
     <field name="Surface QPitch" start="224" end="238" type="uint"/>
   </instruction>
@@ -1384,7 +1398,7 @@
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="17"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="8"/>
     <field name="Kernel Start Pointer" start="38" end="95" type="offset"/>
-    <field name="Single Program Flow" start="127" end="127" type="uint"/>
+    <field name="Single Program Flow" start="127" end="127" type="bool"/>
     <field name="Vector Mask Enable" start="126" end="126" type="bool"/>
     <field name="Sampler Count" start="123" end="125" type="uint">
       <value name="No Samplers" value="0"/>
@@ -1411,7 +1425,7 @@
     <field name="Output Vertex Size" start="215" end="220" type="uint"/>
     <field name="Output Topology" start="209" end="214" type="uint" prefix="OUTPUT"/>
     <field name="Vertex URB Entry Read Length" start="203" end="208" type="uint"/>
-    <field name="Include Vertex Handles" start="202" end="202" type="uint"/>
+    <field name="Include Vertex Handles" start="202" end="202" type="bool"/>
     <field name="Vertex URB Entry Read Offset" start="196" end="201" type="uint"/>
     <field name="Dispatch GRF Start Register For URB Data" start="192" end="195" type="uint"/>
     <field name="Maximum Number of Threads" start="248" end="255" type="uint"/>
@@ -1425,7 +1439,7 @@
     </field>
     <field name="Statistics Enable" start="234" end="234" type="bool"/>
     <field name="Invocations Increment Value" start="229" end="233" type="uint"/>
-    <field name="Include Primitive ID" start="228" end="228" type="uint"/>
+    <field name="Include Primitive ID" start="228" end="228" type="bool"/>
     <field name="Hint" start="227" end="227" type="uint"/>
     <field name="Reorder Mode" start="226" end="226" type="uint">
       <value name="LEADING" value="0"/>
@@ -1452,6 +1466,7 @@
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="7"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
     <field name="Hierarchical Depth Buffer Object Control State" start="57" end="63" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="Hierarchical Depth Buffer MOCS" start="57" end="63" type="uint"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
     <field name="Surface Base Address" start="64" end="127" type="address"/>
     <field name="Surface QPitch" start="128" end="142" type="uint"/>
@@ -1490,7 +1505,7 @@
     <field name="Single Program Flow" start="251" end="251" type="bool"/>
     <field name="Vector Mask Enable" start="250" end="250" type="bool"/>
     <field name="Accesses UAV" start="249" end="249" type="bool"/>
-    <field name="Include Vertex Handles" start="248" end="248" type="uint"/>
+    <field name="Include Vertex Handles" start="248" end="248" type="bool"/>
     <field name="Dispatch GRF Start Register For URB Data" start="243" end="247" type="uint"/>
     <field name="Vertex URB Entry Read Length" start="235" end="240" type="uint"/>
     <field name="Vertex URB Entry Read Offset" start="228" end="233" type="uint"/>
@@ -1578,7 +1593,7 @@
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="32"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="10"/>
     <field name="Kernel Start Pointer 0" start="38" end="95" type="offset"/>
-    <field name="Single Program Flow" start="127" end="127" type="uint"/>
+    <field name="Single Program Flow" start="127" end="127" type="bool"/>
     <field name="Vector Mask Enable" start="126" end="126" type="bool"/>
     <field name="Sampler Count" start="123" end="125" type="uint">
       <value name="No Samplers" value="0"/>
@@ -2022,8 +2037,9 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="6"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
-    <field name="Stencil Buffer Enable" start="63" end="63" type="uint"/>
+    <field name="Stencil Buffer Enable" start="63" end="63" type="bool"/>
     <field name="Stencil Buffer Object Control State" start="54" end="60" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="Stencil Buffer MOCS" start="54" end="60" type="uint"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
     <field name="Surface Base Address" start="64" end="127" type="address"/>
     <field name="Surface QPitch" start="128" end="142" type="uint"/>
@@ -2035,8 +2051,8 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="30"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
-    <field name="SO Function Enable" start="63" end="63" type="uint"/>
-    <field name="Rendering Disable" start="62" end="62" type="uint"/>
+    <field name="SO Function Enable" start="63" end="63" type="bool"/>
+    <field name="Rendering Disable" start="62" end="62" type="bool"/>
     <field name="Render Stream Select" start="59" end="60" type="uint"/>
     <field name="Reorder Mode" start="58" end="58" type="uint">
       <value name="LEADING" value="0"/>
@@ -2694,7 +2710,7 @@
       <value name="2nd level batch" value="1"/>
     </field>
     <field name="Add Offset Enable" start="16" end="16" type="bool"/>
-    <field name="Predication Enable" start="15" end="15" type="uint"/>
+    <field name="Predication Enable" start="15" end="15" type="bool"/>
     <field name="Resource Streamer Enable" start="10" end="10" type="bool"/>
     <field name="Address Space Indicator" start="8" end="8" type="uint" prefix="ASI">
       <value name="GGTT" value="0"/>
@@ -2707,10 +2723,7 @@
   <instruction name="MI_CLFLUSH" bias="2">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="39"/>
-    <field name="Use Global GTT" start="22" end="22" type="uint">
-      <value name="Per Process Graphics Address" value="0"/>
-      <value name="Global Graphics Address" value="1"/>
-    </field>
+    <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="DWord Length" start="0" end="9" type="uint" default="1"/>
     <field name="Page Base Address" start="44" end="79" type="address"/>
     <field name="Starting Cacheline Offset" start="38" end="43" type="uint"/>
@@ -2722,7 +2735,7 @@
   <instruction name="MI_CONDITIONAL_BATCH_BUFFER_END" bias="2" length="3">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="54"/>
-    <field name="Use Global GTT" start="22" end="22" type="uint" default="0"/>
+    <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="Compare Semaphore" start="21" end="21" type="uint" default="0"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
     <field name="Compare Data Dword" start="32" end="63" type="uint"/>
@@ -2732,14 +2745,8 @@
   <instruction name="MI_COPY_MEM_MEM" bias="2" length="5">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="46"/>
-    <field name="Use Global GTT Source" start="22" end="22" type="uint">
-      <value name="Per Process Graphics Address" value="0"/>
-      <value name="Global Graphics Address" value="1"/>
-    </field>
-    <field name="Use Global GTT Destination" start="21" end="21" type="uint">
-      <value name="Per Process Graphics Address" value="0"/>
-      <value name="Global Graphics Address" value="1"/>
-    </field>
+    <field name="Use Global GTT Source" start="22" end="22" type="bool"/>
+    <field name="Use Global GTT Destination" start="21" end="21" type="bool"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
     <field name="Destination Memory Address" start="34" end="95" type="address"/>
     <field name="Source Memory Address" start="98" end="159" type="address"/>
@@ -2757,7 +2764,7 @@
   <instruction name="MI_LOAD_REGISTER_MEM" bias="2" length="4">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="41"/>
-    <field name="Use Global GTT" start="22" end="22" type="uint"/>
+    <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="Async Mode Enable" start="21" end="21" type="bool"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
     <field name="Register Address" start="34" end="54" type="offset"/>
@@ -2856,7 +2863,7 @@
     <field name="DWord Length" start="0" end="5" type="uint" default="2"/>
     <field name="Memory Address" start="38" end="95" type="address"/>
     <field name="Core Mode Enable" start="36" end="36" type="uint"/>
-    <field name="Use Global GTT" start="32" end="32" type="uint"/>
+    <field name="Use Global GTT" start="32" end="32" type="bool"/>
     <field name="Report ID" start="96" end="127" type="uint"/>
   </instruction>
 
@@ -2959,7 +2966,7 @@
   <instruction name="MI_STORE_DATA_IMM" bias="2" length="4">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="32"/>
-    <field name="Use Global GTT" start="22" end="22" type="uint"/>
+    <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="Store Qword" start="21" end="21" type="uint"/>
     <field name="DWord Length" start="0" end="9" type="uint" default="2"/>
     <field name="Address" start="34" end="79" type="address"/>
@@ -2981,7 +2988,7 @@
   <instruction name="MI_STORE_REGISTER_MEM" bias="2" length="4">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="36"/>
-    <field name="Use Global GTT" start="22" end="22" type="uint"/>
+    <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="Predicate Enable" start="21" end="21" type="bool"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
     <field name="Register Address" start="34" end="54" type="offset"/>
@@ -3073,11 +3080,8 @@
     </field>
     <field name="Store Data Index" start="53" end="53" type="uint"/>
     <field name="Command Streamer Stall Enable" start="52" end="52" type="bool"/>
-    <field name="Global Snapshot Count Reset" start="51" end="51" type="uint">
-      <value name="Don't Reset" value="0"/>
-      <value name="Reset" value="1"/>
-    </field>
-    <field name="TLB Invalidate" start="50" end="50" type="uint"/>
+    <field name="Global Snapshot Count Reset" start="51" end="51" type="bool"/>
+    <field name="TLB Invalidate" start="50" end="50" type="bool"/>
     <field name="Generic Media State Clear" start="48" end="48" type="bool"/>
     <field name="Post Sync Operation" start="46" end="47" type="uint">
       <value name="No Write" value="0"/>

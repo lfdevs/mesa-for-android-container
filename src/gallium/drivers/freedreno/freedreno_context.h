@@ -33,9 +33,10 @@
 #include "indices/u_primconvert.h"
 #include "util/u_blitter.h"
 #include "util/list.h"
-#include "util/u_slab.h"
+#include "util/slab.h"
 #include "util/u_string.h"
 
+#include "freedreno_batch.h"
 #include "freedreno_screen.h"
 #include "freedreno_gmem.h"
 #include "freedreno_util.h"
@@ -47,9 +48,10 @@ struct fd_vertex_stateobj;
 struct fd_texture_stateobj {
 	struct pipe_sampler_view *textures[PIPE_MAX_SAMPLERS];
 	unsigned num_textures;
+	unsigned valid_textures;
 	struct pipe_sampler_state *samplers[PIPE_MAX_SAMPLERS];
 	unsigned num_samplers;
-	unsigned dirty_samplers;
+	unsigned valid_samplers;
 };
 
 struct fd_program_stateobj {
@@ -105,33 +107,6 @@ struct fd_vertex_state {
 	struct fd_vertexbuf_stateobj vertexbuf;
 };
 
-/* Bitmask of stages in rendering that a particular query query is
- * active.  Queries will be automatically started/stopped (generating
- * additional fd_hw_sample_period's) on entrance/exit from stages that
- * are applicable to the query.
- *
- * NOTE: set the stage to NULL at end of IB to ensure no query is still
- * active.  Things aren't going to work out the way you want if a query
- * is active across IB's (or between tile IB and draw IB)
- */
-enum fd_render_stage {
-	FD_STAGE_NULL     = 0x00,
-	FD_STAGE_DRAW     = 0x01,
-	FD_STAGE_CLEAR    = 0x02,
-	/* TODO before queries which include MEM2GMEM or GMEM2MEM will
-	 * work we will need to call fd_hw_query_prepare() from somewhere
-	 * appropriate so that queries in the tiling IB get backed with
-	 * memory to write results to.
-	 */
-	FD_STAGE_MEM2GMEM = 0x04,
-	FD_STAGE_GMEM2MEM = 0x08,
-	/* used for driver internal draws (ie. util_blitter_blit()): */
-	FD_STAGE_BLIT     = 0x10,
-};
-
-#define MAX_HW_SAMPLE_PROVIDERS 4
-struct fd_hw_sample_provider;
-struct fd_hw_sample;
 
 struct fd_context {
 	struct pipe_context base;
@@ -139,51 +114,24 @@ struct fd_context {
 	struct fd_device *dev;
 	struct fd_screen *screen;
 
+	struct util_queue flush_queue;
+
 	struct blitter_context *blitter;
+	void *clear_rs_state;
 	struct primconvert_context *primconvert;
 
 	/* slab for pipe_transfer allocations: */
-	struct util_slab_mempool transfer_pool;
+	struct slab_child_pool transfer_pool;
 
 	/* slabs for fd_hw_sample and fd_hw_sample_period allocations: */
-	struct util_slab_mempool sample_pool;
-	struct util_slab_mempool sample_period_pool;
-
-	/* next sample offset.. incremented for each sample in the batch/
-	 * submit, reset to zero on next submit.
-	 */
-	uint32_t next_sample_offset;
+	struct slab_mempool sample_pool;
+	struct slab_mempool sample_period_pool;
 
 	/* sample-providers for hw queries: */
 	const struct fd_hw_sample_provider *sample_providers[MAX_HW_SAMPLE_PROVIDERS];
 
-	/* cached samples (in case multiple queries need to reference
-	 * the same sample snapshot)
-	 */
-	struct fd_hw_sample *sample_cache[MAX_HW_SAMPLE_PROVIDERS];
-
-	/* which sample providers were active in the current batch: */
-	uint32_t active_providers;
-
-	/* tracking for current stage, to know when to start/stop
-	 * any active queries:
-	 */
-	enum fd_render_stage stage;
-
 	/* list of active queries: */
 	struct list_head active_queries;
-
-	/* list of queries that are not active, but were active in the
-	 * current submit:
-	 */
-	struct list_head current_queries;
-
-	/* current query result bo and tile stride: */
-	struct fd_bo *query_bo;
-	uint32_t query_tile_stride;
-
-	/* list of resources used by currently-unsubmitted renders */
-	struct list_head used_resources;
 
 	/* table with PIPE_PRIM_MAX entries mapping PIPE_PRIM_x to
 	 * DI_PT_x value to use for draw initiator.  There are some
@@ -199,42 +147,6 @@ struct fd_context {
 	struct fd_program_stateobj blit_prog[MAX_RENDER_TARGETS]; // TODO move to screen?
 	struct fd_program_stateobj blit_z, blit_zs;
 
-	/* do we need to mem2gmem before rendering.  We don't, if for example,
-	 * there was a glClear() that invalidated the entire previous buffer
-	 * contents.  Keep track of which buffer(s) are cleared, or needs
-	 * restore.  Masks of PIPE_CLEAR_*
-	 *
-	 * The 'cleared' bits will be set for buffers which are *entirely*
-	 * cleared, and 'partial_cleared' bits will be set if you must
-	 * check cleared_scissor.
-	 */
-	enum {
-		/* align bitmask values w/ PIPE_CLEAR_*.. since that is convenient.. */
-		FD_BUFFER_COLOR   = PIPE_CLEAR_COLOR,
-		FD_BUFFER_DEPTH   = PIPE_CLEAR_DEPTH,
-		FD_BUFFER_STENCIL = PIPE_CLEAR_STENCIL,
-		FD_BUFFER_ALL     = FD_BUFFER_COLOR | FD_BUFFER_DEPTH | FD_BUFFER_STENCIL,
-	} cleared, partial_cleared, restore, resolve;
-
-	bool needs_flush;
-
-	/* To decide whether to render to system memory, keep track of the
-	 * number of draws, and whether any of them require multisample,
-	 * depth_test (or depth write), stencil_test, blending, and
-	 * color_logic_Op (since those functions are disabled when by-
-	 * passing GMEM.
-	 */
-	enum {
-		FD_GMEM_CLEARS_DEPTH_STENCIL = 0x01,
-		FD_GMEM_DEPTH_ENABLED        = 0x02,
-		FD_GMEM_STENCIL_ENABLED      = 0x04,
-
-		FD_GMEM_MSAA_ENABLED         = 0x08,
-		FD_GMEM_BLEND_ENABLED        = 0x10,
-		FD_GMEM_LOGICOP_ENABLED      = 0x20,
-	} gmem_reason;
-	unsigned num_draws;   /* number of draws in current batch */
-
 	/* Stats/counters:
 	 */
 	struct {
@@ -244,49 +156,26 @@ struct fd_context {
 		uint64_t batch_total, batch_sysmem, batch_gmem, batch_restore;
 	} stats;
 
-	/* we can't really sanely deal with wraparound point in ringbuffer
-	 * and because of the way tiling works we can't really flush at
-	 * arbitrary points (without a big performance hit).  When we get
-	 * too close to the end of the current ringbuffer, cycle to the next
-	 * one (and wait for pending rendering from next rb to complete).
-	 * We want the # of ringbuffers to be high enough that we don't
-	 * normally have to wait before resetting to the start of the next
-	 * rb.
+	/* Current batch.. the rule here is that you can deref ctx->batch
+	 * in codepaths from pipe_context entrypoints.  But not in code-
+	 * paths from fd_batch_flush() (basically, the stuff that gets
+	 * called from GMEM code), since in those code-paths the batch
+	 * you care about is not necessarily the same as ctx->batch.
 	 */
-	struct fd_ringbuffer *rings[8];
-	unsigned rings_idx;
+	struct fd_batch *batch;
 
-	/* NOTE: currently using a single ringbuffer for both draw and
-	 * tiling commands, we need to make sure we need to leave enough
-	 * room at the end to append the tiling commands when we flush.
-	 * 0x7000 dwords should be a couple times more than we ever need
-	 * so should be a nice conservative threshold.
+	uint32_t last_fence;
+
+	/* Are we in process of shadowing a resource? Used to detect recursion
+	 * in transfer_map, and skip unneeded synchronization.
 	 */
-#define FD_TILING_COMMANDS_DWORDS 0x7000
+	bool in_shadow : 1;
 
-	/* normal draw/clear cmds: */
-	struct fd_ringbuffer *ring;
-	struct fd_ringmarker *draw_start, *draw_end;
-
-	/* binning pass draw/clear cmds: */
-	struct fd_ringbuffer *binning_ring;
-	struct fd_ringmarker *binning_start, *binning_end;
-
-	/* Keep track if WAIT_FOR_IDLE is needed for registers we need
-	 * to update via RMW:
+	/* Ie. in blit situation where we no longer care about previous framebuffer
+	 * contents.  Main point is to eliminate blits from fd_try_shadow_resource().
+	 * For example, in case of texture upload + gen-mipmaps.
 	 */
-	bool needs_wfi;
-
-	/* Do we need to re-emit RB_FRAME_BUFFER_DIMENSION?  At least on a3xx
-	 * it is not a banked context register, so it needs a WFI to update.
-	 * Keep track if it has actually changed, to avoid unneeded WFI.
-	 * */
-	bool needs_rb_fbd;
-
-	/* Keep track of DRAW initiators that need to be patched up depending
-	 * on whether we using binning or not:
-	 */
-	struct util_dynarray draw_patches;
+	bool in_blit : 1;
 
 	struct pipe_scissor_state scissor;
 
@@ -296,22 +185,11 @@ struct fd_context {
 	 */
 	struct pipe_scissor_state disabled_scissor;
 
-	/* Track the maximal bounds of the scissor of all the draws within a
-	 * batch.  Used at the tile rendering step (fd_gmem_render_tiles(),
-	 * mem2gmem/gmem2mem) to avoid needlessly moving data in/out of gmem.
-	 */
-	struct pipe_scissor_state max_scissor;
-
-	/* Track the cleared scissor for color/depth/stencil, so we know
-	 * which, if any, tiles need to be restored (mem2gmem).  Only valid
-	 * if the corresponding bit in ctx->cleared is set.
-	 */
-	struct {
-		struct pipe_scissor_state color, depth, stencil;
-	} cleared_scissor;
-
 	/* Current gmem/tiling configuration.. gets updated on render_tiles()
 	 * if out of date with current maximal-scissor/cpp:
+	 *
+	 * (NOTE: this is kind of related to the batch, but moving it there
+	 * means we'd always have to recalc tiles ever batch)
 	 */
 	struct fd_gmem_stateobj gmem;
 	struct fd_vsc_pipe      pipe[8];
@@ -360,7 +238,6 @@ struct fd_context {
 	struct pipe_blend_color blend_color;
 	struct pipe_stencil_ref stencil_ref;
 	unsigned sample_mask;
-	struct pipe_framebuffer_state framebuffer;
 	struct pipe_poly_stipple stipple;
 	struct pipe_viewport_state viewport;
 	struct fd_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
@@ -375,14 +252,14 @@ struct fd_context {
 	struct pipe_debug_callback debug;
 
 	/* GMEM/tile handling fxns: */
-	void (*emit_tile_init)(struct fd_context *ctx);
-	void (*emit_tile_prep)(struct fd_context *ctx, struct fd_tile *tile);
-	void (*emit_tile_mem2gmem)(struct fd_context *ctx, struct fd_tile *tile);
-	void (*emit_tile_renderprep)(struct fd_context *ctx, struct fd_tile *tile);
-	void (*emit_tile_gmem2mem)(struct fd_context *ctx, struct fd_tile *tile);
+	void (*emit_tile_init)(struct fd_batch *batch);
+	void (*emit_tile_prep)(struct fd_batch *batch, struct fd_tile *tile);
+	void (*emit_tile_mem2gmem)(struct fd_batch *batch, struct fd_tile *tile);
+	void (*emit_tile_renderprep)(struct fd_batch *batch, struct fd_tile *tile);
+	void (*emit_tile_gmem2mem)(struct fd_batch *batch, struct fd_tile *tile);
 
 	/* optional, for GMEM bypass: */
-	void (*emit_sysmem_prep)(struct fd_context *ctx);
+	void (*emit_sysmem_prep)(struct fd_batch *batch);
 
 	/* draw: */
 	bool (*draw_vbo)(struct fd_context *ctx, const struct pipe_draw_info *info);
@@ -393,18 +270,57 @@ struct fd_context {
 	void (*emit_const)(struct fd_ringbuffer *ring, enum shader_t type,
 			uint32_t regid, uint32_t offset, uint32_t sizedwords,
 			const uint32_t *dwords, struct pipe_resource *prsc);
+	/* emit bo addresses as constant: */
 	void (*emit_const_bo)(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
-			uint32_t regid, uint32_t num, struct fd_bo **bos, uint32_t *offsets);
+			uint32_t regid, uint32_t num, struct pipe_resource **prscs, uint32_t *offsets);
 
 	/* indirect-branch emit: */
-	void (*emit_ib)(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
-			struct fd_ringmarker *end);
+	void (*emit_ib)(struct fd_ringbuffer *ring, struct fd_ringbuffer *target);
+
+	/*
+	 * Common pre-cooked VBO state (used for a3xx and later):
+	 */
+
+	/* for clear/gmem->mem vertices, and mem->gmem */
+	struct pipe_resource *solid_vbuf;
+
+	/* for mem->gmem tex coords: */
+	struct pipe_resource *blit_texcoord_vbuf;
+
+	/* vertex state for solid_vbuf:
+	 *    - solid_vbuf / 12 / R32G32B32_FLOAT
+	 */
+	struct fd_vertex_state solid_vbuf_state;
+
+	/* vertex state for blit_prog:
+	 *    - blit_texcoord_vbuf / 8 / R32G32_FLOAT
+	 *    - solid_vbuf / 12 / R32G32B32_FLOAT
+	 */
+	struct fd_vertex_state blit_vbuf_state;
 };
 
 static inline struct fd_context *
 fd_context(struct pipe_context *pctx)
 {
 	return (struct fd_context *)pctx;
+}
+
+static inline void
+fd_context_assert_locked(struct fd_context *ctx)
+{
+	pipe_mutex_assert_locked(ctx->screen->lock);
+}
+
+static inline void
+fd_context_lock(struct fd_context *ctx)
+{
+	pipe_mutex_lock(ctx->screen->lock);
+}
+
+static inline void
+fd_context_unlock(struct fd_context *ctx)
+{
+	pipe_mutex_unlock(ctx->screen->lock);
 }
 
 static inline struct pipe_scissor_state *
@@ -421,40 +337,12 @@ fd_supported_prim(struct fd_context *ctx, unsigned prim)
 	return (1 << prim) & ctx->primtype_mask;
 }
 
-static inline void
-fd_reset_wfi(struct fd_context *ctx)
-{
-	ctx->needs_wfi = true;
-}
-
-/* emit a WAIT_FOR_IDLE only if needed, ie. if there has not already
- * been one since last draw:
- */
-static inline void
-fd_wfi(struct fd_context *ctx, struct fd_ringbuffer *ring)
-{
-	if (ctx->needs_wfi) {
-		OUT_WFI(ring);
-		ctx->needs_wfi = false;
-	}
-}
-
-/* emit a CP_EVENT_WRITE:
- */
-static inline void
-fd_event_write(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		enum vgt_event_type evt)
-{
-	OUT_PKT3(ring, CP_EVENT_WRITE, 1);
-	OUT_RING(ring, evt);
-	fd_reset_wfi(ctx);
-}
+void fd_context_setup_common_vbos(struct fd_context *ctx);
+void fd_context_cleanup_common_vbos(struct fd_context *ctx);
 
 struct pipe_context * fd_context_init(struct fd_context *ctx,
 		struct pipe_screen *pscreen, const uint8_t *primtypes,
 		void *priv);
-
-void fd_context_render(struct pipe_context *pctx);
 
 void fd_context_destroy(struct pipe_context *pctx);
 

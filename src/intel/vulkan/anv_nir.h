@@ -21,7 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef ANV_NIR_H
+#define ANV_NIR_H
 
 #include "nir/nir.h"
 #include "anv_private.h"
@@ -43,3 +44,5 @@ void anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* ANV_NIR_H */

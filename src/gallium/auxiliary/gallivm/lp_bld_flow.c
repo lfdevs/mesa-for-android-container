@@ -454,6 +454,26 @@ lp_build_endif(struct lp_build_if_state *ifthen)
 }
 
 
+static LLVMBuilderRef
+create_builder_at_entry(struct gallivm_state *gallivm)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+   LLVMBasicBlockRef first_block = LLVMGetEntryBasicBlock(function);
+   LLVMValueRef first_instr = LLVMGetFirstInstruction(first_block);
+   LLVMBuilderRef first_builder = LLVMCreateBuilderInContext(gallivm->context);
+
+   if (first_instr) {
+      LLVMPositionBuilderBefore(first_builder, first_instr);
+   } else {
+      LLVMPositionBuilderAtEnd(first_builder, first_block);
+   }
+
+   return first_builder;
+}
+
+
 /**
  * Allocate a scalar (or vector) variable.
  *
@@ -475,21 +495,30 @@ lp_build_alloca(struct gallivm_state *gallivm,
                 const char *name)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
-   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
-   LLVMBasicBlockRef first_block = LLVMGetEntryBasicBlock(function);
-   LLVMValueRef first_instr = LLVMGetFirstInstruction(first_block);
-   LLVMBuilderRef first_builder = LLVMCreateBuilderInContext(gallivm->context);
+   LLVMBuilderRef first_builder = create_builder_at_entry(gallivm);
    LLVMValueRef res;
-
-   if (first_instr) {
-      LLVMPositionBuilderBefore(first_builder, first_instr);
-   } else {
-      LLVMPositionBuilderAtEnd(first_builder, first_block);
-   }
 
    res = LLVMBuildAlloca(first_builder, type, name);
    LLVMBuildStore(builder, LLVMConstNull(type), res);
+
+   LLVMDisposeBuilder(first_builder);
+
+   return res;
+}
+
+
+/**
+ * Like lp_build_alloca, but do not zero-initialize the variable.
+ */
+LLVMValueRef
+lp_build_alloca_undef(struct gallivm_state *gallivm,
+                      LLVMTypeRef type,
+                      const char *name)
+{
+   LLVMBuilderRef first_builder = create_builder_at_entry(gallivm);
+   LLVMValueRef res;
+
+   res = LLVMBuildAlloca(first_builder, type, name);
 
    LLVMDisposeBuilder(first_builder);
 
@@ -517,19 +546,8 @@ lp_build_array_alloca(struct gallivm_state *gallivm,
                       LLVMValueRef count,
                       const char *name)
 {
-   LLVMBuilderRef builder = gallivm->builder;
-   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
-   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
-   LLVMBasicBlockRef first_block = LLVMGetEntryBasicBlock(function);
-   LLVMValueRef first_instr = LLVMGetFirstInstruction(first_block);
-   LLVMBuilderRef first_builder = LLVMCreateBuilderInContext(gallivm->context);
+   LLVMBuilderRef first_builder = create_builder_at_entry(gallivm);
    LLVMValueRef res;
-
-   if (first_instr) {
-      LLVMPositionBuilderBefore(first_builder, first_instr);
-   } else {
-      LLVMPositionBuilderAtEnd(first_builder, first_block);
-   }
 
    res = LLVMBuildArrayAlloca(first_builder, type, count, name);
 

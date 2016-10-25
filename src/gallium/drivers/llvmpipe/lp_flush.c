@@ -82,7 +82,8 @@ llvmpipe_finish( struct pipe_context *pipe,
    struct pipe_fence_handle *fence = NULL;
    llvmpipe_flush(pipe, &fence, reason);
    if (fence) {
-      pipe->screen->fence_finish(pipe->screen, fence, PIPE_TIMEOUT_INFINITE);
+      pipe->screen->fence_finish(pipe->screen, NULL, fence,
+                                 PIPE_TIMEOUT_INFINITE);
       pipe->screen->fence_reference(pipe->screen, &fence, NULL);
    }
 }

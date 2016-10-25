@@ -116,6 +116,13 @@ NineSurface9_SetResource( struct NineSurface9 *This,
     pipe_surface_reference(&This->surface[1], NULL);
 }
 
+static inline void
+NineSurface9_SetMultiSampleType( struct NineSurface9 *This,
+                                 D3DMULTISAMPLE_TYPE mst )
+{
+    This->desc.MultiSampleType = mst;
+}
+
 void
 NineSurface9_SetResourceResize( struct NineSurface9 *This,
                                 struct pipe_resource *resource );

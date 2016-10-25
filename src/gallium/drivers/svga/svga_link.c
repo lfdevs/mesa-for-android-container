@@ -25,6 +25,7 @@
 
 #include "svga_context.h"
 #include "svga_link.h"
+#include "svga_debug.h"
 
 #include "tgsi/tgsi_strings.h"
 
@@ -97,13 +98,15 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
    }
 
    /* Debug */
-   if (0) {
+   if (SVGA_DEBUG & DEBUG_TGSI) {
       unsigned reg = 0;
+      debug_printf("### linkage info:\n");
+
       for (i = 0; i < linkage->num_inputs; i++) {
 
          assert(linkage->input_map[i] != INVALID_INDEX);
 
-         debug_printf("input shader input[%d] slot %u  %s %u %s\n",
+         debug_printf("   input[%d] slot %u  %s %u %s\n",
                       i,
                       linkage->input_map[i],
                       tgsi_semantic_names[inshader_info->input_semantic_name[i]],

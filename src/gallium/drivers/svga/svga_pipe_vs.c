@@ -104,6 +104,8 @@ svga_create_vs_state(struct pipe_context *pipe,
    if (!vs)
       return NULL;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_CREATEVS);         
+
    /* substitute a debug shader?
     */
    vs->base.tokens = tgsi_dup_tokens(substitute_vs(svga->debug.shader_id,
@@ -132,6 +134,7 @@ svga_create_vs_state(struct pipe_context *pipe,
                                                          &templ->stream_output);
    }
 
+   SVGA_STATS_TIME_POP(svga_sws(svga));
    return vs;
 }
 

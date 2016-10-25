@@ -34,6 +34,7 @@
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
 
+#ifndef NDEBUG
 static bool
 is_passthru_format(uint32_t format)
 {
@@ -47,12 +48,12 @@ is_passthru_format(uint32_t format)
       return false;
    }
 }
+#endif
 
 static void
 gen8_emit_vertices(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
    bool uses_edge_flag;
 
    brw_prepare_vertices(brw);
@@ -61,7 +62,10 @@ gen8_emit_vertices(struct brw_context *brw)
    uses_edge_flag = (ctx->Polygon.FrontMode != GL_FILL ||
                      ctx->Polygon.BackMode != GL_FILL);
 
-   if (brw->vs.prog_data->uses_vertexid || brw->vs.prog_data->uses_instanceid) {
+   const struct brw_vs_prog_data *vs_prog_data =
+      brw_vs_prog_data(brw->vs.base.prog_data);
+
+   if (vs_prog_data->uses_vertexid || vs_prog_data->uses_instanceid) {
       unsigned vue = brw->vb.nr_enabled;
 
       /* The element for the edge flags must always be last, so we have to
@@ -77,13 +81,13 @@ gen8_emit_vertices(struct brw_context *brw)
                 "need to reorder the vertex attrbutes.");
 
       unsigned dw1 = 0;
-      if (brw->vs.prog_data->uses_vertexid) {
+      if (vs_prog_data->uses_vertexid) {
          dw1 |= GEN8_SGVS_ENABLE_VERTEX_ID |
                 (2 << GEN8_SGVS_VERTEX_ID_COMPONENT_SHIFT) |  /* .z channel */
                 (vue << GEN8_SGVS_VERTEX_ID_ELEMENT_OFFSET_SHIFT);
       }
 
-      if (brw->vs.prog_data->uses_instanceid) {
+      if (vs_prog_data->uses_instanceid) {
          dw1 |= GEN8_SGVS_ENABLE_INSTANCE_ID |
                 (3 << GEN8_SGVS_INSTANCE_ID_COMPONENT_SHIFT) | /* .w channel */
                 (vue << GEN8_SGVS_INSTANCE_ID_ELEMENT_OFFSET_SHIFT);
@@ -130,10 +134,10 @@ gen8_emit_vertices(struct brw_context *brw)
 
    /* Now emit 3DSTATE_VERTEX_BUFFERS and 3DSTATE_VERTEX_ELEMENTS packets. */
    const bool uses_draw_params =
-      brw->vs.prog_data->uses_basevertex ||
-      brw->vs.prog_data->uses_baseinstance;
+      vs_prog_data->uses_basevertex ||
+      vs_prog_data->uses_baseinstance;
    const unsigned nr_buffers = brw->vb.nr_buffers +
-      uses_draw_params + brw->vs.prog_data->uses_drawid;
+      uses_draw_params + vs_prog_data->uses_drawid;
 
    if (nr_buffers) {
       assert(nr_buffers <= 33);
@@ -141,35 +145,29 @@ gen8_emit_vertices(struct brw_context *brw)
       BEGIN_BATCH(1 + 4 * nr_buffers);
       OUT_BATCH((_3DSTATE_VERTEX_BUFFERS << 16) | (4 * nr_buffers - 1));
       for (unsigned i = 0; i < brw->vb.nr_buffers; i++) {
-         struct brw_vertex_buffer *buffer = &brw->vb.buffers[i];
-         uint32_t dw0 = 0;
-
-         dw0 |= i << GEN6_VB0_INDEX_SHIFT;
-         dw0 |= GEN7_VB0_ADDRESS_MODIFYENABLE;
-         dw0 |= buffer->stride << BRW_VB0_PITCH_SHIFT;
-         dw0 |= mocs_wb << 16;
-
-         OUT_BATCH(dw0);
-         OUT_RELOC64(buffer->bo, I915_GEM_DOMAIN_VERTEX, 0, buffer->offset);
-         OUT_BATCH(buffer->size);
+         const struct brw_vertex_buffer *buffer = &brw->vb.buffers[i];
+         EMIT_VERTEX_BUFFER_STATE(brw, i, buffer->bo,
+                                  buffer->offset,
+                                  buffer->offset + buffer->size,
+                                  buffer->stride, 0 /* unused */);
       }
 
       if (uses_draw_params) {
-         OUT_BATCH(brw->vb.nr_buffers << GEN6_VB0_INDEX_SHIFT |
-                   GEN7_VB0_ADDRESS_MODIFYENABLE |
-                   mocs_wb << 16);
-         OUT_RELOC64(brw->draw.draw_params_bo, I915_GEM_DOMAIN_VERTEX, 0,
-                     brw->draw.draw_params_offset);
-         OUT_BATCH(brw->draw.draw_params_bo->size);
+         EMIT_VERTEX_BUFFER_STATE(brw, brw->vb.nr_buffers,
+                                  brw->draw.draw_params_bo,
+                                  brw->draw.draw_params_offset,
+                                  brw->draw.draw_params_bo->size,
+                                  0 /* stride */,
+                                  0 /* unused */);
       }
 
-      if (brw->vs.prog_data->uses_drawid) {
-         OUT_BATCH((brw->vb.nr_buffers + 1) << GEN6_VB0_INDEX_SHIFT |
-                   GEN7_VB0_ADDRESS_MODIFYENABLE |
-                   mocs_wb << 16);
-         OUT_RELOC64(brw->draw.draw_id_bo, I915_GEM_DOMAIN_VERTEX, 0,
-                     brw->draw.draw_id_offset);
-         OUT_BATCH(brw->draw.draw_id_bo->size);
+      if (vs_prog_data->uses_drawid) {
+         EMIT_VERTEX_BUFFER_STATE(brw, brw->vb.nr_buffers + 1,
+                                  brw->draw.draw_id_bo,
+                                  brw->draw.draw_id_offset,
+                                  brw->draw.draw_id_bo->size,
+                                  0 /* stride */,
+                                  0 /* unused */);
       }
       ADVANCE_BATCH();
    }
@@ -182,13 +180,13 @@ gen8_emit_vertices(struct brw_context *brw)
     * can't be inserted past that so we need a dummy element to ensure that
     * the edge flag is the last one.
     */
-   const bool needs_sgvs_element = (brw->vs.prog_data->uses_basevertex ||
-                                    brw->vs.prog_data->uses_baseinstance ||
-                                    ((brw->vs.prog_data->uses_instanceid ||
-                                      brw->vs.prog_data->uses_vertexid) &&
+   const bool needs_sgvs_element = (vs_prog_data->uses_basevertex ||
+                                    vs_prog_data->uses_baseinstance ||
+                                    ((vs_prog_data->uses_instanceid ||
+                                      vs_prog_data->uses_vertexid) &&
                                      uses_edge_flag));
    const unsigned nr_elements =
-      brw->vb.nr_enabled + needs_sgvs_element + brw->vs.prog_data->uses_drawid;
+      brw->vb.nr_enabled + needs_sgvs_element + vs_prog_data->uses_drawid;
 
    /* The hardware allows one more VERTEX_ELEMENTS than VERTEX_BUFFERS,
     * presumably for VertexID/InstanceID.
@@ -284,8 +282,8 @@ gen8_emit_vertices(struct brw_context *brw)
    }
 
    if (needs_sgvs_element) {
-      if (brw->vs.prog_data->uses_basevertex ||
-          brw->vs.prog_data->uses_baseinstance) {
+      if (vs_prog_data->uses_basevertex ||
+          vs_prog_data->uses_baseinstance) {
          OUT_BATCH(GEN6_VE0_VALID |
                    brw->vb.nr_buffers << GEN6_VE0_INDEX_SHIFT |
                    BRW_SURFACEFORMAT_R32G32_UINT << BRW_VE0_FORMAT_SHIFT);
@@ -302,7 +300,7 @@ gen8_emit_vertices(struct brw_context *brw)
       }
    }
 
-   if (brw->vs.prog_data->uses_drawid) {
+   if (vs_prog_data->uses_drawid) {
       OUT_BATCH(GEN6_VE0_VALID |
                 ((brw->vb.nr_buffers + 1) << GEN6_VE0_INDEX_SHIFT) |
                 (BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT));
@@ -350,7 +348,7 @@ gen8_emit_vertices(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
-   if (brw->vs.prog_data->uses_drawid) {
+   if (vs_prog_data->uses_drawid) {
       const unsigned element = brw->vb.nr_enabled + needs_sgvs_element;
       BEGIN_BATCH(3);
       OUT_BATCH(_3DSTATE_VF_INSTANCING << 16 | (3 - 2));

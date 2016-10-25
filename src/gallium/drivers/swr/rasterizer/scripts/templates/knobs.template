@@ -112,6 +112,8 @@ struct GlobalKnobs
 };
 extern GlobalKnobs g_GlobalKnobs;
 
+#undef DEFINE_KNOB
+
 % for knob in knobs:
 #define KNOB_${knob[0]}${space_knob(knob[0])} GET_KNOB(${knob[0]})
 % endfor

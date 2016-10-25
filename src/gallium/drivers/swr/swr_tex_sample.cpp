@@ -60,6 +60,7 @@
 #include "swr_tex_sample.h"
 #include "swr_context_llvm.h"
 
+using namespace SwrJit;
 
 /**
  * This provides the bridge between the sampler state store in

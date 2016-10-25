@@ -31,6 +31,7 @@ struct pipe_vertex_element;
 struct pipe_stream_output_info;
 struct NineDevice9;
 struct NineVertexBuffer9;
+struct nine_vs_output_info;
 
 struct NineVertexDeclaration9
 {
@@ -78,6 +79,13 @@ NineVertexDeclaration9_GetDeclaration( struct NineVertexDeclaration9 *This,
                                        D3DVERTEXELEMENT9 *pElement,
                                        UINT *pNumElements );
 
+void
+NineVertexDeclaration9_FillStreamOutputInfo(
+    struct NineVertexDeclaration9 *This,
+    struct nine_vs_output_info *ShaderOutputsInfo,
+    unsigned numOutputs,
+    struct pipe_stream_output_info *so );
+
 /* Convert stream output data to the vertex declaration's format. */
 HRESULT
 NineVertexDeclaration9_ConvertStreamOutput(
@@ -85,7 +93,7 @@ NineVertexDeclaration9_ConvertStreamOutput(
     struct NineVertexBuffer9 *pDstBuf,
     UINT DestIndex,
     UINT VertexCount,
-    struct pipe_resource *pSrcBuf,
+    void *pSrcBuf,
     const struct pipe_stream_output_info *so );
 
 #endif /* _NINE_VERTEXDECLARATION9_H_ */

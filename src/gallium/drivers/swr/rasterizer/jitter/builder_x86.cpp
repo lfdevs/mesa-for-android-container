@@ -30,206 +30,187 @@
 
 #include "builder.h"
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VGATHERPS(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale)
+namespace SwrJit
 {
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_gather_d_ps_256);
-    return CALL(func, std::initializer_list<Value*>{src, pBase, indices, mask, scale});
-}
+    using namespace llvm;
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VGATHERDD(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_gather_d_d_256);
-    return CALL(func, std::initializer_list<Value*>{src, pBase, indices, mask, scale});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VGATHERPS(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_gather_d_ps_256);
+        return CALL(func, std::initializer_list<Value*>{src, pBase, indices, mask, scale});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VSQRTPS(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_sqrt_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VGATHERDD(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_gather_d_d_256);
+        return CALL(func, std::initializer_list<Value*>{src, pBase, indices, mask, scale});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VRSQRTPS(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_rsqrt_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VSQRTPS(Value* a)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_sqrt_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VRCPPS(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_rcp_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VRSQRTPS(Value* a)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_rsqrt_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VMINPS(Value* a, Value* b)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_min_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a, b});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VRCPPS(Value* a)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_rcp_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VMAXPS(Value* a, Value* b)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_max_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a, b});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VMINPS(Value* a, Value* b)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_min_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a, b});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPMINSD(Value* a, Value* b)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_pmins_d);
-    return CALL(func, std::initializer_list<Value*>{a, b});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VMAXPS(Value* a, Value* b)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_max_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a, b});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPMAXSD(Value* a, Value* b)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_pmaxs_d);
-    return CALL(func, std::initializer_list<Value*>{a, b});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VROUND(Value* a, Value* rounding)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_round_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a, rounding});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VROUND(Value* a, Value* rounding)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_round_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a, rounding});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VCMPPS(Value* a, Value* b, Value* cmpop)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_cmp_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a, b, cmpop});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VCMPPS(Value* a, Value* b, Value* cmpop)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_cmp_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a, b, cmpop});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VBLENDVPS(Value* a, Value* b, Value* mask)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_blendv_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a, b, mask});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VBLENDVPS(Value* a, Value* b, Value* mask)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_blendv_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a, b, mask});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::BEXTR_32(Value* src, Value* control)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_bmi_bextr_32);
+        return CALL(func, std::initializer_list<Value*>{src, control});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::BEXTR_32(Value* src, Value* control)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_bmi_bextr_32);
-    return CALL(func, std::initializer_list<Value*>{src, control});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VMASKLOADD(Value* src, Value* mask)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_maskload_d_256);
+        return CALL(func, std::initializer_list<Value*>{src, mask});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VMASKLOADD(Value* src, Value* mask)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_maskload_d_256);
-    return CALL(func, std::initializer_list<Value*>{src, mask});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VMASKMOVPS(Value* src, Value* mask)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_maskload_ps_256);
+        return CALL(func, std::initializer_list<Value*>{src, mask});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VMASKMOVPS(Value* src, Value* mask)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_maskload_ps_256);
-    return CALL(func, std::initializer_list<Value*>{src, mask});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VMASKSTOREPS(Value* src, Value* mask, Value* val)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_maskstore_ps_256);
+        return CALL(func, std::initializer_list<Value*>{src, mask, val});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPSHUFB(Value* a, Value* b)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_pshuf_b);
-    return CALL(func, std::initializer_list<Value*>{a, b});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VPSHUFB(Value* a, Value* b)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_pshuf_b);
+        return CALL(func, std::initializer_list<Value*>{a, b});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPMOVSXBD(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_pmovsxbd);
-    return CALL(func, std::initializer_list<Value*>{a});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VPERMD(Value* a, Value* idx)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_permd);
+#if (HAVE_LLVM == 0x306) && (LLVM_VERSION_PATCH == 0)
+        return CALL(func, std::initializer_list<Value*>{idx, a});
+#else
+        return CALL(func, std::initializer_list<Value*>{a, idx});
+#endif
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPMOVSXWD(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_pmovsxwd);
-    return CALL(func, std::initializer_list<Value*>{a});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VPERMPS(Value* idx, Value* a)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_permps);
+        return CALL(func, std::initializer_list<Value*>{idx, a});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPERMD(Value* idx, Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_permd);
-    return CALL(func, std::initializer_list<Value*>{idx, a});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VCVTPH2PS(Value* a)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_vcvtph2ps_256);
+        return CALL(func, std::initializer_list<Value*>{a});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPERMPS(Value* idx, Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_permps);
-    return CALL(func, std::initializer_list<Value*>{idx, a});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VCVTPS2PH(Value* a, Value* round)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_vcvtps2ph_256);
+        return CALL(func, std::initializer_list<Value*>{a, round});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VCVTPH2PS(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_vcvtph2ps_256);
-    return CALL(func, std::initializer_list<Value*>{a});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VHSUBPS(Value* a, Value* b)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_hsub_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a, b});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VCVTPS2PH(Value* a, Value* round)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_vcvtps2ph_256);
-    return CALL(func, std::initializer_list<Value*>{a, round});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VPTESTC(Value* a, Value* b)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_ptestc_256);
+        return CALL(func, std::initializer_list<Value*>{a, b});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VHSUBPS(Value* a, Value* b)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_hsub_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a, b});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VPTESTZ(Value* a, Value* b)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_ptestz_256);
+        return CALL(func, std::initializer_list<Value*>{a, b});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPTESTC(Value* a, Value* b)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_ptestc_256);
-    return CALL(func, std::initializer_list<Value*>{a, b});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VFMADDPS(Value* a, Value* b, Value* c)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_fma_vfmadd_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a, b, c});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VPTESTZ(Value* a, Value* b)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_ptestz_256);
-    return CALL(func, std::initializer_list<Value*>{a, b});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VMOVMSKPS(Value* a)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_movmsk_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VFMADDPS(Value* a, Value* b, Value* c)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_fma_vfmadd_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a, b, c});
-}
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::INTERRUPT(Value* a)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_int);
+        return CALL(func, std::initializer_list<Value*>{a});
+    }
 
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VCVTTPS2DQ(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_cvtt_ps2dq_256);
-    return CALL(func, std::initializer_list<Value*>{a});
 }
-
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::VMOVMSKPS(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_movmsk_ps_256);
-    return CALL(func, std::initializer_list<Value*>{a});
-}
-
-//////////////////////////////////////////////////////////////////////////
-Value *Builder::INTERRUPT(Value* a)
-{
-    Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_int);
-    return CALL(func, std::initializer_list<Value*>{a});
-}
-

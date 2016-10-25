@@ -127,6 +127,12 @@ offset_tri
 
 offset_units
     Specifies the polygon offset bias
+offset_units_unscaled
+    Specifies the unit of the polygon offset bias. If false, use the
+    GL/D3D1X behaviour. If true, offset_units is a floating point offset
+    which isn't scaled (D3D9). Note that GL/D3D1X behaviour has different
+    formula whether the depth buffer is unorm or float, which is not
+    the case for D3D9.
 offset_scale
     Specifies the polygon offset scale
 offset_clamp

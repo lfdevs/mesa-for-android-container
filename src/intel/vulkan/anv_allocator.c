@@ -272,7 +272,7 @@ anv_block_pool_init(struct anv_block_pool *pool,
    if (ftruncate(pool->fd, BLOCK_POOL_MEMFD_SIZE) == -1)
       return;
 
-   anv_vector_init(&pool->mmap_cleanups,
+   u_vector_init(&pool->mmap_cleanups,
                    round_to_power_of_two(sizeof(struct anv_mmap_cleanup)), 128);
 
    pool->state.next = 0;
@@ -289,14 +289,14 @@ anv_block_pool_finish(struct anv_block_pool *pool)
 {
    struct anv_mmap_cleanup *cleanup;
 
-   anv_vector_foreach(cleanup, &pool->mmap_cleanups) {
+   u_vector_foreach(cleanup, &pool->mmap_cleanups) {
       if (cleanup->map)
          munmap(cleanup->map, cleanup->size);
       if (cleanup->gem_handle)
          anv_gem_close(pool->device, cleanup->gem_handle);
    }
 
-   anv_vector_finish(&pool->mmap_cleanups);
+   u_vector_finish(&pool->mmap_cleanups);
 
    close(pool->fd);
 }
@@ -420,7 +420,7 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
    assert(center_bo_offset >= pool->back_state.end);
    assert(size - center_bo_offset >= pool->state.end);
 
-   cleanup = anv_vector_add(&pool->mmap_cleanups);
+   cleanup = u_vector_add(&pool->mmap_cleanups);
    if (!cleanup)
       goto fail;
    *cleanup = ANV_MMAP_CLEANUP_INIT;
@@ -865,15 +865,17 @@ anv_bo_pool_free(struct anv_bo_pool *pool, const struct anv_bo *bo_in)
 {
    /* Make a copy in case the anv_bo happens to be storred in the BO */
    struct anv_bo bo = *bo_in;
+
+   VG(VALGRIND_MEMPOOL_FREE(pool, bo.map));
+
    struct bo_pool_bo_link *link = bo.map;
-   link->bo = bo;
+   VG_NOACCESS_WRITE(&link->bo, bo);
 
    assert(util_is_power_of_two(bo.size));
    const unsigned size_log2 = ilog2_round_up(bo.size);
    const unsigned bucket = size_log2 - 12;
    assert(bucket < ARRAY_SIZE(pool->free_list));
 
-   VG(VALGRIND_MEMPOOL_FREE(pool, bo.map));
    anv_ptr_free_list_push(&pool->free_list[bucket], link);
 }
 
@@ -922,14 +924,36 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    if (size == 0) {
       /* We own the lock.  Allocate a buffer */
 
-      struct brw_device_info *devinfo = &device->info;
+      const struct anv_physical_device *physical_device =
+         &device->instance->physicalDevice;
+      const struct gen_device_info *devinfo = &physical_device->info;
+
+      /* WaCSScratchSize:hsw
+       *
+       * Haswell's scratch space address calculation appears to be sparse
+       * rather than tightly packed. The Thread ID has bits indicating which
+       * subslice, EU within a subslice, and thread within an EU it is.
+       * There's a maximum of two slices and two subslices, so these can be
+       * stored with a single bit. Even though there are only 10 EUs per
+       * subslice, this is stored in 4 bits, so there's an effective maximum
+       * value of 16 EUs. Similarly, although there are only 7 threads per EU,
+       * this is stored in a 3 bit number, giving an effective maximum value
+       * of 8 threads per EU.
+       *
+       * This means that we need to use 16 * 8 instead of 10 * 7 for the
+       * number of threads per subslice.
+       */
+      const unsigned subslices = MAX2(physical_device->subslice_total, 1);
+      const unsigned scratch_ids_per_subslice =
+         device->info.is_haswell ? 16 * 8 : devinfo->max_cs_threads;
+
       uint32_t max_threads[] = {
-         [MESA_SHADER_VERTEX]                  = devinfo->max_vs_threads,
-         [MESA_SHADER_TESS_CTRL]               = devinfo->max_hs_threads,
-         [MESA_SHADER_TESS_EVAL]               = devinfo->max_ds_threads,
-         [MESA_SHADER_GEOMETRY]                = devinfo->max_gs_threads,
-         [MESA_SHADER_FRAGMENT]                = devinfo->max_wm_threads,
-         [MESA_SHADER_COMPUTE]                 = devinfo->max_cs_threads,
+         [MESA_SHADER_VERTEX]           = devinfo->max_vs_threads,
+         [MESA_SHADER_TESS_CTRL]        = devinfo->max_tcs_threads,
+         [MESA_SHADER_TESS_EVAL]        = devinfo->max_tes_threads,
+         [MESA_SHADER_GEOMETRY]         = devinfo->max_gs_threads,
+         [MESA_SHADER_FRAGMENT]         = devinfo->max_wm_threads,
+         [MESA_SHADER_COMPUTE]          = scratch_ids_per_subslice * subslices,
       };
 
       size = per_thread_scratch * max_threads[stage];

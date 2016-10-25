@@ -76,7 +76,7 @@ vec4_live_variables::setup_def_use()
 	 /* Set use[] for this instruction */
 	 for (unsigned int i = 0; i < 3; i++) {
 	    if (inst->src[i].file == VGRF) {
-               for (unsigned j = 0; j < inst->regs_read(i); j++) {
+               for (unsigned j = 0; j < regs_read(inst, i); j++) {
                   for (int c = 0; c < 4; c++) {
                      const unsigned v =
                         var_from_reg(alloc, offset(inst->src[i], j), c);
@@ -99,7 +99,7 @@ vec4_live_variables::setup_def_use()
 	  */
 	 if (inst->dst.file == VGRF &&
 	     (!inst->predicate || inst->opcode == BRW_OPCODE_SEL)) {
-            for (unsigned i = 0; i < inst->regs_written; i++) {
+            for (unsigned i = 0; i < regs_written(inst); i++) {
                for (int c = 0; c < 4; c++) {
                   if (inst->dst.writemask & (1 << c)) {
                      const unsigned v =
@@ -257,7 +257,7 @@ vec4_visitor::calculate_live_intervals()
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (unsigned int i = 0; i < 3; i++) {
 	 if (inst->src[i].file == VGRF) {
-            for (unsigned j = 0; j < inst->regs_read(i); j++) {
+            for (unsigned j = 0; j < regs_read(inst, i); j++) {
                for (int c = 0; c < 4; c++) {
                   const unsigned v =
                      var_from_reg(alloc, offset(inst->src[i], j), c);
@@ -269,7 +269,7 @@ vec4_visitor::calculate_live_intervals()
       }
 
       if (inst->dst.file == VGRF) {
-         for (unsigned i = 0; i < inst->regs_written; i++) {
+         for (unsigned i = 0; i < regs_written(inst); i++) {
             for (int c = 0; c < 4; c++) {
                if (inst->dst.writemask & (1 << c)) {
                   const unsigned v =

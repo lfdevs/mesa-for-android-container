@@ -197,7 +197,7 @@ struct ir3_shader_variant {
 		/* fragment shader specific: */
 		bool    bary       : 1;   /* fetched varying (vs one loaded into reg) */
 		bool    rasterflat : 1;   /* special handling for emit->rasterflat */
-		enum glsl_interp_qualifier interpolate;
+		enum glsl_interp_mode interpolate;
 	} inputs[16 + 2];  /* +POSITION +FACE */
 
 	/* sum of input components (scalar).  For frag shaders, it only counts
@@ -272,6 +272,7 @@ void ir3_shader_destroy(struct ir3_shader *shader);
 struct ir3_shader_variant * ir3_shader_variant(struct ir3_shader *shader,
 		struct ir3_shader_key key, struct pipe_debug_callback *debug);
 void ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin);
+uint64_t ir3_shader_outputs(const struct ir3_shader *so);
 
 struct fd_ringbuffer;
 struct fd_context;

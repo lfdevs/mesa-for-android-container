@@ -333,18 +333,21 @@ trace_screen_resource_from_handle(struct pipe_screen *_screen,
 
 static boolean
 trace_screen_resource_get_handle(struct pipe_screen *_screen,
+                                 struct pipe_context *_pipe,
                                 struct pipe_resource *_resource,
                                 struct winsys_handle *handle,
                                  unsigned usage)
 {
    struct trace_screen *tr_screen = trace_screen(_screen);
+   struct trace_context *tr_pipe = _pipe ? trace_context(_pipe) : NULL;
    struct trace_resource *tr_resource = trace_resource(_resource);
    struct pipe_screen *screen = tr_screen->screen;
    struct pipe_resource *resource = tr_resource->resource;
 
    /* TODO trace call */
 
-   return screen->resource_get_handle(screen, resource, handle, usage);
+   return screen->resource_get_handle(screen, tr_pipe ? tr_pipe->pipe : NULL,
+                                      resource, handle, usage);
 }
 
 
@@ -402,20 +405,23 @@ trace_screen_fence_reference(struct pipe_screen *_screen,
 
 static boolean
 trace_screen_fence_finish(struct pipe_screen *_screen,
+                          struct pipe_context *_ctx,
                           struct pipe_fence_handle *fence,
                           uint64_t timeout)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct pipe_screen *screen = tr_scr->screen;
+   struct pipe_context *ctx = _ctx ? trace_context(_ctx)->pipe : NULL;
    int result;
 
    trace_dump_call_begin("pipe_screen", "fence_finish");
 
    trace_dump_arg(ptr, screen);
+   trace_dump_arg(ptr, ctx);
    trace_dump_arg(ptr, fence);
    trace_dump_arg(uint, timeout);
 
-   result = screen->fence_finish(screen, fence, timeout);
+   result = screen->fence_finish(screen, ctx, fence, timeout);
 
    trace_dump_ret(bool, result);
 

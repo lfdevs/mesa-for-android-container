@@ -5,7 +5,6 @@ Missing Features:
  - FP64
  - Tessellation
  - Cull and Clip Distance
- - Sampler anisotropy (Is there anything to do here?)
  - Image Gather Extended
  - Storage Image Without Format
  - Investigate CTS failures on HSW
@@ -19,7 +18,7 @@ Code sharing with GL:
  - Generalize blorp to use ISL and be sharable between the two drivers
 
 Performance:
- - HiZ (Nanley)
+ - Multi-{sampled/gen8,LOD,subpass} HiZ
  - Fast color clears (after HiZ?)
  - Compressed multisample support
  - Renderbuffer compression (SKL+)

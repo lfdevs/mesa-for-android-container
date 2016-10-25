@@ -154,10 +154,14 @@ struct __GLXDRIdrawableRec
 extern __GLXDRIdisplay *driswCreateDisplay(Display * dpy);
 extern __GLXDRIdisplay *driCreateDisplay(Display * dpy);
 extern __GLXDRIdisplay *dri2CreateDisplay(Display * dpy);
+extern __GLXDRIdisplay *dri3_create_display(Display * dpy);
+extern __GLXDRIdisplay *driwindowsCreateDisplay(Display * dpy);
+
+/*
+**
+*/
 extern void dri2InvalidateBuffers(Display *dpy, XID drawable);
 extern unsigned dri2GetSwapEventType(Display *dpy, XID drawable);
-
-extern __GLXDRIdisplay *dri3_create_display(Display * dpy);
 
 /*
 ** Functions to obtain driver configuration information from a direct
@@ -605,6 +609,9 @@ struct glx_display
    __GLXDRIdisplay *driDisplay;
    __GLXDRIdisplay *dri2Display;
    __GLXDRIdisplay *dri3Display;
+#endif
+#ifdef GLX_USE_WINDOWSGL
+   __GLXDRIdisplay *windowsdriDisplay;
 #endif
 };
 

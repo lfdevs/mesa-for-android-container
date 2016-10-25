@@ -24,6 +24,7 @@
 #define VIRGL_H
 
 #include "pipe/p_screen.h"
+#include "util/slab.h"
 #include "virgl_winsys.h"
 
 struct virgl_screen {
@@ -37,6 +38,8 @@ struct virgl_screen {
    struct virgl_winsys *vws;
 
    struct virgl_drm_caps caps;
+
+   struct slab_parent_pool texture_transfer_pool;
 
    uint32_t sub_ctx_id;
 };

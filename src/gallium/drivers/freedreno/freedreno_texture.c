@@ -50,74 +50,63 @@ fd_sampler_view_destroy(struct pipe_context *pctx,
 }
 
 static void bind_sampler_states(struct fd_texture_stateobj *tex,
-		unsigned nr, void **hwcso)
+		unsigned start, unsigned nr, void **hwcso)
 {
 	unsigned i;
-	unsigned new_nr = 0;
 
 	for (i = 0; i < nr; i++) {
-		if (hwcso[i])
-			new_nr = i + 1;
-		tex->samplers[i] = hwcso[i];
-		tex->dirty_samplers |= (1 << i);
+		unsigned p = i + start;
+		tex->samplers[p] = hwcso[i];
+		if (tex->samplers[p])
+			tex->valid_samplers |= (1 << p);
+		else
+			tex->valid_samplers &= ~(1 << p);
 	}
 
-	for (; i < tex->num_samplers; i++) {
-		tex->samplers[i] = NULL;
-		tex->dirty_samplers |= (1 << i);
-	}
-
-	tex->num_samplers = new_nr;
+	tex->num_samplers = util_last_bit(tex->valid_samplers);
 }
 
 static void set_sampler_views(struct fd_texture_stateobj *tex,
-		unsigned nr, struct pipe_sampler_view **views)
+		unsigned start, unsigned nr, struct pipe_sampler_view **views)
 {
 	unsigned i;
-	unsigned new_nr = 0;
 
 	for (i = 0; i < nr; i++) {
-		if (views[i])
-			new_nr = i + 1;
-		pipe_sampler_view_reference(&tex->textures[i], views[i]);
-		tex->dirty_samplers |= (1 << i);
+		struct pipe_sampler_view *view = views ? views[i] : NULL;
+		unsigned p = i + start;
+		pipe_sampler_view_reference(&tex->textures[p], view);
+		if (tex->textures[p])
+			tex->valid_textures |= (1 << p);
+		else
+			tex->valid_textures &= ~(1 << p);
 	}
 
-	for (; i < tex->num_textures; i++) {
-		pipe_sampler_view_reference(&tex->textures[i], NULL);
-		tex->dirty_samplers |= (1 << i);
-	}
-
-	tex->num_textures = new_nr;
+	tex->num_textures = util_last_bit(tex->valid_textures);
 }
 
 void
 fd_sampler_states_bind(struct pipe_context *pctx,
-		unsigned shader, unsigned start,
+		enum pipe_shader_type shader, unsigned start,
 		unsigned nr, void **hwcso)
 {
 	struct fd_context *ctx = fd_context(pctx);
 
-	assert(start == 0);
-
 	if (shader == PIPE_SHADER_FRAGMENT) {
-		bind_sampler_states(&ctx->fragtex, nr, hwcso);
+		bind_sampler_states(&ctx->fragtex, start, nr, hwcso);
 		ctx->dirty |= FD_DIRTY_FRAGTEX;
 	}
 	else if (shader == PIPE_SHADER_VERTEX) {
-		bind_sampler_states(&ctx->verttex, nr, hwcso);
+		bind_sampler_states(&ctx->verttex, start, nr, hwcso);
 		ctx->dirty |= FD_DIRTY_VERTTEX;
 	}
 }
 
 void
-fd_set_sampler_views(struct pipe_context *pctx, unsigned shader,
+fd_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
 		unsigned start, unsigned nr,
 		struct pipe_sampler_view **views)
 {
 	struct fd_context *ctx = fd_context(pctx);
-
-	assert(start == 0);
 
 	switch (shader) {
 	case PIPE_SHADER_FRAGMENT:
@@ -130,11 +119,11 @@ fd_set_sampler_views(struct pipe_context *pctx, unsigned shader,
 		if (nr != ctx->fragtex.num_textures)
 			ctx->dirty |= FD_DIRTY_TEXSTATE;
 
-		set_sampler_views(&ctx->fragtex, nr, views);
+		set_sampler_views(&ctx->fragtex, start, nr, views);
 		ctx->dirty |= FD_DIRTY_FRAGTEX;
 		break;
 	case PIPE_SHADER_VERTEX:
-		set_sampler_views(&ctx->verttex, nr, views);
+		set_sampler_views(&ctx->verttex, start, nr, views);
 		ctx->dirty |= FD_DIRTY_VERTTEX;
 		break;
 	default:

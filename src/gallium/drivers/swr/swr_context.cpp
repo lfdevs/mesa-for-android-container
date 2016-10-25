@@ -24,6 +24,7 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_format.h"
+#include "util/u_atomic.h"
 
 extern "C" {
 #include "util/u_transfer.h"
@@ -128,7 +129,7 @@ swr_transfer_map(struct pipe_context *pipe,
             if (!swr_is_fence_pending(screen->flush_fence))
                swr_fence_submit(swr_context(pipe), screen->flush_fence);
 
-            swr_fence_finish(pipe->screen, screen->flush_fence, 0);
+            swr_fence_finish(pipe->screen, NULL, screen->flush_fence, 0);
             swr_resource_unused(resource);
          }
       }
@@ -205,7 +206,7 @@ swr_resource_copy(struct pipe_context *pipe,
    swr_store_dirty_resource(pipe, src, SWR_TILE_RESOLVED);
    swr_store_dirty_resource(pipe, dst, SWR_TILE_RESOLVED);
 
-   swr_fence_finish(pipe->screen, screen->flush_fence, 0);
+   swr_fence_finish(pipe->screen, NULL, screen->flush_fence, 0);
    swr_resource_unused(src);
    swr_resource_unused(dst);
 
@@ -322,8 +323,10 @@ swr_destroy(struct pipe_context *pipe)
 
    swr_destroy_scratch_buffers(ctx);
 
+   /* Only update screen->pipe if current context is being destroyed */
    assert(screen);
-   screen->pipe = NULL;
+   if (screen->pipe == pipe)
+      screen->pipe = NULL;
 
    FREE(ctx);
 }
@@ -342,20 +345,68 @@ swr_render_condition(struct pipe_context *pipe,
    ctx->render_cond_cond = condition;
 }
 
+static void
+swr_UpdateStats(HANDLE hPrivateContext, const SWR_STATS *pStats)
+{
+   swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
+
+   if (!pDC)
+      return;
+
+   struct swr_query_result *pqr = (struct swr_query_result *)pDC->pStats;
+
+   SWR_STATS *pSwrStats = &pqr->core;
+
+   pSwrStats->DepthPassCount += pStats->DepthPassCount;
+   pSwrStats->PsInvocations += pStats->PsInvocations;
+   pSwrStats->CsInvocations += pStats->CsInvocations;
+}
+
+static void
+swr_UpdateStatsFE(HANDLE hPrivateContext, const SWR_STATS_FE *pStats)
+{
+   swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
+
+   if (!pDC)
+      return;
+
+   struct swr_query_result *pqr = (struct swr_query_result *)pDC->pStats;
+
+   SWR_STATS_FE *pSwrStats = &pqr->coreFE;
+   p_atomic_add(&pSwrStats->IaVertices, pStats->IaVertices);
+   p_atomic_add(&pSwrStats->IaPrimitives, pStats->IaPrimitives);
+   p_atomic_add(&pSwrStats->VsInvocations, pStats->VsInvocations);
+   p_atomic_add(&pSwrStats->HsInvocations, pStats->HsInvocations);
+   p_atomic_add(&pSwrStats->DsInvocations, pStats->DsInvocations);
+   p_atomic_add(&pSwrStats->GsInvocations, pStats->GsInvocations);
+   p_atomic_add(&pSwrStats->CInvocations, pStats->CInvocations);
+   p_atomic_add(&pSwrStats->CPrimitives, pStats->CPrimitives);
+   p_atomic_add(&pSwrStats->GsPrimitives, pStats->GsPrimitives);
+
+   for (unsigned i = 0; i < 4; i++) {
+      p_atomic_add(&pSwrStats->SoPrimStorageNeeded[i],
+            pStats->SoPrimStorageNeeded[i]);
+      p_atomic_add(&pSwrStats->SoNumPrimsWritten[i],
+            pStats->SoNumPrimsWritten[i]);
+   }
+}
+
 struct pipe_context *
 swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
 {
    struct swr_context *ctx = CALLOC_STRUCT(swr_context);
-   struct swr_screen *screen = swr_screen(p_screen);
    ctx->blendJIT =
       new std::unordered_map<BLEND_COMPILE_STATE, PFN_BLEND_JIT_FUNC>;
 
    SWR_CREATECONTEXT_INFO createInfo;
+   memset(&createInfo, 0, sizeof(createInfo));
    createInfo.driver = GL;
    createInfo.privateStateSize = sizeof(swr_draw_context);
    createInfo.pfnLoadTile = swr_LoadHotTile;
    createInfo.pfnStoreTile = swr_StoreHotTile;
    createInfo.pfnClearTile = swr_StoreHotTileClear;
+   createInfo.pfnUpdateStats = swr_UpdateStats;
+   createInfo.pfnUpdateStatsFE = swr_UpdateStatsFE;
    ctx->swrContext = SwrCreateContext(&createInfo);
 
    /* Init Load/Store/ClearTiles Tables */
@@ -366,7 +417,6 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
    if (ctx->swrContext == NULL)
       goto fail;
 
-   screen->pipe = &ctx->pipe;
    ctx->pipe.screen = p_screen;
    ctx->pipe.destroy = swr_destroy;
    ctx->pipe.priv = priv;
@@ -376,7 +426,8 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
    ctx->pipe.transfer_unmap = swr_transfer_unmap;
 
    ctx->pipe.transfer_flush_region = u_default_transfer_flush_region;
-   ctx->pipe.transfer_inline_write = u_default_transfer_inline_write;
+   ctx->pipe.buffer_subdata = u_default_buffer_subdata;
+   ctx->pipe.texture_subdata = u_default_texture_subdata;
 
    ctx->pipe.resource_copy_region = swr_resource_copy;
    ctx->pipe.render_condition = swr_render_condition;

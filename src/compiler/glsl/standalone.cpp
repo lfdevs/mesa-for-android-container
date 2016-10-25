@@ -33,10 +33,10 @@
 #include "glsl_parser_extras.h"
 #include "ir_optimization.h"
 #include "program.h"
-#include "program/hash_table.h"
 #include "loop_analysis.h"
 #include "standalone_scaffolding.h"
 #include "standalone.h"
+#include "util/string_to_uint_map.h"
 
 static const struct standalone_options *options;
 
@@ -58,6 +58,10 @@ initialize_context(struct gl_context *ctx, gl_api api)
    ctx->Const.MaxComputeWorkGroupSize[2] = 64;
    ctx->Const.MaxComputeWorkGroupInvocations = 1024;
    ctx->Const.MaxComputeSharedMemorySize = 32768;
+   ctx->Const.MaxComputeVariableGroupSize[0] = 512;
+   ctx->Const.MaxComputeVariableGroupSize[1] = 512;
+   ctx->Const.MaxComputeVariableGroupSize[2] = 64;
+   ctx->Const.MaxComputeVariableGroupInvocations = 512;
    ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits = 16;
    ctx->Const.Program[MESA_SHADER_COMPUTE].MaxUniformComponents = 1024;
    ctx->Const.Program[MESA_SHADER_COMPUTE].MaxCombinedUniformComponents = 1024;
@@ -153,6 +157,12 @@ initialize_context(struct gl_context *ctx, gl_api api)
       break;
    case 150:
    case 330:
+   case 400:
+   case 410:
+   case 420:
+   case 430:
+   case 440:
+   case 450:
       ctx->Const.MaxClipPlanes = 8;
       ctx->Const.MaxDrawBuffers = 8;
       ctx->Const.MinProgramTexelOffset = -8;
@@ -222,7 +232,11 @@ initialize_context(struct gl_context *ctx, gl_api api)
    ctx->Const.GenerateTemporaryNames = true;
    ctx->Const.MaxPatchVertices = 32;
 
-   ctx->Driver.NewShader = _mesa_new_shader;
+   /* GL_ARB_explicit_uniform_location, GL_MAX_UNIFORM_LOCATIONS */
+   ctx->Const.MaxUserAssignableUniformLocations =
+      4 * MESA_SHADER_STAGES * MAX_UNIFORMS;
+
+   ctx->Driver.NewShader = _mesa_new_linked_shader;
 }
 
 /* Returned string will have 'ctx' as its ralloc owner. */
@@ -320,6 +334,12 @@ standalone_compile_shader(const struct standalone_options *_options,
    case 140:
    case 150:
    case 330:
+   case 400:
+   case 410:
+   case 420:
+   case 430:
+   case 440:
+   case 450:
       glsl_es = false;
       break;
    default:
@@ -327,7 +347,11 @@ standalone_compile_shader(const struct standalone_options *_options,
       return NULL;
    }
 
-   initialize_context(ctx, (glsl_es) ? API_OPENGLES2 : API_OPENGL_COMPAT);
+   if (glsl_es) {
+      initialize_context(ctx, API_OPENGLES2);
+   } else {
+      initialize_context(ctx, options->glsl_version > 130 ? API_OPENGL_CORE : API_OPENGL_COMPAT);
+   }
 
    struct gl_shader_program *whole_program;
 
@@ -412,13 +436,13 @@ standalone_compile_shader(const struct standalone_options *_options,
       }
 
       for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
-         struct gl_shader *shader = whole_program->_LinkedShaders[i];
+         struct gl_linked_shader *shader = whole_program->_LinkedShaders[i];
 
          if (!shader)
             continue;
 
          shader->Program = rzalloc(shader, gl_program);
-         init_gl_program(shader->Program, shader->Type);
+         init_gl_program(shader->Program, shader->Stage);
       }
    }
 

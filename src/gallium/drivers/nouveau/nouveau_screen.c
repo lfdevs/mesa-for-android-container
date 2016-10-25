@@ -70,6 +70,7 @@ nouveau_screen_fence_ref(struct pipe_screen *pscreen,
 
 static boolean
 nouveau_screen_fence_finish(struct pipe_screen *screen,
+                            struct pipe_context *ctx,
                             struct pipe_fence_handle *pfence,
                             uint64_t timeout)
 {

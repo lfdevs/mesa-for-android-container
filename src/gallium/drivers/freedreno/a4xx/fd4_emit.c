@@ -94,7 +94,7 @@ fd4_emit_const(struct fd_ringbuffer *ring, enum shader_t type,
 
 static void
 fd4_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
-		uint32_t regid, uint32_t num, struct fd_bo **bos, uint32_t *offsets)
+		uint32_t regid, uint32_t num, struct pipe_resource **prscs, uint32_t *offsets)
 {
 	uint32_t i;
 
@@ -110,11 +110,11 @@ fd4_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 			CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
 
 	for (i = 0; i < num; i++) {
-		if (bos[i]) {
+		if (prscs[i]) {
 			if (write) {
-				OUT_RELOCW(ring, bos[i], offsets[i], 0, 0);
+				OUT_RELOCW(ring, fd_resource(prscs[i])->bo, offsets[i], 0, 0);
 			} else {
-				OUT_RELOC(ring, bos[i], offsets[i], 0, 0);
+				OUT_RELOC(ring, fd_resource(prscs[i])->bo, offsets[i], 0, 0);
 			}
 		} else {
 			OUT_RING(ring, 0xbad00000 | (i << 16));
@@ -132,16 +132,8 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			[SB_FRAG_TEX] = REG_A4XX_TPL1_TP_FS_BORDER_COLOR_BASE_ADDR,
 	};
 	struct fd4_context *fd4_ctx = fd4_context(ctx);
-	unsigned i, off;
-	void *ptr;
-
-	u_upload_alloc(fd4_ctx->border_color_uploader,
-			0, BORDER_COLOR_UPLOAD_SIZE,
-		       BORDER_COLOR_UPLOAD_SIZE, &off,
-			&fd4_ctx->border_color_buf,
-			&ptr);
-
-	fd_setup_border_colors(tex, ptr, 0);
+	bool needs_border = false;
+	unsigned i;
 
 	if (tex->num_samplers > 0) {
 		int num_samplers;
@@ -167,6 +159,8 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 					&dummy_sampler;
 			OUT_RING(ring, sampler->texsamp0);
 			OUT_RING(ring, sampler->texsamp1);
+
+			needs_border |= sampler->needs_border;
 		}
 
 		for (; i < num_samplers; i++) {
@@ -236,10 +230,22 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		debug_assert(v->astc_srgb.count == 0);
 	}
 
-	OUT_PKT0(ring, bcolor_reg[sb], 1);
-	OUT_RELOC(ring, fd_resource(fd4_ctx->border_color_buf)->bo, off, 0, 0);
+	if (needs_border) {
+		unsigned off;
+		void *ptr;
 
-	u_upload_unmap(fd4_ctx->border_color_uploader);
+		u_upload_alloc(fd4_ctx->border_color_uploader,
+				0, BORDER_COLOR_UPLOAD_SIZE,
+				BORDER_COLOR_UPLOAD_SIZE, &off,
+				&fd4_ctx->border_color_buf,
+				&ptr);
+
+		fd_setup_border_colors(tex, ptr, 0);
+		OUT_PKT0(ring, bcolor_reg[sb], 1);
+		OUT_RELOC(ring, fd_resource(fd4_ctx->border_color_buf)->bo, off, 0, 0);
+
+		u_upload_unmap(fd4_ctx->border_color_uploader);
+	}
 }
 
 /* emit texture state for mem->gmem restore operation.. eventually it would
@@ -500,7 +506,7 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	emit_marker(ring, 5);
 
 	if ((dirty & FD_DIRTY_FRAMEBUFFER) && !emit->key.binning_pass) {
-		struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+		struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
 		unsigned char mrt_comp[A4XX_MAX_RENDER_TARGETS] = {0};
 
 		for (unsigned i = 0; i < A4XX_MAX_RENDER_TARGETS; i++) {
@@ -520,7 +526,7 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_FRAMEBUFFER)) {
 		struct fd4_zsa_stateobj *zsa = fd4_zsa_stateobj(ctx->zsa);
-		struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+		struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
 		uint32_t rb_alpha_control = zsa->rb_alpha_control;
 
 		if (util_format_is_pure_integer(pipe_surface_format(pfb->cbufs[0])))
@@ -622,14 +628,14 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_RING(ring, A4XX_GRAS_SC_WINDOW_SCISSOR_TL_X(scissor->minx) |
 				A4XX_GRAS_SC_WINDOW_SCISSOR_TL_Y(scissor->miny));
 
-		ctx->max_scissor.minx = MIN2(ctx->max_scissor.minx, scissor->minx);
-		ctx->max_scissor.miny = MIN2(ctx->max_scissor.miny, scissor->miny);
-		ctx->max_scissor.maxx = MAX2(ctx->max_scissor.maxx, scissor->maxx);
-		ctx->max_scissor.maxy = MAX2(ctx->max_scissor.maxy, scissor->maxy);
+		ctx->batch->max_scissor.minx = MIN2(ctx->batch->max_scissor.minx, scissor->minx);
+		ctx->batch->max_scissor.miny = MIN2(ctx->batch->max_scissor.miny, scissor->miny);
+		ctx->batch->max_scissor.maxx = MAX2(ctx->batch->max_scissor.maxx, scissor->maxx);
+		ctx->batch->max_scissor.maxy = MAX2(ctx->batch->max_scissor.maxy, scissor->maxy);
 	}
 
 	if (dirty & FD_DIRTY_VIEWPORT) {
-		fd_wfi(ctx, ring);
+		fd_wfi(ctx->batch, ring);
 		OUT_PKT0(ring, REG_A4XX_GRAS_CL_VPORT_XOFFSET_0, 6);
 		OUT_RING(ring, A4XX_GRAS_CL_VPORT_XOFFSET_0(ctx->viewport.translate[0]));
 		OUT_RING(ring, A4XX_GRAS_CL_VPORT_XSCALE_0(ctx->viewport.scale[0]));
@@ -642,9 +648,9 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	if (dirty & (FD_DIRTY_VIEWPORT | FD_DIRTY_RASTERIZER | FD_DIRTY_FRAMEBUFFER)) {
 		float zmin, zmax;
 		int depth = 24;
-		if (ctx->framebuffer.zsbuf) {
+		if (ctx->batch->framebuffer.zsbuf) {
 			depth = util_format_get_component_bits(
-					pipe_surface_format(ctx->framebuffer.zsbuf),
+					pipe_surface_format(ctx->batch->framebuffer.zsbuf),
 					UTIL_FORMAT_COLORSPACE_ZS, 0);
 		}
 		util_viewport_zmin_zmax(&ctx->viewport, ctx->rasterizer->clip_halfz,
@@ -664,7 +670,7 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	}
 
 	if (dirty & (FD_DIRTY_PROG | FD_DIRTY_FRAMEBUFFER)) {
-		struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+		struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
 		unsigned n = pfb->nr_cbufs;
 		/* if we have depth/stencil, we need at least on MRT: */
 		if (pfb->zsbuf)
@@ -684,7 +690,7 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 		for (i = 0; i < A4XX_MAX_RENDER_TARGETS; i++) {
 			enum pipe_format format = pipe_surface_format(
-					ctx->framebuffer.cbufs[i]);
+					ctx->batch->framebuffer.cbufs[i]);
 			bool is_int = util_format_is_pure_integer(format);
 			bool has_alpha = util_format_has_alpha(format);
 			uint32_t control = blend->rb_mrt[i].control;
@@ -757,10 +763,10 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
  * state, there could have been a context switch between ioctls):
  */
 void
-fd4_emit_restore(struct fd_context *ctx)
+fd4_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
+	struct fd_context *ctx = batch->ctx;
 	struct fd4_context *fd4_ctx = fd4_context(ctx);
-	struct fd_ringbuffer *ring = ctx->ring;
 
 	OUT_PKT0(ring, REG_A4XX_RBBM_PERFCTR_CTL, 1);
 	OUT_RING(ring, 0x00000001);
@@ -907,16 +913,13 @@ fd4_emit_restore(struct fd_context *ctx)
 	OUT_PKT0(ring, REG_A4XX_GRAS_ALPHA_CONTROL, 1);
 	OUT_RING(ring, 0x0);
 
-	fd_hw_query_enable(ctx, ring);
-
-	ctx->needs_rb_fbd = true;
+	fd_hw_query_enable(batch, ring);
 }
 
 static void
-fd4_emit_ib(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
-		struct fd_ringmarker *end)
+fd4_emit_ib(struct fd_ringbuffer *ring, struct fd_ringbuffer *target)
 {
-	__OUT_IB(ring, true, start, end);
+	__OUT_IB(ring, true, target);
 }
 
 void

@@ -40,37 +40,9 @@
 #include "st_cb_blit.h"
 #include "st_cb_fbo.h"
 #include "st_manager.h"
+#include "st_scissor.h"
 
 #include "util/u_format.h"
-
-
-static void
-st_adjust_blit_for_msaa_resolve(struct pipe_blit_info *blit)
-{
-   /* Even though we do multisample resolves at the time of the blit, OpenGL
-    * specification defines them as if they happen at the time of rendering,
-    * which means that the type of averaging we do during the resolve should
-    * only depend on the source format; the destination format should be
-    * ignored. But, specification doesn't seem to be strict about it.
-    *
-    * It has been observed that mulitisample resolves produce slightly better
-    * looking images when averaging is done using destination format. NVIDIA's
-    * proprietary OpenGL driver also follows this approach.
-    *
-    * When multisampling, if the source and destination formats are equal
-    * (aside from the color space), we choose to blit in sRGB space to get
-    * this higher quality image.
-    */
-   if (blit->src.resource->nr_samples > 1 &&
-       blit->dst.resource->nr_samples <= 1) {
-      blit->dst.format = blit->dst.resource->format;
-
-      if (util_format_is_srgb(blit->dst.resource->format))
-         blit->src.format = util_format_srgb(blit->src.resource->format);
-      else
-         blit->src.format = util_format_linear(blit->src.resource->format);
-   }
-}
 
 static void
 st_BlitFramebuffer(struct gl_context *ctx,
@@ -96,6 +68,7 @@ st_BlitFramebuffer(struct gl_context *ctx,
 
    /* Make sure bitmap rendering has landed in the framebuffers */
    st_flush_bitmap_cache(st);
+   st_invalidate_readpix_cache(st);
 
    clip.srcX0 = srcX0;
    clip.srcY0 = srcY0;
@@ -117,6 +90,7 @@ st_BlitFramebuffer(struct gl_context *ctx,
                         &clip.dstX0, &clip.dstY0, &clip.dstX1, &clip.dstY1)) {
       return; /* nothing to draw/blit */
    }
+   memset(&blit, 0, sizeof(struct pipe_blit_info));
    blit.scissor_enable =
       (dstX0 != clip.dstX0) ||
       (dstY0 != clip.dstY0) ||
@@ -190,6 +164,9 @@ st_BlitFramebuffer(struct gl_context *ctx,
       blit.src.box.height = srcY0 - srcY1;
    }
 
+   if (drawFB != ctx->WinSysDrawBuffer)
+      st_window_rectangles_to_blit(ctx, &blit);
+
    blit.filter = pFilter;
    blit.render_condition_enable = TRUE;
    blit.alpha_blend = FALSE;
@@ -213,20 +190,25 @@ st_BlitFramebuffer(struct gl_context *ctx,
                st_renderbuffer(drawFB->_ColorDrawBuffers[i]);
 
             if (dstRb) {
-               struct pipe_surface *dstSurf = dstRb->surface;
+               struct pipe_surface *dstSurf;
+
+               st_update_renderbuffer_surface(st, dstRb);
+
+               dstSurf = dstRb->surface;
 
                if (dstSurf) {
                   blit.dst.resource = dstSurf->texture;
                   blit.dst.level = dstSurf->u.tex.level;
                   blit.dst.box.z = dstSurf->u.tex.first_layer;
-                  blit.dst.format = util_format_linear(dstSurf->format);
+                  blit.dst.format = dstSurf->format;
 
                   blit.src.resource = srcObj->pt;
                   blit.src.level = srcAtt->TextureLevel;
                   blit.src.box.z = srcAtt->Zoffset + srcAtt->CubeMapFace;
-                  blit.src.format = util_format_linear(srcObj->pt->format);
+                  blit.src.format = srcObj->pt->format;
 
-                  st_adjust_blit_for_msaa_resolve(&blit);
+                  if (!ctx->Color.sRGBEnabled)
+                     blit.src.format = util_format_linear(blit.src.format);
 
                   st->pipe->blit(st->pipe, &blit);
                   dstRb->defined = true; /* front buffer tracking */
@@ -240,9 +222,13 @@ st_BlitFramebuffer(struct gl_context *ctx,
          struct pipe_surface *srcSurf;
          GLuint i;
 
-         if (!srcRb || !srcRb->surface) {
+         if (!srcRb)
             return;
-         }
+
+         st_update_renderbuffer_surface(st, srcRb);
+
+         if (!srcRb->surface)
+            return;
 
          srcSurf = srcRb->surface;
 
@@ -251,20 +237,22 @@ st_BlitFramebuffer(struct gl_context *ctx,
                st_renderbuffer(drawFB->_ColorDrawBuffers[i]);
 
             if (dstRb) {
-               struct pipe_surface *dstSurf = dstRb->surface;
+               struct pipe_surface *dstSurf;
+
+               st_update_renderbuffer_surface(st, dstRb);
+
+               dstSurf = dstRb->surface;
 
                if (dstSurf) {
                   blit.dst.resource = dstSurf->texture;
                   blit.dst.level = dstSurf->u.tex.level;
                   blit.dst.box.z = dstSurf->u.tex.first_layer;
-                  blit.dst.format = util_format_linear(dstSurf->format);
+                  blit.dst.format = dstSurf->format;
 
                   blit.src.resource = srcSurf->texture;
                   blit.src.level = srcSurf->u.tex.level;
                   blit.src.box.z = srcSurf->u.tex.first_layer;
-                  blit.src.format = util_format_linear(srcSurf->format);
-
-                  st_adjust_blit_for_msaa_resolve(&blit);
+                  blit.src.format = srcSurf->format;
 
                   st->pipe->blit(st->pipe, &blit);
                   dstRb->defined = true; /* front buffer tracking */

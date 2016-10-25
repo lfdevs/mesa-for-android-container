@@ -34,9 +34,14 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include "Windows.h"
+#include <windows.h>
 #include <intrin.h>
 #include <cstdint>
+
+#if defined(MemoryFence)
+// Windows.h defines MemoryFence as _mm_mfence, but this conflicts with llvm::sys::MemoryFence
+#undef MemoryFence
+#endif
 
 #define OSALIGN(RWORD, WIDTH) __declspec(align(WIDTH)) RWORD
 #define THREAD __declspec(thread)
@@ -105,14 +110,30 @@ typedef unsigned int    DWORD;
 #define INLINE __inline
 #endif
 #define DEBUGBREAK asm ("int $3")
+
 #if !defined(__CYGWIN__)
+
 #ifndef __cdecl
 #define __cdecl
 #endif
 #ifndef __stdcall
 #define __stdcall
 #endif
-#define __declspec(X)
+
+#if defined(__GNUC__) && !defined(__INTEL_COMPILER)
+    #define __declspec(x)           __declspec_##x
+    #define __declspec_align(y)     __attribute__((aligned(y)))
+    #define __declspec_deprecated   __attribute__((deprecated))
+    #define __declspec_dllexport
+    #define __declspec_dllimport
+    #define __declspec_noinline     __attribute__((__noinline__))
+    #define __declspec_nothrow      __attribute__((nothrow))
+    #define __declspec_novtable
+    #define __declspec_thread       __thread
+#else
+    #define __declspec(X)
+#endif
+
 #endif
 
 #define GCC_VERSION (__GNUC__ * 10000 \
@@ -195,6 +216,7 @@ void AlignedFree(void* p)
 #define sprintf_s sprintf
 #define strcpy_s(dst,size,src) strncpy(dst,src,size)
 #define GetCurrentProcessId getpid
+pid_t gettid(void);
 #define GetCurrentThreadId gettid
 
 #define CreateDirectory(name, pSecurity) mkdir(name, 0777)
@@ -204,6 +226,8 @@ void AlignedFree(void* p)
 #define InterlockedDecrement(Append) __sync_sub_and_fetch(Append, 1)
 #define InterlockedDecrement64(Append) __sync_sub_and_fetch(Append, 1)
 #define InterlockedIncrement(Append) __sync_add_and_fetch(Append, 1)
+#define InterlockedAdd(Addend, Value) __sync_add_and_fetch(Addend, Value)
+#define InterlockedAdd64(Addend, Value) __sync_add_and_fetch(Addend, Value)
 #define _ReadWriteBarrier() asm volatile("" ::: "memory")
 
 #define PRAGMA_WARNING_PUSH_DISABLE(...)
@@ -222,7 +246,16 @@ typedef MEGABYTE    GIGABYTE[1024];
 
 #define OSALIGNLINE(RWORD) OSALIGN(RWORD, 64)
 #define OSALIGNSIMD(RWORD) OSALIGN(RWORD, KNOB_SIMD_BYTES)
+#if ENABLE_AVX512_SIMD16
+#define OSALIGNSIMD16(RWORD) OSALIGN(RWORD, KNOB_SIMD16_BYTES)
+#endif
 
 #include "common/swr_assert.h"
+
+#ifdef __GNUC__
+#define ATTR_UNUSED __attribute__((unused))
+#else
+#define ATTR_UNUSED
+#endif
 
 #endif//__SWR_OS_H__

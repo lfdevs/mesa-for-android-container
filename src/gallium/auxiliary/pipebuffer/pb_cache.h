@@ -42,11 +42,16 @@ struct pb_cache_entry
    struct pb_buffer *buffer; /**< Pointer to the structure this is part of. */
    struct pb_cache *mgr;
    int64_t start, end; /**< Caching time interval */
+   unsigned bucket_index;
 };
 
 struct pb_cache
 {
-   struct list_head cache;
+   /* The cache is divided into buckets for minimizing cache misses.
+    * The driver controls which buffer goes into which bucket.
+    */
+   struct list_head buckets[4];
+
    pipe_mutex mutex;
    uint64_t cache_size;
    uint64_t max_cache_size;
@@ -61,10 +66,11 @@ struct pb_cache
 
 void pb_cache_add_buffer(struct pb_cache_entry *entry);
 struct pb_buffer *pb_cache_reclaim_buffer(struct pb_cache *mgr, pb_size size,
-                                       unsigned alignment, unsigned usage);
+                                          unsigned alignment, unsigned usage,
+                                          unsigned bucket_index);
 void pb_cache_release_all_buffers(struct pb_cache *mgr);
 void pb_cache_init_entry(struct pb_cache *mgr, struct pb_cache_entry *entry,
-                         struct pb_buffer *buf);
+                         struct pb_buffer *buf, unsigned bucket_index);
 void pb_cache_init(struct pb_cache *mgr, uint usecs, float size_factor,
                    unsigned bypass_usage, uint64_t maximum_cache_size,
                    void (*destroy_buffer)(struct pb_buffer *buf),

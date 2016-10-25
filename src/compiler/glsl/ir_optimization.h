@@ -42,6 +42,13 @@
 #define SAT_TO_CLAMP       0x400
 #define DOPS_TO_DFRAC      0x800
 #define DFREXP_DLDEXP_TO_ARITH    0x1000
+#define BIT_COUNT_TO_MATH         0x02000
+#define EXTRACT_TO_SHIFTS         0x04000
+#define INSERT_TO_SHIFTS          0x08000
+#define REVERSE_TO_SHIFTS         0x10000
+#define FIND_LSB_TO_FLOAT_CAST    0x20000
+#define FIND_MSB_TO_FLOAT_CAST    0x40000
+#define IMUL_HIGH_TO_MUL          0x80000
 
 /**
  * \see class lower_packing_builtins_visitor
@@ -86,7 +93,8 @@ bool do_copy_propagation(exec_list *instructions);
 bool do_copy_propagation_elements(exec_list *instructions);
 bool do_constant_propagation(exec_list *instructions);
 void do_dead_builtin_varyings(struct gl_context *ctx,
-                              gl_shader *producer, gl_shader *consumer,
+                              gl_linked_shader *producer,
+                              gl_linked_shader *consumer,
                               unsigned num_tfeedback_decls,
                               class tfeedback_decl *tfeedback_decls);
 bool do_dead_code(exec_list *instructions, bool uniform_locations_assigned);
@@ -118,27 +126,32 @@ bool lower_variable_index_to_cond_assign(gl_shader_stage stage,
     exec_list *instructions, bool lower_input, bool lower_output,
     bool lower_temp, bool lower_uniform);
 bool lower_quadop_vector(exec_list *instructions, bool dont_lower_swz);
-bool lower_const_arrays_to_uniforms(exec_list *instructions);
-bool lower_clip_cull_distance(struct gl_shader_program *prog, gl_shader *shader);
+bool lower_const_arrays_to_uniforms(exec_list *instructions, unsigned stage);
+bool lower_clip_cull_distance(struct gl_shader_program *prog,
+                              gl_linked_shader *shader);
 void lower_output_reads(unsigned stage, exec_list *instructions);
 bool lower_packing_builtins(exec_list *instructions, int op_mask);
-void lower_shared_reference(struct gl_shader *shader, unsigned *shared_size);
-void lower_ubo_reference(struct gl_shader *shader, bool clamp_block_indices);
+void lower_shared_reference(struct gl_linked_shader *shader,
+                            unsigned *shared_size);
+void lower_ubo_reference(struct gl_linked_shader *shader,
+                         bool clamp_block_indices);
 void lower_packed_varyings(void *mem_ctx,
                            unsigned locations_used, ir_variable_mode mode,
-                           unsigned gs_input_vertices, gl_shader *shader,
+                           unsigned gs_input_vertices,
+                           gl_linked_shader *shader,
                            bool disable_varying_packing, bool xfb_enabled);
 bool lower_vector_insert(exec_list *instructions, bool lower_nonconstant_index);
-bool lower_vector_derefs(gl_shader *shader);
-void lower_named_interface_blocks(void *mem_ctx, gl_shader *shader);
+bool lower_vector_derefs(gl_linked_shader *shader);
+void lower_named_interface_blocks(void *mem_ctx, gl_linked_shader *shader);
 bool optimize_redundant_jumps(exec_list *instructions);
 bool optimize_split_arrays(exec_list *instructions, bool linked);
 bool lower_offset_arrays(exec_list *instructions);
 void optimize_dead_builtin_variables(exec_list *instructions,
                                      enum ir_variable_mode other);
-bool lower_tess_level(gl_shader *shader);
+bool lower_tess_level(gl_linked_shader *shader);
 
-bool lower_vertex_id(gl_shader *shader);
+bool lower_vertex_id(gl_linked_shader *shader);
+bool lower_blend_equation_advanced(gl_linked_shader *shader);
 
 bool lower_subroutine(exec_list *instructions, struct _mesa_glsl_parse_state *state);
 void propagate_invariance(exec_list *instructions);

@@ -101,6 +101,7 @@ private:
    void emitDMUL(const Instruction *);
    void emitIMAD(const Instruction *);
    void emitISAD(const Instruction *);
+   void emitSHLADD(const Instruction *a);
    void emitFMAD(const Instruction *);
    void emitDMAD(const Instruction *);
    void emitMADSP(const Instruction *);
@@ -698,16 +699,15 @@ CodeEmitterNVC0::emitUADD(const Instruction *i)
    uint32_t addOp = 0;
 
    assert(!i->src(0).mod.abs() && !i->src(1).mod.abs());
-   assert(!i->src(0).mod.neg() || !i->src(1).mod.neg());
 
    if (i->src(0).mod.neg())
       addOp |= 0x200;
    if (i->src(1).mod.neg())
       addOp |= 0x100;
-   if (i->op == OP_SUB) {
+   if (i->op == OP_SUB)
       addOp ^= 0x100;
-      assert(addOp != 0x300); // would be add-plus-one
-   }
+
+   assert(addOp != 0x300); // would be add-plus-one
 
    if (i->encSize == 8) {
       if (isLIMM(i->src(1), TYPE_U32)) {
@@ -736,8 +736,14 @@ CodeEmitterNVC0::emitUADD(const Instruction *i)
 void
 CodeEmitterNVC0::emitIMAD(const Instruction *i)
 {
+   uint8_t addOp =
+      (i->src(2).mod.neg() << 1) | (i->src(0).mod.neg() ^ i->src(1).mod.neg());
+
    assert(i->encSize == 8);
    emitForm_A(i, HEX64(20000000, 00000003));
+
+   assert(addOp != 3);
+   code[0] |= addOp << 8;
 
    if (isSignedType(i->dType))
       code[0] |= 1 << 7;
@@ -749,12 +755,47 @@ CodeEmitterNVC0::emitIMAD(const Instruction *i)
    if (i->flagsDef >= 0) code[1] |= 1 << 16;
    if (i->flagsSrc >= 0) code[1] |= 1 << 23;
 
-   if (i->src(2).mod.neg()) code[0] |= 0x10;
-   if (i->src(1).mod.neg() ^
-       i->src(0).mod.neg()) code[0] |= 0x20;
-
    if (i->subOp == NV50_IR_SUBOP_MUL_HIGH)
       code[0] |= 1 << 6;
+}
+
+void
+CodeEmitterNVC0::emitSHLADD(const Instruction *i)
+{
+   uint8_t addOp = (i->src(2).mod.neg() << 1) | i->src(0).mod.neg();
+   const ImmediateValue *imm = i->src(1).get()->asImm();
+   assert(imm);
+
+   code[0] = 0x00000003;
+   code[1] = 0x40000000 | addOp << 23;
+
+   emitPredicate(i);
+
+   defId(i->def(0), 14);
+   srcId(i->src(0), 20);
+
+   if (i->flagsDef >= 0)
+      code[1] |= 1 << 16;
+
+   assert(!(imm->reg.data.u32 & 0xffffffe0));
+   code[0] |= imm->reg.data.u32 << 5;
+
+   switch (i->src(2).getFile()) {
+   case FILE_GPR:
+      srcId(i->src(2), 26);
+      break;
+   case FILE_MEMORY_CONST:
+      code[1] |= 0x4000;
+      code[1] |= i->getSrc(2)->reg.fileIndex << 10;
+      setAddress16(i->src(2));
+      break;
+   case FILE_IMMEDIATE:
+      setImmediate(i, 2);
+      break;
+   default:
+      assert(!"bad src2 file");
+      break;
+   }
 }
 
 void
@@ -2469,16 +2510,31 @@ CodeEmitterNVC0::emitPIXLD(const Instruction *i)
 void
 CodeEmitterNVC0::emitVOTE(const Instruction *i)
 {
-   assert(i->src(0).getFile() == FILE_PREDICATE &&
-          i->def(1).getFile() == FILE_PREDICATE);
+   assert(i->src(0).getFile() == FILE_PREDICATE);
 
    code[0] = 0x00000004 | (i->subOp << 5);
    code[1] = 0x48000000;
 
    emitPredicate(i);
 
-   defId(i->def(0), 14);
-   defId(i->def(1), 32 + 22);
+   unsigned rp = 0;
+   for (int d = 0; i->defExists(d); d++) {
+      if (i->def(d).getFile() == FILE_PREDICATE) {
+         assert(!(rp & 2));
+         rp |= 2;
+         defId(i->def(d), 32 + 22);
+      } else if (i->def(d).getFile() == FILE_GPR) {
+         assert(!(rp & 1));
+         rp |= 1;
+         defId(i->def(d), 14);
+      } else {
+         assert(!"Unhandled def");
+      }
+   }
+   if (!(rp & 1))
+      code[0] |= 63 << 14;
+   if (!(rp & 2))
+      code[1] |= 7 << 22;
    if (i->src(0).mod == Modifier(NV50_IR_MOD_NOT))
       code[0] |= 1 << 23;
    srcId(i->src(0), 20);
@@ -2586,6 +2642,9 @@ CodeEmitterNVC0::emitInstruction(Instruction *insn)
       break;
    case OP_SAD:
       emitISAD(insn);
+      break;
+   case OP_SHLADD:
+      emitSHLADD(insn);
       break;
    case OP_NOT:
       emitNOT(insn);

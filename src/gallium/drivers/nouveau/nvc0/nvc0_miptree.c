@@ -240,7 +240,6 @@ const struct u_resource_vtbl nvc0_miptree_vtbl =
    nvc0_miptree_transfer_map,       /* transfer_map */
    u_default_transfer_flush_region, /* transfer_flush_region */
    nvc0_miptree_transfer_unmap,     /* transfer_unmap */
-   u_default_transfer_inline_write  /* transfer_inline_write */
 };
 
 struct pipe_resource *

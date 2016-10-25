@@ -119,6 +119,8 @@ SVGA3D_FIFOReserve(struct svga_winsys_context *swc,
    header->id = cmd;
    header->size = cmdSize;
 
+   swc->last_command = cmd;
+
    return &header[1];
 }
 

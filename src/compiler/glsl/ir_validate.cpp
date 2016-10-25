@@ -246,11 +246,22 @@ ir_validate::visit_leave(ir_expression *ir)
       break;
 
    case ir_unop_neg:
+      assert(ir->type == ir->operands[0]->type);
+      break;
+
    case ir_unop_abs:
    case ir_unop_sign:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_INT ||
+             ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT ||
+             ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
+      assert(ir->type == ir->operands[0]->type);
+      break;
+
    case ir_unop_rcp:
    case ir_unop_rsq:
    case ir_unop_sqrt:
+      assert(ir->type->base_type == GLSL_TYPE_FLOAT ||
+             ir->type->base_type == GLSL_TYPE_DOUBLE);
       assert(ir->type == ir->operands[0]->type);
       break;
 
@@ -453,6 +464,14 @@ ir_validate::visit_leave(ir_expression *ir)
       assert(ir->operands[0]->type->base_type == GLSL_TYPE_SUBROUTINE);
       assert(ir->type->base_type == GLSL_TYPE_INT);
       break;
+
+   case ir_unop_vote_any:
+   case ir_unop_vote_all:
+   case ir_unop_vote_eq:
+      assert(ir->type == glsl_type::bool_type);
+      assert(ir->operands[0]->type == glsl_type::bool_type);
+      break;
+
    case ir_binop_add:
    case ir_binop_sub:
    case ir_binop_mul:
@@ -832,8 +851,8 @@ ir_validate::visit_enter(ir_call *ir)
       abort();
    }
 
-   const exec_node *formal_param_node = callee->parameters.head;
-   const exec_node *actual_param_node = ir->actual_parameters.head;
+   const exec_node *formal_param_node = callee->parameters.get_head_raw();
+   const exec_node *actual_param_node = ir->actual_parameters.get_head_raw();
    while (true) {
       if (formal_param_node->is_tail_sentinel()
           != actual_param_node->is_tail_sentinel()) {

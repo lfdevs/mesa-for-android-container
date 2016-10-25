@@ -36,7 +36,7 @@
 #include "util/u_framebuffer.h"
 
 
-/* Second state atom for user clip planes:
+/* Update the sample mask for MSAA.
  */
 static void update_sample_mask( struct st_context *st )
 {
@@ -46,7 +46,7 @@ static void update_sample_mask( struct st_context *st )
    unsigned sample_count = util_framebuffer_get_num_samples(framebuffer);
 
    if (st->ctx->Multisample.Enabled && sample_count > 1) {
-   /* unlike in gallium/d3d10 the mask is only active if msaa is enabled */
+      /* unlike in gallium/d3d10 the mask is only active if msaa is enabled */
       if (st->ctx->Multisample.SampleCoverage) {
          unsigned nr_bits;
          nr_bits = (unsigned)
@@ -54,7 +54,7 @@ static void update_sample_mask( struct st_context *st )
          /* there's lot of ways how to do this. We just use first few bits,
             since we have no knowledge of sample positions here. When
             app-supplied mask though is used too might need to be smarter.
-            Also, there's a interface restriction here in theory it is
+            Also, there's an interface restriction here in theory it is
             encouraged this mask not be the same at each pixel. */
          sample_mask = (1 << nr_bits) - 1;
          if (st->ctx->Multisample.SampleCoverageInvert)
@@ -86,19 +86,9 @@ static void update_sample_shading( struct st_context *st )
 }
 
 const struct st_tracked_state st_update_msaa = {
-   "st_update_msaa",					/* name */
-   {							/* dirty */
-      (_NEW_MULTISAMPLE | _NEW_BUFFERS),		/* mesa */
-      ST_NEW_FRAMEBUFFER,				/* st */
-   },
    update_sample_mask					/* update */
 };
 
 const struct st_tracked_state st_update_sample_shading = {
-   "st_update_sample_shading",				/* name */
-   {							/* dirty */
-      (_NEW_MULTISAMPLE | _NEW_PROGRAM | _NEW_BUFFERS),	/* mesa */
-      ST_NEW_FRAGMENT_PROGRAM | ST_NEW_FRAMEBUFFER,	/* st */
-   },
    update_sample_shading				/* update */
 };

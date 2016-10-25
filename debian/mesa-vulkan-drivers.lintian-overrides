@@ -1,2 +1,3 @@
-package-name-doesnt-match-sonames libvulkan-intel
+package-name-doesnt-match-sonames libvulkan-intel libvulkan-radeon
 shlib-without-versioned-soname usr/lib/*/libvulkan_intel.so libvulkan_intel.so
+shlib-without-versioned-soname usr/lib/*/libvulkan_radeon.so libvulkan_radeon.so

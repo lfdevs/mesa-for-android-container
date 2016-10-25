@@ -41,6 +41,39 @@ namespace nv50_ir {
    ((QOP_##q << 6) | (QOP_##r << 4) |           \
     (QOP_##s << 2) | (QOP_##t << 0))
 
+void
+GM107LegalizeSSA::handlePFETCH(Instruction *i)
+{
+   Value *src0;
+
+   if (i->src(0).getFile() == FILE_GPR && !i->srcExists(1))
+      return;
+
+   bld.setPosition(i, false);
+   src0 = bld.getSSA();
+
+   if (i->srcExists(1))
+      bld.mkOp2(OP_ADD , TYPE_U32, src0, i->getSrc(0), i->getSrc(1));
+   else
+      bld.mkOp1(OP_MOV , TYPE_U32, src0, i->getSrc(0));
+
+   i->setSrc(0, src0);
+   i->setSrc(1, NULL);
+}
+
+bool
+GM107LegalizeSSA::visit(Instruction *i)
+{
+   switch (i->op) {
+   case OP_PFETCH:
+      handlePFETCH(i);
+      break;
+   default:
+      break;
+   }
+   return true;
+}
+
 bool
 GM107LoweringPass::handleManualTXD(TexInstruction *i)
 {

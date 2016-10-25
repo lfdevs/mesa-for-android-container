@@ -31,7 +31,30 @@
 #define R600_CS_H
 
 #include "r600_pipe_common.h"
-#include "r600d_common.h"
+#include "amd/common/r600d_common.h"
+
+/**
+ * Return true if there is enough memory in VRAM and GTT for the buffers
+ * added so far.
+ *
+ * \param vram      VRAM memory size not added to the buffer list yet
+ * \param gtt       GTT memory size not added to the buffer list yet
+ */
+static inline bool
+radeon_cs_memory_below_limit(struct r600_common_screen *screen,
+			     struct radeon_winsys_cs *cs,
+			     uint64_t vram, uint64_t gtt)
+{
+	vram += cs->used_vram;
+	gtt += cs->used_gart;
+
+	/* Anything that goes above the VRAM size should go to GTT. */
+	if (vram > screen->info.vram_size)
+		gtt += vram - screen->info.vram_size;
+
+	/* Now we just need to check if we have enough GTT. */
+	return gtt < screen->info.gart_size * 0.7;
+}
 
 /**
  * Add a buffer to the buffer list for the given command stream (CS).
@@ -50,8 +73,44 @@ static inline unsigned radeon_add_to_buffer_list(struct r600_common_context *rct
 						 enum radeon_bo_priority priority)
 {
 	assert(usage);
-	return rctx->ws->cs_add_buffer(ring->cs, rbo->buf, usage,
-				      rbo->domains, priority) * 4;
+	return rctx->ws->cs_add_buffer(
+		ring->cs, rbo->buf,
+		(enum radeon_bo_usage)(usage | RADEON_USAGE_SYNCHRONIZED),
+		rbo->domains, priority) * 4;
+}
+
+/**
+ * Same as above, but also checks memory usage and flushes the context
+ * accordingly.
+ *
+ * When this SHOULD NOT be used:
+ *
+ * - if r600_context_add_resource_size has been called for the buffer
+ *   followed by *_need_cs_space for checking the memory usage
+ *
+ * - if r600_need_dma_space has been called for the buffer
+ *
+ * - when emitting state packets and draw packets (because preceding packets
+ *   can't be re-emitted at that point)
+ *
+ * - if shader resource "enabled_mask" is not up-to-date or there is
+ *   a different constraint disallowing a context flush
+ */
+static inline unsigned
+radeon_add_to_buffer_list_check_mem(struct r600_common_context *rctx,
+				    struct r600_ring *ring,
+				    struct r600_resource *rbo,
+				    enum radeon_bo_usage usage,
+				    enum radeon_bo_priority priority,
+				    bool check_mem)
+{
+	if (check_mem &&
+	    !radeon_cs_memory_below_limit(rctx->screen, ring->cs,
+					  rctx->vram + rbo->vram_usage,
+					  rctx->gtt + rbo->gart_usage))
+		ring->flush(rctx, RADEON_FLUSH_ASYNC, NULL);
+
+	return radeon_add_to_buffer_list(rctx, ring, rbo, usage, priority);
 }
 
 static inline void r600_emit_reloc(struct r600_common_context *rctx,
@@ -72,7 +131,7 @@ static inline void r600_emit_reloc(struct r600_common_context *rctx,
 static inline void radeon_set_config_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg < R600_CONTEXT_REG_OFFSET);
-	assert(cs->cdw+2+num <= cs->max_dw);
+	assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
 	radeon_emit(cs, PKT3(PKT3_SET_CONFIG_REG, num, 0));
 	radeon_emit(cs, (reg - R600_CONFIG_REG_OFFSET) >> 2);
 }
@@ -86,7 +145,7 @@ static inline void radeon_set_config_reg(struct radeon_winsys_cs *cs, unsigned r
 static inline void radeon_set_context_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg >= R600_CONTEXT_REG_OFFSET);
-	assert(cs->cdw+2+num <= cs->max_dw);
+	assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
 	radeon_emit(cs, PKT3(PKT3_SET_CONTEXT_REG, num, 0));
 	radeon_emit(cs, (reg - R600_CONTEXT_REG_OFFSET) >> 2);
 }
@@ -102,7 +161,7 @@ static inline void radeon_set_context_reg_idx(struct radeon_winsys_cs *cs,
 					      unsigned value)
 {
 	assert(reg >= R600_CONTEXT_REG_OFFSET);
-	assert(cs->cdw + 3 <= cs->max_dw);
+	assert(cs->current.cdw + 3 <= cs->current.max_dw);
 	radeon_emit(cs, PKT3(PKT3_SET_CONTEXT_REG, 1, 0));
 	radeon_emit(cs, (reg - R600_CONTEXT_REG_OFFSET) >> 2 | (idx << 28));
 	radeon_emit(cs, value);
@@ -111,7 +170,7 @@ static inline void radeon_set_context_reg_idx(struct radeon_winsys_cs *cs,
 static inline void radeon_set_sh_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg >= SI_SH_REG_OFFSET && reg < SI_SH_REG_END);
-	assert(cs->cdw+2+num <= cs->max_dw);
+	assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
 	radeon_emit(cs, PKT3(PKT3_SET_SH_REG, num, 0));
 	radeon_emit(cs, (reg - SI_SH_REG_OFFSET) >> 2);
 }
@@ -125,7 +184,7 @@ static inline void radeon_set_sh_reg(struct radeon_winsys_cs *cs, unsigned reg, 
 static inline void radeon_set_uconfig_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
-	assert(cs->cdw+2+num <= cs->max_dw);
+	assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
 	radeon_emit(cs, PKT3(PKT3_SET_UCONFIG_REG, num, 0));
 	radeon_emit(cs, (reg - CIK_UCONFIG_REG_OFFSET) >> 2);
 }
@@ -141,7 +200,7 @@ static inline void radeon_set_uconfig_reg_idx(struct radeon_winsys_cs *cs,
 					      unsigned value)
 {
 	assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
-	assert(cs->cdw + 3 <= cs->max_dw);
+	assert(cs->current.cdw + 3 <= cs->current.max_dw);
 	radeon_emit(cs, PKT3(PKT3_SET_UCONFIG_REG, 1, 0));
 	radeon_emit(cs, (reg - CIK_UCONFIG_REG_OFFSET) >> 2 | (idx << 28));
 	radeon_emit(cs, value);

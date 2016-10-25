@@ -210,7 +210,7 @@ pb_cache_manager_create_buffer(struct pb_manager *_mgr,
    /* get a buffer from the cache */
    buf = (struct pb_cache_buffer *)
          pb_cache_reclaim_buffer(&mgr->cache, size, desc->alignment,
-                                 desc->usage);
+                                 desc->usage, 0);
    if (buf)
       return &buf->base;
 
@@ -243,7 +243,7 @@ pb_cache_manager_create_buffer(struct pb_manager *_mgr,
    
    buf->base.vtbl = &pb_cache_buffer_vtbl;
    buf->mgr = mgr;
-   pb_cache_init_entry(&mgr->cache, &buf->cache_entry, &buf->base);
+   pb_cache_init_entry(&mgr->cache, &buf->cache_entry, &buf->base, 0);
    
    return &buf->base;
 }

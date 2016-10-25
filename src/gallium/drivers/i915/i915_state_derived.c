@@ -145,7 +145,12 @@ static void calculate_vertex_layout(struct i915_context *i915)
       uint hwtc;
       if (texCoords[i]) {
          hwtc = TEXCOORDFMT_4D;
-         src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_GENERIC, fs->generic_mapping[i]);
+         if (fs->generic_mapping[i] == I915_SEMANTIC_POS) {
+            src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_POSITION, 0);
+         }
+         else {
+            src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_GENERIC, fs->generic_mapping[i]);
+         }
          draw_emit_vertex_attr(&vinfo, EMIT_4F, src);
       }
       else {

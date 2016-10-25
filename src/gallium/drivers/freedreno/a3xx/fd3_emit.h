@@ -93,14 +93,14 @@ void fd3_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd3_emit *emit);
 void fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd3_emit *emit);
 
-void fd3_emit_restore(struct fd_context *ctx);
+void fd3_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring);
 
 void fd3_emit_init(struct pipe_context *pctx);
 
 static inline void
-fd3_emit_cache_flush(struct fd_context *ctx, struct fd_ringbuffer *ring)
+fd3_emit_cache_flush(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
-	fd_wfi(ctx, ring);
+	fd_wfi(batch, ring);
 	OUT_PKT0(ring, REG_A3XX_UCHE_CACHE_INVALIDATE0_REG, 2);
 	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE0_REG_ADDR(0));
 	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR(0) |

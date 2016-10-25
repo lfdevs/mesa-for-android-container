@@ -87,6 +87,21 @@ lp_build_div(struct lp_build_context *bld,
              LLVMValueRef b);
 
 
+/* llvm.fmuladd.* intrinsic */
+LLVMValueRef
+lp_build_fmuladd(LLVMBuilderRef builder,
+                 LLVMValueRef a,
+                 LLVMValueRef b,
+                 LLVMValueRef c);
+
+/* a * b + c */
+LLVMValueRef
+lp_build_mad(struct lp_build_context *bld,
+             LLVMValueRef a,
+             LLVMValueRef b,
+             LLVMValueRef c);
+
+
 /**
  * Set when the weights for normalized are prescaled, that is, in range
  * 0..2**n, as opposed to range 0..2**(n-1).

@@ -42,8 +42,11 @@ gen6_upload_scissor_state(struct brw_context *brw)
    const unsigned int fb_width= _mesa_geometric_width(ctx->DrawBuffer);
    const unsigned int fb_height = _mesa_geometric_height(ctx->DrawBuffer);
 
+   /* BRW_NEW_VIEWPORT_COUNT */
+   const unsigned viewport_count = brw->clip.viewport_count;
+
    scissor = brw_state_batch(brw, AUB_TRACE_SCISSOR_STATE,
-			     sizeof(*scissor) * ctx->Const.MaxViewports, 32,
+			     sizeof(*scissor) * viewport_count, 32,
                              &scissor_state_offset);
 
    /* _NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT */
@@ -55,7 +58,7 @@ gen6_upload_scissor_state(struct brw_context *brw)
     * Note that the hardware's coordinates are inclusive, while Mesa's min is
     * inclusive but max is exclusive.
     */
-   for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
+   for (unsigned i = 0; i < viewport_count; i++) {
       int bbox[4];
 
       bbox[0] = MAX2(ctx->ViewportArray[i].X, 0);
@@ -102,7 +105,8 @@ const struct brw_tracked_state gen6_scissor_state = {
               _NEW_SCISSOR |
               _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP,
+             BRW_NEW_BLORP |
+             BRW_NEW_VIEWPORT_COUNT,
    },
    .emit = gen6_upload_scissor_state,
 };

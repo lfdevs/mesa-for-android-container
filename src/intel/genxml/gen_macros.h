@@ -21,7 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef GEN_MACROS_H
+#define GEN_MACROS_H
 
 /* Macros for handling per-gen compilation.
  *
@@ -57,9 +58,22 @@
 
 #define GEN_GEN ((GEN_VERSIONx10) / 10)
 #define GEN_IS_HASWELL ((GEN_VERSIONx10) == 75)
+#define GEN_IS_G4X ((GEN_VERSIONx10) == 45)
 
 /* Prefixing macros */
-#if (GEN_VERSIONx10 == 70)
+#if (GEN_VERSIONx10 == 40)
+#  define GENX(X) GEN4_##X
+#  define genX(x) gen4_##x
+#elif (GEN_VERSIONx10 == 45)
+#  define GENX(X) GEN45_##X
+#  define genX(x) gen45_##x
+#elif (GEN_VERSIONx10 == 50)
+#  define GENX(X) GEN5_##X
+#  define genX(x) gen5_##x
+#elif (GEN_VERSIONx10 == 60)
+#  define GENX(X) GEN6_##X
+#  define genX(x) gen6_##x
+#elif (GEN_VERSIONx10 == 70)
 #  define GENX(X) GEN7_##X
 #  define genX(x) gen7_##x
 #elif (GEN_VERSIONx10 == 75)
@@ -74,3 +88,5 @@
 #else
 #  error "Need to add prefixing macros for this gen"
 #endif
+
+#endif /* GEN_MACROS_H */

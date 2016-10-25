@@ -34,6 +34,7 @@
 #include <GL/wglext.h>
 
 #include "util/u_debug.h"
+#include "stw_st.h"
 
 
 struct pipe_resource;
@@ -131,9 +132,24 @@ struct stw_framebuffer
 struct stw_framebuffer *
 stw_framebuffer_create(HDC hdc, int iPixelFormat);
 
+
+/**
+ * Increase fb reference count.  The referenced framebuffer should be locked.
+ *
+ * It's not necessary to hold stw_dev::fb_mutex global lock.
+ */
+static inline void
+stw_framebuffer_reference_locked(struct stw_framebuffer *fb)
+{
+   if (fb) {
+      assert(stw_own_mutex(&fb->mutex));
+      fb->refcnt++;
+   }
+}
+
+
 void
-stw_framebuffer_reference(struct stw_framebuffer **ptr,
-                          struct stw_framebuffer *fb);
+stw_framebuffer_release_locked(struct stw_framebuffer *fb);
 
 /**
  * Search a framebuffer with a matching HWND.
@@ -179,6 +195,7 @@ static inline void
 stw_framebuffer_unlock(struct stw_framebuffer *fb)
 {
    assert(fb);
+   assert(stw_own_mutex(&fb->mutex));
    LeaveCriticalSection(&fb->mutex);
 }
 

@@ -206,6 +206,9 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
 
    svga->hud.num_depthstencil_objects++;
 
+   SVGA_STATS_COUNT_INC(svga_screen(svga->pipe.screen)->sws,
+                        SVGA_STATS_COUNT_DEPTHSTENCILSTATE);
+
    return ds;
 }
 

@@ -136,8 +136,8 @@ The integer capabilities:
   PIPE_BUFFER. In other words, the pointer returned by transfer_map is
   always aligned to this value.
 * ``PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT``: Describes the required
-  alignment for pipe_sampler_view::u.buf.first_element, in bytes.
-  If a driver does not support first/last_element, it should return 0.
+  alignment for pipe_sampler_view::u.buf.offset, in bytes.
+  If a driver does not support offset/size, it should return 0.
 * ``PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY``: Whether the driver only
   supports R, RG, RGB and RGBA formats for PIPE_BUFFER sampler views.
   When this is the case it should be assumed that the swizzle parameters
@@ -340,6 +340,27 @@ The integer capabilities:
   extension and thus implements proper support for culling planes.
 * ``PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES``: Whether primitive restart is
   supported for patch primitives.
+* ``PIPE_CAP_TGSI_VOTE``: Whether the ``VOTE_*`` ops can be used in shaders.
+* ``PIPE_CAP_MAX_WINDOW_RECTANGLES``: The maxium number of window rectangles
+  supported in ``set_window_rectangles``.
+* ``PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED``: If true, the driver implements support
+  for ``pipe_rasterizer_state::offset_units_unscaled``.
+* ``PIPE_CAP_VIEWPORT_SUBPIXEL_BITS``: Number of bits of subpixel precision for
+  floating point viewport bounds.
+* ``PIPE_CAP_MIXED_COLOR_DEPTH_BITS``: Whether there is non-fallback
+  support for color/depth format combinations that use a different
+  number of bits. For the purpose of this cap, Z24 is treated as
+  32-bit. If set to off, that means that a B5G6R5 + Z24 or RGBA8 + Z16
+  combination will require a driver fallback, and should not be
+  advertised in the GLX/EGL config list.
+* ``PIPE_CAP_TGSI_ARRAY_COMPONENTS``: If true, the driver interprets the
+  UsageMask of input and output declarations and allows declaring arrays
+  in overlapping ranges. The components must be a contiguous range, e.g. a
+  UsageMask of  xy or yzw is allowed, but xz or yw isn't. Declarations with
+  overlapping locations must have matching semantic names and indices, and
+  equal interpolation qualifiers.
+  Components may overlap, notably when the gaps in an array of dvec3 are
+  filled in.
 
 
 .. _pipe_capf:
@@ -483,6 +504,12 @@ pipe_screen::get_compute_param.
   non-zero means yes, zero means no. Value type: ``uint32_t``
 * ``PIPE_COMPUTE_CAP_SUBGROUP_SIZE``: The size of a basic execution unit in
   threads. Also known as wavefront size, warp size or SIMD width.
+* ``PIPE_COMPUTE_CAP_ADDRESS_BITS``: The default compute device address space
+  size specified as an unsigned integer value in bits.
+* ``PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK``: Maximum variable number
+  of threads that a single block can contain. This is similar to
+  PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK, except that the variable size is not
+  known a compile-time but at dispatch-time.
 
 .. _pipe_bind:
 
@@ -514,8 +541,6 @@ resources might be created and handled quite differently.
 * ``PIPE_BIND_VERTEX_BUFFER``: A vertex buffer.
 * ``PIPE_BIND_INDEX_BUFFER``: An vertex index/element buffer.
 * ``PIPE_BIND_CONSTANT_BUFFER``: A buffer of shader constants.
-* ``PIPE_BIND_TRANSFER_WRITE``: A transfer object which will be written to.
-* ``PIPE_BIND_TRANSFER_READ``: A transfer object which will be read from.
 * ``PIPE_BIND_STREAM_OUTPUT``: A stream output buffer.
 * ``PIPE_BIND_CUSTOM``:
 * ``PIPE_BIND_SCANOUT``: A front color buffer or scanout buffer.

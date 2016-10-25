@@ -745,7 +745,7 @@ setup_operand0_indexing(struct svga_shader_emitter_v10 *emit,
                         boolean indirect, boolean index2D,
                         unsigned tempArrayID)
 {
-   unsigned indexDim, index0Rep, index1Rep = VGPU10_OPERAND_INDEX_0D;
+   unsigned indexDim, index0Rep, index1Rep = VGPU10_OPERAND_INDEX_IMMEDIATE32;
 
    /*
     * Compute index dimensions
@@ -1762,7 +1762,7 @@ alloc_immediate_float4(struct svga_shader_emitter_v10 *emit,
 
 
 /**
- * Allocate space for a int[4] immediate.
+ * Allocate space for an int[4] immediate.
  * \return  the index/position of the immediate.
  */
 static unsigned
@@ -2631,6 +2631,28 @@ emit_temporaries_declaration(struct svga_shader_emitter_v10 *emit)
 
    total_temps = emit->num_shader_temps;
 
+   /* If there is indirect access to non-indexable temps in the shader,
+    * convert those temps to indexable temps. This works around a bug
+    * in the GLSL->TGSI translator exposed in piglit test
+    * glsl-1.20/execution/fs-const-array-of-struct-of-array.shader_test.
+    * Internal temps added by the driver remain as non-indexable temps.
+    */
+   if ((emit->info.indirect_files & (1 << TGSI_FILE_TEMPORARY)) &&
+       emit->num_temp_arrays == 0) {
+      unsigned arrayID;
+
+      arrayID = 1;
+      emit->num_temp_arrays = arrayID + 1; 
+      emit->temp_arrays[arrayID].start = 0;
+      emit->temp_arrays[arrayID].size = total_temps;
+
+      /* Fill in the temp_map entries for this temp array */
+      for (i = 0; i < total_temps; i++) {
+         emit->temp_map[i].arrayId = arrayID;
+         emit->temp_map[i].index = i;
+      }
+   }
+
    /* Allocate extra temps for specially-implemented instructions,
     * such as LIT.
     */
@@ -2740,15 +2762,16 @@ emit_temporaries_declaration(struct svga_shader_emitter_v10 *emit)
          emit->temp_map[i].index = reg++;
       }
    }
-   total_temps = reg;
 
    if (0) {
       debug_printf("total_temps %u\n", total_temps);
-      for (i = 0; i < 30; i++) {
+      for (i = 0; i < total_temps; i++) {
          debug_printf("temp %u ->  array %u  index %u\n",
                       i, emit->temp_map[i].arrayId, emit->temp_map[i].index);
       }
    }
+
+   total_temps = reg;
 
    /* Emit declaration of ordinary temp registers */
    if (total_temps > 0) {
@@ -6692,12 +6715,13 @@ svga_tgsi_vgpu10_translate(struct svga_context *svga,
    /* These two flags cannot be used together */
    assert(key->vs.need_prescale + key->vs.undo_viewport <= 1);
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_TGSIVGPU10TRANSLATE);
    /*
     * Setup the code emitter
     */
    emit = alloc_emitter();
    if (!emit)
-      return NULL;
+      goto done;
 
    emit->unit = unit;
    emit->key = *key;
@@ -6862,5 +6886,7 @@ svga_tgsi_vgpu10_translate(struct svga_context *svga,
 cleanup:
    free_emitter(emit);
 
+done:
+   SVGA_STATS_TIME_POP(svga_sws(svga));
    return variant;
 }

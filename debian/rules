@@ -81,11 +81,10 @@ else
     DRI_DRIVERS += r200 radeon
     GALLIUM_DRIVERS += r600 r300
   endif
-  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 arm64 armhf))
-	# opencl needs gallium-pipe-loader which needs udev,
-	# so no opencl on kfreebsd.
+  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf))
 	# opencl needs LLVM and Clang, so only build it on the subset
 	# of arches where we have LLVM enabled.
+	# opencl on ppc64el is currently disabled (see #810913).
 	confflags_GALLIUM += --enable-opencl --enable-opencl-icd
   endif
 
@@ -93,11 +92,18 @@ else
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el))
 	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += --enable-gallium-llvm
-	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-3.8
+	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-3.9
 	GALLIUM_DRIVERS += swrast
   else
 	DRI_DRIVERS += swrast
   endif
+
+  # radv needs LLVM and the Vulkan loader, so only build on the subset of
+  # arches where we have LLVM enabled and where the Vulkan loader is built.
+  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 arm64 armhf ppc64el))
+	VULKAN_DRIVERS += radeon
+  endif
+
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
 	confflags_GALLIUM += --enable-vdpau
 	confflags_GALLIUM += --enable-va
@@ -178,7 +184,7 @@ override_dh_install:
   # Remove vulkan headers only where they get installed in tmp
   # We ship those headers via src:vulkan / libvulkan-dev
   ifeq ($(DEB_HOST_ARCH_OS), linux)
-    ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 x32))
+    ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 arm64 armhf ppc64el x32))
 	set -e; for file in vk_platform.h vulkan.h vulkan_intel.h; do rm debian/tmp/usr/include/vulkan/$$file; done
 	rmdir debian/tmp/usr/include/vulkan
     endif

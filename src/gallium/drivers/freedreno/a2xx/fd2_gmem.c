@@ -56,10 +56,10 @@ static uint32_t fmt2swap(enum pipe_format format)
 /* transfer from gmem to system memory (ie. normal RAM) */
 
 static void
-emit_gmem2mem_surf(struct fd_context *ctx, uint32_t base,
+emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 		struct pipe_surface *psurf)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	uint32_t swap = fmt2swap(psurf->format);
 
@@ -90,16 +90,17 @@ emit_gmem2mem_surf(struct fd_context *ctx, uint32_t base,
 	OUT_RING(ring, 3);                 /* VGT_MAX_VTX_INDX */
 	OUT_RING(ring, 0);                 /* VGT_MIN_VTX_INDX */
 
-	fd_draw(ctx, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
+	fd_draw(batch, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
 			DI_SRC_SEL_AUTO_INDEX, 3, 0, INDEX_SIZE_IGN, 0, 0, NULL);
 }
 
 static void
-fd2_emit_tile_gmem2mem(struct fd_context *ctx, struct fd_tile *tile)
+fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 {
+	struct fd_context *ctx = batch->ctx;
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
-	struct fd_ringbuffer *ring = ctx->ring;
-	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct fd_ringbuffer *ring = batch->gmem;
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 
 	fd2_emit_vertex_bufs(ring, 0x9c, (struct fd2_vertex_buf[]) {
 			{ .prsc = fd2_ctx->solid_vertexbuf, .size = 48 },
@@ -159,11 +160,11 @@ fd2_emit_tile_gmem2mem(struct fd_context *ctx, struct fd_tile *tile)
 	OUT_RING(ring, A2XX_RB_COPY_DEST_OFFSET_X(tile->xoff) |
 			A2XX_RB_COPY_DEST_OFFSET_Y(tile->yoff));
 
-	if (ctx->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
-		emit_gmem2mem_surf(ctx, tile->bin_w * tile->bin_h, pfb->zsbuf);
+	if (batch->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
+		emit_gmem2mem_surf(batch, tile->bin_w * tile->bin_h, pfb->zsbuf);
 
-	if (ctx->resolve & FD_BUFFER_COLOR)
-		emit_gmem2mem_surf(ctx, 0, pfb->cbufs[0]);
+	if (batch->resolve & FD_BUFFER_COLOR)
+		emit_gmem2mem_surf(batch, 0, pfb->cbufs[0]);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_MODECONTROL));
@@ -173,10 +174,10 @@ fd2_emit_tile_gmem2mem(struct fd_context *ctx, struct fd_tile *tile)
 /* transfer from system memory to gmem */
 
 static void
-emit_mem2gmem_surf(struct fd_context *ctx, uint32_t base,
+emit_mem2gmem_surf(struct fd_batch *batch, uint32_t base,
 		struct pipe_surface *psurf)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	uint32_t swiz;
 
@@ -212,16 +213,17 @@ emit_mem2gmem_surf(struct fd_context *ctx, uint32_t base,
 	OUT_RING(ring, 3);                 /* VGT_MAX_VTX_INDX */
 	OUT_RING(ring, 0);                 /* VGT_MIN_VTX_INDX */
 
-	fd_draw(ctx, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
+	fd_draw(batch, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
 			DI_SRC_SEL_AUTO_INDEX, 3, 0, INDEX_SIZE_IGN, 0, 0, NULL);
 }
 
 static void
-fd2_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
+fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 {
+	struct fd_context *ctx = batch->ctx;
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
-	struct fd_ringbuffer *ring = ctx->ring;
-	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct fd_ringbuffer *ring = batch->gmem;
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	unsigned bin_w = tile->bin_w;
 	unsigned bin_h = tile->bin_h;
 	float x0, y0, x1, y1;
@@ -317,24 +319,27 @@ fd2_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
-	if (fd_gmem_needs_restore(ctx, tile, FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
-		emit_mem2gmem_surf(ctx, bin_w * bin_h, pfb->zsbuf);
+	if (fd_gmem_needs_restore(batch, tile, FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
+		emit_mem2gmem_surf(batch, bin_w * bin_h, pfb->zsbuf);
 
-	if (fd_gmem_needs_restore(ctx, tile, FD_BUFFER_COLOR))
-		emit_mem2gmem_surf(ctx, 0, pfb->cbufs[0]);
+	if (fd_gmem_needs_restore(batch, tile, FD_BUFFER_COLOR))
+		emit_mem2gmem_surf(batch, 0, pfb->cbufs[0]);
 
 	/* TODO blob driver seems to toss in a CACHE_FLUSH after each DRAW_INDX.. */
 }
 
 /* before first tile */
 static void
-fd2_emit_tile_init(struct fd_context *ctx)
+fd2_emit_tile_init(struct fd_batch *batch)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
-	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct fd_context *ctx = batch->ctx;
+	struct fd_ringbuffer *ring = batch->gmem;
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
 	uint32_t reg;
+
+	fd2_emit_restore(ctx, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_SURFACE_INFO));
@@ -349,10 +354,10 @@ fd2_emit_tile_init(struct fd_context *ctx)
 
 /* before mem2gmem */
 static void
-fd2_emit_tile_prep(struct fd_context *ctx, struct fd_tile *tile)
+fd2_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
-	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct fd_ringbuffer *ring = batch->gmem;
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -371,10 +376,10 @@ fd2_emit_tile_prep(struct fd_context *ctx, struct fd_tile *tile)
 
 /* before IB to rendering cmds: */
 static void
-fd2_emit_tile_renderprep(struct fd_context *ctx, struct fd_tile *tile)
+fd2_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
-	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct fd_ringbuffer *ring = batch->gmem;
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);

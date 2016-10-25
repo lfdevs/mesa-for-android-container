@@ -62,13 +62,9 @@ static void
 up_consts(struct pp_queue_t *ppq)
 {
    struct pipe_context *pipe = ppq->p->pipe;
-   struct pipe_box box;
 
-   u_box_2d(0, 0, sizeof(constants), 1, &box);
-
-   pipe->transfer_inline_write(pipe, ppq->constbuf, 0, PIPE_TRANSFER_WRITE,
-                               &box, constants, sizeof(constants),
-                               sizeof(constants));
+   pipe->buffer_subdata(pipe, ppq->constbuf, PIPE_TRANSFER_WRITE,
+                        0, sizeof(constants), constants);
 }
 
 /** Run function of the MLAA filter. */
@@ -280,9 +276,9 @@ pp_jimenezmlaa_init_run(struct pp_queue_t *ppq, unsigned int n,
    
    u_box_2d(0, 0, 165, 165, &box);
 
-   ppq->p->pipe->transfer_inline_write(ppq->p->pipe, ppq->areamaptex, 0,
-                                       PIPE_TRANSFER_WRITE, &box,
-                                       areamap, 165 * 2, sizeof(areamap));
+   ppq->p->pipe->texture_subdata(ppq->p->pipe, ppq->areamaptex, 0,
+                                 PIPE_TRANSFER_WRITE, &box,
+                                 areamap, 165 * 2, sizeof(areamap));
 
    ppq->shaders[n][1] = pp_tgsi_to_state(ppq->p->pipe, offsetvs, true,
                                          "offsetvs");
@@ -357,13 +353,11 @@ void
 pp_jimenezmlaa_free(struct pp_queue_t *ppq, unsigned int n)
 {
    if (ppq->areamaptex) {
-      ppq->p->screen->resource_destroy(ppq->p->screen, ppq->areamaptex);
-      ppq->areamaptex = NULL;
+      pipe_resource_reference(&ppq->areamaptex, NULL);
    }
 
    if (ppq->constbuf) {
-      ppq->p->screen->resource_destroy(ppq->p->screen, ppq->constbuf);
-      ppq->constbuf = NULL;
+      pipe_resource_reference(&ppq->constbuf, NULL);
    }
 }
 

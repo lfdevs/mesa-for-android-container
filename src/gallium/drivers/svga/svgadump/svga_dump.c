@@ -30,6 +30,7 @@
  * Generated automatically from svga3d_reg.h by svga_dump.py.
  */
 
+#include "../svga_format.h"
 #include "svga_types.h"
 #include "svga_shader_dump.h"
 #include "svga3d_reg.h"
@@ -306,6 +307,49 @@ dump_SVGA3dTextureState(const SVGA3dTextureState *cmd)
 }
 
 static void
+dump_SVGA3dViewport(const SVGA3dViewport *cmd)
+{
+   _debug_printf("\t\t.x = %f\n", (*cmd).x);
+   _debug_printf("\t\t.y = %f\n", (*cmd).y);
+   _debug_printf("\t\t.width = %f\n", (*cmd).width);
+   _debug_printf("\t\t.height = %f\n", (*cmd).height);
+   _debug_printf("\t\t.minDepth = %f\n", (*cmd).minDepth);
+   _debug_printf("\t\t.maxDepth = %f\n", (*cmd).maxDepth);
+}
+
+static void
+dump_SVGA3dSamplerId(const SVGA3dSamplerId *cmd)
+{
+   _debug_printf("\t\t.id = %u\n", *cmd);
+}
+
+static void
+dump_SVGA3dSoTarget(const SVGA3dSoTarget *cmd)
+{
+   _debug_printf("\t\t.sid = %u\n", (*cmd).sid);
+   _debug_printf("\t\t.offset = %u\n", (*cmd).offset);
+}
+
+static void
+dump_SVGA3dInputElementDesc(const SVGA3dInputElementDesc *cmd)
+{
+   _debug_printf("\t\t.inputSlot = %u\n", (*cmd).inputSlot);
+   _debug_printf("\t\t.alignedByteOffset = %u\n", (*cmd).alignedByteOffset);
+   _debug_printf("\t\t.format = %s\n", svga_format_name((*cmd).format));
+   _debug_printf("\t\t.inputSlotClass = %u\n", (*cmd).inputSlotClass);
+   _debug_printf("\t\t.instanceDataStepRate = %u\n", (*cmd).instanceDataStepRate);
+   _debug_printf("\t\t.inputRegister = %u\n", (*cmd).inputRegister);
+}
+
+static void
+dump_SVGA3dVertexBuffer(const SVGA3dVertexBuffer *cmd)
+{
+   _debug_printf("\t\t.sid = %u\n", (*cmd).sid);
+   _debug_printf("\t\t.stride = %u\n", (*cmd).stride);
+   _debug_printf("\t\t.offset = %u\n", (*cmd).offset);
+}
+
+static void
 dump_SVGA3dCopyBox(const SVGA3dCopyBox *cmd)
 {
    _debug_printf("\t\t.x = %u\n", (*cmd).x);
@@ -317,6 +361,12 @@ dump_SVGA3dCopyBox(const SVGA3dCopyBox *cmd)
    _debug_printf("\t\t.srcx = %u\n", (*cmd).srcx);
    _debug_printf("\t\t.srcy = %u\n", (*cmd).srcy);
    _debug_printf("\t\t.srcz = %u\n", (*cmd).srcz);
+}
+
+static void
+dump_SVGA3dShaderResourceViewId(const SVGA3dShaderResourceViewId *id)
+{
+   _debug_printf("\t\t.id = %u\n", *id);
 }
 
 static void
@@ -921,9 +971,6 @@ dump_SVGA3dCmdDefineShader(const SVGA3dCmdDefineShader *cmd)
    case SVGA3D_SHADERTYPE_PS:
       _debug_printf("\t\t.type = SVGA3D_SHADERTYPE_PS\n");
       break;
-   case SVGA3D_SHADERTYPE_PREDX_MAX:
-      _debug_printf("\t\t.type = SVGA3D_SHADERTYPE_MAX\n");
-      break;
    default:
       _debug_printf("\t\t.type = %i\n", (*cmd).type);
       break;
@@ -1240,9 +1287,6 @@ dump_SVGA3dCmdDestroyShader(const SVGA3dCmdDestroyShader *cmd)
    case SVGA3D_SHADERTYPE_PS:
       _debug_printf("\t\t.type = SVGA3D_SHADERTYPE_PS\n");
       break;
-   case SVGA3D_SHADERTYPE_PREDX_MAX:
-      _debug_printf("\t\t.type = SVGA3D_SHADERTYPE_MAX\n");
-      break;
    default:
       _debug_printf("\t\t.type = %i\n", (*cmd).type);
       break;
@@ -1302,149 +1346,7 @@ dump_SVGA3dCmdDefineSurface(const SVGA3dCmdDefineSurface *cmd)
       _debug_printf("\t\t.surfaceFlags = %i\n", (*cmd).surfaceFlags);
       break;
    }
-   switch((*cmd).format) {
-   case SVGA3D_FORMAT_INVALID:
-      _debug_printf("\t\t.format = SVGA3D_FORMAT_INVALID\n");
-      break;
-   case SVGA3D_X8R8G8B8:
-      _debug_printf("\t\t.format = SVGA3D_X8R8G8B8\n");
-      break;
-   case SVGA3D_A8R8G8B8:
-      _debug_printf("\t\t.format = SVGA3D_A8R8G8B8\n");
-      break;
-   case SVGA3D_R5G6B5:
-      _debug_printf("\t\t.format = SVGA3D_R5G6B5\n");
-      break;
-   case SVGA3D_X1R5G5B5:
-      _debug_printf("\t\t.format = SVGA3D_X1R5G5B5\n");
-      break;
-   case SVGA3D_A1R5G5B5:
-      _debug_printf("\t\t.format = SVGA3D_A1R5G5B5\n");
-      break;
-   case SVGA3D_A4R4G4B4:
-      _debug_printf("\t\t.format = SVGA3D_A4R4G4B4\n");
-      break;
-   case SVGA3D_Z_D32:
-      _debug_printf("\t\t.format = SVGA3D_Z_D32\n");
-      break;
-   case SVGA3D_Z_D16:
-      _debug_printf("\t\t.format = SVGA3D_Z_D16\n");
-      break;
-   case SVGA3D_Z_D24S8:
-      _debug_printf("\t\t.format = SVGA3D_Z_D24S8\n");
-      break;
-   case SVGA3D_Z_D15S1:
-      _debug_printf("\t\t.format = SVGA3D_Z_D15S1\n");
-      break;
-   case SVGA3D_LUMINANCE8:
-      _debug_printf("\t\t.format = SVGA3D_LUMINANCE8\n");
-      break;
-   case SVGA3D_LUMINANCE4_ALPHA4:
-      _debug_printf("\t\t.format = SVGA3D_LUMINANCE4_ALPHA4\n");
-      break;
-   case SVGA3D_LUMINANCE16:
-      _debug_printf("\t\t.format = SVGA3D_LUMINANCE16\n");
-      break;
-   case SVGA3D_LUMINANCE8_ALPHA8:
-      _debug_printf("\t\t.format = SVGA3D_LUMINANCE8_ALPHA8\n");
-      break;
-   case SVGA3D_DXT1:
-      _debug_printf("\t\t.format = SVGA3D_DXT1\n");
-      break;
-   case SVGA3D_DXT2:
-      _debug_printf("\t\t.format = SVGA3D_DXT2\n");
-      break;
-   case SVGA3D_DXT3:
-      _debug_printf("\t\t.format = SVGA3D_DXT3\n");
-      break;
-   case SVGA3D_DXT4:
-      _debug_printf("\t\t.format = SVGA3D_DXT4\n");
-      break;
-   case SVGA3D_DXT5:
-      _debug_printf("\t\t.format = SVGA3D_DXT5\n");
-      break;
-   case SVGA3D_BUMPU8V8:
-      _debug_printf("\t\t.format = SVGA3D_BUMPU8V8\n");
-      break;
-   case SVGA3D_BUMPL6V5U5:
-      _debug_printf("\t\t.format = SVGA3D_BUMPL6V5U5\n");
-      break;
-   case SVGA3D_ARGB_S10E5:
-      _debug_printf("\t\t.format = SVGA3D_ARGB_S10E5\n");
-      break;
-   case SVGA3D_ARGB_S23E8:
-      _debug_printf("\t\t.format = SVGA3D_ARGB_S23E8\n");
-      break;
-   case SVGA3D_A2R10G10B10:
-      _debug_printf("\t\t.format = SVGA3D_A2R10G10B10\n");
-      break;
-   case SVGA3D_V8U8:
-      _debug_printf("\t\t.format = SVGA3D_V8U8\n");
-      break;
-   case SVGA3D_Q8W8V8U8:
-      _debug_printf("\t\t.format = SVGA3D_Q8W8V8U8\n");
-      break;
-   case SVGA3D_CxV8U8:
-      _debug_printf("\t\t.format = SVGA3D_CxV8U8\n");
-      break;
-   case SVGA3D_X8L8V8U8:
-      _debug_printf("\t\t.format = SVGA3D_X8L8V8U8\n");
-      break;
-   case SVGA3D_A2W10V10U10:
-      _debug_printf("\t\t.format = SVGA3D_A2W10V10U10\n");
-      break;
-   case SVGA3D_ALPHA8:
-      _debug_printf("\t\t.format = SVGA3D_ALPHA8\n");
-      break;
-   case SVGA3D_R_S10E5:
-      _debug_printf("\t\t.format = SVGA3D_R_S10E5\n");
-      break;
-   case SVGA3D_R_S23E8:
-      _debug_printf("\t\t.format = SVGA3D_R_S23E8\n");
-      break;
-   case SVGA3D_RG_S10E5:
-      _debug_printf("\t\t.format = SVGA3D_RG_S10E5\n");
-      break;
-   case SVGA3D_RG_S23E8:
-      _debug_printf("\t\t.format = SVGA3D_RG_S23E8\n");
-      break;
-   case SVGA3D_BUFFER:
-      _debug_printf("\t\t.format = SVGA3D_BUFFER\n");
-      break;
-   case SVGA3D_Z_D24X8:
-      _debug_printf("\t\t.format = SVGA3D_Z_D24X8\n");
-      break;
-   case SVGA3D_G16R16:
-      _debug_printf("\t\t.format = SVGA3D_G16R16\n");
-      break;
-   case SVGA3D_A16B16G16R16:
-      _debug_printf("\t\t.format = SVGA3D_A16B16G16R16\n");
-      break;
-   case SVGA3D_UYVY:
-      _debug_printf("\t\t.format = SVGA3D_UYVY\n");
-      break;
-   case SVGA3D_YUY2:
-      _debug_printf("\t\t.format = SVGA3D_YUY2\n");
-      break;
-   case SVGA3D_NV12:
-      _debug_printf("\t\t.format = SVGA3D_NV12\n");
-      break;
-   case SVGA3D_AYUV:
-      _debug_printf("\t\t.format = SVGA3D_AYUV\n");
-      break;
-   case SVGA3D_Z_DF16:
-      _debug_printf("\t\t.format = SVGA3D_Z_D16\n");
-      break;
-   case SVGA3D_Z_DF24:
-      _debug_printf("\t\t.format = SVGA3D_Z_DF24\n");
-      break;
-   case SVGA3D_Z_D24S8_INT:
-      _debug_printf("\t\t.format = SVGA3D_Z_D24S8_INT\n");
-      break;
-   default:
-      _debug_printf("\t\t.format = %i\n", (*cmd).format);
-      break;
-   }
+   _debug_printf("\t\t.format = %s\n", svga_format_name((*cmd).format));
    _debug_printf("\t\t.face[0].numMipLevels = %u\n", (*cmd).face[0].numMipLevels);
    _debug_printf("\t\t.face[1].numMipLevels = %u\n", (*cmd).face[1].numMipLevels);
    _debug_printf("\t\t.face[2].numMipLevels = %u\n", (*cmd).face[2].numMipLevels);
@@ -1460,6 +1362,14 @@ dump_SVGASignedRect(const SVGASignedRect *cmd)
    _debug_printf("\t\t.top = %i\n", (*cmd).top);
    _debug_printf("\t\t.right = %i\n", (*cmd).right);
    _debug_printf("\t\t.bottom = %i\n", (*cmd).bottom);
+}
+
+static void
+dump_SVGA3dBox(const SVGA3dBox *box)
+{
+   _debug_printf("\t\t.box = %u, %u, %u  %u x %u x %u\n",
+                 box->x, box->y, box->z, 
+                 box->w, box->h, box->d);
 }
 
 static void
@@ -1540,9 +1450,7 @@ dump_SVGA3dCmdUpdateGBImage(const SVGA3dCmdUpdateGBImage *cmd)
    _debug_printf("\t\t.image.sid = %u\n", cmd->image.sid);
    _debug_printf("\t\t.image.face = %u\n", cmd->image.face);
    _debug_printf("\t\t.image.mipmap = %u\n", cmd->image.mipmap);
-   _debug_printf("\t\t.box = %u, %u, %u  %u x %u x %u\n",
-                 cmd->box.x, cmd->box.y, cmd->box.z, 
-                 cmd->box.w, cmd->box.h, cmd->box.d);
+   dump_SVGA3dBox(&cmd->box);
 }
 
 static void
@@ -1567,11 +1475,602 @@ dump_SVGA3dCmdInvalidateGBImagePartial(const SVGA3dCmdInvalidateGBImagePartial *
    _debug_printf("\t\t.image.sid = %u\n", cmd->image.sid);
    _debug_printf("\t\t.image.face = %u\n", cmd->image.face);
    _debug_printf("\t\t.image.mipmap = %u\n", cmd->image.mipmap);
-   _debug_printf("\t\t.box = %u, %u, %u  %u x %u x %u\n",
-                 cmd->box.x, cmd->box.y, cmd->box.z, 
-                 cmd->box.w, cmd->box.h, cmd->box.d);
+   dump_SVGA3dBox(&cmd->box);
    _debug_printf("\t\t.invertBox = %u\n", cmd->invertBox);
 }
+
+/// SVGA_3D_CMD_DX
+
+#define __SVGA3D_DUMP_STRINGIFY(a) #a
+#define SVGA3D_DUMP_STRINGIFY(a) __SVGA3D_DUMP_STRINGIFY(a)
+
+#define SVGA3D_DUMP_HEADER(CommandName) \
+static void \
+dump_SVGA3dCmdDX##CommandName(const SVGA3dCmdDX##CommandName *cmd)
+
+#define SVGA3D_DUMP_PARAMETER(ParameterName, ParameterType) \
+_debug_printf(SVGA3D_DUMP_STRINGIFY(\t\t.ParameterName = %ParameterType\n), cmd->ParameterName)
+
+#define SVGA3D_DUMP_TYPE_CASE(TypeVariableName, CaseName) \
+case CaseName: \
+  _debug_printf(SVGA3D_DUMP_STRINGIFY(\t\t.TypeVariableName = CaseName) "\n"); \
+   break;
+
+#define SVGA3D_DUMP_TYPE_DEFAULT(TypeVariableName) \
+default: \
+   _debug_printf(SVGA3D_DUMP_STRINGIFY(\t\t.TypeVariableName = %i\n), (*cmd).TypeVariableName); \
+   break;
+
+SVGA3D_DUMP_HEADER(SetShader)
+{
+   SVGA3D_DUMP_PARAMETER(shaderId, u);
+   debug_printf("\t\t.type = %s\n", shader_name(cmd->type));
+}
+
+SVGA3D_DUMP_HEADER(SetSamplers)
+{
+   SVGA3D_DUMP_PARAMETER(startSampler, u);
+   debug_printf("\t\t.type = %s\n", shader_name(cmd->type));
+   /* XXX: note we're not printing the sampler IDs at this time */
+}
+
+SVGA3D_DUMP_HEADER(Draw)
+{
+   SVGA3D_DUMP_PARAMETER(vertexCount, u);
+   SVGA3D_DUMP_PARAMETER(startVertexLocation, u);
+}
+
+SVGA3D_DUMP_HEADER(DrawIndexed)
+{
+   SVGA3D_DUMP_PARAMETER(indexCount, u);
+   SVGA3D_DUMP_PARAMETER(startIndexLocation, u);
+   SVGA3D_DUMP_PARAMETER(baseVertexLocation, i);
+}
+
+SVGA3D_DUMP_HEADER(DrawInstanced)
+{
+   SVGA3D_DUMP_PARAMETER(vertexCountPerInstance, u);
+   SVGA3D_DUMP_PARAMETER(instanceCount, u);
+   SVGA3D_DUMP_PARAMETER(startVertexLocation, u);
+   SVGA3D_DUMP_PARAMETER(startInstanceLocation, u);
+}
+
+SVGA3D_DUMP_HEADER(DrawIndexedInstanced)
+{
+   SVGA3D_DUMP_PARAMETER(indexCountPerInstance, u);
+   SVGA3D_DUMP_PARAMETER(instanceCount, u);
+   SVGA3D_DUMP_PARAMETER(startIndexLocation, u);
+   SVGA3D_DUMP_PARAMETER(baseVertexLocation, i);
+   SVGA3D_DUMP_PARAMETER(startInstanceLocation, u);
+}
+
+SVGA3D_DUMP_HEADER(DrawAuto)
+{
+}
+
+SVGA3D_DUMP_HEADER(SetBlendState)
+{
+   SVGA3D_DUMP_PARAMETER(blendId, u);
+   _debug_printf("\t\t.blendFactor[4] = %f %f %f %f\n", cmd->blendFactor[0],
+                                                        cmd->blendFactor[1],
+                                                        cmd->blendFactor[2],
+                                                        cmd->blendFactor[3]);
+  SVGA3D_DUMP_PARAMETER(sampleMask, u);
+}
+
+SVGA3D_DUMP_HEADER(SetDepthStencilState)
+{
+   SVGA3D_DUMP_PARAMETER(depthStencilId, u);
+   SVGA3D_DUMP_PARAMETER(stencilRef, u);
+}
+
+SVGA3D_DUMP_HEADER(SetRasterizerState)
+{
+   SVGA3D_DUMP_PARAMETER(rasterizerId, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineQuery)
+{
+   SVGA3D_DUMP_PARAMETER(queryId, u);
+   switch (cmd->type)
+   {
+      SVGA3D_DUMP_TYPE_CASE(type, SVGA3D_QUERYTYPE_OCCLUSION);
+      SVGA3D_DUMP_TYPE_CASE(type, SVGA3D_QUERYTYPE_MAX);
+      SVGA3D_DUMP_TYPE_DEFAULT(type);
+   }
+   switch (cmd->flags)
+   {
+      SVGA3D_DUMP_TYPE_CASE(flags, SVGA3D_DXQUERY_FLAG_PREDICATEHINT);
+      SVGA3D_DUMP_TYPE_DEFAULT(flags);
+   }
+}
+
+SVGA3D_DUMP_HEADER(DestroyQuery)
+{
+   SVGA3D_DUMP_PARAMETER(queryId, u);
+}
+
+SVGA3D_DUMP_HEADER(BindAllQuery)
+{
+   SVGA3D_DUMP_PARAMETER(cid, u);
+   SVGA3D_DUMP_PARAMETER(mobid, u);
+}
+
+SVGA3D_DUMP_HEADER(BindQuery)
+{
+   SVGA3D_DUMP_PARAMETER(queryId, u);
+   SVGA3D_DUMP_PARAMETER(mobid, u);
+}
+
+SVGA3D_DUMP_HEADER(MoveQuery)
+{
+   SVGA3D_DUMP_PARAMETER(queryId, u);
+   SVGA3D_DUMP_PARAMETER(mobid, u);
+   SVGA3D_DUMP_PARAMETER(mobOffset, u);
+}
+
+SVGA3D_DUMP_HEADER(ReadbackAllQuery)
+{
+   SVGA3D_DUMP_PARAMETER(cid, u);
+}
+
+SVGA3D_DUMP_HEADER(SetQueryOffset)
+{
+   SVGA3D_DUMP_PARAMETER(queryId, u);
+   SVGA3D_DUMP_PARAMETER(mobOffset, u);
+}
+
+SVGA3D_DUMP_HEADER(BeginQuery)
+{
+   SVGA3D_DUMP_PARAMETER(queryId, u);
+}
+
+SVGA3D_DUMP_HEADER(EndQuery)
+{
+   SVGA3D_DUMP_PARAMETER(queryId, u);
+}
+
+SVGA3D_DUMP_HEADER(SetPredication)
+{
+   SVGA3D_DUMP_PARAMETER(queryId, u);
+   SVGA3D_DUMP_PARAMETER(predicateValue, u);
+}
+
+SVGA3D_DUMP_HEADER(SetSOTargets)
+{
+}
+
+
+SVGA3D_DUMP_HEADER(BindContext)
+{
+   SVGA3D_DUMP_PARAMETER(mobid, u);
+   SVGA3D_DUMP_PARAMETER(validContents, u);
+}
+
+SVGA3D_DUMP_HEADER(SetViewports)
+{
+
+   /* XXX: note we're not printing the SVGA3dViewport list at this time */
+}
+
+SVGA3D_DUMP_HEADER(SetScissorRects)
+{
+ 
+   /* XXX: note we're not printing the SVGASignedRect list at this time */
+}
+
+SVGA3D_DUMP_HEADER(ClearRenderTargetView)
+{
+   SVGA3D_DUMP_PARAMETER(renderTargetViewId, u);
+   SVGA3D_DUMP_PARAMETER(rgba.r, f);
+   SVGA3D_DUMP_PARAMETER(rgba.g, f);
+   SVGA3D_DUMP_PARAMETER(rgba.b, f);
+   SVGA3D_DUMP_PARAMETER(rgba.a, f);
+}
+
+SVGA3D_DUMP_HEADER(ClearDepthStencilView)
+{
+   SVGA3D_DUMP_PARAMETER(flags, u);
+   SVGA3D_DUMP_PARAMETER(stencil, u);
+   SVGA3D_DUMP_PARAMETER(depthStencilViewId, u);
+   SVGA3D_DUMP_PARAMETER(depth, f);
+}
+
+SVGA3D_DUMP_HEADER(DefineShaderResourceView)
+{
+   SVGA3D_DUMP_PARAMETER(shaderResourceViewId, u);
+   SVGA3D_DUMP_PARAMETER(sid, u);
+   _debug_printf("\t\t.format = %s\n", svga_format_name(cmd->format));
+   switch (cmd->resourceDimension)
+   {
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_BUFFER);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE1D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE2D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE3D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURECUBE);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TYPE_MAX);
+      SVGA3D_DUMP_TYPE_DEFAULT(resourceDimension);
+   }
+   if (cmd->resourceDimension == SVGA3D_RESOURCE_BUFFER) {
+      SVGA3D_DUMP_PARAMETER(desc.buffer.firstElement, u);
+      SVGA3D_DUMP_PARAMETER(desc.buffer.numElements, u);
+   } 
+   else {
+      SVGA3D_DUMP_PARAMETER(desc.tex.mostDetailedMip, u);
+      SVGA3D_DUMP_PARAMETER(desc.tex.firstArraySlice, u);
+      SVGA3D_DUMP_PARAMETER(desc.tex.mipLevels, u);
+      SVGA3D_DUMP_PARAMETER(desc.tex.arraySize, u);
+   }
+}
+
+SVGA3D_DUMP_HEADER(SetShaderResources)
+{
+   SVGA3D_DUMP_PARAMETER(startView, u);
+   debug_printf("\t\t.type = %s\n", shader_name(cmd->type));
+}
+
+
+SVGA3D_DUMP_HEADER(DestroyShaderResourceView)
+{
+   SVGA3D_DUMP_PARAMETER(shaderResourceViewId, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineRenderTargetView)
+{
+   SVGA3D_DUMP_PARAMETER(renderTargetViewId, u);
+   SVGA3D_DUMP_PARAMETER(sid, u);
+   _debug_printf("\t\t.format = %s\n", svga_format_name(cmd->format));
+   switch (cmd->resourceDimension)
+   {
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_BUFFER);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE1D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE2D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE3D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURECUBE);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TYPE_MAX);
+      SVGA3D_DUMP_TYPE_DEFAULT(resourceDimension);
+   }
+   SVGA3D_DUMP_PARAMETER(desc.buffer.firstElement, u);
+   SVGA3D_DUMP_PARAMETER(desc.buffer.numElements, u);
+   SVGA3D_DUMP_PARAMETER(desc.tex.mipSlice, u);
+   SVGA3D_DUMP_PARAMETER(desc.tex.firstArraySlice, u);
+   SVGA3D_DUMP_PARAMETER(desc.tex.arraySize, u);
+   SVGA3D_DUMP_PARAMETER(desc.tex3D.mipSlice, u);
+   SVGA3D_DUMP_PARAMETER(desc.tex3D.firstW, u);
+   SVGA3D_DUMP_PARAMETER(desc.tex3D.wSize, u);
+}
+
+SVGA3D_DUMP_HEADER(DestroyRenderTargetView)
+{
+   SVGA3D_DUMP_PARAMETER(renderTargetViewId, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineDepthStencilView)
+{
+   SVGA3D_DUMP_PARAMETER(depthStencilViewId, u);
+   SVGA3D_DUMP_PARAMETER(sid, u);
+   _debug_printf("\t\t.format = %s\n", svga_format_name(cmd->format));
+   switch (cmd->resourceDimension)
+   {
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_BUFFER);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE1D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE2D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURE3D);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TEXTURECUBE);
+      SVGA3D_DUMP_TYPE_CASE(resourceDimension, SVGA3D_RESOURCE_TYPE_MAX);
+      SVGA3D_DUMP_TYPE_DEFAULT(resourceDimension);
+   }
+   SVGA3D_DUMP_PARAMETER(mipSlice, u);
+   SVGA3D_DUMP_PARAMETER(firstArraySlice, u);
+   SVGA3D_DUMP_PARAMETER(arraySize, u);
+}
+
+SVGA3D_DUMP_HEADER(DestroyDepthStencilView)
+{
+   SVGA3D_DUMP_PARAMETER(depthStencilViewId, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineElementLayout)
+{
+   SVGA3D_DUMP_PARAMETER(elementLayoutId, u);
+}
+
+SVGA3D_DUMP_HEADER(DestroyElementLayout)
+{
+   SVGA3D_DUMP_PARAMETER(elementLayoutId, u);
+}
+
+static void
+dump_SVGA3dCmdDXDefineBlendState(const SVGA3dCmdDXDefineBlendState *cmd)
+{
+   unsigned i;
+
+   SVGA3D_DUMP_PARAMETER(blendId, u);
+   SVGA3D_DUMP_PARAMETER(alphaToCoverageEnable, u);
+   SVGA3D_DUMP_PARAMETER(independentBlendEnable, u);
+   for (i = 0; i < SVGA3D_DX_MAX_RENDER_TARGETS; i++) {
+      const SVGA3dDXBlendStatePerRT *rt = cmd->perRT + i;
+      _debug_printf("\t\t.perRT[%u].blendEnable = %u\n", i, rt->blendEnable);
+      if (rt->blendEnable) {
+         _debug_printf("\t\t.perRT[%u].srcBlend = %u\n", i, rt->srcBlend);
+         _debug_printf("\t\t.perRT[%u].destBlend = %u\n", i, rt->destBlend);
+         _debug_printf("\t\t.perRT[%u].blendOp = %u\n", i, rt->blendOp);
+         _debug_printf("\t\t.perRT[%u].srcBlendAlpha = %u\n", i, rt->srcBlendAlpha);
+         _debug_printf("\t\t.perRT[%u].destBlendAlpha = %u\n", i, rt->destBlendAlpha);
+         _debug_printf("\t\t.perRT[%u].blendOpAlpha = %u\n", i, rt->blendOpAlpha);
+      }
+      _debug_printf("\t\t.perRT[%u].renderTargetWriteMask = %u\n", i, rt->renderTargetWriteMask);
+      _debug_printf("\t\t.perRT[%u].logicOpEnable = %u\n", i, rt->logicOpEnable);
+      if (rt->logicOpEnable) {
+         _debug_printf("\t\t.perRT[%u].logicOp = %u\n", i, rt->logicOp);
+      }
+   }
+}
+
+SVGA3D_DUMP_HEADER(DestroyBlendState)
+{
+   SVGA3D_DUMP_PARAMETER(blendId, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineDepthStencilState)
+{
+   SVGA3D_DUMP_PARAMETER(depthStencilId, u);
+   SVGA3D_DUMP_PARAMETER(depthEnable, u);
+   SVGA3D_DUMP_PARAMETER(depthWriteMask, u);
+   SVGA3D_DUMP_PARAMETER(depthFunc, u);
+   SVGA3D_DUMP_PARAMETER(stencilEnable, u);
+   SVGA3D_DUMP_PARAMETER(frontEnable, u);
+   SVGA3D_DUMP_PARAMETER(backEnable, u);
+   SVGA3D_DUMP_PARAMETER(stencilReadMask, u);
+   SVGA3D_DUMP_PARAMETER(stencilWriteMask, u);
+   SVGA3D_DUMP_PARAMETER(frontStencilFailOp, u);
+   SVGA3D_DUMP_PARAMETER(frontStencilDepthFailOp, u);
+   SVGA3D_DUMP_PARAMETER(frontStencilPassOp, u);
+   SVGA3D_DUMP_PARAMETER(frontStencilFunc, u);
+   SVGA3D_DUMP_PARAMETER(backStencilFailOp, u);
+   SVGA3D_DUMP_PARAMETER(backStencilDepthFailOp, u);
+   SVGA3D_DUMP_PARAMETER(backStencilPassOp, u);
+   SVGA3D_DUMP_PARAMETER(backStencilFunc, u);
+}
+
+SVGA3D_DUMP_HEADER(DestroyDepthStencilState)
+{
+   SVGA3D_DUMP_PARAMETER(depthStencilId, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineRasterizerState)
+{
+   SVGA3D_DUMP_PARAMETER(rasterizerId, u);
+   SVGA3D_DUMP_PARAMETER(fillMode, u);
+   SVGA3D_DUMP_PARAMETER(cullMode, u);
+   SVGA3D_DUMP_PARAMETER(frontCounterClockwise, u);
+   SVGA3D_DUMP_PARAMETER(depthBias, u);
+   SVGA3D_DUMP_PARAMETER(depthBiasClamp, f);
+   SVGA3D_DUMP_PARAMETER(slopeScaledDepthBias, f);
+   SVGA3D_DUMP_PARAMETER(depthClipEnable, u);
+   SVGA3D_DUMP_PARAMETER(scissorEnable, u);
+   SVGA3D_DUMP_PARAMETER(multisampleEnable, u);
+   SVGA3D_DUMP_PARAMETER(antialiasedLineEnable, u);
+   SVGA3D_DUMP_PARAMETER(lineWidth, f);
+   SVGA3D_DUMP_PARAMETER(lineStippleEnable, u);
+   SVGA3D_DUMP_PARAMETER(lineStippleFactor, u);
+   SVGA3D_DUMP_PARAMETER(lineStipplePattern, u);
+   SVGA3D_DUMP_PARAMETER(provokingVertexLast, u);
+}
+
+SVGA3D_DUMP_HEADER(DestroyRasterizerState)
+{
+   SVGA3D_DUMP_PARAMETER(rasterizerId, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineSamplerState)
+{
+   SVGA3D_DUMP_PARAMETER(samplerId, u);
+   SVGA3D_DUMP_PARAMETER(filter, u);
+   SVGA3D_DUMP_PARAMETER(addressU, u);
+   SVGA3D_DUMP_PARAMETER(addressV, u);
+   SVGA3D_DUMP_PARAMETER(addressW, u);
+   SVGA3D_DUMP_PARAMETER(mipLODBias, f);
+   SVGA3D_DUMP_PARAMETER(maxAnisotropy, u);
+   SVGA3D_DUMP_PARAMETER(comparisonFunc, u);
+   SVGA3D_DUMP_PARAMETER(borderColor.r, f);
+   SVGA3D_DUMP_PARAMETER(borderColor.g, f);
+   SVGA3D_DUMP_PARAMETER(borderColor.b, f);
+   SVGA3D_DUMP_PARAMETER(borderColor.a, f);
+   SVGA3D_DUMP_PARAMETER(minLOD, f);
+   SVGA3D_DUMP_PARAMETER(maxLOD, f);
+}
+
+SVGA3D_DUMP_HEADER(DestroySamplerState)
+{
+   SVGA3D_DUMP_PARAMETER(samplerId, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineShader)
+{
+   SVGA3D_DUMP_PARAMETER(shaderId, u);
+   debug_printf("\t\t.type = %s\n", shader_name(cmd->type));
+   SVGA3D_DUMP_PARAMETER(sizeInBytes, u);
+}
+
+SVGA3D_DUMP_HEADER(DestroyShader)
+{
+   SVGA3D_DUMP_PARAMETER(shaderId, u);
+}
+
+SVGA3D_DUMP_HEADER(BindShader)
+{
+   SVGA3D_DUMP_PARAMETER(cid, u);
+   SVGA3D_DUMP_PARAMETER(shid, u);
+   SVGA3D_DUMP_PARAMETER(mobid, u);
+   SVGA3D_DUMP_PARAMETER(offsetInBytes, u);
+}
+
+SVGA3D_DUMP_HEADER(DefineStreamOutput)
+{
+   int i;
+   SVGA3D_DUMP_PARAMETER(soid, u);
+   SVGA3D_DUMP_PARAMETER(numOutputStreamEntries, u);
+   for (i = 0; i < SVGA3D_DX_MAX_SOTARGETS; i++) {
+      _debug_printf("\t\t.streamOutputStrideInBytes[%d] = %u\n",
+                    i, cmd->streamOutputStrideInBytes[i]);
+   }
+   for (i = 0; i < 16; i++)
+   {
+      _debug_printf("\t\t.decl[%d].outputSlot = %u\n", i, cmd->decl[i].outputSlot);
+      _debug_printf("\t\t.decl[%d].registerIndex = %u\n", i, cmd->decl[i].registerIndex);
+      _debug_printf("\t\t.decl[%d].registerMask = %u\n", i, cmd->decl[i].registerMask);
+   }
+}
+
+SVGA3D_DUMP_HEADER(DestroyStreamOutput)
+{
+   SVGA3D_DUMP_PARAMETER(soid, u);
+}
+
+SVGA3D_DUMP_HEADER(SetStreamOutput)
+{
+   SVGA3D_DUMP_PARAMETER(soid, u);
+}
+
+SVGA3D_DUMP_HEADER(SetSingleConstantBuffer)
+{
+   SVGA3D_DUMP_PARAMETER(slot, u);
+   SVGA3D_DUMP_PARAMETER(sid, u);
+   debug_printf("\t\t.type = %s\n", shader_name(cmd->type));
+   SVGA3D_DUMP_PARAMETER(offsetInBytes, u);
+   SVGA3D_DUMP_PARAMETER(sizeInBytes, u);
+}
+
+SVGA3D_DUMP_HEADER(SetInputLayout)
+{
+   SVGA3D_DUMP_PARAMETER(elementLayoutId, u);
+}
+
+SVGA3D_DUMP_HEADER(SetVertexBuffers)
+{
+   SVGA3D_DUMP_PARAMETER(startBuffer, u);
+
+   /* XXX: note we're not printing the SVGA3dVertexBuffer list at this time */
+}
+
+SVGA3D_DUMP_HEADER(SetTopology)
+{
+   switch (cmd->topology)
+   {
+      SVGA3D_DUMP_TYPE_CASE(topology, SVGA3D_PRIMITIVE_INVALID);
+      SVGA3D_DUMP_TYPE_CASE(topology, SVGA3D_PRIMITIVE_TRIANGLELIST);
+      SVGA3D_DUMP_TYPE_CASE(topology, SVGA3D_PRIMITIVE_POINTLIST);
+      SVGA3D_DUMP_TYPE_CASE(topology, SVGA3D_PRIMITIVE_LINELIST);
+      SVGA3D_DUMP_TYPE_CASE(topology, SVGA3D_PRIMITIVE_LINESTRIP);
+      SVGA3D_DUMP_TYPE_CASE(topology, SVGA3D_PRIMITIVE_TRIANGLESTRIP);
+      SVGA3D_DUMP_TYPE_CASE(topology, SVGA3D_PRIMITIVE_TRIANGLEFAN);
+      SVGA3D_DUMP_TYPE_CASE(topology, SVGA3D_PRIMITIVE_MAX);
+      SVGA3D_DUMP_TYPE_DEFAULT(topology);
+   }
+}
+
+SVGA3D_DUMP_HEADER(SetIndexBuffer)
+{
+   SVGA3D_DUMP_PARAMETER(sid, u);
+   _debug_printf("\t\t.format = %s\n", svga_format_name(cmd->format));
+   SVGA3D_DUMP_PARAMETER(offset, u);
+}
+
+SVGA3D_DUMP_HEADER(PredCopyRegion)
+{
+   SVGA3D_DUMP_PARAMETER(dstSid, u);
+   SVGA3D_DUMP_PARAMETER(dstSubResource, u);
+   SVGA3D_DUMP_PARAMETER(srcSid, u);
+   SVGA3D_DUMP_PARAMETER(srcSubResource, u);
+   dump_SVGA3dCopyBox(&cmd->box);
+}
+
+SVGA3D_DUMP_HEADER(PredCopy)
+{
+   SVGA3D_DUMP_PARAMETER(dstSid, u);
+   SVGA3D_DUMP_PARAMETER(srcSid, u);
+}
+
+static void
+dump_SVGA3dCmdDXUpdateSubResource(const SVGA3dCmdDXUpdateSubResource *cmd)
+{
+   SVGA3D_DUMP_PARAMETER(sid, u);
+   SVGA3D_DUMP_PARAMETER(subResource, u);
+   dump_SVGA3dBox(&cmd->box);
+}
+
+static void
+dump_SVGA3dCmdDXReadbackSubResource(const SVGA3dCmdDXReadbackSubResource *cmd)
+{
+   SVGA3D_DUMP_PARAMETER(sid, u);
+   SVGA3D_DUMP_PARAMETER(subResource, u);
+}
+
+SVGA3D_DUMP_HEADER(BufferCopy)
+{
+   SVGA3D_DUMP_PARAMETER(dest, u);
+   SVGA3D_DUMP_PARAMETER(src, u);
+   SVGA3D_DUMP_PARAMETER(destX, u);
+   SVGA3D_DUMP_PARAMETER(srcX, u);
+   SVGA3D_DUMP_PARAMETER(width, u);
+
+}
+
+SVGA3D_DUMP_HEADER(BufferUpdate)
+{
+   SVGA3D_DUMP_PARAMETER(sid, u);
+   SVGA3D_DUMP_PARAMETER(x, u);
+   SVGA3D_DUMP_PARAMETER(width, u);
+
+}
+
+SVGA3D_DUMP_HEADER(GenMips)
+{
+   SVGA3D_DUMP_PARAMETER(shaderResourceViewId, u);
+}
+
+SVGA3D_DUMP_HEADER(TransferFromBuffer)
+{
+   SVGA3D_DUMP_PARAMETER(srcSid, u);
+   SVGA3D_DUMP_PARAMETER(srcOffset, u);
+   SVGA3D_DUMP_PARAMETER(srcPitch, u);
+   SVGA3D_DUMP_PARAMETER(srcSlicePitch, u);
+   SVGA3D_DUMP_PARAMETER(destSid, u);
+   SVGA3D_DUMP_PARAMETER(destSubResource, u);
+   dump_SVGA3dBox(&cmd->destBox);
+}
+
+static void
+dump_SVGA3dCmdInvalidateGBSurface(const SVGA3dCmdInvalidateGBSurface *cmd)
+{
+   SVGA3D_DUMP_PARAMETER(sid, u);
+}
+
+#define SVGA3D_DUMP_CASE_BASIC(CommandName, CommandCode) \
+case SVGA_3D_CMD_DX_##CommandCode: \
+   _debug_printf(SVGA3D_DUMP_STRINGIFY(\tSVGA_3D_CMD_DX_##CommandCode) "\n"); \
+   { \
+      const SVGA3dCmdDX##CommandName *cmd = (const SVGA3dCmdDX##CommandName *)body; \
+      dump_SVGA3dCmdDX##CommandName(cmd); \
+      body = (const uint8_t *)&cmd[1]; \
+   } \
+   break
+
+#define SVGA3D_DUMP_CASE_LIST(CommandName, CommandCode, ElementType) \
+case SVGA_3D_CMD_DX_##CommandCode: \
+   _debug_printf(SVGA3D_DUMP_STRINGIFY(\tSVGA_3D_CMD_DX_##CommandCode) "\n"); \
+   { \
+      const SVGA3dCmdDX##CommandName *cmd = (const SVGA3dCmdDX##CommandName *)body; \
+      dump_SVGA3dCmdDX##CommandName(cmd); \
+      body = (const uint8_t *)&cmd[1]; \
+      while (body + sizeof(ElementType) <= next) \
+      { \
+         dump_##ElementType((const ElementType *)body); \
+         body += sizeof(ElementType); \
+      } \
+   } \
+   break
 
 void            
 svga_dump_command(uint32_t cmd_id, const void *data, uint32_t size)
@@ -1580,6 +2079,86 @@ svga_dump_command(uint32_t cmd_id, const void *data, uint32_t size)
    const uint8_t *next = body + size;
   
    switch(cmd_id) {
+   SVGA3D_DUMP_CASE_BASIC(BindContext, BIND_CONTEXT);
+   SVGA3D_DUMP_CASE_LIST(SetViewports, SET_VIEWPORTS, SVGA3dViewport);
+   SVGA3D_DUMP_CASE_BASIC(SetShader, SET_SHADER);
+   SVGA3D_DUMP_CASE_LIST(SetSamplers, SET_SAMPLERS, SVGA3dSamplerId);
+   SVGA3D_DUMP_CASE_BASIC(SetBlendState, SET_BLEND_STATE);
+   SVGA3D_DUMP_CASE_BASIC(SetDepthStencilState, SET_DEPTHSTENCIL_STATE);
+   SVGA3D_DUMP_CASE_BASIC(SetRasterizerState, SET_RASTERIZER_STATE);
+   SVGA3D_DUMP_CASE_BASIC(SetPredication, SET_PREDICATION);
+   SVGA3D_DUMP_CASE_LIST(SetSOTargets, SET_SOTARGETS, SVGA3dSoTarget);
+   SVGA3D_DUMP_CASE_LIST(SetScissorRects, SET_SCISSORRECTS, SVGASignedRect);
+   SVGA3D_DUMP_CASE_BASIC(SetStreamOutput, SET_STREAMOUTPUT);
+   SVGA3D_DUMP_CASE_BASIC(SetSingleConstantBuffer, SET_SINGLE_CONSTANT_BUFFER);
+   SVGA3D_DUMP_CASE_BASIC(Draw, DRAW);
+   SVGA3D_DUMP_CASE_BASIC(DrawIndexed, DRAW_INDEXED);
+   SVGA3D_DUMP_CASE_BASIC(DrawInstanced, DRAW_INSTANCED);
+   SVGA3D_DUMP_CASE_BASIC(DrawIndexedInstanced, DRAW_INDEXED_INSTANCED);
+   SVGA3D_DUMP_CASE_BASIC(DrawAuto, DRAW_AUTO);
+   SVGA3D_DUMP_CASE_BASIC(DefineQuery, DEFINE_QUERY);
+   SVGA3D_DUMP_CASE_BASIC(DestroyQuery, DESTROY_QUERY);
+   SVGA3D_DUMP_CASE_BASIC(BindAllQuery, BIND_ALL_QUERY);
+   SVGA3D_DUMP_CASE_BASIC(BindQuery, BIND_QUERY);
+   SVGA3D_DUMP_CASE_BASIC(MoveQuery, MOVE_QUERY);
+   SVGA3D_DUMP_CASE_BASIC(ReadbackAllQuery, READBACK_ALL_QUERY);
+   SVGA3D_DUMP_CASE_BASIC(SetQueryOffset, SET_QUERY_OFFSET);
+   SVGA3D_DUMP_CASE_BASIC(BeginQuery, BEGIN_QUERY);
+   SVGA3D_DUMP_CASE_BASIC(EndQuery, END_QUERY);
+   SVGA3D_DUMP_CASE_BASIC(ClearRenderTargetView, CLEAR_RENDERTARGET_VIEW);
+   SVGA3D_DUMP_CASE_BASIC(ClearDepthStencilView, CLEAR_DEPTHSTENCIL_VIEW);
+   SVGA3D_DUMP_CASE_BASIC(DefineShaderResourceView, DEFINE_SHADERRESOURCE_VIEW);
+   SVGA3D_DUMP_CASE_LIST(SetShaderResources, SET_SHADER_RESOURCES, SVGA3dShaderResourceViewId);
+   SVGA3D_DUMP_CASE_BASIC(DestroyShaderResourceView, DESTROY_SHADERRESOURCE_VIEW);
+   SVGA3D_DUMP_CASE_BASIC(DefineRenderTargetView, DEFINE_RENDERTARGET_VIEW);
+   SVGA3D_DUMP_CASE_BASIC(DestroyRenderTargetView, DESTROY_RENDERTARGET_VIEW);
+   SVGA3D_DUMP_CASE_BASIC(DefineDepthStencilView, DEFINE_DEPTHSTENCIL_VIEW);
+   SVGA3D_DUMP_CASE_BASIC(DestroyDepthStencilView, DESTROY_DEPTHSTENCIL_VIEW);
+   SVGA3D_DUMP_CASE_LIST(DefineElementLayout, DEFINE_ELEMENTLAYOUT, SVGA3dInputElementDesc);
+   SVGA3D_DUMP_CASE_BASIC(DestroyElementLayout, DESTROY_ELEMENTLAYOUT);
+   SVGA3D_DUMP_CASE_BASIC(DefineBlendState, DEFINE_BLEND_STATE);
+   SVGA3D_DUMP_CASE_BASIC(DestroyBlendState, DESTROY_BLEND_STATE);
+   SVGA3D_DUMP_CASE_BASIC(DefineDepthStencilState, DEFINE_DEPTHSTENCIL_STATE);
+   SVGA3D_DUMP_CASE_BASIC(DestroyDepthStencilState, DESTROY_DEPTHSTENCIL_STATE);
+   SVGA3D_DUMP_CASE_BASIC(DefineRasterizerState, DEFINE_RASTERIZER_STATE);
+   SVGA3D_DUMP_CASE_BASIC(DestroyRasterizerState, DESTROY_RASTERIZER_STATE);
+   SVGA3D_DUMP_CASE_BASIC(DefineSamplerState, DEFINE_SAMPLER_STATE);
+   SVGA3D_DUMP_CASE_BASIC(DestroySamplerState, DESTROY_SAMPLER_STATE);
+   SVGA3D_DUMP_CASE_BASIC(DefineShader, DEFINE_SHADER);
+   SVGA3D_DUMP_CASE_BASIC(DestroyShader, DESTROY_SHADER);
+   SVGA3D_DUMP_CASE_BASIC(BindShader, BIND_SHADER);
+   SVGA3D_DUMP_CASE_BASIC(DefineStreamOutput, DEFINE_STREAMOUTPUT);
+   SVGA3D_DUMP_CASE_BASIC(DestroyStreamOutput, DESTROY_STREAMOUTPUT);
+   SVGA3D_DUMP_CASE_BASIC(SetInputLayout, SET_INPUT_LAYOUT);
+   SVGA3D_DUMP_CASE_LIST(SetVertexBuffers, SET_VERTEX_BUFFERS, SVGA3dVertexBuffer);
+   SVGA3D_DUMP_CASE_BASIC(SetTopology, SET_TOPOLOGY);
+   SVGA3D_DUMP_CASE_BASIC(SetIndexBuffer, SET_INDEX_BUFFER);
+
+   SVGA3D_DUMP_CASE_BASIC(PredCopy, PRED_COPY);
+   SVGA3D_DUMP_CASE_BASIC(UpdateSubResource, UPDATE_SUBRESOURCE);
+   SVGA3D_DUMP_CASE_BASIC(ReadbackSubResource, READBACK_SUBRESOURCE);
+   SVGA3D_DUMP_CASE_BASIC(PredCopyRegion, PRED_COPY_REGION);
+   SVGA3D_DUMP_CASE_BASIC(BufferCopy, BUFFER_COPY);
+   SVGA3D_DUMP_CASE_BASIC(BufferUpdate, BUFFER_UPDATE);
+   SVGA3D_DUMP_CASE_BASIC(GenMips, GENMIPS);
+   SVGA3D_DUMP_CASE_BASIC(TransferFromBuffer, TRANSFER_FROM_BUFFER);
+
+   case SVGA_3D_CMD_DX_SET_RENDERTARGETS:
+      _debug_printf("\tSVGA_3D_CMD_DX_SET_RENDERTARGETS\n");
+      {
+         const SVGA3dCmdDXSetRenderTargets *cmd =
+            (const SVGA3dCmdDXSetRenderTargets *) body;
+         _debug_printf("\t\t.depthStencilViewId = %u\n",
+                       cmd->depthStencilViewId);
+         body = (const uint8_t *) &cmd[1];
+         while (body + sizeof(SVGA3dRenderTargetViewId) <= next) {
+            _debug_printf("\t\t.renderTargetViewId = %u\n",
+                          *((SVGA3dRenderTargetViewId *) body));
+            body += sizeof(SVGA3dRenderTargetViewId);
+         }
+      }
+      break;
+
    case SVGA_3D_CMD_SURFACE_DEFINE:
       _debug_printf("\tSVGA_3D_CMD_SURFACE_DEFINE\n");
       {
@@ -1970,6 +2549,14 @@ svga_dump_command(uint32_t cmd_id, const void *data, uint32_t size)
          uint32 numConsts = (size - sizeof *cmd) / (4 * sizeof(uint32));
          dump_SVGA3dCmdSetGBShaderConstInline(cmd, numConsts);
          body = next;
+      }
+      break;
+   case SVGA_3D_CMD_INVALIDATE_GB_SURFACE:
+      _debug_printf("\tSVGA_3D_CMD_INVALIDATE_GB_SURFACE\n");
+      {
+         const SVGA3dCmdInvalidateGBSurface *cmd = (const SVGA3dCmdInvalidateGBSurface *)body;
+         dump_SVGA3dCmdInvalidateGBSurface(cmd);
+         body = (const uint8_t *)&cmd[1];
       }
       break;
    default:

@@ -942,6 +942,9 @@ const struct function common_desktop_functions_possible[] = {
    { "glDispatchCompute", 43, -1 },
    { "glDispatchComputeIndirect", 43, -1 },
 
+   /* GL_ARB_compute_variable_group_size */
+   { "glDispatchComputeGroupSizeARB", 43, -1 },
+
    /* GL_EXT_polygon_offset_clamp */
    { "glPolygonOffsetClampEXT", 11, -1 },
 
@@ -951,6 +954,12 @@ const struct function common_desktop_functions_possible[] = {
 
    /* GL_GREMEDY_string_marker */
    { "glStringMarkerGREMEDY", 15, -1 },
+
+   /* GL_EXT_window_rectangles */
+   { "glWindowRectanglesEXT", 30, -1 },
+
+   /* GL_KHR_blend_equation_advanced */
+   { "glBlendBarrierKHR", 20, -1 },
 
    { NULL, 0, -1 }
 };
@@ -1860,6 +1869,9 @@ const struct function gl_core_functions_possible[] = {
    { "glMultiDrawArraysIndirectCountARB", 31, -1 },
    { "glMultiDrawElementsIndirectCountARB", 31, -1 },
 
+   /* GL_ARB_ES3_2_compatibility */
+   { "glPrimitiveBoundingBoxARB", 45, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -2319,6 +2331,9 @@ const struct function gles2_functions_possible[] = {
    { "glGetnUniformivKHR", 20, -1 },
    { "glGetnUniformuivKHR", 20, -1 },
 
+   /* GL_KHR_blend_equation_advanced */
+   { "glBlendBarrierKHR", 20, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -2494,6 +2509,9 @@ const struct function gles3_functions_possible[] = {
    { "glDrawElementsInstancedBaseInstanceEXT", 30, -1 },
    { "glDrawElementsInstancedBaseVertexBaseInstanceEXT", 30, -1 },
 
+   /* GL_EXT_window_rectangles */
+   { "glWindowRectanglesEXT", 30, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -2587,6 +2605,27 @@ const struct function gles31_functions_possible[] = {
 
    /* GL_OES_geometry_shader */
    { "glFramebufferTextureOES", 31, -1},
+
+   /* GL_EXT_geometry_shader */
+   // We check for the aliased OES version above
+   // { "glFramebufferTextureEXT", 31, -1},
+
+   /* GL_OES_tessellation_shader */
+   { "glPatchParameteriOES", 31, -1 },
+
+   /* GL_OES_primitive_bound_box */
+   { "glPrimitiveBoundingBoxOES", 31, -1 },
+
+   /* GL_OES_viewport_array */
+   { "glViewportArrayvOES", 31, -1 },
+   { "glViewportIndexedfOES", 31, -1 },
+   { "glViewportIndexedfvOES", 31, -1 },
+   { "glScissorArrayvOES", 31, -1 },
+   { "glScissorIndexedOES", 31, -1 },
+   { "glScissorIndexedvOES", 31, -1 },
+   { "glDepthRangeArrayfvOES", 31, -1 },
+   { "glDepthRangeIndexedfOES", 31, -1 },
+   { "glGetFloati_vOES", 31, -1 },
 
    { NULL, 0, -1 },
  };

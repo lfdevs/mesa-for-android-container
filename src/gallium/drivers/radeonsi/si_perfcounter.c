@@ -27,7 +27,6 @@
 
 #include "radeon/r600_cs.h"
 #include "radeon/r600_query.h"
-#include "radeon/r600_pipe_common.h"
 #include "util/u_memory.h"
 
 #include "si_pipe.h"
@@ -591,35 +590,8 @@ static void si_pc_emit_stop(struct r600_common_context *ctx,
 {
 	struct radeon_winsys_cs *cs = ctx->gfx.cs;
 
-	if (ctx->screen->chip_class == CIK) {
-		/* Two EOP events are required to make all engines go idle
-		 * (and optional cache flushes executed) before the timestamp
-		 * is written.
-		 */
-		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE_EOP, 4, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_BOTTOM_OF_PIPE_TS) |
-				EVENT_INDEX(5));
-		radeon_emit(cs, va);
-		radeon_emit(cs, (va >> 32) | EOP_DATA_SEL(1));
-		radeon_emit(cs, 0); /* immediate data */
-		radeon_emit(cs, 0); /* unused */
-	}
-
-	radeon_emit(cs, PKT3(PKT3_EVENT_WRITE_EOP, 4, 0));
-	radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_BOTTOM_OF_PIPE_TS) |
-			EVENT_INDEX(5));
-	radeon_emit(cs, va);
-	radeon_emit(cs, (va >> 32) | EOP_DATA_SEL(1));
-	radeon_emit(cs, 0); /* immediate data */
-	radeon_emit(cs, 0); /* unused */
-
-	radeon_emit(cs, PKT3(PKT3_WAIT_REG_MEM, 5, 0));
-	radeon_emit(cs, WAIT_REG_MEM_EQUAL | WAIT_REG_MEM_MEM_SPACE(1));
-	radeon_emit(cs, va);
-	radeon_emit(cs, va >> 32);
-	radeon_emit(cs, 0); /* reference value */
-	radeon_emit(cs, 0xffffffff); /* mask */
-	radeon_emit(cs, 4); /* poll interval */
+	r600_gfx_write_fence(ctx, buffer, va, 1, 0);
+	r600_gfx_wait_fence(ctx, va, 0, 0xffffffff);
 
 	radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
 	radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_PERFCOUNTER_SAMPLE) | EVENT_INDEX(0));
@@ -715,13 +687,9 @@ void si_init_perfcounters(struct si_screen *screen)
 		return;
 
 	pc->num_start_cs_dwords = 14;
-	pc->num_stop_cs_dwords = 20;
+	pc->num_stop_cs_dwords = 14 + r600_gfx_write_fence_dwords(&screen->b);
 	pc->num_instance_cs_dwords = 3;
 	pc->num_shaders_cs_dwords = 4;
-
-	if (screen->b.chip_class == CIK) {
-		pc->num_stop_cs_dwords += 6;
-	}
 
 	pc->num_shader_types = ARRAY_SIZE(si_pc_shader_type_bits);
 	pc->shader_type_suffixes = si_pc_shader_type_suffixes;

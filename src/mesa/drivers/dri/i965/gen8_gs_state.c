@@ -29,17 +29,22 @@
 static void
 gen8_upload_gs_state(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    const struct brw_stage_state *stage_state = &brw->gs.base;
    /* BRW_NEW_GEOMETRY_PROGRAM */
    bool active = brw->geometry_program;
    /* BRW_NEW_GS_PROG_DATA */
-   const struct brw_vue_prog_data *prog_data = &brw->gs.prog_data->base;
+   const struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   const struct brw_vue_prog_data *vue_prog_data =
+      brw_vue_prog_data(stage_state->prog_data);
+   const struct brw_gs_prog_data *gs_prog_data =
+      brw_gs_prog_data(stage_state->prog_data);
 
    if (active) {
       int urb_entry_write_offset = 1;
       uint32_t urb_entry_output_length =
-         ((prog_data->vue_map.num_slots + 1) / 2 - urb_entry_write_offset);
+         ((vue_prog_data->vue_map.num_slots + 1) / 2 - urb_entry_write_offset);
 
       if (urb_entry_output_length == 0)
          urb_entry_output_length = 1;
@@ -48,13 +53,13 @@ gen8_upload_gs_state(struct brw_context *brw)
       OUT_BATCH(_3DSTATE_GS << 16 | (10 - 2));
       OUT_BATCH(stage_state->prog_offset);
       OUT_BATCH(0);
-      OUT_BATCH(brw->gs.prog_data->vertices_in |
+      OUT_BATCH(gs_prog_data->vertices_in |
                 ((ALIGN(stage_state->sampler_count, 4)/4) <<
                  GEN6_GS_SAMPLER_COUNT_SHIFT) |
-                ((prog_data->base.binding_table.size_bytes / 4) <<
+                ((prog_data->binding_table.size_bytes / 4) <<
                  GEN6_GS_BINDING_TABLE_ENTRY_COUNT_SHIFT));
 
-      if (brw->gs.prog_data->base.base.total_scratch) {
+      if (prog_data->total_scratch) {
          OUT_RELOC64(stage_state->scratch_bo,
                      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                      ffs(stage_state->per_thread_scratch) - 11);
@@ -64,42 +69,42 @@ gen8_upload_gs_state(struct brw_context *brw)
       }
 
       /* DW6 */
-      OUT_BATCH(((brw->gs.prog_data->output_vertex_size_hwords * 2 - 1) <<
+      OUT_BATCH(((gs_prog_data->output_vertex_size_hwords * 2 - 1) <<
                  GEN7_GS_OUTPUT_VERTEX_SIZE_SHIFT) |
-                (brw->gs.prog_data->output_topology <<
+                (gs_prog_data->output_topology <<
                  GEN7_GS_OUTPUT_TOPOLOGY_SHIFT) |
-                (prog_data->include_vue_handles ?
+                (vue_prog_data->include_vue_handles ?
                  GEN7_GS_INCLUDE_VERTEX_HANDLES : 0) |
-                (prog_data->urb_read_length <<
+                (vue_prog_data->urb_read_length <<
                  GEN6_GS_URB_READ_LENGTH_SHIFT) |
                 (0 << GEN6_GS_URB_ENTRY_READ_OFFSET_SHIFT) |
-                (prog_data->base.dispatch_grf_start_reg <<
+                (prog_data->dispatch_grf_start_reg <<
                  GEN6_GS_DISPATCH_START_GRF_SHIFT));
 
-      uint32_t dw7 = (brw->gs.prog_data->control_data_header_size_hwords <<
+      uint32_t dw7 = (gs_prog_data->control_data_header_size_hwords <<
                       GEN7_GS_CONTROL_DATA_HEADER_SIZE_SHIFT) |
-                     SET_FIELD(prog_data->dispatch_mode,
+                     SET_FIELD(vue_prog_data->dispatch_mode,
                                GEN7_GS_DISPATCH_MODE) |
-                     ((brw->gs.prog_data->invocations - 1) <<
+                     ((gs_prog_data->invocations - 1) <<
                       GEN7_GS_INSTANCE_CONTROL_SHIFT) |
                       GEN6_GS_STATISTICS_ENABLE |
-                      (brw->gs.prog_data->include_primitive_id ?
+                      (gs_prog_data->include_primitive_id ?
                        GEN7_GS_INCLUDE_PRIMITIVE_ID : 0) |
                       GEN7_GS_REORDER_TRAILING |
                       GEN7_GS_ENABLE;
-      uint32_t dw8 = brw->gs.prog_data->control_data_format <<
+      uint32_t dw8 = gs_prog_data->control_data_format <<
                      HSW_GS_CONTROL_DATA_FORMAT_SHIFT;
 
-      if (brw->gs.prog_data->static_vertex_count != -1) {
+      if (gs_prog_data->static_vertex_count != -1) {
          dw8 |= GEN8_GS_STATIC_OUTPUT |
-                SET_FIELD(brw->gs.prog_data->static_vertex_count,
+                SET_FIELD(gs_prog_data->static_vertex_count,
                           GEN8_GS_STATIC_VERTEX_COUNT);
       }
 
       if (brw->gen < 9)
-         dw7 |= (brw->max_gs_threads / 2 - 1) << HSW_GS_MAX_THREADS_SHIFT;
+         dw7 |= (devinfo->max_gs_threads / 2 - 1) << HSW_GS_MAX_THREADS_SHIFT;
       else
-         dw8 |= brw->max_gs_threads - 1;
+         dw8 |= devinfo->max_gs_threads - 1;
 
       /* DW7 */
       OUT_BATCH(dw7);
@@ -108,7 +113,7 @@ gen8_upload_gs_state(struct brw_context *brw)
       OUT_BATCH(dw8);
 
       /* DW9 / _NEW_TRANSFORM */
-      OUT_BATCH((prog_data->cull_distance_mask |
+      OUT_BATCH((vue_prog_data->cull_distance_mask |
                  ctx->Transform.ClipPlanesEnabled <<
                  GEN8_GS_USER_CLIP_DISTANCE_SHIFT) |
                 (urb_entry_output_length << GEN8_GS_URB_OUTPUT_LENGTH_SHIFT) |

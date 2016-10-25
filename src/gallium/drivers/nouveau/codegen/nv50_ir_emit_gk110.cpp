@@ -96,6 +96,7 @@ private:
    void emitDMUL(const Instruction *);
    void emitIMAD(const Instruction *);
    void emitISAD(const Instruction *);
+   void emitSHLADD(const Instruction *);
    void emitFMAD(const Instruction *);
    void emitDMAD(const Instruction *);
    void emitMADSP(const Instruction *i);
@@ -757,6 +758,54 @@ CodeEmitterGK110::emitISAD(const Instruction *i)
 }
 
 void
+CodeEmitterGK110::emitSHLADD(const Instruction *i)
+{
+   uint8_t addOp = (i->src(2).mod.neg() << 1) | i->src(0).mod.neg();
+   const ImmediateValue *imm = i->src(1).get()->asImm();
+   assert(imm);
+
+   if (i->src(2).getFile() == FILE_IMMEDIATE) {
+      code[0] = 0x1;
+      code[1] = 0xc0c << 20;
+   } else {
+      code[0] = 0x2;
+      code[1] = 0x20c << 20;
+   }
+   code[1] |= addOp << 19;
+
+   emitPredicate(i);
+
+   defId(i->def(0), 2);
+   srcId(i->src(0), 10);
+
+   if (i->flagsDef >= 0)
+      code[1] |= 1 << 18;
+
+   assert(!(imm->reg.data.u32 & 0xffffffe0));
+   code[1] |= imm->reg.data.u32 << 10;
+
+   switch (i->src(2).getFile()) {
+   case FILE_GPR:
+      assert(code[0] & 0x2);
+      code[1] |= 0xc << 28;
+      srcId(i->src(2), 23);
+      break;
+   case FILE_MEMORY_CONST:
+      assert(code[0] & 0x2);
+      code[1] |= 0x4 << 28;
+      setCAddress14(i->src(2));
+      break;
+   case FILE_IMMEDIATE:
+      assert(code[0] & 0x1);
+      setShortImmediate(i, 2);
+      break;
+   default:
+      assert(!"bad src2 file");
+      break;
+   }
+}
+
+void
 CodeEmitterGK110::emitNOT(const Instruction *i)
 {
    code[0] = 0x0003fc02; // logop(mov2) dst, 0, not src
@@ -773,7 +822,7 @@ CodeEmitterGK110::emitNOT(const Instruction *i)
       break;
    case FILE_MEMORY_CONST:
       code[1] |= 0x4 << 28;
-      setCAddress14(i->src(1));
+      setCAddress14(i->src(0));
       break;
    default:
       assert(0);
@@ -1478,16 +1527,31 @@ CodeEmitterGK110::emitFlow(const Instruction *i)
 void
 CodeEmitterGK110::emitVOTE(const Instruction *i)
 {
-   assert(i->src(0).getFile() == FILE_PREDICATE &&
-          i->def(1).getFile() == FILE_PREDICATE);
+   assert(i->src(0).getFile() == FILE_PREDICATE);
 
    code[0] = 0x00000002;
    code[1] = 0x86c00000 | (i->subOp << 19);
 
    emitPredicate(i);
 
-   defId(i->def(0), 2);
-   defId(i->def(1), 48);
+   unsigned rp = 0;
+   for (int d = 0; i->defExists(d); d++) {
+      if (i->def(d).getFile() == FILE_PREDICATE) {
+         assert(!(rp & 2));
+         rp |= 2;
+         defId(i->def(d), 48);
+      } else if (i->def(d).getFile() == FILE_GPR) {
+         assert(!(rp & 1));
+         rp |= 1;
+         defId(i->def(d), 2);
+      } else {
+         assert(!"Unhandled def");
+      }
+   }
+   if (!(rp & 1))
+      code[0] |= 255 << 2;
+   if (!(rp & 2))
+      code[1] |= 7 << 16;
    if (i->src(0).mod == Modifier(NV50_IR_MOD_NOT))
       code[1] |= 1 << 13;
    srcId(i->src(0), 42);
@@ -2387,6 +2451,9 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
       break;
    case OP_SAD:
       emitISAD(insn);
+      break;
+   case OP_SHLADD:
+      emitSHLADD(insn);
       break;
    case OP_NOT:
       emitNOT(insn);

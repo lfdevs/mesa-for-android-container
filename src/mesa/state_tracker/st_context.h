@@ -32,6 +32,7 @@
 #include "pipe/p_state.h"
 #include "state_tracker/st_api.h"
 #include "main/fbobject.h"
+#include "state_tracker/st_atom.h"
 
 
 #ifdef __cplusplus
@@ -48,45 +49,6 @@ struct st_context;
 struct st_fragment_program;
 struct st_perf_monitor_group;
 struct u_upload_mgr;
-
-
-/* gap  */
-#define ST_NEW_FRAGMENT_PROGRAM        (1 << 1)
-#define ST_NEW_VERTEX_PROGRAM          (1 << 2)
-#define ST_NEW_FRAMEBUFFER             (1 << 3)
-#define ST_NEW_TESS_STATE              (1 << 4)
-#define ST_NEW_GEOMETRY_PROGRAM        (1 << 5)
-#define ST_NEW_VERTEX_ARRAYS           (1 << 6)
-#define ST_NEW_RASTERIZER              (1 << 7)
-#define ST_NEW_UNIFORM_BUFFER          (1 << 8)
-#define ST_NEW_TESSCTRL_PROGRAM        (1 << 9)
-#define ST_NEW_TESSEVAL_PROGRAM        (1 << 10)
-#define ST_NEW_SAMPLER_VIEWS           (1 << 11)
-#define ST_NEW_ATOMIC_BUFFER           (1 << 12)
-#define ST_NEW_STORAGE_BUFFER          (1 << 13)
-#define ST_NEW_COMPUTE_PROGRAM         (1 << 14)
-#define ST_NEW_IMAGE_UNITS             (1 << 15)
-
-
-struct st_state_flags {
-   GLbitfield mesa;  /**< Mask of _NEW_x flags */
-   uint64_t st;      /**< Mask of ST_NEW_x flags */
-};
-
-struct st_tracked_state {
-   const char *name;
-   struct st_state_flags dirty;
-   void (*update)( struct st_context *st );
-};
-
-
-/**
- * Enumeration of state tracker pipelines.
- */
-enum st_pipeline {
-   ST_PIPELINE_RENDER,
-   ST_PIPELINE_COMPUTE,
-};
 
 
 /** For drawing quads for glClear, glDraw/CopyPixels, glBitmap, etc. */
@@ -161,6 +123,11 @@ struct st_context
       struct pipe_framebuffer_state framebuffer;
       struct pipe_scissor_state scissor[PIPE_MAX_VIEWPORTS];
       struct pipe_viewport_state viewport[PIPE_MAX_VIEWPORTS];
+      struct {
+         unsigned num;
+         boolean include;
+         struct pipe_scissor_state rects[PIPE_MAX_WINDOW_RECTANGLES];
+      } window_rects;
       unsigned sample_mask;
 
       GLuint poly_stipple[32];  /**< In OpenGL's bottom-to-top order */
@@ -171,8 +138,16 @@ struct st_context
    char vendor[100];
    char renderer[100];
 
-   struct st_state_flags dirty;
-   struct st_state_flags dirty_cp;
+   uint64_t dirty; /**< dirty states */
+
+   /** This masks out unused shader resources. Only valid in draw calls. */
+   uint64_t active_states;
+
+   /* If true, further analysis of states is required to know if something
+    * has changed. Used mainly for shaders.
+    */
+   bool gfx_shaders_may_be_dirty;
+   bool compute_shader_may_be_dirty;
 
    GLboolean vertdata_edgeflags;
    GLboolean edgeflag_culls_prims;
@@ -223,6 +198,16 @@ struct st_context
       struct pipe_resource *texture;
    } drawpix_cache;
 
+   /** for glReadPixels */
+   struct {
+      struct pipe_resource *src;
+      struct pipe_resource *cache;
+      enum pipe_format dst_format;
+      unsigned level;
+      unsigned layer;
+      unsigned hits;
+   } readpix_cache;
+
    /** for glClear */
    struct {
       struct pipe_rasterizer_state raster;
@@ -236,15 +221,17 @@ struct st_context
    /* For gl(Compressed)Tex(Sub)Image */
    struct {
       struct pipe_rasterizer_state raster;
-      struct pipe_blend_state blend;
+      struct pipe_blend_state upload_blend;
       void *vs;
       void *gs;
-      void *fs;
-      bool enabled;
+      void *upload_fs;
+      void *download_fs[PIPE_MAX_TEXTURE_TYPES];
+      bool upload_enabled;
+      bool download_enabled;
       bool rgba_only;
-      bool upload_layers;
+      bool layers;
       bool use_gs;
-   } pbo_upload;
+   } pbo;
 
    /** for drawing with st_util_vertex */
    struct pipe_vertex_element util_velems[3];
@@ -266,6 +253,8 @@ struct st_context
    struct st_config_options options;
 
    struct st_perf_monitor_group *perfmon;
+
+   enum pipe_reset_status reset_status;
 };
 
 
@@ -299,6 +288,7 @@ extern void st_init_driver_functions(struct pipe_screen *screen,
 
 void st_invalidate_state(struct gl_context * ctx, GLbitfield new_state);
 
+void st_invalidate_readpix_cache(struct st_context *st);
 
 
 #define Y_0_TOP 1
@@ -329,7 +319,7 @@ st_fb_orientation(const struct gl_framebuffer *fb)
 }
 
 
-static inline unsigned
+static inline enum pipe_shader_type
 st_shader_stage_to_ptarget(gl_shader_stage stage)
 {
    switch (stage) {
@@ -351,6 +341,13 @@ st_shader_stage_to_ptarget(gl_shader_stage stage)
    return PIPE_SHADER_VERTEX;
 }
 
+static inline bool
+st_user_clip_planes_enabled(struct gl_context *ctx)
+{
+   return (ctx->API == API_OPENGL_COMPAT ||
+           ctx->API == API_OPENGLES) && /* only ES 1.x */
+          ctx->Transform.ClipPlanesEnabled;
+}
 
 /** clear-alloc a struct-sized object, with casting */
 #define ST_CALLOC_STRUCT(T)   (struct T *) calloc(1, sizeof(struct T))
@@ -364,6 +361,9 @@ st_create_context(gl_api api, struct pipe_context *pipe,
 
 extern void
 st_destroy_context(struct st_context *st);
+
+uint64_t
+st_get_active_states(struct gl_context *ctx);
 
 
 #ifdef __cplusplus

@@ -40,19 +40,12 @@
 
 THREAD UINT tlsThreadId = 0;
 
+BucketManager::~BucketManager()
+{
+}
+
 void BucketManager::RegisterThread(const std::string& name)
 {
-    // lazy evaluate threadviz knob
-    if (!mThreadViz && KNOB_BUCKETS_ENABLE_THREADVIZ)
-    {
-        uint32_t pid = GetCurrentProcessId();
-        std::stringstream str;
-        str << "threadviz." << pid;
-        mThreadVizDir = str.str();
-        CreateDirectory(mThreadVizDir.c_str(), NULL);
-
-        mThreadViz = true;
-    }
 
     BUCKET_THREAD newThread;
     newThread.name = name;
@@ -67,15 +60,6 @@ void BucketManager::RegisterThread(const std::string& name)
     size_t id = mThreads.size();
     newThread.id = (UINT)id;
     tlsThreadId = (UINT)id;
-
-    // open threadviz file if enabled
-    if (mThreadViz)
-    {
-        std::stringstream ss;
-        ss << mThreadVizDir << PATH_SEPARATOR;
-        ss << "threadviz_thread." << newThread.id << ".dat";
-        newThread.vizFile = fopen(ss.str().c_str(), "wb");
-    }
 
     // store new thread
     mThreads.push_back(newThread);
@@ -167,37 +151,8 @@ void BucketManager::PrintThread(FILE* f, const BUCKET_THREAD& thread)
     }
 }
 
-void BucketManager::DumpThreadViz()
-{
-    // ensure all thread data is flushed
-    mThreadMutex.lock();
-    for (auto& thread : mThreads)
-    {
-        fflush(thread.vizFile);
-        fclose(thread.vizFile);
-        thread.vizFile = nullptr;
-    }
-    mThreadMutex.unlock();
-
-    // dump bucket descriptions
-    std::stringstream ss;
-    ss << mThreadVizDir << PATH_SEPARATOR << "threadviz_buckets.dat";
-
-    FILE* f = fopen(ss.str().c_str(), "wb");
-    for (auto& bucket : mBuckets)
-    {
-        Serialize(f, bucket);
-    }
-    fclose(f);
-}
-
 void BucketManager::PrintReport(const std::string& filename)
 {
-    if (mThreadViz)
-    {
-        DumpThreadViz();
-    }
-    else
     {
         FILE* f = fopen(filename.c_str(), "w");
 
@@ -207,10 +162,20 @@ void BucketManager::PrintReport(const std::string& filename)
             PrintThread(f, thread);
             fprintf(f, "\n");
         }
+
         mThreadMutex.unlock();
 
         fclose(f);
     }
+}
+
+
+void BucketManager::StartCapture()
+{
+
+    printf("Capture Starting\n");
+
+    mCapturing = true;
 }
 
 void BucketManager_StartBucket(BucketManager* pBucketMgr, uint32_t id)

@@ -22,24 +22,20 @@
 # Python source
 KNOBS = [
 
+    ['ENABLE_ASSERT_DIALOGS', {
+        'type'      : 'bool',
+        'default'   : 'true',
+        'desc'      : ['Use dialogs when asserts fire.',
+                       'Asserts are only enabled in debug builds'],
+        'category'  : 'debug',
+    }],
+
     ['SINGLE_THREADED', {
         'type'      : 'bool',
         'default'   : 'false',
         'desc'      : ['If enabled will perform all rendering on the API thread.',
                        'This is useful mainly for debugging purposes.'],
         'category'  : 'debug',
-    }],
-
-    ['HYPERTHREADED_FE', {
-        'type'      : 'bool',
-        'default'   : 'false',
-        'desc'      : ['EXPERIMENTAL!!',
-                       'If enabled will attempt to use secondary threads per core to perform',
-                       'front-end (VS/GS) work.',
-                       '',
-                       'Note: Setting this will cause KNOB_MAX_THREADS_PER_CORE to be ignored.'],
-        'category'  : 'perf',
-        'advanced'  : 'true',
     }],
 
     ['DUMP_SHADER_IR', {
@@ -133,8 +129,9 @@ KNOBS = [
 
     ['MAX_DRAWS_IN_FLIGHT', {
         'type'      : 'uint32_t',
-        'default'   : '96',
-        'desc'      : ['Maximum number of draws outstanding before API thread blocks.'],
+        'default'   : '128',
+        'desc'      : ['Maximum number of draws outstanding before API thread blocks.',
+                       'This value MUST be evenly divisible into 2^32'],
         'category'  : 'perf',
     }],
 
@@ -157,11 +154,11 @@ KNOBS = [
     }],
 
 
-    ['BUCKETS_ENABLE_THREADVIZ', {
-        'type'      : 'bool',
-        'default'   : 'false',
-        'desc'      : ['Enable threadviz output.'],
-        'category'  : 'perf',
+    ['DEBUG_OUTPUT_DIR', {
+        'type'      : 'std::string',
+        'default'   : '/tmp/Rast/DebugOutput',
+        'desc'      : ['Output directory for debug data.'],
+        'category'  : 'debug',
     }],
 
     ['TOSS_DRAW', {

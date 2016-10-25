@@ -34,81 +34,43 @@
 
 #include "genX_pipeline_util.h"
 
-static void
-gen7_emit_rs_state(struct anv_pipeline *pipeline,
-                   const VkPipelineRasterizationStateCreateInfo *info,
-                   const struct anv_graphics_pipeline_create_info *extra)
-{
-   struct GENX(3DSTATE_SF) sf = {
-      GENX(3DSTATE_SF_header),
-
-      /* LegacyGlobalDepthBiasEnable */
-
-      .StatisticsEnable                         = true,
-      .FrontFaceFillMode                        = vk_to_gen_fillmode[info->polygonMode],
-      .BackFaceFillMode                         = vk_to_gen_fillmode[info->polygonMode],
-      .ViewTransformEnable                      = !(extra && extra->use_rectlist),
-      .FrontWinding                             = vk_to_gen_front_face[info->frontFace],
-      /* bool                                         AntiAliasingEnable; */
-
-      .CullMode                                 = vk_to_gen_cullmode[info->cullMode],
-
-      /* uint32_t                                     LineEndCapAntialiasingRegionWidth; */
-      .ScissorRectangleEnable                   =  !(extra && extra->use_rectlist),
-
-      /* uint32_t                                     MultisampleRasterizationMode; */
-      /* bool                                         LastPixelEnable; */
-
-      .TriangleStripListProvokingVertexSelect   = 0,
-      .LineStripListProvokingVertexSelect       = 0,
-      .TriangleFanProvokingVertexSelect         = 1,
-
-      /* uint32_t                                     AALineDistanceMode; */
-      /* uint32_t                                     VertexSubPixelPrecisionSelect; */
-      .UsePointWidthState                       = false,
-      .PointWidth                               = 1.0,
-      .GlobalDepthOffsetEnableSolid             = info->depthBiasEnable,
-      .GlobalDepthOffsetEnableWireframe         = info->depthBiasEnable,
-      .GlobalDepthOffsetEnablePoint             = info->depthBiasEnable,
-   };
-
-   GENX(3DSTATE_SF_pack)(NULL, &pipeline->gen7.sf, &sf);
-}
-
 VkResult
 genX(graphics_pipeline_create)(
     VkDevice                                    _device,
     struct anv_pipeline_cache *                 cache,
     const VkGraphicsPipelineCreateInfo*         pCreateInfo,
-    const struct anv_graphics_pipeline_create_info *extra,
     const VkAllocationCallbacks*                pAllocator,
     VkPipeline*                                 pPipeline)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_render_pass, pass, pCreateInfo->renderPass);
+   const struct anv_physical_device *physical_device =
+      &device->instance->physicalDevice;
+   const struct gen_device_info *devinfo = &physical_device->info;
    struct anv_subpass *subpass = &pass->subpasses[pCreateInfo->subpass];
    struct anv_pipeline *pipeline;
    VkResult result;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO);
 
-   pipeline = anv_alloc2(&device->alloc, pAllocator, sizeof(*pipeline), 8,
+   pipeline = vk_alloc2(&device->alloc, pAllocator, sizeof(*pipeline), 8,
                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (pipeline == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
    result = anv_pipeline_init(pipeline, device, cache,
-                              pCreateInfo, extra, pAllocator);
+                              pCreateInfo, pAllocator);
    if (result != VK_SUCCESS) {
-      anv_free2(&device->alloc, pAllocator, pipeline);
+      vk_free2(&device->alloc, pAllocator, pipeline);
       return result;
    }
 
    assert(pCreateInfo->pVertexInputState);
-   emit_vertex_input(pipeline, pCreateInfo->pVertexInputState, extra);
+   emit_vertex_input(pipeline, pCreateInfo->pVertexInputState);
 
    assert(pCreateInfo->pRasterizationState);
-   gen7_emit_rs_state(pipeline, pCreateInfo->pRasterizationState, extra);
+   emit_rs_state(pipeline, pCreateInfo->pRasterizationState,
+                 pCreateInfo->pMultisampleState, pass, subpass);
 
    emit_ds_state(pipeline, pCreateInfo->pDepthStencilState, pass, subpass);
 
@@ -118,23 +80,10 @@ genX(graphics_pipeline_create)(
    emit_urb_setup(pipeline);
 
    emit_3dstate_clip(pipeline, pCreateInfo->pViewportState,
-                     pCreateInfo->pRasterizationState, extra);
+                     pCreateInfo->pRasterizationState);
+   emit_3dstate_streamout(pipeline, pCreateInfo->pRasterizationState);
 
-   if (pCreateInfo->pMultisampleState &&
-       pCreateInfo->pMultisampleState->rasterizationSamples > 1)
-      anv_finishme("VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO");
-
-   uint32_t samples = 1;
-   uint32_t log2_samples = __builtin_ffs(samples) - 1;
-
-   anv_batch_emit(&pipeline->batch, GENX(3DSTATE_MULTISAMPLE), ms) {
-      ms.PixelLocation        = PIXLOC_CENTER;
-      ms.NumberofMultisamples = log2_samples;
-   }
-
-   anv_batch_emit(&pipeline->batch, GENX(3DSTATE_SAMPLE_MASK), sm) {
-      sm.SampleMask = 0xff;
-   }
+   emit_ms_state(pipeline, pCreateInfo->pMultisampleState);
 
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
 
@@ -157,7 +106,7 @@ genX(graphics_pipeline_create)(
       gen7_emit_vs_workaround_flush(brw);
 #endif
 
-   if (pipeline->vs_vec4 == NO_KERNEL || (extra && extra->disable_vs))
+   if (pipeline->vs_vec4 == NO_KERNEL)
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_VS), vs);
    else
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_VS), vs) {
@@ -176,14 +125,14 @@ genX(graphics_pipeline_create)(
 
          vs.VertexURBEntryReadLength   = vs_prog_data->base.urb_read_length;
          vs.VertexURBEntryReadOffset   = 0;
-         vs.MaximumNumberofThreads     = device->info.max_vs_threads - 1;
+         vs.MaximumNumberofThreads     = devinfo->max_vs_threads - 1;
          vs.StatisticsEnable           = true;
          vs.VSFunctionEnable           = true;
       }
 
    const struct brw_gs_prog_data *gs_prog_data = get_gs_prog_data(pipeline);
 
-   if (pipeline->gs_kernel == NO_KERNEL || (extra && extra->disable_vs)) {
+   if (pipeline->gs_kernel == NO_KERNEL) {
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_GS), gs);
    } else {
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_GS), gs) {
@@ -205,7 +154,7 @@ genX(graphics_pipeline_create)(
          gs.DispatchGRFStartRegisterforURBData =
             gs_prog_data->base.base.dispatch_grf_start_reg;
 
-         gs.MaximumNumberofThreads     = device->info.max_gs_threads - 1;
+         gs.MaximumNumberofThreads     = devinfo->max_gs_threads - 1;
          /* This in the next dword on HSW. */
          gs.ControlDataFormat          = gs_prog_data->control_data_format;
          gs.ControlDataHeaderSize      = gs_prog_data->control_data_header_size_hwords;
@@ -238,7 +187,7 @@ genX(graphics_pipeline_create)(
        * don't at least set the maximum number of threads.
        */
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_PS), ps) {
-         ps.MaximumNumberofThreads = device->info.max_wm_threads - 1;
+         ps.MaximumNumberofThreads = devinfo->max_wm_threads - 1;
       }
    } else {
       const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
@@ -252,6 +201,8 @@ genX(graphics_pipeline_create)(
 
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_PS), ps) {
          ps.KernelStartPointer0           = pipeline->ps_ksp0;
+         ps.KernelStartPointer1           = 0;
+         ps.KernelStartPointer2           = pipeline->ps_ksp0 + wm_prog_data->prog_offset_2;
 
          ps.ScratchSpaceBasePointer = (struct anv_address) {
             .bo = anv_scratch_pool_alloc(device, &device->scratch_pool,
@@ -260,7 +211,7 @@ genX(graphics_pipeline_create)(
             .offset = 0,
          };
          ps.PerThreadScratchSpace         = scratch_space(&wm_prog_data->base);
-         ps.MaximumNumberofThreads        = device->info.max_wm_threads - 1;
+         ps.MaximumNumberofThreads        = devinfo->max_wm_threads - 1;
          ps.PushConstantEnable            = wm_prog_data->base.nr_params > 0;
          ps.AttributeEnable               = wm_prog_data->num_varying_inputs > 0;
          ps.oMaskPresenttoRenderTarget    = wm_prog_data->uses_omask;
@@ -280,15 +231,18 @@ genX(graphics_pipeline_create)(
             wm_prog_data->base.dispatch_grf_start_reg,
          ps.DispatchGRFStartRegisterforConstantSetupData1 = 0,
          ps.DispatchGRFStartRegisterforConstantSetupData2 =
-            wm_prog_data->dispatch_grf_start_reg_2,
+            wm_prog_data->dispatch_grf_start_reg_2;
 
          /* Haswell requires the sample mask to be set in this packet as well as
           * in 3DSTATE_SAMPLE_MASK; the values should match. */
          /* _NEW_BUFFERS, _NEW_MULTISAMPLE */
-
-         ps.KernelStartPointer1           = 0;
-         ps.KernelStartPointer2           = pipeline->ps_ksp0 + wm_prog_data->prog_offset_2;
+#if GEN_IS_HASWELL
+         ps.SampleMask                    = 0xff;
+#endif
       }
+
+      uint32_t samples = pCreateInfo->pMultisampleState ?
+                         pCreateInfo->pMultisampleState->rasterizationSamples : 1;
 
       /* FIXME-GEN7: This needs a lot more work, cf gen7 upload_wm_state(). */
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_WM), wm) {
@@ -312,6 +266,12 @@ genX(graphics_pipeline_create)(
          }
 
          wm.BarycentricInterpolationMode        = wm_prog_data->barycentric_interp_modes;
+
+         wm.MultisampleRasterizationMode        = samples > 1 ?
+                                                  MSRASTMODE_ON_PATTERN : MSRASTMODE_OFF_PIXEL;
+         wm.MultisampleDispatchMode             = ((samples == 1) ||
+                                                   (samples > 1 && wm_prog_data->persample_dispatch)) ?
+                                                  MSDISPMODE_PERSAMPLE : MSDISPMODE_PERPIXEL;
       }
    }
 

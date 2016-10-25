@@ -25,6 +25,8 @@
 
 #define NVC0_MAX_IMAGES 8
 
+#define NVC0_MAX_WINDOW_RECTANGLES 8
+
 struct nvc0_context;
 
 struct nvc0_blitter;
@@ -134,8 +136,7 @@ int nvc0_screen_tsc_alloc(struct nvc0_screen *, void *);
 int nve4_screen_compute_setup(struct nvc0_screen *, struct nouveau_pushbuf *);
 int nvc0_screen_compute_setup(struct nvc0_screen *, struct nouveau_pushbuf *);
 
-bool nvc0_screen_resize_tls_area(struct nvc0_screen *, uint32_t lpos,
-                                 uint32_t lneg, uint32_t cstack);
+int nvc0_screen_resize_text_area(struct nvc0_screen *, uint64_t);
 
 static inline void
 nvc0_resource_fence(struct nv04_resource *res, uint32_t flags)

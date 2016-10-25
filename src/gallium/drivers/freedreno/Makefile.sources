@@ -2,6 +2,10 @@ C_SOURCES := \
 	adreno_common.xml.h \
 	adreno_pm4.xml.h \
 	disasm.h \
+	freedreno_batch.c \
+	freedreno_batch.h \
+	freedreno_batch_cache.c \
+	freedreno_batch_cache.h \
 	freedreno_context.c \
 	freedreno_context.h \
 	freedreno_draw.c \

@@ -233,6 +233,10 @@ static void encode(struct rvce_encoder *enc)
 	RVCE_END();
 }
 
+void radeon_vce_50_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_desc *pic)
+{
+}
+
 void radeon_vce_50_init(struct rvce_encoder *enc)
 {
 	radeon_vce_40_2_2_init(enc);

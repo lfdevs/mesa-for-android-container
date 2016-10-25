@@ -29,6 +29,7 @@
 
 #include "anv_private.h"
 
+#include "common/gen_sample_positions.h"
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
@@ -58,7 +59,6 @@ genX(init_device_state)(struct anv_device *device)
    anv_batch_emit(&batch, GENX(3DSTATE_TE), ts);
    anv_batch_emit(&batch, GENX(3DSTATE_DS), ds);
 
-   anv_batch_emit(&batch, GENX(3DSTATE_STREAMOUT), so);
    anv_batch_emit(&batch, GENX(3DSTATE_AA_LINE_PARAMETERS), aa);
 
    anv_batch_emit(&batch, GENX(3DSTATE_DRAWING_RECTANGLE), rect) {
@@ -77,69 +77,12 @@ genX(init_device_state)(struct anv_device *device)
     * VkPhysicalDeviceFeatures::standardSampleLocations.
     */
    anv_batch_emit(&batch, GENX(3DSTATE_SAMPLE_PATTERN), sp) {
-      sp._1xSample0XOffset    = 0.5;
-      sp._1xSample0YOffset    = 0.5;
-      sp._2xSample0XOffset    = 0.25;
-      sp._2xSample0YOffset    = 0.25;
-      sp._2xSample1XOffset    = 0.75;
-      sp._2xSample1YOffset    = 0.75;
-      sp._4xSample0XOffset    = 0.375;
-      sp._4xSample0YOffset    = 0.125;
-      sp._4xSample1XOffset    = 0.875;
-      sp._4xSample1YOffset    = 0.375;
-      sp._4xSample2XOffset    = 0.125;
-      sp._4xSample2YOffset    = 0.625;
-      sp._4xSample3XOffset    = 0.625;
-      sp._4xSample3YOffset    = 0.875;
-      sp._8xSample0XOffset    = 0.5625;
-      sp._8xSample0YOffset    = 0.3125;
-      sp._8xSample1XOffset    = 0.4375;
-      sp._8xSample1YOffset    = 0.6875;
-      sp._8xSample2XOffset    = 0.8125;
-      sp._8xSample2YOffset    = 0.5625;
-      sp._8xSample3XOffset    = 0.3125;
-      sp._8xSample3YOffset    = 0.1875;
-      sp._8xSample4XOffset    = 0.1875;
-      sp._8xSample4YOffset    = 0.8125;
-      sp._8xSample5XOffset    = 0.0625;
-      sp._8xSample5YOffset    = 0.4375;
-      sp._8xSample6XOffset    = 0.6875;
-      sp._8xSample6YOffset    = 0.9375;
-      sp._8xSample7XOffset    = 0.9375;
-      sp._8xSample7YOffset    = 0.0625;
+      GEN_SAMPLE_POS_1X(sp._1xSample);
+      GEN_SAMPLE_POS_2X(sp._2xSample);
+      GEN_SAMPLE_POS_4X(sp._4xSample);
+      GEN_SAMPLE_POS_8X(sp._8xSample);
 #if GEN_GEN >= 9
-      sp._16xSample0XOffset   = 0.5625;
-      sp._16xSample0YOffset   = 0.5625;
-      sp._16xSample1XOffset   = 0.4375;
-      sp._16xSample1YOffset   = 0.3125;
-      sp._16xSample2XOffset   = 0.3125;
-      sp._16xSample2YOffset   = 0.6250;
-      sp._16xSample3XOffset   = 0.7500;
-      sp._16xSample3YOffset   = 0.4375;
-      sp._16xSample4XOffset   = 0.1875;
-      sp._16xSample4YOffset   = 0.3750;
-      sp._16xSample5XOffset   = 0.6250;
-      sp._16xSample5YOffset   = 0.8125;
-      sp._16xSample6XOffset   = 0.8125;
-      sp._16xSample6YOffset   = 0.6875;
-      sp._16xSample7XOffset   = 0.6875;
-      sp._16xSample7YOffset   = 0.1875;
-      sp._16xSample8XOffset   = 0.3750;
-      sp._16xSample8YOffset   = 0.8750;
-      sp._16xSample9XOffset   = 0.5000;
-      sp._16xSample9YOffset   = 0.0625;
-      sp._16xSample10XOffset  = 0.2500;
-      sp._16xSample10YOffset  = 0.1250;
-      sp._16xSample11XOffset  = 0.1250;
-      sp._16xSample11YOffset  = 0.7500;
-      sp._16xSample12XOffset  = 0.0000;
-      sp._16xSample12YOffset  = 0.5000;
-      sp._16xSample13XOffset  = 0.9375;
-      sp._16xSample13YOffset  = 0.2500;
-      sp._16xSample14XOffset  = 0.8750;
-      sp._16xSample14YOffset  = 0.9375;
-      sp._16xSample15XOffset  = 0.0625;
-      sp._16xSample15YOffset  = 0.0000;
+      GEN_SAMPLE_POS_16X(sp._16xSample);
 #endif
    }
 #endif
@@ -216,7 +159,7 @@ VkResult genX(CreateSampler)(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
 
-   sampler = anv_alloc2(&device->alloc, pAllocator, sizeof(*sampler), 8,
+   sampler = vk_alloc2(&device->alloc, pAllocator, sizeof(*sampler), 8,
                         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!sampler)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);

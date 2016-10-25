@@ -126,7 +126,7 @@ static inline bool isFloatType(DataType ty)
 
 static inline bool isSignedIntType(DataType ty)
 {
-   return (ty == TYPE_S8 || ty == TYPE_S16 || ty == TYPE_S32);
+   return (ty == TYPE_S8 || ty == TYPE_S16 || ty == TYPE_S32 || ty == TYPE_S64);
 }
 
 static inline bool isSignedType(DataType ty)
@@ -136,6 +136,7 @@ static inline bool isSignedType(DataType ty)
    case TYPE_U8:
    case TYPE_U16:
    case TYPE_U32:
+   case TYPE_U64:
    case TYPE_B96:
    case TYPE_B128:
       return false;
@@ -147,6 +148,7 @@ static inline bool isSignedType(DataType ty)
 static inline DataType intTypeToSigned(DataType ty)
 {
    switch (ty) {
+   case TYPE_U64: return TYPE_S64;
    case TYPE_U32: return TYPE_S32;
    case TYPE_U16: return TYPE_S16;
    case TYPE_U8: return TYPE_S8;

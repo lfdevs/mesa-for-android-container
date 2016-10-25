@@ -102,14 +102,7 @@ store_output(nir_builder *b, nir_ssa_def *value, int offset, unsigned comps)
 static void
 emit_quads_workaround(nir_builder *b, nir_block *block)
 {
-   /* We're going to insert a new if-statement in a predecessor of the end
-    * block.  This would normally create a new block (after the if) which
-    * would then become the predecessor of the end block, causing our set
-    * walking to get screwed up.  To avoid this, just emit a constant at
-    * the end of our current block, and insert the if before that.
-    */
    b->cursor = nir_after_block_before_jump(block);
-   b->cursor = nir_before_instr(nir_imm_int(b, 0)->parent_instr);
 
    nir_ssa_def *inner = load_output(b, 2, 0);
    nir_ssa_def *outer = load_output(b, 4, 1);
@@ -134,19 +127,28 @@ brw_nir_apply_tcs_quads_workaround(nir_shader *nir)
 {
    assert(nir->stage == MESA_SHADER_TESS_CTRL);
 
-   nir_foreach_function(func, nir) {
-      if (!func->impl)
-         continue;
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 
-      nir_builder b;
-      nir_builder_init(&b, func->impl);
+   nir_builder b;
+   nir_builder_init(&b, impl);
 
-      struct set_entry *entry;
-      set_foreach(func->impl->end_block->predecessors, entry) {
-         nir_block *pred = (nir_block *) entry->key;
-         emit_quads_workaround(&b, pred);
-      }
+   /* emit_quads_workaround() inserts an if statement into each block,
+    * which splits it in two.  This changes the set of predecessors of
+    * the end block.  We want to process the original set, so to be safe,
+    * save it off to an array first.
+    */
+   const unsigned num_end_preds = impl->end_block->predecessors->entries;
+   nir_block *end_preds[num_end_preds];
+   unsigned i = 0;
+   struct set_entry *entry;
 
-      nir_metadata_preserve(func->impl, 0);
+   set_foreach(impl->end_block->predecessors, entry) {
+      end_preds[i++] = (nir_block *) entry->key;
    }
+
+   for (i = 0; i < num_end_preds; i++) {
+      emit_quads_workaround(&b, end_preds[i]);
+   }
+
+   nir_metadata_preserve(impl, 0);
 }

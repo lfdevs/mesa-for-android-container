@@ -153,6 +153,107 @@ struct SimdTile <R8_UINT,R8_UINT>
     }
 };
 
+#if ENABLE_AVX512_SIMD16
+//////////////////////////////////////////////////////////////////////////
+/// SimdTile 8x2 for AVX-512
+//////////////////////////////////////////////////////////////////////////
+
+template<SWR_FORMAT HotTileFormat, SWR_FORMAT SrcOrDstFormat>
+struct SimdTile_16
+{
+    // SimdTile is SOA (e.g. rrrrrrrrrrrrrrrr gggggggggggggggg bbbbbbbbbbbbbbbb aaaaaaaaaaaaaaaa )
+    float color[FormatTraits<HotTileFormat>::numComps][KNOB_SIMD16_WIDTH];
+
+    //////////////////////////////////////////////////////////////////////////
+    /// @brief Retrieve color from simd.
+    /// @param index - linear index to color within simd.
+    /// @param outputColor - output color
+    INLINE void GetSwizzledColor(
+        uint32_t index,
+        float outputColor[4])
+    {
+        // SOA pattern for 8x2..
+        //   0 1 4 5 8 9 C D
+        //   2 3 6 7 A B E F
+        // The offset converts pattern to linear
+        static const uint32_t offset[KNOB_SIMD16_WIDTH] = { 0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15 };
+
+        for (uint32_t i = 0; i < FormatTraits<SrcOrDstFormat>::numComps; ++i)
+        {
+            outputColor[i] = this->color[FormatTraits<SrcOrDstFormat>::swizzle(i)][offset[index]];
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////////
+    /// @brief Retrieve color from simd.
+    /// @param index - linear index to color within simd.
+    /// @param outputColor - output color
+    INLINE void SetSwizzledColor(
+        uint32_t index,
+        const float src[4])
+    {
+        // SOA pattern for 8x2..
+        //   0 1 4 5 8 9 C D
+        //   2 3 6 7 A B E F
+        // The offset converts pattern to linear
+        static const uint32_t offset[KNOB_SIMD16_WIDTH] = { 0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15 };
+
+        for (uint32_t i = 0; i < FormatTraits<SrcOrDstFormat>::numComps; ++i)
+        {
+            this->color[i][offset[index]] = src[i];
+        }
+    }
+};
+
+template<>
+struct SimdTile_16 <R8_UINT, R8_UINT>
+{
+    // SimdTile is SOA (e.g. rrrrrrrrrrrrrrrr gggggggggggggggg bbbbbbbbbbbbbbbb aaaaaaaaaaaaaaaa )
+    uint8_t color[FormatTraits<R8_UINT>::numComps][KNOB_SIMD16_WIDTH];
+
+    //////////////////////////////////////////////////////////////////////////
+    /// @brief Retrieve color from simd.
+    /// @param index - linear index to color within simd.
+    /// @param outputColor - output color
+    INLINE void GetSwizzledColor(
+        uint32_t index,
+        float outputColor[4])
+    {
+        // SOA pattern for 8x2..
+        //   0 1 4 5 8 9 C D
+        //   2 3 6 7 A B E F
+        // The offset converts pattern to linear
+        static const uint32_t offset[KNOB_SIMD16_WIDTH] = { 0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15 };
+
+        for (uint32_t i = 0; i < FormatTraits<R8_UINT>::numComps; ++i)
+        {
+            uint32_t src = this->color[FormatTraits<R8_UINT>::swizzle(i)][offset[index]];
+            outputColor[i] = *(float*)&src;
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////////
+    /// @brief Retrieve color from simd.
+    /// @param index - linear index to color within simd.
+    /// @param outputColor - output color
+    INLINE void SetSwizzledColor(
+        uint32_t index,
+        const float src[4])
+    {
+        // SOA pattern for 8x2..
+        //   0 1 4 5 8 9 C D
+        //   2 3 6 7 A B E F
+        // The offset converts pattern to linear
+        static const uint32_t offset[KNOB_SIMD16_WIDTH] = { 0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15 };
+
+        for (uint32_t i = 0; i < FormatTraits<R8_UINT>::numComps; ++i)
+        {
+            this->color[i][offset[index]] = *(uint8_t*)&src[i];
+        }
+    }
+};
+
+#endif
 //////////////////////////////////////////////////////////////////////////
 /// @brief Computes lod offset for 1D surface at specified lod.
 /// @param baseWidth - width of basemip (mip 0).
@@ -565,6 +666,8 @@ uint32_t ComputeSurfaceOffset(uint32_t x, uint32_t y, uint32_t z, uint32_t array
     return (uint32_t) NULL;
 }
 
+typedef void*(*PFN_COMPUTESURFADDR)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, const SWR_SURFACE_STATE*);
+
 //////////////////////////////////////////////////////////////////////////
 /// @brief Computes surface address at the given location and lod
 /// @param x - x location in pixels
@@ -573,7 +676,7 @@ uint32_t ComputeSurfaceOffset(uint32_t x, uint32_t y, uint32_t z, uint32_t array
 /// @param array - array slice for 1D and 2D surfaces
 /// @param lod - level of detail
 /// @param pState - pointer to the surface state
-template<bool UseCachedOffsets>
+template<bool UseCachedOffsets, bool IsRead>
 INLINE
 void* ComputeSurfaceAddress(uint32_t x, uint32_t y, uint32_t z, uint32_t array, uint32_t sampleNum, uint32_t lod, const SWR_SURFACE_STATE *pState)
 {

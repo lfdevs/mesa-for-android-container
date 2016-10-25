@@ -36,109 +36,10 @@
 
 static void
 emit_ia_state(struct anv_pipeline *pipeline,
-              const VkPipelineInputAssemblyStateCreateInfo *info,
-              const struct anv_graphics_pipeline_create_info *extra)
+              const VkPipelineInputAssemblyStateCreateInfo *info)
 {
    anv_batch_emit(&pipeline->batch, GENX(3DSTATE_VF_TOPOLOGY), vft) {
       vft.PrimitiveTopologyType = pipeline->topology;
-   }
-}
-
-static void
-emit_rs_state(struct anv_pipeline *pipeline,
-              const VkPipelineRasterizationStateCreateInfo *info,
-              const VkPipelineMultisampleStateCreateInfo *ms_info,
-              const struct anv_graphics_pipeline_create_info *extra)
-{
-   uint32_t samples = 1;
-
-   if (ms_info)
-      samples = ms_info->rasterizationSamples;
-
-   struct GENX(3DSTATE_SF) sf = {
-      GENX(3DSTATE_SF_header),
-      .ViewportTransformEnable = !(extra && extra->use_rectlist),
-      .TriangleStripListProvokingVertexSelect = 0,
-      .LineStripListProvokingVertexSelect = 0,
-      .TriangleFanProvokingVertexSelect = 1,
-      .PointWidthSource = Vertex,
-      .PointWidth = 1.0,
-   };
-
-   /* FINISHME: VkBool32 rasterizerDiscardEnable; */
-
-   GENX(3DSTATE_SF_pack)(NULL, pipeline->gen8.sf, &sf);
-
-   struct GENX(3DSTATE_RASTER) raster = {
-      GENX(3DSTATE_RASTER_header),
-
-      /* For details on 3DSTATE_RASTER multisample state, see the BSpec table
-       * "Multisample Modes State".
-       */
-      .DXMultisampleRasterizationEnable = samples > 1,
-      .ForcedSampleCount = FSC_NUMRASTSAMPLES_0,
-      .ForceMultisampling = false,
-
-      .FrontWinding = vk_to_gen_front_face[info->frontFace],
-      .CullMode = vk_to_gen_cullmode[info->cullMode],
-      .FrontFaceFillMode = vk_to_gen_fillmode[info->polygonMode],
-      .BackFaceFillMode = vk_to_gen_fillmode[info->polygonMode],
-      .ScissorRectangleEnable = !(extra && extra->use_rectlist),
-#if GEN_GEN == 8
-      .ViewportZClipTestEnable = !pipeline->depth_clamp_enable,
-#else
-      /* GEN9+ splits ViewportZClipTestEnable into near and far enable bits */
-      .ViewportZFarClipTestEnable = !pipeline->depth_clamp_enable,
-      .ViewportZNearClipTestEnable = !pipeline->depth_clamp_enable,
-#endif
-      .GlobalDepthOffsetEnableSolid = info->depthBiasEnable,
-      .GlobalDepthOffsetEnableWireframe = info->depthBiasEnable,
-      .GlobalDepthOffsetEnablePoint = info->depthBiasEnable,
-   };
-
-   GENX(3DSTATE_RASTER_pack)(NULL, pipeline->gen8.raster, &raster);
-}
-
-static void
-emit_ms_state(struct anv_pipeline *pipeline,
-              const VkPipelineMultisampleStateCreateInfo *info)
-{
-   uint32_t samples = 1;
-   uint32_t log2_samples = 0;
-
-   /* From the Vulkan 1.0 spec:
-    *    If pSampleMask is NULL, it is treated as if the mask has all bits
-    *    enabled, i.e. no coverage is removed from fragments.
-    *
-    * 3DSTATE_SAMPLE_MASK.SampleMask is 16 bits.
-    */
-   uint32_t sample_mask = 0xffff;
-
-   if (info) {
-      samples = info->rasterizationSamples;
-      log2_samples = __builtin_ffs(samples) - 1;
-   }
-
-   if (info && info->pSampleMask)
-      sample_mask &= info->pSampleMask[0];
-
-   if (info && info->sampleShadingEnable)
-      anv_finishme("VkPipelineMultisampleStateCreateInfo::sampleShadingEnable");
-
-   anv_batch_emit(&pipeline->batch, GENX(3DSTATE_MULTISAMPLE), ms) {
-      /* The PRM says that this bit is valid only for DX9:
-       *
-       *    SW can choose to set this bit only for DX9 API. DX10/OGL API's
-       *    should not have any effect by setting or not setting this bit.
-       */
-      ms.PixelPositionOffsetEnable = false;
-
-      ms.PixelLocation = CENTER;
-      ms.NumberofMultisamples = log2_samples;
-   }
-
-   anv_batch_emit(&pipeline->batch, GENX(3DSTATE_SAMPLE_MASK), sm) {
-      sm.SampleMask = sample_mask;
    }
 }
 
@@ -147,12 +48,14 @@ genX(graphics_pipeline_create)(
     VkDevice                                    _device,
     struct anv_pipeline_cache *                 cache,
     const VkGraphicsPipelineCreateInfo*         pCreateInfo,
-    const struct anv_graphics_pipeline_create_info *extra,
     const VkAllocationCallbacks*                pAllocator,
     VkPipeline*                                 pPipeline)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_render_pass, pass, pCreateInfo->renderPass);
+   const struct anv_physical_device *physical_device =
+      &device->instance->physicalDevice;
+   const struct gen_device_info *devinfo = &physical_device->info;
    struct anv_subpass *subpass = &pass->subpasses[pCreateInfo->subpass];
    struct anv_pipeline *pipeline;
    VkResult result;
@@ -160,25 +63,25 @@ genX(graphics_pipeline_create)(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO);
 
-   pipeline = anv_alloc2(&device->alloc, pAllocator, sizeof(*pipeline), 8,
+   pipeline = vk_alloc2(&device->alloc, pAllocator, sizeof(*pipeline), 8,
                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (pipeline == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
    result = anv_pipeline_init(pipeline, device, cache,
-                              pCreateInfo, extra, pAllocator);
+                              pCreateInfo, pAllocator);
    if (result != VK_SUCCESS) {
-      anv_free2(&device->alloc, pAllocator, pipeline);
+      vk_free2(&device->alloc, pAllocator, pipeline);
       return result;
    }
 
    assert(pCreateInfo->pVertexInputState);
-   emit_vertex_input(pipeline, pCreateInfo->pVertexInputState, extra);
+   emit_vertex_input(pipeline, pCreateInfo->pVertexInputState);
    assert(pCreateInfo->pInputAssemblyState);
-   emit_ia_state(pipeline, pCreateInfo->pInputAssemblyState, extra);
+   emit_ia_state(pipeline, pCreateInfo->pInputAssemblyState);
    assert(pCreateInfo->pRasterizationState);
    emit_rs_state(pipeline, pCreateInfo->pRasterizationState,
-                 pCreateInfo->pMultisampleState, extra);
+                 pCreateInfo->pMultisampleState, pass, subpass);
    emit_ms_state(pipeline, pCreateInfo->pMultisampleState);
    emit_ds_state(pipeline, pCreateInfo->pDepthStencilState, pass, subpass);
    emit_cb_state(pipeline, pCreateInfo->pColorBlendState,
@@ -187,7 +90,8 @@ genX(graphics_pipeline_create)(
    emit_urb_setup(pipeline);
 
    emit_3dstate_clip(pipeline, pCreateInfo->pViewportState,
-                     pCreateInfo->pRasterizationState, extra);
+                     pCreateInfo->pRasterizationState);
+   emit_3dstate_streamout(pipeline, pCreateInfo->pRasterizationState);
 
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
    anv_batch_emit(&pipeline->batch, GENX(3DSTATE_WM), wm) {
@@ -239,7 +143,7 @@ genX(graphics_pipeline_create)(
          gs.DispatchGRFStartRegisterForURBData =
             gs_prog_data->base.base.dispatch_grf_start_reg;
 
-         gs.MaximumNumberofThreads  = device->info.max_gs_threads / 2 - 1;
+         gs.MaximumNumberofThreads  = devinfo->max_gs_threads / 2 - 1;
          gs.ControlDataHeaderSize   = gs_prog_data->control_data_header_size_hwords;
          gs.DispatchMode            = gs_prog_data->base.dispatch_mode;
          gs.StatisticsEnable        = true;
@@ -265,6 +169,7 @@ genX(graphics_pipeline_create)(
    }
 
    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
+   assert(!vs_prog_data->base.base.use_alt_mode);
    /* Skip the VUE header and position slots */
    offset = 1;
    length = (vs_prog_data->base.vue_map.num_slots + 1) / 2 - offset;
@@ -272,7 +177,7 @@ genX(graphics_pipeline_create)(
    uint32_t vs_start = pipeline->vs_simd8 != NO_KERNEL ? pipeline->vs_simd8 :
                                                          pipeline->vs_vec4;
 
-   if (vs_start == NO_KERNEL || (extra && extra->disable_vs)) {
+   if (vs_start == NO_KERNEL) {
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_VS), vs) {
          vs.FunctionEnable = false;
          /* Even if VS is disabled, SBE still gets the amount of
@@ -288,7 +193,7 @@ genX(graphics_pipeline_create)(
          vs.SamplerCount                  = 0;
 
          vs.BindingTableEntryCount =
-            vs_prog_data->base.base.binding_table.size_bytes / 4,
+            vs_prog_data->base.base.binding_table.size_bytes / 4;
 
          vs.ThreadDispatchPriority        = false;
          vs.FloatingPointMode             = IEEE754;
@@ -310,7 +215,7 @@ genX(graphics_pipeline_create)(
          vs.VertexURBEntryReadLength      = vs_prog_data->base.urb_read_length;
          vs.VertexURBEntryReadOffset      = 0;
 
-         vs.MaximumNumberofThreads        = device->info.max_vs_threads - 1;
+         vs.MaximumNumberofThreads        = devinfo->max_vs_threads - 1;
          vs.StatisticsEnable              = false;
          vs.SIMD8DispatchEnable           = pipeline->vs_simd8 != NO_KERNEL;
          vs.VertexCacheDisable            = false;
@@ -365,16 +270,13 @@ genX(graphics_pipeline_create)(
             wm_prog_data->dispatch_grf_start_reg_2;
       }
 
-      bool per_sample_ps = pCreateInfo->pMultisampleState &&
-                           pCreateInfo->pMultisampleState->sampleShadingEnable;
-
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_PS_EXTRA), ps) {
          ps.PixelShaderValid              = true;
          ps.PixelShaderKillsPixel         = wm_prog_data->uses_kill;
          ps.PixelShaderComputedDepthMode  = wm_prog_data->computed_depth_mode;
          ps.AttributeEnable               = wm_prog_data->num_varying_inputs > 0;
          ps.oMaskPresenttoRenderTarget    = wm_prog_data->uses_omask;
-         ps.PixelShaderIsPerSample        = per_sample_ps;
+         ps.PixelShaderIsPerSample        = wm_prog_data->persample_dispatch;
          ps.PixelShaderUsesSourceDepth    = wm_prog_data->uses_src_depth;
          ps.PixelShaderUsesSourceW        = wm_prog_data->uses_src_w;
 #if GEN_GEN >= 9

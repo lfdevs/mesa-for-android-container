@@ -126,6 +126,7 @@ struct pipe_video_buffer
    unsigned width;
    unsigned height;
    bool interlaced;
+   unsigned bind;
 
    /**
     * destroy this video buffer
@@ -133,17 +134,17 @@ struct pipe_video_buffer
    void (*destroy)(struct pipe_video_buffer *buffer);
 
    /**
-    * get a individual sampler view for each plane
+    * get an individual sampler view for each plane
     */
    struct pipe_sampler_view **(*get_sampler_view_planes)(struct pipe_video_buffer *buffer);
 
    /**
-    * get a individual sampler view for each component
+    * get an individual sampler view for each component
     */
    struct pipe_sampler_view **(*get_sampler_view_components)(struct pipe_video_buffer *buffer);
 
    /**
-    * get a individual surfaces for each plane
+    * get an individual surfaces for each plane
     */
    struct pipe_surface **(*get_surfaces)(struct pipe_video_buffer *buffer);
 

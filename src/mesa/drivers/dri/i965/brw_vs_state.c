@@ -39,7 +39,11 @@
 static void
 brw_upload_vs_unit(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_stage_state *stage_state = &brw->vs.base;
+   const struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   const struct brw_vue_prog_data *vue_prog_data =
+      brw_vue_prog_data(stage_state->prog_data);
 
    struct brw_vs_unit_state *vs;
 
@@ -48,8 +52,7 @@ brw_upload_vs_unit(struct brw_context *brw)
    memset(vs, 0, sizeof(*vs));
 
    /* BRW_NEW_PROGRAM_CACHE | BRW_NEW_VS_PROG_DATA */
-   vs->thread0.grf_reg_count =
-      ALIGN(brw->vs.prog_data->base.total_grf, 16) / 16 - 1;
+   vs->thread0.grf_reg_count = ALIGN(vue_prog_data->total_grf, 16) / 16 - 1;
    vs->thread0.kernel_start_pointer =
       brw_program_reloc(brw,
 			stage_state->state_offset +
@@ -57,7 +60,7 @@ brw_upload_vs_unit(struct brw_context *brw)
 			stage_state->prog_offset +
 			(vs->thread0.grf_reg_count << 1)) >> 6;
 
-   if (brw->vs.prog_data->base.base.use_alt_mode)
+   if (prog_data->use_alt_mode)
       vs->thread1.floating_point_mode = BRW_FLOATING_POINT_NON_IEEE_754;
    else
       vs->thread1.floating_point_mode = BRW_FLOATING_POINT_IEEE_754;
@@ -77,9 +80,9 @@ brw_upload_vs_unit(struct brw_context *brw)
    vs->thread1.single_program_flow = (brw->gen == 5);
 
    vs->thread1.binding_table_entry_count =
-      brw->vs.prog_data->base.base.binding_table.size_bytes / 4;
+      prog_data->binding_table.size_bytes / 4;
 
-   if (brw->vs.prog_data->base.base.total_scratch != 0) {
+   if (prog_data->total_scratch != 0) {
       vs->thread2.scratch_space_base_pointer =
 	 stage_state->scratch_bo->offset64 >> 10; /* reloc */
       vs->thread2.per_thread_scratch_space =
@@ -89,11 +92,9 @@ brw_upload_vs_unit(struct brw_context *brw)
       vs->thread2.per_thread_scratch_space = 0;
    }
 
-   vs->thread3.urb_entry_read_length = brw->vs.prog_data->base.urb_read_length;
-   vs->thread3.const_urb_entry_read_length
-      = brw->vs.prog_data->base.base.curb_read_length;
-   vs->thread3.dispatch_grf_start_reg =
-      brw->vs.prog_data->base.base.dispatch_grf_start_reg;
+   vs->thread3.urb_entry_read_length = vue_prog_data->urb_read_length;
+   vs->thread3.const_urb_entry_read_length = prog_data->curb_read_length;
+   vs->thread3.dispatch_grf_start_reg = prog_data->dispatch_grf_start_reg;
    vs->thread3.urb_entry_read_offset = 0;
 
    /* BRW_NEW_CURBE_OFFSETS */
@@ -137,7 +138,7 @@ brw_upload_vs_unit(struct brw_context *brw)
    vs->thread4.urb_entry_allocation_size = brw->urb.vsize - 1;
 
    vs->thread4.max_threads = CLAMP(brw->urb.nr_vs_entries / 2,
-				   1, brw->max_vs_threads) - 1;
+				   1, devinfo->max_vs_threads) - 1;
 
    if (brw->gen == 5)
       vs->vs5.sampler_count = 0; /* hardware requirement */
@@ -169,7 +170,7 @@ brw_upload_vs_unit(struct brw_context *brw)
    }
 
    /* Emit scratch space relocation */
-   if (brw->vs.prog_data->base.base.total_scratch != 0) {
+   if (prog_data->total_scratch != 0) {
       drm_intel_bo_emit_reloc(brw->batch.bo,
 			      stage_state->state_offset +
 			      offsetof(struct brw_vs_unit_state, thread2),

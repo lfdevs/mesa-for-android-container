@@ -32,6 +32,8 @@
 extern "C" {
 #endif
 
+#include "pipe/p_shader_tokens.h"
+
 struct tgsi_src_register;
 struct tgsi_full_src_register;
 struct tgsi_full_instruction;

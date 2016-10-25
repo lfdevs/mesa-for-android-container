@@ -53,7 +53,7 @@ struct _egl_sync
 
 extern EGLBoolean
 _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
-             const EGLint *attrib_list, const EGLAttrib *attrib_list64);
+             const EGLAttrib *attrib_list);
 
 
 extern EGLBoolean

@@ -46,6 +46,7 @@ public:
     void Init(uint32_t numEntries)
     {
         SWR_ASSERT(numEntries > 0);
+        SWR_ASSERT(((1ULL << 32) % numEntries) == 0, "%d is not evenly divisible into 2 ^ 32.  Wrap errors will occur!", numEntries);
         mNumEntries = numEntries;
         mpRingBuffer = (T*)AlignedMalloc(sizeof(T)*numEntries, 64);
         SWR_ASSERT(mpRingBuffer != nullptr);
@@ -67,6 +68,8 @@ public:
     INLINE void Enqueue()
     {
         mRingHead++; // There's only one producer.
+        // Assert to find wrap-around cases, NEVER ENABLE DURING CHECKIN!!
+        // SWR_REL_ASSERT(mRingHead);
     }
 
     INLINE void Dequeue()
@@ -81,22 +84,19 @@ public:
 
     INLINE bool IsFull()
     {
-        ///@note We don't handle wrap case due to using 64-bit indices.
-        ///      It would take 11 million years to wrap at 50,000 DCs per sec.
-        ///      If we used 32-bit indices then its about 23 hours to wrap.
-        uint64_t numEnqueued = GetHead() - GetTail();
+        uint32_t numEnqueued = GetHead() - GetTail();
         SWR_ASSERT(numEnqueued <= mNumEntries);
 
         return (numEnqueued == mNumEntries);
     }
 
-    INLINE uint64_t GetTail() volatile { return mRingTail; }
-    INLINE uint64_t GetHead() volatile { return mRingHead; }
+    INLINE uint32_t GetTail() volatile { return mRingTail; }
+    INLINE uint32_t GetHead() volatile { return mRingHead; }
 
 protected:
     T* mpRingBuffer;
     uint32_t mNumEntries;
 
-    OSALIGNLINE(volatile uint64_t) mRingHead;  // Consumer Counter
-    OSALIGNLINE(volatile uint64_t) mRingTail;  // Producer Counter
+    OSALIGNLINE(volatile uint32_t) mRingHead;  // Consumer Counter
+    OSALIGNLINE(volatile uint32_t) mRingTail;  // Producer Counter
 };

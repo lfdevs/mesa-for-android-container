@@ -43,19 +43,60 @@
 
 #include "util/ralloc.h"
 
+GLbitfield64
+brw_vs_outputs_written(struct brw_context *brw, struct brw_vs_prog_key *key,
+                       GLbitfield64 user_varyings)
+{
+   GLbitfield64 outputs_written = user_varyings;
+
+   if (key->copy_edgeflag) {
+      outputs_written |= BITFIELD64_BIT(VARYING_SLOT_EDGE);
+   }
+
+   if (brw->gen < 6) {
+      /* Put dummy slots into the VUE for the SF to put the replaced
+       * point sprite coords in.  We shouldn't need these dummy slots,
+       * which take up precious URB space, but it would mean that the SF
+       * doesn't get nice aligned pairs of input coords into output
+       * coords, which would be a pain to handle.
+       */
+      for (unsigned i = 0; i < 8; i++) {
+         if (key->point_coord_replace & (1 << i))
+            outputs_written |= BITFIELD64_BIT(VARYING_SLOT_TEX0 + i);
+      }
+
+      /* if back colors are written, allocate slots for front colors too */
+      if (outputs_written & BITFIELD64_BIT(VARYING_SLOT_BFC0))
+         outputs_written |= BITFIELD64_BIT(VARYING_SLOT_COL0);
+      if (outputs_written & BITFIELD64_BIT(VARYING_SLOT_BFC1))
+         outputs_written |= BITFIELD64_BIT(VARYING_SLOT_COL1);
+   }
+
+   /* In order for legacy clipping to work, we need to populate the clip
+    * distance varying slots whenever clipping is enabled, even if the vertex
+    * shader doesn't write to gl_ClipDistance.
+    */
+   if (key->nr_userclip_plane_consts > 0) {
+      outputs_written |= BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST0);
+      outputs_written |= BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1);
+   }
+
+   return outputs_written;
+}
+
 bool
 brw_codegen_vs_prog(struct brw_context *brw,
                     struct gl_shader_program *prog,
                     struct brw_vertex_program *vp,
                     struct brw_vs_prog_key *key)
 {
-   const struct brw_compiler *compiler = brw->intelScreen->compiler;
+   const struct brw_compiler *compiler = brw->screen->compiler;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    GLuint program_size;
    const GLuint *program;
    struct brw_vs_prog_data prog_data;
    struct brw_stage_prog_data *stage_prog_data = &prog_data.base.base;
    void *mem_ctx;
-   int i;
    struct brw_shader *vs = NULL;
    bool start_busy = false;
    double start_time = 0;
@@ -72,7 +113,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
    mem_ctx = ralloc_context(NULL);
 
    brw_assign_common_binding_table_offsets(MESA_SHADER_VERTEX,
-                                           brw->intelScreen->devinfo,
+                                           devinfo,
                                            prog, &vp->program.Base,
                                            &prog_data.base.base, 0);
 
@@ -108,11 +149,12 @@ brw_codegen_vs_prog(struct brw_context *brw,
                                  &prog_data.base.base);
    }
 
-   GLbitfield64 outputs_written = vp->program.Base.OutputsWritten;
-   prog_data.inputs_read = vp->program.Base.InputsRead;
+   uint64_t outputs_written =
+      brw_vs_outputs_written(brw, key,
+                             vp->program.Base.nir->info.outputs_written);
+   prog_data.inputs_read = vp->program.Base.nir->info.inputs_read;
 
    if (key->copy_edgeflag) {
-      outputs_written |= BITFIELD64_BIT(VARYING_SLOT_EDGE);
       prog_data.inputs_read |= VERT_BIT_EDGEFLAG;
    }
 
@@ -120,35 +162,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
       ((1 << vp->program.Base.CullDistanceArraySize) - 1) <<
       vp->program.Base.ClipDistanceArraySize;
 
-   if (brw->gen < 6) {
-      /* Put dummy slots into the VUE for the SF to put the replaced
-       * point sprite coords in.  We shouldn't need these dummy slots,
-       * which take up precious URB space, but it would mean that the SF
-       * doesn't get nice aligned pairs of input coords into output
-       * coords, which would be a pain to handle.
-       */
-      for (i = 0; i < 8; i++) {
-         if (key->point_coord_replace & (1 << i))
-            outputs_written |= BITFIELD64_BIT(VARYING_SLOT_TEX0 + i);
-      }
-
-      /* if back colors are written, allocate slots for front colors too */
-      if (outputs_written & BITFIELD64_BIT(VARYING_SLOT_BFC0))
-         outputs_written |= BITFIELD64_BIT(VARYING_SLOT_COL0);
-      if (outputs_written & BITFIELD64_BIT(VARYING_SLOT_BFC1))
-         outputs_written |= BITFIELD64_BIT(VARYING_SLOT_COL1);
-   }
-
-   /* In order for legacy clipping to work, we need to populate the clip
-    * distance varying slots whenever clipping is enabled, even if the vertex
-    * shader doesn't write to gl_ClipDistance.
-    */
-   if (key->nr_userclip_plane_consts > 0) {
-      outputs_written |= BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST0);
-      outputs_written |= BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1);
-   }
-
-   brw_compute_vue_map(brw->intelScreen->devinfo,
+   brw_compute_vue_map(devinfo,
                        &prog_data.base.vue_map, outputs_written,
                        prog ? prog->SeparateShader ||
                               prog->_LinkedShaders[MESA_SHADER_TESS_EVAL]
@@ -210,13 +224,13 @@ brw_codegen_vs_prog(struct brw_context *brw,
    /* Scratch space is used for register spilling */
    brw_alloc_stage_scratch(brw, &brw->vs.base,
                            prog_data.base.base.total_scratch,
-                           brw->max_vs_threads);
+                           devinfo->max_vs_threads);
 
    brw_upload_cache(&brw->cache, BRW_CACHE_VS_PROG,
 		    key, sizeof(struct brw_vs_prog_key),
 		    program, program_size,
 		    &prog_data, sizeof(prog_data),
-		    &brw->vs.base.prog_offset, &brw->vs.prog_data);
+		    &brw->vs.base.prog_offset, &brw->vs.base.prog_data);
    ralloc_free(mem_ctx);
 
    return true;
@@ -290,7 +304,7 @@ brw_vs_state_dirty(const struct brw_context *brw)
                           BRW_NEW_VS_ATTRIB_WORKAROUNDS);
 }
 
-static void
+void
 brw_vs_populate_key(struct brw_context *brw,
                     struct brw_vs_prog_key *key)
 {
@@ -299,7 +313,6 @@ brw_vs_populate_key(struct brw_context *brw,
    struct brw_vertex_program *vp =
       (struct brw_vertex_program *)brw->vertex_program;
    struct gl_program *prog = (struct gl_program *) brw->vertex_program;
-   int i;
 
    memset(key, 0, sizeof(*key));
 
@@ -316,33 +329,32 @@ brw_vs_populate_key(struct brw_context *brw,
          _mesa_logbase2(ctx->Transform.ClipPlanesEnabled) + 1;
    }
 
-   /* _NEW_POLYGON */
    if (brw->gen < 6) {
+      /* _NEW_POLYGON */
       key->copy_edgeflag = (ctx->Polygon.FrontMode != GL_FILL ||
                             ctx->Polygon.BackMode != GL_FILL);
+
+      /* _NEW_POINT */
+      if (ctx->Point.PointSprite) {
+         key->point_coord_replace = ctx->Point.CoordReplace & 0xff;
+      }
    }
 
-   if (prog->OutputsWritten & (VARYING_BIT_COL0 | VARYING_BIT_COL1 |
-                               VARYING_BIT_BFC0 | VARYING_BIT_BFC1)) {
+   if (prog->nir->info.outputs_written &
+       (VARYING_BIT_COL0 | VARYING_BIT_COL1 | VARYING_BIT_BFC0 |
+        VARYING_BIT_BFC1)) {
       /* _NEW_LIGHT | _NEW_BUFFERS */
       key->clamp_vertex_color = ctx->Light._ClampVertexColor;
    }
 
-   /* _NEW_POINT */
-   if (brw->gen < 6 && ctx->Point.PointSprite) {
-      for (i = 0; i < 8; i++) {
-	 if (ctx->Point.CoordReplace[i])
-            key->point_coord_replace |= (1 << i);
-      }
-   }
-
    /* _NEW_TEXTURE */
-   brw_populate_sampler_prog_key_data(ctx, prog, brw->vs.base.sampler_count,
-                                      &key->tex);
+   brw_populate_sampler_prog_key_data(ctx, prog, &key->tex);
 
    /* BRW_NEW_VS_ATTRIB_WORKAROUNDS */
-   memcpy(key->gl_attrib_wa_flags, brw->vb.attrib_wa_flags,
-          sizeof(brw->vb.attrib_wa_flags));
+   if (brw->gen < 8 && !brw->is_haswell) {
+      memcpy(key->gl_attrib_wa_flags, brw->vb.attrib_wa_flags,
+             sizeof(brw->vb.attrib_wa_flags));
+   }
 }
 
 void
@@ -362,13 +374,12 @@ brw_upload_vs_prog(struct brw_context *brw)
 
    if (!brw_search_cache(&brw->cache, BRW_CACHE_VS_PROG,
 			 &key, sizeof(key),
-			 &brw->vs.base.prog_offset, &brw->vs.prog_data)) {
+			 &brw->vs.base.prog_offset, &brw->vs.base.prog_data)) {
       bool success = brw_codegen_vs_prog(brw, current[MESA_SHADER_VERTEX],
                                          vp, &key);
       (void) success;
       assert(success);
    }
-   brw->vs.base.prog_data = &brw->vs.prog_data->base.base;
 }
 
 bool
@@ -379,7 +390,7 @@ brw_vs_precompile(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    struct brw_vs_prog_key key;
    uint32_t old_prog_offset = brw->vs.base.prog_offset;
-   struct brw_vs_prog_data *old_prog_data = brw->vs.prog_data;
+   struct brw_stage_prog_data *old_prog_data = brw->vs.base.prog_data;
    bool success;
 
    struct gl_vertex_program *vp = (struct gl_vertex_program *) prog;
@@ -390,13 +401,14 @@ brw_vs_precompile(struct gl_context *ctx,
    brw_setup_tex_for_precompile(brw, &key.tex, prog);
    key.program_string_id = bvp->id;
    key.clamp_vertex_color =
-      (prog->OutputsWritten & (VARYING_BIT_COL0 | VARYING_BIT_COL1 |
-                               VARYING_BIT_BFC0 | VARYING_BIT_BFC1));
+      (prog->nir->info.outputs_written &
+       (VARYING_BIT_COL0 | VARYING_BIT_COL1 | VARYING_BIT_BFC0 |
+        VARYING_BIT_BFC1));
 
    success = brw_codegen_vs_prog(brw, shader_prog, bvp, &key);
 
    brw->vs.base.prog_offset = old_prog_offset;
-   brw->vs.prog_data = old_prog_data;
+   brw->vs.base.prog_data = old_prog_data;
 
    return success;
 }

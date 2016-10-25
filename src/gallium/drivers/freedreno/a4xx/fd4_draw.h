@@ -48,13 +48,13 @@ static inline uint32_t DRAW4(enum pc_di_primtype prim_type,
 }
 
 static inline void
-fd4_draw(struct fd_context *ctx, struct fd_ringbuffer *ring,
+fd4_draw(struct fd_batch *batch, struct fd_ringbuffer *ring,
 		enum pc_di_primtype primtype,
 		enum pc_di_vis_cull_mode vismode,
 		enum pc_di_src_sel src_sel, uint32_t count,
 		uint32_t instances, enum a4xx_index_size idx_type,
 		uint32_t idx_size, uint32_t idx_offset,
-		struct fd_bo *idx_bo)
+		struct pipe_resource *idx_buffer)
 {
 	/* for debug after a lock up, write a unique counter value
 	 * to scratch7 for each draw, to make it easier to match up
@@ -64,31 +64,31 @@ fd4_draw(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	 */
 	emit_marker(ring, 7);
 
-	OUT_PKT3(ring, CP_DRAW_INDX_OFFSET, idx_bo ? 6 : 3);
+	OUT_PKT3(ring, CP_DRAW_INDX_OFFSET, idx_buffer ? 6 : 3);
 	if (vismode == USE_VISIBILITY) {
 		/* leave vis mode blank for now, it will be patched up when
 		 * we know if we are binning or not
 		 */
 		OUT_RINGP(ring, DRAW4(primtype, src_sel, idx_type, 0),
-				&ctx->draw_patches);
+				&batch->draw_patches);
 	} else {
 		OUT_RING(ring, DRAW4(primtype, src_sel, idx_type, vismode));
 	}
 	OUT_RING(ring, instances);         /* NumInstances */
 	OUT_RING(ring, count);             /* NumIndices */
-	if (idx_bo) {
+	if (idx_buffer) {
 		OUT_RING(ring, 0x0);           /* XXX */
-		OUT_RELOC(ring, idx_bo, idx_offset, 0, 0);
+		OUT_RELOC(ring, fd_resource(idx_buffer)->bo, idx_offset, 0, 0);
 		OUT_RING (ring, idx_size);
 	}
 
 	emit_marker(ring, 7);
 
-	fd_reset_wfi(ctx);
+	fd_reset_wfi(batch);
 }
 
 
-static inline enum pc_di_index_size
+static inline enum a4xx_index_size
 fd4_size2indextype(unsigned index_size)
 {
 	switch (index_size) {
@@ -101,36 +101,37 @@ fd4_size2indextype(unsigned index_size)
 	return INDEX4_SIZE_32_BIT;
 }
 static inline void
-fd4_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
+fd4_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 		enum pc_di_primtype primtype,
 		enum pc_di_vis_cull_mode vismode,
 		const struct pipe_draw_info *info)
 {
-	struct pipe_index_buffer *idx = &ctx->indexbuf;
-	struct fd_bo *idx_bo = NULL;
+	struct pipe_resource *idx_buffer = NULL;
 	enum a4xx_index_size idx_type;
 	enum pc_di_src_sel src_sel;
 	uint32_t idx_size, idx_offset;
 
 	if (info->indexed) {
+		struct pipe_index_buffer *idx = &batch->ctx->indexbuf;
+
 		assert(!idx->user_buffer);
 
-		idx_bo = fd_resource(idx->buffer)->bo;
+		idx_buffer = idx->buffer;
 		idx_type = fd4_size2indextype(idx->index_size);
 		idx_size = idx->index_size * info->count;
 		idx_offset = idx->offset + (info->start * idx->index_size);
 		src_sel = DI_SRC_SEL_DMA;
 	} else {
-		idx_bo = NULL;
+		idx_buffer = NULL;
 		idx_type = INDEX4_SIZE_32_BIT;
 		idx_size = 0;
 		idx_offset = 0;
 		src_sel = DI_SRC_SEL_AUTO_INDEX;
 	}
 
-	fd4_draw(ctx, ring, primtype, vismode, src_sel,
+	fd4_draw(batch, ring, primtype, vismode, src_sel,
 			info->count, info->instance_count,
-			idx_type, idx_size, idx_offset, idx_bo);
+			idx_type, idx_size, idx_offset, idx_buffer);
 }
 
 #endif /* FD4_DRAW_H_ */

@@ -34,8 +34,6 @@ static inline void
 nvc0_program_update_context_state(struct nvc0_context *nvc0,
                                   struct nvc0_program *prog, int stage)
 {
-   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-
    if (prog && prog->need_tls) {
       const uint32_t flags = NV_VRAM_DOMAIN(&nvc0->screen->base) | NOUVEAU_BO_RDWR;
       if (!nvc0->state.tls_required)
@@ -45,24 +43,6 @@ nvc0_program_update_context_state(struct nvc0_context *nvc0,
       if (nvc0->state.tls_required == (1 << stage))
          nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_TLS);
       nvc0->state.tls_required &= ~(1 << stage);
-   }
-
-   if (prog && prog->immd_size) {
-      BEGIN_NVC0(push, NVC0_3D(CB_SIZE), 3);
-      /* NOTE: may overlap code of a different shader */
-      PUSH_DATA (push, align(prog->immd_size, 0x100));
-      PUSH_DATAh(push, nvc0->screen->text->offset + prog->immd_base);
-      PUSH_DATA (push, nvc0->screen->text->offset + prog->immd_base);
-      BEGIN_NVC0(push, NVC0_3D(CB_BIND(stage)), 1);
-      PUSH_DATA (push, (14 << 4) | 1);
-
-      nvc0->state.c14_bound |= 1 << stage;
-   } else
-   if (nvc0->state.c14_bound & (1 << stage)) {
-      BEGIN_NVC0(push, NVC0_3D(CB_BIND(stage)), 1);
-      PUSH_DATA (push, (14 << 4) | 0);
-
-      nvc0->state.c14_bound &= ~(1 << stage);
    }
 }
 
@@ -80,7 +60,7 @@ nvc0_program_validate(struct nvc0_context *nvc0, struct nvc0_program *prog)
    }
 
    if (likely(prog->code_size))
-      return nvc0_program_upload_code(nvc0, prog);
+      return nvc0_program_upload(nvc0, prog);
    return true; /* stream output info only */
 }
 

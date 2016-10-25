@@ -65,8 +65,7 @@ _mesa_is_valid_generate_texture_mipmap_target(struct gl_context *ctx,
          || !ctx->Extensions.EXT_texture_array;
       break;
    case GL_TEXTURE_CUBE_MAP_ARRAY:
-      error = _mesa_is_gles(ctx) ||
-              !ctx->Extensions.ARB_texture_cube_map_array;
+      error = !_mesa_has_texture_cube_map_array(ctx);
       break;
    default:
       error = true;
@@ -95,7 +94,7 @@ _mesa_is_valid_generate_texture_mipmap_internalformat(struct gl_context *ctx,
              internalformat == GL_LUMINANCE || internalformat == GL_ALPHA ||
              internalformat == GL_BGRA_EXT ||
              (_mesa_is_es3_color_renderable(internalformat) &&
-              _mesa_is_es3_texture_filterable(internalformat));
+              _mesa_is_es3_texture_filterable(ctx, internalformat));
    }
 
    return (!_mesa_is_enum_format_integer(internalformat) &&

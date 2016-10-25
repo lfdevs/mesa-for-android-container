@@ -59,6 +59,10 @@ header = r"""
 
 #pragma once
 
+namespace SwrJit
+{
+    using namespace llvm;
+
 """
 
 """
@@ -120,7 +124,7 @@ def gen_llvm_type(type, name, postfix_name, is_pointer, is_pointer_pointer, is_a
     elif is_array:
         llvm_type = 'ArrayType::get(%s, %s)' % (llvm_type, array_count)
 
-    return ['    members.push_back( %s );    // %s' % (llvm_type, name)]
+    return ['        members.push_back( %s );    // %s' % (llvm_type, name)]
 
 """
 """
@@ -151,12 +155,12 @@ def gen_llvm_types(input_file, output_file):
                 struct_name = match.group(3).strip()
 
                 output_lines += [
-                    '//////////////////////////////////////////////////////////////////////////',
-                    '/// Generate LLVM type information for %s' % struct_name,
-                    'INLINE static StructType *Gen_%s%s(JitManager* pJitMgr)' % (struct_name, postfix_name),
-                    '{',
-                    '    LLVMContext& ctx = pJitMgr->mContext;',
-                    '    std::vector<Type*> members;',
+                    '    //////////////////////////////////////////////////////////////////////////',
+                    '    /// Generate LLVM type information for %s' % struct_name,
+                    '    INLINE static StructType *Gen_%s%s(JitManager* pJitMgr)' % (struct_name, postfix_name),
+                    '    {',
+                    '        LLVMContext& ctx = pJitMgr->mContext;',
+                    '        std::vector<Type*> members;',
                     '',
                 ]
 
@@ -309,16 +313,17 @@ def gen_llvm_types(input_file, output_file):
                     if (end_of_struct):
                         output_lines += [
                             '',
-                            '    return StructType::get(ctx, members, false);',
-                            '}',
+                            '        return StructType::get(ctx, members, false);',
+                            '    }',
                             '',
                         ]
 
                         for i in range(len(llvm_args)):
-                            output_lines.append('static const uint32_t %s%s_%s = %s;' % (struct_name, postfix_name, llvm_args[i], i))
+                            output_lines.append('    static const uint32_t %s%s_%s = %s;' % (struct_name, postfix_name, llvm_args[i], i))
 
                         output_lines.append('')
 
+    output_lines.append('}')
     output_file.write('\n'.join(output_lines) + '\n')
 
 """

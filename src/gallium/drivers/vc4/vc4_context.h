@@ -29,7 +29,7 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
-#include "util/u_slab.h"
+#include "util/slab.h"
 
 #define __user
 #include "vc4_drm.h"
@@ -49,7 +49,6 @@
 #define VC4_DIRTY_ZSA           (1 <<  2)
 #define VC4_DIRTY_FRAGTEX       (1 <<  3)
 #define VC4_DIRTY_VERTTEX       (1 <<  4)
-#define VC4_DIRTY_TEXSTATE      (1 <<  5)
 
 #define VC4_DIRTY_BLEND_COLOR   (1 <<  7)
 #define VC4_DIRTY_STENCIL_REF   (1 <<  8)
@@ -70,11 +69,13 @@
 #define VC4_DIRTY_COMPILED_CS   (1 << 23)
 #define VC4_DIRTY_COMPILED_VS   (1 << 24)
 #define VC4_DIRTY_COMPILED_FS   (1 << 25)
+#define VC4_DIRTY_FS_INPUTS     (1 << 26)
 
 struct vc4_sampler_view {
         struct pipe_sampler_view base;
         uint32_t texture_p0;
         uint32_t texture_p1;
+        bool force_first_level;
 };
 
 struct vc4_sampler_state {
@@ -87,7 +88,6 @@ struct vc4_texture_stateobj {
         unsigned num_textures;
         struct pipe_sampler_state *samplers[PIPE_MAX_SAMPLERS];
         unsigned num_samplers;
-        unsigned dirty_samplers;
 };
 
 struct vc4_shader_uniform_info {
@@ -124,6 +124,17 @@ struct vc4_ubo_range {
         uint32_t size;
 };
 
+struct vc4_fs_inputs {
+        /**
+         * Array of the meanings of the VPM inputs this shader needs.
+         *
+         * It doesn't include those that aren't part of the VPM, like
+         * point/line coordinates.
+         */
+        struct vc4_varying_slot *input_slots;
+        uint32_t num_inputs;
+};
+
 struct vc4_compiled_shader {
         uint64_t program_id;
         struct vc4_bo *bo;
@@ -153,13 +164,7 @@ struct vc4_compiled_shader {
         uint8_t vattr_offsets[9];
         uint8_t vattrs_live;
 
-        /**
-         * Array of the meanings of the VPM inputs this shader needs.
-         *
-         * It doesn't include those that aren't part of the VPM, like
-         * point/line coordinates.
-         */
-        struct vc4_varying_slot *input_slots;
+        const struct vc4_fs_inputs *fs_inputs;
 };
 
 struct vc4_program_stateobj {
@@ -185,12 +190,22 @@ struct vc4_vertex_stateobj {
         unsigned num_elements;
 };
 
-struct vc4_context {
-        struct pipe_context base;
+/* Hash table key for vc4->jobs */
+struct vc4_job_key {
+        struct pipe_surface *cbuf;
+        struct pipe_surface *zsbuf;
+};
 
-        int fd;
-        struct vc4_screen *screen;
-
+/**
+ * A complete bin/render job.
+ *
+ * This is all of the state necessary to submit a bin/render to the kernel.
+ * We want to be able to have multiple in progress at a time, so that we don't
+ * need to flush an existing CL just to switch to rendering to a new render
+ * target (which would mean reading back from the old render target when
+ * starting to render to it again).
+ */
+struct vc4_job {
         struct vc4_cl bcl;
         struct vc4_cl shader_rec;
         struct vc4_cl uniforms;
@@ -233,11 +248,6 @@ struct vc4_context {
         bool msaa;
 	/** @} */
 
-        struct util_slab_mempool transfer_pool;
-        struct blitter_context *blitter;
-
-        /** bitfield of VC4_DIRTY_* */
-        uint32_t dirty;
         /* Bitmask of PIPE_CLEAR_* of buffers that were cleared before the
          * first rendering.
          */
@@ -263,24 +273,56 @@ struct vc4_context {
          */
         uint32_t draw_calls_queued;
 
-        /** Maximum index buffer valid for the current shader_rec. */
-        uint32_t max_index;
-        /** Last index bias baked into the current shader_rec. */
-        uint32_t last_index_bias;
+        struct vc4_job_key key;
+};
+
+struct vc4_context {
+        struct pipe_context base;
+
+        int fd;
+        struct vc4_screen *screen;
+
+        /** The 3D rendering job for the currently bound FBO. */
+        struct vc4_job *job;
+
+        /* Map from struct vc4_job_key to the job for that FBO.
+         */
+        struct hash_table *jobs;
+
+        /**
+         * Map from vc4_resource to a job writing to that resource.
+         *
+         * Primarily for flushing jobs rendering to textures that are now
+         * being read from.
+         */
+        struct hash_table *write_jobs;
+
+        struct slab_child_pool transfer_pool;
+        struct blitter_context *blitter;
+
+        /** bitfield of VC4_DIRTY_* */
+        uint32_t dirty;
 
         struct primconvert_context *primconvert;
 
         struct hash_table *fs_cache, *vs_cache;
+        struct set *fs_inputs_set;
         uint32_t next_uncompiled_program_id;
         uint64_t next_compiled_program_id;
 
         struct ra_regs *regs;
         unsigned int reg_class_any;
         unsigned int reg_class_a_or_b_or_acc;
+        unsigned int reg_class_r0_r3;
         unsigned int reg_class_r4_or_a;
         unsigned int reg_class_a;
 
         uint8_t prim_mode;
+
+        /** Maximum index buffer valid for the current shader_rec. */
+        uint32_t max_index;
+        /** Last index bias baked into the current shader_rec. */
+        uint32_t last_index_bias;
 
         /** Seqno of the last CL flush's job. */
         uint64_t last_emit_seqno;
@@ -381,8 +423,10 @@ void vc4_program_init(struct pipe_context *pctx);
 void vc4_program_fini(struct pipe_context *pctx);
 void vc4_query_init(struct pipe_context *pctx);
 void vc4_simulator_init(struct vc4_screen *screen);
+void vc4_simulator_destroy(struct vc4_screen *screen);
 int vc4_simulator_flush(struct vc4_context *vc4,
-                        struct drm_vc4_submit_cl *args);
+                        struct drm_vc4_submit_cl *args,
+                        struct vc4_job *job);
 
 void vc4_set_shader_uniform_dirty_flags(struct vc4_compiled_shader *shader);
 void vc4_write_uniforms(struct vc4_context *vc4,
@@ -392,10 +436,16 @@ void vc4_write_uniforms(struct vc4_context *vc4,
 
 void vc4_flush(struct pipe_context *pctx);
 void vc4_job_init(struct vc4_context *vc4);
-void vc4_job_submit(struct vc4_context *vc4);
-void vc4_job_reset(struct vc4_context *vc4);
-bool vc4_cl_references_bo(struct pipe_context *pctx, struct vc4_bo *bo,
-                          bool include_reads);
+struct vc4_job *vc4_get_job(struct vc4_context *vc4,
+                            struct pipe_surface *cbuf,
+                            struct pipe_surface *zsbuf);
+struct vc4_job *vc4_get_job_for_fbo(struct vc4_context *vc4);
+
+void vc4_job_submit(struct vc4_context *vc4, struct vc4_job *job);
+void vc4_flush_jobs_writing_resource(struct vc4_context *vc4,
+                                     struct pipe_resource *prsc);
+void vc4_flush_jobs_reading_resource(struct vc4_context *vc4,
+                                     struct pipe_resource *prsc);
 void vc4_emit_state(struct pipe_context *pctx);
 void vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c);
 struct qpu_reg *vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c);
@@ -408,4 +458,5 @@ uint8_t vc4_get_tex_format(enum pipe_format f);
 const uint8_t *vc4_get_format_swizzle(enum pipe_format f);
 void vc4_init_query_functions(struct vc4_context *vc4);
 void vc4_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info);
+void vc4_blitter_save(struct vc4_context *vc4);
 #endif /* VC4_CONTEXT_H */

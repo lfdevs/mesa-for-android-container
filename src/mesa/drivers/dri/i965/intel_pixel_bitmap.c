@@ -47,7 +47,6 @@
 #include "intel_image.h"
 #include "intel_buffers.h"
 #include "intel_pixel.h"
-#include "intel_reg.h"
 
 
 #define FILE_DEBUG_FLAG DEBUG_PIXEL

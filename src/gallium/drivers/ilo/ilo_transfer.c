@@ -180,7 +180,6 @@ xfer_alloc_staging_res(struct ilo_transfer *xfer)
    templ.array_size = box->depth;
    templ.nr_samples = 1;
    templ.usage = PIPE_USAGE_STAGING;
-   templ.bind = PIPE_BIND_TRANSFER_WRITE;
 
    if (xfer->base.usage & PIPE_TRANSFER_FLUSH_EXPLICIT) {
       templ.flags = PIPE_RESOURCE_FLAG_MAP_PERSISTENT |
@@ -1111,7 +1110,7 @@ buf_pwrite(struct ilo_context *ilo, struct pipe_resource *res,
          templ = *res;
          templ.width0 = size;
          templ.usage = PIPE_USAGE_STAGING;
-         templ.bind = PIPE_BIND_TRANSFER_WRITE;
+         templ.bind = 0;
          staging = ilo->base.screen->resource_create(ilo->base.screen, &templ);
          if (staging) {
             const struct ilo_vma *staging_vma = ilo_resource_get_vma(staging);
@@ -1184,7 +1183,7 @@ ilo_transfer_unmap(struct pipe_context *pipe,
 
    pipe_resource_reference(&xfer->base.resource, NULL);
 
-   util_slab_free(&ilo->transfer_mempool, xfer);
+   slab_free_st(&ilo->transfer_mempool, xfer);
 }
 
 static void *
@@ -1200,7 +1199,7 @@ ilo_transfer_map(struct pipe_context *pipe,
    void *ptr;
 
    /* note that xfer is not zero'd */
-   xfer = util_slab_alloc(&ilo->transfer_mempool);
+   xfer = slab_alloc_st(&ilo->transfer_mempool);
    if (!xfer) {
       *transfer = NULL;
       return NULL;
@@ -1226,7 +1225,7 @@ ilo_transfer_map(struct pipe_context *pipe,
 
    if (!ptr) {
       pipe_resource_reference(&xfer->base.resource, NULL);
-      util_slab_free(&ilo->transfer_mempool, xfer);
+      slab_free_st(&ilo->transfer_mempool, xfer);
       *transfer = NULL;
       return NULL;
    }
@@ -1236,32 +1235,15 @@ ilo_transfer_map(struct pipe_context *pipe,
    return ptr;
 }
 
-static void
-ilo_transfer_inline_write(struct pipe_context *pipe,
-                          struct pipe_resource *res,
-                          unsigned level,
-                          unsigned usage,
-                          const struct pipe_box *box,
-                          const void *data,
-                          unsigned stride,
-                          unsigned layer_stride)
+static void ilo_buffer_subdata(struct pipe_context *pipe,
+                               struct pipe_resource *resource,
+                               unsigned usage, unsigned offset,
+                               unsigned size, const void *data)
 {
-   if (likely(res->target == PIPE_BUFFER) &&
-       !(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
-      /* they should specify just an offset and a size */
-      assert(level == 0);
-      assert(box->y == 0);
-      assert(box->z == 0);
-      assert(box->height == 1);
-      assert(box->depth == 1);
-
-      buf_pwrite(ilo_context(pipe), res,
-            usage, box->x, box->width, data);
-   }
-   else {
-      u_default_transfer_inline_write(pipe, res,
-            level, usage, box, data, stride, layer_stride);
-   }
+   if (usage & PIPE_TRANSFER_UNSYNCHRONIZED)
+      u_default_buffer_subdata(pipe, resource, usage, offset, size, data);
+   else
+      buf_pwrite(ilo_context(pipe), resource, usage, offset, size, data);
 }
 
 /**
@@ -1273,5 +1255,6 @@ ilo_init_transfer_functions(struct ilo_context *ilo)
    ilo->base.transfer_map = ilo_transfer_map;
    ilo->base.transfer_flush_region = ilo_transfer_flush_region;
    ilo->base.transfer_unmap = ilo_transfer_unmap;
-   ilo->base.transfer_inline_write = ilo_transfer_inline_write;
+   ilo->base.buffer_subdata = ilo_buffer_subdata;
+   ilo->base.texture_subdata = u_default_texture_subdata;
 }

@@ -485,6 +485,9 @@ typedef enum
    /* EXT_polygon_offset_clamp */
    OPCODE_POLYGON_OFFSET_CLAMP,
 
+   /* EXT_window_rectangles */
+   OPCODE_WINDOW_RECTANGLES,
+
    /* The following three are meta instructions */
    OPCODE_ERROR,                /* raise compiled-in error */
    OPCODE_CONTINUE,
@@ -1090,7 +1093,10 @@ _mesa_delete_list(struct gl_context *ctx, struct gl_display_list *dlist)
             free(get_pointer(&n[3]));
             n += InstSize[n[0].opcode];
             break;
-
+         case OPCODE_WINDOW_RECTANGLES:
+            free(get_pointer(&n[3]));
+            n += InstSize[n[0].opcode];
+            break;
          case OPCODE_CONTINUE:
             n = (Node *) get_pointer(&n[1]);
             free(block);
@@ -6020,7 +6026,7 @@ save_MultiTexCoord4fv(GLenum target, const GLfloat * v)
 
 
 /**
- * Record a GL_INVALID_VALUE error when a invalid vertex attribute
+ * Record a GL_INVALID_VALUE error when an invalid vertex attribute
  * index is found.
  */
 static void
@@ -7922,6 +7928,27 @@ save_UniformBlockBinding(GLuint prog, GLuint index, GLuint binding)
    }
 }
 
+/** GL_EXT_window_rectangles */
+static void GLAPIENTRY
+save_WindowRectanglesEXT(GLenum mode, GLsizei count, const GLint *box)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   Node *n;
+   ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
+   n = alloc_instruction(ctx, OPCODE_WINDOW_RECTANGLES, 2 + POINTER_DWORDS);
+   if (n) {
+      GLint *box_copy = NULL;
+
+      if (count > 0)
+         box_copy = memdup(box, sizeof(GLint) * 4 * count);
+      n[1].e = mode;
+      n[2].si = count;
+      save_pointer(&n[3], box_copy);
+   }
+   if (ctx->ExecuteFlag) {
+      CALL_WindowRectanglesEXT(ctx->Exec, (mode, count, box));
+   }
+}
 
 /**
  * Save an error-generating command into display list.
@@ -9122,6 +9149,12 @@ execute_list(struct gl_context *ctx, GLuint list)
             CALL_UniformBlockBinding(ctx->Exec, (n[1].ui, n[2].ui, n[3].ui));
             break;
 
+         /* GL_EXT_window_rectangles */
+         case OPCODE_WINDOW_RECTANGLES:
+            CALL_WindowRectanglesEXT(
+                  ctx->Exec, (n[1].e, n[2].si, get_pointer(&n[3])));
+            break;
+
          case OPCODE_CONTINUE:
             n = (Node *) get_pointer(&n[1]);
             break;
@@ -10018,6 +10051,9 @@ _mesa_initialize_save_table(const struct gl_context *ctx)
 
    /* GL_EXT_polygon_offset_clamp */
    SET_PolygonOffsetClampEXT(table, save_PolygonOffsetClampEXT);
+
+   /* GL_EXT_window_rectangles */
+   SET_WindowRectanglesEXT(table, save_WindowRectanglesEXT);
 }
 
 
@@ -10050,15 +10086,12 @@ print_list(struct gl_context *ctx, GLuint list, const char *fname)
 
    if (!islist(ctx, list)) {
       fprintf(f, "%u is not a display list ID\n", list);
-      return;
+      goto out;
    }
 
    dlist = _mesa_lookup_list(ctx, list);
    if (!dlist) {
-      if (fname) {
-         fclose(f);
-      }
-      return;
+      goto out;
    }
 
    n = dlist->Head;
@@ -10330,7 +10363,7 @@ print_list(struct gl_context *ctx, GLuint list, const char *fname)
                printf
                   ("ERROR IN DISPLAY LIST: opcode = %d, address = %p\n",
                    opcode, (void *) n);
-               return;
+               goto out;
             }
             else {
                fprintf(f, "command %d, %u operands\n", opcode,
@@ -10344,6 +10377,7 @@ print_list(struct gl_context *ctx, GLuint list, const char *fname)
       }
    }
 
+ out:
    fflush(f);
    if (fname)
       fclose(f);

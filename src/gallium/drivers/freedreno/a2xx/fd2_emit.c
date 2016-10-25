@@ -184,7 +184,7 @@ fd2_emit_state(struct fd_context *ctx, uint32_t dirty)
 {
 	struct fd2_blend_stateobj *blend = fd2_blend_stateobj(ctx->blend);
 	struct fd2_zsa_stateobj *zsa = fd2_zsa_stateobj(ctx->zsa);
-	struct fd_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = ctx->batch->draw;
 
 	/* NOTE: we probably want to eventually refactor this so each state
 	 * object handles emitting it's own state..  although the mapping of
@@ -250,10 +250,10 @@ fd2_emit_state(struct fd_context *ctx, uint32_t dirty)
 		OUT_RING(ring, xy2d(scissor->maxx,       /* PA_SC_WINDOW_SCISSOR_BR */
 				scissor->maxy));
 
-		ctx->max_scissor.minx = MIN2(ctx->max_scissor.minx, scissor->minx);
-		ctx->max_scissor.miny = MIN2(ctx->max_scissor.miny, scissor->miny);
-		ctx->max_scissor.maxx = MAX2(ctx->max_scissor.maxx, scissor->maxx);
-		ctx->max_scissor.maxy = MAX2(ctx->max_scissor.maxy, scissor->maxy);
+		ctx->batch->max_scissor.minx = MIN2(ctx->batch->max_scissor.minx, scissor->minx);
+		ctx->batch->max_scissor.miny = MIN2(ctx->batch->max_scissor.miny, scissor->miny);
+		ctx->batch->max_scissor.maxx = MAX2(ctx->batch->max_scissor.maxx, scissor->maxx);
+		ctx->batch->max_scissor.maxy = MAX2(ctx->batch->max_scissor.maxy, scissor->maxy);
 	}
 
 	if (dirty & FD_DIRTY_VIEWPORT) {
@@ -316,10 +316,8 @@ fd2_emit_state(struct fd_context *ctx, uint32_t dirty)
 /* emit per-context initialization:
  */
 void
-fd2_emit_setup(struct fd_context *ctx)
+fd2_emit_restore(struct fd_context *ctx, struct fd_ringbuffer *ring)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
-
 	OUT_PKT0(ring, REG_A2XX_TP0_CHICKEN, 1);
 	OUT_RING(ring, 0x00000002);
 
@@ -442,16 +440,12 @@ fd2_emit_setup(struct fd_context *ctx)
 	OUT_RING(ring, 0x00000000);        /* RB_BLEND_GREEN */
 	OUT_RING(ring, 0x00000000);        /* RB_BLEND_BLUE */
 	OUT_RING(ring, 0x000000ff);        /* RB_BLEND_ALPHA */
-
-	fd_ringbuffer_flush(ring);
-	fd_ringmarker_mark(ctx->draw_start);
 }
 
 static void
-fd2_emit_ib(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
-		struct fd_ringmarker *end)
+fd2_emit_ib(struct fd_ringbuffer *ring, struct fd_ringbuffer *target)
 {
-	__OUT_IB(ring, false, start, end);
+	__OUT_IB(ring, false, target);
 }
 
 void

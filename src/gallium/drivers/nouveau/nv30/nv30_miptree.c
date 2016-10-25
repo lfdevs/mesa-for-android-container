@@ -358,7 +358,6 @@ const struct u_resource_vtbl nv30_miptree_vtbl = {
    nv30_miptree_transfer_map,
    u_default_transfer_flush_region,
    nv30_miptree_transfer_unmap,
-   u_default_transfer_inline_write
 };
 
 struct pipe_resource *

@@ -27,10 +27,12 @@
 
 
 #include "util/u_debug.h"
+#include "util/u_cpu_detect.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_const.h"
 #include "lp_bld_format.h"
 #include "lp_bld_gather.h"
+#include "lp_bld_swizzle.h"
 #include "lp_bld_init.h"
 #include "lp_bld_intr.h"
 
@@ -132,6 +134,97 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
 }
 
 
+static LLVMValueRef
+lp_build_gather_avx2(struct gallivm_state *gallivm,
+                     unsigned length,
+                     unsigned src_width,
+                     unsigned dst_width,
+                     LLVMValueRef base_ptr,
+                     LLVMValueRef offsets)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMTypeRef dst_type = LLVMIntTypeInContext(gallivm->context, dst_width);
+   LLVMTypeRef dst_vec_type = LLVMVectorType(dst_type, length);
+   LLVMTypeRef src_type = LLVMIntTypeInContext(gallivm->context, src_width);
+   LLVMTypeRef src_vec_type = LLVMVectorType(src_type, length);
+   LLVMValueRef res;
+
+   assert(LLVMTypeOf(base_ptr) == LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0));
+
+   if (0) {
+      /*
+       * XXX: This will cause LLVM pre 3.7 to hang; it works on LLVM 3.8 but
+       * will not use the AVX2 gather instrinsics.  See
+       * http://lists.llvm.org/pipermail/llvm-dev/2016-January/094448.html
+       */
+      LLVMTypeRef i32_type = LLVMIntTypeInContext(gallivm->context, 32);
+      LLVMTypeRef i32_vec_type = LLVMVectorType(i32_type, length);
+      LLVMTypeRef i1_type = LLVMIntTypeInContext(gallivm->context, 1);
+      LLVMTypeRef i1_vec_type = LLVMVectorType(i1_type, length);
+      LLVMTypeRef src_ptr_type = LLVMPointerType(src_type, 0);
+      LLVMValueRef src_ptr;
+
+      base_ptr = LLVMBuildBitCast(builder, base_ptr, src_ptr_type, "");
+
+      /* Rescale offsets from bytes to elements */
+      LLVMValueRef scale = LLVMConstInt(i32_type, src_width/8, 0);
+      scale = lp_build_broadcast(gallivm, i32_vec_type, scale);
+      assert(LLVMTypeOf(offsets) == i32_vec_type);
+      offsets = LLVMBuildSDiv(builder, offsets, scale, "");
+
+      src_ptr = LLVMBuildGEP(builder, base_ptr, &offsets, 1, "vector-gep");
+
+      char intrinsic[64];
+      util_snprintf(intrinsic, sizeof intrinsic, "llvm.masked.gather.v%ui%u", length, src_width);
+      LLVMValueRef alignment = LLVMConstInt(i32_type, src_width/8, 0);
+      LLVMValueRef mask = LLVMConstAllOnes(i1_vec_type);
+      LLVMValueRef passthru = LLVMGetUndef(src_vec_type);
+
+      LLVMValueRef args[] = { src_ptr, alignment, mask, passthru };
+
+      res = lp_build_intrinsic(builder, intrinsic, src_vec_type, args, 4, 0);
+   } else {
+      assert(src_width == 32);
+
+      LLVMTypeRef i8_type = LLVMIntTypeInContext(gallivm->context, 8);
+
+      /*
+       * We should get the caller to give more type information so we can use
+       * the intrinsics for the right int/float domain.  Int should be the most
+       * common.
+       */
+      const char *intrinsic = NULL;
+      switch (length) {
+      case 4:
+         intrinsic = "llvm.x86.avx2.gather.d.d";
+         break;
+      case 8:
+         intrinsic = "llvm.x86.avx2.gather.d.d.256";
+         break;
+      default:
+         assert(0);
+      }
+
+      LLVMValueRef passthru = LLVMGetUndef(src_vec_type);
+      LLVMValueRef mask = LLVMConstAllOnes(src_vec_type);
+      mask = LLVMConstBitCast(mask, src_vec_type);
+      LLVMValueRef scale = LLVMConstInt(i8_type, 1, 0);
+
+      LLVMValueRef args[] = { passthru, base_ptr, offsets, mask, scale };
+
+      res = lp_build_intrinsic(builder, intrinsic, src_vec_type, args, 5, 0);
+   }
+
+   if (src_width > dst_width) {
+      res = LLVMBuildTrunc(builder, res, dst_vec_type, "");
+   } else if (src_width < dst_width) {
+      res = LLVMBuildZExt(builder, res, dst_vec_type, "");
+   }
+
+   return res;
+}
+
+
 /**
  * Gather elements from scatter positions in memory into a single vector.
  * Use for fetching texels from a texture.
@@ -170,6 +263,8 @@ lp_build_gather(struct gallivm_state *gallivm,
       return lp_build_gather_elem(gallivm, length,
                                   src_width, dst_width, aligned,
                                   base_ptr, offsets, 0, vector_justify);
+   } else if (util_cpu_caps.has_avx2 && src_width == 32 && (length == 4 || length == 8)) {
+      return lp_build_gather_avx2(gallivm, length, src_width, dst_width, base_ptr, offsets);
    } else {
       /* Vector */
 

@@ -36,10 +36,15 @@
 #include "main/macros.h"
 #include "main/mtypes.h"
 #include "main/arbprogram.h"
+#include "main/shaderapi.h"
 #include "program/arbprogparse.h"
 #include "program/program.h"
 #include "program/prog_print.h"
 
+#ifdef _MSC_VER
+#include <stdlib.h>
+#define PATH_MAX _MAX_PATH
+#endif
 
 /**
  * Bind a program (make it current)
@@ -377,6 +382,27 @@ _mesa_ProgramStringARB(GLenum target, GLenum format, GLsizei len,
          fprintf(stderr, "\n");
       }
       fflush(stderr);
+   }
+
+   /* Capture vp-*.shader_test/fp-*.shader_test files. */
+   const char *capture_path = _mesa_get_shader_capture_path();
+   if (capture_path != NULL) {
+      FILE *file;
+      char filename[PATH_MAX];
+      const char *shader_type =
+         target == GL_FRAGMENT_PROGRAM_ARB ? "fragment" : "vertex";
+
+      _mesa_snprintf(filename, sizeof(filename), "%s/%cp-%u.shader_test",
+                     capture_path, shader_type[0], base->Id);
+      file = fopen(filename, "w");
+      if (file) {
+         fprintf(file,
+                 "[require]\nGL_ARB_%s_program\n\n[%s program]\n%s\n",
+                 shader_type, shader_type, (const char *) string);
+         fclose(file);
+      } else {
+         _mesa_warning(ctx, "Failed to open %s", filename);
+      }
    }
 }
 

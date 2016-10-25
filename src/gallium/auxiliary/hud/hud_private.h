@@ -61,6 +61,7 @@ struct hud_pane {
    unsigned inner_height;
    float yscale;
    unsigned max_num_vertices;
+   unsigned last_line; /* index of the last describing line in the graph */
    uint64_t max_value;
    uint64_t initial_max_value;
    uint64_t ceiling;
@@ -101,5 +102,37 @@ boolean hud_driver_query_install(struct hud_batch_query_context **pbq,
                                  struct pipe_context *pipe, const char *name);
 void hud_batch_query_update(struct hud_batch_query_context *bq);
 void hud_batch_query_cleanup(struct hud_batch_query_context **pbq);
+
+#if HAVE_GALLIUM_EXTRA_HUD
+int hud_get_num_nics(bool displayhelp);
+#define NIC_DIRECTION_RX 1
+#define NIC_DIRECTION_TX 2
+#define NIC_RSSI_DBM     3
+void hud_nic_graph_install(struct hud_pane *pane, const char *nic_index,
+                           unsigned int mode);
+
+int hud_get_num_disks(bool displayhelp);
+#define DISKSTAT_RD 1
+#define DISKSTAT_WR 2
+void hud_diskstat_graph_install(struct hud_pane *pane, const char *dev_name,
+                                unsigned int mode);
+
+int hud_get_num_cpufreq(bool displayhelp);
+#define CPUFREQ_MINIMUM     1
+#define CPUFREQ_CURRENT     2
+#define CPUFREQ_MAXIMUM     3
+void hud_cpufreq_graph_install(struct hud_pane *pane, int cpu_index, unsigned int mode);
+#endif
+
+#if HAVE_LIBSENSORS
+int hud_get_num_sensors(bool displayhelp);
+#define SENSORS_TEMP_CURRENT     1
+#define SENSORS_TEMP_CRITICAL    2
+#define SENSORS_VOLTAGE_CURRENT  3
+#define SENSORS_CURRENT_CURRENT  4
+#define SENSORS_POWER_CURRENT    5
+void hud_sensors_temp_graph_install(struct hud_pane *pane, const char *dev_name,
+                                    unsigned int mode);
+#endif
 
 #endif

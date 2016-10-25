@@ -253,7 +253,8 @@ svga_remap_generic_index(int8_t remap_table[MAX_GENERIC_VARYING],
                          int generic_index);
 
 void
-svga_init_shader_key_common(const struct svga_context *svga, unsigned shader,
+svga_init_shader_key_common(const struct svga_context *svga,
+                            enum pipe_shader_type shader,
                             struct svga_compile_key *key);
 
 struct svga_shader_variant *
@@ -310,7 +311,7 @@ svga_shader_too_large(const struct svga_context *svga,
  * Convert from PIPE_SHADER_* to SVGA3D_SHADERTYPE_*
  */
 static inline SVGA3dShaderType
-svga_shader_type(unsigned shader)
+svga_shader_type(enum pipe_shader_type shader)
 {
    switch (shader) {
    case PIPE_SHADER_VERTEX:

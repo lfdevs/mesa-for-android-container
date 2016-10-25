@@ -30,6 +30,7 @@
 
 #define NINED3DSAMP_MINLOD (D3DSAMP_DMAPOFFSET + 1)
 #define NINED3DSAMP_SHADOW (D3DSAMP_DMAPOFFSET + 2)
+#define NINED3DSAMP_CUBETEX (D3DSAMP_DMAPOFFSET + 3)
 
 #define NINED3DRS_VSPOINTSIZE (D3DRS_BLENDOPALPHA + 1)
 #define NINED3DRS_RTMASK      (D3DRS_BLENDOPALPHA + 2)
@@ -42,7 +43,7 @@
 
 #define D3DRS_LAST       D3DRS_BLENDOPALPHA
 #define NINED3DRS_LAST   NINED3DRS_MULTISAMPLE /* 214 */
-#define NINED3DSAMP_LAST NINED3DSAMP_SHADOW /* 15 */
+#define NINED3DSAMP_LAST NINED3DSAMP_CUBETEX /* 16 */
 #define NINED3DTSS_LAST  D3DTSS_CONSTANT
 #define NINED3DTS_LAST   D3DTS_WORLDMATRIX(255)
 
@@ -84,8 +85,9 @@
 #define NINE_STATE_PS1X_SHADER (1 << 26)
 #define NINE_STATE_POINTSIZE_SHADER (1 << 27)
 #define NINE_STATE_MULTISAMPLE (1 << 28)
-#define NINE_STATE_ALL          0x1fffffff
-#define NINE_STATE_UNHANDLED   (1 << 29)
+#define NINE_STATE_SWVP        (1 << 29)
+#define NINE_STATE_ALL          0x3fffffff
+#define NINE_STATE_UNHANDLED   (1 << 30)
 
 #define NINE_STATE_COMMIT_DSA  (1 << 0)
 #define NINE_STATE_COMMIT_RASTERIZER (1 << 1)
@@ -101,6 +103,9 @@
 #define NINE_MAX_CONST_F   256
 #define NINE_MAX_CONST_I   16
 #define NINE_MAX_CONST_B   16
+#define NINE_MAX_CONST_F_SWVP   8192
+#define NINE_MAX_CONST_I_SWVP   2048
+#define NINE_MAX_CONST_B_SWVP   2048
 #define NINE_MAX_CONST_ALL 276 /* B consts count only 1/4 th */
 
 #define NINE_CONST_I_BASE(nconstf) \
@@ -137,10 +142,10 @@ struct nine_state
         uint16_t sampler[NINE_MAX_SAMPLERS];
         struct nine_range *vs_const_f;
         struct nine_range *ps_const_f;
-        uint16_t vs_const_i; /* NINE_MAX_CONST_I == 16 */
-        uint16_t ps_const_i;
-        uint16_t vs_const_b; /* NINE_MAX_CONST_B == 16 */
-        uint16_t ps_const_b;
+        struct nine_range *vs_const_i;
+        uint16_t ps_const_i; /* NINE_MAX_CONST_I == 16 */
+        struct nine_range *vs_const_b;
+        uint16_t ps_const_b; /* NINE_MAX_CONST_B == 16 */
         uint8_t ucp;
     } changed;
 
@@ -157,8 +162,9 @@ struct nine_state
      */
     struct NineVertexShader9 *vs;
     float *vs_const_f;
-    int    vs_const_i[NINE_MAX_CONST_I][4];
-    BOOL   vs_const_b[NINE_MAX_CONST_B];
+    float *vs_const_f_swvp;
+    int   *vs_const_i;
+    BOOL  *vs_const_b;
     float *vs_lconstf_temp;
     BOOL programmable_vs;
 
@@ -229,10 +235,17 @@ struct nine_state
         struct pipe_rasterizer_state rast;
         struct pipe_blend_state blend;
         struct pipe_constant_buffer cb_vs;
+        struct pipe_constant_buffer cb0_swvp;
+        struct pipe_constant_buffer cb1_swvp;
+        struct pipe_constant_buffer cb2_swvp;
+        struct pipe_constant_buffer cb3_swvp;
         struct pipe_constant_buffer cb_ps;
         struct pipe_constant_buffer cb_vs_ff;
         struct pipe_constant_buffer cb_ps_ff;
     } pipe;
+
+    /* sw */
+    struct pipe_transfer *transfers_so[4];
 };
 
 /* map D3DRS -> NINE_STATE_x
@@ -253,6 +266,15 @@ void nine_state_restore_non_cso(struct NineDevice9 *device);
 void nine_state_set_defaults(struct NineDevice9 *, const D3DCAPS9 *,
                              boolean is_reset);
 void nine_state_clear(struct nine_state *, const boolean device);
+
+void nine_state_init_sw(struct NineDevice9 *device);
+void nine_state_prepare_draw_sw(struct NineDevice9 *device,
+                                struct NineVertexDeclaration9 *vdecl_out,
+                                int start_vertice,
+                                int num_vertices,
+                                struct pipe_stream_output_info *so);
+void nine_state_after_draw_sw(struct NineDevice9 *device);
+void nine_state_destroy_sw(struct NineDevice9 *device);
 
 /* If @alloc is FALSE, the return value may be a const identity matrix.
  * Therefore, do not modify if you set alloc to FALSE !

@@ -28,9 +28,10 @@
 #include "core/object.hpp"
 #include "core/context.hpp"
 #include "core/module.hpp"
-#include "core/compiler.hpp"
 
 namespace clover {
+   typedef std::vector<std::pair<std::string, std::string>> header_map;
+
    class program : public ref_counter, public _cl_program {
    private:
       typedef adaptor_range<
@@ -40,25 +41,35 @@ namespace clover {
       program(clover::context &ctx,
               const std::string &source);
       program(clover::context &ctx,
-              const ref_vector<device> &devs,
-              const std::vector<module> &binaries);
+              const ref_vector<device> &devs = {},
+              const std::vector<module> &binaries = {});
 
       program(const program &prog) = delete;
       program &
       operator=(const program &prog) = delete;
 
-      void build(const ref_vector<device> &devs, const char *opts,
-                 const header_map &headers = {});
+      void compile(const ref_vector<device> &devs, const std::string &opts,
+                   const header_map &headers = {});
+      void link(const ref_vector<device> &devs, const std::string &opts,
+                const ref_vector<program> &progs);
 
       const bool has_source;
       const std::string &source() const;
 
       device_range devices() const;
 
-      const module &binary(const device &dev) const;
-      cl_build_status build_status(const device &dev) const;
-      std::string build_opts(const device &dev) const;
-      std::string build_log(const device &dev) const;
+      struct build {
+         build(const module &m = {}, const std::string &opts = {},
+               const std::string &log = {}) : binary(m), opts(opts), log(log) {}
+
+         cl_build_status status() const;
+
+         module binary;
+         std::string opts;
+         std::string log;
+      };
+
+      const build &build(const device &dev) const;
 
       const std::vector<module::symbol> &symbols() const;
 
@@ -70,9 +81,7 @@ namespace clover {
 
    private:
       std::vector<intrusive_ref<device>> _devices;
-      std::map<const device *, module> _binaries;
-      std::map<const device *, std::string> _logs;
-      std::map<const device *, std::string> _opts;
+      std::map<const device *, struct build> _builds;
       std::string _source;
       ref_counter _kernel_ref_counter;
    };

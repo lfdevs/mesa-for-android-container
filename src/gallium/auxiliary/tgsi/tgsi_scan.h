@@ -66,6 +66,7 @@ struct tgsi_shader_info
    int const_file_max[PIPE_MAX_CONSTANT_BUFFERS];
    unsigned samplers_declared; /**< bitmask of declared samplers */
    ubyte sampler_targets[PIPE_MAX_SHADER_SAMPLER_VIEWS];  /**< TGSI_TEXTURE_x values */
+   ubyte sampler_type[PIPE_MAX_SHADER_SAMPLER_VIEWS]; /**< TGSI_RETURN_TYPE_x */
 
    ubyte input_array_first[PIPE_MAX_SHADER_INPUTS];
    ubyte input_array_last[PIPE_MAX_SHADER_INPUTS];
@@ -149,10 +150,27 @@ struct tgsi_shader_info
    unsigned max_depth;
 };
 
+struct tgsi_array_info
+{
+   /** Whether an array with this ID was declared. */
+   bool declared;
+
+   /** The OR of all writemasks used to write to this array. */
+   ubyte writemask;
+
+   /** The range with which the array was declared. */
+   struct tgsi_declaration_range range;
+};
+
 extern void
 tgsi_scan_shader(const struct tgsi_token *tokens,
                  struct tgsi_shader_info *info);
 
+void
+tgsi_scan_arrays(const struct tgsi_token *tokens,
+                 unsigned file,
+                 unsigned max_array_id,
+                 struct tgsi_array_info *arrays);
 
 extern boolean
 tgsi_is_passthrough_shader(const struct tgsi_token *tokens);

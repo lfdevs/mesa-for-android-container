@@ -46,7 +46,7 @@ r600_create_so_target(struct pipe_context *ctx,
 		return NULL;
 	}
 
-	u_suballocator_alloc(rctx->allocator_so_filled_size, 4,
+	u_suballocator_alloc(rctx->allocator_zeroed_memory, 4, 4,
 			     &t->buf_filled_size_offset,
 			     (struct pipe_resource**)&t->buf_filled_size);
 	if (!t->buf_filled_size) {
@@ -70,7 +70,7 @@ static void r600_so_target_destroy(struct pipe_context *ctx,
 {
 	struct r600_so_target *t = (struct r600_so_target*)target;
 	pipe_resource_reference(&t->b.buffer, NULL);
-	pipe_resource_reference((struct pipe_resource**)&t->buf_filled_size, NULL);
+	r600_resource_reference(&t->buf_filled_size, NULL);
 	FREE(t);
 }
 
@@ -218,7 +218,7 @@ static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r
 			radeon_emit(cs, va >> 8);			/* BUFFER_BASE */
 
 			r600_emit_reloc(rctx, &rctx->gfx, r600_resource(t[i]->b.buffer),
-					RADEON_USAGE_WRITE, RADEON_PRIO_RINGS_STREAMOUT);
+					RADEON_USAGE_WRITE, RADEON_PRIO_SHADER_RW_BUFFER);
 
 			/* R7xx requires this packet after updating BUFFER_BASE.
 			 * Without this, R7xx locks up. */
@@ -228,7 +228,7 @@ static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r
 				radeon_emit(cs, va >> 8);
 
 				r600_emit_reloc(rctx, &rctx->gfx, r600_resource(t[i]->b.buffer),
-						RADEON_USAGE_WRITE, RADEON_PRIO_RINGS_STREAMOUT);
+						RADEON_USAGE_WRITE, RADEON_PRIO_SHADER_RW_BUFFER);
 			}
 		}
 

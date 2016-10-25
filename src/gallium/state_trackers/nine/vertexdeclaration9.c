@@ -24,12 +24,12 @@
 #include "vertexbuffer9.h"
 #include "device9.h"
 #include "nine_helpers.h"
+#include "nine_shader.h"
 
 #include "pipe/p_format.h"
 #include "pipe/p_context.h"
 #include "util/u_math.h"
 #include "util/u_format.h"
-#include "util/u_box.h"
 #include "translate/translate.h"
 
 #define DBG_CHANNEL DBG_VERTEXDECLARATION
@@ -409,6 +409,53 @@ NineVertexDeclaration9_new_from_fvf( struct NineDevice9 *pDevice,
     NINE_DEVICE_CHILD_NEW(VertexDeclaration9, ppOut, /* args */ pDevice, elems);
 }
 
+void
+NineVertexDeclaration9_FillStreamOutputInfo(
+    struct NineVertexDeclaration9 *This,
+    struct nine_vs_output_info *ShaderOutputsInfo,
+    unsigned numOutputs,
+    struct pipe_stream_output_info *so )
+{
+    unsigned so_outputs = 0;
+    int i, j;
+
+    memset(so, 0, sizeof(struct pipe_stream_output_info));
+
+    for (i = 0; i < numOutputs; i++) {
+        BYTE output_semantic = ShaderOutputsInfo[i].output_semantic;
+        unsigned output_semantic_index = ShaderOutputsInfo[i].output_semantic_index;
+
+        for (j = 0; j < This->nelems; j++) {
+            if ((This->decls[j].Usage == output_semantic ||
+                 (output_semantic == D3DDECLUSAGE_POSITION &&
+                  This->decls[j].Usage == D3DDECLUSAGE_POSITIONT)) &&
+                This->decls[j].UsageIndex == output_semantic_index) {
+                DBG("Matching %s %d: o%d -> %d\n",
+                    nine_declusage_name(nine_d3d9_to_nine_declusage(This->decls[j].Usage, 0)),
+                    This->decls[j].UsageIndex, i, j);
+                so->output[so_outputs].register_index = ShaderOutputsInfo[i].output_index;
+                so->output[so_outputs].start_component = 0;
+                if (ShaderOutputsInfo[i].mask & 8)
+                    so->output[so_outputs].num_components = 4;
+                else if (ShaderOutputsInfo[i].mask & 4)
+                    so->output[so_outputs].num_components = 3;
+                else if (ShaderOutputsInfo[i].mask & 2)
+                    so->output[so_outputs].num_components = 2;
+                else
+                    so->output[so_outputs].num_components = 1;
+                so->output[so_outputs].output_buffer = 0;
+                so->output[so_outputs].dst_offset = so_outputs * sizeof(float[4])/4;
+                so->output[so_outputs].stream = 0;
+                so_outputs++;
+                break;
+            }
+        }
+    }
+
+    so->num_outputs = so_outputs;
+    so->stride[0] = so_outputs * sizeof(float[4])/4;
+}
+
 /* ProcessVertices runs stream output into a temporary buffer to capture
  * all outputs.
  * Now we have to convert them to the format and order set by the vertex
@@ -422,17 +469,13 @@ NineVertexDeclaration9_ConvertStreamOutput(
     struct NineVertexBuffer9 *pDstBuf,
     UINT DestIndex,
     UINT VertexCount,
-    struct pipe_resource *pSrcBuf,
+    void *pSrcBuf,
     const struct pipe_stream_output_info *so )
 {
-    struct pipe_context *pipe = This->base.device->pipe;
-    struct pipe_transfer *transfer = NULL;
     struct translate *translate;
     struct translate_key transkey;
-    struct pipe_box box;
     HRESULT hr;
     unsigned i;
-    void *src_map;
     void *dst_map;
 
     DBG("This=%p pDstBuf=%p DestIndex=%u VertexCount=%u pSrcBuf=%p so=%p\n",
@@ -477,20 +520,12 @@ NineVertexDeclaration9_ConvertStreamOutput(
     if (FAILED(hr))
         goto out;
 
-    src_map = pipe->transfer_map(pipe, pSrcBuf, 0, PIPE_TRANSFER_READ, &box,
-                                 &transfer);
-    if (!src_map) {
-        hr = D3DERR_DRIVERINTERNALERROR;
-        goto out;
-    }
-    translate->set_buffer(translate, 0, src_map, so->stride[0], ~0);
+    translate->set_buffer(translate, 0, pSrcBuf, so->stride[0] * 4, ~0);
 
     translate->run(translate, 0, VertexCount, 0, 0, dst_map);
 
     NineVertexBuffer9_Unlock(pDstBuf);
 out:
-    if (transfer)
-        pipe->transfer_unmap(pipe, transfer);
     translate->release(translate); /* TODO: cache these */
     return hr;
 }

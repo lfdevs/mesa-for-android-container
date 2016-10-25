@@ -54,7 +54,7 @@ VkResult anv_CreateQueryPool(
    }
 
    slot_size = sizeof(struct anv_query_pool_slot);
-   pool = anv_alloc2(&device->alloc, pAllocator, sizeof(*pool), 8,
+   pool = vk_alloc2(&device->alloc, pAllocator, sizeof(*pool), 8,
                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (pool == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -74,7 +74,7 @@ VkResult anv_CreateQueryPool(
    return VK_SUCCESS;
 
  fail:
-   anv_free2(&device->alloc, pAllocator, pool);
+   vk_free2(&device->alloc, pAllocator, pool);
 
    return result;
 }
@@ -89,7 +89,7 @@ void anv_DestroyQueryPool(
 
    anv_gem_munmap(pool->bo.map, pool->bo.size);
    anv_gem_close(device, pool->bo.gem_handle);
-   anv_free2(&device->alloc, pAllocator, pool);
+   vk_free2(&device->alloc, pAllocator, pool);
 }
 
 VkResult anv_GetQueryPoolResults(

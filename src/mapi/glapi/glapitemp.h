@@ -5748,7 +5748,7 @@ KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_616)(GLenum target, GLenum attach
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_616)(GLenum target, GLenum attachment, GLuint texture, GLint level)
 {
     (void) target; (void) attachment; (void) texture; (void) level;
-   DISPATCH(FramebufferTexture, (target, attachment, texture, level), (F, "glFramebufferTextureOES(0x%x, 0x%x, %d, %d);\n", target, attachment, texture, level));
+   DISPATCH(FramebufferTexture, (target, attachment, texture, level), (F, "glFramebufferTextureEXT(0x%x, 0x%x, %d, %d);\n", target, attachment, texture, level));
 }
 
 KEYWORD1 void KEYWORD2 NAME(GetBufferParameteri64v)(GLenum target, GLenum pname, GLint64 * params)
@@ -6800,6 +6800,12 @@ KEYWORD1 void KEYWORD2 NAME(BlendEquationSeparateiARB)(GLuint buf, GLenum modeRG
    DISPATCH(BlendEquationSeparateiARB, (buf, modeRGB, modeA), (F, "glBlendEquationSeparateiARB(%d, 0x%x, 0x%x);\n", buf, modeRGB, modeA));
 }
 
+KEYWORD1 void KEYWORD2 NAME(BlendEquationSeparatei)(GLuint buf, GLenum modeRGB, GLenum modeA)
+{
+    (void) buf; (void) modeRGB; (void) modeA;
+   DISPATCH(BlendEquationSeparateiARB, (buf, modeRGB, modeA), (F, "glBlendEquationSeparatei(%d, 0x%x, 0x%x);\n", buf, modeRGB, modeA));
+}
+
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_711)(GLuint buf, GLenum modeRGB, GLenum modeA);
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_711)(GLuint buf, GLenum modeRGB, GLenum modeA)
@@ -6812,6 +6818,12 @@ KEYWORD1 void KEYWORD2 NAME(BlendEquationiARB)(GLuint buf, GLenum mode)
 {
     (void) buf; (void) mode;
    DISPATCH(BlendEquationiARB, (buf, mode), (F, "glBlendEquationiARB(%d, 0x%x);\n", buf, mode));
+}
+
+KEYWORD1 void KEYWORD2 NAME(BlendEquationi)(GLuint buf, GLenum mode)
+{
+    (void) buf; (void) mode;
+   DISPATCH(BlendEquationiARB, (buf, mode), (F, "glBlendEquationi(%d, 0x%x);\n", buf, mode));
 }
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_712)(GLuint buf, GLenum mode);
@@ -6828,6 +6840,12 @@ KEYWORD1 void KEYWORD2 NAME(BlendFuncSeparateiARB)(GLuint buf, GLenum srcRGB, GL
    DISPATCH(BlendFuncSeparateiARB, (buf, srcRGB, dstRGB, srcA, dstA), (F, "glBlendFuncSeparateiARB(%d, 0x%x, 0x%x, 0x%x, 0x%x);\n", buf, srcRGB, dstRGB, srcA, dstA));
 }
 
+KEYWORD1 void KEYWORD2 NAME(BlendFuncSeparatei)(GLuint buf, GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha)
+{
+    (void) buf; (void) sfactorRGB; (void) dfactorRGB; (void) sfactorAlpha; (void) dfactorAlpha;
+   DISPATCH(BlendFuncSeparateiARB, (buf, sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha), (F, "glBlendFuncSeparatei(%d, 0x%x, 0x%x, 0x%x, 0x%x);\n", buf, sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha));
+}
+
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_713)(GLuint buf, GLenum srcRGB, GLenum dstRGB, GLenum srcA, GLenum dstA);
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_713)(GLuint buf, GLenum srcRGB, GLenum dstRGB, GLenum srcA, GLenum dstA)
@@ -6840,6 +6858,12 @@ KEYWORD1 void KEYWORD2 NAME(BlendFunciARB)(GLuint buf, GLenum src, GLenum dst)
 {
     (void) buf; (void) src; (void) dst;
    DISPATCH(BlendFunciARB, (buf, src, dst), (F, "glBlendFunciARB(%d, 0x%x, 0x%x);\n", buf, src, dst));
+}
+
+KEYWORD1 void KEYWORD2 NAME(BlendFunci)(GLuint buf, GLenum sfactor, GLenum dfactor)
+{
+    (void) buf; (void) sfactor; (void) dfactor;
+   DISPATCH(BlendFunciARB, (buf, sfactor, dfactor), (F, "glBlendFunci(%d, 0x%x, 0x%x);\n", buf, sfactor, dfactor));
 }
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_714)(GLuint buf, GLenum src, GLenum dst);
@@ -7474,12 +7498,18 @@ KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_800)(GLenum pname, const GLfloat 
    DISPATCH(PatchParameterfv, (pname, values), (F, "glPatchParameterfv(0x%x, %p);\n", pname, (const void *) values));
 }
 
+KEYWORD1 void KEYWORD2 NAME(PatchParameteri)(GLenum pname, GLint value)
+{
+    (void) pname; (void) value;
+   DISPATCH(PatchParameteri, (pname, value), (F, "glPatchParameteri(0x%x, %d);\n", pname, value));
+}
+
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_801)(GLenum pname, GLint value);
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_801)(GLenum pname, GLint value)
 {
     (void) pname; (void) value;
-   DISPATCH(PatchParameteri, (pname, value), (F, "glPatchParameteri(0x%x, %d);\n", pname, value));
+   DISPATCH(PatchParameteri, (pname, value), (F, "glPatchParameteriEXT(0x%x, %d);\n", pname, value));
 }
 
 KEYWORD1 void KEYWORD2 NAME(BindTransformFeedback)(GLenum target, GLuint id)
@@ -7737,10 +7767,26 @@ KEYWORD1 void KEYWORD2 NAME(GetFloati_v)(GLenum target, GLuint index, GLfloat * 
    DISPATCH(GetFloati_v, (target, index, data), (F, "glGetFloati_v(0x%x, %d, %p);\n", target, index, (const void *) data));
 }
 
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_834)(GLenum target, GLuint index, GLfloat * data);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_834)(GLenum target, GLuint index, GLfloat * data)
+{
+    (void) target; (void) index; (void) data;
+   DISPATCH(GetFloati_v, (target, index, data), (F, "glGetFloati_vOES(0x%x, %d, %p);\n", target, index, (const void *) data));
+}
+
 KEYWORD1 void KEYWORD2 NAME(ScissorArrayv)(GLuint first, GLsizei count, const int * v)
 {
     (void) first; (void) count; (void) v;
    DISPATCH(ScissorArrayv, (first, count, v), (F, "glScissorArrayv(%d, %d, %p);\n", first, count, (const void *) v));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_835)(GLuint first, GLsizei count, const int * v);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_835)(GLuint first, GLsizei count, const int * v)
+{
+    (void) first; (void) count; (void) v;
+   DISPATCH(ScissorArrayv, (first, count, v), (F, "glScissorArrayvOES(%d, %d, %p);\n", first, count, (const void *) v));
 }
 
 KEYWORD1 void KEYWORD2 NAME(ScissorIndexed)(GLuint index, GLint left, GLint bottom, GLsizei width, GLsizei height)
@@ -7749,10 +7795,26 @@ KEYWORD1 void KEYWORD2 NAME(ScissorIndexed)(GLuint index, GLint left, GLint bott
    DISPATCH(ScissorIndexed, (index, left, bottom, width, height), (F, "glScissorIndexed(%d, %d, %d, %d, %d);\n", index, left, bottom, width, height));
 }
 
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_836)(GLuint index, GLint left, GLint bottom, GLsizei width, GLsizei height);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_836)(GLuint index, GLint left, GLint bottom, GLsizei width, GLsizei height)
+{
+    (void) index; (void) left; (void) bottom; (void) width; (void) height;
+   DISPATCH(ScissorIndexed, (index, left, bottom, width, height), (F, "glScissorIndexedOES(%d, %d, %d, %d, %d);\n", index, left, bottom, width, height));
+}
+
 KEYWORD1 void KEYWORD2 NAME(ScissorIndexedv)(GLuint index, const GLint * v)
 {
     (void) index; (void) v;
    DISPATCH(ScissorIndexedv, (index, v), (F, "glScissorIndexedv(%d, %p);\n", index, (const void *) v));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_837)(GLuint index, const GLint * v);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_837)(GLuint index, const GLint * v)
+{
+    (void) index; (void) v;
+   DISPATCH(ScissorIndexedv, (index, v), (F, "glScissorIndexedvOES(%d, %p);\n", index, (const void *) v));
 }
 
 KEYWORD1 void KEYWORD2 NAME(ViewportArrayv)(GLuint first, GLsizei count, const GLfloat * v)
@@ -7761,10 +7823,26 @@ KEYWORD1 void KEYWORD2 NAME(ViewportArrayv)(GLuint first, GLsizei count, const G
    DISPATCH(ViewportArrayv, (first, count, v), (F, "glViewportArrayv(%d, %d, %p);\n", first, count, (const void *) v));
 }
 
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_838)(GLuint first, GLsizei count, const GLfloat * v);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_838)(GLuint first, GLsizei count, const GLfloat * v)
+{
+    (void) first; (void) count; (void) v;
+   DISPATCH(ViewportArrayv, (first, count, v), (F, "glViewportArrayvOES(%d, %d, %p);\n", first, count, (const void *) v));
+}
+
 KEYWORD1 void KEYWORD2 NAME(ViewportIndexedf)(GLuint index, GLfloat x, GLfloat y, GLfloat w, GLfloat h)
 {
     (void) index; (void) x; (void) y; (void) w; (void) h;
    DISPATCH(ViewportIndexedf, (index, x, y, w, h), (F, "glViewportIndexedf(%d, %f, %f, %f, %f);\n", index, x, y, w, h));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_839)(GLuint index, GLfloat x, GLfloat y, GLfloat w, GLfloat h);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_839)(GLuint index, GLfloat x, GLfloat y, GLfloat w, GLfloat h)
+{
+    (void) index; (void) x; (void) y; (void) w; (void) h;
+   DISPATCH(ViewportIndexedf, (index, x, y, w, h), (F, "glViewportIndexedfOES(%d, %f, %f, %f, %f);\n", index, x, y, w, h));
 }
 
 KEYWORD1 void KEYWORD2 NAME(ViewportIndexedfv)(GLuint index, const GLfloat * v)
@@ -7773,16 +7851,29 @@ KEYWORD1 void KEYWORD2 NAME(ViewportIndexedfv)(GLuint index, const GLfloat * v)
    DISPATCH(ViewportIndexedfv, (index, v), (F, "glViewportIndexedfv(%d, %p);\n", index, (const void *) v));
 }
 
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_840)(GLuint index, const GLfloat * v);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_840)(GLuint index, const GLfloat * v)
+{
+    (void) index; (void) v;
+   DISPATCH(ViewportIndexedfv, (index, v), (F, "glViewportIndexedfvOES(%d, %p);\n", index, (const void *) v));
+}
+
 KEYWORD1 GLenum KEYWORD2 NAME(GetGraphicsResetStatusARB)(void)
 {
    RETURN_DISPATCH(GetGraphicsResetStatusARB, (), (F, "glGetGraphicsResetStatusARB();\n"));
+}
+
+KEYWORD1 GLenum KEYWORD2 NAME(GetGraphicsResetStatus)(void)
+{
+   RETURN_DISPATCH(GetGraphicsResetStatusARB, (), (F, "glGetGraphicsResetStatus();\n"));
 }
 
 KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_841)(void);
 
 KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_841)(void)
 {
-   RETURN_DISPATCH(GetGraphicsResetStatusARB, (), (F, "glGetGraphicsResetStatus();\n"));
+   RETURN_DISPATCH(GetGraphicsResetStatusARB, (), (F, "glGetGraphicsResetStatusKHR();\n"));
 }
 
 KEYWORD1 void KEYWORD2 NAME(GetnColorTableARB)(GLenum target, GLenum format, GLenum type, GLsizei bufSize, GLvoid * table)
@@ -7881,12 +7972,18 @@ KEYWORD1 void KEYWORD2 NAME(GetnUniformfvARB)(GLuint program, GLint location, GL
    DISPATCH(GetnUniformfvARB, (program, location, bufSize, params), (F, "glGetnUniformfvARB(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
 }
 
+KEYWORD1 void KEYWORD2 NAME(GetnUniformfv)(GLuint program, GLint location, GLsizei bufSize, GLfloat * params)
+{
+    (void) program; (void) location; (void) bufSize; (void) params;
+   DISPATCH(GetnUniformfvARB, (program, location, bufSize, params), (F, "glGetnUniformfv(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
+}
+
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_857)(GLuint program, GLint location, GLsizei bufSize, GLfloat * params);
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_857)(GLuint program, GLint location, GLsizei bufSize, GLfloat * params)
 {
     (void) program; (void) location; (void) bufSize; (void) params;
-   DISPATCH(GetnUniformfvARB, (program, location, bufSize, params), (F, "glGetnUniformfv(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
+   DISPATCH(GetnUniformfvARB, (program, location, bufSize, params), (F, "glGetnUniformfvKHR(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
 }
 
 KEYWORD1 void KEYWORD2 NAME(GetnUniformivARB)(GLuint program, GLint location, GLsizei bufSize, GLint * params)
@@ -7895,12 +7992,18 @@ KEYWORD1 void KEYWORD2 NAME(GetnUniformivARB)(GLuint program, GLint location, GL
    DISPATCH(GetnUniformivARB, (program, location, bufSize, params), (F, "glGetnUniformivARB(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
 }
 
+KEYWORD1 void KEYWORD2 NAME(GetnUniformiv)(GLuint program, GLint location, GLsizei bufSize, GLint * params)
+{
+    (void) program; (void) location; (void) bufSize; (void) params;
+   DISPATCH(GetnUniformivARB, (program, location, bufSize, params), (F, "glGetnUniformiv(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
+}
+
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_858)(GLuint program, GLint location, GLsizei bufSize, GLint * params);
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_858)(GLuint program, GLint location, GLsizei bufSize, GLint * params)
 {
     (void) program; (void) location; (void) bufSize; (void) params;
-   DISPATCH(GetnUniformivARB, (program, location, bufSize, params), (F, "glGetnUniformiv(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
+   DISPATCH(GetnUniformivARB, (program, location, bufSize, params), (F, "glGetnUniformivKHR(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
 }
 
 KEYWORD1 void KEYWORD2 NAME(GetnUniformuivARB)(GLuint program, GLint location, GLsizei bufSize, GLuint * params)
@@ -7909,12 +8012,18 @@ KEYWORD1 void KEYWORD2 NAME(GetnUniformuivARB)(GLuint program, GLint location, G
    DISPATCH(GetnUniformuivARB, (program, location, bufSize, params), (F, "glGetnUniformuivARB(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
 }
 
+KEYWORD1 void KEYWORD2 NAME(GetnUniformuiv)(GLuint program, GLint location, GLsizei bufSize, GLuint * params)
+{
+    (void) program; (void) location; (void) bufSize; (void) params;
+   DISPATCH(GetnUniformuivARB, (program, location, bufSize, params), (F, "glGetnUniformuiv(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
+}
+
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_859)(GLuint program, GLint location, GLsizei bufSize, GLuint * params);
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_859)(GLuint program, GLint location, GLsizei bufSize, GLuint * params)
 {
     (void) program; (void) location; (void) bufSize; (void) params;
-   DISPATCH(GetnUniformuivARB, (program, location, bufSize, params), (F, "glGetnUniformuiv(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
+   DISPATCH(GetnUniformuivARB, (program, location, bufSize, params), (F, "glGetnUniformuivKHR(%d, %d, %d, %p);\n", program, location, bufSize, (const void *) params));
 }
 
 KEYWORD1 void KEYWORD2 NAME(ReadnPixelsARB)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, GLvoid * data)
@@ -7923,12 +8032,18 @@ KEYWORD1 void KEYWORD2 NAME(ReadnPixelsARB)(GLint x, GLint y, GLsizei width, GLs
    DISPATCH(ReadnPixelsARB, (x, y, width, height, format, type, bufSize, data), (F, "glReadnPixelsARB(%d, %d, %d, %d, 0x%x, 0x%x, %d, %p);\n", x, y, width, height, format, type, bufSize, (const void *) data));
 }
 
+KEYWORD1 void KEYWORD2 NAME(ReadnPixels)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, GLvoid * data)
+{
+    (void) x; (void) y; (void) width; (void) height; (void) format; (void) type; (void) bufSize; (void) data;
+   DISPATCH(ReadnPixelsARB, (x, y, width, height, format, type, bufSize, data), (F, "glReadnPixels(%d, %d, %d, %d, 0x%x, 0x%x, %d, %p);\n", x, y, width, height, format, type, bufSize, (const void *) data));
+}
+
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_860)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, GLvoid * data);
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_860)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, GLvoid * data)
 {
     (void) x; (void) y; (void) width; (void) height; (void) format; (void) type; (void) bufSize; (void) data;
-   DISPATCH(ReadnPixelsARB, (x, y, width, height, format, type, bufSize, data), (F, "glReadnPixels(%d, %d, %d, %d, 0x%x, 0x%x, %d, %p);\n", x, y, width, height, format, type, bufSize, (const void *) data));
+   DISPATCH(ReadnPixelsARB, (x, y, width, height, format, type, bufSize, data), (F, "glReadnPixelsKHR(%d, %d, %d, %d, 0x%x, 0x%x, %d, %p);\n", x, y, width, height, format, type, bufSize, (const void *) data));
 }
 
 KEYWORD1 void KEYWORD2 NAME(DrawArraysInstancedBaseInstance)(GLenum mode, GLint first, GLsizei count, GLsizei primcount, GLuint baseinstance)
@@ -8301,236 +8416,236 @@ KEYWORD1 void KEYWORD2 NAME(BindVertexBuffers)(GLuint first, GLsizei count, cons
    DISPATCH(BindVertexBuffers, (first, count, buffers, offsets, strides), (F, "glBindVertexBuffers(%d, %d, %p, %p, %p);\n", first, count, (const void *) buffers, (const void *) offsets, (const void *) strides));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_912)(GLenum mode, GLintptr indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_912)(GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z, GLuint group_size_x, GLuint group_size_y, GLuint group_size_z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_912)(GLenum mode, GLintptr indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_912)(GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z, GLuint group_size_x, GLuint group_size_y, GLuint group_size_z)
+{
+    (void) num_groups_x; (void) num_groups_y; (void) num_groups_z; (void) group_size_x; (void) group_size_y; (void) group_size_z;
+   DISPATCH(DispatchComputeGroupSizeARB, (num_groups_x, num_groups_y, num_groups_z, group_size_x, group_size_y, group_size_z), (F, "glDispatchComputeGroupSizeARB(%d, %d, %d, %d, %d, %d);\n", num_groups_x, num_groups_y, num_groups_z, group_size_x, group_size_y, group_size_z));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_913)(GLenum mode, GLintptr indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_913)(GLenum mode, GLintptr indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride)
 {
     (void) mode; (void) indirect; (void) drawcount; (void) maxdrawcount; (void) stride;
    DISPATCH(MultiDrawArraysIndirectCountARB, (mode, indirect, drawcount, maxdrawcount, stride), (F, "glMultiDrawArraysIndirectCountARB(0x%x, %d, %d, %d, %d);\n", mode, indirect, drawcount, maxdrawcount, stride));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_913)(GLenum mode, GLenum type, GLintptr indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_914)(GLenum mode, GLenum type, GLintptr indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_913)(GLenum mode, GLenum type, GLintptr indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_914)(GLenum mode, GLenum type, GLintptr indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride)
 {
     (void) mode; (void) type; (void) indirect; (void) drawcount; (void) maxdrawcount; (void) stride;
    DISPATCH(MultiDrawElementsIndirectCountARB, (mode, type, indirect, drawcount, maxdrawcount, stride), (F, "glMultiDrawElementsIndirectCountARB(0x%x, 0x%x, %d, %d, %d, %d);\n", mode, type, indirect, drawcount, maxdrawcount, stride));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_914)(GLenum origin, GLenum depth);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_915)(GLenum origin, GLenum depth);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_914)(GLenum origin, GLenum depth)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_915)(GLenum origin, GLenum depth)
 {
     (void) origin; (void) depth;
    DISPATCH(ClipControl, (origin, depth), (F, "glClipControl(0x%x, 0x%x);\n", origin, depth));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_915)(GLuint unit, GLuint texture);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_916)(GLuint unit, GLuint texture);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_915)(GLuint unit, GLuint texture)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_916)(GLuint unit, GLuint texture)
 {
     (void) unit; (void) texture;
    DISPATCH(BindTextureUnit, (unit, texture), (F, "glBindTextureUnit(%d, %d);\n", unit, texture));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_916)(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_917)(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_916)(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_917)(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)
 {
     (void) readFramebuffer; (void) drawFramebuffer; (void) srcX0; (void) srcY0; (void) srcX1; (void) srcY1; (void) dstX0; (void) dstY0; (void) dstX1; (void) dstY1; (void) mask; (void) filter;
    DISPATCH(BlitNamedFramebuffer, (readFramebuffer, drawFramebuffer, srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter), (F, "glBlitNamedFramebuffer(%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, 0x%x);\n", readFramebuffer, drawFramebuffer, srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter));
 }
 
-KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_917)(GLuint framebuffer, GLenum target);
+KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_918)(GLuint framebuffer, GLenum target);
 
-KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_917)(GLuint framebuffer, GLenum target)
+KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_918)(GLuint framebuffer, GLenum target)
 {
     (void) framebuffer; (void) target;
    RETURN_DISPATCH(CheckNamedFramebufferStatus, (framebuffer, target), (F, "glCheckNamedFramebufferStatus(%d, 0x%x);\n", framebuffer, target));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_918)(GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const GLvoid * data);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_919)(GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const GLvoid * data);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_918)(GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const GLvoid * data)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_919)(GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const GLvoid * data)
 {
     (void) buffer; (void) internalformat; (void) format; (void) type; (void) data;
    DISPATCH(ClearNamedBufferData, (buffer, internalformat, format, type, data), (F, "glClearNamedBufferData(%d, 0x%x, 0x%x, 0x%x, %p);\n", buffer, internalformat, format, type, (const void *) data));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_919)(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const GLvoid * data);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_920)(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const GLvoid * data);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_919)(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const GLvoid * data)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_920)(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const GLvoid * data)
 {
     (void) buffer; (void) internalformat; (void) offset; (void) size; (void) format; (void) type; (void) data;
    DISPATCH(ClearNamedBufferSubData, (buffer, internalformat, offset, size, format, type, data), (F, "glClearNamedBufferSubData(%d, 0x%x, %d, %d, 0x%x, 0x%x, %p);\n", buffer, internalformat, offset, size, format, type, (const void *) data));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_920)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_921)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_920)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_921)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)
 {
     (void) framebuffer; (void) buffer; (void) drawbuffer; (void) depth; (void) stencil;
    DISPATCH(ClearNamedFramebufferfi, (framebuffer, buffer, drawbuffer, depth, stencil), (F, "glClearNamedFramebufferfi(%d, 0x%x, %d, %f, %d);\n", framebuffer, buffer, drawbuffer, depth, stencil));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_921)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_922)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_921)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_922)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat * value)
 {
     (void) framebuffer; (void) buffer; (void) drawbuffer; (void) value;
    DISPATCH(ClearNamedFramebufferfv, (framebuffer, buffer, drawbuffer, value), (F, "glClearNamedFramebufferfv(%d, 0x%x, %d, %p);\n", framebuffer, buffer, drawbuffer, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_922)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_923)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_922)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_923)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLint * value)
 {
     (void) framebuffer; (void) buffer; (void) drawbuffer; (void) value;
    DISPATCH(ClearNamedFramebufferiv, (framebuffer, buffer, drawbuffer, value), (F, "glClearNamedFramebufferiv(%d, 0x%x, %d, %p);\n", framebuffer, buffer, drawbuffer, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_923)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLuint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_924)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLuint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_923)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLuint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_924)(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLuint * value)
 {
     (void) framebuffer; (void) buffer; (void) drawbuffer; (void) value;
    DISPATCH(ClearNamedFramebufferuiv, (framebuffer, buffer, drawbuffer, value), (F, "glClearNamedFramebufferuiv(%d, 0x%x, %d, %p);\n", framebuffer, buffer, drawbuffer, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_924)(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const GLvoid * data);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_925)(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const GLvoid * data);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_924)(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const GLvoid * data)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_925)(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const GLvoid * data)
 {
     (void) texture; (void) level; (void) xoffset; (void) width; (void) format; (void) imageSize; (void) data;
    DISPATCH(CompressedTextureSubImage1D, (texture, level, xoffset, width, format, imageSize, data), (F, "glCompressedTextureSubImage1D(%d, %d, %d, %d, 0x%x, %d, %p);\n", texture, level, xoffset, width, format, imageSize, (const void *) data));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_925)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid * data);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_926)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid * data);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_925)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid * data)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_926)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid * data)
 {
     (void) texture; (void) level; (void) xoffset; (void) yoffset; (void) width; (void) height; (void) format; (void) imageSize; (void) data;
    DISPATCH(CompressedTextureSubImage2D, (texture, level, xoffset, yoffset, width, height, format, imageSize, data), (F, "glCompressedTextureSubImage2D(%d, %d, %d, %d, %d, %d, 0x%x, %d, %p);\n", texture, level, xoffset, yoffset, width, height, format, imageSize, (const void *) data));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_926)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid * data);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_927)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid * data);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_926)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid * data)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_927)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid * data)
 {
     (void) texture; (void) level; (void) xoffset; (void) yoffset; (void) zoffset; (void) width; (void) height; (void) depth; (void) format; (void) imageSize; (void) data;
    DISPATCH(CompressedTextureSubImage3D, (texture, level, xoffset, yoffset, zoffset, width, height, depth, format, imageSize, data), (F, "glCompressedTextureSubImage3D(%d, %d, %d, %d, %d, %d, %d, %d, 0x%x, %d, %p);\n", texture, level, xoffset, yoffset, zoffset, width, height, depth, format, imageSize, (const void *) data));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_927)(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_928)(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_927)(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_928)(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)
 {
     (void) readBuffer; (void) writeBuffer; (void) readOffset; (void) writeOffset; (void) size;
    DISPATCH(CopyNamedBufferSubData, (readBuffer, writeBuffer, readOffset, writeOffset, size), (F, "glCopyNamedBufferSubData(%d, %d, %d, %d, %d);\n", readBuffer, writeBuffer, readOffset, writeOffset, size));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_928)(GLuint texture, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_929)(GLuint texture, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_928)(GLuint texture, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_929)(GLuint texture, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width)
 {
     (void) texture; (void) level; (void) xoffset; (void) x; (void) y; (void) width;
    DISPATCH(CopyTextureSubImage1D, (texture, level, xoffset, x, y, width), (F, "glCopyTextureSubImage1D(%d, %d, %d, %d, %d, %d);\n", texture, level, xoffset, x, y, width));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_929)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_930)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_929)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_930)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height)
 {
     (void) texture; (void) level; (void) xoffset; (void) yoffset; (void) x; (void) y; (void) width; (void) height;
    DISPATCH(CopyTextureSubImage2D, (texture, level, xoffset, yoffset, x, y, width, height), (F, "glCopyTextureSubImage2D(%d, %d, %d, %d, %d, %d, %d, %d);\n", texture, level, xoffset, yoffset, x, y, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_930)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_931)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_930)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_931)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height)
 {
     (void) texture; (void) level; (void) xoffset; (void) yoffset; (void) zoffset; (void) x; (void) y; (void) width; (void) height;
    DISPATCH(CopyTextureSubImage3D, (texture, level, xoffset, yoffset, zoffset, x, y, width, height), (F, "glCopyTextureSubImage3D(%d, %d, %d, %d, %d, %d, %d, %d, %d);\n", texture, level, xoffset, yoffset, zoffset, x, y, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_931)(GLsizei n, GLuint * buffers);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_932)(GLsizei n, GLuint * buffers);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_931)(GLsizei n, GLuint * buffers)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_932)(GLsizei n, GLuint * buffers)
 {
     (void) n; (void) buffers;
    DISPATCH(CreateBuffers, (n, buffers), (F, "glCreateBuffers(%d, %p);\n", n, (const void *) buffers));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_932)(GLsizei n, GLuint * framebuffers);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_933)(GLsizei n, GLuint * framebuffers);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_932)(GLsizei n, GLuint * framebuffers)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_933)(GLsizei n, GLuint * framebuffers)
 {
     (void) n; (void) framebuffers;
    DISPATCH(CreateFramebuffers, (n, framebuffers), (F, "glCreateFramebuffers(%d, %p);\n", n, (const void *) framebuffers));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_933)(GLsizei n, GLuint * pipelines);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_934)(GLsizei n, GLuint * pipelines);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_933)(GLsizei n, GLuint * pipelines)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_934)(GLsizei n, GLuint * pipelines)
 {
     (void) n; (void) pipelines;
    DISPATCH(CreateProgramPipelines, (n, pipelines), (F, "glCreateProgramPipelines(%d, %p);\n", n, (const void *) pipelines));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_934)(GLenum target, GLsizei n, GLuint * ids);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_935)(GLenum target, GLsizei n, GLuint * ids);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_934)(GLenum target, GLsizei n, GLuint * ids)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_935)(GLenum target, GLsizei n, GLuint * ids)
 {
     (void) target; (void) n; (void) ids;
    DISPATCH(CreateQueries, (target, n, ids), (F, "glCreateQueries(0x%x, %d, %p);\n", target, n, (const void *) ids));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_935)(GLsizei n, GLuint * renderbuffers);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_936)(GLsizei n, GLuint * renderbuffers);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_935)(GLsizei n, GLuint * renderbuffers)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_936)(GLsizei n, GLuint * renderbuffers)
 {
     (void) n; (void) renderbuffers;
    DISPATCH(CreateRenderbuffers, (n, renderbuffers), (F, "glCreateRenderbuffers(%d, %p);\n", n, (const void *) renderbuffers));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_936)(GLsizei n, GLuint * samplers);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_937)(GLsizei n, GLuint * samplers);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_936)(GLsizei n, GLuint * samplers)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_937)(GLsizei n, GLuint * samplers)
 {
     (void) n; (void) samplers;
    DISPATCH(CreateSamplers, (n, samplers), (F, "glCreateSamplers(%d, %p);\n", n, (const void *) samplers));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_937)(GLenum target, GLsizei n, GLuint * textures);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_938)(GLenum target, GLsizei n, GLuint * textures);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_937)(GLenum target, GLsizei n, GLuint * textures)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_938)(GLenum target, GLsizei n, GLuint * textures)
 {
     (void) target; (void) n; (void) textures;
    DISPATCH(CreateTextures, (target, n, textures), (F, "glCreateTextures(0x%x, %d, %p);\n", target, n, (const void *) textures));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_938)(GLsizei n, GLuint * ids);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_939)(GLsizei n, GLuint * ids);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_938)(GLsizei n, GLuint * ids)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_939)(GLsizei n, GLuint * ids)
 {
     (void) n; (void) ids;
    DISPATCH(CreateTransformFeedbacks, (n, ids), (F, "glCreateTransformFeedbacks(%d, %p);\n", n, (const void *) ids));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_939)(GLsizei n, GLuint * arrays);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_940)(GLsizei n, GLuint * arrays);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_939)(GLsizei n, GLuint * arrays)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_940)(GLsizei n, GLuint * arrays)
 {
     (void) n; (void) arrays;
    DISPATCH(CreateVertexArrays, (n, arrays), (F, "glCreateVertexArrays(%d, %p);\n", n, (const void *) arrays));
-}
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_940)(GLuint vaobj, GLuint index);
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_940)(GLuint vaobj, GLuint index)
-{
-    (void) vaobj; (void) index;
-   DISPATCH(DisableVertexArrayAttrib, (vaobj, index), (F, "glDisableVertexArrayAttrib(%d, %d);\n", vaobj, index));
 }
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_941)(GLuint vaobj, GLuint index);
@@ -8538,95 +8653,95 @@ KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_941)(GLuint vaobj, GLuint index);
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_941)(GLuint vaobj, GLuint index)
 {
     (void) vaobj; (void) index;
+   DISPATCH(DisableVertexArrayAttrib, (vaobj, index), (F, "glDisableVertexArrayAttrib(%d, %d);\n", vaobj, index));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_942)(GLuint vaobj, GLuint index);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_942)(GLuint vaobj, GLuint index)
+{
+    (void) vaobj; (void) index;
    DISPATCH(EnableVertexArrayAttrib, (vaobj, index), (F, "glEnableVertexArrayAttrib(%d, %d);\n", vaobj, index));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_942)(GLuint buffer, GLintptr offset, GLsizeiptr length);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_943)(GLuint buffer, GLintptr offset, GLsizeiptr length);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_942)(GLuint buffer, GLintptr offset, GLsizeiptr length)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_943)(GLuint buffer, GLintptr offset, GLsizeiptr length)
 {
     (void) buffer; (void) offset; (void) length;
    DISPATCH(FlushMappedNamedBufferRange, (buffer, offset, length), (F, "glFlushMappedNamedBufferRange(%d, %d, %d);\n", buffer, offset, length));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_943)(GLuint texture);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_944)(GLuint texture);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_943)(GLuint texture)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_944)(GLuint texture)
 {
     (void) texture;
    DISPATCH(GenerateTextureMipmap, (texture), (F, "glGenerateTextureMipmap(%d);\n", texture));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_944)(GLuint texture, GLint level, GLsizei bufSize, GLvoid * pixels);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_945)(GLuint texture, GLint level, GLsizei bufSize, GLvoid * pixels);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_944)(GLuint texture, GLint level, GLsizei bufSize, GLvoid * pixels)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_945)(GLuint texture, GLint level, GLsizei bufSize, GLvoid * pixels)
 {
     (void) texture; (void) level; (void) bufSize; (void) pixels;
    DISPATCH(GetCompressedTextureImage, (texture, level, bufSize, pixels), (F, "glGetCompressedTextureImage(%d, %d, %d, %p);\n", texture, level, bufSize, (const void *) pixels));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_945)(GLuint buffer, GLenum pname, GLint64 * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_946)(GLuint buffer, GLenum pname, GLint64 * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_945)(GLuint buffer, GLenum pname, GLint64 * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_946)(GLuint buffer, GLenum pname, GLint64 * params)
 {
     (void) buffer; (void) pname; (void) params;
    DISPATCH(GetNamedBufferParameteri64v, (buffer, pname, params), (F, "glGetNamedBufferParameteri64v(%d, 0x%x, %p);\n", buffer, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_946)(GLuint buffer, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_947)(GLuint buffer, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_946)(GLuint buffer, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_947)(GLuint buffer, GLenum pname, GLint * params)
 {
     (void) buffer; (void) pname; (void) params;
    DISPATCH(GetNamedBufferParameteriv, (buffer, pname, params), (F, "glGetNamedBufferParameteriv(%d, 0x%x, %p);\n", buffer, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_947)(GLuint buffer, GLenum pname, GLvoid ** params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_948)(GLuint buffer, GLenum pname, GLvoid ** params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_947)(GLuint buffer, GLenum pname, GLvoid ** params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_948)(GLuint buffer, GLenum pname, GLvoid ** params)
 {
     (void) buffer; (void) pname; (void) params;
    DISPATCH(GetNamedBufferPointerv, (buffer, pname, params), (F, "glGetNamedBufferPointerv(%d, 0x%x, %p);\n", buffer, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_948)(GLuint buffer, GLintptr offset, GLsizeiptr size, GLvoid * data);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_949)(GLuint buffer, GLintptr offset, GLsizeiptr size, GLvoid * data);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_948)(GLuint buffer, GLintptr offset, GLsizeiptr size, GLvoid * data)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_949)(GLuint buffer, GLintptr offset, GLsizeiptr size, GLvoid * data)
 {
     (void) buffer; (void) offset; (void) size; (void) data;
    DISPATCH(GetNamedBufferSubData, (buffer, offset, size, data), (F, "glGetNamedBufferSubData(%d, %d, %d, %p);\n", buffer, offset, size, (const void *) data));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_949)(GLuint framebuffer, GLenum attachment, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_950)(GLuint framebuffer, GLenum attachment, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_949)(GLuint framebuffer, GLenum attachment, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_950)(GLuint framebuffer, GLenum attachment, GLenum pname, GLint * params)
 {
     (void) framebuffer; (void) attachment; (void) pname; (void) params;
    DISPATCH(GetNamedFramebufferAttachmentParameteriv, (framebuffer, attachment, pname, params), (F, "glGetNamedFramebufferAttachmentParameteriv(%d, 0x%x, 0x%x, %p);\n", framebuffer, attachment, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_950)(GLuint framebuffer, GLenum pname, GLint * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_951)(GLuint framebuffer, GLenum pname, GLint * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_950)(GLuint framebuffer, GLenum pname, GLint * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_951)(GLuint framebuffer, GLenum pname, GLint * param)
 {
     (void) framebuffer; (void) pname; (void) param;
    DISPATCH(GetNamedFramebufferParameteriv, (framebuffer, pname, param), (F, "glGetNamedFramebufferParameteriv(%d, 0x%x, %p);\n", framebuffer, pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_951)(GLuint renderbuffer, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_952)(GLuint renderbuffer, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_951)(GLuint renderbuffer, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_952)(GLuint renderbuffer, GLenum pname, GLint * params)
 {
     (void) renderbuffer; (void) pname; (void) params;
    DISPATCH(GetNamedRenderbufferParameteriv, (renderbuffer, pname, params), (F, "glGetNamedRenderbufferParameteriv(%d, 0x%x, %p);\n", renderbuffer, pname, (const void *) params));
-}
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_952)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_952)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset)
-{
-    (void) id; (void) buffer; (void) pname; (void) offset;
-   DISPATCH(GetQueryBufferObjecti64v, (id, buffer, pname, offset), (F, "glGetQueryBufferObjecti64v(%d, %d, 0x%x, %d);\n", id, buffer, pname, offset));
 }
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_953)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
@@ -8634,7 +8749,7 @@ KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_953)(GLuint id, GLuint buffer, GL
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_953)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset)
 {
     (void) id; (void) buffer; (void) pname; (void) offset;
-   DISPATCH(GetQueryBufferObjectiv, (id, buffer, pname, offset), (F, "glGetQueryBufferObjectiv(%d, %d, 0x%x, %d);\n", id, buffer, pname, offset));
+   DISPATCH(GetQueryBufferObjecti64v, (id, buffer, pname, offset), (F, "glGetQueryBufferObjecti64v(%d, %d, 0x%x, %d);\n", id, buffer, pname, offset));
 }
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_954)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
@@ -8642,7 +8757,7 @@ KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_954)(GLuint id, GLuint buffer, GL
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_954)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset)
 {
     (void) id; (void) buffer; (void) pname; (void) offset;
-   DISPATCH(GetQueryBufferObjectui64v, (id, buffer, pname, offset), (F, "glGetQueryBufferObjectui64v(%d, %d, 0x%x, %d);\n", id, buffer, pname, offset));
+   DISPATCH(GetQueryBufferObjectiv, (id, buffer, pname, offset), (F, "glGetQueryBufferObjectiv(%d, %d, 0x%x, %d);\n", id, buffer, pname, offset));
 }
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_955)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
@@ -8650,415 +8765,415 @@ KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_955)(GLuint id, GLuint buffer, GL
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_955)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset)
 {
     (void) id; (void) buffer; (void) pname; (void) offset;
+   DISPATCH(GetQueryBufferObjectui64v, (id, buffer, pname, offset), (F, "glGetQueryBufferObjectui64v(%d, %d, 0x%x, %d);\n", id, buffer, pname, offset));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_956)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_956)(GLuint id, GLuint buffer, GLenum pname, GLintptr offset)
+{
+    (void) id; (void) buffer; (void) pname; (void) offset;
    DISPATCH(GetQueryBufferObjectuiv, (id, buffer, pname, offset), (F, "glGetQueryBufferObjectuiv(%d, %d, 0x%x, %d);\n", id, buffer, pname, offset));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_956)(GLuint texture, GLint level, GLenum format, GLenum type, GLsizei bufSize, GLvoid * pixels);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_957)(GLuint texture, GLint level, GLenum format, GLenum type, GLsizei bufSize, GLvoid * pixels);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_956)(GLuint texture, GLint level, GLenum format, GLenum type, GLsizei bufSize, GLvoid * pixels)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_957)(GLuint texture, GLint level, GLenum format, GLenum type, GLsizei bufSize, GLvoid * pixels)
 {
     (void) texture; (void) level; (void) format; (void) type; (void) bufSize; (void) pixels;
    DISPATCH(GetTextureImage, (texture, level, format, type, bufSize, pixels), (F, "glGetTextureImage(%d, %d, 0x%x, 0x%x, %d, %p);\n", texture, level, format, type, bufSize, (const void *) pixels));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_957)(GLuint texture, GLint level, GLenum pname, GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_958)(GLuint texture, GLint level, GLenum pname, GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_957)(GLuint texture, GLint level, GLenum pname, GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_958)(GLuint texture, GLint level, GLenum pname, GLfloat * params)
 {
     (void) texture; (void) level; (void) pname; (void) params;
    DISPATCH(GetTextureLevelParameterfv, (texture, level, pname, params), (F, "glGetTextureLevelParameterfv(%d, %d, 0x%x, %p);\n", texture, level, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_958)(GLuint texture, GLint level, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_959)(GLuint texture, GLint level, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_958)(GLuint texture, GLint level, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_959)(GLuint texture, GLint level, GLenum pname, GLint * params)
 {
     (void) texture; (void) level; (void) pname; (void) params;
    DISPATCH(GetTextureLevelParameteriv, (texture, level, pname, params), (F, "glGetTextureLevelParameteriv(%d, %d, 0x%x, %p);\n", texture, level, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_959)(GLuint texture, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_960)(GLuint texture, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_959)(GLuint texture, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_960)(GLuint texture, GLenum pname, GLint * params)
 {
     (void) texture; (void) pname; (void) params;
    DISPATCH(GetTextureParameterIiv, (texture, pname, params), (F, "glGetTextureParameterIiv(%d, 0x%x, %p);\n", texture, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_960)(GLuint texture, GLenum pname, GLuint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_961)(GLuint texture, GLenum pname, GLuint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_960)(GLuint texture, GLenum pname, GLuint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_961)(GLuint texture, GLenum pname, GLuint * params)
 {
     (void) texture; (void) pname; (void) params;
    DISPATCH(GetTextureParameterIuiv, (texture, pname, params), (F, "glGetTextureParameterIuiv(%d, 0x%x, %p);\n", texture, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_961)(GLuint texture, GLenum pname, GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_962)(GLuint texture, GLenum pname, GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_961)(GLuint texture, GLenum pname, GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_962)(GLuint texture, GLenum pname, GLfloat * params)
 {
     (void) texture; (void) pname; (void) params;
    DISPATCH(GetTextureParameterfv, (texture, pname, params), (F, "glGetTextureParameterfv(%d, 0x%x, %p);\n", texture, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_962)(GLuint texture, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_963)(GLuint texture, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_962)(GLuint texture, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_963)(GLuint texture, GLenum pname, GLint * params)
 {
     (void) texture; (void) pname; (void) params;
    DISPATCH(GetTextureParameteriv, (texture, pname, params), (F, "glGetTextureParameteriv(%d, 0x%x, %p);\n", texture, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_963)(GLuint xfb, GLenum pname, GLuint index, GLint64 * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_964)(GLuint xfb, GLenum pname, GLuint index, GLint64 * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_963)(GLuint xfb, GLenum pname, GLuint index, GLint64 * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_964)(GLuint xfb, GLenum pname, GLuint index, GLint64 * param)
 {
     (void) xfb; (void) pname; (void) index; (void) param;
    DISPATCH(GetTransformFeedbacki64_v, (xfb, pname, index, param), (F, "glGetTransformFeedbacki64_v(%d, 0x%x, %d, %p);\n", xfb, pname, index, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_964)(GLuint xfb, GLenum pname, GLuint index, GLint * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_965)(GLuint xfb, GLenum pname, GLuint index, GLint * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_964)(GLuint xfb, GLenum pname, GLuint index, GLint * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_965)(GLuint xfb, GLenum pname, GLuint index, GLint * param)
 {
     (void) xfb; (void) pname; (void) index; (void) param;
    DISPATCH(GetTransformFeedbacki_v, (xfb, pname, index, param), (F, "glGetTransformFeedbacki_v(%d, 0x%x, %d, %p);\n", xfb, pname, index, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_965)(GLuint xfb, GLenum pname, GLint * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_966)(GLuint xfb, GLenum pname, GLint * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_965)(GLuint xfb, GLenum pname, GLint * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_966)(GLuint xfb, GLenum pname, GLint * param)
 {
     (void) xfb; (void) pname; (void) param;
    DISPATCH(GetTransformFeedbackiv, (xfb, pname, param), (F, "glGetTransformFeedbackiv(%d, 0x%x, %p);\n", xfb, pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_966)(GLuint vaobj, GLuint index, GLenum pname, GLint64 * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_967)(GLuint vaobj, GLuint index, GLenum pname, GLint64 * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_966)(GLuint vaobj, GLuint index, GLenum pname, GLint64 * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_967)(GLuint vaobj, GLuint index, GLenum pname, GLint64 * param)
 {
     (void) vaobj; (void) index; (void) pname; (void) param;
    DISPATCH(GetVertexArrayIndexed64iv, (vaobj, index, pname, param), (F, "glGetVertexArrayIndexed64iv(%d, %d, 0x%x, %p);\n", vaobj, index, pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_967)(GLuint vaobj, GLuint index, GLenum pname, GLint * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_968)(GLuint vaobj, GLuint index, GLenum pname, GLint * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_967)(GLuint vaobj, GLuint index, GLenum pname, GLint * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_968)(GLuint vaobj, GLuint index, GLenum pname, GLint * param)
 {
     (void) vaobj; (void) index; (void) pname; (void) param;
    DISPATCH(GetVertexArrayIndexediv, (vaobj, index, pname, param), (F, "glGetVertexArrayIndexediv(%d, %d, 0x%x, %p);\n", vaobj, index, pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_968)(GLuint vaobj, GLenum pname, GLint * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_969)(GLuint vaobj, GLenum pname, GLint * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_968)(GLuint vaobj, GLenum pname, GLint * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_969)(GLuint vaobj, GLenum pname, GLint * param)
 {
     (void) vaobj; (void) pname; (void) param;
    DISPATCH(GetVertexArrayiv, (vaobj, pname, param), (F, "glGetVertexArrayiv(%d, 0x%x, %p);\n", vaobj, pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_969)(GLuint framebuffer, GLsizei numAttachments, const GLenum * attachments);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_970)(GLuint framebuffer, GLsizei numAttachments, const GLenum * attachments);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_969)(GLuint framebuffer, GLsizei numAttachments, const GLenum * attachments)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_970)(GLuint framebuffer, GLsizei numAttachments, const GLenum * attachments)
 {
     (void) framebuffer; (void) numAttachments; (void) attachments;
    DISPATCH(InvalidateNamedFramebufferData, (framebuffer, numAttachments, attachments), (F, "glInvalidateNamedFramebufferData(%d, %d, %p);\n", framebuffer, numAttachments, (const void *) attachments));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_970)(GLuint framebuffer, GLsizei numAttachments, const GLenum * attachments, GLint x, GLint y, GLsizei width, GLsizei height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_971)(GLuint framebuffer, GLsizei numAttachments, const GLenum * attachments, GLint x, GLint y, GLsizei width, GLsizei height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_970)(GLuint framebuffer, GLsizei numAttachments, const GLenum * attachments, GLint x, GLint y, GLsizei width, GLsizei height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_971)(GLuint framebuffer, GLsizei numAttachments, const GLenum * attachments, GLint x, GLint y, GLsizei width, GLsizei height)
 {
     (void) framebuffer; (void) numAttachments; (void) attachments; (void) x; (void) y; (void) width; (void) height;
    DISPATCH(InvalidateNamedFramebufferSubData, (framebuffer, numAttachments, attachments, x, y, width, height), (F, "glInvalidateNamedFramebufferSubData(%d, %d, %p, %d, %d, %d, %d);\n", framebuffer, numAttachments, (const void *) attachments, x, y, width, height));
 }
 
-KEYWORD1_ALT GLvoid * KEYWORD2 NAME(_dispatch_stub_971)(GLuint buffer, GLenum access);
+KEYWORD1_ALT GLvoid * KEYWORD2 NAME(_dispatch_stub_972)(GLuint buffer, GLenum access);
 
-KEYWORD1_ALT GLvoid * KEYWORD2 NAME(_dispatch_stub_971)(GLuint buffer, GLenum access)
+KEYWORD1_ALT GLvoid * KEYWORD2 NAME(_dispatch_stub_972)(GLuint buffer, GLenum access)
 {
     (void) buffer; (void) access;
    RETURN_DISPATCH(MapNamedBuffer, (buffer, access), (F, "glMapNamedBuffer(%d, 0x%x);\n", buffer, access));
 }
 
-KEYWORD1_ALT GLvoid * KEYWORD2 NAME(_dispatch_stub_972)(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
+KEYWORD1_ALT GLvoid * KEYWORD2 NAME(_dispatch_stub_973)(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
 
-KEYWORD1_ALT GLvoid * KEYWORD2 NAME(_dispatch_stub_972)(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access)
+KEYWORD1_ALT GLvoid * KEYWORD2 NAME(_dispatch_stub_973)(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access)
 {
     (void) buffer; (void) offset; (void) length; (void) access;
    RETURN_DISPATCH(MapNamedBufferRange, (buffer, offset, length, access), (F, "glMapNamedBufferRange(%d, %d, %d, %d);\n", buffer, offset, length, access));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_973)(GLuint buffer, GLsizeiptr size, const GLvoid * data, GLenum usage);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_974)(GLuint buffer, GLsizeiptr size, const GLvoid * data, GLenum usage);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_973)(GLuint buffer, GLsizeiptr size, const GLvoid * data, GLenum usage)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_974)(GLuint buffer, GLsizeiptr size, const GLvoid * data, GLenum usage)
 {
     (void) buffer; (void) size; (void) data; (void) usage;
    DISPATCH(NamedBufferData, (buffer, size, data, usage), (F, "glNamedBufferData(%d, %d, %p, 0x%x);\n", buffer, size, (const void *) data, usage));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_974)(GLuint buffer, GLsizeiptr size, const GLvoid * data, GLbitfield flags);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_975)(GLuint buffer, GLsizeiptr size, const GLvoid * data, GLbitfield flags);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_974)(GLuint buffer, GLsizeiptr size, const GLvoid * data, GLbitfield flags)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_975)(GLuint buffer, GLsizeiptr size, const GLvoid * data, GLbitfield flags)
 {
     (void) buffer; (void) size; (void) data; (void) flags;
    DISPATCH(NamedBufferStorage, (buffer, size, data, flags), (F, "glNamedBufferStorage(%d, %d, %p, %d);\n", buffer, size, (const void *) data, flags));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_975)(GLuint buffer, GLintptr offset, GLsizeiptr size, const GLvoid * data);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_976)(GLuint buffer, GLintptr offset, GLsizeiptr size, const GLvoid * data);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_975)(GLuint buffer, GLintptr offset, GLsizeiptr size, const GLvoid * data)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_976)(GLuint buffer, GLintptr offset, GLsizeiptr size, const GLvoid * data)
 {
     (void) buffer; (void) offset; (void) size; (void) data;
    DISPATCH(NamedBufferSubData, (buffer, offset, size, data), (F, "glNamedBufferSubData(%d, %d, %d, %p);\n", buffer, offset, size, (const void *) data));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_976)(GLuint framebuffer, GLenum buf);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_977)(GLuint framebuffer, GLenum buf);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_976)(GLuint framebuffer, GLenum buf)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_977)(GLuint framebuffer, GLenum buf)
 {
     (void) framebuffer; (void) buf;
    DISPATCH(NamedFramebufferDrawBuffer, (framebuffer, buf), (F, "glNamedFramebufferDrawBuffer(%d, 0x%x);\n", framebuffer, buf));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_977)(GLuint framebuffer, GLsizei n, const GLenum * bufs);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_978)(GLuint framebuffer, GLsizei n, const GLenum * bufs);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_977)(GLuint framebuffer, GLsizei n, const GLenum * bufs)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_978)(GLuint framebuffer, GLsizei n, const GLenum * bufs)
 {
     (void) framebuffer; (void) n; (void) bufs;
    DISPATCH(NamedFramebufferDrawBuffers, (framebuffer, n, bufs), (F, "glNamedFramebufferDrawBuffers(%d, %d, %p);\n", framebuffer, n, (const void *) bufs));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_978)(GLuint framebuffer, GLenum pname, GLint param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_979)(GLuint framebuffer, GLenum pname, GLint param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_978)(GLuint framebuffer, GLenum pname, GLint param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_979)(GLuint framebuffer, GLenum pname, GLint param)
 {
     (void) framebuffer; (void) pname; (void) param;
    DISPATCH(NamedFramebufferParameteri, (framebuffer, pname, param), (F, "glNamedFramebufferParameteri(%d, 0x%x, %d);\n", framebuffer, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_979)(GLuint framebuffer, GLenum buf);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_980)(GLuint framebuffer, GLenum buf);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_979)(GLuint framebuffer, GLenum buf)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_980)(GLuint framebuffer, GLenum buf)
 {
     (void) framebuffer; (void) buf;
    DISPATCH(NamedFramebufferReadBuffer, (framebuffer, buf), (F, "glNamedFramebufferReadBuffer(%d, 0x%x);\n", framebuffer, buf));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_980)(GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_981)(GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_980)(GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_981)(GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)
 {
     (void) framebuffer; (void) attachment; (void) renderbuffertarget; (void) renderbuffer;
    DISPATCH(NamedFramebufferRenderbuffer, (framebuffer, attachment, renderbuffertarget, renderbuffer), (F, "glNamedFramebufferRenderbuffer(%d, 0x%x, 0x%x, %d);\n", framebuffer, attachment, renderbuffertarget, renderbuffer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_981)(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_982)(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_981)(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_982)(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level)
 {
     (void) framebuffer; (void) attachment; (void) texture; (void) level;
    DISPATCH(NamedFramebufferTexture, (framebuffer, attachment, texture, level), (F, "glNamedFramebufferTexture(%d, 0x%x, %d, %d);\n", framebuffer, attachment, texture, level));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_982)(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_983)(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_982)(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_983)(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer)
 {
     (void) framebuffer; (void) attachment; (void) texture; (void) level; (void) layer;
    DISPATCH(NamedFramebufferTextureLayer, (framebuffer, attachment, texture, level, layer), (F, "glNamedFramebufferTextureLayer(%d, 0x%x, %d, %d, %d);\n", framebuffer, attachment, texture, level, layer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_983)(GLuint renderbuffer, GLenum internalformat, GLsizei width, GLsizei height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_984)(GLuint renderbuffer, GLenum internalformat, GLsizei width, GLsizei height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_983)(GLuint renderbuffer, GLenum internalformat, GLsizei width, GLsizei height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_984)(GLuint renderbuffer, GLenum internalformat, GLsizei width, GLsizei height)
 {
     (void) renderbuffer; (void) internalformat; (void) width; (void) height;
    DISPATCH(NamedRenderbufferStorage, (renderbuffer, internalformat, width, height), (F, "glNamedRenderbufferStorage(%d, 0x%x, %d, %d);\n", renderbuffer, internalformat, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_984)(GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_985)(GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_984)(GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_985)(GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height)
 {
     (void) renderbuffer; (void) samples; (void) internalformat; (void) width; (void) height;
    DISPATCH(NamedRenderbufferStorageMultisample, (renderbuffer, samples, internalformat, width, height), (F, "glNamedRenderbufferStorageMultisample(%d, %d, 0x%x, %d, %d);\n", renderbuffer, samples, internalformat, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_985)(GLuint texture, GLenum internalformat, GLuint buffer);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_986)(GLuint texture, GLenum internalformat, GLuint buffer);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_985)(GLuint texture, GLenum internalformat, GLuint buffer)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_986)(GLuint texture, GLenum internalformat, GLuint buffer)
 {
     (void) texture; (void) internalformat; (void) buffer;
    DISPATCH(TextureBuffer, (texture, internalformat, buffer), (F, "glTextureBuffer(%d, 0x%x, %d);\n", texture, internalformat, buffer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_986)(GLuint texture, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_987)(GLuint texture, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_986)(GLuint texture, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_987)(GLuint texture, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size)
 {
     (void) texture; (void) internalformat; (void) buffer; (void) offset; (void) size;
    DISPATCH(TextureBufferRange, (texture, internalformat, buffer, offset, size), (F, "glTextureBufferRange(%d, 0x%x, %d, %d, %d);\n", texture, internalformat, buffer, offset, size));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_987)(GLuint texture, GLenum pname, const GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_988)(GLuint texture, GLenum pname, const GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_987)(GLuint texture, GLenum pname, const GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_988)(GLuint texture, GLenum pname, const GLint * params)
 {
     (void) texture; (void) pname; (void) params;
    DISPATCH(TextureParameterIiv, (texture, pname, params), (F, "glTextureParameterIiv(%d, 0x%x, %p);\n", texture, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_988)(GLuint texture, GLenum pname, const GLuint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_989)(GLuint texture, GLenum pname, const GLuint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_988)(GLuint texture, GLenum pname, const GLuint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_989)(GLuint texture, GLenum pname, const GLuint * params)
 {
     (void) texture; (void) pname; (void) params;
    DISPATCH(TextureParameterIuiv, (texture, pname, params), (F, "glTextureParameterIuiv(%d, 0x%x, %p);\n", texture, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_989)(GLuint texture, GLenum pname, GLfloat param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_990)(GLuint texture, GLenum pname, GLfloat param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_989)(GLuint texture, GLenum pname, GLfloat param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_990)(GLuint texture, GLenum pname, GLfloat param)
 {
     (void) texture; (void) pname; (void) param;
    DISPATCH(TextureParameterf, (texture, pname, param), (F, "glTextureParameterf(%d, 0x%x, %f);\n", texture, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_990)(GLuint texture, GLenum pname, const GLfloat * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_991)(GLuint texture, GLenum pname, const GLfloat * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_990)(GLuint texture, GLenum pname, const GLfloat * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_991)(GLuint texture, GLenum pname, const GLfloat * param)
 {
     (void) texture; (void) pname; (void) param;
    DISPATCH(TextureParameterfv, (texture, pname, param), (F, "glTextureParameterfv(%d, 0x%x, %p);\n", texture, pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_991)(GLuint texture, GLenum pname, GLint param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_992)(GLuint texture, GLenum pname, GLint param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_991)(GLuint texture, GLenum pname, GLint param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_992)(GLuint texture, GLenum pname, GLint param)
 {
     (void) texture; (void) pname; (void) param;
    DISPATCH(TextureParameteri, (texture, pname, param), (F, "glTextureParameteri(%d, 0x%x, %d);\n", texture, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_992)(GLuint texture, GLenum pname, const GLint * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_993)(GLuint texture, GLenum pname, const GLint * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_992)(GLuint texture, GLenum pname, const GLint * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_993)(GLuint texture, GLenum pname, const GLint * param)
 {
     (void) texture; (void) pname; (void) param;
    DISPATCH(TextureParameteriv, (texture, pname, param), (F, "glTextureParameteriv(%d, 0x%x, %p);\n", texture, pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_993)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_994)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_993)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_994)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width)
 {
     (void) texture; (void) levels; (void) internalformat; (void) width;
    DISPATCH(TextureStorage1D, (texture, levels, internalformat, width), (F, "glTextureStorage1D(%d, %d, 0x%x, %d);\n", texture, levels, internalformat, width));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_994)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_995)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_994)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_995)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height)
 {
     (void) texture; (void) levels; (void) internalformat; (void) width; (void) height;
    DISPATCH(TextureStorage2D, (texture, levels, internalformat, width, height), (F, "glTextureStorage2D(%d, %d, 0x%x, %d, %d);\n", texture, levels, internalformat, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_995)(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_996)(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_995)(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_996)(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)
 {
     (void) texture; (void) samples; (void) internalformat; (void) width; (void) height; (void) fixedsamplelocations;
    DISPATCH(TextureStorage2DMultisample, (texture, samples, internalformat, width, height, fixedsamplelocations), (F, "glTextureStorage2DMultisample(%d, %d, 0x%x, %d, %d, %d);\n", texture, samples, internalformat, width, height, fixedsamplelocations));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_996)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_997)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_996)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_997)(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth)
 {
     (void) texture; (void) levels; (void) internalformat; (void) width; (void) height; (void) depth;
    DISPATCH(TextureStorage3D, (texture, levels, internalformat, width, height, depth), (F, "glTextureStorage3D(%d, %d, 0x%x, %d, %d, %d);\n", texture, levels, internalformat, width, height, depth));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_997)(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_998)(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_997)(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_998)(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)
 {
     (void) texture; (void) samples; (void) internalformat; (void) width; (void) height; (void) depth; (void) fixedsamplelocations;
    DISPATCH(TextureStorage3DMultisample, (texture, samples, internalformat, width, height, depth, fixedsamplelocations), (F, "glTextureStorage3DMultisample(%d, %d, 0x%x, %d, %d, %d, %d);\n", texture, samples, internalformat, width, height, depth, fixedsamplelocations));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_998)(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const GLvoid * pixels);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_999)(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const GLvoid * pixels);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_998)(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const GLvoid * pixels)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_999)(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const GLvoid * pixels)
 {
     (void) texture; (void) level; (void) xoffset; (void) width; (void) format; (void) type; (void) pixels;
    DISPATCH(TextureSubImage1D, (texture, level, xoffset, width, format, type, pixels), (F, "glTextureSubImage1D(%d, %d, %d, %d, 0x%x, 0x%x, %p);\n", texture, level, xoffset, width, format, type, (const void *) pixels));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_999)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * pixels);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1000)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * pixels);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_999)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * pixels)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1000)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * pixels)
 {
     (void) texture; (void) level; (void) xoffset; (void) yoffset; (void) width; (void) height; (void) format; (void) type; (void) pixels;
    DISPATCH(TextureSubImage2D, (texture, level, xoffset, yoffset, width, height, format, type, pixels), (F, "glTextureSubImage2D(%d, %d, %d, %d, %d, %d, 0x%x, 0x%x, %p);\n", texture, level, xoffset, yoffset, width, height, format, type, (const void *) pixels));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1000)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid * pixels);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1001)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid * pixels);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1000)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid * pixels)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1001)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid * pixels)
 {
     (void) texture; (void) level; (void) xoffset; (void) yoffset; (void) zoffset; (void) width; (void) height; (void) depth; (void) format; (void) type; (void) pixels;
    DISPATCH(TextureSubImage3D, (texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels), (F, "glTextureSubImage3D(%d, %d, %d, %d, %d, %d, %d, %d, 0x%x, 0x%x, %p);\n", texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, (const void *) pixels));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1001)(GLuint xfb, GLuint index, GLuint buffer);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1002)(GLuint xfb, GLuint index, GLuint buffer);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1001)(GLuint xfb, GLuint index, GLuint buffer)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1002)(GLuint xfb, GLuint index, GLuint buffer)
 {
     (void) xfb; (void) index; (void) buffer;
    DISPATCH(TransformFeedbackBufferBase, (xfb, index, buffer), (F, "glTransformFeedbackBufferBase(%d, %d, %d);\n", xfb, index, buffer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1002)(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1003)(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1002)(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1003)(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)
 {
     (void) xfb; (void) index; (void) buffer; (void) offset; (void) size;
    DISPATCH(TransformFeedbackBufferRange, (xfb, index, buffer, offset, size), (F, "glTransformFeedbackBufferRange(%d, %d, %d, %d, %d);\n", xfb, index, buffer, offset, size));
 }
 
-KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1003)(GLuint buffer);
+KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1004)(GLuint buffer);
 
-KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1003)(GLuint buffer)
+KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1004)(GLuint buffer)
 {
     (void) buffer;
    RETURN_DISPATCH(UnmapNamedBuffer, (buffer), (F, "glUnmapNamedBuffer(%d);\n", buffer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1004)(GLuint vaobj, GLuint attribindex, GLuint bindingindex);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1005)(GLuint vaobj, GLuint attribindex, GLuint bindingindex);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1004)(GLuint vaobj, GLuint attribindex, GLuint bindingindex)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1005)(GLuint vaobj, GLuint attribindex, GLuint bindingindex)
 {
     (void) vaobj; (void) attribindex; (void) bindingindex;
    DISPATCH(VertexArrayAttribBinding, (vaobj, attribindex, bindingindex), (F, "glVertexArrayAttribBinding(%d, %d, %d);\n", vaobj, attribindex, bindingindex));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1005)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1006)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1005)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1006)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset)
 {
     (void) vaobj; (void) attribindex; (void) size; (void) type; (void) normalized; (void) relativeoffset;
    DISPATCH(VertexArrayAttribFormat, (vaobj, attribindex, size, type, normalized, relativeoffset), (F, "glVertexArrayAttribFormat(%d, %d, %d, 0x%x, %d, %d);\n", vaobj, attribindex, size, type, normalized, relativeoffset));
-}
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1006)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset);
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1006)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset)
-{
-    (void) vaobj; (void) attribindex; (void) size; (void) type; (void) relativeoffset;
-   DISPATCH(VertexArrayAttribIFormat, (vaobj, attribindex, size, type, relativeoffset), (F, "glVertexArrayAttribIFormat(%d, %d, %d, 0x%x, %d);\n", vaobj, attribindex, size, type, relativeoffset));
 }
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1007)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset);
@@ -9066,52 +9181,60 @@ KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1007)(GLuint vaobj, GLuint attrib
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1007)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset)
 {
     (void) vaobj; (void) attribindex; (void) size; (void) type; (void) relativeoffset;
+   DISPATCH(VertexArrayAttribIFormat, (vaobj, attribindex, size, type, relativeoffset), (F, "glVertexArrayAttribIFormat(%d, %d, %d, 0x%x, %d);\n", vaobj, attribindex, size, type, relativeoffset));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1008)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1008)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset)
+{
+    (void) vaobj; (void) attribindex; (void) size; (void) type; (void) relativeoffset;
    DISPATCH(VertexArrayAttribLFormat, (vaobj, attribindex, size, type, relativeoffset), (F, "glVertexArrayAttribLFormat(%d, %d, %d, 0x%x, %d);\n", vaobj, attribindex, size, type, relativeoffset));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1008)(GLuint vaobj, GLuint bindingindex, GLuint divisor);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1009)(GLuint vaobj, GLuint bindingindex, GLuint divisor);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1008)(GLuint vaobj, GLuint bindingindex, GLuint divisor)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1009)(GLuint vaobj, GLuint bindingindex, GLuint divisor)
 {
     (void) vaobj; (void) bindingindex; (void) divisor;
    DISPATCH(VertexArrayBindingDivisor, (vaobj, bindingindex, divisor), (F, "glVertexArrayBindingDivisor(%d, %d, %d);\n", vaobj, bindingindex, divisor));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1009)(GLuint vaobj, GLuint buffer);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1010)(GLuint vaobj, GLuint buffer);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1009)(GLuint vaobj, GLuint buffer)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1010)(GLuint vaobj, GLuint buffer)
 {
     (void) vaobj; (void) buffer;
    DISPATCH(VertexArrayElementBuffer, (vaobj, buffer), (F, "glVertexArrayElementBuffer(%d, %d);\n", vaobj, buffer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1010)(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1011)(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1010)(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1011)(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride)
 {
     (void) vaobj; (void) bindingindex; (void) buffer; (void) offset; (void) stride;
    DISPATCH(VertexArrayVertexBuffer, (vaobj, bindingindex, buffer, offset, stride), (F, "glVertexArrayVertexBuffer(%d, %d, %d, %d, %d);\n", vaobj, bindingindex, buffer, offset, stride));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1011)(GLuint vaobj, GLuint first, GLsizei count, const GLuint * buffers, const GLintptr * offsets, const GLsizei * strides);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1012)(GLuint vaobj, GLuint first, GLsizei count, const GLuint * buffers, const GLintptr * offsets, const GLsizei * strides);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1011)(GLuint vaobj, GLuint first, GLsizei count, const GLuint * buffers, const GLintptr * offsets, const GLsizei * strides)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1012)(GLuint vaobj, GLuint first, GLsizei count, const GLuint * buffers, const GLintptr * offsets, const GLsizei * strides)
 {
     (void) vaobj; (void) first; (void) count; (void) buffers; (void) offsets; (void) strides;
    DISPATCH(VertexArrayVertexBuffers, (vaobj, first, count, buffers, offsets, strides), (F, "glVertexArrayVertexBuffers(%d, %d, %d, %p, %p, %p);\n", vaobj, first, count, (const void *) buffers, (const void *) offsets, (const void *) strides));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1012)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLsizei bufSize, GLvoid * pixels);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1013)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLsizei bufSize, GLvoid * pixels);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1012)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLsizei bufSize, GLvoid * pixels)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1013)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLsizei bufSize, GLvoid * pixels)
 {
     (void) texture; (void) level; (void) xoffset; (void) yoffset; (void) zoffset; (void) width; (void) height; (void) depth; (void) bufSize; (void) pixels;
    DISPATCH(GetCompressedTextureSubImage, (texture, level, xoffset, yoffset, zoffset, width, height, depth, bufSize, pixels), (F, "glGetCompressedTextureSubImage(%d, %d, %d, %d, %d, %d, %d, %d, %d, %p);\n", texture, level, xoffset, yoffset, zoffset, width, height, depth, bufSize, (const void *) pixels));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1013)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, GLvoid * pixels);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1014)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, GLvoid * pixels);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1013)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, GLvoid * pixels)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1014)(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, GLvoid * pixels)
 {
     (void) texture; (void) level; (void) xoffset; (void) yoffset; (void) zoffset; (void) width; (void) height; (void) depth; (void) format; (void) type; (void) bufSize; (void) pixels;
    DISPATCH(GetTextureSubImage, (texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, bufSize, pixels), (F, "glGetTextureSubImage(%d, %d, %d, %d, %d, %d, %d, %d, 0x%x, 0x%x, %d, %p);\n", texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, bufSize, (const void *) pixels));
@@ -9153,73 +9276,73 @@ KEYWORD1 void KEYWORD2 NAME(InvalidateTexSubImage)(GLuint texture, GLint level, 
    DISPATCH(InvalidateTexSubImage, (texture, level, xoffset, yoffset, zoffset, width, height, depth), (F, "glInvalidateTexSubImage(%d, %d, %d, %d, %d, %d, %d, %d);\n", texture, level, xoffset, yoffset, zoffset, width, height, depth));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1020)(GLfloat factor, GLfloat bias);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1021)(GLfloat factor, GLfloat bias);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1020)(GLfloat factor, GLfloat bias)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1021)(GLfloat factor, GLfloat bias)
 {
     (void) factor; (void) bias;
    DISPATCH(PolygonOffsetEXT, (factor, bias), (F, "glPolygonOffsetEXT(%f, %f);\n", factor, bias));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1021)(GLfloat x, GLfloat y, GLfloat z, GLfloat width, GLfloat height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1022)(GLfloat x, GLfloat y, GLfloat z, GLfloat width, GLfloat height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1021)(GLfloat x, GLfloat y, GLfloat z, GLfloat width, GLfloat height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1022)(GLfloat x, GLfloat y, GLfloat z, GLfloat width, GLfloat height)
 {
     (void) x; (void) y; (void) z; (void) width; (void) height;
    DISPATCH(DrawTexfOES, (x, y, z, width, height), (F, "glDrawTexfOES(%f, %f, %f, %f, %f);\n", x, y, z, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1022)(const GLfloat * coords);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1023)(const GLfloat * coords);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1022)(const GLfloat * coords)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1023)(const GLfloat * coords)
 {
     (void) coords;
    DISPATCH(DrawTexfvOES, (coords), (F, "glDrawTexfvOES(%p);\n", (const void *) coords));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1023)(GLint x, GLint y, GLint z, GLint width, GLint height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1024)(GLint x, GLint y, GLint z, GLint width, GLint height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1023)(GLint x, GLint y, GLint z, GLint width, GLint height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1024)(GLint x, GLint y, GLint z, GLint width, GLint height)
 {
     (void) x; (void) y; (void) z; (void) width; (void) height;
    DISPATCH(DrawTexiOES, (x, y, z, width, height), (F, "glDrawTexiOES(%d, %d, %d, %d, %d);\n", x, y, z, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1024)(const GLint * coords);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1025)(const GLint * coords);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1024)(const GLint * coords)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1025)(const GLint * coords)
 {
     (void) coords;
    DISPATCH(DrawTexivOES, (coords), (F, "glDrawTexivOES(%p);\n", (const void *) coords));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1025)(GLshort x, GLshort y, GLshort z, GLshort width, GLshort height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1026)(GLshort x, GLshort y, GLshort z, GLshort width, GLshort height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1025)(GLshort x, GLshort y, GLshort z, GLshort width, GLshort height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1026)(GLshort x, GLshort y, GLshort z, GLshort width, GLshort height)
 {
     (void) x; (void) y; (void) z; (void) width; (void) height;
    DISPATCH(DrawTexsOES, (x, y, z, width, height), (F, "glDrawTexsOES(%d, %d, %d, %d, %d);\n", x, y, z, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1026)(const GLshort * coords);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1027)(const GLshort * coords);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1026)(const GLshort * coords)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1027)(const GLshort * coords)
 {
     (void) coords;
    DISPATCH(DrawTexsvOES, (coords), (F, "glDrawTexsvOES(%p);\n", (const void *) coords));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1027)(GLfixed x, GLfixed y, GLfixed z, GLfixed width, GLfixed height);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1028)(GLfixed x, GLfixed y, GLfixed z, GLfixed width, GLfixed height);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1027)(GLfixed x, GLfixed y, GLfixed z, GLfixed width, GLfixed height)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1028)(GLfixed x, GLfixed y, GLfixed z, GLfixed width, GLfixed height)
 {
     (void) x; (void) y; (void) z; (void) width; (void) height;
    DISPATCH(DrawTexxOES, (x, y, z, width, height), (F, "glDrawTexxOES(%d, %d, %d, %d, %d);\n", x, y, z, width, height));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1028)(const GLfixed * coords);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1029)(const GLfixed * coords);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1028)(const GLfixed * coords)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1029)(const GLfixed * coords)
 {
     (void) coords;
    DISPATCH(DrawTexxvOES, (coords), (F, "glDrawTexxvOES(%p);\n", (const void *) coords));
@@ -9231,25 +9354,25 @@ KEYWORD1 void KEYWORD2 NAME(PointSizePointerOES)(GLenum type, GLsizei stride, co
    DISPATCH(PointSizePointerOES, (type, stride, pointer), (F, "glPointSizePointerOES(0x%x, %d, %p);\n", type, stride, (const void *) pointer));
 }
 
-KEYWORD1_ALT GLbitfield KEYWORD2 NAME(_dispatch_stub_1030)(GLfixed * mantissa, GLint * exponent);
+KEYWORD1_ALT GLbitfield KEYWORD2 NAME(_dispatch_stub_1031)(GLfixed * mantissa, GLint * exponent);
 
-KEYWORD1_ALT GLbitfield KEYWORD2 NAME(_dispatch_stub_1030)(GLfixed * mantissa, GLint * exponent)
+KEYWORD1_ALT GLbitfield KEYWORD2 NAME(_dispatch_stub_1031)(GLfixed * mantissa, GLint * exponent)
 {
     (void) mantissa; (void) exponent;
    RETURN_DISPATCH(QueryMatrixxOES, (mantissa, exponent), (F, "glQueryMatrixxOES(%p, %p);\n", (const void *) mantissa, (const void *) exponent));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1031)(GLclampf value, GLboolean invert);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1032)(GLclampf value, GLboolean invert);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1031)(GLclampf value, GLboolean invert)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1032)(GLclampf value, GLboolean invert)
 {
     (void) value; (void) invert;
    DISPATCH(SampleMaskSGIS, (value, invert), (F, "glSampleMaskSGIS(%f, %d);\n", value, invert));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1032)(GLenum pattern);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1033)(GLenum pattern);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1032)(GLenum pattern)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1033)(GLenum pattern)
 {
     (void) pattern;
    DISPATCH(SamplePatternSGIS, (pattern), (F, "glSamplePatternSGIS(0x%x);\n", pattern));
@@ -9291,9 +9414,9 @@ KEYWORD1 void KEYWORD2 NAME(VertexPointerEXT)(GLint size, GLenum type, GLsizei s
    DISPATCH(VertexPointerEXT, (size, type, stride, count, pointer), (F, "glVertexPointerEXT(%d, 0x%x, %d, %d, %p);\n", size, type, stride, count, (const void *) pointer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1039)(GLenum target, GLsizei numAttachments, const GLenum * attachments);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1040)(GLenum target, GLsizei numAttachments, const GLenum * attachments);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1039)(GLenum target, GLsizei numAttachments, const GLenum * attachments)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1040)(GLenum target, GLsizei numAttachments, const GLenum * attachments)
 {
     (void) target; (void) numAttachments; (void) attachments;
    DISPATCH(DiscardFramebufferEXT, (target, numAttachments, attachments), (F, "glDiscardFramebufferEXT(0x%x, %d, %p);\n", target, numAttachments, (const void *) attachments));
@@ -9305,9 +9428,9 @@ KEYWORD1 void KEYWORD2 NAME(ActiveShaderProgram)(GLuint pipeline, GLuint program
    DISPATCH(ActiveShaderProgram, (pipeline, program), (F, "glActiveShaderProgram(%d, %d);\n", pipeline, program));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1040)(GLuint pipeline, GLuint program);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1041)(GLuint pipeline, GLuint program);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1040)(GLuint pipeline, GLuint program)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1041)(GLuint pipeline, GLuint program)
 {
     (void) pipeline; (void) program;
    DISPATCH(ActiveShaderProgram, (pipeline, program), (F, "glActiveShaderProgramEXT(%d, %d);\n", pipeline, program));
@@ -9319,9 +9442,9 @@ KEYWORD1 void KEYWORD2 NAME(BindProgramPipeline)(GLuint pipeline)
    DISPATCH(BindProgramPipeline, (pipeline), (F, "glBindProgramPipeline(%d);\n", pipeline));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1041)(GLuint pipeline);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1042)(GLuint pipeline);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1041)(GLuint pipeline)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1042)(GLuint pipeline)
 {
     (void) pipeline;
    DISPATCH(BindProgramPipeline, (pipeline), (F, "glBindProgramPipelineEXT(%d);\n", pipeline));
@@ -9333,9 +9456,9 @@ KEYWORD1 GLuint KEYWORD2 NAME(CreateShaderProgramv)(GLenum type, GLsizei count, 
    RETURN_DISPATCH(CreateShaderProgramv, (type, count, strings), (F, "glCreateShaderProgramv(0x%x, %d, %p);\n", type, count, (const void *) strings));
 }
 
-KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1042)(GLenum type, GLsizei count, const GLchar * const * strings);
+KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1043)(GLenum type, GLsizei count, const GLchar * const * strings);
 
-KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1042)(GLenum type, GLsizei count, const GLchar * const * strings)
+KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1043)(GLenum type, GLsizei count, const GLchar * const * strings)
 {
     (void) type; (void) count; (void) strings;
    RETURN_DISPATCH(CreateShaderProgramv, (type, count, strings), (F, "glCreateShaderProgramvEXT(0x%x, %d, %p);\n", type, count, (const void *) strings));
@@ -9347,9 +9470,9 @@ KEYWORD1 void KEYWORD2 NAME(DeleteProgramPipelines)(GLsizei n, const GLuint * pi
    DISPATCH(DeleteProgramPipelines, (n, pipelines), (F, "glDeleteProgramPipelines(%d, %p);\n", n, (const void *) pipelines));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1043)(GLsizei n, const GLuint * pipelines);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1044)(GLsizei n, const GLuint * pipelines);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1043)(GLsizei n, const GLuint * pipelines)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1044)(GLsizei n, const GLuint * pipelines)
 {
     (void) n; (void) pipelines;
    DISPATCH(DeleteProgramPipelines, (n, pipelines), (F, "glDeleteProgramPipelinesEXT(%d, %p);\n", n, (const void *) pipelines));
@@ -9361,9 +9484,9 @@ KEYWORD1 void KEYWORD2 NAME(GenProgramPipelines)(GLsizei n, GLuint * pipelines)
    DISPATCH(GenProgramPipelines, (n, pipelines), (F, "glGenProgramPipelines(%d, %p);\n", n, (const void *) pipelines));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1044)(GLsizei n, GLuint * pipelines);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1045)(GLsizei n, GLuint * pipelines);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1044)(GLsizei n, GLuint * pipelines)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1045)(GLsizei n, GLuint * pipelines)
 {
     (void) n; (void) pipelines;
    DISPATCH(GenProgramPipelines, (n, pipelines), (F, "glGenProgramPipelinesEXT(%d, %p);\n", n, (const void *) pipelines));
@@ -9375,9 +9498,9 @@ KEYWORD1 void KEYWORD2 NAME(GetProgramPipelineInfoLog)(GLuint pipeline, GLsizei 
    DISPATCH(GetProgramPipelineInfoLog, (pipeline, bufSize, length, infoLog), (F, "glGetProgramPipelineInfoLog(%d, %d, %p, %p);\n", pipeline, bufSize, (const void *) length, (const void *) infoLog));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1045)(GLuint pipeline, GLsizei bufSize, GLsizei * length, GLchar * infoLog);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1046)(GLuint pipeline, GLsizei bufSize, GLsizei * length, GLchar * infoLog);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1045)(GLuint pipeline, GLsizei bufSize, GLsizei * length, GLchar * infoLog)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1046)(GLuint pipeline, GLsizei bufSize, GLsizei * length, GLchar * infoLog)
 {
     (void) pipeline; (void) bufSize; (void) length; (void) infoLog;
    DISPATCH(GetProgramPipelineInfoLog, (pipeline, bufSize, length, infoLog), (F, "glGetProgramPipelineInfoLogEXT(%d, %d, %p, %p);\n", pipeline, bufSize, (const void *) length, (const void *) infoLog));
@@ -9389,9 +9512,9 @@ KEYWORD1 void KEYWORD2 NAME(GetProgramPipelineiv)(GLuint pipeline, GLenum pname,
    DISPATCH(GetProgramPipelineiv, (pipeline, pname, params), (F, "glGetProgramPipelineiv(%d, 0x%x, %p);\n", pipeline, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1046)(GLuint pipeline, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1047)(GLuint pipeline, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1046)(GLuint pipeline, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1047)(GLuint pipeline, GLenum pname, GLint * params)
 {
     (void) pipeline; (void) pname; (void) params;
    DISPATCH(GetProgramPipelineiv, (pipeline, pname, params), (F, "glGetProgramPipelineivEXT(%d, 0x%x, %p);\n", pipeline, pname, (const void *) params));
@@ -9403,9 +9526,9 @@ KEYWORD1 GLboolean KEYWORD2 NAME(IsProgramPipeline)(GLuint pipeline)
    RETURN_DISPATCH(IsProgramPipeline, (pipeline), (F, "glIsProgramPipeline(%d);\n", pipeline));
 }
 
-KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1047)(GLuint pipeline);
+KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1048)(GLuint pipeline);
 
-KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1047)(GLuint pipeline)
+KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1048)(GLuint pipeline)
 {
     (void) pipeline;
    RETURN_DISPATCH(IsProgramPipeline, (pipeline), (F, "glIsProgramPipelineEXT(%d);\n", pipeline));
@@ -9417,17 +9540,17 @@ KEYWORD1 void KEYWORD2 NAME(LockArraysEXT)(GLint first, GLsizei count)
    DISPATCH(LockArraysEXT, (first, count), (F, "glLockArraysEXT(%d, %d);\n", first, count));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1049)(GLuint program, GLint location, GLdouble x);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1050)(GLuint program, GLint location, GLdouble x);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1049)(GLuint program, GLint location, GLdouble x)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1050)(GLuint program, GLint location, GLdouble x)
 {
     (void) program; (void) location; (void) x;
    DISPATCH(ProgramUniform1d, (program, location, x), (F, "glProgramUniform1d(%d, %d, %f);\n", program, location, x));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1050)(GLuint program, GLint location, GLsizei count, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1051)(GLuint program, GLint location, GLsizei count, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1050)(GLuint program, GLint location, GLsizei count, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1051)(GLuint program, GLint location, GLsizei count, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform1dv, (program, location, count, value), (F, "glProgramUniform1dv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9439,9 +9562,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform1f)(GLuint program, GLint location, GL
    DISPATCH(ProgramUniform1f, (program, location, x), (F, "glProgramUniform1f(%d, %d, %f);\n", program, location, x));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1051)(GLuint program, GLint location, GLfloat x);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1052)(GLuint program, GLint location, GLfloat x);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1051)(GLuint program, GLint location, GLfloat x)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1052)(GLuint program, GLint location, GLfloat x)
 {
     (void) program; (void) location; (void) x;
    DISPATCH(ProgramUniform1f, (program, location, x), (F, "glProgramUniform1fEXT(%d, %d, %f);\n", program, location, x));
@@ -9453,9 +9576,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform1fv)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform1fv, (program, location, count, value), (F, "glProgramUniform1fv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1052)(GLuint program, GLint location, GLsizei count, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1053)(GLuint program, GLint location, GLsizei count, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1052)(GLuint program, GLint location, GLsizei count, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1053)(GLuint program, GLint location, GLsizei count, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform1fv, (program, location, count, value), (F, "glProgramUniform1fvEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9467,9 +9590,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform1i)(GLuint program, GLint location, GL
    DISPATCH(ProgramUniform1i, (program, location, x), (F, "glProgramUniform1i(%d, %d, %d);\n", program, location, x));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1053)(GLuint program, GLint location, GLint x);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1054)(GLuint program, GLint location, GLint x);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1053)(GLuint program, GLint location, GLint x)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1054)(GLuint program, GLint location, GLint x)
 {
     (void) program; (void) location; (void) x;
    DISPATCH(ProgramUniform1i, (program, location, x), (F, "glProgramUniform1iEXT(%d, %d, %d);\n", program, location, x));
@@ -9481,9 +9604,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform1iv)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform1iv, (program, location, count, value), (F, "glProgramUniform1iv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1054)(GLuint program, GLint location, GLsizei count, const GLint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1055)(GLuint program, GLint location, GLsizei count, const GLint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1054)(GLuint program, GLint location, GLsizei count, const GLint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1055)(GLuint program, GLint location, GLsizei count, const GLint * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform1iv, (program, location, count, value), (F, "glProgramUniform1ivEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9495,9 +9618,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform1ui)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform1ui, (program, location, x), (F, "glProgramUniform1ui(%d, %d, %d);\n", program, location, x));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1055)(GLuint program, GLint location, GLuint x);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1056)(GLuint program, GLint location, GLuint x);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1055)(GLuint program, GLint location, GLuint x)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1056)(GLuint program, GLint location, GLuint x)
 {
     (void) program; (void) location; (void) x;
    DISPATCH(ProgramUniform1ui, (program, location, x), (F, "glProgramUniform1uiEXT(%d, %d, %d);\n", program, location, x));
@@ -9509,25 +9632,25 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform1uiv)(GLuint program, GLint location, 
    DISPATCH(ProgramUniform1uiv, (program, location, count, value), (F, "glProgramUniform1uiv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1056)(GLuint program, GLint location, GLsizei count, const GLuint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1057)(GLuint program, GLint location, GLsizei count, const GLuint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1056)(GLuint program, GLint location, GLsizei count, const GLuint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1057)(GLuint program, GLint location, GLsizei count, const GLuint * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform1uiv, (program, location, count, value), (F, "glProgramUniform1uivEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1057)(GLuint program, GLint location, GLdouble x, GLdouble y);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1058)(GLuint program, GLint location, GLdouble x, GLdouble y);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1057)(GLuint program, GLint location, GLdouble x, GLdouble y)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1058)(GLuint program, GLint location, GLdouble x, GLdouble y)
 {
     (void) program; (void) location; (void) x; (void) y;
    DISPATCH(ProgramUniform2d, (program, location, x, y), (F, "glProgramUniform2d(%d, %d, %f, %f);\n", program, location, x, y));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1058)(GLuint program, GLint location, GLsizei count, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1059)(GLuint program, GLint location, GLsizei count, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1058)(GLuint program, GLint location, GLsizei count, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1059)(GLuint program, GLint location, GLsizei count, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform2dv, (program, location, count, value), (F, "glProgramUniform2dv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9539,9 +9662,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform2f)(GLuint program, GLint location, GL
    DISPATCH(ProgramUniform2f, (program, location, x, y), (F, "glProgramUniform2f(%d, %d, %f, %f);\n", program, location, x, y));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1059)(GLuint program, GLint location, GLfloat x, GLfloat y);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1060)(GLuint program, GLint location, GLfloat x, GLfloat y);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1059)(GLuint program, GLint location, GLfloat x, GLfloat y)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1060)(GLuint program, GLint location, GLfloat x, GLfloat y)
 {
     (void) program; (void) location; (void) x; (void) y;
    DISPATCH(ProgramUniform2f, (program, location, x, y), (F, "glProgramUniform2fEXT(%d, %d, %f, %f);\n", program, location, x, y));
@@ -9553,9 +9676,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform2fv)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform2fv, (program, location, count, value), (F, "glProgramUniform2fv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1060)(GLuint program, GLint location, GLsizei count, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1061)(GLuint program, GLint location, GLsizei count, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1060)(GLuint program, GLint location, GLsizei count, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1061)(GLuint program, GLint location, GLsizei count, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform2fv, (program, location, count, value), (F, "glProgramUniform2fvEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9567,9 +9690,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform2i)(GLuint program, GLint location, GL
    DISPATCH(ProgramUniform2i, (program, location, x, y), (F, "glProgramUniform2i(%d, %d, %d, %d);\n", program, location, x, y));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1061)(GLuint program, GLint location, GLint x, GLint y);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1062)(GLuint program, GLint location, GLint x, GLint y);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1061)(GLuint program, GLint location, GLint x, GLint y)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1062)(GLuint program, GLint location, GLint x, GLint y)
 {
     (void) program; (void) location; (void) x; (void) y;
    DISPATCH(ProgramUniform2i, (program, location, x, y), (F, "glProgramUniform2iEXT(%d, %d, %d, %d);\n", program, location, x, y));
@@ -9581,9 +9704,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform2iv)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform2iv, (program, location, count, value), (F, "glProgramUniform2iv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1062)(GLuint program, GLint location, GLsizei count, const GLint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1063)(GLuint program, GLint location, GLsizei count, const GLint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1062)(GLuint program, GLint location, GLsizei count, const GLint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1063)(GLuint program, GLint location, GLsizei count, const GLint * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform2iv, (program, location, count, value), (F, "glProgramUniform2ivEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9595,9 +9718,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform2ui)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform2ui, (program, location, x, y), (F, "glProgramUniform2ui(%d, %d, %d, %d);\n", program, location, x, y));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1063)(GLuint program, GLint location, GLuint x, GLuint y);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1064)(GLuint program, GLint location, GLuint x, GLuint y);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1063)(GLuint program, GLint location, GLuint x, GLuint y)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1064)(GLuint program, GLint location, GLuint x, GLuint y)
 {
     (void) program; (void) location; (void) x; (void) y;
    DISPATCH(ProgramUniform2ui, (program, location, x, y), (F, "glProgramUniform2uiEXT(%d, %d, %d, %d);\n", program, location, x, y));
@@ -9609,25 +9732,25 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform2uiv)(GLuint program, GLint location, 
    DISPATCH(ProgramUniform2uiv, (program, location, count, value), (F, "glProgramUniform2uiv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1064)(GLuint program, GLint location, GLsizei count, const GLuint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1065)(GLuint program, GLint location, GLsizei count, const GLuint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1064)(GLuint program, GLint location, GLsizei count, const GLuint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1065)(GLuint program, GLint location, GLsizei count, const GLuint * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform2uiv, (program, location, count, value), (F, "glProgramUniform2uivEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1065)(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1066)(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1065)(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1066)(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z)
 {
     (void) program; (void) location; (void) x; (void) y; (void) z;
    DISPATCH(ProgramUniform3d, (program, location, x, y, z), (F, "glProgramUniform3d(%d, %d, %f, %f, %f);\n", program, location, x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1066)(GLuint program, GLint location, GLsizei count, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1067)(GLuint program, GLint location, GLsizei count, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1066)(GLuint program, GLint location, GLsizei count, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1067)(GLuint program, GLint location, GLsizei count, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform3dv, (program, location, count, value), (F, "glProgramUniform3dv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9639,9 +9762,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform3f)(GLuint program, GLint location, GL
    DISPATCH(ProgramUniform3f, (program, location, x, y, z), (F, "glProgramUniform3f(%d, %d, %f, %f, %f);\n", program, location, x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1067)(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1068)(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1067)(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1068)(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z)
 {
     (void) program; (void) location; (void) x; (void) y; (void) z;
    DISPATCH(ProgramUniform3f, (program, location, x, y, z), (F, "glProgramUniform3fEXT(%d, %d, %f, %f, %f);\n", program, location, x, y, z));
@@ -9653,9 +9776,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform3fv)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform3fv, (program, location, count, value), (F, "glProgramUniform3fv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1068)(GLuint program, GLint location, GLsizei count, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1069)(GLuint program, GLint location, GLsizei count, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1068)(GLuint program, GLint location, GLsizei count, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1069)(GLuint program, GLint location, GLsizei count, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform3fv, (program, location, count, value), (F, "glProgramUniform3fvEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9667,9 +9790,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform3i)(GLuint program, GLint location, GL
    DISPATCH(ProgramUniform3i, (program, location, x, y, z), (F, "glProgramUniform3i(%d, %d, %d, %d, %d);\n", program, location, x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1069)(GLuint program, GLint location, GLint x, GLint y, GLint z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1070)(GLuint program, GLint location, GLint x, GLint y, GLint z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1069)(GLuint program, GLint location, GLint x, GLint y, GLint z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1070)(GLuint program, GLint location, GLint x, GLint y, GLint z)
 {
     (void) program; (void) location; (void) x; (void) y; (void) z;
    DISPATCH(ProgramUniform3i, (program, location, x, y, z), (F, "glProgramUniform3iEXT(%d, %d, %d, %d, %d);\n", program, location, x, y, z));
@@ -9681,9 +9804,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform3iv)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform3iv, (program, location, count, value), (F, "glProgramUniform3iv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1070)(GLuint program, GLint location, GLsizei count, const GLint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1071)(GLuint program, GLint location, GLsizei count, const GLint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1070)(GLuint program, GLint location, GLsizei count, const GLint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1071)(GLuint program, GLint location, GLsizei count, const GLint * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform3iv, (program, location, count, value), (F, "glProgramUniform3ivEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9695,9 +9818,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform3ui)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform3ui, (program, location, x, y, z), (F, "glProgramUniform3ui(%d, %d, %d, %d, %d);\n", program, location, x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1071)(GLuint program, GLint location, GLuint x, GLuint y, GLuint z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1072)(GLuint program, GLint location, GLuint x, GLuint y, GLuint z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1071)(GLuint program, GLint location, GLuint x, GLuint y, GLuint z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1072)(GLuint program, GLint location, GLuint x, GLuint y, GLuint z)
 {
     (void) program; (void) location; (void) x; (void) y; (void) z;
    DISPATCH(ProgramUniform3ui, (program, location, x, y, z), (F, "glProgramUniform3uiEXT(%d, %d, %d, %d, %d);\n", program, location, x, y, z));
@@ -9709,25 +9832,25 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform3uiv)(GLuint program, GLint location, 
    DISPATCH(ProgramUniform3uiv, (program, location, count, value), (F, "glProgramUniform3uiv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1072)(GLuint program, GLint location, GLsizei count, const GLuint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1073)(GLuint program, GLint location, GLsizei count, const GLuint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1072)(GLuint program, GLint location, GLsizei count, const GLuint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1073)(GLuint program, GLint location, GLsizei count, const GLuint * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform3uiv, (program, location, count, value), (F, "glProgramUniform3uivEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1073)(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1074)(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1073)(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1074)(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
     (void) program; (void) location; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(ProgramUniform4d, (program, location, x, y, z, w), (F, "glProgramUniform4d(%d, %d, %f, %f, %f, %f);\n", program, location, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1074)(GLuint program, GLint location, GLsizei count, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1075)(GLuint program, GLint location, GLsizei count, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1074)(GLuint program, GLint location, GLsizei count, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1075)(GLuint program, GLint location, GLsizei count, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform4dv, (program, location, count, value), (F, "glProgramUniform4dv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9739,9 +9862,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform4f)(GLuint program, GLint location, GL
    DISPATCH(ProgramUniform4f, (program, location, x, y, z, w), (F, "glProgramUniform4f(%d, %d, %f, %f, %f, %f);\n", program, location, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1075)(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1076)(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1075)(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1076)(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
     (void) program; (void) location; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(ProgramUniform4f, (program, location, x, y, z, w), (F, "glProgramUniform4fEXT(%d, %d, %f, %f, %f, %f);\n", program, location, x, y, z, w));
@@ -9753,9 +9876,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform4fv)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform4fv, (program, location, count, value), (F, "glProgramUniform4fv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1076)(GLuint program, GLint location, GLsizei count, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1077)(GLuint program, GLint location, GLsizei count, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1076)(GLuint program, GLint location, GLsizei count, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1077)(GLuint program, GLint location, GLsizei count, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform4fv, (program, location, count, value), (F, "glProgramUniform4fvEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9767,9 +9890,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform4i)(GLuint program, GLint location, GL
    DISPATCH(ProgramUniform4i, (program, location, x, y, z, w), (F, "glProgramUniform4i(%d, %d, %d, %d, %d, %d);\n", program, location, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1077)(GLuint program, GLint location, GLint x, GLint y, GLint z, GLint w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1078)(GLuint program, GLint location, GLint x, GLint y, GLint z, GLint w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1077)(GLuint program, GLint location, GLint x, GLint y, GLint z, GLint w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1078)(GLuint program, GLint location, GLint x, GLint y, GLint z, GLint w)
 {
     (void) program; (void) location; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(ProgramUniform4i, (program, location, x, y, z, w), (F, "glProgramUniform4iEXT(%d, %d, %d, %d, %d, %d);\n", program, location, x, y, z, w));
@@ -9781,9 +9904,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform4iv)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform4iv, (program, location, count, value), (F, "glProgramUniform4iv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1078)(GLuint program, GLint location, GLsizei count, const GLint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1079)(GLuint program, GLint location, GLsizei count, const GLint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1078)(GLuint program, GLint location, GLsizei count, const GLint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1079)(GLuint program, GLint location, GLsizei count, const GLint * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform4iv, (program, location, count, value), (F, "glProgramUniform4ivEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
@@ -9795,9 +9918,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform4ui)(GLuint program, GLint location, G
    DISPATCH(ProgramUniform4ui, (program, location, x, y, z, w), (F, "glProgramUniform4ui(%d, %d, %d, %d, %d, %d);\n", program, location, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1079)(GLuint program, GLint location, GLuint x, GLuint y, GLuint z, GLuint w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1080)(GLuint program, GLint location, GLuint x, GLuint y, GLuint z, GLuint w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1079)(GLuint program, GLint location, GLuint x, GLuint y, GLuint z, GLuint w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1080)(GLuint program, GLint location, GLuint x, GLuint y, GLuint z, GLuint w)
 {
     (void) program; (void) location; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(ProgramUniform4ui, (program, location, x, y, z, w), (F, "glProgramUniform4uiEXT(%d, %d, %d, %d, %d, %d);\n", program, location, x, y, z, w));
@@ -9809,17 +9932,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniform4uiv)(GLuint program, GLint location, 
    DISPATCH(ProgramUniform4uiv, (program, location, count, value), (F, "glProgramUniform4uiv(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1080)(GLuint program, GLint location, GLsizei count, const GLuint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1081)(GLuint program, GLint location, GLsizei count, const GLuint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1080)(GLuint program, GLint location, GLsizei count, const GLuint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1081)(GLuint program, GLint location, GLsizei count, const GLuint * value)
 {
     (void) program; (void) location; (void) count; (void) value;
    DISPATCH(ProgramUniform4uiv, (program, location, count, value), (F, "glProgramUniform4uivEXT(%d, %d, %d, %p);\n", program, location, count, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1081)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1082)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1081)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1082)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix2dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -9831,17 +9954,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix2fv)(GLuint program, GLint locat
    DISPATCH(ProgramUniformMatrix2fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1082)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1083)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1082)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1083)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix2fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1083)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1084)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1083)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1084)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix2x3dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2x3dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -9853,17 +9976,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix2x3fv)(GLuint program, GLint loc
    DISPATCH(ProgramUniformMatrix2x3fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2x3fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1084)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1085)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1084)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1085)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix2x3fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2x3fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1085)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1086)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1085)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1086)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix2x4dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2x4dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -9875,17 +9998,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix2x4fv)(GLuint program, GLint loc
    DISPATCH(ProgramUniformMatrix2x4fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2x4fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1086)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1087)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1086)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1087)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix2x4fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix2x4fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1087)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1088)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1087)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1088)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix3dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -9897,17 +10020,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix3fv)(GLuint program, GLint locat
    DISPATCH(ProgramUniformMatrix3fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1088)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1089)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1088)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1089)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix3fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1089)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1090)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1089)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1090)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix3x2dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3x2dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -9919,17 +10042,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix3x2fv)(GLuint program, GLint loc
    DISPATCH(ProgramUniformMatrix3x2fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3x2fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1090)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1091)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1090)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1091)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix3x2fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3x2fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1091)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1092)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1091)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1092)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix3x4dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3x4dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -9941,17 +10064,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix3x4fv)(GLuint program, GLint loc
    DISPATCH(ProgramUniformMatrix3x4fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3x4fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1092)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1093)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1092)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1093)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix3x4fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix3x4fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1093)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1094)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1093)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1094)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix4dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -9963,17 +10086,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix4fv)(GLuint program, GLint locat
    DISPATCH(ProgramUniformMatrix4fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1094)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1095)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1094)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1095)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix4fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1095)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1096)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1095)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1096)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix4x2dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4x2dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -9985,17 +10108,17 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix4x2fv)(GLuint program, GLint loc
    DISPATCH(ProgramUniformMatrix4x2fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4x2fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1096)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1097)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1096)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1097)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix4x2fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4x2fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1097)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1098)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1097)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1098)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix4x3dv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4x3dv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -10007,9 +10130,9 @@ KEYWORD1 void KEYWORD2 NAME(ProgramUniformMatrix4x3fv)(GLuint program, GLint loc
    DISPATCH(ProgramUniformMatrix4x3fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4x3fv(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1098)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1099)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1098)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1099)(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)
 {
     (void) program; (void) location; (void) count; (void) transpose; (void) value;
    DISPATCH(ProgramUniformMatrix4x3fv, (program, location, count, transpose, value), (F, "glProgramUniformMatrix4x3fvEXT(%d, %d, %d, %d, %p);\n", program, location, count, transpose, (const void *) value));
@@ -10026,9 +10149,9 @@ KEYWORD1 void KEYWORD2 NAME(UseProgramStages)(GLuint pipeline, GLbitfield stages
    DISPATCH(UseProgramStages, (pipeline, stages, program), (F, "glUseProgramStages(%d, %d, %d);\n", pipeline, stages, program));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1100)(GLuint pipeline, GLbitfield stages, GLuint program);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1101)(GLuint pipeline, GLbitfield stages, GLuint program);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1100)(GLuint pipeline, GLbitfield stages, GLuint program)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1101)(GLuint pipeline, GLbitfield stages, GLuint program)
 {
     (void) pipeline; (void) stages; (void) program;
    DISPATCH(UseProgramStages, (pipeline, stages, program), (F, "glUseProgramStagesEXT(%d, %d, %d);\n", pipeline, stages, program));
@@ -10040,9 +10163,9 @@ KEYWORD1 void KEYWORD2 NAME(ValidateProgramPipeline)(GLuint pipeline)
    DISPATCH(ValidateProgramPipeline, (pipeline), (F, "glValidateProgramPipeline(%d);\n", pipeline));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1101)(GLuint pipeline);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1102)(GLuint pipeline);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1101)(GLuint pipeline)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1102)(GLuint pipeline)
 {
     (void) pipeline;
    DISPATCH(ValidateProgramPipeline, (pipeline), (F, "glValidateProgramPipelineEXT(%d);\n", pipeline));
@@ -10060,9 +10183,9 @@ KEYWORD1 void KEYWORD2 NAME(DebugMessageCallback)(GLDEBUGPROC callback, const GL
    DISPATCH(DebugMessageCallback, (callback, userParam), (F, "glDebugMessageCallback(%p, %p);\n", (const void *) callback, (const void *) userParam));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1102)(GLDEBUGPROC callback, const GLvoid * userParam);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1103)(GLDEBUGPROC callback, const GLvoid * userParam);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1102)(GLDEBUGPROC callback, const GLvoid * userParam)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1103)(GLDEBUGPROC callback, const GLvoid * userParam)
 {
     (void) callback; (void) userParam;
    DISPATCH(DebugMessageCallback, (callback, userParam), (F, "glDebugMessageCallbackKHR(%p, %p);\n", (const void *) callback, (const void *) userParam));
@@ -10080,9 +10203,9 @@ KEYWORD1 void KEYWORD2 NAME(DebugMessageControl)(GLenum source, GLenum type, GLe
    DISPATCH(DebugMessageControl, (source, type, severity, count, ids, enabled), (F, "glDebugMessageControl(0x%x, 0x%x, 0x%x, %d, %p, %d);\n", source, type, severity, count, (const void *) ids, enabled));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1103)(GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint * ids, GLboolean enabled);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1104)(GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint * ids, GLboolean enabled);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1103)(GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint * ids, GLboolean enabled)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1104)(GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint * ids, GLboolean enabled)
 {
     (void) source; (void) type; (void) severity; (void) count; (void) ids; (void) enabled;
    DISPATCH(DebugMessageControl, (source, type, severity, count, ids, enabled), (F, "glDebugMessageControlKHR(0x%x, 0x%x, 0x%x, %d, %p, %d);\n", source, type, severity, count, (const void *) ids, enabled));
@@ -10100,9 +10223,9 @@ KEYWORD1 void KEYWORD2 NAME(DebugMessageInsert)(GLenum source, GLenum type, GLui
    DISPATCH(DebugMessageInsert, (source, type, id, severity, length, buf), (F, "glDebugMessageInsert(0x%x, 0x%x, %d, 0x%x, %d, %p);\n", source, type, id, severity, length, (const void *) buf));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1104)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar * buf);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1105)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar * buf);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1104)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar * buf)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1105)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar * buf)
 {
     (void) source; (void) type; (void) id; (void) severity; (void) length; (void) buf;
    DISPATCH(DebugMessageInsert, (source, type, id, severity, length, buf), (F, "glDebugMessageInsertKHR(0x%x, 0x%x, %d, 0x%x, %d, %p);\n", source, type, id, severity, length, (const void *) buf));
@@ -10120,9 +10243,9 @@ KEYWORD1 GLuint KEYWORD2 NAME(GetDebugMessageLog)(GLuint count, GLsizei bufsize,
    RETURN_DISPATCH(GetDebugMessageLog, (count, bufsize, sources, types, ids, severities, lengths, messageLog), (F, "glGetDebugMessageLog(%d, %d, %p, %p, %p, %p, %p, %p);\n", count, bufsize, (const void *) sources, (const void *) types, (const void *) ids, (const void *) severities, (const void *) lengths, (const void *) messageLog));
 }
 
-KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1105)(GLuint count, GLsizei bufsize, GLenum * sources, GLenum * types, GLuint * ids, GLenum * severities, GLsizei * lengths, GLchar * messageLog);
+KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1106)(GLuint count, GLsizei bufsize, GLenum * sources, GLenum * types, GLuint * ids, GLenum * severities, GLsizei * lengths, GLchar * messageLog);
 
-KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1105)(GLuint count, GLsizei bufsize, GLenum * sources, GLenum * types, GLuint * ids, GLenum * severities, GLsizei * lengths, GLchar * messageLog)
+KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1106)(GLuint count, GLsizei bufsize, GLenum * sources, GLenum * types, GLuint * ids, GLenum * severities, GLsizei * lengths, GLchar * messageLog)
 {
     (void) count; (void) bufsize; (void) sources; (void) types; (void) ids; (void) severities; (void) lengths; (void) messageLog;
    RETURN_DISPATCH(GetDebugMessageLog, (count, bufsize, sources, types, ids, severities, lengths, messageLog), (F, "glGetDebugMessageLogKHR(%d, %d, %p, %p, %p, %p, %p, %p);\n", count, bufsize, (const void *) sources, (const void *) types, (const void *) ids, (const void *) severities, (const void *) lengths, (const void *) messageLog));
@@ -10134,9 +10257,9 @@ KEYWORD1 void KEYWORD2 NAME(GetObjectLabel)(GLenum identifier, GLuint name, GLsi
    DISPATCH(GetObjectLabel, (identifier, name, bufSize, length, label), (F, "glGetObjectLabel(0x%x, %d, %d, %p, %p);\n", identifier, name, bufSize, (const void *) length, (const void *) label));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1106)(GLenum identifier, GLuint name, GLsizei bufSize, GLsizei * length, GLchar * label);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1107)(GLenum identifier, GLuint name, GLsizei bufSize, GLsizei * length, GLchar * label);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1106)(GLenum identifier, GLuint name, GLsizei bufSize, GLsizei * length, GLchar * label)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1107)(GLenum identifier, GLuint name, GLsizei bufSize, GLsizei * length, GLchar * label)
 {
     (void) identifier; (void) name; (void) bufSize; (void) length; (void) label;
    DISPATCH(GetObjectLabel, (identifier, name, bufSize, length, label), (F, "glGetObjectLabelKHR(0x%x, %d, %d, %p, %p);\n", identifier, name, bufSize, (const void *) length, (const void *) label));
@@ -10148,9 +10271,9 @@ KEYWORD1 void KEYWORD2 NAME(GetObjectPtrLabel)(const GLvoid * ptr, GLsizei bufSi
    DISPATCH(GetObjectPtrLabel, (ptr, bufSize, length, label), (F, "glGetObjectPtrLabel(%p, %d, %p, %p);\n", (const void *) ptr, bufSize, (const void *) length, (const void *) label));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1107)(const GLvoid * ptr, GLsizei bufSize, GLsizei * length, GLchar * label);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1108)(const GLvoid * ptr, GLsizei bufSize, GLsizei * length, GLchar * label);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1107)(const GLvoid * ptr, GLsizei bufSize, GLsizei * length, GLchar * label)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1108)(const GLvoid * ptr, GLsizei bufSize, GLsizei * length, GLchar * label)
 {
     (void) ptr; (void) bufSize; (void) length; (void) label;
    DISPATCH(GetObjectPtrLabel, (ptr, bufSize, length, label), (F, "glGetObjectPtrLabelKHR(%p, %d, %p, %p);\n", (const void *) ptr, bufSize, (const void *) length, (const void *) label));
@@ -10162,9 +10285,9 @@ KEYWORD1 void KEYWORD2 NAME(ObjectLabel)(GLenum identifier, GLuint name, GLsizei
    DISPATCH(ObjectLabel, (identifier, name, length, label), (F, "glObjectLabel(0x%x, %d, %d, %p);\n", identifier, name, length, (const void *) label));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1108)(GLenum identifier, GLuint name, GLsizei length, const GLchar * label);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1109)(GLenum identifier, GLuint name, GLsizei length, const GLchar * label);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1108)(GLenum identifier, GLuint name, GLsizei length, const GLchar * label)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1109)(GLenum identifier, GLuint name, GLsizei length, const GLchar * label)
 {
     (void) identifier; (void) name; (void) length; (void) label;
    DISPATCH(ObjectLabel, (identifier, name, length, label), (F, "glObjectLabelKHR(0x%x, %d, %d, %p);\n", identifier, name, length, (const void *) label));
@@ -10176,9 +10299,9 @@ KEYWORD1 void KEYWORD2 NAME(ObjectPtrLabel)(const GLvoid * ptr, GLsizei length, 
    DISPATCH(ObjectPtrLabel, (ptr, length, label), (F, "glObjectPtrLabel(%p, %d, %p);\n", (const void *) ptr, length, (const void *) label));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1109)(const GLvoid * ptr, GLsizei length, const GLchar * label);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1110)(const GLvoid * ptr, GLsizei length, const GLchar * label);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1109)(const GLvoid * ptr, GLsizei length, const GLchar * label)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1110)(const GLvoid * ptr, GLsizei length, const GLchar * label)
 {
     (void) ptr; (void) length; (void) label;
    DISPATCH(ObjectPtrLabel, (ptr, length, label), (F, "glObjectPtrLabelKHR(%p, %d, %p);\n", (const void *) ptr, length, (const void *) label));
@@ -10189,9 +10312,9 @@ KEYWORD1 void KEYWORD2 NAME(PopDebugGroup)(void)
    DISPATCH(PopDebugGroup, (), (F, "glPopDebugGroup();\n"));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1110)(void);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1111)(void);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1110)(void)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1111)(void)
 {
    DISPATCH(PopDebugGroup, (), (F, "glPopDebugGroupKHR();\n"));
 }
@@ -10202,9 +10325,9 @@ KEYWORD1 void KEYWORD2 NAME(PushDebugGroup)(GLenum source, GLuint id, GLsizei le
    DISPATCH(PushDebugGroup, (source, id, length, message), (F, "glPushDebugGroup(0x%x, %d, %d, %p);\n", source, id, length, (const void *) message));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1111)(GLenum source, GLuint id, GLsizei length, const GLchar * message);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1112)(GLenum source, GLuint id, GLsizei length, const GLchar * message);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1111)(GLenum source, GLuint id, GLsizei length, const GLchar * message)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1112)(GLenum source, GLuint id, GLsizei length, const GLchar * message)
 {
     (void) source; (void) id; (void) length; (void) message;
    DISPATCH(PushDebugGroup, (source, id, length, message), (F, "glPushDebugGroupKHR(0x%x, %d, %d, %p);\n", source, id, length, (const void *) message));
@@ -10270,742 +10393,758 @@ KEYWORD1 void KEYWORD2 NAME(FogCoordfvEXT)(const GLfloat * coord)
    DISPATCH(FogCoordfvEXT, (coord), (F, "glFogCoordfvEXT(%p);\n", (const void *) coord));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1117)(void);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1118)(void);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1117)(void)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1118)(void)
 {
    DISPATCH(ResizeBuffersMESA, (), (F, "glResizeBuffersMESA();\n"));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1118)(GLdouble x, GLdouble y, GLdouble z, GLdouble w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1119)(GLdouble x, GLdouble y, GLdouble z, GLdouble w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1118)(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1119)(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
     (void) x; (void) y; (void) z; (void) w;
    DISPATCH(WindowPos4dMESA, (x, y, z, w), (F, "glWindowPos4dMESA(%f, %f, %f, %f);\n", x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1119)(const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1120)(const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1119)(const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1120)(const GLdouble * v)
 {
     (void) v;
    DISPATCH(WindowPos4dvMESA, (v), (F, "glWindowPos4dvMESA(%p);\n", (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1120)(GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1121)(GLfloat x, GLfloat y, GLfloat z, GLfloat w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1120)(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1121)(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
     (void) x; (void) y; (void) z; (void) w;
    DISPATCH(WindowPos4fMESA, (x, y, z, w), (F, "glWindowPos4fMESA(%f, %f, %f, %f);\n", x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1121)(const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1122)(const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1121)(const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1122)(const GLfloat * v)
 {
     (void) v;
    DISPATCH(WindowPos4fvMESA, (v), (F, "glWindowPos4fvMESA(%p);\n", (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1122)(GLint x, GLint y, GLint z, GLint w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1123)(GLint x, GLint y, GLint z, GLint w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1122)(GLint x, GLint y, GLint z, GLint w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1123)(GLint x, GLint y, GLint z, GLint w)
 {
     (void) x; (void) y; (void) z; (void) w;
    DISPATCH(WindowPos4iMESA, (x, y, z, w), (F, "glWindowPos4iMESA(%d, %d, %d, %d);\n", x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1123)(const GLint * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1124)(const GLint * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1123)(const GLint * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1124)(const GLint * v)
 {
     (void) v;
    DISPATCH(WindowPos4ivMESA, (v), (F, "glWindowPos4ivMESA(%p);\n", (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1124)(GLshort x, GLshort y, GLshort z, GLshort w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1125)(GLshort x, GLshort y, GLshort z, GLshort w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1124)(GLshort x, GLshort y, GLshort z, GLshort w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1125)(GLshort x, GLshort y, GLshort z, GLshort w)
 {
     (void) x; (void) y; (void) z; (void) w;
    DISPATCH(WindowPos4sMESA, (x, y, z, w), (F, "glWindowPos4sMESA(%d, %d, %d, %d);\n", x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1125)(const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1126)(const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1125)(const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1126)(const GLshort * v)
 {
     (void) v;
    DISPATCH(WindowPos4svMESA, (v), (F, "glWindowPos4svMESA(%p);\n", (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1126)(const GLenum * mode, const GLint * first, const GLsizei * count, GLsizei primcount, GLint modestride);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1127)(const GLenum * mode, const GLint * first, const GLsizei * count, GLsizei primcount, GLint modestride);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1126)(const GLenum * mode, const GLint * first, const GLsizei * count, GLsizei primcount, GLint modestride)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1127)(const GLenum * mode, const GLint * first, const GLsizei * count, GLsizei primcount, GLint modestride)
 {
     (void) mode; (void) first; (void) count; (void) primcount; (void) modestride;
    DISPATCH(MultiModeDrawArraysIBM, (mode, first, count, primcount, modestride), (F, "glMultiModeDrawArraysIBM(%p, %p, %p, %d, %d);\n", (const void *) mode, (const void *) first, (const void *) count, primcount, modestride));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1127)(const GLenum * mode, const GLsizei * count, GLenum type, const GLvoid * const * indices, GLsizei primcount, GLint modestride);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1128)(const GLenum * mode, const GLsizei * count, GLenum type, const GLvoid * const * indices, GLsizei primcount, GLint modestride);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1127)(const GLenum * mode, const GLsizei * count, GLenum type, const GLvoid * const * indices, GLsizei primcount, GLint modestride)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1128)(const GLenum * mode, const GLsizei * count, GLenum type, const GLvoid * const * indices, GLsizei primcount, GLint modestride)
 {
     (void) mode; (void) count; (void) type; (void) indices; (void) primcount; (void) modestride;
    DISPATCH(MultiModeDrawElementsIBM, (mode, count, type, indices, primcount, modestride), (F, "glMultiModeDrawElementsIBM(%p, %p, 0x%x, %p, %d, %d);\n", (const void *) mode, (const void *) count, type, (const void *) indices, primcount, modestride));
 }
 
-KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1128)(GLsizei n, const GLuint * ids, GLboolean * residences);
+KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1129)(GLsizei n, const GLuint * ids, GLboolean * residences);
 
-KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1128)(GLsizei n, const GLuint * ids, GLboolean * residences)
+KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1129)(GLsizei n, const GLuint * ids, GLboolean * residences)
 {
     (void) n; (void) ids; (void) residences;
    RETURN_DISPATCH(AreProgramsResidentNV, (n, ids, residences), (F, "glAreProgramsResidentNV(%d, %p, %p);\n", n, (const void *) ids, (const void *) residences));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1129)(GLenum target, GLuint id, const GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1130)(GLenum target, GLuint id, const GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1129)(GLenum target, GLuint id, const GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1130)(GLenum target, GLuint id, const GLfloat * params)
 {
     (void) target; (void) id; (void) params;
    DISPATCH(ExecuteProgramNV, (target, id, params), (F, "glExecuteProgramNV(0x%x, %d, %p);\n", target, id, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1130)(GLenum target, GLuint index, GLenum pname, GLdouble * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1131)(GLenum target, GLuint index, GLenum pname, GLdouble * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1130)(GLenum target, GLuint index, GLenum pname, GLdouble * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1131)(GLenum target, GLuint index, GLenum pname, GLdouble * params)
 {
     (void) target; (void) index; (void) pname; (void) params;
    DISPATCH(GetProgramParameterdvNV, (target, index, pname, params), (F, "glGetProgramParameterdvNV(0x%x, %d, 0x%x, %p);\n", target, index, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1131)(GLenum target, GLuint index, GLenum pname, GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1132)(GLenum target, GLuint index, GLenum pname, GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1131)(GLenum target, GLuint index, GLenum pname, GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1132)(GLenum target, GLuint index, GLenum pname, GLfloat * params)
 {
     (void) target; (void) index; (void) pname; (void) params;
    DISPATCH(GetProgramParameterfvNV, (target, index, pname, params), (F, "glGetProgramParameterfvNV(0x%x, %d, 0x%x, %p);\n", target, index, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1132)(GLuint id, GLenum pname, GLubyte * program);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1133)(GLuint id, GLenum pname, GLubyte * program);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1132)(GLuint id, GLenum pname, GLubyte * program)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1133)(GLuint id, GLenum pname, GLubyte * program)
 {
     (void) id; (void) pname; (void) program;
    DISPATCH(GetProgramStringNV, (id, pname, program), (F, "glGetProgramStringNV(%d, 0x%x, %p);\n", id, pname, (const void *) program));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1133)(GLuint id, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1134)(GLuint id, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1133)(GLuint id, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1134)(GLuint id, GLenum pname, GLint * params)
 {
     (void) id; (void) pname; (void) params;
    DISPATCH(GetProgramivNV, (id, pname, params), (F, "glGetProgramivNV(%d, 0x%x, %p);\n", id, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1134)(GLenum target, GLuint address, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1135)(GLenum target, GLuint address, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1134)(GLenum target, GLuint address, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1135)(GLenum target, GLuint address, GLenum pname, GLint * params)
 {
     (void) target; (void) address; (void) pname; (void) params;
    DISPATCH(GetTrackMatrixivNV, (target, address, pname, params), (F, "glGetTrackMatrixivNV(0x%x, %d, 0x%x, %p);\n", target, address, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1135)(GLuint index, GLenum pname, GLdouble * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1136)(GLuint index, GLenum pname, GLdouble * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1135)(GLuint index, GLenum pname, GLdouble * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1136)(GLuint index, GLenum pname, GLdouble * params)
 {
     (void) index; (void) pname; (void) params;
    DISPATCH(GetVertexAttribdvNV, (index, pname, params), (F, "glGetVertexAttribdvNV(%d, 0x%x, %p);\n", index, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1136)(GLuint index, GLenum pname, GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1137)(GLuint index, GLenum pname, GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1136)(GLuint index, GLenum pname, GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1137)(GLuint index, GLenum pname, GLfloat * params)
 {
     (void) index; (void) pname; (void) params;
    DISPATCH(GetVertexAttribfvNV, (index, pname, params), (F, "glGetVertexAttribfvNV(%d, 0x%x, %p);\n", index, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1137)(GLuint index, GLenum pname, GLint * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1138)(GLuint index, GLenum pname, GLint * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1137)(GLuint index, GLenum pname, GLint * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1138)(GLuint index, GLenum pname, GLint * params)
 {
     (void) index; (void) pname; (void) params;
    DISPATCH(GetVertexAttribivNV, (index, pname, params), (F, "glGetVertexAttribivNV(%d, 0x%x, %p);\n", index, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1138)(GLenum target, GLuint id, GLsizei len, const GLubyte * program);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1139)(GLenum target, GLuint id, GLsizei len, const GLubyte * program);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1138)(GLenum target, GLuint id, GLsizei len, const GLubyte * program)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1139)(GLenum target, GLuint id, GLsizei len, const GLubyte * program)
 {
     (void) target; (void) id; (void) len; (void) program;
    DISPATCH(LoadProgramNV, (target, id, len, program), (F, "glLoadProgramNV(0x%x, %d, %d, %p);\n", target, id, len, (const void *) program));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1139)(GLenum target, GLuint index, GLsizei num, const GLdouble * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1140)(GLenum target, GLuint index, GLsizei num, const GLdouble * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1139)(GLenum target, GLuint index, GLsizei num, const GLdouble * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1140)(GLenum target, GLuint index, GLsizei num, const GLdouble * params)
 {
     (void) target; (void) index; (void) num; (void) params;
    DISPATCH(ProgramParameters4dvNV, (target, index, num, params), (F, "glProgramParameters4dvNV(0x%x, %d, %d, %p);\n", target, index, num, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1140)(GLenum target, GLuint index, GLsizei num, const GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1141)(GLenum target, GLuint index, GLsizei num, const GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1140)(GLenum target, GLuint index, GLsizei num, const GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1141)(GLenum target, GLuint index, GLsizei num, const GLfloat * params)
 {
     (void) target; (void) index; (void) num; (void) params;
    DISPATCH(ProgramParameters4fvNV, (target, index, num, params), (F, "glProgramParameters4fvNV(0x%x, %d, %d, %p);\n", target, index, num, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1141)(GLsizei n, const GLuint * ids);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1142)(GLsizei n, const GLuint * ids);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1141)(GLsizei n, const GLuint * ids)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1142)(GLsizei n, const GLuint * ids)
 {
     (void) n; (void) ids;
    DISPATCH(RequestResidentProgramsNV, (n, ids), (F, "glRequestResidentProgramsNV(%d, %p);\n", n, (const void *) ids));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1142)(GLenum target, GLuint address, GLenum matrix, GLenum transform);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1143)(GLenum target, GLuint address, GLenum matrix, GLenum transform);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1142)(GLenum target, GLuint address, GLenum matrix, GLenum transform)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1143)(GLenum target, GLuint address, GLenum matrix, GLenum transform)
 {
     (void) target; (void) address; (void) matrix; (void) transform;
    DISPATCH(TrackMatrixNV, (target, address, matrix, transform), (F, "glTrackMatrixNV(0x%x, %d, 0x%x, 0x%x);\n", target, address, matrix, transform));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1143)(GLuint index, GLdouble x);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1144)(GLuint index, GLdouble x);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1143)(GLuint index, GLdouble x)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1144)(GLuint index, GLdouble x)
 {
     (void) index; (void) x;
    DISPATCH(VertexAttrib1dNV, (index, x), (F, "glVertexAttrib1dNV(%d, %f);\n", index, x));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1144)(GLuint index, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1145)(GLuint index, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1144)(GLuint index, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1145)(GLuint index, const GLdouble * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib1dvNV, (index, v), (F, "glVertexAttrib1dvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1145)(GLuint index, GLfloat x);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1146)(GLuint index, GLfloat x);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1145)(GLuint index, GLfloat x)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1146)(GLuint index, GLfloat x)
 {
     (void) index; (void) x;
    DISPATCH(VertexAttrib1fNV, (index, x), (F, "glVertexAttrib1fNV(%d, %f);\n", index, x));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1146)(GLuint index, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1147)(GLuint index, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1146)(GLuint index, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1147)(GLuint index, const GLfloat * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib1fvNV, (index, v), (F, "glVertexAttrib1fvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1147)(GLuint index, GLshort x);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1148)(GLuint index, GLshort x);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1147)(GLuint index, GLshort x)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1148)(GLuint index, GLshort x)
 {
     (void) index; (void) x;
    DISPATCH(VertexAttrib1sNV, (index, x), (F, "glVertexAttrib1sNV(%d, %d);\n", index, x));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1148)(GLuint index, const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1149)(GLuint index, const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1148)(GLuint index, const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1149)(GLuint index, const GLshort * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib1svNV, (index, v), (F, "glVertexAttrib1svNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1149)(GLuint index, GLdouble x, GLdouble y);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1150)(GLuint index, GLdouble x, GLdouble y);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1149)(GLuint index, GLdouble x, GLdouble y)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1150)(GLuint index, GLdouble x, GLdouble y)
 {
     (void) index; (void) x; (void) y;
    DISPATCH(VertexAttrib2dNV, (index, x, y), (F, "glVertexAttrib2dNV(%d, %f, %f);\n", index, x, y));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1150)(GLuint index, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1151)(GLuint index, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1150)(GLuint index, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1151)(GLuint index, const GLdouble * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib2dvNV, (index, v), (F, "glVertexAttrib2dvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1151)(GLuint index, GLfloat x, GLfloat y);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1152)(GLuint index, GLfloat x, GLfloat y);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1151)(GLuint index, GLfloat x, GLfloat y)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1152)(GLuint index, GLfloat x, GLfloat y)
 {
     (void) index; (void) x; (void) y;
    DISPATCH(VertexAttrib2fNV, (index, x, y), (F, "glVertexAttrib2fNV(%d, %f, %f);\n", index, x, y));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1152)(GLuint index, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1153)(GLuint index, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1152)(GLuint index, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1153)(GLuint index, const GLfloat * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib2fvNV, (index, v), (F, "glVertexAttrib2fvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1153)(GLuint index, GLshort x, GLshort y);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1154)(GLuint index, GLshort x, GLshort y);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1153)(GLuint index, GLshort x, GLshort y)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1154)(GLuint index, GLshort x, GLshort y)
 {
     (void) index; (void) x; (void) y;
    DISPATCH(VertexAttrib2sNV, (index, x, y), (F, "glVertexAttrib2sNV(%d, %d, %d);\n", index, x, y));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1154)(GLuint index, const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1155)(GLuint index, const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1154)(GLuint index, const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1155)(GLuint index, const GLshort * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib2svNV, (index, v), (F, "glVertexAttrib2svNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1155)(GLuint index, GLdouble x, GLdouble y, GLdouble z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1156)(GLuint index, GLdouble x, GLdouble y, GLdouble z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1155)(GLuint index, GLdouble x, GLdouble y, GLdouble z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1156)(GLuint index, GLdouble x, GLdouble y, GLdouble z)
 {
     (void) index; (void) x; (void) y; (void) z;
    DISPATCH(VertexAttrib3dNV, (index, x, y, z), (F, "glVertexAttrib3dNV(%d, %f, %f, %f);\n", index, x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1156)(GLuint index, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1157)(GLuint index, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1156)(GLuint index, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1157)(GLuint index, const GLdouble * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib3dvNV, (index, v), (F, "glVertexAttrib3dvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1157)(GLuint index, GLfloat x, GLfloat y, GLfloat z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1158)(GLuint index, GLfloat x, GLfloat y, GLfloat z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1157)(GLuint index, GLfloat x, GLfloat y, GLfloat z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1158)(GLuint index, GLfloat x, GLfloat y, GLfloat z)
 {
     (void) index; (void) x; (void) y; (void) z;
    DISPATCH(VertexAttrib3fNV, (index, x, y, z), (F, "glVertexAttrib3fNV(%d, %f, %f, %f);\n", index, x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1158)(GLuint index, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1159)(GLuint index, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1158)(GLuint index, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1159)(GLuint index, const GLfloat * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib3fvNV, (index, v), (F, "glVertexAttrib3fvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1159)(GLuint index, GLshort x, GLshort y, GLshort z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1160)(GLuint index, GLshort x, GLshort y, GLshort z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1159)(GLuint index, GLshort x, GLshort y, GLshort z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1160)(GLuint index, GLshort x, GLshort y, GLshort z)
 {
     (void) index; (void) x; (void) y; (void) z;
    DISPATCH(VertexAttrib3sNV, (index, x, y, z), (F, "glVertexAttrib3sNV(%d, %d, %d, %d);\n", index, x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1160)(GLuint index, const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1161)(GLuint index, const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1160)(GLuint index, const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1161)(GLuint index, const GLshort * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib3svNV, (index, v), (F, "glVertexAttrib3svNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1161)(GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1162)(GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1161)(GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1162)(GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
     (void) index; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(VertexAttrib4dNV, (index, x, y, z, w), (F, "glVertexAttrib4dNV(%d, %f, %f, %f, %f);\n", index, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1162)(GLuint index, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1163)(GLuint index, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1162)(GLuint index, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1163)(GLuint index, const GLdouble * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib4dvNV, (index, v), (F, "glVertexAttrib4dvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1163)(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1164)(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1163)(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1164)(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
     (void) index; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(VertexAttrib4fNV, (index, x, y, z, w), (F, "glVertexAttrib4fNV(%d, %f, %f, %f, %f);\n", index, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1164)(GLuint index, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1165)(GLuint index, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1164)(GLuint index, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1165)(GLuint index, const GLfloat * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib4fvNV, (index, v), (F, "glVertexAttrib4fvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1165)(GLuint index, GLshort x, GLshort y, GLshort z, GLshort w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1166)(GLuint index, GLshort x, GLshort y, GLshort z, GLshort w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1165)(GLuint index, GLshort x, GLshort y, GLshort z, GLshort w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1166)(GLuint index, GLshort x, GLshort y, GLshort z, GLshort w)
 {
     (void) index; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(VertexAttrib4sNV, (index, x, y, z, w), (F, "glVertexAttrib4sNV(%d, %d, %d, %d, %d);\n", index, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1166)(GLuint index, const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1167)(GLuint index, const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1166)(GLuint index, const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1167)(GLuint index, const GLshort * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib4svNV, (index, v), (F, "glVertexAttrib4svNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1167)(GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1168)(GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1167)(GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1168)(GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w)
 {
     (void) index; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(VertexAttrib4ubNV, (index, x, y, z, w), (F, "glVertexAttrib4ubNV(%d, %d, %d, %d, %d);\n", index, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1168)(GLuint index, const GLubyte * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1169)(GLuint index, const GLubyte * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1168)(GLuint index, const GLubyte * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1169)(GLuint index, const GLubyte * v)
 {
     (void) index; (void) v;
    DISPATCH(VertexAttrib4ubvNV, (index, v), (F, "glVertexAttrib4ubvNV(%d, %p);\n", index, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1169)(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid * pointer);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1170)(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid * pointer);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1169)(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid * pointer)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1170)(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid * pointer)
 {
     (void) index; (void) size; (void) type; (void) stride; (void) pointer;
    DISPATCH(VertexAttribPointerNV, (index, size, type, stride, pointer), (F, "glVertexAttribPointerNV(%d, %d, 0x%x, %d, %p);\n", index, size, type, stride, (const void *) pointer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1170)(GLuint index, GLsizei n, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1171)(GLuint index, GLsizei n, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1170)(GLuint index, GLsizei n, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1171)(GLuint index, GLsizei n, const GLdouble * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs1dvNV, (index, n, v), (F, "glVertexAttribs1dvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1171)(GLuint index, GLsizei n, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1172)(GLuint index, GLsizei n, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1171)(GLuint index, GLsizei n, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1172)(GLuint index, GLsizei n, const GLfloat * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs1fvNV, (index, n, v), (F, "glVertexAttribs1fvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1172)(GLuint index, GLsizei n, const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1173)(GLuint index, GLsizei n, const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1172)(GLuint index, GLsizei n, const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1173)(GLuint index, GLsizei n, const GLshort * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs1svNV, (index, n, v), (F, "glVertexAttribs1svNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1173)(GLuint index, GLsizei n, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1174)(GLuint index, GLsizei n, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1173)(GLuint index, GLsizei n, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1174)(GLuint index, GLsizei n, const GLdouble * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs2dvNV, (index, n, v), (F, "glVertexAttribs2dvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1174)(GLuint index, GLsizei n, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1175)(GLuint index, GLsizei n, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1174)(GLuint index, GLsizei n, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1175)(GLuint index, GLsizei n, const GLfloat * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs2fvNV, (index, n, v), (F, "glVertexAttribs2fvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1175)(GLuint index, GLsizei n, const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1176)(GLuint index, GLsizei n, const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1175)(GLuint index, GLsizei n, const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1176)(GLuint index, GLsizei n, const GLshort * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs2svNV, (index, n, v), (F, "glVertexAttribs2svNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1176)(GLuint index, GLsizei n, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1177)(GLuint index, GLsizei n, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1176)(GLuint index, GLsizei n, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1177)(GLuint index, GLsizei n, const GLdouble * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs3dvNV, (index, n, v), (F, "glVertexAttribs3dvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1177)(GLuint index, GLsizei n, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1178)(GLuint index, GLsizei n, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1177)(GLuint index, GLsizei n, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1178)(GLuint index, GLsizei n, const GLfloat * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs3fvNV, (index, n, v), (F, "glVertexAttribs3fvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1178)(GLuint index, GLsizei n, const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1179)(GLuint index, GLsizei n, const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1178)(GLuint index, GLsizei n, const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1179)(GLuint index, GLsizei n, const GLshort * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs3svNV, (index, n, v), (F, "glVertexAttribs3svNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1179)(GLuint index, GLsizei n, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1180)(GLuint index, GLsizei n, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1179)(GLuint index, GLsizei n, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1180)(GLuint index, GLsizei n, const GLdouble * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs4dvNV, (index, n, v), (F, "glVertexAttribs4dvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1180)(GLuint index, GLsizei n, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1181)(GLuint index, GLsizei n, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1180)(GLuint index, GLsizei n, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1181)(GLuint index, GLsizei n, const GLfloat * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs4fvNV, (index, n, v), (F, "glVertexAttribs4fvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1181)(GLuint index, GLsizei n, const GLshort * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1182)(GLuint index, GLsizei n, const GLshort * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1181)(GLuint index, GLsizei n, const GLshort * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1182)(GLuint index, GLsizei n, const GLshort * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs4svNV, (index, n, v), (F, "glVertexAttribs4svNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1182)(GLuint index, GLsizei n, const GLubyte * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1183)(GLuint index, GLsizei n, const GLubyte * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1182)(GLuint index, GLsizei n, const GLubyte * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1183)(GLuint index, GLsizei n, const GLubyte * v)
 {
     (void) index; (void) n; (void) v;
    DISPATCH(VertexAttribs4ubvNV, (index, n, v), (F, "glVertexAttribs4ubvNV(%d, %d, %p);\n", index, n, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1183)(GLenum pname, GLfloat * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1184)(GLenum pname, GLfloat * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1183)(GLenum pname, GLfloat * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1184)(GLenum pname, GLfloat * param)
 {
     (void) pname; (void) param;
    DISPATCH(GetTexBumpParameterfvATI, (pname, param), (F, "glGetTexBumpParameterfvATI(0x%x, %p);\n", pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1184)(GLenum pname, GLint * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1185)(GLenum pname, GLint * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1184)(GLenum pname, GLint * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1185)(GLenum pname, GLint * param)
 {
     (void) pname; (void) param;
    DISPATCH(GetTexBumpParameterivATI, (pname, param), (F, "glGetTexBumpParameterivATI(0x%x, %p);\n", pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1185)(GLenum pname, const GLfloat * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1186)(GLenum pname, const GLfloat * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1185)(GLenum pname, const GLfloat * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1186)(GLenum pname, const GLfloat * param)
 {
     (void) pname; (void) param;
    DISPATCH(TexBumpParameterfvATI, (pname, param), (F, "glTexBumpParameterfvATI(0x%x, %p);\n", pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1186)(GLenum pname, const GLint * param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1187)(GLenum pname, const GLint * param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1186)(GLenum pname, const GLint * param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1187)(GLenum pname, const GLint * param)
 {
     (void) pname; (void) param;
    DISPATCH(TexBumpParameterivATI, (pname, param), (F, "glTexBumpParameterivATI(0x%x, %p);\n", pname, (const void *) param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1187)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1188)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1187)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1188)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod)
 {
     (void) op; (void) dst; (void) dstMod; (void) arg1; (void) arg1Rep; (void) arg1Mod;
    DISPATCH(AlphaFragmentOp1ATI, (op, dst, dstMod, arg1, arg1Rep, arg1Mod), (F, "glAlphaFragmentOp1ATI(0x%x, %d, %d, %d, %d, %d);\n", op, dst, dstMod, arg1, arg1Rep, arg1Mod));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1188)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1189)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1188)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1189)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod)
 {
     (void) op; (void) dst; (void) dstMod; (void) arg1; (void) arg1Rep; (void) arg1Mod; (void) arg2; (void) arg2Rep; (void) arg2Mod;
    DISPATCH(AlphaFragmentOp2ATI, (op, dst, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod), (F, "glAlphaFragmentOp2ATI(0x%x, %d, %d, %d, %d, %d, %d, %d, %d);\n", op, dst, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1189)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1190)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1189)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1190)(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod)
 {
     (void) op; (void) dst; (void) dstMod; (void) arg1; (void) arg1Rep; (void) arg1Mod; (void) arg2; (void) arg2Rep; (void) arg2Mod; (void) arg3; (void) arg3Rep; (void) arg3Mod;
    DISPATCH(AlphaFragmentOp3ATI, (op, dst, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod, arg3, arg3Rep, arg3Mod), (F, "glAlphaFragmentOp3ATI(0x%x, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d);\n", op, dst, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod, arg3, arg3Rep, arg3Mod));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1190)(void);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1191)(void);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1190)(void)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1191)(void)
 {
    DISPATCH(BeginFragmentShaderATI, (), (F, "glBeginFragmentShaderATI();\n"));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1191)(GLuint id);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1192)(GLuint id);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1191)(GLuint id)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1192)(GLuint id)
 {
     (void) id;
    DISPATCH(BindFragmentShaderATI, (id), (F, "glBindFragmentShaderATI(%d);\n", id));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1192)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1193)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1192)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1193)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod)
 {
     (void) op; (void) dst; (void) dstMask; (void) dstMod; (void) arg1; (void) arg1Rep; (void) arg1Mod;
    DISPATCH(ColorFragmentOp1ATI, (op, dst, dstMask, dstMod, arg1, arg1Rep, arg1Mod), (F, "glColorFragmentOp1ATI(0x%x, %d, %d, %d, %d, %d, %d);\n", op, dst, dstMask, dstMod, arg1, arg1Rep, arg1Mod));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1193)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1194)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1193)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1194)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod)
 {
     (void) op; (void) dst; (void) dstMask; (void) dstMod; (void) arg1; (void) arg1Rep; (void) arg1Mod; (void) arg2; (void) arg2Rep; (void) arg2Mod;
    DISPATCH(ColorFragmentOp2ATI, (op, dst, dstMask, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod), (F, "glColorFragmentOp2ATI(0x%x, %d, %d, %d, %d, %d, %d, %d, %d, %d);\n", op, dst, dstMask, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1194)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1195)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1194)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1195)(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod)
 {
     (void) op; (void) dst; (void) dstMask; (void) dstMod; (void) arg1; (void) arg1Rep; (void) arg1Mod; (void) arg2; (void) arg2Rep; (void) arg2Mod; (void) arg3; (void) arg3Rep; (void) arg3Mod;
    DISPATCH(ColorFragmentOp3ATI, (op, dst, dstMask, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod, arg3, arg3Rep, arg3Mod), (F, "glColorFragmentOp3ATI(0x%x, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d);\n", op, dst, dstMask, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod, arg3, arg3Rep, arg3Mod));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1195)(GLuint id);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1196)(GLuint id);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1195)(GLuint id)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1196)(GLuint id)
 {
     (void) id;
    DISPATCH(DeleteFragmentShaderATI, (id), (F, "glDeleteFragmentShaderATI(%d);\n", id));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1196)(void);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1197)(void);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1196)(void)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1197)(void)
 {
    DISPATCH(EndFragmentShaderATI, (), (F, "glEndFragmentShaderATI();\n"));
 }
 
-KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1197)(GLuint range);
+KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1198)(GLuint range);
 
-KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1197)(GLuint range)
+KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1198)(GLuint range)
 {
     (void) range;
    RETURN_DISPATCH(GenFragmentShadersATI, (range), (F, "glGenFragmentShadersATI(%d);\n", range));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1198)(GLuint dst, GLuint coord, GLenum swizzle);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1199)(GLuint dst, GLuint coord, GLenum swizzle);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1198)(GLuint dst, GLuint coord, GLenum swizzle)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1199)(GLuint dst, GLuint coord, GLenum swizzle)
 {
     (void) dst; (void) coord; (void) swizzle;
    DISPATCH(PassTexCoordATI, (dst, coord, swizzle), (F, "glPassTexCoordATI(%d, %d, 0x%x);\n", dst, coord, swizzle));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1199)(GLuint dst, GLuint interp, GLenum swizzle);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1200)(GLuint dst, GLuint interp, GLenum swizzle);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1199)(GLuint dst, GLuint interp, GLenum swizzle)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1200)(GLuint dst, GLuint interp, GLenum swizzle)
 {
     (void) dst; (void) interp; (void) swizzle;
    DISPATCH(SampleMapATI, (dst, interp, swizzle), (F, "glSampleMapATI(%d, %d, 0x%x);\n", dst, interp, swizzle));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1200)(GLuint dst, const GLfloat * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1201)(GLuint dst, const GLfloat * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1200)(GLuint dst, const GLfloat * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1201)(GLuint dst, const GLfloat * value)
 {
     (void) dst; (void) value;
    DISPATCH(SetFragmentShaderConstantATI, (dst, value), (F, "glSetFragmentShaderConstantATI(%d, %p);\n", dst, (const void *) value));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1201)(GLenum face);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1202)(GLuint first, GLsizei count, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1201)(GLenum face)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1202)(GLuint first, GLsizei count, const GLfloat * v)
+{
+    (void) first; (void) count; (void) v;
+   DISPATCH(DepthRangeArrayfvOES, (first, count, v), (F, "glDepthRangeArrayfvOES(%d, %d, %p);\n", first, count, (const void *) v));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1203)(GLuint index, GLfloat n, GLfloat f);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1203)(GLuint index, GLfloat n, GLfloat f)
+{
+    (void) index; (void) n; (void) f;
+   DISPATCH(DepthRangeIndexedfOES, (index, n, f), (F, "glDepthRangeIndexedfOES(%d, %f, %f);\n", index, n, f));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1204)(GLenum face);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1204)(GLenum face)
 {
     (void) face;
    DISPATCH(ActiveStencilFaceEXT, (face), (F, "glActiveStencilFaceEXT(0x%x);\n", face));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1202)(GLuint array);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1205)(GLuint array);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1202)(GLuint array)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1205)(GLuint array)
 {
     (void) array;
    DISPATCH(BindVertexArrayAPPLE, (array), (F, "glBindVertexArrayAPPLE(%d);\n", array));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1203)(GLsizei n, GLuint * arrays);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1206)(GLsizei n, GLuint * arrays);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1203)(GLsizei n, GLuint * arrays)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1206)(GLsizei n, GLuint * arrays)
 {
     (void) n; (void) arrays;
    DISPATCH(GenVertexArraysAPPLE, (n, arrays), (F, "glGenVertexArraysAPPLE(%d, %p);\n", n, (const void *) arrays));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1204)(GLuint id, GLsizei len, const GLubyte * name, GLdouble * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1207)(GLuint id, GLsizei len, const GLubyte * name, GLdouble * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1204)(GLuint id, GLsizei len, const GLubyte * name, GLdouble * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1207)(GLuint id, GLsizei len, const GLubyte * name, GLdouble * params)
 {
     (void) id; (void) len; (void) name; (void) params;
    DISPATCH(GetProgramNamedParameterdvNV, (id, len, name, params), (F, "glGetProgramNamedParameterdvNV(%d, %d, %p, %p);\n", id, len, (const void *) name, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1205)(GLuint id, GLsizei len, const GLubyte * name, GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1208)(GLuint id, GLsizei len, const GLubyte * name, GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1205)(GLuint id, GLsizei len, const GLubyte * name, GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1208)(GLuint id, GLsizei len, const GLubyte * name, GLfloat * params)
 {
     (void) id; (void) len; (void) name; (void) params;
    DISPATCH(GetProgramNamedParameterfvNV, (id, len, name, params), (F, "glGetProgramNamedParameterfvNV(%d, %d, %p, %p);\n", id, len, (const void *) name, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1206)(GLuint id, GLsizei len, const GLubyte * name, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1209)(GLuint id, GLsizei len, const GLubyte * name, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1206)(GLuint id, GLsizei len, const GLubyte * name, GLdouble x, GLdouble y, GLdouble z, GLdouble w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1209)(GLuint id, GLsizei len, const GLubyte * name, GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
     (void) id; (void) len; (void) name; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(ProgramNamedParameter4dNV, (id, len, name, x, y, z, w), (F, "glProgramNamedParameter4dNV(%d, %d, %p, %f, %f, %f, %f);\n", id, len, (const void *) name, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1207)(GLuint id, GLsizei len, const GLubyte * name, const GLdouble * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1210)(GLuint id, GLsizei len, const GLubyte * name, const GLdouble * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1207)(GLuint id, GLsizei len, const GLubyte * name, const GLdouble * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1210)(GLuint id, GLsizei len, const GLubyte * name, const GLdouble * v)
 {
     (void) id; (void) len; (void) name; (void) v;
    DISPATCH(ProgramNamedParameter4dvNV, (id, len, name, v), (F, "glProgramNamedParameter4dvNV(%d, %d, %p, %p);\n", id, len, (const void *) name, (const void *) v));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1208)(GLuint id, GLsizei len, const GLubyte * name, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1211)(GLuint id, GLsizei len, const GLubyte * name, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1208)(GLuint id, GLsizei len, const GLubyte * name, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1211)(GLuint id, GLsizei len, const GLubyte * name, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
     (void) id; (void) len; (void) name; (void) x; (void) y; (void) z; (void) w;
    DISPATCH(ProgramNamedParameter4fNV, (id, len, name, x, y, z, w), (F, "glProgramNamedParameter4fNV(%d, %d, %p, %f, %f, %f, %f);\n", id, len, (const void *) name, x, y, z, w));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1209)(GLuint id, GLsizei len, const GLubyte * name, const GLfloat * v);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1212)(GLuint id, GLsizei len, const GLubyte * name, const GLfloat * v);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1209)(GLuint id, GLsizei len, const GLubyte * name, const GLfloat * v)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1212)(GLuint id, GLsizei len, const GLubyte * name, const GLfloat * v)
 {
     (void) id; (void) len; (void) name; (void) v;
    DISPATCH(ProgramNamedParameter4fvNV, (id, len, name, v), (F, "glProgramNamedParameter4fvNV(%d, %d, %p, %p);\n", id, len, (const void *) name, (const void *) v));
@@ -11016,33 +11155,33 @@ KEYWORD1 void KEYWORD2 NAME(PrimitiveRestartNV)(void)
    DISPATCH(PrimitiveRestartNV, (), (F, "glPrimitiveRestartNV();\n"));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1211)(GLenum coord, GLenum pname, GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1214)(GLenum coord, GLenum pname, GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1211)(GLenum coord, GLenum pname, GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1214)(GLenum coord, GLenum pname, GLfixed * params)
 {
     (void) coord; (void) pname; (void) params;
    DISPATCH(GetTexGenxvOES, (coord, pname, params), (F, "glGetTexGenxvOES(0x%x, 0x%x, %p);\n", coord, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1212)(GLenum coord, GLenum pname, GLint param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1215)(GLenum coord, GLenum pname, GLint param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1212)(GLenum coord, GLenum pname, GLint param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1215)(GLenum coord, GLenum pname, GLint param)
 {
     (void) coord; (void) pname; (void) param;
    DISPATCH(TexGenxOES, (coord, pname, param), (F, "glTexGenxOES(0x%x, 0x%x, %d);\n", coord, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1213)(GLenum coord, GLenum pname, const GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1216)(GLenum coord, GLenum pname, const GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1213)(GLenum coord, GLenum pname, const GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1216)(GLenum coord, GLenum pname, const GLfixed * params)
 {
     (void) coord; (void) pname; (void) params;
    DISPATCH(TexGenxvOES, (coord, pname, params), (F, "glTexGenxvOES(0x%x, 0x%x, %p);\n", coord, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1214)(GLclampd zmin, GLclampd zmax);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1217)(GLclampd zmin, GLclampd zmax);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1214)(GLclampd zmin, GLclampd zmax)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1217)(GLclampd zmin, GLclampd zmax)
 {
     (void) zmin; (void) zmax;
    DISPATCH(DepthBoundsEXT, (zmin, zmax), (F, "glDepthBoundsEXT(%f, %f);\n", zmin, zmax));
@@ -11060,25 +11199,25 @@ KEYWORD1 void KEYWORD2 NAME(BindRenderbufferEXT)(GLenum target, GLuint renderbuf
    DISPATCH(BindRenderbufferEXT, (target, renderbuffer), (F, "glBindRenderbufferEXT(0x%x, %d);\n", target, renderbuffer));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1217)(GLsizei len, const GLvoid * string);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1220)(GLsizei len, const GLvoid * string);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1217)(GLsizei len, const GLvoid * string)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1220)(GLsizei len, const GLvoid * string)
 {
     (void) len; (void) string;
    DISPATCH(StringMarkerGREMEDY, (len, string), (F, "glStringMarkerGREMEDY(%d, %p);\n", len, (const void *) string));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1218)(GLenum target, GLenum pname, GLint param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1221)(GLenum target, GLenum pname, GLint param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1218)(GLenum target, GLenum pname, GLint param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1221)(GLenum target, GLenum pname, GLint param)
 {
     (void) target; (void) pname; (void) param;
    DISPATCH(BufferParameteriAPPLE, (target, pname, param), (F, "glBufferParameteriAPPLE(0x%x, 0x%x, %d);\n", target, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1219)(GLenum target, GLintptr offset, GLsizeiptr size);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1222)(GLenum target, GLintptr offset, GLsizeiptr size);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1219)(GLenum target, GLintptr offset, GLsizeiptr size)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1222)(GLenum target, GLintptr offset, GLsizeiptr size)
 {
     (void) target; (void) offset; (void) size;
    DISPATCH(FlushMappedBufferRangeAPPLE, (target, offset, size), (F, "glFlushMappedBufferRangeAPPLE(0x%x, %d, %d);\n", target, offset, size));
@@ -11264,145 +11403,145 @@ KEYWORD1 void KEYWORD2 NAME(ClearColorIuiEXT)(GLuint r, GLuint g, GLuint b, GLui
    DISPATCH(ClearColorIuiEXT, (r, g, b, a), (F, "glClearColorIuiEXT(%d, %d, %d, %d);\n", r, g, b, a));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1236)(GLenum target, GLuint index, GLuint buffer, GLintptr offset);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1239)(GLenum target, GLuint index, GLuint buffer, GLintptr offset);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1236)(GLenum target, GLuint index, GLuint buffer, GLintptr offset)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1239)(GLenum target, GLuint index, GLuint buffer, GLintptr offset)
 {
     (void) target; (void) index; (void) buffer; (void) offset;
    DISPATCH(BindBufferOffsetEXT, (target, index, buffer, offset), (F, "glBindBufferOffsetEXT(0x%x, %d, %d, %d);\n", target, index, buffer, offset));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1237)(GLuint monitor);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1240)(GLuint monitor);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1237)(GLuint monitor)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1240)(GLuint monitor)
 {
     (void) monitor;
    DISPATCH(BeginPerfMonitorAMD, (monitor), (F, "glBeginPerfMonitorAMD(%d);\n", monitor));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1238)(GLsizei n, GLuint * monitors);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1241)(GLsizei n, GLuint * monitors);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1238)(GLsizei n, GLuint * monitors)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1241)(GLsizei n, GLuint * monitors)
 {
     (void) n; (void) monitors;
    DISPATCH(DeletePerfMonitorsAMD, (n, monitors), (F, "glDeletePerfMonitorsAMD(%d, %p);\n", n, (const void *) monitors));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1239)(GLuint monitor);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1242)(GLuint monitor);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1239)(GLuint monitor)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1242)(GLuint monitor)
 {
     (void) monitor;
    DISPATCH(EndPerfMonitorAMD, (monitor), (F, "glEndPerfMonitorAMD(%d);\n", monitor));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1240)(GLsizei n, GLuint * monitors);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1243)(GLsizei n, GLuint * monitors);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1240)(GLsizei n, GLuint * monitors)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1243)(GLsizei n, GLuint * monitors)
 {
     (void) n; (void) monitors;
    DISPATCH(GenPerfMonitorsAMD, (n, monitors), (F, "glGenPerfMonitorsAMD(%d, %p);\n", n, (const void *) monitors));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1241)(GLuint monitor, GLenum pname, GLsizei dataSize, GLuint * data, GLint * bytesWritten);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1244)(GLuint monitor, GLenum pname, GLsizei dataSize, GLuint * data, GLint * bytesWritten);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1241)(GLuint monitor, GLenum pname, GLsizei dataSize, GLuint * data, GLint * bytesWritten)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1244)(GLuint monitor, GLenum pname, GLsizei dataSize, GLuint * data, GLint * bytesWritten)
 {
     (void) monitor; (void) pname; (void) dataSize; (void) data; (void) bytesWritten;
    DISPATCH(GetPerfMonitorCounterDataAMD, (monitor, pname, dataSize, data, bytesWritten), (F, "glGetPerfMonitorCounterDataAMD(%d, 0x%x, %d, %p, %p);\n", monitor, pname, dataSize, (const void *) data, (const void *) bytesWritten));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1242)(GLuint group, GLuint counter, GLenum pname, GLvoid * data);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1245)(GLuint group, GLuint counter, GLenum pname, GLvoid * data);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1242)(GLuint group, GLuint counter, GLenum pname, GLvoid * data)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1245)(GLuint group, GLuint counter, GLenum pname, GLvoid * data)
 {
     (void) group; (void) counter; (void) pname; (void) data;
    DISPATCH(GetPerfMonitorCounterInfoAMD, (group, counter, pname, data), (F, "glGetPerfMonitorCounterInfoAMD(%d, %d, 0x%x, %p);\n", group, counter, pname, (const void *) data));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1243)(GLuint group, GLuint counter, GLsizei bufSize, GLsizei * length, GLchar * counterString);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1246)(GLuint group, GLuint counter, GLsizei bufSize, GLsizei * length, GLchar * counterString);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1243)(GLuint group, GLuint counter, GLsizei bufSize, GLsizei * length, GLchar * counterString)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1246)(GLuint group, GLuint counter, GLsizei bufSize, GLsizei * length, GLchar * counterString)
 {
     (void) group; (void) counter; (void) bufSize; (void) length; (void) counterString;
    DISPATCH(GetPerfMonitorCounterStringAMD, (group, counter, bufSize, length, counterString), (F, "glGetPerfMonitorCounterStringAMD(%d, %d, %d, %p, %p);\n", group, counter, bufSize, (const void *) length, (const void *) counterString));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1244)(GLuint group, GLint * numCounters, GLint * maxActiveCounters, GLsizei countersSize, GLuint * counters);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1247)(GLuint group, GLint * numCounters, GLint * maxActiveCounters, GLsizei countersSize, GLuint * counters);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1244)(GLuint group, GLint * numCounters, GLint * maxActiveCounters, GLsizei countersSize, GLuint * counters)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1247)(GLuint group, GLint * numCounters, GLint * maxActiveCounters, GLsizei countersSize, GLuint * counters)
 {
     (void) group; (void) numCounters; (void) maxActiveCounters; (void) countersSize; (void) counters;
    DISPATCH(GetPerfMonitorCountersAMD, (group, numCounters, maxActiveCounters, countersSize, counters), (F, "glGetPerfMonitorCountersAMD(%d, %p, %p, %d, %p);\n", group, (const void *) numCounters, (const void *) maxActiveCounters, countersSize, (const void *) counters));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1245)(GLuint group, GLsizei bufSize, GLsizei * length, GLchar * groupString);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1248)(GLuint group, GLsizei bufSize, GLsizei * length, GLchar * groupString);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1245)(GLuint group, GLsizei bufSize, GLsizei * length, GLchar * groupString)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1248)(GLuint group, GLsizei bufSize, GLsizei * length, GLchar * groupString)
 {
     (void) group; (void) bufSize; (void) length; (void) groupString;
    DISPATCH(GetPerfMonitorGroupStringAMD, (group, bufSize, length, groupString), (F, "glGetPerfMonitorGroupStringAMD(%d, %d, %p, %p);\n", group, bufSize, (const void *) length, (const void *) groupString));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1246)(GLint * numGroups, GLsizei groupsSize, GLuint * groups);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1249)(GLint * numGroups, GLsizei groupsSize, GLuint * groups);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1246)(GLint * numGroups, GLsizei groupsSize, GLuint * groups)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1249)(GLint * numGroups, GLsizei groupsSize, GLuint * groups)
 {
     (void) numGroups; (void) groupsSize; (void) groups;
    DISPATCH(GetPerfMonitorGroupsAMD, (numGroups, groupsSize, groups), (F, "glGetPerfMonitorGroupsAMD(%p, %d, %p);\n", (const void *) numGroups, groupsSize, (const void *) groups));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1247)(GLuint monitor, GLboolean enable, GLuint group, GLint numCounters, GLuint * counterList);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1250)(GLuint monitor, GLboolean enable, GLuint group, GLint numCounters, GLuint * counterList);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1247)(GLuint monitor, GLboolean enable, GLuint group, GLint numCounters, GLuint * counterList)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1250)(GLuint monitor, GLboolean enable, GLuint group, GLint numCounters, GLuint * counterList)
 {
     (void) monitor; (void) enable; (void) group; (void) numCounters; (void) counterList;
    DISPATCH(SelectPerfMonitorCountersAMD, (monitor, enable, group, numCounters, counterList), (F, "glSelectPerfMonitorCountersAMD(%d, %d, %d, %d, %p);\n", monitor, enable, group, numCounters, (const void *) counterList));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1248)(GLenum objectType, GLuint name, GLenum pname, GLint * value);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1251)(GLenum objectType, GLuint name, GLenum pname, GLint * value);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1248)(GLenum objectType, GLuint name, GLenum pname, GLint * value)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1251)(GLenum objectType, GLuint name, GLenum pname, GLint * value)
 {
     (void) objectType; (void) name; (void) pname; (void) value;
    DISPATCH(GetObjectParameterivAPPLE, (objectType, name, pname, value), (F, "glGetObjectParameterivAPPLE(0x%x, %d, 0x%x, %p);\n", objectType, name, pname, (const void *) value));
 }
 
-KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_1249)(GLenum objectType, GLuint name, GLenum option);
+KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_1252)(GLenum objectType, GLuint name, GLenum option);
 
-KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_1249)(GLenum objectType, GLuint name, GLenum option)
+KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_1252)(GLenum objectType, GLuint name, GLenum option)
 {
     (void) objectType; (void) name; (void) option;
    RETURN_DISPATCH(ObjectPurgeableAPPLE, (objectType, name, option), (F, "glObjectPurgeableAPPLE(0x%x, %d, 0x%x);\n", objectType, name, option));
 }
 
-KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_1250)(GLenum objectType, GLuint name, GLenum option);
+KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_1253)(GLenum objectType, GLuint name, GLenum option);
 
-KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_1250)(GLenum objectType, GLuint name, GLenum option)
+KEYWORD1_ALT GLenum KEYWORD2 NAME(_dispatch_stub_1253)(GLenum objectType, GLuint name, GLenum option)
 {
     (void) objectType; (void) name; (void) option;
    RETURN_DISPATCH(ObjectUnpurgeableAPPLE, (objectType, name, option), (F, "glObjectUnpurgeableAPPLE(0x%x, %d, 0x%x);\n", objectType, name, option));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1251)(GLuint program);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1254)(GLuint program);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1251)(GLuint program)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1254)(GLuint program)
 {
     (void) program;
    DISPATCH(ActiveProgramEXT, (program), (F, "glActiveProgramEXT(%d);\n", program));
 }
 
-KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1252)(GLenum type, const GLchar * string);
+KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1255)(GLenum type, const GLchar * string);
 
-KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1252)(GLenum type, const GLchar * string)
+KEYWORD1_ALT GLuint KEYWORD2 NAME(_dispatch_stub_1255)(GLenum type, const GLchar * string)
 {
     (void) type; (void) string;
    RETURN_DISPATCH(CreateShaderProgramEXT, (type, string), (F, "glCreateShaderProgramEXT(0x%x, %p);\n", type, (const void *) string));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1253)(GLenum type, GLuint program);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1256)(GLenum type, GLuint program);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1253)(GLenum type, GLuint program)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1256)(GLenum type, GLuint program)
 {
     (void) type; (void) program;
    DISPATCH(UseShaderProgramEXT, (type, program), (F, "glUseShaderProgramEXT(0x%x, %d);\n", type, program));
@@ -11413,114 +11552,90 @@ KEYWORD1 void KEYWORD2 NAME(TextureBarrierNV)(void)
    DISPATCH(TextureBarrierNV, (), (F, "glTextureBarrierNV();\n"));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1254)(void);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1257)(void);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1254)(void)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1257)(void)
 {
    DISPATCH(TextureBarrierNV, (), (F, "glTextureBarrier();\n"));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1255)(void);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1258)(void);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1255)(void)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1258)(void)
 {
    DISPATCH(VDPAUFiniNV, (), (F, "glVDPAUFiniNV();\n"));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1256)(GLintptr surface, GLenum pname, GLsizei bufSize, GLsizei * length, GLint * values);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1259)(GLintptr surface, GLenum pname, GLsizei bufSize, GLsizei * length, GLint * values);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1256)(GLintptr surface, GLenum pname, GLsizei bufSize, GLsizei * length, GLint * values)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1259)(GLintptr surface, GLenum pname, GLsizei bufSize, GLsizei * length, GLint * values)
 {
     (void) surface; (void) pname; (void) bufSize; (void) length; (void) values;
    DISPATCH(VDPAUGetSurfaceivNV, (surface, pname, bufSize, length, values), (F, "glVDPAUGetSurfaceivNV(%d, 0x%x, %d, %p, %p);\n", surface, pname, bufSize, (const void *) length, (const void *) values));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1257)(const GLvoid * vdpDevice, const GLvoid * getProcAddress);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1260)(const GLvoid * vdpDevice, const GLvoid * getProcAddress);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1257)(const GLvoid * vdpDevice, const GLvoid * getProcAddress)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1260)(const GLvoid * vdpDevice, const GLvoid * getProcAddress)
 {
     (void) vdpDevice; (void) getProcAddress;
    DISPATCH(VDPAUInitNV, (vdpDevice, getProcAddress), (F, "glVDPAUInitNV(%p, %p);\n", (const void *) vdpDevice, (const void *) getProcAddress));
 }
 
-KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1258)(GLintptr surface);
+KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1261)(GLintptr surface);
 
-KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1258)(GLintptr surface)
+KEYWORD1_ALT GLboolean KEYWORD2 NAME(_dispatch_stub_1261)(GLintptr surface)
 {
     (void) surface;
    RETURN_DISPATCH(VDPAUIsSurfaceNV, (surface), (F, "glVDPAUIsSurfaceNV(%d);\n", surface));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1259)(GLsizei numSurfaces, const GLintptr * surfaces);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1262)(GLsizei numSurfaces, const GLintptr * surfaces);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1259)(GLsizei numSurfaces, const GLintptr * surfaces)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1262)(GLsizei numSurfaces, const GLintptr * surfaces)
 {
     (void) numSurfaces; (void) surfaces;
    DISPATCH(VDPAUMapSurfacesNV, (numSurfaces, surfaces), (F, "glVDPAUMapSurfacesNV(%d, %p);\n", numSurfaces, (const void *) surfaces));
 }
 
-KEYWORD1_ALT GLintptr KEYWORD2 NAME(_dispatch_stub_1260)(const GLvoid * vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint * textureNames);
+KEYWORD1_ALT GLintptr KEYWORD2 NAME(_dispatch_stub_1263)(const GLvoid * vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint * textureNames);
 
-KEYWORD1_ALT GLintptr KEYWORD2 NAME(_dispatch_stub_1260)(const GLvoid * vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint * textureNames)
+KEYWORD1_ALT GLintptr KEYWORD2 NAME(_dispatch_stub_1263)(const GLvoid * vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint * textureNames)
 {
     (void) vdpSurface; (void) target; (void) numTextureNames; (void) textureNames;
    RETURN_DISPATCH(VDPAURegisterOutputSurfaceNV, (vdpSurface, target, numTextureNames, textureNames), (F, "glVDPAURegisterOutputSurfaceNV(%p, 0x%x, %d, %p);\n", (const void *) vdpSurface, target, numTextureNames, (const void *) textureNames));
 }
 
-KEYWORD1_ALT GLintptr KEYWORD2 NAME(_dispatch_stub_1261)(const GLvoid * vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint * textureNames);
+KEYWORD1_ALT GLintptr KEYWORD2 NAME(_dispatch_stub_1264)(const GLvoid * vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint * textureNames);
 
-KEYWORD1_ALT GLintptr KEYWORD2 NAME(_dispatch_stub_1261)(const GLvoid * vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint * textureNames)
+KEYWORD1_ALT GLintptr KEYWORD2 NAME(_dispatch_stub_1264)(const GLvoid * vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint * textureNames)
 {
     (void) vdpSurface; (void) target; (void) numTextureNames; (void) textureNames;
    RETURN_DISPATCH(VDPAURegisterVideoSurfaceNV, (vdpSurface, target, numTextureNames, textureNames), (F, "glVDPAURegisterVideoSurfaceNV(%p, 0x%x, %d, %p);\n", (const void *) vdpSurface, target, numTextureNames, (const void *) textureNames));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1262)(GLintptr surface, GLenum access);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1265)(GLintptr surface, GLenum access);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1262)(GLintptr surface, GLenum access)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1265)(GLintptr surface, GLenum access)
 {
     (void) surface; (void) access;
    DISPATCH(VDPAUSurfaceAccessNV, (surface, access), (F, "glVDPAUSurfaceAccessNV(%d, 0x%x);\n", surface, access));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1263)(GLsizei numSurfaces, const GLintptr * surfaces);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1266)(GLsizei numSurfaces, const GLintptr * surfaces);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1263)(GLsizei numSurfaces, const GLintptr * surfaces)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1266)(GLsizei numSurfaces, const GLintptr * surfaces)
 {
     (void) numSurfaces; (void) surfaces;
    DISPATCH(VDPAUUnmapSurfacesNV, (numSurfaces, surfaces), (F, "glVDPAUUnmapSurfacesNV(%d, %p);\n", numSurfaces, (const void *) surfaces));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1264)(GLintptr surface);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1267)(GLintptr surface);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1264)(GLintptr surface)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1267)(GLintptr surface)
 {
     (void) surface;
    DISPATCH(VDPAUUnregisterSurfaceNV, (surface), (F, "glVDPAUUnregisterSurfaceNV(%d);\n", surface));
-}
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1265)(GLuint queryHandle);
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1265)(GLuint queryHandle)
-{
-    (void) queryHandle;
-   DISPATCH(BeginPerfQueryINTEL, (queryHandle), (F, "glBeginPerfQueryINTEL(%d);\n", queryHandle));
-}
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1266)(GLuint queryId, GLuint * queryHandle);
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1266)(GLuint queryId, GLuint * queryHandle)
-{
-    (void) queryId; (void) queryHandle;
-   DISPATCH(CreatePerfQueryINTEL, (queryId, queryHandle), (F, "glCreatePerfQueryINTEL(%d, %p);\n", queryId, (const void *) queryHandle));
-}
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1267)(GLuint queryHandle);
-
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1267)(GLuint queryHandle)
-{
-    (void) queryHandle;
-   DISPATCH(DeletePerfQueryINTEL, (queryHandle), (F, "glDeletePerfQueryINTEL(%d);\n", queryHandle));
 }
 
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1268)(GLuint queryHandle);
@@ -11528,100 +11643,132 @@ KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1268)(GLuint queryHandle);
 KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1268)(GLuint queryHandle)
 {
     (void) queryHandle;
+   DISPATCH(BeginPerfQueryINTEL, (queryHandle), (F, "glBeginPerfQueryINTEL(%d);\n", queryHandle));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1269)(GLuint queryId, GLuint * queryHandle);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1269)(GLuint queryId, GLuint * queryHandle)
+{
+    (void) queryId; (void) queryHandle;
+   DISPATCH(CreatePerfQueryINTEL, (queryId, queryHandle), (F, "glCreatePerfQueryINTEL(%d, %p);\n", queryId, (const void *) queryHandle));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1270)(GLuint queryHandle);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1270)(GLuint queryHandle)
+{
+    (void) queryHandle;
+   DISPATCH(DeletePerfQueryINTEL, (queryHandle), (F, "glDeletePerfQueryINTEL(%d);\n", queryHandle));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1271)(GLuint queryHandle);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1271)(GLuint queryHandle)
+{
+    (void) queryHandle;
    DISPATCH(EndPerfQueryINTEL, (queryHandle), (F, "glEndPerfQueryINTEL(%d);\n", queryHandle));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1269)(GLuint * queryId);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1272)(GLuint * queryId);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1269)(GLuint * queryId)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1272)(GLuint * queryId)
 {
     (void) queryId;
    DISPATCH(GetFirstPerfQueryIdINTEL, (queryId), (F, "glGetFirstPerfQueryIdINTEL(%p);\n", (const void *) queryId));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1270)(GLuint queryId, GLuint * nextQueryId);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1273)(GLuint queryId, GLuint * nextQueryId);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1270)(GLuint queryId, GLuint * nextQueryId)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1273)(GLuint queryId, GLuint * nextQueryId)
 {
     (void) queryId; (void) nextQueryId;
    DISPATCH(GetNextPerfQueryIdINTEL, (queryId, nextQueryId), (F, "glGetNextPerfQueryIdINTEL(%d, %p);\n", queryId, (const void *) nextQueryId));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1271)(GLuint queryId, GLuint counterId, GLuint counterNameLength, GLchar * counterName, GLuint counterDescLength, GLchar * counterDesc, GLuint * counterOffset, GLuint * counterDataSize, GLuint * counterTypeEnum, GLuint * counterDataTypeEnum, GLuint64 * rawCounterMaxValue);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1274)(GLuint queryId, GLuint counterId, GLuint counterNameLength, GLchar * counterName, GLuint counterDescLength, GLchar * counterDesc, GLuint * counterOffset, GLuint * counterDataSize, GLuint * counterTypeEnum, GLuint * counterDataTypeEnum, GLuint64 * rawCounterMaxValue);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1271)(GLuint queryId, GLuint counterId, GLuint counterNameLength, GLchar * counterName, GLuint counterDescLength, GLchar * counterDesc, GLuint * counterOffset, GLuint * counterDataSize, GLuint * counterTypeEnum, GLuint * counterDataTypeEnum, GLuint64 * rawCounterMaxValue)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1274)(GLuint queryId, GLuint counterId, GLuint counterNameLength, GLchar * counterName, GLuint counterDescLength, GLchar * counterDesc, GLuint * counterOffset, GLuint * counterDataSize, GLuint * counterTypeEnum, GLuint * counterDataTypeEnum, GLuint64 * rawCounterMaxValue)
 {
     (void) queryId; (void) counterId; (void) counterNameLength; (void) counterName; (void) counterDescLength; (void) counterDesc; (void) counterOffset; (void) counterDataSize; (void) counterTypeEnum; (void) counterDataTypeEnum; (void) rawCounterMaxValue;
    DISPATCH(GetPerfCounterInfoINTEL, (queryId, counterId, counterNameLength, counterName, counterDescLength, counterDesc, counterOffset, counterDataSize, counterTypeEnum, counterDataTypeEnum, rawCounterMaxValue), (F, "glGetPerfCounterInfoINTEL(%d, %d, %d, %p, %d, %p, %p, %p, %p, %p, %p);\n", queryId, counterId, counterNameLength, (const void *) counterName, counterDescLength, (const void *) counterDesc, (const void *) counterOffset, (const void *) counterDataSize, (const void *) counterTypeEnum, (const void *) counterDataTypeEnum, (const void *) rawCounterMaxValue));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1272)(GLuint queryHandle, GLuint flags, GLsizei dataSize, GLvoid * data, GLuint * bytesWritten);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1275)(GLuint queryHandle, GLuint flags, GLsizei dataSize, GLvoid * data, GLuint * bytesWritten);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1272)(GLuint queryHandle, GLuint flags, GLsizei dataSize, GLvoid * data, GLuint * bytesWritten)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1275)(GLuint queryHandle, GLuint flags, GLsizei dataSize, GLvoid * data, GLuint * bytesWritten)
 {
     (void) queryHandle; (void) flags; (void) dataSize; (void) data; (void) bytesWritten;
    DISPATCH(GetPerfQueryDataINTEL, (queryHandle, flags, dataSize, data, bytesWritten), (F, "glGetPerfQueryDataINTEL(%d, %d, %d, %p, %p);\n", queryHandle, flags, dataSize, (const void *) data, (const void *) bytesWritten));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1273)(GLchar * queryName, GLuint * queryId);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1276)(GLchar * queryName, GLuint * queryId);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1273)(GLchar * queryName, GLuint * queryId)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1276)(GLchar * queryName, GLuint * queryId)
 {
     (void) queryName; (void) queryId;
    DISPATCH(GetPerfQueryIdByNameINTEL, (queryName, queryId), (F, "glGetPerfQueryIdByNameINTEL(%p, %p);\n", (const void *) queryName, (const void *) queryId));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1274)(GLuint queryId, GLuint queryNameLength, GLchar * queryName, GLuint * dataSize, GLuint * noCounters, GLuint * noInstances, GLuint * capsMask);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1277)(GLuint queryId, GLuint queryNameLength, GLchar * queryName, GLuint * dataSize, GLuint * noCounters, GLuint * noInstances, GLuint * capsMask);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1274)(GLuint queryId, GLuint queryNameLength, GLchar * queryName, GLuint * dataSize, GLuint * noCounters, GLuint * noInstances, GLuint * capsMask)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1277)(GLuint queryId, GLuint queryNameLength, GLchar * queryName, GLuint * dataSize, GLuint * noCounters, GLuint * noInstances, GLuint * capsMask)
 {
     (void) queryId; (void) queryNameLength; (void) queryName; (void) dataSize; (void) noCounters; (void) noInstances; (void) capsMask;
    DISPATCH(GetPerfQueryInfoINTEL, (queryId, queryNameLength, queryName, dataSize, noCounters, noInstances, capsMask), (F, "glGetPerfQueryInfoINTEL(%d, %d, %p, %p, %p, %p, %p);\n", queryId, queryNameLength, (const void *) queryName, (const void *) dataSize, (const void *) noCounters, (const void *) noInstances, (const void *) capsMask));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1275)(GLfloat factor, GLfloat units, GLfloat clamp);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1278)(GLfloat factor, GLfloat units, GLfloat clamp);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1275)(GLfloat factor, GLfloat units, GLfloat clamp)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1278)(GLfloat factor, GLfloat units, GLfloat clamp)
 {
     (void) factor; (void) units; (void) clamp;
    DISPATCH(PolygonOffsetClampEXT, (factor, units, clamp), (F, "glPolygonOffsetClampEXT(%f, %f, %f);\n", factor, units, clamp));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1276)(GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1279)(GLenum mode, GLsizei count, const GLint * box);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1276)(GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1279)(GLenum mode, GLsizei count, const GLint * box)
+{
+    (void) mode; (void) count; (void) box;
+   DISPATCH(WindowRectanglesEXT, (mode, count, box), (F, "glWindowRectanglesEXT(0x%x, %d, %p);\n", mode, count, (const void *) box));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1280)(GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1280)(GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask)
 {
     (void) frontfunc; (void) backfunc; (void) ref; (void) mask;
    DISPATCH(StencilFuncSeparateATI, (frontfunc, backfunc, ref, mask), (F, "glStencilFuncSeparateATI(0x%x, 0x%x, %d, %d);\n", frontfunc, backfunc, ref, mask));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1277)(GLenum target, GLuint index, GLsizei count, const GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1281)(GLenum target, GLuint index, GLsizei count, const GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1277)(GLenum target, GLuint index, GLsizei count, const GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1281)(GLenum target, GLuint index, GLsizei count, const GLfloat * params)
 {
     (void) target; (void) index; (void) count; (void) params;
    DISPATCH(ProgramEnvParameters4fvEXT, (target, index, count, params), (F, "glProgramEnvParameters4fvEXT(0x%x, %d, %d, %p);\n", target, index, count, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1278)(GLenum target, GLuint index, GLsizei count, const GLfloat * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1282)(GLenum target, GLuint index, GLsizei count, const GLfloat * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1278)(GLenum target, GLuint index, GLsizei count, const GLfloat * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1282)(GLenum target, GLuint index, GLsizei count, const GLfloat * params)
 {
     (void) target; (void) index; (void) count; (void) params;
    DISPATCH(ProgramLocalParameters4fvEXT, (target, index, count, params), (F, "glProgramLocalParameters4fvEXT(0x%x, %d, %d, %p);\n", target, index, count, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1279)(GLenum target, GLvoid * writeOffset);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1283)(GLenum target, GLvoid * writeOffset);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1279)(GLenum target, GLvoid * writeOffset)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1283)(GLenum target, GLvoid * writeOffset)
 {
     (void) target; (void) writeOffset;
    DISPATCH(EGLImageTargetRenderbufferStorageOES, (target, writeOffset), (F, "glEGLImageTargetRenderbufferStorageOES(0x%x, %p);\n", target, (const void *) writeOffset));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1280)(GLenum target, GLvoid * writeOffset);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1284)(GLenum target, GLvoid * writeOffset);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1280)(GLenum target, GLvoid * writeOffset)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1284)(GLenum target, GLvoid * writeOffset)
 {
     (void) target; (void) writeOffset;
    DISPATCH(EGLImageTargetTexture2DOES, (target, writeOffset), (F, "glEGLImageTargetTexture2DOES(0x%x, %p);\n", target, (const void *) writeOffset));
@@ -11633,9 +11780,9 @@ KEYWORD1 void KEYWORD2 NAME(AlphaFuncx)(GLenum func, GLclampx ref)
    DISPATCH(AlphaFuncx, (func, ref), (F, "glAlphaFuncx(0x%x, %d);\n", func, ref));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1281)(GLenum func, GLclampx ref);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1285)(GLenum func, GLclampx ref);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1281)(GLenum func, GLclampx ref)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1285)(GLenum func, GLclampx ref)
 {
     (void) func; (void) ref;
    DISPATCH(AlphaFuncx, (func, ref), (F, "glAlphaFuncxOES(0x%x, %d);\n", func, ref));
@@ -11647,9 +11794,9 @@ KEYWORD1 void KEYWORD2 NAME(ClearColorx)(GLclampx red, GLclampx green, GLclampx 
    DISPATCH(ClearColorx, (red, green, blue, alpha), (F, "glClearColorx(%d, %d, %d, %d);\n", red, green, blue, alpha));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1282)(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1286)(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1282)(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1286)(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha)
 {
     (void) red; (void) green; (void) blue; (void) alpha;
    DISPATCH(ClearColorx, (red, green, blue, alpha), (F, "glClearColorxOES(%d, %d, %d, %d);\n", red, green, blue, alpha));
@@ -11661,9 +11808,9 @@ KEYWORD1 void KEYWORD2 NAME(ClearDepthx)(GLclampx depth)
    DISPATCH(ClearDepthx, (depth), (F, "glClearDepthx(%d);\n", depth));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1283)(GLclampx depth);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1287)(GLclampx depth);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1283)(GLclampx depth)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1287)(GLclampx depth)
 {
     (void) depth;
    DISPATCH(ClearDepthx, (depth), (F, "glClearDepthxOES(%d);\n", depth));
@@ -11675,9 +11822,9 @@ KEYWORD1 void KEYWORD2 NAME(Color4x)(GLfixed red, GLfixed green, GLfixed blue, G
    DISPATCH(Color4x, (red, green, blue, alpha), (F, "glColor4x(%d, %d, %d, %d);\n", red, green, blue, alpha));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1284)(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1288)(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1284)(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1288)(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)
 {
     (void) red; (void) green; (void) blue; (void) alpha;
    DISPATCH(Color4x, (red, green, blue, alpha), (F, "glColor4xOES(%d, %d, %d, %d);\n", red, green, blue, alpha));
@@ -11689,9 +11836,9 @@ KEYWORD1 void KEYWORD2 NAME(DepthRangex)(GLclampx zNear, GLclampx zFar)
    DISPATCH(DepthRangex, (zNear, zFar), (F, "glDepthRangex(%d, %d);\n", zNear, zFar));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1285)(GLclampx zNear, GLclampx zFar);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1289)(GLclampx zNear, GLclampx zFar);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1285)(GLclampx zNear, GLclampx zFar)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1289)(GLclampx zNear, GLclampx zFar)
 {
     (void) zNear; (void) zFar;
    DISPATCH(DepthRangex, (zNear, zFar), (F, "glDepthRangexOES(%d, %d);\n", zNear, zFar));
@@ -11703,9 +11850,9 @@ KEYWORD1 void KEYWORD2 NAME(Fogx)(GLenum pname, GLfixed param)
    DISPATCH(Fogx, (pname, param), (F, "glFogx(0x%x, %d);\n", pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1286)(GLenum pname, GLfixed param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1290)(GLenum pname, GLfixed param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1286)(GLenum pname, GLfixed param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1290)(GLenum pname, GLfixed param)
 {
     (void) pname; (void) param;
    DISPATCH(Fogx, (pname, param), (F, "glFogxOES(0x%x, %d);\n", pname, param));
@@ -11717,9 +11864,9 @@ KEYWORD1 void KEYWORD2 NAME(Fogxv)(GLenum pname, const GLfixed * params)
    DISPATCH(Fogxv, (pname, params), (F, "glFogxv(0x%x, %p);\n", pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1287)(GLenum pname, const GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1291)(GLenum pname, const GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1287)(GLenum pname, const GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1291)(GLenum pname, const GLfixed * params)
 {
     (void) pname; (void) params;
    DISPATCH(Fogxv, (pname, params), (F, "glFogxvOES(0x%x, %p);\n", pname, (const void *) params));
@@ -11731,9 +11878,9 @@ KEYWORD1 void KEYWORD2 NAME(Frustumf)(GLfloat left, GLfloat right, GLfloat botto
    DISPATCH(Frustumf, (left, right, bottom, top, zNear, zFar), (F, "glFrustumf(%f, %f, %f, %f, %f, %f);\n", left, right, bottom, top, zNear, zFar));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1288)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1292)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1288)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1292)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar)
 {
     (void) left; (void) right; (void) bottom; (void) top; (void) zNear; (void) zFar;
    DISPATCH(Frustumf, (left, right, bottom, top, zNear, zFar), (F, "glFrustumfOES(%f, %f, %f, %f, %f, %f);\n", left, right, bottom, top, zNear, zFar));
@@ -11745,9 +11892,9 @@ KEYWORD1 void KEYWORD2 NAME(Frustumx)(GLfixed left, GLfixed right, GLfixed botto
    DISPATCH(Frustumx, (left, right, bottom, top, zNear, zFar), (F, "glFrustumx(%d, %d, %d, %d, %d, %d);\n", left, right, bottom, top, zNear, zFar));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1289)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1293)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1289)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1293)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar)
 {
     (void) left; (void) right; (void) bottom; (void) top; (void) zNear; (void) zFar;
    DISPATCH(Frustumx, (left, right, bottom, top, zNear, zFar), (F, "glFrustumxOES(%d, %d, %d, %d, %d, %d);\n", left, right, bottom, top, zNear, zFar));
@@ -11759,9 +11906,9 @@ KEYWORD1 void KEYWORD2 NAME(LightModelx)(GLenum pname, GLfixed param)
    DISPATCH(LightModelx, (pname, param), (F, "glLightModelx(0x%x, %d);\n", pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1290)(GLenum pname, GLfixed param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1294)(GLenum pname, GLfixed param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1290)(GLenum pname, GLfixed param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1294)(GLenum pname, GLfixed param)
 {
     (void) pname; (void) param;
    DISPATCH(LightModelx, (pname, param), (F, "glLightModelxOES(0x%x, %d);\n", pname, param));
@@ -11773,9 +11920,9 @@ KEYWORD1 void KEYWORD2 NAME(LightModelxv)(GLenum pname, const GLfixed * params)
    DISPATCH(LightModelxv, (pname, params), (F, "glLightModelxv(0x%x, %p);\n", pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1291)(GLenum pname, const GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1295)(GLenum pname, const GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1291)(GLenum pname, const GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1295)(GLenum pname, const GLfixed * params)
 {
     (void) pname; (void) params;
    DISPATCH(LightModelxv, (pname, params), (F, "glLightModelxvOES(0x%x, %p);\n", pname, (const void *) params));
@@ -11787,9 +11934,9 @@ KEYWORD1 void KEYWORD2 NAME(Lightx)(GLenum light, GLenum pname, GLfixed param)
    DISPATCH(Lightx, (light, pname, param), (F, "glLightx(0x%x, 0x%x, %d);\n", light, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1292)(GLenum light, GLenum pname, GLfixed param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1296)(GLenum light, GLenum pname, GLfixed param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1292)(GLenum light, GLenum pname, GLfixed param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1296)(GLenum light, GLenum pname, GLfixed param)
 {
     (void) light; (void) pname; (void) param;
    DISPATCH(Lightx, (light, pname, param), (F, "glLightxOES(0x%x, 0x%x, %d);\n", light, pname, param));
@@ -11801,9 +11948,9 @@ KEYWORD1 void KEYWORD2 NAME(Lightxv)(GLenum light, GLenum pname, const GLfixed *
    DISPATCH(Lightxv, (light, pname, params), (F, "glLightxv(0x%x, 0x%x, %p);\n", light, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1293)(GLenum light, GLenum pname, const GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1297)(GLenum light, GLenum pname, const GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1293)(GLenum light, GLenum pname, const GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1297)(GLenum light, GLenum pname, const GLfixed * params)
 {
     (void) light; (void) pname; (void) params;
    DISPATCH(Lightxv, (light, pname, params), (F, "glLightxvOES(0x%x, 0x%x, %p);\n", light, pname, (const void *) params));
@@ -11815,9 +11962,9 @@ KEYWORD1 void KEYWORD2 NAME(LineWidthx)(GLfixed width)
    DISPATCH(LineWidthx, (width), (F, "glLineWidthx(%d);\n", width));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1294)(GLfixed width);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1298)(GLfixed width);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1294)(GLfixed width)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1298)(GLfixed width)
 {
     (void) width;
    DISPATCH(LineWidthx, (width), (F, "glLineWidthxOES(%d);\n", width));
@@ -11829,9 +11976,9 @@ KEYWORD1 void KEYWORD2 NAME(LoadMatrixx)(const GLfixed * m)
    DISPATCH(LoadMatrixx, (m), (F, "glLoadMatrixx(%p);\n", (const void *) m));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1295)(const GLfixed * m);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1299)(const GLfixed * m);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1295)(const GLfixed * m)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1299)(const GLfixed * m)
 {
     (void) m;
    DISPATCH(LoadMatrixx, (m), (F, "glLoadMatrixxOES(%p);\n", (const void *) m));
@@ -11843,9 +11990,9 @@ KEYWORD1 void KEYWORD2 NAME(Materialx)(GLenum face, GLenum pname, GLfixed param)
    DISPATCH(Materialx, (face, pname, param), (F, "glMaterialx(0x%x, 0x%x, %d);\n", face, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1296)(GLenum face, GLenum pname, GLfixed param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1300)(GLenum face, GLenum pname, GLfixed param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1296)(GLenum face, GLenum pname, GLfixed param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1300)(GLenum face, GLenum pname, GLfixed param)
 {
     (void) face; (void) pname; (void) param;
    DISPATCH(Materialx, (face, pname, param), (F, "glMaterialxOES(0x%x, 0x%x, %d);\n", face, pname, param));
@@ -11857,9 +12004,9 @@ KEYWORD1 void KEYWORD2 NAME(Materialxv)(GLenum face, GLenum pname, const GLfixed
    DISPATCH(Materialxv, (face, pname, params), (F, "glMaterialxv(0x%x, 0x%x, %p);\n", face, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1297)(GLenum face, GLenum pname, const GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1301)(GLenum face, GLenum pname, const GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1297)(GLenum face, GLenum pname, const GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1301)(GLenum face, GLenum pname, const GLfixed * params)
 {
     (void) face; (void) pname; (void) params;
    DISPATCH(Materialxv, (face, pname, params), (F, "glMaterialxvOES(0x%x, 0x%x, %p);\n", face, pname, (const void *) params));
@@ -11871,9 +12018,9 @@ KEYWORD1 void KEYWORD2 NAME(MultMatrixx)(const GLfixed * m)
    DISPATCH(MultMatrixx, (m), (F, "glMultMatrixx(%p);\n", (const void *) m));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1298)(const GLfixed * m);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1302)(const GLfixed * m);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1298)(const GLfixed * m)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1302)(const GLfixed * m)
 {
     (void) m;
    DISPATCH(MultMatrixx, (m), (F, "glMultMatrixxOES(%p);\n", (const void *) m));
@@ -11885,9 +12032,9 @@ KEYWORD1 void KEYWORD2 NAME(MultiTexCoord4x)(GLenum target, GLfixed s, GLfixed t
    DISPATCH(MultiTexCoord4x, (target, s, t, r, q), (F, "glMultiTexCoord4x(0x%x, %d, %d, %d, %d);\n", target, s, t, r, q));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1299)(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1303)(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1299)(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1303)(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q)
 {
     (void) target; (void) s; (void) t; (void) r; (void) q;
    DISPATCH(MultiTexCoord4x, (target, s, t, r, q), (F, "glMultiTexCoord4xOES(0x%x, %d, %d, %d, %d);\n", target, s, t, r, q));
@@ -11899,9 +12046,9 @@ KEYWORD1 void KEYWORD2 NAME(Normal3x)(GLfixed nx, GLfixed ny, GLfixed nz)
    DISPATCH(Normal3x, (nx, ny, nz), (F, "glNormal3x(%d, %d, %d);\n", nx, ny, nz));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1300)(GLfixed nx, GLfixed ny, GLfixed nz);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1304)(GLfixed nx, GLfixed ny, GLfixed nz);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1300)(GLfixed nx, GLfixed ny, GLfixed nz)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1304)(GLfixed nx, GLfixed ny, GLfixed nz)
 {
     (void) nx; (void) ny; (void) nz;
    DISPATCH(Normal3x, (nx, ny, nz), (F, "glNormal3xOES(%d, %d, %d);\n", nx, ny, nz));
@@ -11913,9 +12060,9 @@ KEYWORD1 void KEYWORD2 NAME(Orthof)(GLfloat left, GLfloat right, GLfloat bottom,
    DISPATCH(Orthof, (left, right, bottom, top, zNear, zFar), (F, "glOrthof(%f, %f, %f, %f, %f, %f);\n", left, right, bottom, top, zNear, zFar));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1301)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1305)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1301)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1305)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar)
 {
     (void) left; (void) right; (void) bottom; (void) top; (void) zNear; (void) zFar;
    DISPATCH(Orthof, (left, right, bottom, top, zNear, zFar), (F, "glOrthofOES(%f, %f, %f, %f, %f, %f);\n", left, right, bottom, top, zNear, zFar));
@@ -11927,9 +12074,9 @@ KEYWORD1 void KEYWORD2 NAME(Orthox)(GLfixed left, GLfixed right, GLfixed bottom,
    DISPATCH(Orthox, (left, right, bottom, top, zNear, zFar), (F, "glOrthox(%d, %d, %d, %d, %d, %d);\n", left, right, bottom, top, zNear, zFar));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1302)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1306)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1302)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1306)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar)
 {
     (void) left; (void) right; (void) bottom; (void) top; (void) zNear; (void) zFar;
    DISPATCH(Orthox, (left, right, bottom, top, zNear, zFar), (F, "glOrthoxOES(%d, %d, %d, %d, %d, %d);\n", left, right, bottom, top, zNear, zFar));
@@ -11941,9 +12088,9 @@ KEYWORD1 void KEYWORD2 NAME(PointSizex)(GLfixed size)
    DISPATCH(PointSizex, (size), (F, "glPointSizex(%d);\n", size));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1303)(GLfixed size);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1307)(GLfixed size);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1303)(GLfixed size)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1307)(GLfixed size)
 {
     (void) size;
    DISPATCH(PointSizex, (size), (F, "glPointSizexOES(%d);\n", size));
@@ -11955,9 +12102,9 @@ KEYWORD1 void KEYWORD2 NAME(PolygonOffsetx)(GLfixed factor, GLfixed units)
    DISPATCH(PolygonOffsetx, (factor, units), (F, "glPolygonOffsetx(%d, %d);\n", factor, units));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1304)(GLfixed factor, GLfixed units);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1308)(GLfixed factor, GLfixed units);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1304)(GLfixed factor, GLfixed units)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1308)(GLfixed factor, GLfixed units)
 {
     (void) factor; (void) units;
    DISPATCH(PolygonOffsetx, (factor, units), (F, "glPolygonOffsetxOES(%d, %d);\n", factor, units));
@@ -11969,9 +12116,9 @@ KEYWORD1 void KEYWORD2 NAME(Rotatex)(GLfixed angle, GLfixed x, GLfixed y, GLfixe
    DISPATCH(Rotatex, (angle, x, y, z), (F, "glRotatex(%d, %d, %d, %d);\n", angle, x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1305)(GLfixed angle, GLfixed x, GLfixed y, GLfixed z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1309)(GLfixed angle, GLfixed x, GLfixed y, GLfixed z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1305)(GLfixed angle, GLfixed x, GLfixed y, GLfixed z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1309)(GLfixed angle, GLfixed x, GLfixed y, GLfixed z)
 {
     (void) angle; (void) x; (void) y; (void) z;
    DISPATCH(Rotatex, (angle, x, y, z), (F, "glRotatexOES(%d, %d, %d, %d);\n", angle, x, y, z));
@@ -11983,9 +12130,9 @@ KEYWORD1 void KEYWORD2 NAME(SampleCoveragex)(GLclampx value, GLboolean invert)
    DISPATCH(SampleCoveragex, (value, invert), (F, "glSampleCoveragex(%d, %d);\n", value, invert));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1306)(GLclampx value, GLboolean invert);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1310)(GLclampx value, GLboolean invert);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1306)(GLclampx value, GLboolean invert)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1310)(GLclampx value, GLboolean invert)
 {
     (void) value; (void) invert;
    DISPATCH(SampleCoveragex, (value, invert), (F, "glSampleCoveragexOES(%d, %d);\n", value, invert));
@@ -11997,9 +12144,9 @@ KEYWORD1 void KEYWORD2 NAME(Scalex)(GLfixed x, GLfixed y, GLfixed z)
    DISPATCH(Scalex, (x, y, z), (F, "glScalex(%d, %d, %d);\n", x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1307)(GLfixed x, GLfixed y, GLfixed z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1311)(GLfixed x, GLfixed y, GLfixed z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1307)(GLfixed x, GLfixed y, GLfixed z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1311)(GLfixed x, GLfixed y, GLfixed z)
 {
     (void) x; (void) y; (void) z;
    DISPATCH(Scalex, (x, y, z), (F, "glScalexOES(%d, %d, %d);\n", x, y, z));
@@ -12011,9 +12158,9 @@ KEYWORD1 void KEYWORD2 NAME(TexEnvx)(GLenum target, GLenum pname, GLfixed param)
    DISPATCH(TexEnvx, (target, pname, param), (F, "glTexEnvx(0x%x, 0x%x, %d);\n", target, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1308)(GLenum target, GLenum pname, GLfixed param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1312)(GLenum target, GLenum pname, GLfixed param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1308)(GLenum target, GLenum pname, GLfixed param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1312)(GLenum target, GLenum pname, GLfixed param)
 {
     (void) target; (void) pname; (void) param;
    DISPATCH(TexEnvx, (target, pname, param), (F, "glTexEnvxOES(0x%x, 0x%x, %d);\n", target, pname, param));
@@ -12025,9 +12172,9 @@ KEYWORD1 void KEYWORD2 NAME(TexEnvxv)(GLenum target, GLenum pname, const GLfixed
    DISPATCH(TexEnvxv, (target, pname, params), (F, "glTexEnvxv(0x%x, 0x%x, %p);\n", target, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1309)(GLenum target, GLenum pname, const GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1313)(GLenum target, GLenum pname, const GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1309)(GLenum target, GLenum pname, const GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1313)(GLenum target, GLenum pname, const GLfixed * params)
 {
     (void) target; (void) pname; (void) params;
    DISPATCH(TexEnvxv, (target, pname, params), (F, "glTexEnvxvOES(0x%x, 0x%x, %p);\n", target, pname, (const void *) params));
@@ -12039,9 +12186,9 @@ KEYWORD1 void KEYWORD2 NAME(TexParameterx)(GLenum target, GLenum pname, GLfixed 
    DISPATCH(TexParameterx, (target, pname, param), (F, "glTexParameterx(0x%x, 0x%x, %d);\n", target, pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1310)(GLenum target, GLenum pname, GLfixed param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1314)(GLenum target, GLenum pname, GLfixed param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1310)(GLenum target, GLenum pname, GLfixed param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1314)(GLenum target, GLenum pname, GLfixed param)
 {
     (void) target; (void) pname; (void) param;
    DISPATCH(TexParameterx, (target, pname, param), (F, "glTexParameterxOES(0x%x, 0x%x, %d);\n", target, pname, param));
@@ -12053,9 +12200,9 @@ KEYWORD1 void KEYWORD2 NAME(Translatex)(GLfixed x, GLfixed y, GLfixed z)
    DISPATCH(Translatex, (x, y, z), (F, "glTranslatex(%d, %d, %d);\n", x, y, z));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1311)(GLfixed x, GLfixed y, GLfixed z);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1315)(GLfixed x, GLfixed y, GLfixed z);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1311)(GLfixed x, GLfixed y, GLfixed z)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1315)(GLfixed x, GLfixed y, GLfixed z)
 {
     (void) x; (void) y; (void) z;
    DISPATCH(Translatex, (x, y, z), (F, "glTranslatexOES(%d, %d, %d);\n", x, y, z));
@@ -12067,9 +12214,9 @@ KEYWORD1 void KEYWORD2 NAME(ClipPlanef)(GLenum plane, const GLfloat * equation)
    DISPATCH(ClipPlanef, (plane, equation), (F, "glClipPlanef(0x%x, %p);\n", plane, (const void *) equation));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1312)(GLenum plane, const GLfloat * equation);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1316)(GLenum plane, const GLfloat * equation);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1312)(GLenum plane, const GLfloat * equation)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1316)(GLenum plane, const GLfloat * equation)
 {
     (void) plane; (void) equation;
    DISPATCH(ClipPlanef, (plane, equation), (F, "glClipPlanefOES(0x%x, %p);\n", plane, (const void *) equation));
@@ -12081,9 +12228,9 @@ KEYWORD1 void KEYWORD2 NAME(ClipPlanex)(GLenum plane, const GLfixed * equation)
    DISPATCH(ClipPlanex, (plane, equation), (F, "glClipPlanex(0x%x, %p);\n", plane, (const void *) equation));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1313)(GLenum plane, const GLfixed * equation);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1317)(GLenum plane, const GLfixed * equation);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1313)(GLenum plane, const GLfixed * equation)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1317)(GLenum plane, const GLfixed * equation)
 {
     (void) plane; (void) equation;
    DISPATCH(ClipPlanex, (plane, equation), (F, "glClipPlanexOES(0x%x, %p);\n", plane, (const void *) equation));
@@ -12095,9 +12242,9 @@ KEYWORD1 void KEYWORD2 NAME(GetClipPlanef)(GLenum plane, GLfloat * equation)
    DISPATCH(GetClipPlanef, (plane, equation), (F, "glGetClipPlanef(0x%x, %p);\n", plane, (const void *) equation));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1314)(GLenum plane, GLfloat * equation);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1318)(GLenum plane, GLfloat * equation);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1314)(GLenum plane, GLfloat * equation)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1318)(GLenum plane, GLfloat * equation)
 {
     (void) plane; (void) equation;
    DISPATCH(GetClipPlanef, (plane, equation), (F, "glGetClipPlanefOES(0x%x, %p);\n", plane, (const void *) equation));
@@ -12109,9 +12256,9 @@ KEYWORD1 void KEYWORD2 NAME(GetClipPlanex)(GLenum plane, GLfixed * equation)
    DISPATCH(GetClipPlanex, (plane, equation), (F, "glGetClipPlanex(0x%x, %p);\n", plane, (const void *) equation));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1315)(GLenum plane, GLfixed * equation);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1319)(GLenum plane, GLfixed * equation);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1315)(GLenum plane, GLfixed * equation)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1319)(GLenum plane, GLfixed * equation)
 {
     (void) plane; (void) equation;
    DISPATCH(GetClipPlanex, (plane, equation), (F, "glGetClipPlanexOES(0x%x, %p);\n", plane, (const void *) equation));
@@ -12123,9 +12270,9 @@ KEYWORD1 void KEYWORD2 NAME(GetFixedv)(GLenum pname, GLfixed * params)
    DISPATCH(GetFixedv, (pname, params), (F, "glGetFixedv(0x%x, %p);\n", pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1316)(GLenum pname, GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1320)(GLenum pname, GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1316)(GLenum pname, GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1320)(GLenum pname, GLfixed * params)
 {
     (void) pname; (void) params;
    DISPATCH(GetFixedv, (pname, params), (F, "glGetFixedvOES(0x%x, %p);\n", pname, (const void *) params));
@@ -12137,9 +12284,9 @@ KEYWORD1 void KEYWORD2 NAME(GetLightxv)(GLenum light, GLenum pname, GLfixed * pa
    DISPATCH(GetLightxv, (light, pname, params), (F, "glGetLightxv(0x%x, 0x%x, %p);\n", light, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1317)(GLenum light, GLenum pname, GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1321)(GLenum light, GLenum pname, GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1317)(GLenum light, GLenum pname, GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1321)(GLenum light, GLenum pname, GLfixed * params)
 {
     (void) light; (void) pname; (void) params;
    DISPATCH(GetLightxv, (light, pname, params), (F, "glGetLightxvOES(0x%x, 0x%x, %p);\n", light, pname, (const void *) params));
@@ -12151,9 +12298,9 @@ KEYWORD1 void KEYWORD2 NAME(GetMaterialxv)(GLenum face, GLenum pname, GLfixed * 
    DISPATCH(GetMaterialxv, (face, pname, params), (F, "glGetMaterialxv(0x%x, 0x%x, %p);\n", face, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1318)(GLenum face, GLenum pname, GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1322)(GLenum face, GLenum pname, GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1318)(GLenum face, GLenum pname, GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1322)(GLenum face, GLenum pname, GLfixed * params)
 {
     (void) face; (void) pname; (void) params;
    DISPATCH(GetMaterialxv, (face, pname, params), (F, "glGetMaterialxvOES(0x%x, 0x%x, %p);\n", face, pname, (const void *) params));
@@ -12165,9 +12312,9 @@ KEYWORD1 void KEYWORD2 NAME(GetTexEnvxv)(GLenum target, GLenum pname, GLfixed * 
    DISPATCH(GetTexEnvxv, (target, pname, params), (F, "glGetTexEnvxv(0x%x, 0x%x, %p);\n", target, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1319)(GLenum target, GLenum pname, GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1323)(GLenum target, GLenum pname, GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1319)(GLenum target, GLenum pname, GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1323)(GLenum target, GLenum pname, GLfixed * params)
 {
     (void) target; (void) pname; (void) params;
    DISPATCH(GetTexEnvxv, (target, pname, params), (F, "glGetTexEnvxvOES(0x%x, 0x%x, %p);\n", target, pname, (const void *) params));
@@ -12179,9 +12326,9 @@ KEYWORD1 void KEYWORD2 NAME(GetTexParameterxv)(GLenum target, GLenum pname, GLfi
    DISPATCH(GetTexParameterxv, (target, pname, params), (F, "glGetTexParameterxv(0x%x, 0x%x, %p);\n", target, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1320)(GLenum target, GLenum pname, GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1324)(GLenum target, GLenum pname, GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1320)(GLenum target, GLenum pname, GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1324)(GLenum target, GLenum pname, GLfixed * params)
 {
     (void) target; (void) pname; (void) params;
    DISPATCH(GetTexParameterxv, (target, pname, params), (F, "glGetTexParameterxvOES(0x%x, 0x%x, %p);\n", target, pname, (const void *) params));
@@ -12193,9 +12340,9 @@ KEYWORD1 void KEYWORD2 NAME(PointParameterx)(GLenum pname, GLfixed param)
    DISPATCH(PointParameterx, (pname, param), (F, "glPointParameterx(0x%x, %d);\n", pname, param));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1321)(GLenum pname, GLfixed param);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1325)(GLenum pname, GLfixed param);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1321)(GLenum pname, GLfixed param)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1325)(GLenum pname, GLfixed param)
 {
     (void) pname; (void) param;
    DISPATCH(PointParameterx, (pname, param), (F, "glPointParameterxOES(0x%x, %d);\n", pname, param));
@@ -12207,9 +12354,9 @@ KEYWORD1 void KEYWORD2 NAME(PointParameterxv)(GLenum pname, const GLfixed * para
    DISPATCH(PointParameterxv, (pname, params), (F, "glPointParameterxv(0x%x, %p);\n", pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1322)(GLenum pname, const GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1326)(GLenum pname, const GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1322)(GLenum pname, const GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1326)(GLenum pname, const GLfixed * params)
 {
     (void) pname; (void) params;
    DISPATCH(PointParameterxv, (pname, params), (F, "glPointParameterxvOES(0x%x, %p);\n", pname, (const void *) params));
@@ -12221,12 +12368,38 @@ KEYWORD1 void KEYWORD2 NAME(TexParameterxv)(GLenum target, GLenum pname, const G
    DISPATCH(TexParameterxv, (target, pname, params), (F, "glTexParameterxv(0x%x, 0x%x, %p);\n", target, pname, (const void *) params));
 }
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1323)(GLenum target, GLenum pname, const GLfixed * params);
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1327)(GLenum target, GLenum pname, const GLfixed * params);
 
-KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1323)(GLenum target, GLenum pname, const GLfixed * params)
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1327)(GLenum target, GLenum pname, const GLfixed * params)
 {
     (void) target; (void) pname; (void) params;
    DISPATCH(TexParameterxv, (target, pname, params), (F, "glTexParameterxvOES(0x%x, 0x%x, %p);\n", target, pname, (const void *) params));
+}
+
+KEYWORD1 void KEYWORD2 NAME(BlendBarrier)(void)
+{
+   DISPATCH(BlendBarrier, (), (F, "glBlendBarrier();\n"));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1328)(void);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1328)(void)
+{
+   DISPATCH(BlendBarrier, (), (F, "glBlendBarrierKHR();\n"));
+}
+
+KEYWORD1 void KEYWORD2 NAME(PrimitiveBoundingBox)(GLfloat minX, GLfloat minY, GLfloat minZ, GLfloat minW, GLfloat maxX, GLfloat maxY, GLfloat maxZ, GLfloat maxW)
+{
+    (void) minX; (void) minY; (void) minZ; (void) minW; (void) maxX; (void) maxY; (void) maxZ; (void) maxW;
+   DISPATCH(PrimitiveBoundingBox, (minX, minY, minZ, minW, maxX, maxY, maxZ, maxW), (F, "glPrimitiveBoundingBox(%f, %f, %f, %f, %f, %f, %f, %f);\n", minX, minY, minZ, minW, maxX, maxY, maxZ, maxW));
+}
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1329)(GLfloat minX, GLfloat minY, GLfloat minZ, GLfloat minW, GLfloat maxX, GLfloat maxY, GLfloat maxZ, GLfloat maxW);
+
+KEYWORD1_ALT void KEYWORD2 NAME(_dispatch_stub_1329)(GLfloat minX, GLfloat minY, GLfloat minZ, GLfloat minW, GLfloat maxX, GLfloat maxY, GLfloat maxZ, GLfloat maxW)
+{
+    (void) minX; (void) minY; (void) minZ; (void) minW; (void) maxX; (void) maxY; (void) maxZ; (void) maxW;
+   DISPATCH(PrimitiveBoundingBox, (minX, minY, minZ, minW, maxX, maxY, maxZ, maxW), (F, "glPrimitiveBoundingBoxARB(%f, %f, %f, %f, %f, %f, %f, %f);\n", minX, minY, minZ, minW, maxX, maxY, maxZ, maxW));
 }
 
 
@@ -13185,7 +13358,7 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_798),
    TABLE_ENTRY(_dispatch_stub_799),
    TABLE_ENTRY(_dispatch_stub_800),
-   TABLE_ENTRY(_dispatch_stub_801),
+   TABLE_ENTRY(PatchParameteri),
    TABLE_ENTRY(BindTransformFeedback),
    TABLE_ENTRY(DeleteTransformFeedbacks),
    TABLE_ENTRY(DrawTransformFeedback),
@@ -13398,13 +13571,13 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_1011),
    TABLE_ENTRY(_dispatch_stub_1012),
    TABLE_ENTRY(_dispatch_stub_1013),
+   TABLE_ENTRY(_dispatch_stub_1014),
    TABLE_ENTRY(InvalidateBufferData),
    TABLE_ENTRY(InvalidateBufferSubData),
    TABLE_ENTRY(InvalidateFramebuffer),
    TABLE_ENTRY(InvalidateSubFramebuffer),
    TABLE_ENTRY(InvalidateTexImage),
    TABLE_ENTRY(InvalidateTexSubImage),
-   TABLE_ENTRY(_dispatch_stub_1020),
    TABLE_ENTRY(_dispatch_stub_1021),
    TABLE_ENTRY(_dispatch_stub_1022),
    TABLE_ENTRY(_dispatch_stub_1023),
@@ -13413,17 +13586,18 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_1026),
    TABLE_ENTRY(_dispatch_stub_1027),
    TABLE_ENTRY(_dispatch_stub_1028),
+   TABLE_ENTRY(_dispatch_stub_1029),
    TABLE_ENTRY(PointSizePointerOES),
-   TABLE_ENTRY(_dispatch_stub_1030),
    TABLE_ENTRY(_dispatch_stub_1031),
    TABLE_ENTRY(_dispatch_stub_1032),
+   TABLE_ENTRY(_dispatch_stub_1033),
    TABLE_ENTRY(ColorPointerEXT),
    TABLE_ENTRY(EdgeFlagPointerEXT),
    TABLE_ENTRY(IndexPointerEXT),
    TABLE_ENTRY(NormalPointerEXT),
    TABLE_ENTRY(TexCoordPointerEXT),
    TABLE_ENTRY(VertexPointerEXT),
-   TABLE_ENTRY(_dispatch_stub_1039),
+   TABLE_ENTRY(_dispatch_stub_1040),
    TABLE_ENTRY(ActiveShaderProgram),
    TABLE_ENTRY(BindProgramPipeline),
    TABLE_ENTRY(CreateShaderProgramv),
@@ -13433,55 +13607,55 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(GetProgramPipelineiv),
    TABLE_ENTRY(IsProgramPipeline),
    TABLE_ENTRY(LockArraysEXT),
-   TABLE_ENTRY(_dispatch_stub_1049),
    TABLE_ENTRY(_dispatch_stub_1050),
+   TABLE_ENTRY(_dispatch_stub_1051),
    TABLE_ENTRY(ProgramUniform1f),
    TABLE_ENTRY(ProgramUniform1fv),
    TABLE_ENTRY(ProgramUniform1i),
    TABLE_ENTRY(ProgramUniform1iv),
    TABLE_ENTRY(ProgramUniform1ui),
    TABLE_ENTRY(ProgramUniform1uiv),
-   TABLE_ENTRY(_dispatch_stub_1057),
    TABLE_ENTRY(_dispatch_stub_1058),
+   TABLE_ENTRY(_dispatch_stub_1059),
    TABLE_ENTRY(ProgramUniform2f),
    TABLE_ENTRY(ProgramUniform2fv),
    TABLE_ENTRY(ProgramUniform2i),
    TABLE_ENTRY(ProgramUniform2iv),
    TABLE_ENTRY(ProgramUniform2ui),
    TABLE_ENTRY(ProgramUniform2uiv),
-   TABLE_ENTRY(_dispatch_stub_1065),
    TABLE_ENTRY(_dispatch_stub_1066),
+   TABLE_ENTRY(_dispatch_stub_1067),
    TABLE_ENTRY(ProgramUniform3f),
    TABLE_ENTRY(ProgramUniform3fv),
    TABLE_ENTRY(ProgramUniform3i),
    TABLE_ENTRY(ProgramUniform3iv),
    TABLE_ENTRY(ProgramUniform3ui),
    TABLE_ENTRY(ProgramUniform3uiv),
-   TABLE_ENTRY(_dispatch_stub_1073),
    TABLE_ENTRY(_dispatch_stub_1074),
+   TABLE_ENTRY(_dispatch_stub_1075),
    TABLE_ENTRY(ProgramUniform4f),
    TABLE_ENTRY(ProgramUniform4fv),
    TABLE_ENTRY(ProgramUniform4i),
    TABLE_ENTRY(ProgramUniform4iv),
    TABLE_ENTRY(ProgramUniform4ui),
    TABLE_ENTRY(ProgramUniform4uiv),
-   TABLE_ENTRY(_dispatch_stub_1081),
+   TABLE_ENTRY(_dispatch_stub_1082),
    TABLE_ENTRY(ProgramUniformMatrix2fv),
-   TABLE_ENTRY(_dispatch_stub_1083),
+   TABLE_ENTRY(_dispatch_stub_1084),
    TABLE_ENTRY(ProgramUniformMatrix2x3fv),
-   TABLE_ENTRY(_dispatch_stub_1085),
+   TABLE_ENTRY(_dispatch_stub_1086),
    TABLE_ENTRY(ProgramUniformMatrix2x4fv),
-   TABLE_ENTRY(_dispatch_stub_1087),
+   TABLE_ENTRY(_dispatch_stub_1088),
    TABLE_ENTRY(ProgramUniformMatrix3fv),
-   TABLE_ENTRY(_dispatch_stub_1089),
+   TABLE_ENTRY(_dispatch_stub_1090),
    TABLE_ENTRY(ProgramUniformMatrix3x2fv),
-   TABLE_ENTRY(_dispatch_stub_1091),
+   TABLE_ENTRY(_dispatch_stub_1092),
    TABLE_ENTRY(ProgramUniformMatrix3x4fv),
-   TABLE_ENTRY(_dispatch_stub_1093),
+   TABLE_ENTRY(_dispatch_stub_1094),
    TABLE_ENTRY(ProgramUniformMatrix4fv),
-   TABLE_ENTRY(_dispatch_stub_1095),
+   TABLE_ENTRY(_dispatch_stub_1096),
    TABLE_ENTRY(ProgramUniformMatrix4x2fv),
-   TABLE_ENTRY(_dispatch_stub_1097),
+   TABLE_ENTRY(_dispatch_stub_1098),
    TABLE_ENTRY(ProgramUniformMatrix4x3fv),
    TABLE_ENTRY(UnlockArraysEXT),
    TABLE_ENTRY(UseProgramStages),
@@ -13501,7 +13675,6 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(MultiDrawElementsEXT),
    TABLE_ENTRY(FogCoordfEXT),
    TABLE_ENTRY(FogCoordfvEXT),
-   TABLE_ENTRY(_dispatch_stub_1117),
    TABLE_ENTRY(_dispatch_stub_1118),
    TABLE_ENTRY(_dispatch_stub_1119),
    TABLE_ENTRY(_dispatch_stub_1120),
@@ -13594,16 +13767,19 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_1207),
    TABLE_ENTRY(_dispatch_stub_1208),
    TABLE_ENTRY(_dispatch_stub_1209),
-   TABLE_ENTRY(PrimitiveRestartNV),
+   TABLE_ENTRY(_dispatch_stub_1210),
    TABLE_ENTRY(_dispatch_stub_1211),
    TABLE_ENTRY(_dispatch_stub_1212),
-   TABLE_ENTRY(_dispatch_stub_1213),
+   TABLE_ENTRY(PrimitiveRestartNV),
    TABLE_ENTRY(_dispatch_stub_1214),
+   TABLE_ENTRY(_dispatch_stub_1215),
+   TABLE_ENTRY(_dispatch_stub_1216),
+   TABLE_ENTRY(_dispatch_stub_1217),
    TABLE_ENTRY(BindFramebufferEXT),
    TABLE_ENTRY(BindRenderbufferEXT),
-   TABLE_ENTRY(_dispatch_stub_1217),
-   TABLE_ENTRY(_dispatch_stub_1218),
-   TABLE_ENTRY(_dispatch_stub_1219),
+   TABLE_ENTRY(_dispatch_stub_1220),
+   TABLE_ENTRY(_dispatch_stub_1221),
+   TABLE_ENTRY(_dispatch_stub_1222),
    TABLE_ENTRY(VertexAttribI1iEXT),
    TABLE_ENTRY(VertexAttribI1uiEXT),
    TABLE_ENTRY(VertexAttribI2iEXT),
@@ -13620,9 +13796,6 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(VertexAttribI4uivEXT),
    TABLE_ENTRY(ClearColorIiEXT),
    TABLE_ENTRY(ClearColorIuiEXT),
-   TABLE_ENTRY(_dispatch_stub_1236),
-   TABLE_ENTRY(_dispatch_stub_1237),
-   TABLE_ENTRY(_dispatch_stub_1238),
    TABLE_ENTRY(_dispatch_stub_1239),
    TABLE_ENTRY(_dispatch_stub_1240),
    TABLE_ENTRY(_dispatch_stub_1241),
@@ -13638,10 +13811,10 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_1251),
    TABLE_ENTRY(_dispatch_stub_1252),
    TABLE_ENTRY(_dispatch_stub_1253),
-   TABLE_ENTRY(TextureBarrierNV),
+   TABLE_ENTRY(_dispatch_stub_1254),
    TABLE_ENTRY(_dispatch_stub_1255),
    TABLE_ENTRY(_dispatch_stub_1256),
-   TABLE_ENTRY(_dispatch_stub_1257),
+   TABLE_ENTRY(TextureBarrierNV),
    TABLE_ENTRY(_dispatch_stub_1258),
    TABLE_ENTRY(_dispatch_stub_1259),
    TABLE_ENTRY(_dispatch_stub_1260),
@@ -13665,6 +13838,10 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_1278),
    TABLE_ENTRY(_dispatch_stub_1279),
    TABLE_ENTRY(_dispatch_stub_1280),
+   TABLE_ENTRY(_dispatch_stub_1281),
+   TABLE_ENTRY(_dispatch_stub_1282),
+   TABLE_ENTRY(_dispatch_stub_1283),
+   TABLE_ENTRY(_dispatch_stub_1284),
    TABLE_ENTRY(AlphaFuncx),
    TABLE_ENTRY(ClearColorx),
    TABLE_ENTRY(ClearDepthx),
@@ -13708,6 +13885,8 @@ _glapi_proc DISPATCH_TABLE_NAME[] = {
    TABLE_ENTRY(PointParameterx),
    TABLE_ENTRY(PointParameterxv),
    TABLE_ENTRY(TexParameterxv),
+   TABLE_ENTRY(BlendBarrier),
+   TABLE_ENTRY(PrimitiveBoundingBox),
    /* A whole bunch of no-op functions.  These might be called
     * when someone tries to call a dynamically-registered
     * extension function without a current rendering context.
@@ -14193,9 +14372,13 @@ _glapi_proc UNUSED_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_704),
    TABLE_ENTRY(_dispatch_stub_705),
    TABLE_ENTRY(ProvokingVertexEXT),
+   TABLE_ENTRY(BlendEquationSeparatei),
    TABLE_ENTRY(_dispatch_stub_711),
+   TABLE_ENTRY(BlendEquationi),
    TABLE_ENTRY(_dispatch_stub_712),
+   TABLE_ENTRY(BlendFuncSeparatei),
    TABLE_ENTRY(_dispatch_stub_713),
+   TABLE_ENTRY(BlendFunci),
    TABLE_ENTRY(_dispatch_stub_714),
    TABLE_ENTRY(_dispatch_stub_715),
    TABLE_ENTRY(_dispatch_stub_716),
@@ -14203,15 +14386,28 @@ _glapi_proc UNUSED_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_721),
    TABLE_ENTRY(_dispatch_stub_725),
    TABLE_ENTRY(_dispatch_stub_726),
+   TABLE_ENTRY(_dispatch_stub_801),
    TABLE_ENTRY(_dispatch_stub_813),
    TABLE_ENTRY(_dispatch_stub_814),
    TABLE_ENTRY(_dispatch_stub_818),
    TABLE_ENTRY(_dispatch_stub_819),
    TABLE_ENTRY(_dispatch_stub_820),
+   TABLE_ENTRY(_dispatch_stub_834),
+   TABLE_ENTRY(_dispatch_stub_835),
+   TABLE_ENTRY(_dispatch_stub_836),
+   TABLE_ENTRY(_dispatch_stub_837),
+   TABLE_ENTRY(_dispatch_stub_838),
+   TABLE_ENTRY(_dispatch_stub_839),
+   TABLE_ENTRY(_dispatch_stub_840),
+   TABLE_ENTRY(GetGraphicsResetStatus),
    TABLE_ENTRY(_dispatch_stub_841),
+   TABLE_ENTRY(GetnUniformfv),
    TABLE_ENTRY(_dispatch_stub_857),
+   TABLE_ENTRY(GetnUniformiv),
    TABLE_ENTRY(_dispatch_stub_858),
+   TABLE_ENTRY(GetnUniformuiv),
    TABLE_ENTRY(_dispatch_stub_859),
+   TABLE_ENTRY(ReadnPixels),
    TABLE_ENTRY(_dispatch_stub_860),
    TABLE_ENTRY(_dispatch_stub_861),
    TABLE_ENTRY(_dispatch_stub_862),
@@ -14220,7 +14416,6 @@ _glapi_proc UNUSED_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_900),
    TABLE_ENTRY(_dispatch_stub_902),
    TABLE_ENTRY(_dispatch_stub_903),
-   TABLE_ENTRY(_dispatch_stub_1040),
    TABLE_ENTRY(_dispatch_stub_1041),
    TABLE_ENTRY(_dispatch_stub_1042),
    TABLE_ENTRY(_dispatch_stub_1043),
@@ -14228,55 +14423,56 @@ _glapi_proc UNUSED_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_1045),
    TABLE_ENTRY(_dispatch_stub_1046),
    TABLE_ENTRY(_dispatch_stub_1047),
-   TABLE_ENTRY(_dispatch_stub_1051),
+   TABLE_ENTRY(_dispatch_stub_1048),
    TABLE_ENTRY(_dispatch_stub_1052),
    TABLE_ENTRY(_dispatch_stub_1053),
    TABLE_ENTRY(_dispatch_stub_1054),
    TABLE_ENTRY(_dispatch_stub_1055),
    TABLE_ENTRY(_dispatch_stub_1056),
-   TABLE_ENTRY(_dispatch_stub_1059),
+   TABLE_ENTRY(_dispatch_stub_1057),
    TABLE_ENTRY(_dispatch_stub_1060),
    TABLE_ENTRY(_dispatch_stub_1061),
    TABLE_ENTRY(_dispatch_stub_1062),
    TABLE_ENTRY(_dispatch_stub_1063),
    TABLE_ENTRY(_dispatch_stub_1064),
-   TABLE_ENTRY(_dispatch_stub_1067),
+   TABLE_ENTRY(_dispatch_stub_1065),
    TABLE_ENTRY(_dispatch_stub_1068),
    TABLE_ENTRY(_dispatch_stub_1069),
    TABLE_ENTRY(_dispatch_stub_1070),
    TABLE_ENTRY(_dispatch_stub_1071),
    TABLE_ENTRY(_dispatch_stub_1072),
-   TABLE_ENTRY(_dispatch_stub_1075),
+   TABLE_ENTRY(_dispatch_stub_1073),
    TABLE_ENTRY(_dispatch_stub_1076),
    TABLE_ENTRY(_dispatch_stub_1077),
    TABLE_ENTRY(_dispatch_stub_1078),
    TABLE_ENTRY(_dispatch_stub_1079),
    TABLE_ENTRY(_dispatch_stub_1080),
-   TABLE_ENTRY(_dispatch_stub_1082),
-   TABLE_ENTRY(_dispatch_stub_1084),
-   TABLE_ENTRY(_dispatch_stub_1086),
-   TABLE_ENTRY(_dispatch_stub_1088),
-   TABLE_ENTRY(_dispatch_stub_1090),
-   TABLE_ENTRY(_dispatch_stub_1092),
-   TABLE_ENTRY(_dispatch_stub_1094),
-   TABLE_ENTRY(_dispatch_stub_1096),
-   TABLE_ENTRY(_dispatch_stub_1098),
-   TABLE_ENTRY(_dispatch_stub_1100),
+   TABLE_ENTRY(_dispatch_stub_1081),
+   TABLE_ENTRY(_dispatch_stub_1083),
+   TABLE_ENTRY(_dispatch_stub_1085),
+   TABLE_ENTRY(_dispatch_stub_1087),
+   TABLE_ENTRY(_dispatch_stub_1089),
+   TABLE_ENTRY(_dispatch_stub_1091),
+   TABLE_ENTRY(_dispatch_stub_1093),
+   TABLE_ENTRY(_dispatch_stub_1095),
+   TABLE_ENTRY(_dispatch_stub_1097),
+   TABLE_ENTRY(_dispatch_stub_1099),
    TABLE_ENTRY(_dispatch_stub_1101),
-   TABLE_ENTRY(DebugMessageCallbackARB),
    TABLE_ENTRY(_dispatch_stub_1102),
-   TABLE_ENTRY(DebugMessageControlARB),
+   TABLE_ENTRY(DebugMessageCallbackARB),
    TABLE_ENTRY(_dispatch_stub_1103),
-   TABLE_ENTRY(DebugMessageInsertARB),
+   TABLE_ENTRY(DebugMessageControlARB),
    TABLE_ENTRY(_dispatch_stub_1104),
-   TABLE_ENTRY(GetDebugMessageLogARB),
+   TABLE_ENTRY(DebugMessageInsertARB),
    TABLE_ENTRY(_dispatch_stub_1105),
+   TABLE_ENTRY(GetDebugMessageLogARB),
    TABLE_ENTRY(_dispatch_stub_1106),
    TABLE_ENTRY(_dispatch_stub_1107),
    TABLE_ENTRY(_dispatch_stub_1108),
    TABLE_ENTRY(_dispatch_stub_1109),
    TABLE_ENTRY(_dispatch_stub_1110),
    TABLE_ENTRY(_dispatch_stub_1111),
+   TABLE_ENTRY(_dispatch_stub_1112),
    TABLE_ENTRY(SecondaryColor3f),
    TABLE_ENTRY(SecondaryColor3fv),
    TABLE_ENTRY(MultiDrawElements),
@@ -14296,11 +14492,7 @@ _glapi_proc UNUSED_TABLE_NAME[] = {
    TABLE_ENTRY(VertexAttribI4iv),
    TABLE_ENTRY(VertexAttribI4ui),
    TABLE_ENTRY(VertexAttribI4uiv),
-   TABLE_ENTRY(_dispatch_stub_1254),
-   TABLE_ENTRY(_dispatch_stub_1281),
-   TABLE_ENTRY(_dispatch_stub_1282),
-   TABLE_ENTRY(_dispatch_stub_1283),
-   TABLE_ENTRY(_dispatch_stub_1284),
+   TABLE_ENTRY(_dispatch_stub_1257),
    TABLE_ENTRY(_dispatch_stub_1285),
    TABLE_ENTRY(_dispatch_stub_1286),
    TABLE_ENTRY(_dispatch_stub_1287),
@@ -14340,6 +14532,12 @@ _glapi_proc UNUSED_TABLE_NAME[] = {
    TABLE_ENTRY(_dispatch_stub_1321),
    TABLE_ENTRY(_dispatch_stub_1322),
    TABLE_ENTRY(_dispatch_stub_1323),
+   TABLE_ENTRY(_dispatch_stub_1324),
+   TABLE_ENTRY(_dispatch_stub_1325),
+   TABLE_ENTRY(_dispatch_stub_1326),
+   TABLE_ENTRY(_dispatch_stub_1327),
+   TABLE_ENTRY(_dispatch_stub_1328),
+   TABLE_ENTRY(_dispatch_stub_1329),
 #endif /* _GLAPI_SKIP_NORMAL_ENTRY_POINTS */
 #ifndef _GLAPI_SKIP_PROTO_ENTRY_POINTS
    TABLE_ENTRY(AreTexturesResidentEXT),

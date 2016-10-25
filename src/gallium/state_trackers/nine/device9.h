@@ -48,11 +48,15 @@ struct NineDevice9
 {
     struct NineUnknown base;
     boolean ex;
+    boolean may_swvp;
 
     /* G3D context */
     struct pipe_screen *screen;
+    struct pipe_screen *screen_sw;
     struct pipe_context *pipe;
+    struct pipe_context *pipe_sw;
     struct cso_context *cso;
+    struct cso_context *cso_sw;
 
     /* creation parameters */
     D3DCAPS9 caps;
@@ -76,10 +80,6 @@ struct NineDevice9
     boolean is_recording;
     boolean in_scene;
 
-    boolean prefer_user_constbuf;
-
-    struct pipe_resource *constbuf_vs;
-    struct pipe_resource *constbuf_ps;
     uint16_t vs_const_size;
     uint16_t ps_const_size;
     uint16_t max_vs_const_f;
@@ -118,9 +118,12 @@ struct NineDevice9
         boolean user_vbufs;
         boolean user_ibufs;
         boolean user_cbufs;
+        boolean user_sw_vbufs;
+        boolean user_sw_cbufs;
         boolean window_space_position_support;
         boolean vs_integer;
         boolean ps_integer;
+        boolean offset_units_unscaled;
     } driver_caps;
 
     struct {
@@ -130,6 +133,8 @@ struct NineDevice9
     struct u_upload_mgr *vertex_uploader;
     struct u_upload_mgr *index_uploader;
     struct u_upload_mgr *constbuf_uploader;
+    struct u_upload_mgr *vertex_sw_uploader;
+    struct u_upload_mgr *constbuf_sw_uploader;
     unsigned constbuf_alignment;
 
     struct nine_range_pool range_pool;
@@ -143,6 +148,9 @@ struct NineDevice9
     int minor_version_num;
     long long available_texture_mem;
     long long available_texture_limit;
+
+    /* software vertex processing */
+    boolean swvp;
 };
 static inline struct NineDevice9 *
 NineDevice9( void *data )

@@ -96,7 +96,7 @@ struct psprite_transform_context
    unsigned stream_out_point_pos:1; // set if to stream out original point pos
    unsigned aa_point:1;             // set if doing aa point
    unsigned out_tmp_index[PIPE_MAX_SHADER_OUTPUTS];
-   int max_generic;
+   int max_generic;                 // max generic semantic index
 };
 
 static inline struct psprite_transform_context *
@@ -133,7 +133,7 @@ psprite_decl(struct tgsi_transform_context *ctx,
       else if (decl->Semantic.Name == TGSI_SEMANTIC_GENERIC &&
                decl->Semantic.Index < 32) {
          ts->point_coord_decl |= 1 << decl->Semantic.Index;
-         ts->max_generic = MAX2(ts->max_generic, decl->Semantic.Index);
+         ts->max_generic = MAX2(ts->max_generic, (int)decl->Semantic.Index);
       }
       ts->num_out = MAX2(ts->num_out, decl->Range.Last + 1);
    }
@@ -216,7 +216,7 @@ psprite_prolog(struct tgsi_transform_context *ctx)
          if (en & 0x1) {
             tgsi_transform_output_decl(ctx, ts->num_out++,
                                        TGSI_SEMANTIC_GENERIC, i, 0);
-            ts->max_generic = MAX2(ts->max_generic, i);
+            ts->max_generic = MAX2(ts->max_generic, (int)i);
          }
       }
    }

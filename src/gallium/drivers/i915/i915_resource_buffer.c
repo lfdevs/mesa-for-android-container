@@ -70,7 +70,7 @@ i915_buffer_transfer_map(struct pipe_context *pipe,
 {
    struct i915_context *i915 = i915_context(pipe);
    struct i915_buffer *buffer = i915_buffer(resource);
-   struct pipe_transfer *transfer = util_slab_alloc(&i915->transfer_pool);
+   struct pipe_transfer *transfer = slab_alloc_st(&i915->transfer_pool);
 
    if (!transfer)
       return NULL;
@@ -89,24 +89,18 @@ i915_buffer_transfer_unmap(struct pipe_context *pipe,
                            struct pipe_transfer *transfer)
 {
    struct i915_context *i915 = i915_context(pipe);
-   util_slab_free(&i915->transfer_pool, transfer);
+   slab_free_st(&i915->transfer_pool, transfer);
 }
 
-static void
-i915_buffer_transfer_inline_write( struct pipe_context *rm_ctx,
-                                   struct pipe_resource *resource,
-                                   unsigned level,
-                                   unsigned usage,
-                                   const struct pipe_box *box,
-                                   const void *data,
-                                   unsigned stride,
-                                   unsigned layer_stride)
+void
+i915_buffer_subdata(struct pipe_context *rm_ctx,
+                    struct pipe_resource *resource,
+                    unsigned usage, unsigned offset,
+                    unsigned size, const void *data)
 {
    struct i915_buffer *buffer = i915_buffer(resource);
 
-   memcpy(buffer->data + box->x,
-          data,
-          box->width);
+   memcpy(buffer->data + offset, data, size);
 }
 
 
@@ -117,7 +111,6 @@ struct u_resource_vtbl i915_buffer_vtbl =
    i915_buffer_transfer_map,	     /* transfer_map */
    u_default_transfer_flush_region,  /* transfer_flush_region */
    i915_buffer_transfer_unmap,	     /* transfer_unmap */
-   i915_buffer_transfer_inline_write /* transfer_inline_write */
 };
 
 

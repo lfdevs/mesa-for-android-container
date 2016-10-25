@@ -250,7 +250,7 @@ vl_video_buffer_template(struct pipe_resource *templ,
    templ->height0 = tmpl->height;
    templ->depth0 = depth;
    templ->array_size = array_size;
-   templ->bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
+   templ->bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET | tmpl->bind;
    templ->usage = usage;
 
    vl_video_buffer_adjust_size(&templ->width0, &templ->height0, plane,

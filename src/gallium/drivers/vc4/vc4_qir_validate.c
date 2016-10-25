@@ -25,10 +25,10 @@
 #include "vc4_qpu.h"
 
 static void
-fail_instr(struct qinst *inst, const char *msg)
+fail_instr(struct vc4_compile *c, struct qinst *inst, const char *msg)
 {
         fprintf(stderr, "qir_validate: %s: ", msg);
-        qir_dump_inst(stderr, inst);
+        qir_dump_inst(c, inst);
         fprintf(stderr, "\n");
         abort();
 }
@@ -50,18 +50,18 @@ void qir_validate(struct vc4_compile *c)
                 struct qinst *def = c->defs[i];
 
                 if (def && def->cond != QPU_COND_ALWAYS)
-                        fail_instr(def, "SSA def with condition");
+                        fail_instr(c, def, "SSA def with condition");
         }
 
-        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
+        qir_for_each_inst_inorder(inst, c) {
                 switch (inst->dst.file) {
                 case QFILE_TEMP:
                         if (inst->dst.index >= c->num_temps)
-                                fail_instr(inst, "bad temp index");
+                                fail_instr(c, inst, "bad temp index");
 
                         if (c->defs[inst->dst.index] &&
                             already_assigned[inst->dst.index]) {
-                                fail_instr(inst, "Re-assignment of SSA value");
+                                fail_instr(c, inst, "Re-assignment of SSA value");
                         }
                         already_assigned[inst->dst.index] = true;
                         break;
@@ -79,9 +79,10 @@ void qir_validate(struct vc4_compile *c)
                 case QFILE_FRAG_X:
                 case QFILE_FRAG_Y:
                 case QFILE_FRAG_REV_FLAG:
+                case QFILE_QPU_ELEMENT:
                 case QFILE_SMALL_IMM:
                 case QFILE_LOAD_IMM:
-                        fail_instr(inst, "Bad dest file");
+                        fail_instr(c, inst, "Bad dest file");
                         break;
                 }
 
@@ -91,25 +92,26 @@ void qir_validate(struct vc4_compile *c)
                         switch (src.file) {
                         case QFILE_TEMP:
                                 if (src.index >= c->num_temps)
-                                        fail_instr(inst, "bad temp index");
+                                        fail_instr(c, inst, "bad temp index");
                                 break;
 
                         case QFILE_VARY:
                         case QFILE_UNIF:
                         case QFILE_VPM:
                         case QFILE_LOAD_IMM:
+                        case QFILE_QPU_ELEMENT:
                                 break;
 
                         case QFILE_SMALL_IMM:
                                 if (qpu_encode_small_immediate(src.index) == ~0)
-                                        fail_instr(inst, "bad small immediate");
+                                        fail_instr(c, inst, "bad small immediate");
                                 break;
 
                         case QFILE_FRAG_X:
                         case QFILE_FRAG_Y:
                         case QFILE_FRAG_REV_FLAG:
                                 if (c->stage != QSTAGE_FRAG)
-                                        fail_instr(inst, "frag access in VS/CS");
+                                        fail_instr(c, inst, "frag access in VS/CS");
                                 break;
 
                         case QFILE_NULL:
@@ -117,7 +119,7 @@ void qir_validate(struct vc4_compile *c)
                         case QFILE_TLB_COLOR_WRITE_MS:
                         case QFILE_TLB_Z_WRITE:
                         case QFILE_TLB_STENCIL_SETUP:
-                                fail_instr(inst, "Bad src file");
+                                fail_instr(c, inst, "Bad src file");
                                 break;
                         }
                 }

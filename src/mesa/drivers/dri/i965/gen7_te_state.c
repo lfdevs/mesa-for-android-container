@@ -32,7 +32,8 @@ upload_te_state(struct brw_context *brw)
    /* BRW_NEW_TESS_PROGRAMS */
    bool active = brw->tess_eval_program;
 
-   const struct brw_tes_prog_data *tes_prog_data = brw->tes.prog_data;
+   const struct brw_tes_prog_data *tes_prog_data =
+      brw_tes_prog_data(brw->tes.base.prog_data);
 
    if (active) {
       BEGIN_BATCH(4);

@@ -64,7 +64,6 @@ static void update_raster_state( struct st_context *st )
    struct pipe_rasterizer_state *raster = &st->state.rasterizer;
    const struct gl_vertex_program *vertProg = ctx->VertexProgram._Current;
    const struct gl_fragment_program *fragProg = ctx->FragmentProgram._Current;
-   uint i;
 
    memset(raster, 0, sizeof(*raster));
 
@@ -181,11 +180,8 @@ static void update_raster_state( struct st_context *st )
        * that we need to replace GENERIC[k] attrib with an automatically
        * computed texture coord.
        */
-      for (i = 0; i < MAX_TEXTURE_COORD_UNITS; i++) {
-         if (ctx->Point.CoordReplace[i]) {
-            raster->sprite_coord_enable |= 1 << i;
-         }
-      }
+      raster->sprite_coord_enable = ctx->Point.CoordReplace &
+         ((1u << MAX_TEXTURE_COORD_UNITS) - 1);
       if (!st->needs_texcoord_semantic &&
           fragProg->Base.InputsRead & VARYING_BIT_PNTC) {
          raster->sprite_coord_enable |=
@@ -294,22 +290,5 @@ static void update_raster_state( struct st_context *st )
 }
 
 const struct st_tracked_state st_update_rasterizer = {
-   "st_update_rasterizer",    /* name */
-   {
-      (_NEW_BUFFERS |
-       _NEW_LIGHT |
-       _NEW_LINE |
-       _NEW_MULTISAMPLE |
-       _NEW_POINT |
-       _NEW_POLYGON |
-       _NEW_PROGRAM |
-       _NEW_SCISSOR |
-       _NEW_FRAG_CLAMP |
-       _NEW_TRANSFORM),     /* mesa state dependencies*/
-      (ST_NEW_VERTEX_PROGRAM |
-       ST_NEW_TESSEVAL_PROGRAM |
-       ST_NEW_GEOMETRY_PROGRAM |
-       ST_NEW_RASTERIZER),  /* state tracker dependencies */
-   },
    update_raster_state     /* update function */
 };

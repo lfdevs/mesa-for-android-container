@@ -109,7 +109,7 @@ gen6_set_sample_maps(struct gl_context *ctx)
 {
    uint8_t map_2x[2] = {0, 1};
    uint8_t map_4x[4] = {0, 1, 2, 3};
-   uint8_t map_8x[8] = {5, 2, 4, 6, 0, 3, 7, 1};
+   uint8_t map_8x[8] = {3, 7, 5, 0, 1, 2, 4, 6};
    uint8_t map_16x[16] = { 15, 10, 9, 7, 4, 1, 3, 13,
                            12, 2, 0, 6, 11, 8, 5, 14 };
 

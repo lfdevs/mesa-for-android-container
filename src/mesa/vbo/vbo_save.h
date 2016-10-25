@@ -61,6 +61,7 @@ struct vbo_save_copied_vtx {
  * compiled using the fallback opcode mechanism provided by dlist.c.
  */
 struct vbo_save_vertex_list {
+   GLbitfield64 enabled; /**< mask of enabled vbo arrays. */
    GLubyte attrsz[VBO_ATTRIB_MAX];
    GLenum attrtype[VBO_ATTRIB_MAX];
    GLuint vertex_size;  /**< size in GLfloats */
@@ -95,7 +96,7 @@ struct vbo_save_vertex_list {
  * likelyhood as it occurs.  No reason we couldn't change usage
  * internally even though this probably isn't allowed for client VBOs?
  */
-#define VBO_SAVE_BUFFER_SIZE (8*1024) /* dwords */
+#define VBO_SAVE_BUFFER_SIZE (256*1024) /* dwords */
 #define VBO_SAVE_PRIM_SIZE   128
 #define VBO_SAVE_PRIM_MODE_MASK         0x3f
 #define VBO_SAVE_PRIM_WEAK              0x40
@@ -126,6 +127,7 @@ struct vbo_save_context {
    struct gl_client_array arrays[VBO_ATTRIB_MAX];
    const struct gl_client_array *inputs[VBO_ATTRIB_MAX];
 
+   GLbitfield64 enabled; /**< mask of enabled vbo arrays. */
    GLubyte attrsz[VBO_ATTRIB_MAX];  /**< 1, 2, 3 or 4 */
    GLenum attrtype[VBO_ATTRIB_MAX];  /**< GL_FLOAT, GL_INT, etc */
    GLubyte active_sz[VBO_ATTRIB_MAX];  /**< 1, 2, 3 or 4 */

@@ -99,12 +99,13 @@ struct pstip_stage
    void (*driver_bind_fs_state)(struct pipe_context *, void *);
    void (*driver_delete_fs_state)(struct pipe_context *, void *);
 
-   void (*driver_bind_sampler_states)(struct pipe_context *, unsigned,
+   void (*driver_bind_sampler_states)(struct pipe_context *,
+                                      enum pipe_shader_type,
                                       unsigned, unsigned, void **);
 
    void (*driver_set_sampler_views)(struct pipe_context *,
-                                    unsigned shader, unsigned start,
-                                    unsigned count,
+                                    enum pipe_shader_type shader,
+                                    unsigned start, unsigned count,
                                     struct pipe_sampler_view **);
 
    void (*driver_set_polygon_stipple)(struct pipe_context *,
@@ -142,7 +143,7 @@ generate_pstip_fs(struct pstip_stage *pstip)
    assert(pstip->fs->sampler_unit < PIPE_MAX_SAMPLERS);
 
    pstip->fs->pstip_fs = pstip->driver_create_fs_state(pipe, &pstip_fs);
-   
+
    FREE((void *)pstip_fs.tokens);
 
    if (!pstip->fs->pstip_fs)
@@ -195,7 +196,6 @@ pstip_first_tri(struct draw_stage *stage, struct prim_header *header)
       stage->tri(stage, header);
       return;
    }
-      
 
    /* how many samplers? */
    /* we'll use sampler/texture[pstip->sampler_unit] for the stipple */
@@ -374,7 +374,8 @@ pstip_delete_fs_state(struct pipe_context *pipe, void *fs)
 
 
 static void
-pstip_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
+pstip_bind_sampler_states(struct pipe_context *pipe,
+                          enum pipe_shader_type shader,
                           unsigned start, unsigned num, void **sampler)
 {
    struct pstip_stage *pstip = pstip_stage_from_pipe(pipe);
@@ -398,7 +399,8 @@ pstip_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
 
 static void
 pstip_set_sampler_views(struct pipe_context *pipe,
-                        unsigned shader, unsigned start, unsigned num,
+                        enum pipe_shader_type shader,
+                        unsigned start, unsigned num,
                         struct pipe_sampler_view **views)
 {
    struct pstip_stage *pstip = pstip_stage_from_pipe(pipe);

@@ -37,7 +37,7 @@
 
 #include "tgsi/tgsi_scan.h"
 
-#include "util/u_slab.h"
+#include "util/slab.h"
 #include "util/u_blitter.h"
 
 
@@ -278,8 +278,8 @@ struct i915_context {
    struct i915_winsys_buffer *validation_buffers[2 + 1 + I915_TEX_UNITS];
    int num_validation_buffers;
 
-   struct util_slab_mempool transfer_pool;
-   struct util_slab_mempool texture_transfer_pool;
+   struct slab_mempool transfer_pool;
+   struct slab_mempool texture_transfer_pool;
 
    /* state for tracking flushes */
    int last_fired_vertices;

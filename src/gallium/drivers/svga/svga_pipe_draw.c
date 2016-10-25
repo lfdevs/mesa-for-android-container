@@ -59,6 +59,8 @@ retry_draw_range_elements( struct svga_context *svga,
 {
    enum pipe_error ret = PIPE_OK;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_DRAWELEMENTS);
+
    svga_hwtnl_set_fillmode(svga->hwtnl, svga->curr.rast->hw_fillmode);
 
    ret = svga_update_state( svga, SVGA_STATE_HW_DRAW );
@@ -81,20 +83,22 @@ retry_draw_range_elements( struct svga_context *svga,
    if (ret != PIPE_OK)
       goto retry;
 
-   return PIPE_OK;
+   goto done;
 
 retry:
    svga_context_flush( svga, NULL );
 
    if (do_retry)
    {
-      return retry_draw_range_elements( svga,
-                                        index_buffer, index_size, index_bias,
-                                        min_index, max_index,
-                                        prim, start, count,
-                                        start_instance, instance_count, FALSE );
+      ret = retry_draw_range_elements(svga,
+                                      index_buffer, index_size, index_bias,
+                                      min_index, max_index,
+                                      prim, start, count,
+                                      start_instance, instance_count, FALSE);
    }
 
+done:
+   SVGA_STATS_TIME_POP(svga_sws(svga));
    return ret;
 }
 
@@ -106,6 +110,8 @@ retry_draw_arrays( struct svga_context *svga,
                    boolean do_retry )
 {
    enum pipe_error ret;
+
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_DRAWARRAYS);
 
    svga_hwtnl_set_fillmode(svga->hwtnl, svga->curr.rast->hw_fillmode);
 
@@ -126,18 +132,20 @@ retry_draw_arrays( struct svga_context *svga,
    if (ret != PIPE_OK)
       goto retry;
 
-   return PIPE_OK;
+   goto done;
 
 retry:
    if (ret == PIPE_ERROR_OUT_OF_MEMORY && do_retry)
    {
       svga_context_flush( svga, NULL );
 
-      return retry_draw_arrays(svga, prim, start, count,
-                               start_instance, instance_count,
-                               FALSE );
+      ret = retry_draw_arrays(svga, prim, start, count,
+                              start_instance, instance_count,
+                              FALSE);
    }
 
+done:
+   SVGA_STATS_TIME_POP(svga_sws(svga));
    return ret;
 }
 
@@ -177,11 +185,13 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    enum pipe_error ret = 0;
    boolean needed_swtnl;
 
+   SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_DRAWVBO);
+
    svga->hud.num_draw_calls++;  /* for SVGA_QUERY_NUM_DRAW_CALLS */
 
    if (u_reduced_prim(info->mode) == PIPE_PRIM_TRIANGLES &&
        svga->curr.rast->templ.cull_face == PIPE_FACE_FRONT_AND_BACK)
-      return;
+      goto done;
 
    /*
     * Mark currently bound target surfaces as dirty
@@ -202,21 +212,15 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       r = util_draw_vbo_without_prim_restart(pipe, &svga->curr.ib, info);
       assert(r == PIPE_OK);
       (void) r;
-      return;
+      goto done;
    }
 
    if (!u_trim_pipe_prim( info->mode, &count ))
-      return;
+      goto done;
 
    needed_swtnl = svga->state.sw.need_swtnl;
 
    svga_update_state_retry( svga, SVGA_STATE_NEED_SWTNL );
-
-#ifdef DEBUG
-   if (svga->curr.vs->base.id == svga->debug.disable_shader ||
-       svga->curr.fs->base.id == svga->debug.disable_shader)
-      return;
-#endif
 
    if (svga->state.sw.need_swtnl) {
       svga->hud.num_fallbacks++;  /* for SVGA_QUERY_NUM_FALLBACKS */
@@ -270,6 +274,10 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       svga_hwtnl_flush_retry( svga );
       svga_context_flush(svga, NULL);
    }
+
+done:
+   SVGA_STATS_TIME_POP(svga_sws(svga));
+;
 }
 
 

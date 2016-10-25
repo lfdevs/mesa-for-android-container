@@ -85,7 +85,8 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 
 void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 				   struct pipe_resource *dst, uint64_t offset,
-				   unsigned size, uint32_t clear_value)
+				   unsigned size, uint32_t clear_value,
+				   enum r600_coherency coher)
 {
 	struct radeon_winsys_cs *cs = rctx->b.gfx.cs;
 
@@ -101,15 +102,7 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 	offset += r600_resource(dst)->gpu_address;
 
 	/* Flush the cache where the resource is bound. */
-	rctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE |
-			 R600_CONTEXT_INV_VERTEX_CACHE |
-			 R600_CONTEXT_INV_TEX_CACHE |
-			 R600_CONTEXT_FLUSH_AND_INV |
-			 R600_CONTEXT_FLUSH_AND_INV_CB |
-			 R600_CONTEXT_FLUSH_AND_INV_DB |
-			 R600_CONTEXT_FLUSH_AND_INV_CB_META |
-			 R600_CONTEXT_FLUSH_AND_INV_DB_META |
-			 R600_CONTEXT_STREAMOUT_FLUSH |
+	rctx->b.flags |= r600_get_flush_flags(coher) |
 			 R600_CONTEXT_WAIT_3D_IDLE;
 
 	while (size) {
@@ -117,7 +110,9 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 		unsigned byte_count = MIN2(size, CP_DMA_MAX_BYTE_COUNT);
 		unsigned reloc;
 
-		r600_need_cs_space(rctx, 10 + (rctx->b.flags ? R600_MAX_FLUSH_CS_DWORDS : 0), FALSE);
+		r600_need_cs_space(rctx,
+				   10 + (rctx->b.flags ? R600_MAX_FLUSH_CS_DWORDS : 0) +
+				   R600_MAX_PFP_SYNC_ME_DWORDS, FALSE);
 
 		/* Flush the caches for the first copy only. */
 		if (rctx->b.flags) {
@@ -148,9 +143,11 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 		offset += byte_count;
 	}
 
-	/* Invalidate the read caches. */
-	rctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE |
-			 R600_CONTEXT_INV_VERTEX_CACHE |
-			 R600_CONTEXT_INV_TEX_CACHE;
+	/* CP DMA is executed in ME, but index buffers are read by PFP.
+	 * This ensures that ME (CP DMA) is idle before PFP starts fetching
+	 * indices. If we wanted to execute CP DMA in PFP, this packet
+	 * should precede it.
+	 */
+	if (coher == R600_COHERENCY_SHADER)
+		r600_emit_pfp_sync_me(rctx);
 }
-

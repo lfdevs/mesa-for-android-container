@@ -52,7 +52,7 @@
 extern "C" {
 #endif
 
-struct brw_device_info;
+struct gen_device_info;
 
 /** Number of general purpose registers (VS, WM, etc) */
 #define BRW_MAX_GRF 128
@@ -87,6 +87,9 @@ struct brw_device_info;
 #define BRW_SWIZZLE_ZXYW      BRW_SWIZZLE4(2,0,1,3)
 #define BRW_SWIZZLE_ZWZW      BRW_SWIZZLE4(2,3,2,3)
 #define BRW_SWIZZLE_WZYX      BRW_SWIZZLE4(3,2,1,0)
+
+#define BRW_SWZ_COMP_INPUT(comp) (BRW_SWIZZLE_XYZW >> ((comp)*2))
+#define BRW_SWZ_COMP_OUTPUT(comp) (BRW_SWIZZLE_XYZW << ((comp)*2))
 
 static inline bool
 brw_is_single_value_swizzle(unsigned swiz)
@@ -220,7 +223,7 @@ enum PACKED brw_reg_type {
    BRW_REGISTER_TYPE_Q,
 };
 
-unsigned brw_reg_type_to_hw_type(const struct brw_device_info *devinfo,
+unsigned brw_reg_type_to_hw_type(const struct gen_device_info *devinfo,
                                  enum brw_reg_type type, enum brw_reg_file file);
 const char *brw_reg_type_letters(unsigned brw_reg_type);
 uint32_t brw_swizzle_immediate(enum brw_reg_type type, uint32_t x, unsigned swz);
@@ -292,15 +295,19 @@ type_sz(unsigned type)
    case BRW_REGISTER_TYPE_UD:
    case BRW_REGISTER_TYPE_D:
    case BRW_REGISTER_TYPE_F:
+   case BRW_REGISTER_TYPE_VF:
       return 4;
    case BRW_REGISTER_TYPE_UW:
    case BRW_REGISTER_TYPE_W:
+   case BRW_REGISTER_TYPE_UV:
+   case BRW_REGISTER_TYPE_V:
+   case BRW_REGISTER_TYPE_HF:
       return 2;
    case BRW_REGISTER_TYPE_UB:
    case BRW_REGISTER_TYPE_B:
       return 1;
    default:
-      return 0;
+      unreachable("not reached");
    }
 }
 
@@ -513,14 +520,6 @@ sechalf(struct brw_reg reg)
 }
 
 static inline struct brw_reg
-suboffset(struct brw_reg reg, unsigned delta)
-{
-   reg.subnr += delta * type_sz(reg.type);
-   return reg;
-}
-
-
-static inline struct brw_reg
 offset(struct brw_reg reg, unsigned delta)
 {
    reg.nr += delta;
@@ -537,6 +536,11 @@ byte_offset(struct brw_reg reg, unsigned bytes)
    return reg;
 }
 
+static inline struct brw_reg
+suboffset(struct brw_reg reg, unsigned delta)
+{
+   return byte_offset(reg, delta * type_sz(reg.type));
+}
 
 /** Construct unsigned word[16] register */
 static inline struct brw_reg
@@ -557,6 +561,12 @@ static inline struct brw_reg
 brw_uw1_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
    return suboffset(retype(brw_vec1_reg(file, nr, 0), BRW_REGISTER_TYPE_UW), subnr);
+}
+
+static inline struct brw_reg
+brw_ud1_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
+{
+   return retype(brw_vec1_reg(file, nr, subnr), BRW_REGISTER_TYPE_UD);
 }
 
 static inline struct brw_reg
@@ -782,19 +792,9 @@ brw_notification_reg(void)
 }
 
 static inline struct brw_reg
-brw_sr0_reg(void)
+brw_sr0_reg(unsigned subnr)
 {
-   return brw_reg(BRW_ARCHITECTURE_REGISTER_FILE,
-                  BRW_ARF_STATE,
-                  0,
-                  0,
-                  0,
-                  BRW_REGISTER_TYPE_UD,
-                  BRW_VERTICAL_STRIDE_8,
-                  BRW_WIDTH_8,
-                  BRW_HORIZONTAL_STRIDE_1,
-                  BRW_SWIZZLE_XYZW,
-                  WRITEMASK_XYZW);
+   return brw_ud1_reg(BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_STATE, subnr);
 }
 
 static inline struct brw_reg
@@ -820,6 +820,18 @@ static inline struct brw_reg
 brw_mask_reg(unsigned subnr)
 {
    return brw_uw1_reg(BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_MASK, subnr);
+}
+
+static inline struct brw_reg
+brw_vmask_reg()
+{
+   return brw_sr0_reg(3);
+}
+
+static inline struct brw_reg
+brw_dmask_reg()
+{
+   return brw_sr0_reg(2);
 }
 
 static inline struct brw_reg
@@ -963,6 +975,13 @@ static inline unsigned
 brw_writemask_for_size(unsigned n)
 {
    return (1 << n) - 1;
+}
+
+static inline unsigned
+brw_writemask_for_component_packing(unsigned n, unsigned first_component)
+{
+   assert(first_component + n <= 4);
+   return (((1 << n) - 1) << first_component);
 }
 
 static inline struct brw_reg

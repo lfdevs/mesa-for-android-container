@@ -14,7 +14,6 @@ C_SOURCES := \
 	vc4_context.c \
 	vc4_context.h \
 	vc4_draw.c \
-	vc4_drm.h \
 	vc4_emit.c \
 	vc4_fence.c \
 	vc4_formats.c \
@@ -26,10 +25,13 @@ C_SOURCES := \
 	vc4_opt_constant_folding.c \
 	vc4_opt_copy_propagation.c \
 	vc4_opt_dead_code.c \
+	vc4_opt_peephole_sf.c \
 	vc4_opt_small_immediates.c \
 	vc4_opt_vpm.c \
 	vc4_program.c \
 	vc4_qir.c \
+	vc4_qir_emit_uniform_stream_resets.c \
+	vc4_qir_live_variables.c \
 	vc4_qir_lower_uniforms.c \
 	vc4_qir_schedule.c \
 	vc4_qir_validate.c \

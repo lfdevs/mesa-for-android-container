@@ -29,11 +29,15 @@
 #include "context.h"
 #include "format_traits.h"
 
+//////////////////////////////////////////////////////////////////////////
+/// @brief convenience typedef for testing for single sample case
+typedef std::integral_constant<int, 1> SingleSampleT;
+
 INLINE
 uint32_t GetNumSamples(SWR_MULTISAMPLE_COUNT sampleCount)
 {
-    static const uint32_t sampleCountLUT[SWR_MULTISAMPLE_TYPE_MAX] {1, 2, 4, 8, 16};
-    assert(sampleCount < SWR_MULTISAMPLE_TYPE_MAX);
+    static const uint32_t sampleCountLUT[SWR_MULTISAMPLE_TYPE_COUNT] {1, 2, 4, 8, 16};
+    assert(sampleCount < SWR_MULTISAMPLE_TYPE_COUNT);
     return sampleCountLUT[sampleCount];
 }
 

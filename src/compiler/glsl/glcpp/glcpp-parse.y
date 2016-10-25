@@ -278,6 +278,7 @@ control_line_success:
 	HASH_TOKEN DEFINE_TOKEN define
 |	HASH_TOKEN UNDEF IDENTIFIER NEWLINE {
 		macro_t *macro;
+		struct hash_entry *entry;
 
                 /* Section 3.4 (Preprocessor) of the GLSL ES 3.00 spec says:
                  *
@@ -309,9 +310,10 @@ control_line_success:
 			glcpp_error(& @1, parser, "Built-in (pre-defined)"
 				    " macro names cannot be undefined.");
 
-		macro = hash_table_find (parser->defines, $3);
-		if (macro) {
-			hash_table_remove (parser->defines, $3);
+		entry = _mesa_hash_table_search (parser->defines, $3);
+		if (entry) {
+			macro = entry->data;
+			_mesa_hash_table_remove (parser->defines, entry);
 			ralloc_free (macro);
 		}
 		ralloc_free ($3);
@@ -348,13 +350,16 @@ control_line_success:
 		_glcpp_parser_skip_stack_push_if (parser, & @1, 0);
 	}
 |	HASH_TOKEN IFDEF IDENTIFIER junk NEWLINE {
-		macro_t *macro = hash_table_find (parser->defines, $3);
+		struct hash_entry *entry =
+				_mesa_hash_table_search(parser->defines, $3);
+		macro_t *macro = entry ? entry->data : NULL;
 		ralloc_free ($3);
 		_glcpp_parser_skip_stack_push_if (parser, & @1, macro != NULL);
 	}
 |	HASH_TOKEN IFNDEF IDENTIFIER junk NEWLINE {
-		macro_t *macro = hash_table_find (parser->defines, $3);
-		ralloc_free ($3);
+		struct hash_entry *entry =
+				_mesa_hash_table_search(parser->defines, $3);
+		macro_t *macro = entry ? entry->data : NULL;
 		_glcpp_parser_skip_stack_push_if (parser, & @3, macro == NULL);
 	}
 |	HASH_TOKEN ELIF pp_tokens NEWLINE {
@@ -1335,15 +1340,15 @@ add_builtin_define(glcpp_parser_t *parser, const char *name, int value)
 }
 
 glcpp_parser_t *
-glcpp_parser_create(const struct gl_extensions *extensions, gl_api api)
+glcpp_parser_create(glcpp_extension_iterator extensions, void *state, gl_api api)
 {
    glcpp_parser_t *parser;
 
    parser = ralloc (NULL, glcpp_parser_t);
 
    glcpp_lex_init_extra (parser, &parser->scanner);
-   parser->defines = hash_table_ctor(32, hash_table_string_hash,
-                                     hash_table_string_compare);
+   parser->defines = _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+                                             _mesa_key_string_equal);
    parser->active = NULL;
    parser->lexing_directive = 0;
    parser->space_tokens = 1;
@@ -1368,6 +1373,7 @@ glcpp_parser_create(const struct gl_extensions *extensions, gl_api api)
    parser->error = 0;
 
    parser->extensions = extensions;
+   parser->state = state;
    parser->api = api;
    parser->version = 0;
 
@@ -1383,7 +1389,7 @@ void
 glcpp_parser_destroy(glcpp_parser_t *parser)
 {
    glcpp_lex_destroy (parser->scanner);
-   hash_table_dtor (parser->defines);
+   _mesa_hash_table_destroy(parser->defines, NULL);
    ralloc_free (parser);
 }
 
@@ -1562,8 +1568,8 @@ _glcpp_parser_evaluate_defined(glcpp_parser_t *parser, token_node_t *node,
 
    *last = node;
 
-   return hash_table_find(parser->defines,
-                          argument->token->value.str) ? 1 : 0;
+   return _mesa_hash_table_search(parser->defines,
+                                  argument->token->value.str) ? 1 : 0;
 
 FAIL:
    glcpp_error (&defined->token->location, parser,
@@ -1704,6 +1710,7 @@ static token_list_t *
 _glcpp_parser_expand_function(glcpp_parser_t *parser, token_node_t *node,
                               token_node_t **last, expansion_mode_t mode)
 {
+   struct hash_entry *entry;
    macro_t *macro;
    const char *identifier;
    argument_list_t *arguments;
@@ -1713,7 +1720,8 @@ _glcpp_parser_expand_function(glcpp_parser_t *parser, token_node_t *node,
 
    identifier = node->token->value.str;
 
-   macro = hash_table_find(parser->defines, identifier);
+   entry = _mesa_hash_table_search(parser->defines, identifier);
+   macro = entry ? entry->data : NULL;
 
    assert(macro->is_function);
 
@@ -1810,6 +1818,7 @@ _glcpp_parser_expand_node(glcpp_parser_t *parser, token_node_t *node,
 {
    token_t *token = node->token;
    const char *identifier;
+   struct hash_entry *entry;
    macro_t *macro;
 
    /* We only expand identifiers */
@@ -1829,7 +1838,8 @@ _glcpp_parser_expand_node(glcpp_parser_t *parser, token_node_t *node,
       return _token_list_create_with_one_integer(parser, node->token->location.source);
 
    /* Look up this identifier in the hash table. */
-   macro = hash_table_find(parser->defines, identifier);
+   entry = _mesa_hash_table_search(parser->defines, identifier);
+   macro = entry ? entry->data : NULL;
 
    /* Not a macro, so no expansion needed. */
    if (macro == NULL)
@@ -2079,6 +2089,7 @@ _define_object_macro(glcpp_parser_t *parser, YYLTYPE *loc,
                      const char *identifier, token_list_t *replacements)
 {
    macro_t *macro, *previous;
+   struct hash_entry *entry;
 
    /* We define pre-defined macros before we've started parsing the actual
     * file. So if there's no location defined yet, that's what were doing and
@@ -2094,7 +2105,8 @@ _define_object_macro(glcpp_parser_t *parser, YYLTYPE *loc,
    macro->replacements = replacements;
    ralloc_steal (macro, replacements);
 
-   previous = hash_table_find (parser->defines, identifier);
+   entry = _mesa_hash_table_search(parser->defines, identifier);
+   previous = entry ? entry->data : NULL;
    if (previous) {
       if (_macro_equal (macro, previous)) {
          ralloc_free (macro);
@@ -2103,7 +2115,7 @@ _define_object_macro(glcpp_parser_t *parser, YYLTYPE *loc,
       glcpp_error (loc, parser, "Redefinition of macro %s\n",  identifier);
    }
 
-   hash_table_insert (parser->defines, macro, identifier);
+   _mesa_hash_table_insert (parser->defines, identifier, macro);
 }
 
 void
@@ -2112,6 +2124,7 @@ _define_function_macro(glcpp_parser_t *parser, YYLTYPE *loc,
                        token_list_t *replacements)
 {
    macro_t *macro, *previous;
+   struct hash_entry *entry;
    const char *dup;
 
    _check_for_reserved_macro_name(parser, loc, identifier);
@@ -2129,7 +2142,9 @@ _define_function_macro(glcpp_parser_t *parser, YYLTYPE *loc,
    macro->parameters = parameters;
    macro->identifier = ralloc_strdup (macro, identifier);
    macro->replacements = replacements;
-   previous = hash_table_find (parser->defines, identifier);
+
+   entry = _mesa_hash_table_search(parser->defines, identifier);
+   previous = entry ? entry->data : NULL;
    if (previous) {
       if (_macro_equal (macro, previous)) {
          ralloc_free (macro);
@@ -2138,7 +2153,7 @@ _define_function_macro(glcpp_parser_t *parser, YYLTYPE *loc,
       glcpp_error (loc, parser, "Redefinition of macro %s\n", identifier);
    }
 
-   hash_table_insert(parser->defines, macro, identifier);
+   _mesa_hash_table_insert(parser->defines, identifier, macro);
 }
 
 static int
@@ -2184,9 +2199,9 @@ glcpp_parser_lex(YYSTYPE *yylval, YYLTYPE *yylloc, glcpp_parser_t *parser)
                ret == ENDIF || ret == HASH_TOKEN) {
          parser->in_control_line = 1;
       } else if (ret == IDENTIFIER) {
-         macro_t *macro;
-         macro = hash_table_find (parser->defines,
-                   yylval->str);
+         struct hash_entry *entry = _mesa_hash_table_search(parser->defines,
+                                                            yylval->str);
+         macro_t *macro = entry ? entry->data : NULL;
          if (macro && macro->is_function) {
             parser->newline_as_space = 1;
             parser->paren_count = 0;
@@ -2303,8 +2318,6 @@ _glcpp_parser_handle_version_declaration(glcpp_parser_t *parser, intmax_t versio
                                          const char *es_identifier,
                                          bool explicitly_set)
 {
-   const struct gl_extensions *extensions = parser->extensions;
-
    if (parser->version != 0)
       return;
 
@@ -2316,193 +2329,9 @@ _glcpp_parser_handle_version_declaration(glcpp_parser_t *parser, intmax_t versio
                      (es_identifier && (strcmp(es_identifier, "es") == 0));
 
    /* Add pre-defined macros. */
-   if (parser->is_gles) {
+   if (parser->is_gles)
       add_builtin_define(parser, "GL_ES", 1);
-      add_builtin_define(parser, "GL_EXT_separate_shader_objects", 1);
-      add_builtin_define(parser, "GL_EXT_draw_buffers", 1);
-
-      if (extensions != NULL) {
-         if (extensions->OES_EGL_image_external)
-            add_builtin_define(parser, "GL_OES_EGL_image_external", 1);
-         if (extensions->OES_sample_variables) {
-            add_builtin_define(parser, "GL_OES_sample_variables", 1);
-            add_builtin_define(parser, "GL_OES_shader_multisample_interpolation", 1);
-         }
-         if (extensions->OES_standard_derivatives)
-            add_builtin_define(parser, "GL_OES_standard_derivatives", 1);
-         if (extensions->ARB_texture_multisample)
-            add_builtin_define(parser, "GL_OES_texture_storage_multisample_2d_array", 1);
-         if (extensions->ARB_blend_func_extended)
-            add_builtin_define(parser, "GL_EXT_blend_func_extended", 1);
-         if (extensions->ARB_cull_distance)
-            add_builtin_define(parser, "GL_EXT_clip_cull_distance", 1);
-
-         if (version >= 310) {
-            if (extensions->ARB_shader_image_load_store)
-               add_builtin_define(parser, "GL_OES_shader_image_atomic", 1);
-
-            if (extensions->OES_geometry_shader) {
-               add_builtin_define(parser, "GL_OES_geometry_point_size", 1);
-               add_builtin_define(parser, "GL_OES_geometry_shader", 1);
-            }
-            if (extensions->ARB_gpu_shader5) {
-               add_builtin_define(parser, "GL_EXT_gpu_shader5", 1);
-               add_builtin_define(parser, "GL_OES_gpu_shader5", 1);
-            }
-            if (extensions->OES_texture_buffer) {
-               add_builtin_define(parser, "GL_EXT_texture_buffer", 1);
-               add_builtin_define(parser, "GL_OES_texture_buffer", 1);
-            }
-
-            if (extensions->OES_shader_io_blocks) {
-               add_builtin_define(parser, "GL_EXT_shader_io_blocks", 1);
-               add_builtin_define(parser, "GL_OES_shader_io_blocks", 1);
-            }
-         }
-      }
-   } else {
-      add_builtin_define(parser, "GL_ARB_draw_buffers", 1);
-      add_builtin_define(parser, "GL_ARB_enhanced_layouts", 1);
-      add_builtin_define(parser, "GL_ARB_separate_shader_objects", 1);
-      add_builtin_define(parser, "GL_ARB_texture_rectangle", 1);
-      add_builtin_define(parser, "GL_AMD_shader_trinary_minmax", 1);
-
-      if (extensions != NULL) {
-         if (extensions->EXT_texture_array)
-            add_builtin_define(parser, "GL_EXT_texture_array", 1);
-
-         if (extensions->ARB_ES3_1_compatibility)
-            add_builtin_define(parser, "GL_ARB_ES3_1_compatibility", 1);
-
-         if (extensions->ARB_arrays_of_arrays)
-             add_builtin_define(parser, "GL_ARB_arrays_of_arrays", 1);
-
-         if (extensions->ARB_fragment_coord_conventions) {
-            add_builtin_define(parser, "GL_ARB_fragment_coord_conventions",
-                               1);
-         }
-
-         if (extensions->ARB_fragment_layer_viewport)
-            add_builtin_define(parser, "GL_ARB_fragment_layer_viewport", 1);
-
-         if (extensions->ARB_explicit_attrib_location)
-            add_builtin_define(parser, "GL_ARB_explicit_attrib_location", 1);
-
-         if (extensions->ARB_explicit_uniform_location)
-            add_builtin_define(parser, "GL_ARB_explicit_uniform_location", 1);
-
-         if (extensions->ARB_shader_texture_lod)
-            add_builtin_define(parser, "GL_ARB_shader_texture_lod", 1);
-
-         if (extensions->ARB_draw_instanced)
-            add_builtin_define(parser, "GL_ARB_draw_instanced", 1);
-
-         if (extensions->ARB_conservative_depth) {
-            add_builtin_define(parser, "GL_AMD_conservative_depth", 1);
-            add_builtin_define(parser, "GL_ARB_conservative_depth", 1);
-         }
-
-         if (extensions->ARB_shader_bit_encoding)
-            add_builtin_define(parser, "GL_ARB_shader_bit_encoding", 1);
-
-         if (extensions->ARB_shader_clock)
-            add_builtin_define(parser, "GL_ARB_shader_clock", 1);
-
-         if (extensions->ARB_uniform_buffer_object)
-            add_builtin_define(parser, "GL_ARB_uniform_buffer_object", 1);
-
-         if (extensions->ARB_texture_cube_map_array)
-            add_builtin_define(parser, "GL_ARB_texture_cube_map_array", 1);
-
-         if (extensions->ARB_shading_language_packing)
-            add_builtin_define(parser, "GL_ARB_shading_language_packing", 1);
-
-         if (extensions->ARB_texture_multisample)
-            add_builtin_define(parser, "GL_ARB_texture_multisample", 1);
-
-         if (extensions->ARB_texture_query_levels)
-            add_builtin_define(parser, "GL_ARB_texture_query_levels", 1);
-
-         if (extensions->ARB_texture_query_lod)
-            add_builtin_define(parser, "GL_ARB_texture_query_lod", 1);
-
-         if (extensions->ARB_gpu_shader5)
-            add_builtin_define(parser, "GL_ARB_gpu_shader5", 1);
-
-         if (extensions->ARB_gpu_shader_fp64)
-            add_builtin_define(parser, "GL_ARB_gpu_shader_fp64", 1);
-
-         if (extensions->ARB_vertex_attrib_64bit)
-            add_builtin_define(parser, "GL_ARB_vertex_attrib_64bit", 1);
-
-         if (extensions->AMD_vertex_shader_layer)
-            add_builtin_define(parser, "GL_AMD_vertex_shader_layer", 1);
-
-         if (extensions->AMD_vertex_shader_viewport_index)
-            add_builtin_define(parser, "GL_AMD_vertex_shader_viewport_index", 1);
-
-         if (extensions->ARB_shading_language_420pack)
-            add_builtin_define(parser, "GL_ARB_shading_language_420pack", 1);
-
-         if (extensions->ARB_sample_shading)
-            add_builtin_define(parser, "GL_ARB_sample_shading", 1);
-
-         if (extensions->ARB_texture_gather)
-            add_builtin_define(parser, "GL_ARB_texture_gather", 1);
-
-         if (extensions->ARB_shader_atomic_counters)
-            add_builtin_define(parser, "GL_ARB_shader_atomic_counters", 1);
-
-         if (extensions->ARB_shader_atomic_counter_ops)
-            add_builtin_define(parser, "GL_ARB_shader_atomic_counter_ops", 1);
-
-         if (extensions->ARB_viewport_array)
-            add_builtin_define(parser, "GL_ARB_viewport_array", 1);
-
-         if (extensions->ARB_compute_shader)
-            add_builtin_define(parser, "GL_ARB_compute_shader", 1);
-
-         if (extensions->ARB_shader_image_load_store)
-            add_builtin_define(parser, "GL_ARB_shader_image_load_store", 1);
-
-         if (extensions->ARB_shader_image_size)
-            add_builtin_define(parser, "GL_ARB_shader_image_size", 1);
-
-         if (extensions->ARB_shader_texture_image_samples)
-            add_builtin_define(parser, "GL_ARB_shader_texture_image_samples", 1);
-
-         if (extensions->ARB_derivative_control)
-            add_builtin_define(parser, "GL_ARB_derivative_control", 1);
-
-         if (extensions->ARB_shader_precision)
-            add_builtin_define(parser, "GL_ARB_shader_precision", 1);
-
-         if (extensions->ARB_shader_storage_buffer_object)
-            add_builtin_define(parser, "GL_ARB_shader_storage_buffer_object", 1);
-
-         if (extensions->ARB_tessellation_shader)
-            add_builtin_define(parser, "GL_ARB_tessellation_shader", 1);
-
-         if (extensions->ARB_shader_subroutine)
-            add_builtin_define(parser, "GL_ARB_shader_subroutine", 1);
-
-         if (extensions->ARB_shader_draw_parameters)
-            add_builtin_define(parser, "GL_ARB_shader_draw_parameters", 1);
-
-         if (extensions->ARB_cull_distance)
-            add_builtin_define(parser, "GL_ARB_cull_distance", 1);
-      }
-   }
-
-   if (extensions != NULL) {
-      if (extensions->EXT_shader_integer_mix)
-         add_builtin_define(parser, "GL_EXT_shader_integer_mix", 1);
-
-      if (extensions->EXT_shader_samples_identical)
-         add_builtin_define(parser, "GL_EXT_shader_samples_identical", 1);
-   }
-
-   if (version >= 150)
+   else if (version >= 150)
       add_builtin_define(parser, "GL_core_profile", 1);
 
    /* Currently, all ES2/ES3 implementations support highp in the
@@ -2512,6 +2341,11 @@ _glcpp_parser_handle_version_declaration(glcpp_parser_t *parser, intmax_t versio
     */
    if (version >= 130 || parser->is_gles)
       add_builtin_define (parser, "GL_FRAGMENT_PRECISION_HIGH", 1);
+
+   /* Add all the extension macros available in this context */
+   if (parser->extensions)
+      parser->extensions(parser->state, add_builtin_define, parser,
+                         version, parser->is_gles);
 
    if (explicitly_set) {
       ralloc_asprintf_rewrite_tail(&parser->output, &parser->output_length,

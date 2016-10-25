@@ -50,35 +50,35 @@ struct dpb_list {
 };
 
 static const uint8_t Default_4x4_Intra[16] = {
-    6, 13, 13, 20, 20, 20, 28, 28,
-   28, 28, 32, 32, 32, 37, 37, 42
+    6, 13, 20, 28, 13, 20, 28, 32,
+   20, 28, 32, 37, 28, 32, 37, 42
 };
 
 static const uint8_t Default_4x4_Inter[16] = {
-   10, 14, 14, 20, 20, 20, 24, 24,
-   24, 24, 27, 27, 27, 30, 30, 34
+   10, 14, 20, 24, 14, 20, 24, 27,
+   20, 24, 27, 30, 24, 27, 30, 34
 };
 
 static const uint8_t Default_8x8_Intra[64] = {
-    6, 10, 10, 13, 11, 13, 16, 16,
-   16, 16, 18, 18, 18, 18, 18, 23,
-   23, 23, 23, 23, 23, 25, 25, 25,
-   25, 25, 25, 25, 27, 27, 27, 27,
-   27, 27, 27, 27, 29, 29, 29, 29,
-   29, 29, 29, 31, 31, 31, 31, 31,
-   31, 33, 33, 33, 33, 33, 36, 36,
-   36, 36, 38, 38, 38, 40, 40, 42
+    6, 10, 13, 16, 18, 23, 25, 27,
+   10, 11, 16, 18, 23, 25, 27, 29,
+   13, 16, 18, 23, 25, 27, 29, 31,
+   16, 18, 23, 25, 27, 29, 31, 33,
+   18, 23, 25, 27, 29, 31, 33, 36,
+   23, 25, 27, 29, 31, 33, 36, 38,
+   25, 27, 29, 31, 33, 36, 38, 40,
+   27, 29, 31, 33, 36, 38, 40, 42
 };
 
 static const uint8_t Default_8x8_Inter[64] = {
-    9, 13, 13, 15, 13, 15, 17, 17,
-   17, 17, 19, 19, 19, 19, 19, 21,
-   21, 21, 21, 21, 21, 22, 22, 22,
-   22, 22, 22, 22, 24, 24, 24, 24,
-   24, 24, 24, 24, 25, 25, 25, 25,
-   25, 25, 25, 27, 27, 27, 27, 27,
-   27, 28, 28, 28, 28, 28, 30, 30,
-   30, 30, 32, 32, 32, 33, 33, 35
+    9, 13, 15, 17, 19, 21, 22, 24,
+   13, 13, 17, 19, 21, 22, 24, 25,
+   15, 17, 19, 21, 22, 24, 25, 27,
+   17, 19, 21, 22, 24, 25, 27, 28,
+   19, 21, 22, 24, 25, 27, 28, 30,
+   21, 22, 24, 25, 27, 28, 30, 32,
+   22, 24, 25, 27, 28, 30, 32, 33,
+   24, 25, 27, 28, 30, 32, 33, 35
 };
 
 static void vid_dec_h264_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, unsigned min_bits_left);
@@ -128,6 +128,7 @@ static void vid_dec_h264_BeginFrame(vid_dec_PrivateType *priv)
 
       priv->codec = priv->pipe->create_video_codec(priv->pipe, &templat);
    }
+   priv->picture.h264.slice_count = 0;
    priv->codec->begin_frame(priv->codec, priv->target, &priv->picture.base);
    priv->frame_started = true;
 }
@@ -961,6 +962,7 @@ static void vid_dec_h264_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, u
 
    if (priv->slice) {
       unsigned bytes = priv->bytes_left - (vl_vlc_bits_left(vlc) / 8);
+      ++priv->picture.h264.slice_count;
       priv->codec->decode_bitstream(priv->codec, priv->target, &priv->picture.base,
                                     1, &priv->slice, &bytes);
       priv->slice = NULL;
@@ -1018,6 +1020,7 @@ static void vid_dec_h264_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, u
 
       vid_dec_h264_BeginFrame(priv);
 
+      ++priv->picture.h264.slice_count;
       priv->codec->decode_bitstream(priv->codec, priv->target, &priv->picture.base,
                                     1, &ptr, &bytes);
    }

@@ -53,7 +53,6 @@
 
 #if defined(__GNUC__)
 #define PIPE_CC_GCC
-#define PIPE_CC_GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)
 #endif
 
 /*
@@ -126,44 +125,8 @@
  * Endian detection.
  */
 
-#ifdef __GLIBC__
-#include <endian.h>
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-# define PIPE_ARCH_LITTLE_ENDIAN
-#elif __BYTE_ORDER == __BIG_ENDIAN
-# define PIPE_ARCH_BIG_ENDIAN
-#endif
-
-#elif defined(__APPLE__)
-#include <machine/endian.h>
-
-#if __DARWIN_BYTE_ORDER == __DARWIN_LITTLE_ENDIAN
-# define PIPE_ARCH_LITTLE_ENDIAN
-#elif __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
-# define PIPE_ARCH_BIG_ENDIAN
-#endif
-
-#elif defined(__sun)
-#include <sys/isa_defs.h>
-
-#if defined(_LITTLE_ENDIAN)
-# define PIPE_ARCH_LITTLE_ENDIAN
-#elif defined(_BIG_ENDIAN)
-# define PIPE_ARCH_BIG_ENDIAN
-#endif
-
-#elif defined(__OpenBSD__) || defined(__NetBSD__)
-#include <sys/types.h>
-#include <machine/endian.h>
-
-#if _BYTE_ORDER == _LITTLE_ENDIAN
-# define PIPE_ARCH_LITTLE_ENDIAN
-#elif _BYTE_ORDER == _BIG_ENDIAN
-# define PIPE_ARCH_BIG_ENDIAN
-#endif
-
-#else
+#include "util/u_endian.h"
+#if !defined(PIPE_ARCH_LITTLE_ENDIAN) && !defined(PIPE_ARCH_BIG_ENDIAN)
 
 #if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64) || defined(PIPE_ARCH_ARM) || defined(PIPE_ARCH_AARCH64)
 #define PIPE_ARCH_LITTLE_ENDIAN

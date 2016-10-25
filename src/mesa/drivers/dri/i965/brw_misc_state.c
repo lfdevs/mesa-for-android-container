@@ -177,7 +177,7 @@ brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
 
    if (depth_mt) {
       intel_get_tile_masks(depth_mt->tiling, depth_mt->tr_mode,
-                           depth_mt->cpp, false,
+                           depth_mt->cpp,
                            &tile_mask_x, &tile_mask_y);
 
       if (intel_miptree_level_has_hiz(depth_mt, depth_level)) {
@@ -185,7 +185,7 @@ brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
          intel_get_tile_masks(depth_mt->hiz_buf->mt->tiling,
                               depth_mt->hiz_buf->mt->tr_mode,
                               depth_mt->hiz_buf->mt->cpp,
-                              false, &hiz_tile_mask_x,
+                              &hiz_tile_mask_x,
                               &hiz_tile_mask_y);
 
          /* Each HiZ row represents 2 rows of pixels */
@@ -209,7 +209,7 @@ brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
          intel_get_tile_masks(stencil_mt->tiling,
                               stencil_mt->tr_mode,
                               stencil_mt->cpp,
-                              false, &stencil_tile_mask_x,
+                              &stencil_tile_mask_x,
                               &stencil_tile_mask_y);
 
          tile_mask_x |= stencil_tile_mask_x;
@@ -924,15 +924,6 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
        */
       const unsigned dc_flush =
          brw->gen >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
-
-      if (brw->gen == 6) {
-         /* Hardware workaround: SNB B-Spec says:
-          *
-          *   Before a PIPE_CONTROL with Write Cache Flush Enable = 1, a
-          *   PIPE_CONTROL with any non-zero post-sync-op is required.
-          */
-         brw_emit_post_sync_nonzero_flush(brw);
-      }
 
       brw_emit_pipe_control_flush(brw,
                                   PIPE_CONTROL_RENDER_TARGET_FLUSH |

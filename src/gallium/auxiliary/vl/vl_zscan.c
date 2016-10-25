@@ -99,15 +99,12 @@ static void *
 create_vert_shader(struct vl_zscan *zscan)
 {
    struct ureg_program *shader;
-
    struct ureg_src scale;
    struct ureg_src vrect, vpos, block_num;
-
    struct ureg_dst tmp;
    struct ureg_dst o_vpos;
    struct ureg_dst *o_vtex;
-
-   signed i;
+   unsigned i;
 
    shader = ureg_create(PIPE_SHADER_VERTEX);
    if (!shader)

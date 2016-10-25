@@ -47,7 +47,7 @@
  * If a stw_framebuffer is found, lock it and return the pointer.
  * Else, return NULL.
  */
-static inline struct stw_framebuffer *
+static struct stw_framebuffer *
 stw_framebuffer_from_hwnd_locked(HWND hwnd)
 {
    struct stw_framebuffer *fb;
@@ -67,13 +67,17 @@ stw_framebuffer_from_hwnd_locked(HWND hwnd)
  * Decrement the reference count on the given stw_framebuffer object.
  * If the reference count hits zero, destroy the object.
  *
- * Note: Both stw_dev::fb_mutex and stw_framebuffer::mutex must already
- * be locked.
+ * Note: Both stw_dev::fb_mutex and stw_framebuffer::mutex must already be
+ * locked.  After this function completes, the fb's mutex will be unlocked.
  */
-static void
-stw_framebuffer_destroy_locked(struct stw_framebuffer *fb)
+void
+stw_framebuffer_release_locked(struct stw_framebuffer *fb)
 {
    struct stw_framebuffer **link;
+
+   assert(fb);
+   assert(stw_own_mutex(&fb->mutex));
+   assert(stw_own_mutex(&stw_dev->fb_mutex));
 
    /* check the reference count */
    fb->refcnt--;
@@ -199,32 +203,39 @@ stw_call_window_proc(int nCode, WPARAM wParam, LPARAM lParam)
    if (nCode < 0 || !stw_dev)
        return CallNextHookEx(tls_data->hCallWndProcHook, nCode, wParam, lParam);
 
-   if (pParams->message == WM_WINDOWPOSCHANGED) {
-      /* We handle WM_WINDOWPOSCHANGED instead of WM_SIZE because according to
-       * http://blogs.msdn.com/oldnewthing/archive/2008/01/15/7113860.aspx
-       * WM_SIZE is generated from WM_WINDOWPOSCHANGED by DefWindowProc so it
-       * can be masked out by the application.
-       */
-      LPWINDOWPOS lpWindowPos = (LPWINDOWPOS)pParams->lParam;
-      if ((lpWindowPos->flags & SWP_SHOWWINDOW) ||
-          !(lpWindowPos->flags & SWP_NOMOVE) ||
-          !(lpWindowPos->flags & SWP_NOSIZE)) {
-         fb = stw_framebuffer_from_hwnd( pParams->hwnd );
-         if (fb) {
-            /* Size in WINDOWPOS includes the window frame, so get the size
-             * of the client area via GetClientRect.
-             */
-            stw_framebuffer_get_size(fb);
-            stw_framebuffer_unlock(fb);
+   /* We check that the stw_dev object is initialized before we try to do
+    * anything with it.  Otherwise, in multi-threaded programs there's a
+    * chance of executing this code before the stw_dev object is fully
+    * initialized.
+    */
+   if (stw_dev && stw_dev->initialized) {
+      if (pParams->message == WM_WINDOWPOSCHANGED) {
+         /* We handle WM_WINDOWPOSCHANGED instead of WM_SIZE because according
+          * to http://blogs.msdn.com/oldnewthing/archive/2008/01/15/7113860.aspx
+          * WM_SIZE is generated from WM_WINDOWPOSCHANGED by DefWindowProc so it
+          * can be masked out by the application.
+          */
+         LPWINDOWPOS lpWindowPos = (LPWINDOWPOS)pParams->lParam;
+         if ((lpWindowPos->flags & SWP_SHOWWINDOW) ||
+             !(lpWindowPos->flags & SWP_NOMOVE) ||
+             !(lpWindowPos->flags & SWP_NOSIZE)) {
+            fb = stw_framebuffer_from_hwnd( pParams->hwnd );
+            if (fb) {
+               /* Size in WINDOWPOS includes the window frame, so get the size
+                * of the client area via GetClientRect.
+                */
+               stw_framebuffer_get_size(fb);
+               stw_framebuffer_unlock(fb);
+            }
          }
       }
-   }
-   else if (pParams->message == WM_DESTROY) {
-      stw_lock_framebuffers(stw_dev);
-      fb = stw_framebuffer_from_hwnd_locked( pParams->hwnd );
-      if (fb)
-         stw_framebuffer_destroy_locked(fb);
-      stw_unlock_framebuffers(stw_dev);
+      else if (pParams->message == WM_DESTROY) {
+         stw_lock_framebuffers(stw_dev);
+         fb = stw_framebuffer_from_hwnd_locked( pParams->hwnd );
+         if (fb)
+            stw_framebuffer_release_locked(fb);
+         stw_unlock_framebuffers(stw_dev);
+      }
    }
 
    return CallNextHookEx(tls_data->hCallWndProcHook, nCode, wParam, lParam);
@@ -304,33 +315,6 @@ stw_framebuffer_create(HDC hdc, int iPixelFormat)
 
 
 /**
- * Have ptr reference fb.  The referenced framebuffer should be locked.
- */
-void
-stw_framebuffer_reference(struct stw_framebuffer **ptr,
-                          struct stw_framebuffer *fb)
-{
-   struct stw_framebuffer *old_fb = *ptr;
-
-   if (old_fb == fb)
-      return;
-
-   if (fb)
-      fb->refcnt++;
-   if (old_fb) {
-      stw_lock_framebuffers(stw_dev);
-
-      stw_framebuffer_lock(old_fb);
-      stw_framebuffer_destroy_locked(old_fb);
-
-      stw_unlock_framebuffers(stw_dev);
-   }
-
-   *ptr = fb;
-}
-
-
-/**
  * Update the framebuffer's size if necessary.
  */
 void
@@ -369,7 +353,7 @@ stw_framebuffer_cleanup(void)
       next = fb->next;
 
       stw_framebuffer_lock(fb);
-      stw_framebuffer_destroy_locked(fb);
+      stw_framebuffer_release_locked(fb);
 
       fb = next;
    }
@@ -383,7 +367,7 @@ stw_framebuffer_cleanup(void)
  * Given an hdc, return the corresponding stw_framebuffer.
  * The returned stw_framebuffer will have its mutex locked.
  */
-static inline struct stw_framebuffer *
+static struct stw_framebuffer *
 stw_framebuffer_from_hdc_locked(HDC hdc)
 {
    HWND hwnd;

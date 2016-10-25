@@ -118,10 +118,12 @@ struct aaline_stage
    void (*driver_bind_fs_state)(struct pipe_context *, void *);
    void (*driver_delete_fs_state)(struct pipe_context *, void *);
 
-   void (*driver_bind_sampler_states)(struct pipe_context *, unsigned, unsigned,
+   void (*driver_bind_sampler_states)(struct pipe_context *,
+                                      enum pipe_shader_type, unsigned,
                                       unsigned, void **);
 
-   void (*driver_set_sampler_views)(struct pipe_context *, unsigned shader,
+   void (*driver_set_sampler_views)(struct pipe_context *,
+                                    enum pipe_shader_type shader,
                                     unsigned start, unsigned count,
                                     struct pipe_sampler_view **);
 };
@@ -884,7 +886,8 @@ aaline_delete_fs_state(struct pipe_context *pipe, void *fs)
 
 
 static void
-aaline_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
+aaline_bind_sampler_states(struct pipe_context *pipe,
+                           enum pipe_shader_type shader,
                            unsigned start, unsigned num, void **sampler)
 {
    struct aaline_stage *aaline = aaline_stage_from_pipe(pipe);
@@ -907,7 +910,8 @@ aaline_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
 
 
 static void
-aaline_set_sampler_views(struct pipe_context *pipe, unsigned shader,
+aaline_set_sampler_views(struct pipe_context *pipe,
+                         enum pipe_shader_type shader,
                          unsigned start, unsigned num,
                          struct pipe_sampler_view **views)
 {

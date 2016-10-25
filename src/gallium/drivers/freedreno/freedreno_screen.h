@@ -34,13 +34,17 @@
 
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
+#include "util/slab.h"
+#include "os/os_thread.h"
 
-typedef uint32_t u32;
+#include "freedreno_batch_cache.h"
 
 struct fd_bo;
 
 struct fd_screen {
 	struct pipe_screen base;
+
+	pipe_mutex lock;
 
 	/* it would be tempting to use pipe_reference here, but that
 	 * really doesn't work well if it isn't the first member of
@@ -52,12 +56,15 @@ struct fd_screen {
 	/* place for winsys to stash it's own stuff: */
 	void *winsys_priv;
 
+	struct slab_parent_pool transfer_pool;
+
 	uint32_t gmemsize_bytes;
 	uint32_t device_id;
 	uint32_t gpu_id;         /* 220, 305, etc */
 	uint32_t chip_id;        /* coreid:8 majorrev:8 minorrev:8 patch:8 */
 	uint32_t max_freq;
 	uint32_t max_rts;        /* max # of render targets */
+	bool has_timestamp;
 
 	void *compiler;          /* currently unused for a2xx */
 
@@ -65,6 +72,10 @@ struct fd_screen {
 	struct fd_pipe *pipe;
 
 	int64_t cpu_gpu_time_delta;
+
+	struct fd_batch_cache batch_cache;
+
+	bool reorder;
 };
 
 static inline struct fd_screen *
@@ -78,8 +89,7 @@ boolean fd_screen_bo_get_handle(struct pipe_screen *pscreen,
 		unsigned stride,
 		struct winsys_handle *whandle);
 struct fd_bo * fd_screen_bo_from_handle(struct pipe_screen *pscreen,
-		struct winsys_handle *whandle,
-		unsigned *out_stride);
+		struct winsys_handle *whandle);
 
 struct pipe_screen * fd_screen_create(struct fd_device *dev);
 

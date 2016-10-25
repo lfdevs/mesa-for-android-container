@@ -51,8 +51,8 @@ struct stw_st_framebuffer {
 /**
  * Is the given mutex held by the calling thread?
  */
-static bool
-own_mutex(const CRITICAL_SECTION *cs)
+bool
+stw_own_mutex(const CRITICAL_SECTION *cs)
 {
    // We can't compare OwningThread with our thread handle/id (see
    // http://stackoverflow.com/a/12675635 ) but we can compare with the
@@ -182,7 +182,7 @@ stw_st_framebuffer_present_locked(HDC hdc,
    struct stw_st_framebuffer *stwfb = stw_st_framebuffer(stfb);
    struct pipe_resource *resource;
 
-   assert(own_mutex(&stwfb->fb->mutex));
+   assert(stw_own_mutex(&stwfb->fb->mutex));
 
    resource = stwfb->textures[statt];
    if (resource) {
@@ -192,7 +192,7 @@ stw_st_framebuffer_present_locked(HDC hdc,
       stw_framebuffer_unlock(stwfb->fb);
    }
 
-   assert(!own_mutex(&stwfb->fb->mutex));
+   assert(!stw_own_mutex(&stwfb->fb->mutex));
 
    return TRUE;
 }

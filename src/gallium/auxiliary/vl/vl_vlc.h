@@ -79,7 +79,7 @@ vl_vlc_init_table(struct vl_vlc_entry *dst, unsigned dst_size, const struct vl_v
    }
 
    for(; src_size > 0; --src_size, ++src) {
-      for(i=0; i<(1 << (bits - src->entry.length)); ++i)
+      for(i = 0; i < (1u << (bits - src->entry.length)); ++i)
          dst[src->bitcode >> (16 - bits) | i] = src->entry;
    }
 }
@@ -293,7 +293,7 @@ vl_vlc_search_byte(struct vl_vlc *vlc, unsigned num_bits, uint8_t value)
 {
    /* make sure we are on a byte boundary */
    assert((vl_vlc_valid_bits(vlc) % 8) == 0);
-   assert(num_bits == ~0 || (num_bits % 8) == 0);
+   assert(num_bits == ~0u || (num_bits % 8) == 0);
 
    /* deplete the bit buffer */
    while (vl_vlc_valid_bits(vlc) > 0) {
@@ -305,7 +305,7 @@ vl_vlc_search_byte(struct vl_vlc *vlc, unsigned num_bits, uint8_t value)
 
       vl_vlc_eatbits(vlc, 8);
 
-      if (num_bits != ~0) {
+      if (num_bits != ~0u) {
          num_bits -= 8;
          if (num_bits == 0)
             return FALSE;
@@ -332,7 +332,7 @@ vl_vlc_search_byte(struct vl_vlc *vlc, unsigned num_bits, uint8_t value)
       }
 
       ++vlc->data;
-      if (num_bits != ~0) {
+      if (num_bits != ~0u) {
          num_bits -= 8;
          if (num_bits == 0) {
             vl_vlc_align_data_ptr(vlc);

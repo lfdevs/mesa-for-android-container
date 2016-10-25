@@ -38,7 +38,8 @@ upload_wm_state(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FS_PROG_DATA */
-   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
+   const struct brw_wm_prog_data *prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
    bool writes_depth = prog_data->computed_depth_mode != BRW_PSCDEPTH_OFF;
    uint32_t dw1, dw2;
 
@@ -78,10 +79,8 @@ upload_wm_state(struct brw_context *brw)
    }
 
    /* _NEW_BUFFERS | _NEW_COLOR */
-   const bool active_fs_has_side_effects =
-      _mesa_active_fragment_shader_has_side_effects(&brw->ctx);
    if (brw_color_buffer_write_enabled(brw) || writes_depth ||
-       active_fs_has_side_effects || dw1 & GEN7_WM_KILL_ENABLE) {
+       prog_data->has_side_effects || dw1 & GEN7_WM_KILL_ENABLE) {
       dw1 |= GEN7_WM_DISPATCH_ENABLE;
    }
    if (multisampled_fbo) {
@@ -107,7 +106,7 @@ upload_wm_state(struct brw_context *brw)
    /* BRW_NEW_FS_PROG_DATA */
    if (prog_data->early_fragment_tests)
       dw1 |= GEN7_WM_EARLY_DS_CONTROL_PREPS;
-   else if (active_fs_has_side_effects)
+   else if (prog_data->has_side_effects)
       dw1 |= GEN7_WM_EARLY_DS_CONTROL_PSEXEC;
 
    /* The "UAV access enable" bits are unnecessary on HSW because they only
@@ -120,7 +119,7 @@ upload_wm_state(struct brw_context *brw)
     */
    if (brw->is_haswell &&
        !(brw_color_buffer_write_enabled(brw) || writes_depth) &&
-       active_fs_has_side_effects)
+       prog_data->has_side_effects)
       dw2 |= HSW_WM_UAV_ONLY;
 
    BEGIN_BATCH(3);
@@ -151,6 +150,7 @@ gen7_upload_ps_state(struct brw_context *brw,
                      bool enable_dual_src_blend, unsigned sample_mask,
                      unsigned fast_clear_op)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t dw2, dw4, dw5, ksp0, ksp2;
    const int max_threads_shift = brw->is_haswell ?
       HSW_PS_MAX_THREADS_SHIFT : IVB_PS_MAX_THREADS_SHIFT;
@@ -173,7 +173,7 @@ gen7_upload_ps_state(struct brw_context *brw,
    if (brw->is_haswell)
       dw4 |= SET_FIELD(sample_mask, HSW_PS_SAMPLE_MASK);
 
-   dw4 |= (brw->max_wm_threads - 1) << max_threads_shift;
+   dw4 |= (devinfo->max_wm_threads - 1) << max_threads_shift;
 
    if (prog_data->base.nr_params > 0)
       dw4 |= GEN7_PS_PUSH_CONSTANT_ENABLE;
@@ -252,7 +252,8 @@ static void
 upload_ps_state(struct brw_context *brw)
 {
    /* BRW_NEW_FS_PROG_DATA */
-   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
+   const struct brw_wm_prog_data *prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
    const struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FS_PROG_DATA | _NEW_COLOR */
    const bool enable_dual_src_blend = prog_data->dual_src_blend &&

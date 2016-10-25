@@ -76,7 +76,7 @@ isl_is_storage_image_format(enum isl_format format)
 }
 
 enum isl_format
-isl_lower_storage_image_format(const struct brw_device_info *devinfo,
+isl_lower_storage_image_format(const struct gen_device_info *devinfo,
                                enum isl_format format)
 {
    switch (format) {
@@ -188,15 +188,15 @@ isl_lower_storage_image_format(const struct brw_device_info *devinfo,
 }
 
 bool
-isl_has_matching_typed_storage_image_format(const struct brw_device_info *devinfo,
+isl_has_matching_typed_storage_image_format(const struct gen_device_info *devinfo,
                                             enum isl_format fmt)
 {
    if (devinfo->gen >= 9) {
       return true;
    } else if (devinfo->gen >= 8 || devinfo->is_haswell) {
-      return isl_format_get_layout(fmt)->bs <= 8;
+      return isl_format_get_layout(fmt)->bpb <= 64;
    } else {
-      return isl_format_get_layout(fmt)->bs <= 4;
+      return isl_format_get_layout(fmt)->bpb <= 32;
    }
 }
 
@@ -229,7 +229,7 @@ isl_surf_fill_image_param(const struct isl_device *dev,
    isl_surf_get_image_offset_el(surf, view->base_level, view->base_array_layer,
                                 0, &param->offset[0],  &param->offset[1]);
 
-   const int cpp = isl_format_get_layout(surf->format)->bs;
+   const int cpp = isl_format_get_layout(surf->format)->bpb / 8;
    param->stride[0] = cpp;
    param->stride[1] = surf->row_pitch / cpp;
 
@@ -301,6 +301,6 @@ isl_buffer_fill_image_param(const struct isl_device *dev,
 {
    *param = image_param_defaults;
 
-   param->stride[0] = isl_format_layouts[format].bs;
+   param->stride[0] = isl_format_layouts[format].bpb / 8;
    param->size[0] = size / param->stride[0];
 }

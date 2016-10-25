@@ -6,8 +6,6 @@ i965_compiler_FILES = \
 	brw_dead_control_flow.cpp \
 	brw_dead_control_flow.h \
 	brw_defines.h \
-	brw_device_info.c \
-	brw_device_info.h \
 	brw_disasm.c \
 	brw_eu.c \
 	brw_eu_compact.c \
@@ -88,7 +86,6 @@ i965_compiler_FILES = \
 	intel_asm_annotation.h \
 	intel_debug.c \
 	intel_debug.h \
-	intel_reg.h \
 	intel_resolve_map.c \
 	intel_resolve_map.h
 
@@ -97,8 +94,6 @@ i965_compiler_GENERATED_FILES = \
 
 i965_FILES = \
 	brw_binding_tables.c \
-	brw_blorp_blit.cpp \
-	brw_blorp_clear.cpp \
 	brw_blorp.c \
 	brw_blorp.h \
 	brw_cc.c \
@@ -134,7 +129,6 @@ i965_FILES = \
 	brw_gs_surface_state.c \
 	brw_link.cpp \
 	brw_lower_texture_gradients.cpp \
-	brw_lower_unnormalized_offset.cpp \
 	brw_meta_util.c \
 	brw_meta_util.h \
 	brw_misc_state.c \
@@ -160,11 +154,11 @@ i965_FILES = \
 	brw_state_upload.c \
 	brw_structs.h \
 	brw_surface_formats.c \
+	brw_sync.c \
 	brw_tcs.c \
 	brw_tcs_surface_state.c \
 	brw_tes.c \
 	brw_tes_surface_state.c \
-	brw_tex.c \
 	brw_tex_layout.c \
 	brw_urb.c \
 	brw_vs.c \
@@ -175,7 +169,6 @@ i965_FILES = \
 	brw_wm.h \
 	brw_wm_state.c \
 	brw_wm_surface_state.c \
-	gen6_blorp.c \
 	gen6_cc.c \
 	gen6_clip_state.c \
 	gen6_constant_state.c \
@@ -188,12 +181,10 @@ i965_FILES = \
 	gen6_scissor_state.c \
 	gen6_sf_state.c \
 	gen6_sol.c \
-	gen6_surface_state.c \
 	gen6_urb.c \
 	gen6_viewport_state.c \
 	gen6_vs_state.c \
 	gen6_wm_state.c \
-	gen7_blorp.c \
 	gen7_cs_state.c \
 	gen7_ds_state.c \
 	gen7_gs_state.c \
@@ -209,7 +200,6 @@ i965_FILES = \
 	gen7_wm_state.c \
 	gen7_wm_surface_state.c \
 	gen8_blend_state.c \
-	gen8_blorp.c \
 	gen8_depth_state.c \
 	gen8_disable.c \
 	gen8_draw_upload.c \
@@ -250,7 +240,6 @@ i965_FILES = \
 	intel_screen.c \
 	intel_screen.h \
 	intel_state.c \
-	intel_syncobj.c \
 	intel_tex.c \
 	intel_tex_copy.c \
 	intel_tex.h \
@@ -261,3 +250,18 @@ i965_FILES = \
 	intel_tiled_memcpy.c \
 	intel_tiled_memcpy.h \
 	intel_upload.c
+
+i965_gen6_FILES = \
+	genX_blorp_exec.c
+
+i965_gen7_FILES = \
+	genX_blorp_exec.c
+
+i965_gen75_FILES = \
+	genX_blorp_exec.c
+
+i965_gen8_FILES = \
+	genX_blorp_exec.c
+
+i965_gen9_FILES = \
+	genX_blorp_exec.c

@@ -850,7 +850,7 @@ static void init_get_readers_callback_data(
  * of the loop it reads the value written by instruction 0 and in all other
  * iterations it reads the value written by instruction 3.
  *
- * @param read_cb This function will be called for for every instruction that
+ * @param read_cb This function will be called for every instruction that
  * has been determined to be a reader of writer.
  * @param write_cb This function will be called for every instruction after
  * writer.

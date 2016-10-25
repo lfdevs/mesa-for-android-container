@@ -113,7 +113,7 @@ get_mul_for_src(nir_alu_src *src, int num_components,
       break;
 
    case nir_op_fmul:
-      /* Only absorb a fmul into a ffma if the fmul is is only used in fadd
+      /* Only absorb a fmul into a ffma if the fmul is only used in fadd
        * operations.  This prevents us from being too aggressive with our
        * fusing which can actually lead to more instructions.
        */
