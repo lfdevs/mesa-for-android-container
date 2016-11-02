@@ -373,7 +373,7 @@ NineVolume9_UnlockBox( struct NineVolume9 *This )
                                         This->layer_stride_conversion,
                                         0, 0, 0,
                                         This->desc.Width, This->desc.Height,
-                                        This->desc.Height);
+                                        This->desc.Depth);
 
         if (!This->data)
             pipe_transfer_unmap(This->pipe, transfer);

@@ -734,7 +734,9 @@ eglCreateContext(EGLDisplay dpy, EGLConfig config, EGLContext share_list,
 
    _EGL_CHECK_DISPLAY(disp, EGL_NO_CONTEXT, drv);
 
-   if (!config && !disp->Extensions.KHR_no_config_context)
+   if (config != EGL_NO_CONFIG_KHR)
+      _EGL_CHECK_CONFIG(disp, conf, EGL_NO_CONTEXT, drv);
+   else if (!disp->Extensions.KHR_no_config_context)
       RETURN_EGL_ERROR(disp, EGL_BAD_CONFIG, EGL_NO_CONTEXT);
 
    if (!share && share_list != EGL_NO_CONTEXT)

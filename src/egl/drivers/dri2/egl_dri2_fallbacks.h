@@ -66,7 +66,8 @@ dri2_fallback_swap_buffers_with_damage(_EGLDriver *drv, _EGLDisplay *dpy,
                                       _EGLSurface *surf,
                                       const EGLint *rects, EGLint n_rects)
 {
-   return EGL_FALSE;
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->swap_buffers(drv, dpy, surf);
 }
 
 static inline EGLBoolean

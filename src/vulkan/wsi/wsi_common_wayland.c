@@ -702,6 +702,9 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (chain == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+   bool alpha = pCreateInfo->compositeAlpha ==
+                      VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+
    chain->base.device = device;
    chain->base.destroy = wsi_wl_swapchain_destroy;
    chain->base.get_images = wsi_wl_swapchain_get_images;
@@ -711,7 +714,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->surface = surface->surface;
    chain->extent = pCreateInfo->imageExtent;
    chain->vk_format = pCreateInfo->imageFormat;
-   chain->drm_format = wl_drm_format_for_vk_format(chain->vk_format, false);
+   chain->drm_format = wl_drm_format_for_vk_format(chain->vk_format, alpha);
 
    chain->present_mode = pCreateInfo->presentMode;
    chain->fifo_ready = true;

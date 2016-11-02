@@ -183,11 +183,12 @@ override_dh_install:
 
   # Remove vulkan headers only where they get installed in tmp
   # We ship those headers via src:vulkan / libvulkan-dev
-  ifeq ($(DEB_HOST_ARCH_OS), linux)
-    ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 arm64 armhf ppc64el x32))
-	set -e; for file in vk_platform.h vulkan.h vulkan_intel.h; do rm debian/tmp/usr/include/vulkan/$$file; done
-	rmdir debian/tmp/usr/include/vulkan
+  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 arm64 armhf ppc64el x32))
+	set -e; for file in vk_platform.h vulkan.h; do rm debian/tmp/usr/include/vulkan/$$file; done
+    ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 x32))
+	rm debian/tmp/usr/include/vulkan/vulkan_intel.h
     endif
+	rmdir debian/tmp/usr/include/vulkan
   endif
 
   ifneq ($(DEB_HOST_ARCH_OS), hurd)

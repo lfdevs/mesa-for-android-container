@@ -324,8 +324,6 @@ public:
 
    fs_reg *nir_locals;
    fs_reg *nir_ssa_values;
-   fs_reg nir_inputs;
-   fs_reg nir_outputs;
    fs_reg *nir_system_values;
 
    bool failed;

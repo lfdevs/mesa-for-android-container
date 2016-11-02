@@ -491,23 +491,32 @@ static void emit_lsb(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct gallivm_state *gallivm = bld_base->base.gallivm;
+	LLVMBuilderRef builder = gallivm->builder;
 	LLVMValueRef args[2] = {
 		emit_data->args[0],
 
 		/* The value of 1 means that ffs(x=0) = undef, so LLVM won't
 		 * add special code to check for x=0. The reason is that
 		 * the LLVM behavior for x=0 is different from what we
-		 * need here.
-		 *
-		 * The hardware already implements the correct behavior.
+		 * need here. However, LLVM also assumes that ffs(x) is
+		 * in [0, 31], but GLSL expects that ffs(0) = -1, so
+		 * a conditional assignment to handle 0 is still required.
 		 */
 		LLVMConstInt(LLVMInt1TypeInContext(gallivm->context), 1, 0)
 	};
 
-	emit_data->output[emit_data->chan] =
+	LLVMValueRef lsb =
 		lp_build_intrinsic(gallivm->builder, "llvm.cttz.i32",
 				emit_data->dst_type, args, ARRAY_SIZE(args),
 				LLVMReadNoneAttribute);
+
+	/* TODO: We need an intrinsic to skip this conditional. */
+	/* Check for zero: */
+	emit_data->output[emit_data->chan] =
+		LLVMBuildSelect(builder,
+				LLVMBuildICmp(builder, LLVMIntEQ, args[0],
+					      bld_base->uint_bld.zero, ""),
+				lp_build_const_int32(gallivm, -1), lsb, "");
 }
 
 /* Find the last bit set. */

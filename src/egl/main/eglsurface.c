@@ -262,8 +262,12 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
 {
    const char *func;
    EGLint renderBuffer = EGL_BACK_BUFFER;
-   EGLint swapBehavior = EGL_BUFFER_PRESERVED;
+   EGLint swapBehavior = EGL_BUFFER_DESTROYED;
    EGLint err;
+
+   /* Swap behavior can be preserved only if config supports this. */
+   if (conf->SurfaceType & EGL_SWAP_BEHAVIOR_PRESERVED_BIT)
+      swapBehavior = EGL_BUFFER_PRESERVED;
 
    switch (type) {
    case EGL_WINDOW_BIT:

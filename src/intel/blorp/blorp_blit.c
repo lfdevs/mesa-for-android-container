@@ -997,7 +997,7 @@ blorp_nir_manual_blend_bilinear(nir_builder *b, nir_ssa_def *pos,
  * of samples).
  */
 static nir_shader *
-brw_blorp_build_nir_shader(struct blorp_context *blorp,
+brw_blorp_build_nir_shader(struct blorp_context *blorp, void *mem_ctx,
                            const struct brw_blorp_blit_prog_key *key)
 {
    const struct gen_device_info *devinfo = blorp->isl_dev->info;
@@ -1044,7 +1044,7 @@ brw_blorp_build_nir_shader(struct blorp_context *blorp,
           (key->dst_samples <= 1));
 
    nir_builder b;
-   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
+   nir_builder_init_simple_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT, NULL);
 
    struct brw_blorp_blit_vars v;
    brw_blorp_blit_vars_init(&b, &v, key);
@@ -1233,6 +1233,8 @@ brw_blorp_get_blit_kernel(struct blorp_context *blorp,
                             &params->wm_prog_kernel, &params->wm_prog_data))
       return;
 
+   void *mem_ctx = ralloc_context(NULL);
+
    const unsigned *program;
    unsigned program_size;
    struct brw_blorp_prog_data prog_data;
@@ -1240,7 +1242,7 @@ brw_blorp_get_blit_kernel(struct blorp_context *blorp,
    /* Try and compile with NIR first.  If that fails, fall back to the old
     * method of building shaders manually.
     */
-   nir_shader *nir = brw_blorp_build_nir_shader(blorp, prog_key);
+   nir_shader *nir = brw_blorp_build_nir_shader(blorp, mem_ctx, prog_key);
    struct brw_wm_prog_key wm_key;
    brw_blorp_init_wm_prog_key(&wm_key);
    wm_key.tex.compressed_multisample_layout_mask =
@@ -1248,13 +1250,15 @@ brw_blorp_get_blit_kernel(struct blorp_context *blorp,
    wm_key.tex.msaa_16 = prog_key->tex_samples == 16;
    wm_key.multisample_fbo = prog_key->rt_samples > 1;
 
-   program = brw_blorp_compile_nir_shader(blorp, nir, &wm_key, false,
-                                          &prog_data, &program_size);
+   program = blorp_compile_fs(blorp, mem_ctx, nir, &wm_key, false,
+                              &prog_data, &program_size);
 
    blorp->upload_shader(blorp, prog_key, sizeof(*prog_key),
                         program, program_size,
                         &prog_data, sizeof(prog_data),
                         &params->wm_prog_kernel, &params->wm_prog_data);
+
+   ralloc_free(mem_ctx);
 }
 
 static void
@@ -1761,10 +1765,14 @@ surf_convert_to_uncompressed(const struct isl_device *isl_dev,
    surf_convert_to_single_slice(isl_dev, info);
 
    if (width || height) {
+#ifndef NDEBUG
+      uint32_t right_edge_px = info->tile_x_sa + *x + *width;
+      uint32_t bottom_edge_px = info->tile_y_sa + *y + *height;
       assert(*width % fmtl->bw == 0 ||
-             *x + *width == info->surf.logical_level0_px.width);
+             right_edge_px == info->surf.logical_level0_px.width);
       assert(*height % fmtl->bh == 0 ||
-             *y + *height == info->surf.logical_level0_px.height);
+             bottom_edge_px == info->surf.logical_level0_px.height);
+#endif
       *width = DIV_ROUND_UP(*width, fmtl->bw);
       *height = DIV_ROUND_UP(*height, fmtl->bh);
    }

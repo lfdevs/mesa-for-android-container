@@ -607,7 +607,7 @@ void nvc0_validate_textures(struct nvc0_context *nvc0)
 
    /* Invalidate all CP textures because they are aliased. */
    for (int i = 0; i < nvc0->num_textures[5]; i++)
-      nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_CP_TEX(i));
+      nouveau_bufctx_reset(nvc0->bufctx_cp, NVC0_BIND_CP_TEX(i));
    nvc0->textures_dirty[5] = ~0;
    nvc0->dirty_cp |= NVC0_NEW_CP_TEXTURES;
 }

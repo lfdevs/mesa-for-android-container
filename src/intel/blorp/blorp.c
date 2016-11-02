@@ -165,21 +165,15 @@ nir_uniform_type_size(const struct glsl_type *type)
 }
 
 const unsigned *
-brw_blorp_compile_nir_shader(struct blorp_context *blorp, struct nir_shader *nir,
-                             const struct brw_wm_prog_key *wm_key,
-                             bool use_repclear,
-                             struct brw_blorp_prog_data *prog_data,
-                             unsigned *program_size)
+blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
+                 struct nir_shader *nir,
+                 const struct brw_wm_prog_key *wm_key,
+                 bool use_repclear,
+                 struct brw_blorp_prog_data *prog_data,
+                 unsigned *program_size)
 {
    const struct brw_compiler *compiler = blorp->compiler;
 
-   void *mem_ctx = ralloc_context(NULL);
-
-   /* Calling brw_preprocess_nir and friends is destructive and, if cloning is
-    * enabled, may end up completely replacing the nir_shader.  Therefore, we
-    * own it and might as well put it in our context for easy cleanup.
-    */
-   ralloc_steal(mem_ctx, nir);
    nir->options =
       compiler->glsl_compiler_options[MESA_SHADER_FRAGMENT].NirOptions;
 

@@ -105,13 +105,6 @@ static void vid_dec_h264_BeginFrame(vid_dec_PrivateType *priv)
    if (priv->frame_started)
       return;
 
-   vid_dec_NeedTarget(priv);
-   if (priv->first_buf_in_frame)
-      priv->timestamp = priv->timestamps[0];
-   priv->first_buf_in_frame = false;
-
-   priv->picture.h264.num_ref_frames = priv->picture.h264.pps->sps->max_num_ref_frames;
-
    if (!priv->codec) {
       struct pipe_video_codec templat = {};
       omx_base_video_PortType *port;
@@ -128,6 +121,15 @@ static void vid_dec_h264_BeginFrame(vid_dec_PrivateType *priv)
 
       priv->codec = priv->pipe->create_video_codec(priv->pipe, &templat);
    }
+
+   vid_dec_NeedTarget(priv);
+
+   if (priv->first_buf_in_frame)
+      priv->timestamp = priv->timestamps[0];
+   priv->first_buf_in_frame = false;
+
+   priv->picture.h264.num_ref_frames = priv->picture.h264.pps->sps->max_num_ref_frames;
+
    priv->picture.h264.slice_count = 0;
    priv->codec->begin_frame(priv->codec, priv->target, &priv->picture.base);
    priv->frame_started = true;

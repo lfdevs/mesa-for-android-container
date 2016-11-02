@@ -471,6 +471,7 @@ struct x11_swapchain {
    xcb_connection_t *                           conn;
    xcb_window_t                                 window;
    xcb_gc_t                                     gc;
+   uint32_t                                     depth;
    VkExtent2D                                   extent;
    uint32_t                                     image_count;
 
@@ -625,7 +626,6 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
    uint32_t row_pitch;
    uint32_t offset;
    uint32_t bpp = 32;
-   uint32_t depth = 24;
    int fd;
    uint32_t size;
 
@@ -651,7 +651,7 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
                                           pCreateInfo->imageExtent.width,
                                           pCreateInfo->imageExtent.height,
                                           row_pitch,
-                                          depth, bpp, fd);
+                                          chain->depth, bpp, fd);
    xcb_discard_reply(chain->conn, cookie.sequence);
 
    int fence_fd = xshmfence_alloc_shm();
@@ -752,17 +752,28 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (chain == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+   xcb_connection_t *conn = x11_surface_get_connection(icd_surface);
+   xcb_window_t window = x11_surface_get_window(icd_surface);
+   xcb_get_geometry_reply_t *geometry =
+      xcb_get_geometry_reply(conn, xcb_get_geometry(conn, window), NULL);
+
+   if (geometry == NULL)
+      return VK_ERROR_SURFACE_LOST_KHR;
+
    chain->base.device = device;
    chain->base.destroy = x11_swapchain_destroy;
    chain->base.get_images = x11_get_images;
    chain->base.acquire_next_image = x11_acquire_next_image;
    chain->base.queue_present = x11_queue_present;
    chain->base.image_fns = image_fns;
-   chain->conn = x11_surface_get_connection(icd_surface);
-   chain->window = x11_surface_get_window(icd_surface);
+   chain->conn = conn;
+   chain->window = window;
+   chain->depth = geometry->depth;
    chain->extent = pCreateInfo->imageExtent;
    chain->image_count = num_images;
    chain->send_sbc = 0;
+
+   free(geometry);
 
    chain->event_id = xcb_generate_id(chain->conn);
    xcb_present_select_input(chain->conn, chain->event_id, chain->window,

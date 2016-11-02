@@ -126,7 +126,6 @@ prepare_vs_constants_userbuf_swvp(struct NineDevice9 *device)
         cb.user_buffer = state->vs_const_i;
 
         state->pipe.cb2_swvp = cb;
-        state->changed.vs_const_i = 0;
     }
 
     if (state->changed.vs_const_b || state->changed.group & NINE_STATE_SWVP) {
@@ -138,7 +137,6 @@ prepare_vs_constants_userbuf_swvp(struct NineDevice9 *device)
         cb.user_buffer = state->vs_const_b;
 
         state->pipe.cb3_swvp = cb;
-        state->changed.vs_const_b = 0;
     }
 
     if (!device->driver_caps.user_cbufs) {
@@ -236,14 +234,30 @@ prepare_vs_constants_userbuf(struct NineDevice9 *device)
     if (state->changed.vs_const_i || state->changed.group & NINE_STATE_SWVP) {
         int *idst = (int *)&state->vs_const_f[4 * device->max_vs_const_f];
         memcpy(idst, state->vs_const_i, NINE_MAX_CONST_I * sizeof(int[4]));
-        state->changed.vs_const_i = 0;
     }
 
     if (state->changed.vs_const_b || state->changed.group & NINE_STATE_SWVP) {
         int *idst = (int *)&state->vs_const_f[4 * device->max_vs_const_f];
         uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
         memcpy(bdst, state->vs_const_b, NINE_MAX_CONST_B * sizeof(BOOL));
-        state->changed.vs_const_b = 0;
+    }
+
+    if (device->state.changed.vs_const_i) {
+        struct nine_range *r = device->state.changed.vs_const_i;
+        struct nine_range *p = r;
+        while (p->next)
+            p = p->next;
+        nine_range_pool_put_chain(&device->range_pool, r, p);
+        device->state.changed.vs_const_i = NULL;
+    }
+
+    if (device->state.changed.vs_const_b) {
+        struct nine_range *r = device->state.changed.vs_const_b;
+        struct nine_range *p = r;
+        while (p->next)
+            p = p->next;
+        nine_range_pool_put_chain(&device->range_pool, r, p);
+        device->state.changed.vs_const_b = NULL;
     }
 
     if (!cb.buffer_size)
@@ -290,23 +304,6 @@ prepare_vs_constants_userbuf(struct NineDevice9 *device)
         device->state.changed.vs_const_f = NULL;
     }
 
-    if (device->state.changed.vs_const_i) {
-        struct nine_range *r = device->state.changed.vs_const_i;
-        struct nine_range *p = r;
-        while (p->next)
-            p = p->next;
-        nine_range_pool_put_chain(&device->range_pool, r, p);
-        device->state.changed.vs_const_i = NULL;
-    }
-
-    if (device->state.changed.vs_const_b) {
-        struct nine_range *r = device->state.changed.vs_const_b;
-        struct nine_range *p = r;
-        while (p->next)
-            p = p->next;
-        nine_range_pool_put_chain(&device->range_pool, r, p);
-        device->state.changed.vs_const_b = NULL;
-    }
     state->changed.group &= ~NINE_STATE_VS_CONST;
     state->commit |= NINE_STATE_COMMIT_CONST_VS;
 }

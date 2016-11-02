@@ -1,3 +1,15 @@
+mesa (13.0.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Make mesa-vulkan-drivers.install more generic. Should fix FTBFS on
+    some arches.
+  * rules: Remove superfluous linux check.
+  * rules: Remove vulkan_intel.h only where it get installed in tmp.
+    Should fix FTBFS on some more arches.
+  * source/local-options: Update extend-diff-ignore.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Wed, 02 Nov 2016 11:49:13 +0100
+
 mesa (13.0.0~rc2-1) experimental; urgency=medium
 
   * New upstream release candidate.

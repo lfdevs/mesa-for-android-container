@@ -49,55 +49,17 @@ fs_visitor::emit_nir_code()
 }
 
 void
-fs_visitor::nir_setup_single_output_varying(fs_reg *reg,
-                                            const glsl_type *type,
-                                            unsigned *location)
-{
-   if (type->is_array() || type->is_matrix()) {
-      const struct glsl_type *elem_type = glsl_get_array_element(type);
-      const unsigned length = glsl_get_length(type);
-
-      for (unsigned i = 0; i < length; i++) {
-         nir_setup_single_output_varying(reg, elem_type, location);
-      }
-   } else if (type->is_record()) {
-      for (unsigned i = 0; i < type->length; i++) {
-         const struct glsl_type *field_type = type->fields.structure[i].type;
-         nir_setup_single_output_varying(reg, field_type, location);
-      }
-   } else {
-      assert(type->is_scalar() || type->is_vector());
-      unsigned num_iter = 1;
-      if (type->is_dual_slot())
-         num_iter = 2;
-      for (unsigned count = 0; count < num_iter; count++) {
-         this->outputs[*location] = *reg;
-         *reg = offset(*reg, bld, 4);
-         (*location)++;
-      }
-   }
-}
-
-void
 fs_visitor::nir_setup_outputs()
 {
    if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_FRAGMENT)
       return;
 
-   nir_outputs = bld.vgrf(BRW_REGISTER_TYPE_F, nir->num_outputs);
-
    nir_foreach_variable(var, &nir->outputs) {
-      switch (stage) {
-      case MESA_SHADER_VERTEX:
-      case MESA_SHADER_TESS_EVAL:
-      case MESA_SHADER_GEOMETRY: {
-         fs_reg reg = offset(nir_outputs, bld, var->data.driver_location);
-         unsigned location = var->data.location;
-         nir_setup_single_output_varying(&reg, var->type, &location);
-         break;
-      }
-      default:
-         unreachable("unhandled shader stage");
+      const unsigned vec4s = type_size_vec4(var->type);
+      fs_reg reg = bld.vgrf(BRW_REGISTER_TYPE_F, 4 * vec4s);
+      for (unsigned i = 0; i < vec4s; i++) {
+         if (outputs[var->data.driver_location + i].file == BAD_FILE)
+            outputs[var->data.driver_location + i] = offset(reg, bld, 4 * i);
       }
    }
 }
@@ -4251,12 +4213,11 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
 
    case nir_intrinsic_store_output: {
       fs_reg src = get_nir_src(instr->src[0]);
-      fs_reg new_dest = offset(retype(nir_outputs, src.type), bld,
-                               instr->const_index[0]);
 
       nir_const_value *const_offset = nir_src_as_const_value(instr->src[1]);
       assert(const_offset && "Indirect output stores not allowed");
-      new_dest = offset(new_dest, bld, const_offset->u32[0]);
+      fs_reg new_dest = retype(offset(outputs[instr->const_index[0]], bld,
+                                      4 * const_offset->u32[0]), src.type);
 
       unsigned num_components = instr->num_components;
       unsigned first_component = nir_intrinsic_component(instr);

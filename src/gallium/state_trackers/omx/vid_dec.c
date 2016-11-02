@@ -425,24 +425,19 @@ void vid_dec_NeedTarget(vid_dec_PrivateType *priv)
    struct pipe_video_buffer templat = {};
    struct vl_screen *omx_screen;
    struct pipe_screen *pscreen;
-   omx_base_video_PortType *port;
 
    omx_screen = priv->screen;
-   port = (omx_base_video_PortType *)priv->ports[OMX_BASE_FILTER_INPUTPORT_INDEX];
-
    assert(omx_screen);
-   assert(port);
 
    pscreen = omx_screen->pscreen;
-
    assert(pscreen);
 
    if (!priv->target) {
       memset(&templat, 0, sizeof(templat));
 
       templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
-      templat.width = port->sPortParam.format.video.nFrameWidth;
-      templat.height = port->sPortParam.format.video.nFrameHeight;
+      templat.width = priv->codec->width;
+      templat.height = priv->codec->height;
       templat.buffer_format = pscreen->get_video_param(
             pscreen,
             PIPE_VIDEO_PROFILE_UNKNOWN,
@@ -626,7 +621,7 @@ static void vid_dec_FrameDecoded(OMX_COMPONENTTYPE *comp, OMX_BUFFERHEADERTYPE* 
    }
 
    if (input->pInputPortPrivate) {
-      if (output->pInputPortPrivate) {
+      if (output->pInputPortPrivate && !priv->disable_tunnel) {
          struct pipe_video_buffer *tmp, *vbuf, *new_vbuf;
 
          tmp = output->pOutputPortPrivate;

@@ -2491,7 +2491,7 @@ yyreduce:
 #line 725 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, (yyvsp[0].string));
+              _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
 
 	   free((yyvsp[0].string));
 
@@ -2597,7 +2597,7 @@ yyreduce:
 #line 813 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, (yyvsp[0].string));
+              _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
 
 	   free((yyvsp[0].string));
 
@@ -2628,7 +2628,7 @@ yyreduce:
 #line 842 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, (yyvsp[0].string));
+              _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
 
 	   free((yyvsp[0].string));
 
@@ -2722,7 +2722,7 @@ yyreduce:
 #line 915 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, (yyvsp[0].string));
+              _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
 
 	   free((yyvsp[0].string));
 
@@ -4331,9 +4331,9 @@ yyreduce:
 #line 2029 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *exist = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, (yyvsp[-2].string));
+              _mesa_symbol_table_find_symbol(state->st, (yyvsp[-2].string));
 	   struct asm_symbol *target = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, (yyvsp[0].string));
+              _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
 
 	   free((yyvsp[0].string));
 
@@ -4349,7 +4349,7 @@ yyreduce:
 		      "undefined variable binding in ALIAS statement");
 	      YYERROR;
 	   } else {
-	      _mesa_symbol_table_add_symbol(state->st, 0, (yyvsp[-2].string), target);
+              _mesa_symbol_table_add_symbol(state->st, (yyvsp[-2].string), target);
 	   }
 	}
 #line 4356 "program/program_parse.tab.c" /* yacc.c:1646  */
@@ -4772,7 +4772,7 @@ declare_variable(struct asm_parser_state *state, char *name, enum asm_type t,
 {
    struct asm_symbol *s = NULL;
    struct asm_symbol *exist = (struct asm_symbol *)
-      _mesa_symbol_table_find_symbol(state->st, 0, name);
+      _mesa_symbol_table_find_symbol(state->st, name);
 
 
    if (exist != NULL) {
@@ -4810,7 +4810,7 @@ declare_variable(struct asm_parser_state *state, char *name, enum asm_type t,
 	 break;
       }
 
-      _mesa_symbol_table_add_symbol(state->st, 0, s->name, s);
+      _mesa_symbol_table_add_symbol(state->st, s->name, s);
       s->next = state->sym;
       state->sym = s;
    }

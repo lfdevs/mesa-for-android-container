@@ -129,6 +129,7 @@ DERIVEDCLASS(vid_dec_PrivateType, omx_base_filter_PrivateType)
    bool frame_started; \
    unsigned bytes_left; \
    const void *slice; \
+   bool disable_tunnel; \
    struct vl_compositor compositor; \
    struct vl_compositor_state cstate;
 ENDCLASS(vid_dec_PrivateType)

@@ -737,7 +737,7 @@ void
 CodeEmitterNVC0::emitIMAD(const Instruction *i)
 {
    uint8_t addOp =
-      (i->src(2).mod.neg() << 1) | (i->src(0).mod.neg() ^ i->src(1).mod.neg());
+      i->src(2).mod.neg() | ((i->src(0).mod.neg() ^ i->src(1).mod.neg()) << 1);
 
    assert(i->encSize == 8);
    emitForm_A(i, HEX64(20000000, 00000003));
@@ -762,7 +762,7 @@ CodeEmitterNVC0::emitIMAD(const Instruction *i)
 void
 CodeEmitterNVC0::emitSHLADD(const Instruction *i)
 {
-   uint8_t addOp = (i->src(2).mod.neg() << 1) | i->src(0).mod.neg();
+   uint8_t addOp = (i->src(0).mod.neg() << 1) | i->src(2).mod.neg();
    const ImmediateValue *imm = i->src(1).get()->asImm();
    assert(imm);
 

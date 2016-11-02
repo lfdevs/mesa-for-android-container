@@ -492,19 +492,6 @@ type_size_scalar(const struct glsl_type *type)
    return 0;
 }
 
-/**
- * Returns the number of scalar components needed to store type, assuming
- * that vectors are padded out to vec4.
- *
- * This has the packing rules of type_size_vec4(), but counts components
- * similar to type_size_scalar().
- */
-extern "C" int
-type_size_vec4_times_4(const struct glsl_type *type)
-{
-   return 4 * type_size_vec4(type);
-}
-
 /* Attribute arrays are loaded as one vec4 per element (or matrix column),
  * except for double-precision types, which are loaded as one dvec4.
  */
@@ -1687,6 +1674,12 @@ fs_visitor::assign_gs_urb_setup()
 void
 fs_visitor::split_virtual_grfs()
 {
+   /* Compact the register file so we eliminate dead vgrfs.  This
+    * only defines split points for live registers, so if we have
+    * too large dead registers they will hit assertions later.
+    */
+   compact_virtual_grfs();
+
    int num_vars = this->alloc.count;
 
    /* Count the total number of registers */

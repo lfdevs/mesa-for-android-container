@@ -1,3 +1,2 @@
 usr/share/vulkan/icd.d/*.json
-usr/lib/*/libvulkan_intel.so
-usr/lib/*/libvulkan_radeon.so
+usr/lib/*/libvulkan_*.so

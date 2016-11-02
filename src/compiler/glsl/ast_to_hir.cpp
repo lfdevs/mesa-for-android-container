@@ -4330,6 +4330,8 @@ handle_tess_ctrl_shader_output_decl(struct _mesa_glsl_parse_state *state,
    if (var->data.patch)
       return;
 
+   var->data.tess_varying_implicit_sized_array = var->type->is_unsized_array();
+
    validate_layout_qualifier_vertex_count(state, loc, var, num_vertices,
                                           &state->tcs_output_size,
                                           "tessellation control shader output");
@@ -4366,6 +4368,7 @@ handle_tess_shader_input_decl(struct _mesa_glsl_parse_state *state,
    if (var->type->is_unsized_array()) {
       var->type = glsl_type::get_array_instance(var->type->fields.array,
             state->Const.MaxPatchVertices);
+      var->data.tess_varying_implicit_sized_array = true;
    } else if (var->type->length != state->Const.MaxPatchVertices) {
       _mesa_glsl_error(&loc, state,
                        "per-vertex tessellation shader input arrays must be "

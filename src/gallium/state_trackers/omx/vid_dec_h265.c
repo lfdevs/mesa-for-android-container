@@ -612,13 +612,10 @@ static void vid_dec_h265_BeginFrame(vid_dec_PrivateType *priv)
    if (priv->frame_started)
       return;
 
-   vid_dec_NeedTarget(priv);
-   if (priv->first_buf_in_frame)
-      priv->timestamp = priv->timestamps[0];
-   priv->first_buf_in_frame = false;
-
    if (!priv->codec) {
       struct pipe_video_codec templat = {};
+      omx_base_video_PortType *port = (omx_base_video_PortType *)
+         priv->ports[OMX_BASE_FILTER_INPUTPORT_INDEX];
 
       templat.profile = priv->profile;
       templat.entrypoint = PIPE_VIDEO_ENTRYPOINT_BITSTREAM;
@@ -628,7 +625,21 @@ static void vid_dec_h265_BeginFrame(vid_dec_PrivateType *priv)
       templat.height = priv->codec_data.h265.pic_height_in_luma_samples;
       templat.level =  priv->codec_data.h265.level_idc;
       priv->codec = priv->pipe->create_video_codec(priv->pipe, &templat);
+
+      /* disable transcode tunnel if video size is different from coded size */
+      if (priv->codec_data.h265.pic_width_in_luma_samples !=
+          port->sPortParam.format.video.nFrameWidth ||
+          priv->codec_data.h265.pic_height_in_luma_samples !=
+          port->sPortParam.format.video.nFrameHeight)
+         priv->disable_tunnel = true;
    }
+
+   vid_dec_NeedTarget(priv);
+
+   if (priv->first_buf_in_frame)
+      priv->timestamp = priv->timestamps[0];
+   priv->first_buf_in_frame = false;
+
    priv->codec->begin_frame(priv->codec, priv->target, &priv->picture.base);
    priv->frame_started = true;
 }

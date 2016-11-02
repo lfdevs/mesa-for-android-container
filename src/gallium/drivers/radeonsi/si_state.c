@@ -3925,6 +3925,14 @@ static void si_init_config(struct si_context *sctx)
 	si_pm4_set_reg(pm4, R_028408_VGT_INDX_OFFSET, 0);
 
 	if (sctx->b.chip_class >= CIK) {
+		/* If this is 0, Bonaire can hang even if GS isn't being used.
+		 * Other chips are unaffected. These are suboptimal values,
+		 * but we don't use on-chip GS.
+		 */
+		si_pm4_set_reg(pm4, R_028A44_VGT_GS_ONCHIP_CNTL,
+			       S_028A44_ES_VERTS_PER_SUBGRP(64) |
+			       S_028A44_GS_PRIMS_PER_SUBGRP(4));
+
 		si_pm4_set_reg(pm4, R_00B51C_SPI_SHADER_PGM_RSRC3_LS, S_00B51C_CU_EN(0xffff));
 		si_pm4_set_reg(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS, 0);
 		si_pm4_set_reg(pm4, R_00B31C_SPI_SHADER_PGM_RSRC3_ES, S_00B31C_CU_EN(0xffff));

@@ -447,6 +447,7 @@ NineSurface9_LockRect( struct NineSurface9 *This,
     } else {
         u_box_origin_2d(This->desc.Width, This->desc.Height, &box);
     }
+    box.z = This->layer;
 
     user_warn(This->desc.Format == D3DFMT_NULL);
 

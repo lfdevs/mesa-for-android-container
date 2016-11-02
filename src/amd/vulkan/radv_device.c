@@ -44,12 +44,6 @@
 #include "util/debug.h"
 struct radv_dispatch_table dtable;
 
-struct radv_fence {
-	struct radeon_winsys_fence *fence;
-	bool submitted;
-	bool signalled;
-};
-
 static VkResult
 radv_physical_device_init(struct radv_physical_device *device,
 			  struct radv_instance *instance,

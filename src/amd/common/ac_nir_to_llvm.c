@@ -3520,7 +3520,8 @@ static void visit_tex(struct nir_to_llvm_context *ctx, nir_tex_instr *instr)
 		LLVMValueRef z = LLVMBuildExtractElement(ctx->builder, result, two, "");
 		z = LLVMBuildSDiv(ctx->builder, z, six, "");
 		result = LLVMBuildInsertElement(ctx->builder, result, z, two, "");
-	}
+	} else if (instr->dest.ssa.num_components != 4)
+		result = trim_vector(ctx, result, instr->dest.ssa.num_components);
 
 write_result:
 	if (result) {

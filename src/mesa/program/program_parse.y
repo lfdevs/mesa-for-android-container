@@ -724,7 +724,7 @@ extSwizSel: INTEGER
 srcReg: USED_IDENTIFIER /* temporaryReg | progParamSingle */
 	{
 	   struct asm_symbol *const s = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, $1);
+              _mesa_symbol_table_find_symbol(state->st, $1);
 
 	   free($1);
 
@@ -812,7 +812,7 @@ dstReg: resultBinding
 	| USED_IDENTIFIER /* temporaryReg | vertexResultReg */
 	{
 	   struct asm_symbol *const s = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, $1);
+              _mesa_symbol_table_find_symbol(state->st, $1);
 
 	   free($1);
 
@@ -841,7 +841,7 @@ dstReg: resultBinding
 progParamArray: USED_IDENTIFIER
 	{
 	   struct asm_symbol *const s = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, $1);
+              _mesa_symbol_table_find_symbol(state->st, $1);
 
 	   free($1);
 
@@ -914,7 +914,7 @@ addrRegNegOffset: INTEGER
 addrReg: USED_IDENTIFIER
 	{
 	   struct asm_symbol *const s = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, $1);
+              _mesa_symbol_table_find_symbol(state->st, $1);
 
 	   free($1);
 
@@ -2028,9 +2028,9 @@ legacyTexUnitNum: INTEGER
 ALIAS_statement: ALIAS IDENTIFIER '=' USED_IDENTIFIER
 	{
 	   struct asm_symbol *exist = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, $2);
+              _mesa_symbol_table_find_symbol(state->st, $2);
 	   struct asm_symbol *target = (struct asm_symbol *)
-	      _mesa_symbol_table_find_symbol(state->st, 0, $4);
+              _mesa_symbol_table_find_symbol(state->st, $4);
 
 	   free($4);
 
@@ -2046,7 +2046,7 @@ ALIAS_statement: ALIAS IDENTIFIER '=' USED_IDENTIFIER
 		      "undefined variable binding in ALIAS statement");
 	      YYERROR;
 	   } else {
-	      _mesa_symbol_table_add_symbol(state->st, 0, $2, target);
+              _mesa_symbol_table_add_symbol(state->st, $2, target);
 	   }
 	}
 	;
@@ -2235,7 +2235,7 @@ declare_variable(struct asm_parser_state *state, char *name, enum asm_type t,
 {
    struct asm_symbol *s = NULL;
    struct asm_symbol *exist = (struct asm_symbol *)
-      _mesa_symbol_table_find_symbol(state->st, 0, name);
+      _mesa_symbol_table_find_symbol(state->st, name);
 
 
    if (exist != NULL) {
@@ -2273,7 +2273,7 @@ declare_variable(struct asm_parser_state *state, char *name, enum asm_type t,
 	 break;
       }
 
-      _mesa_symbol_table_add_symbol(state->st, 0, s->name, s);
+      _mesa_symbol_table_add_symbol(state->st, s->name, s);
       s->next = state->sym;
       state->sym = s;
    }
