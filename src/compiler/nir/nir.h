@@ -2625,6 +2625,8 @@ bool nir_opt_remove_phis(nir_shader *shader);
 
 bool nir_opt_undef(nir_shader *shader);
 
+bool nir_opt_conditional_discard(nir_shader *shader);
+
 void nir_sweep(nir_shader *shader);
 
 nir_intrinsic_op nir_intrinsic_from_system_value(gl_system_value val);

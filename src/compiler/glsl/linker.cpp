@@ -181,7 +181,43 @@ private:
 };
 
 
-class array_resize_visitor : public ir_hierarchical_visitor {
+/**
+ * A visitor helper that provides methods for updating the types of
+ * ir_dereferences.  Classes that update variable types (say, updating
+ * array sizes) will want to use this so that dereference types stay in sync.
+ */
+class deref_type_updater : public ir_hierarchical_visitor {
+public:
+   virtual ir_visitor_status visit(ir_dereference_variable *ir)
+   {
+      ir->type = ir->var->type;
+      return visit_continue;
+   }
+
+   virtual ir_visitor_status visit_leave(ir_dereference_array *ir)
+   {
+      const glsl_type *const vt = ir->array->type;
+      if (vt->is_array())
+         ir->type = vt->fields.array;
+      return visit_continue;
+   }
+
+   virtual ir_visitor_status visit_leave(ir_dereference_record *ir)
+   {
+      for (unsigned i = 0; i < ir->record->type->length; i++) {
+         const struct glsl_struct_field *field =
+            &ir->record->type->fields.structure[i];
+         if (strcmp(field->name, ir->field) == 0) {
+            ir->type = field->type;
+            break;
+         }
+      }
+      return visit_continue;
+   }
+};
+
+
+class array_resize_visitor : public deref_type_updater {
 public:
    unsigned num_vertices;
    gl_shader_program *prog;
@@ -238,24 +274,6 @@ public:
                                                 this->num_vertices);
       var->data.max_array_access = this->num_vertices - 1;
 
-      return visit_continue;
-   }
-
-   /* Dereferences of input variables need to be updated so that their type
-    * matches the newly assigned type of the variable they are accessing. */
-   virtual ir_visitor_status visit(ir_dereference_variable *ir)
-   {
-      ir->type = ir->var->type;
-      return visit_continue;
-   }
-
-   /* Dereferences of 2D input arrays need to be updated so that their type
-    * matches the newly assigned type of the array they are accessing. */
-   virtual ir_visitor_status visit_leave(ir_dereference_array *ir)
-   {
-      const glsl_type *const vt = ir->array->type;
-      if (vt->is_array())
-         ir->type = vt->fields.array;
       return visit_continue;
    }
 };
@@ -1353,7 +1371,7 @@ move_non_declarations(exec_list *instructions, exec_node *last,
  * it inside that function leads to compiler warnings with some versions of
  * gcc.
  */
-class array_sizing_visitor : public ir_hierarchical_visitor {
+class array_sizing_visitor : public deref_type_updater {
 public:
    array_sizing_visitor()
       : mem_ctx(ralloc_context(NULL)),
@@ -2273,6 +2291,8 @@ update_array_sizes(struct gl_shader_program *prog)
          if (prog->_LinkedShaders[i] == NULL)
             continue;
 
+      bool types_were_updated = false;
+
       foreach_in_list(ir_instruction, node, prog->_LinkedShaders[i]->ir) {
          ir_variable *const var = node->as_variable();
 
@@ -2328,10 +2348,14 @@ update_array_sizes(struct gl_shader_program *prog)
 
             var->type = glsl_type::get_array_instance(var->type->fields.array,
                                                       size + 1);
-            /* FINISHME: We should update the types of array
-             * dereferences of this variable now.
-             */
+            types_were_updated = true;
          }
+      }
+
+      /* Update the types of dereferences in case we changed any. */
+      if (types_were_updated) {
+         deref_type_updater v;
+         v.run(prog->_LinkedShaders[i]->ir);
       }
    }
 }
@@ -4783,14 +4807,6 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
        num_shaders[MESA_SHADER_COMPUTE] != prog->NumShaders) {
       linker_error(prog, "Compute shaders may not be linked with any other "
                    "type of shader\n");
-   }
-
-   for (unsigned int i = 0; i < MESA_SHADER_STAGES; i++) {
-      if (prog->_LinkedShaders[i] != NULL) {
-         _mesa_delete_linked_shader(ctx, prog->_LinkedShaders[i]);
-      }
-
-      prog->_LinkedShaders[i] = NULL;
    }
 
    /* Link all shaders for a particular stage and validate the result.

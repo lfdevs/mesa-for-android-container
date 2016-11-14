@@ -56,7 +56,8 @@ _mesa_delete_linked_shader(struct gl_context *ctx,
                            struct gl_linked_shader *sh);
 
 extern "C" void
-_mesa_clear_shader_program_data(struct gl_shader_program *);
+_mesa_clear_shader_program_data(struct gl_context *ctx,
+                                struct gl_shader_program *);
 
 extern "C" void
 _mesa_shader_debug(struct gl_context *ctx, GLenum type, GLuint *id,

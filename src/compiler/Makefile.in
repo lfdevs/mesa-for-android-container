@@ -370,6 +370,7 @@ am__objects_8 = nir/nir.lo nir/nir_clone.lo nir/nir_control_flow.lo \
 	nir/nir_lower_wpos_center.lo nir/nir_lower_wpos_ytransform.lo \
 	nir/nir_metadata.lo nir/nir_move_vec_src_uses_to_dest.lo \
 	nir/nir_normalize_cubemap_coords.lo \
+	nir/nir_opt_conditional_discard.lo \
 	nir/nir_opt_constant_folding.lo nir/nir_opt_copy_propagate.lo \
 	nir/nir_opt_cse.lo nir/nir_opt_dce.lo nir/nir_opt_dead_cf.lo \
 	nir/nir_opt_gcm.lo nir/nir_opt_global_to_local.lo \
@@ -1279,6 +1280,7 @@ NIR_FILES = \
 	nir/nir_metadata.c \
 	nir/nir_move_vec_src_uses_to_dest.c \
 	nir/nir_normalize_cubemap_coords.c \
+	nir/nir_opt_conditional_discard.c \
 	nir/nir_opt_constant_folding.c \
 	nir/nir_opt_copy_propagate.c \
 	nir/nir_opt_cse.c \
@@ -1917,6 +1919,8 @@ nir/nir_move_vec_src_uses_to_dest.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_normalize_cubemap_coords.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_opt_conditional_discard.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_constant_folding.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_copy_propagate.lo: nir/$(am__dirstamp) \
@@ -2272,6 +2276,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_normalize_cubemap_coords.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opcodes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_algebraic.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_conditional_discard.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_constant_folding.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_copy_propagate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_cse.Plo@am__quote@

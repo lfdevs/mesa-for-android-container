@@ -52,7 +52,8 @@ static void
 brw_blorp_upload_shader(struct blorp_context *blorp,
                         const void *key, uint32_t key_size,
                         const void *kernel, uint32_t kernel_size,
-                        const void *prog_data, uint32_t prog_data_size,
+                        const struct brw_stage_prog_data *prog_data,
+                        uint32_t prog_data_size,
                         uint32_t *kernel_out, void *prog_data_out)
 {
    struct brw_context *brw = blorp->driver_ctx;

@@ -169,7 +169,7 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
                  struct nir_shader *nir,
                  const struct brw_wm_prog_key *wm_key,
                  bool use_repclear,
-                 struct brw_blorp_prog_data *prog_data,
+                 struct brw_wm_prog_data *wm_prog_data,
                  unsigned *program_size)
 {
    const struct brw_compiler *compiler = blorp->compiler;
@@ -177,15 +177,14 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
    nir->options =
       compiler->glsl_compiler_options[MESA_SHADER_FRAGMENT].NirOptions;
 
-   struct brw_wm_prog_data wm_prog_data;
-   memset(&wm_prog_data, 0, sizeof(wm_prog_data));
+   memset(wm_prog_data, 0, sizeof(*wm_prog_data));
 
-   wm_prog_data.base.nr_params = 0;
-   wm_prog_data.base.param = NULL;
+   wm_prog_data->base.nr_params = 0;
+   wm_prog_data->base.param = NULL;
 
    /* BLORP always just uses the first two binding table entries */
-   wm_prog_data.binding_table.render_target_start = BLORP_RENDERBUFFER_BT_INDEX;
-   wm_prog_data.base.binding_table.texture_start = BLORP_TEXTURE_BT_INDEX;
+   wm_prog_data->binding_table.render_target_start = BLORP_RENDERBUFFER_BT_INDEX;
+   wm_prog_data->base.binding_table.texture_start = BLORP_TEXTURE_BT_INDEX;
 
    nir = brw_preprocess_nir(compiler, nir);
    nir_remove_dead_variables(nir, nir_var_shader_in);
@@ -206,21 +205,8 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
 
    const unsigned *program =
       brw_compile_fs(compiler, blorp->driver_ctx, mem_ctx,
-                     wm_key, &wm_prog_data, nir,
+                     wm_key, wm_prog_data, nir,
                      NULL, -1, -1, false, use_repclear, program_size, NULL);
-
-   /* Copy the relavent bits of wm_prog_data over into the blorp prog data */
-   prog_data->dispatch_8 = wm_prog_data.dispatch_8;
-   prog_data->dispatch_16 = wm_prog_data.dispatch_16;
-   prog_data->first_curbe_grf_0 = wm_prog_data.base.dispatch_grf_start_reg;
-   prog_data->first_curbe_grf_2 = wm_prog_data.dispatch_grf_start_reg_2;
-   prog_data->ksp_offset_2 = wm_prog_data.prog_offset_2;
-   prog_data->persample_msaa_dispatch = wm_prog_data.persample_dispatch;
-   prog_data->flat_inputs = wm_prog_data.flat_inputs;
-   prog_data->num_varying_inputs = wm_prog_data.num_varying_inputs;
-   prog_data->inputs_read = nir->info.inputs_read;
-
-   assert(wm_prog_data.base.nr_params == 0);
 
    return program;
 }

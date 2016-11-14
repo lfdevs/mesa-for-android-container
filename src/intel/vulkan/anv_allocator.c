@@ -253,10 +253,7 @@ anv_block_pool_init(struct anv_block_pool *pool,
    assert(util_is_power_of_two(block_size));
 
    pool->device = device;
-   pool->bo.gem_handle = 0;
-   pool->bo.offset = 0;
-   pool->bo.size = 0;
-   pool->bo.is_winsys_bo = false;
+   anv_bo_init(&pool->bo, 0, 0);
    pool->block_size = block_size;
    pool->free_list = ANV_FREE_LIST_EMPTY;
    pool->back_free_list = ANV_FREE_LIST_EMPTY;
@@ -463,10 +460,8 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
     * values back into pool. */
    pool->map = map + center_bo_offset;
    pool->center_bo_offset = center_bo_offset;
-   pool->bo.gem_handle = gem_handle;
-   pool->bo.size = size;
+   anv_bo_init(&pool->bo, gem_handle, size);
    pool->bo.map = map;
-   pool->bo.index = 0;
 
 done:
    pthread_mutex_unlock(&pool->device->mutex);
@@ -892,9 +887,9 @@ anv_scratch_pool_finish(struct anv_device *device, struct anv_scratch_pool *pool
 {
    for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
       for (unsigned i = 0; i < 16; i++) {
-         struct anv_bo *bo = &pool->bos[i][s];
-         if (bo->size > 0)
-            anv_gem_close(device, bo->gem_handle);
+         struct anv_scratch_bo *bo = &pool->bos[i][s];
+         if (bo->exists > 0)
+            anv_gem_close(device, bo->bo.gem_handle);
       }
    }
 }
@@ -909,70 +904,59 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    unsigned scratch_size_log2 = ffs(per_thread_scratch / 2048);
    assert(scratch_size_log2 < 16);
 
-   struct anv_bo *bo = &pool->bos[scratch_size_log2][stage];
+   struct anv_scratch_bo *bo = &pool->bos[scratch_size_log2][stage];
 
-   /* From now on, we go into a critical section.  In order to remain
-    * thread-safe, we use the bo size as a lock.  A value of 0 means we don't
-    * have a valid BO yet.  A value of 1 means locked.  A value greater than 1
-    * means we have a bo of the given size.
+   /* We can use "exists" to shortcut and ignore the critical section */
+   if (bo->exists)
+      return &bo->bo;
+
+   pthread_mutex_lock(&device->mutex);
+
+   __sync_synchronize();
+   if (bo->exists)
+      return &bo->bo;
+
+   const struct anv_physical_device *physical_device =
+      &device->instance->physicalDevice;
+   const struct gen_device_info *devinfo = &physical_device->info;
+
+   /* WaCSScratchSize:hsw
+    *
+    * Haswell's scratch space address calculation appears to be sparse
+    * rather than tightly packed. The Thread ID has bits indicating which
+    * subslice, EU within a subslice, and thread within an EU it is.
+    * There's a maximum of two slices and two subslices, so these can be
+    * stored with a single bit. Even though there are only 10 EUs per
+    * subslice, this is stored in 4 bits, so there's an effective maximum
+    * value of 16 EUs. Similarly, although there are only 7 threads per EU,
+    * this is stored in a 3 bit number, giving an effective maximum value
+    * of 8 threads per EU.
+    *
+    * This means that we need to use 16 * 8 instead of 10 * 7 for the
+    * number of threads per subslice.
     */
+   const unsigned subslices = MAX2(physical_device->subslice_total, 1);
+   const unsigned scratch_ids_per_subslice =
+      device->info.is_haswell ? 16 * 8 : devinfo->max_cs_threads;
 
-   if (bo->size > 1)
-      return bo;
+   uint32_t max_threads[] = {
+      [MESA_SHADER_VERTEX]           = devinfo->max_vs_threads,
+      [MESA_SHADER_TESS_CTRL]        = devinfo->max_tcs_threads,
+      [MESA_SHADER_TESS_EVAL]        = devinfo->max_tes_threads,
+      [MESA_SHADER_GEOMETRY]         = devinfo->max_gs_threads,
+      [MESA_SHADER_FRAGMENT]         = devinfo->max_wm_threads,
+      [MESA_SHADER_COMPUTE]          = scratch_ids_per_subslice * subslices,
+   };
 
-   uint64_t size = __sync_val_compare_and_swap(&bo->size, 0, 1);
-   if (size == 0) {
-      /* We own the lock.  Allocate a buffer */
+   uint32_t size = per_thread_scratch * max_threads[stage];
 
-      const struct anv_physical_device *physical_device =
-         &device->instance->physicalDevice;
-      const struct gen_device_info *devinfo = &physical_device->info;
+   anv_bo_init_new(&bo->bo, device, size);
 
-      /* WaCSScratchSize:hsw
-       *
-       * Haswell's scratch space address calculation appears to be sparse
-       * rather than tightly packed. The Thread ID has bits indicating which
-       * subslice, EU within a subslice, and thread within an EU it is.
-       * There's a maximum of two slices and two subslices, so these can be
-       * stored with a single bit. Even though there are only 10 EUs per
-       * subslice, this is stored in 4 bits, so there's an effective maximum
-       * value of 16 EUs. Similarly, although there are only 7 threads per EU,
-       * this is stored in a 3 bit number, giving an effective maximum value
-       * of 8 threads per EU.
-       *
-       * This means that we need to use 16 * 8 instead of 10 * 7 for the
-       * number of threads per subslice.
-       */
-      const unsigned subslices = MAX2(physical_device->subslice_total, 1);
-      const unsigned scratch_ids_per_subslice =
-         device->info.is_haswell ? 16 * 8 : devinfo->max_cs_threads;
+   /* Set the exists last because it may be read by other threads */
+   __sync_synchronize();
+   bo->exists = true;
 
-      uint32_t max_threads[] = {
-         [MESA_SHADER_VERTEX]           = devinfo->max_vs_threads,
-         [MESA_SHADER_TESS_CTRL]        = devinfo->max_tcs_threads,
-         [MESA_SHADER_TESS_EVAL]        = devinfo->max_tes_threads,
-         [MESA_SHADER_GEOMETRY]         = devinfo->max_gs_threads,
-         [MESA_SHADER_FRAGMENT]         = devinfo->max_wm_threads,
-         [MESA_SHADER_COMPUTE]          = scratch_ids_per_subslice * subslices,
-      };
+   pthread_mutex_unlock(&device->mutex);
 
-      size = per_thread_scratch * max_threads[stage];
-
-      struct anv_bo new_bo;
-      anv_bo_init_new(&new_bo, device, size);
-
-      bo->gem_handle = new_bo.gem_handle;
-
-      /* Set the size last because we use it as a lock */
-      __sync_synchronize();
-      bo->size = size;
-
-      futex_wake((uint32_t *)&bo->size, INT_MAX);
-   } else {
-      /* Someone else got here first */
-      while (bo->size == 1)
-         futex_wait((uint32_t *)&bo->size, 1);
-   }
-
-   return bo;
+   return &bo->bo;
 }

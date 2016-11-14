@@ -772,16 +772,15 @@ glsl_to_tgsi_visitor::emit_asm(ir_instruction *ir, unsigned op,
 
          int i = u_bit_scan(&writemask);
 
-         /* before emitting the instruction, see if we have to adjust store
+         /* before emitting the instruction, see if we have to adjust load / store
           * address */
-         if (i > 1 && inst->op == TGSI_OPCODE_STORE &&
+         if (i > 1 && (inst->op == TGSI_OPCODE_LOAD || inst->op == TGSI_OPCODE_STORE) &&
              addr.file == PROGRAM_UNDEFINED) {
             /* We have to advance the buffer address by 16 */
             addr = get_temp(glsl_type::uint_type);
             emit_asm(ir, TGSI_OPCODE_UADD, st_dst_reg(addr),
                      inst->src[0], st_src_reg_for_int(16));
          }
-
 
          /* first time use previous instruction */
          if (dinst == NULL) {
@@ -802,11 +801,10 @@ glsl_to_tgsi_visitor::emit_asm(ir_instruction *ir, unsigned op,
                dinst->dst[j].writemask = (i & 1) ? WRITEMASK_ZW : WRITEMASK_XY;
                dinst->dst[j].index = initial_dst_idx[j];
                if (i > 1) {
-                  if (dinst->op == TGSI_OPCODE_STORE) {
+                  if (dinst->op == TGSI_OPCODE_LOAD || dinst->op == TGSI_OPCODE_STORE)
                      dinst->src[0] = addr;
-                  } else {
+                  if (dinst->op != TGSI_OPCODE_STORE)
                      dinst->dst[j].index++;
-                  }
                }
             } else {
                /* if we aren't writing to a double, just get the bit of the initial writemask

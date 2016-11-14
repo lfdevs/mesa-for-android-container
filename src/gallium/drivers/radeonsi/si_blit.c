@@ -487,7 +487,9 @@ si_decompress_sampler_color_textures(struct si_context *sctx,
 		assert(view);
 
 		tex = (struct r600_texture *)view->texture;
-		assert(tex->cmask.size || tex->fmask.size || tex->dcc_offset);
+		/* CMASK or DCC can be discarded and we can still end up here. */
+		if (!tex->cmask.size && !tex->fmask.size && !tex->dcc_offset)
+			continue;
 
 		si_blit_decompress_color(&sctx->b.b, tex,
 					 view->u.tex.first_level, view->u.tex.last_level,

@@ -3673,6 +3673,12 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
        */
       setup_color_payload(bld, key, &sources[length], src0_alpha, 1);
       length++;
+   } else if (key->replicate_alpha && inst->target != 0) {
+      /* Handle the case when fragment shader doesn't write to draw buffer
+       * zero. No need to call setup_color_payload() for src0_alpha because
+       * alpha value will be undefined.
+       */
+      length++;
    }
 
    setup_color_payload(bld, key, &sources[length], color0, components);

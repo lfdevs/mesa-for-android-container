@@ -2384,7 +2384,7 @@ _eglLockDisplayInterop(EGLDisplay dpy, EGLContext context,
    return MESA_GLINTEROP_SUCCESS;
 }
 
-int
+PUBLIC int
 MesaGLInteropEGLQueryDeviceInfo(EGLDisplay dpy, EGLContext context,
                                 struct mesa_glinterop_device_info *out)
 {
@@ -2406,7 +2406,7 @@ MesaGLInteropEGLQueryDeviceInfo(EGLDisplay dpy, EGLContext context,
    return ret;
 }
 
-int
+PUBLIC int
 MesaGLInteropEGLExportObject(EGLDisplay dpy, EGLContext context,
                              struct mesa_glinterop_export_in *in,
                              struct mesa_glinterop_export_out *out)

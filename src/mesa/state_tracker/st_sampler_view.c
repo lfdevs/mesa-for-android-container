@@ -430,8 +430,12 @@ st_create_texture_sampler_view_from_stobj(struct st_context *st,
       templ.u.tex.first_level = stObj->base.MinLevel + stObj->base.BaseLevel;
       templ.u.tex.last_level = last_level(stObj);
       assert(templ.u.tex.first_level <= templ.u.tex.last_level);
-      templ.u.tex.first_layer = stObj->base.MinLayer;
-      templ.u.tex.last_layer = last_layer(stObj);
+      if (stObj->layer_override) {
+         templ.u.tex.first_layer = templ.u.tex.last_layer = stObj->layer_override;
+      } else {
+         templ.u.tex.first_layer = stObj->base.MinLayer;
+         templ.u.tex.last_layer = last_layer(stObj);
+      }
       assert(templ.u.tex.first_layer <= templ.u.tex.last_layer);
       templ.target = gl_target_to_pipe(stObj->base.Target);
    }
@@ -478,8 +482,11 @@ st_get_texture_sampler_view_from_stobj(struct st_context *st,
          assert(stObj->base.MinLevel + stObj->base.BaseLevel ==
                 view->u.tex.first_level);
          assert(last_level(stObj) == view->u.tex.last_level);
-         assert(stObj->base.MinLayer == view->u.tex.first_layer);
-         assert(last_layer(stObj) == view->u.tex.last_layer);
+         assert(stObj->layer_override || stObj->base.MinLayer == view->u.tex.first_layer);
+         assert(stObj->layer_override || last_layer(stObj) == view->u.tex.last_layer);
+         assert(!stObj->layer_override ||
+                (stObj->layer_override == view->u.tex.first_layer &&
+                 stObj->layer_override == view->u.tex.last_layer));
       }
    }
    else {

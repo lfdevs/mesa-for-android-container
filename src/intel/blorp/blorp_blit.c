@@ -1237,7 +1237,7 @@ brw_blorp_get_blit_kernel(struct blorp_context *blorp,
 
    const unsigned *program;
    unsigned program_size;
-   struct brw_blorp_prog_data prog_data;
+   struct brw_wm_prog_data prog_data;
 
    /* Try and compile with NIR first.  If that fails, fall back to the old
     * method of building shaders manually.
@@ -1255,7 +1255,7 @@ brw_blorp_get_blit_kernel(struct blorp_context *blorp,
 
    blorp->upload_shader(blorp, prog_key, sizeof(*prog_key),
                         program, program_size,
-                        &prog_data, sizeof(prog_data),
+                        &prog_data.base, sizeof(prog_data),
                         &params->wm_prog_kernel, &params->wm_prog_data);
 
    ralloc_free(mem_ctx);

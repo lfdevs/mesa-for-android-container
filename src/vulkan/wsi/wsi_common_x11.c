@@ -117,6 +117,8 @@ wsi_x11_get_connection(struct wsi_device *wsi_dev,
 
       struct wsi_x11_connection *wsi_conn =
          wsi_x11_connection_create(alloc, conn);
+      if (!wsi_conn)
+         return NULL;
 
       pthread_mutex_lock(&wsi->mutex);
 
@@ -889,6 +891,10 @@ wsi_x11_finish_wsi(struct wsi_device *wsi_device,
       (struct wsi_x11 *)wsi_device->wsi[VK_ICD_WSI_PLATFORM_XCB];
 
    if (wsi) {
+      struct hash_entry *entry;
+      hash_table_foreach(wsi->connections, entry)
+         wsi_x11_connection_destroy(alloc, entry->data);
+
       _mesa_hash_table_destroy(wsi->connections, NULL);
 
       pthread_mutex_destroy(&wsi->mutex);

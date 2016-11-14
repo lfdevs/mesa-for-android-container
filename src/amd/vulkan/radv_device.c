@@ -113,13 +113,19 @@ static const VkExtensionProperties global_extensions[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
 	{
 		.extensionName = VK_KHR_XCB_SURFACE_EXTENSION_NAME,
-		.specVersion = 5,
+		.specVersion = 6,
+	},
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+	{
+		.extensionName = VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+		.specVersion = 6,
 	},
 #endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 	{
 		.extensionName = VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
-		.specVersion = 4,
+		.specVersion = 5,
 	},
 #endif
 };
@@ -127,7 +133,7 @@ static const VkExtensionProperties global_extensions[] = {
 static const VkExtensionProperties device_extensions[] = {
 	{
 		.extensionName = VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		.specVersion = 67,
+		.specVersion = 68,
 	},
 };
 
@@ -1166,6 +1172,8 @@ VkResult radv_GetFenceStatus(VkDevice _device, VkFence _fence)
 	RADV_FROM_HANDLE(radv_device, device, _device);
 	RADV_FROM_HANDLE(radv_fence, fence, _fence);
 
+	if (fence->signalled)
+		return VK_SUCCESS;
 	if (!fence->submitted)
 		return VK_NOT_READY;
 
@@ -1728,15 +1736,36 @@ radv_tex_bordercolor(VkBorderColor bcolor)
 	return 0;
 }
 
+static unsigned
+radv_tex_aniso_filter(unsigned filter)
+{
+	if (filter < 2)
+		return 0;
+	if (filter < 4)
+		return 1;
+	if (filter < 8)
+		return 2;
+	if (filter < 16)
+		return 3;
+	return 4;
+}
+
 static void
 radv_init_sampler(struct radv_device *device,
 		  struct radv_sampler *sampler,
 		  const VkSamplerCreateInfo *pCreateInfo)
 {
-	uint32_t max_aniso = 0;
-	uint32_t max_aniso_ratio = 0;//TODO
+	uint32_t max_aniso = pCreateInfo->anisotropyEnable && pCreateInfo->maxAnisotropy > 1.0 ?
+					(uint32_t) pCreateInfo->maxAnisotropy : 0;
+	uint32_t max_aniso_ratio = radv_tex_aniso_filter(max_aniso);
 	bool is_vi;
 	is_vi = (device->instance->physicalDevice.rad_info.chip_class >= VI);
+
+	if (!is_vi && max_aniso > 0) {
+		radv_finishme("Anisotropic filtering must be disabled manually "
+		              "by the shader on SI-CI when BASE_LEVEL == LAST_LEVEL\n");
+		max_aniso = max_aniso_ratio = 0;
+	}
 
 	sampler->state[0] = (S_008F30_CLAMP_X(radv_tex_wrap(pCreateInfo->addressModeU)) |
 			     S_008F30_CLAMP_Y(radv_tex_wrap(pCreateInfo->addressModeV)) |
@@ -1744,10 +1773,13 @@ radv_init_sampler(struct radv_device *device,
 			     S_008F30_MAX_ANISO_RATIO(max_aniso_ratio) |
 			     S_008F30_DEPTH_COMPARE_FUNC(radv_tex_compare(pCreateInfo->compareOp)) |
 			     S_008F30_FORCE_UNNORMALIZED(pCreateInfo->unnormalizedCoordinates ? 1 : 0) |
+			     S_008F30_ANISO_THRESHOLD(max_aniso_ratio >> 1) |
+			     S_008F30_ANISO_BIAS(max_aniso_ratio) |
 			     S_008F30_DISABLE_CUBE_WRAP(0) |
 			     S_008F30_COMPAT_MODE(is_vi));
 	sampler->state[1] = (S_008F34_MIN_LOD(S_FIXED(CLAMP(pCreateInfo->minLod, 0, 15), 8)) |
-			     S_008F34_MAX_LOD(S_FIXED(CLAMP(pCreateInfo->maxLod, 0, 15), 8)));
+			     S_008F34_MAX_LOD(S_FIXED(CLAMP(pCreateInfo->maxLod, 0, 15), 8)) |
+			     S_008F34_PERF_MIP(max_aniso_ratio ? max_aniso_ratio + 6 : 0));
 	sampler->state[2] = (S_008F38_LOD_BIAS(S_FIXED(CLAMP(pCreateInfo->mipLodBias, -16, 16), 8)) |
 			     S_008F38_XY_MAG_FILTER(radv_tex_filter(pCreateInfo->magFilter, max_aniso)) |
 			     S_008F38_XY_MIN_FILTER(radv_tex_filter(pCreateInfo->minFilter, max_aniso)) |

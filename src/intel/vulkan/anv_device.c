@@ -203,19 +203,19 @@ static const VkExtensionProperties global_extensions[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
    {
       .extensionName = VK_KHR_XCB_SURFACE_EXTENSION_NAME,
-      .specVersion = 5,
+      .specVersion = 6,
    },
 #endif
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    {
       .extensionName = VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
-      .specVersion = 5,
+      .specVersion = 6,
    },
 #endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    {
       .extensionName = VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
-      .specVersion = 4,
+      .specVersion = 5,
    },
 #endif
 };
@@ -223,7 +223,7 @@ static const VkExtensionProperties global_extensions[] = {
 static const VkExtensionProperties device_extensions[] = {
    {
       .extensionName = VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-      .specVersion = 67,
+      .specVersion = 68,
    },
 };
 
@@ -350,7 +350,7 @@ VkResult anv_EnumeratePhysicalDevices(
          snprintf(path, sizeof(path), "/dev/dri/renderD%d", 128 + i);
          result = anv_physical_device_init(&instance->physicalDevice,
                                            instance, path);
-         if (result == VK_SUCCESS)
+         if (result != VK_ERROR_INCOMPATIBLE_DRIVER)
             break;
       }
 
@@ -770,7 +770,7 @@ anv_device_submit_simple_batch(struct anv_device *device,
 {
    struct drm_i915_gem_execbuffer2 execbuf;
    struct drm_i915_gem_exec_object2 exec2_objects[1];
-   struct anv_bo bo;
+   struct anv_bo bo, *exec_bos[1];
    VkResult result = VK_SUCCESS;
    uint32_t size;
    int64_t timeout;
@@ -786,6 +786,7 @@ anv_device_submit_simple_batch(struct anv_device *device,
    if (!device->info.has_llc)
       anv_clflush_range(bo.map, size);
 
+   exec_bos[0] = &bo;
    exec2_objects[0].handle = bo.gem_handle;
    exec2_objects[0].relocation_count = 0;
    exec2_objects[0].relocs_ptr = 0;
@@ -809,18 +810,15 @@ anv_device_submit_simple_batch(struct anv_device *device,
    execbuf.rsvd1 = device->context_id;
    execbuf.rsvd2 = 0;
 
-   ret = anv_gem_execbuffer(device, &execbuf);
-   if (ret != 0) {
-      /* We don't know the real error. */
-      result = vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY, "execbuf2 failed: %m");
+   result = anv_device_execbuf(device, &execbuf, exec_bos);
+   if (result != VK_SUCCESS)
       goto fail;
-   }
 
    timeout = INT64_MAX;
    ret = anv_gem_wait(device, bo.gem_handle, &timeout);
    if (ret != 0) {
       /* We don't know the real error. */
-      result = vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY, "execbuf2 failed: %m");
+      result = vk_errorf(VK_ERROR_DEVICE_LOST, "execbuf2 failed: %m");
       goto fail;
    }
 
@@ -1070,6 +1068,24 @@ void anv_GetDeviceQueue(
    *pQueue = anv_queue_to_handle(&device->queue);
 }
 
+VkResult
+anv_device_execbuf(struct anv_device *device,
+                   struct drm_i915_gem_execbuffer2 *execbuf,
+                   struct anv_bo **execbuf_bos)
+{
+   int ret = anv_gem_execbuffer(device, execbuf);
+   if (ret != 0) {
+      /* We don't know the real error. */
+      return vk_errorf(VK_ERROR_DEVICE_LOST, "execbuf2 failed: %m");
+   }
+
+   struct drm_i915_gem_exec_object2 *objects = (void *)execbuf->buffers_ptr;
+   for (uint32_t k = 0; k < execbuf->buffer_count; k++)
+      execbuf_bos[k]->offset = objects[k].offset;
+
+   return VK_SUCCESS;
+}
+
 VkResult anv_QueueSubmit(
     VkQueue                                     _queue,
     uint32_t                                    submitCount,
@@ -1079,7 +1095,34 @@ VkResult anv_QueueSubmit(
    ANV_FROM_HANDLE(anv_queue, queue, _queue);
    ANV_FROM_HANDLE(anv_fence, fence, _fence);
    struct anv_device *device = queue->device;
-   int ret;
+   VkResult result = VK_SUCCESS;
+
+   /* We lock around QueueSubmit for three main reasons:
+    *
+    *  1) When a block pool is resized, we create a new gem handle with a
+    *     different size and, in the case of surface states, possibly a
+    *     different center offset but we re-use the same anv_bo struct when
+    *     we do so.  If this happens in the middle of setting up an execbuf,
+    *     we could end up with our list of BOs out of sync with our list of
+    *     gem handles.
+    *
+    *  2) The algorithm we use for building the list of unique buffers isn't
+    *     thread-safe.  While the client is supposed to syncronize around
+    *     QueueSubmit, this would be extremely difficult to debug if it ever
+    *     came up in the wild due to a broken app.  It's better to play it
+    *     safe and just lock around QueueSubmit.
+    *
+    *  3)  The anv_cmd_buffer_execbuf function may perform relocations in
+    *      userspace.  Due to the fact that the surface state buffer is shared
+    *      between batches, we can't afford to have that happen from multiple
+    *      threads at the same time.  Even though the user is supposed to
+    *      ensure this doesn't happen, we play it safe as in (2) above.
+    *
+    * Since the only other things that ever take the device lock such as block
+    * pool resize only rarely happen, this will almost never be contended so
+    * taking a lock isn't really an expensive operation in this case.
+    */
+   pthread_mutex_lock(&device->mutex);
 
    for (uint32_t i = 0; i < submitCount; i++) {
       for (uint32_t j = 0; j < pSubmits[i].commandBufferCount; j++) {
@@ -1087,28 +1130,23 @@ VkResult anv_QueueSubmit(
                          pSubmits[i].pCommandBuffers[j]);
          assert(cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
-         ret = anv_gem_execbuffer(device, &cmd_buffer->execbuf2.execbuf);
-         if (ret != 0) {
-            /* We don't know the real error. */
-            return vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                             "execbuf2 failed: %m");
-         }
-
-         for (uint32_t k = 0; k < cmd_buffer->execbuf2.bo_count; k++)
-            cmd_buffer->execbuf2.bos[k]->offset = cmd_buffer->execbuf2.objects[k].offset;
+         result = anv_cmd_buffer_execbuf(device, cmd_buffer);
+         if (result != VK_SUCCESS)
+            goto out;
       }
    }
 
    if (fence) {
-      ret = anv_gem_execbuffer(device, &fence->execbuf);
-      if (ret != 0) {
-         /* We don't know the real error. */
-         return vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "execbuf2 failed: %m");
-      }
+      struct anv_bo *fence_bo = &fence->bo;
+      result = anv_device_execbuf(device, &fence->execbuf, &fence_bo);
+      if (result != VK_SUCCESS)
+         goto out;
    }
 
-   return VK_SUCCESS;
+out:
+   pthread_mutex_unlock(&device->mutex);
+
+   return result;
 }
 
 VkResult anv_QueueWaitIdle(
@@ -1138,15 +1176,11 @@ VkResult anv_DeviceWaitIdle(
 VkResult
 anv_bo_init_new(struct anv_bo *bo, struct anv_device *device, uint64_t size)
 {
-   bo->gem_handle = anv_gem_create(device, size);
-   if (!bo->gem_handle)
+   uint32_t gem_handle = anv_gem_create(device, size);
+   if (!gem_handle)
       return vk_error(VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
-   bo->map = NULL;
-   bo->index = 0;
-   bo->offset = 0;
-   bo->size = size;
-   bo->is_winsys_bo = false;
+   anv_bo_init(bo, gem_handle, size);
 
    return VK_SUCCESS;
 }

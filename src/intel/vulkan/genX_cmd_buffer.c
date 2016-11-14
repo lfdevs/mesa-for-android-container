@@ -200,19 +200,8 @@ genX(EndCommandBuffer)(
     VkCommandBuffer                             commandBuffer)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
-   struct anv_device *device = cmd_buffer->device;
 
    anv_cmd_buffer_end_batch_buffer(cmd_buffer);
-
-   if (cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
-      /* The algorithm used to compute the validate list is not threadsafe as
-       * it uses the bo->index field.  We have to lock the device around it.
-       * Fortunately, the chances for contention here are probably very low.
-       */
-      pthread_mutex_lock(&device->mutex);
-      anv_cmd_buffer_prepare_execbuf(cmd_buffer);
-      pthread_mutex_unlock(&device->mutex);
-   }
 
    return VK_SUCCESS;
 }
@@ -1883,22 +1872,25 @@ void genX(CmdEndRenderPass)(
 }
 
 static void
-emit_ps_depth_count(struct anv_batch *batch,
+emit_ps_depth_count(struct anv_cmd_buffer *cmd_buffer,
                     struct anv_bo *bo, uint32_t offset)
 {
-   anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
       pc.DestinationAddressType  = DAT_PPGTT;
       pc.PostSyncOperation       = WritePSDepthCount;
       pc.DepthStallEnable        = true;
       pc.Address                 = (struct anv_address) { bo, offset };
+
+      if (GEN_GEN == 9 && cmd_buffer->device->info.gt == 4)
+         pc.CommandStreamerStallEnable = true;
    }
 }
 
 static void
-emit_query_availability(struct anv_batch *batch,
+emit_query_availability(struct anv_cmd_buffer *cmd_buffer,
                         struct anv_bo *bo, uint32_t offset)
 {
-   anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
       pc.DestinationAddressType  = DAT_PPGTT;
       pc.PostSyncOperation       = WriteImmediateData;
       pc.Address                 = (struct anv_address) { bo, offset };
@@ -1931,7 +1923,7 @@ void genX(CmdBeginQuery)(
 
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
-      emit_ps_depth_count(&cmd_buffer->batch, &pool->bo,
+      emit_ps_depth_count(cmd_buffer, &pool->bo,
                           query * sizeof(struct anv_query_pool_slot));
       break;
 
@@ -1951,10 +1943,10 @@ void genX(CmdEndQuery)(
 
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
-      emit_ps_depth_count(&cmd_buffer->batch, &pool->bo,
+      emit_ps_depth_count(cmd_buffer, &pool->bo,
                           query * sizeof(struct anv_query_pool_slot) + 8);
 
-      emit_query_availability(&cmd_buffer->batch, &pool->bo,
+      emit_query_availability(cmd_buffer, &pool->bo,
                               query * sizeof(struct anv_query_pool_slot) + 16);
       break;
 
@@ -1996,11 +1988,14 @@ void genX(CmdWriteTimestamp)(
          pc.DestinationAddressType  = DAT_PPGTT;
          pc.PostSyncOperation       = WriteTimestamp;
          pc.Address = (struct anv_address) { &pool->bo, offset };
+
+         if (GEN_GEN == 9 && cmd_buffer->device->info.gt == 4)
+            pc.CommandStreamerStallEnable = true;
       }
       break;
    }
 
-   emit_query_availability(&cmd_buffer->batch, &pool->bo, query + 16);
+   emit_query_availability(cmd_buffer, &pool->bo, query + 16);
 }
 
 #if GEN_GEN > 7 || GEN_IS_HASWELL

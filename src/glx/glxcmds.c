@@ -2713,7 +2713,7 @@ __glXGetUST(int64_t * ust)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
 
-int
+PUBLIC int
 MesaGLInteropGLXQueryDeviceInfo(Display *dpy, GLXContext context,
                                 struct mesa_glinterop_device_info *out)
 {
@@ -2737,7 +2737,7 @@ MesaGLInteropGLXQueryDeviceInfo(Display *dpy, GLXContext context,
    return ret;
 }
 
-int
+PUBLIC int
 MesaGLInteropGLXExportObject(Display *dpy, GLXContext context,
                              struct mesa_glinterop_export_in *in,
                              struct mesa_glinterop_export_out *out)

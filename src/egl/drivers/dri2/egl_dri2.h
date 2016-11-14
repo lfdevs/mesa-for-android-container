@@ -80,8 +80,6 @@
 #include "eglimage.h"
 #include "eglsync.h"
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-
 struct wl_buffer;
 
 struct dri2_egl_driver

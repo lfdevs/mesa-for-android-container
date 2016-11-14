@@ -421,7 +421,7 @@ standalone_compile_shader(const struct standalone_options *_options,
    }
 
    if ((status == EXIT_SUCCESS) && options->do_link)  {
-      _mesa_clear_shader_program_data(whole_program);
+      _mesa_clear_shader_program_data(ctx, whole_program);
 
       link_shaders(ctx, whole_program);
       status = (whole_program->LinkStatus) ? EXIT_SUCCESS : EXIT_FAILURE;

@@ -17,16 +17,19 @@ const char * const __glXDispatchTableStrings[DI_LAST_INDEX] = {
 #define __ATTRIB(field) \
     [DI_##field] = "glX"#field
 
+    __ATTRIB(BindSwapBarrierSGIX),
     __ATTRIB(BindTexImageEXT),
     // glXChooseFBConfig implemented by libglvnd
     __ATTRIB(ChooseFBConfigSGIX),
     // glXChooseVisual implemented by libglvnd
     // glXCopyContext implemented by libglvnd
+    __ATTRIB(CopySubBufferMESA),
     // glXCreateContext implemented by libglvnd
     __ATTRIB(CreateContextAttribsARB),
     __ATTRIB(CreateContextWithConfigSGIX),
     __ATTRIB(CreateGLXPbufferSGIX),
     // glXCreateGLXPixmap implemented by libglvnd
+    __ATTRIB(CreateGLXPixmapMESA),
     __ATTRIB(CreateGLXPixmapWithConfigSGIX),
     // glXCreateNewContext implemented by libglvnd
     // glXCreatePbuffer implemented by libglvnd
@@ -51,53 +54,49 @@ const char * const __glXDispatchTableStrings[DI_LAST_INDEX] = {
     __ATTRIB(GetFBConfigAttribSGIX),
     __ATTRIB(GetFBConfigFromVisualSGIX),
     // glXGetFBConfigs implemented by libglvnd
+    __ATTRIB(GetMscRateOML),
     // glXGetProcAddress implemented by libglvnd
     // glXGetProcAddressARB implemented by libglvnd
+    __ATTRIB(GetScreenDriver),
     // glXGetSelectedEvent implemented by libglvnd
     __ATTRIB(GetSelectedEventSGIX),
+    __ATTRIB(GetSwapIntervalMESA),
+    __ATTRIB(GetSyncValuesOML),
     __ATTRIB(GetVideoSyncSGI),
     // glXGetVisualFromFBConfig implemented by libglvnd
     __ATTRIB(GetVisualFromFBConfigSGIX),
     // glXImportContextEXT implemented by libglvnd
     // glXIsDirect implemented by libglvnd
+    __ATTRIB(JoinSwapGroupSGIX),
     // glXMakeContextCurrent implemented by libglvnd
     // glXMakeCurrent implemented by libglvnd
     // glXQueryContext implemented by libglvnd
     __ATTRIB(QueryContextInfoEXT),
+    __ATTRIB(QueryCurrentRendererIntegerMESA),
+    __ATTRIB(QueryCurrentRendererStringMESA),
     // glXQueryDrawable implemented by libglvnd
     // glXQueryExtension implemented by libglvnd
     // glXQueryExtensionsString implemented by libglvnd
     __ATTRIB(QueryGLXPbufferSGIX),
+    __ATTRIB(QueryMaxSwapBarriersSGIX),
+    __ATTRIB(QueryRendererIntegerMESA),
+    __ATTRIB(QueryRendererStringMESA),
     // glXQueryServerString implemented by libglvnd
     // glXQueryVersion implemented by libglvnd
+    __ATTRIB(ReleaseBuffersMESA),
     __ATTRIB(ReleaseTexImageEXT),
     // glXSelectEvent implemented by libglvnd
     __ATTRIB(SelectEventSGIX),
     // glXSwapBuffers implemented by libglvnd
+    __ATTRIB(SwapBuffersMscOML),
+    __ATTRIB(SwapIntervalMESA),
     __ATTRIB(SwapIntervalSGI),
     // glXUseXFont implemented by libglvnd
+    __ATTRIB(WaitForMscOML),
+    __ATTRIB(WaitForSbcOML),
     // glXWaitGL implemented by libglvnd
     __ATTRIB(WaitVideoSyncSGI),
     // glXWaitX implemented by libglvnd
-
-    __ATTRIB(glXBindSwapBarrierSGIX),
-    __ATTRIB(glXCopySubBufferMESA),
-    __ATTRIB(glXCreateGLXPixmapMESA),
-    __ATTRIB(glXGetMscRateOML),
-    __ATTRIB(glXGetScreenDriver),
-    __ATTRIB(glXGetSwapIntervalMESA),
-    __ATTRIB(glXGetSyncValuesOML),
-    __ATTRIB(glXJoinSwapGroupSGIX),
-    __ATTRIB(glXQueryCurrentRendererIntegerMESA),
-    __ATTRIB(glXQueryCurrentRendererStringMESA),
-    __ATTRIB(glXQueryMaxSwapBarriersSGIX),
-    __ATTRIB(glXQueryRendererIntegerMESA),
-    __ATTRIB(glXQueryRendererStringMESA),
-    __ATTRIB(glXReleaseBuffersMESA),
-    __ATTRIB(glXSwapBuffersMscOML),
-    __ATTRIB(glXSwapIntervalMESA),
-    __ATTRIB(glXWaitForMscOML),
-    __ATTRIB(glXWaitForSbcOML),
 
 #undef __ATTRIB
 };
@@ -557,49 +556,49 @@ static int dispatch_WaitVideoSyncSGI(int divisor, int remainder,
 
 
 
-static void dispatch_glXBindSwapBarrierSGIX(Display *dpy, GLXDrawable drawable,
+static void dispatch_BindSwapBarrierSGIX(Display *dpy, GLXDrawable drawable,
                                             int barrier)
 {
-    PFNGLXBINDSWAPBARRIERSGIXPROC pglXBindSwapBarrierSGIX;
+    PFNGLXBINDSWAPBARRIERSGIXPROC pBindSwapBarrierSGIX;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, drawable);
     if (dd == NULL)
         return;
 
-    __FETCH_FUNCTION_PTR(glXBindSwapBarrierSGIX);
-    if (pglXBindSwapBarrierSGIX == NULL)
+    __FETCH_FUNCTION_PTR(BindSwapBarrierSGIX);
+    if (pBindSwapBarrierSGIX == NULL)
         return;
 
-    (*pglXBindSwapBarrierSGIX)(dpy, drawable, barrier);
+    (*pBindSwapBarrierSGIX)(dpy, drawable, barrier);
 }
 
 
 
-static void dispatch_glXCopySubBufferMESA(Display *dpy, GLXDrawable drawable,
+static void dispatch_CopySubBufferMESA(Display *dpy, GLXDrawable drawable,
                                           int x, int y, int width, int height)
 {
-    PFNGLXCOPYSUBBUFFERMESAPROC pglXCopySubBufferMESA;
+    PFNGLXCOPYSUBBUFFERMESAPROC pCopySubBufferMESA;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, drawable);
     if (dd == NULL)
         return;
 
-    __FETCH_FUNCTION_PTR(glXCopySubBufferMESA);
-    if (pglXCopySubBufferMESA == NULL)
+    __FETCH_FUNCTION_PTR(CopySubBufferMESA);
+    if (pCopySubBufferMESA == NULL)
         return;
 
-    (*pglXCopySubBufferMESA)(dpy, drawable, x, y, width, height);
+    (*pCopySubBufferMESA)(dpy, drawable, x, y, width, height);
 }
 
 
 
-static GLXPixmap dispatch_glXCreateGLXPixmapMESA(Display *dpy,
+static GLXPixmap dispatch_CreateGLXPixmapMESA(Display *dpy,
                                                  XVisualInfo *visinfo,
                                                  Pixmap pixmap, Colormap cmap)
 {
-    PFNGLXCREATEGLXPIXMAPMESAPROC pglXCreateGLXPixmapMESA;
+    PFNGLXCREATEGLXPIXMAPMESAPROC pCreateGLXPixmapMESA;
     __GLXvendorInfo *dd;
     GLXPixmap ret;
 
@@ -607,11 +606,11 @@ static GLXPixmap dispatch_glXCreateGLXPixmapMESA(Display *dpy,
     if (dd == NULL)
         return None;
 
-    __FETCH_FUNCTION_PTR(glXCreateGLXPixmapMESA);
-    if (pglXCreateGLXPixmapMESA == NULL)
+    __FETCH_FUNCTION_PTR(CreateGLXPixmapMESA);
+    if (pCreateGLXPixmapMESA == NULL)
         return None;
 
-    ret = (*pglXCreateGLXPixmapMESA)(dpy, visinfo, pixmap, cmap);
+    ret = (*pCreateGLXPixmapMESA)(dpy, visinfo, pixmap, cmap);
     if (AddDrawableMapping(dpy, ret, dd)) {
         /* XXX: Call glXDestroyGLXPixmap which lives in libglvnd. If we're not
          * allowed to call it from here, should we extend __glXDispatchTableIndices ?
@@ -624,47 +623,47 @@ static GLXPixmap dispatch_glXCreateGLXPixmapMESA(Display *dpy,
 
 
 
-static GLboolean dispatch_glXGetMscRateOML(Display *dpy, GLXDrawable drawable,
+static GLboolean dispatch_GetMscRateOML(Display *dpy, GLXDrawable drawable,
                                            int32_t *numerator, int32_t *denominator)
 {
-    PFNGLXGETMSCRATEOMLPROC pglXGetMscRateOML;
+    PFNGLXGETMSCRATEOMLPROC pGetMscRateOML;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, drawable);
     if (dd == NULL)
         return GL_FALSE;
 
-    __FETCH_FUNCTION_PTR(glXGetMscRateOML);
-    if (pglXGetMscRateOML == NULL)
+    __FETCH_FUNCTION_PTR(GetMscRateOML);
+    if (pGetMscRateOML == NULL)
         return GL_FALSE;
 
-    return (*pglXGetMscRateOML)(dpy, drawable, numerator, denominator);
+    return (*pGetMscRateOML)(dpy, drawable, numerator, denominator);
 }
 
 
 
-static const char *dispatch_glXGetScreenDriver(Display *dpy, int scrNum)
+static const char *dispatch_GetScreenDriver(Display *dpy, int scrNum)
 {
     typedef const char *(*fn_glXGetScreenDriver_ptr)(Display *dpy, int scrNum);
-    fn_glXGetScreenDriver_ptr pglXGetScreenDriver;
+    fn_glXGetScreenDriver_ptr pGetScreenDriver;
     __GLXvendorInfo *dd;
 
     dd = __VND->getDynDispatch(dpy, scrNum);
     if (dd == NULL)
         return NULL;
 
-    __FETCH_FUNCTION_PTR(glXGetScreenDriver);
-    if (pglXGetScreenDriver == NULL)
+    __FETCH_FUNCTION_PTR(GetScreenDriver);
+    if (pGetScreenDriver == NULL)
         return NULL;
 
-    return (*pglXGetScreenDriver)(dpy, scrNum);
+    return (*pGetScreenDriver)(dpy, scrNum);
 }
 
 
 
-static int dispatch_glXGetSwapIntervalMESA(void)
+static int dispatch_GetSwapIntervalMESA(void)
 {
-    PFNGLXGETSWAPINTERVALMESAPROC pglXGetSwapIntervalMESA;
+    PFNGLXGETSWAPINTERVALMESAPROC pGetSwapIntervalMESA;
     __GLXvendorInfo *dd;
 
     if (!__VND->getCurrentContext())
@@ -674,57 +673,57 @@ static int dispatch_glXGetSwapIntervalMESA(void)
     if (dd == NULL)
         return 0;
 
-    __FETCH_FUNCTION_PTR(glXGetSwapIntervalMESA);
-    if (pglXGetSwapIntervalMESA == NULL)
+    __FETCH_FUNCTION_PTR(GetSwapIntervalMESA);
+    if (pGetSwapIntervalMESA == NULL)
         return 0;
 
-    return (*pglXGetSwapIntervalMESA)();
+    return (*pGetSwapIntervalMESA)();
 }
 
 
 
-static Bool dispatch_glXGetSyncValuesOML(Display *dpy, GLXDrawable drawable,
+static Bool dispatch_GetSyncValuesOML(Display *dpy, GLXDrawable drawable,
                                          int64_t *ust, int64_t *msc, int64_t *sbc)
 {
-    PFNGLXGETSYNCVALUESOMLPROC pglXGetSyncValuesOML;
+    PFNGLXGETSYNCVALUESOMLPROC pGetSyncValuesOML;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, drawable);
     if (dd == NULL)
         return False;
 
-    __FETCH_FUNCTION_PTR(glXGetSyncValuesOML);
-    if (pglXGetSyncValuesOML == NULL)
+    __FETCH_FUNCTION_PTR(GetSyncValuesOML);
+    if (pGetSyncValuesOML == NULL)
         return False;
 
-    return (*pglXGetSyncValuesOML)(dpy, drawable, ust, msc, sbc);
+    return (*pGetSyncValuesOML)(dpy, drawable, ust, msc, sbc);
 }
 
 
 
-static void dispatch_glXJoinSwapGroupSGIX(Display *dpy, GLXDrawable drawable,
+static void dispatch_JoinSwapGroupSGIX(Display *dpy, GLXDrawable drawable,
                                           GLXDrawable member)
 {
-    PFNGLXJOINSWAPGROUPSGIXPROC pglXJoinSwapGroupSGIX;
+    PFNGLXJOINSWAPGROUPSGIXPROC pJoinSwapGroupSGIX;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, drawable);
     if (dd == NULL)
         return;
 
-    __FETCH_FUNCTION_PTR(glXJoinSwapGroupSGIX);
-    if (pglXJoinSwapGroupSGIX == NULL)
+    __FETCH_FUNCTION_PTR(JoinSwapGroupSGIX);
+    if (pJoinSwapGroupSGIX == NULL)
         return;
 
-    (*pglXJoinSwapGroupSGIX)(dpy, drawable, member);
+    (*pJoinSwapGroupSGIX)(dpy, drawable, member);
 }
 
 
 
-static Bool dispatch_glXQueryCurrentRendererIntegerMESA(int attribute,
+static Bool dispatch_QueryCurrentRendererIntegerMESA(int attribute,
                                                         unsigned int *value)
 {
-    PFNGLXQUERYCURRENTRENDERERINTEGERMESAPROC pglXQueryCurrentRendererIntegerMESA;
+    PFNGLXQUERYCURRENTRENDERERINTEGERMESAPROC pQueryCurrentRendererIntegerMESA;
     __GLXvendorInfo *dd;
 
     if (!__VND->getCurrentContext())
@@ -734,18 +733,18 @@ static Bool dispatch_glXQueryCurrentRendererIntegerMESA(int attribute,
     if (dd == NULL)
         return False;
 
-    __FETCH_FUNCTION_PTR(glXQueryCurrentRendererIntegerMESA);
-    if (pglXQueryCurrentRendererIntegerMESA == NULL)
+    __FETCH_FUNCTION_PTR(QueryCurrentRendererIntegerMESA);
+    if (pQueryCurrentRendererIntegerMESA == NULL)
         return False;
 
-    return (*pglXQueryCurrentRendererIntegerMESA)(attribute, value);
+    return (*pQueryCurrentRendererIntegerMESA)(attribute, value);
 }
 
 
 
-static const char *dispatch_glXQueryCurrentRendererStringMESA(int attribute)
+static const char *dispatch_QueryCurrentRendererStringMESA(int attribute)
 {
-    PFNGLXQUERYCURRENTRENDERERSTRINGMESAPROC pglXQueryCurrentRendererStringMESA;
+    PFNGLXQUERYCURRENTRENDERERSTRINGMESAPROC pQueryCurrentRendererStringMESA;
     __GLXvendorInfo *dd;
 
     if (!__VND->getCurrentContext())
@@ -755,114 +754,114 @@ static const char *dispatch_glXQueryCurrentRendererStringMESA(int attribute)
     if (dd == NULL)
         return NULL;
 
-    __FETCH_FUNCTION_PTR(glXQueryCurrentRendererStringMESA);
-    if (pglXQueryCurrentRendererStringMESA == NULL)
+    __FETCH_FUNCTION_PTR(QueryCurrentRendererStringMESA);
+    if (pQueryCurrentRendererStringMESA == NULL)
         return NULL;
 
-    return (*pglXQueryCurrentRendererStringMESA)(attribute);
+    return (*pQueryCurrentRendererStringMESA)(attribute);
 }
 
 
 
-static Bool dispatch_glXQueryMaxSwapBarriersSGIX(Display *dpy, int screen,
+static Bool dispatch_QueryMaxSwapBarriersSGIX(Display *dpy, int screen,
                                                  int *max)
 {
-    PFNGLXQUERYMAXSWAPBARRIERSSGIXPROC pglXQueryMaxSwapBarriersSGIX;
+    PFNGLXQUERYMAXSWAPBARRIERSSGIXPROC pQueryMaxSwapBarriersSGIX;
     __GLXvendorInfo *dd;
 
     dd = __VND->getDynDispatch(dpy, screen);
     if (dd == NULL)
         return False;
 
-    __FETCH_FUNCTION_PTR(glXQueryMaxSwapBarriersSGIX);
-    if (pglXQueryMaxSwapBarriersSGIX == NULL)
+    __FETCH_FUNCTION_PTR(QueryMaxSwapBarriersSGIX);
+    if (pQueryMaxSwapBarriersSGIX == NULL)
         return False;
 
-    return (*pglXQueryMaxSwapBarriersSGIX)(dpy, screen, max);
+    return (*pQueryMaxSwapBarriersSGIX)(dpy, screen, max);
 }
 
 
 
-static Bool dispatch_glXQueryRendererIntegerMESA(Display *dpy, int screen,
+static Bool dispatch_QueryRendererIntegerMESA(Display *dpy, int screen,
                                                  int renderer, int attribute,
                                                  unsigned int *value)
 {
-    PFNGLXQUERYRENDERERINTEGERMESAPROC pglXQueryRendererIntegerMESA;
+    PFNGLXQUERYRENDERERINTEGERMESAPROC pQueryRendererIntegerMESA;
     __GLXvendorInfo *dd;
 
     dd = __VND->getDynDispatch(dpy, screen);
     if (dd == NULL)
         return False;
 
-    __FETCH_FUNCTION_PTR(glXQueryRendererIntegerMESA);
-    if (pglXQueryRendererIntegerMESA == NULL)
+    __FETCH_FUNCTION_PTR(QueryRendererIntegerMESA);
+    if (pQueryRendererIntegerMESA == NULL)
         return False;
 
-    return (*pglXQueryRendererIntegerMESA)(dpy, screen, renderer, attribute, value);
+    return (*pQueryRendererIntegerMESA)(dpy, screen, renderer, attribute, value);
 }
 
 
 
-static const char *dispatch_glXQueryRendererStringMESA(Display *dpy, int screen,
+static const char *dispatch_QueryRendererStringMESA(Display *dpy, int screen,
                                                        int renderer, int attribute)
 {
-    PFNGLXQUERYRENDERERSTRINGMESAPROC pglXQueryRendererStringMESA;
+    PFNGLXQUERYRENDERERSTRINGMESAPROC pQueryRendererStringMESA;
     __GLXvendorInfo *dd = NULL;
 
     dd = __VND->getDynDispatch(dpy, screen);
     if (dd == NULL)
         return NULL;
 
-    __FETCH_FUNCTION_PTR(glXQueryRendererStringMESA);
-    if (pglXQueryRendererStringMESA == NULL)
+    __FETCH_FUNCTION_PTR(QueryRendererStringMESA);
+    if (pQueryRendererStringMESA == NULL)
         return NULL;
 
-    return (*pglXQueryRendererStringMESA)(dpy, screen, renderer, attribute);
+    return (*pQueryRendererStringMESA)(dpy, screen, renderer, attribute);
 }
 
 
 
-static Bool dispatch_glXReleaseBuffersMESA(Display *dpy, GLXDrawable d)
+static Bool dispatch_ReleaseBuffersMESA(Display *dpy, GLXDrawable d)
 {
-    PFNGLXRELEASEBUFFERSMESAPROC pglXReleaseBuffersMESA;
+    PFNGLXRELEASEBUFFERSMESAPROC pReleaseBuffersMESA;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, d);
     if (dd == NULL)
         return False;
 
-    __FETCH_FUNCTION_PTR(glXReleaseBuffersMESA);
-    if (pglXReleaseBuffersMESA == NULL)
+    __FETCH_FUNCTION_PTR(ReleaseBuffersMESA);
+    if (pReleaseBuffersMESA == NULL)
         return False;
 
-    return (*pglXReleaseBuffersMESA)(dpy, d);
+    return (*pReleaseBuffersMESA)(dpy, d);
 }
 
 
 
-static int64_t dispatch_glXSwapBuffersMscOML(Display *dpy, GLXDrawable drawable,
+static int64_t dispatch_SwapBuffersMscOML(Display *dpy, GLXDrawable drawable,
                                              int64_t target_msc, int64_t divisor,
                                              int64_t remainder)
 {
-    PFNGLXSWAPBUFFERSMSCOMLPROC pglXSwapBuffersMscOML;
+    PFNGLXSWAPBUFFERSMSCOMLPROC pSwapBuffersMscOML;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, drawable);
     if (dd == NULL)
         return 0;
 
-    __FETCH_FUNCTION_PTR(glXSwapBuffersMscOML);
-    if (pglXSwapBuffersMscOML == NULL)
+    __FETCH_FUNCTION_PTR(SwapBuffersMscOML);
+    if (pSwapBuffersMscOML == NULL)
         return 0;
 
-    return (*pglXSwapBuffersMscOML)(dpy, drawable, target_msc, divisor, remainder);
+    return (*pSwapBuffersMscOML)(dpy, drawable, target_msc, divisor, remainder);
 }
 
 
 
-static int dispatch_glXSwapIntervalMESA(unsigned int interval)
+static int dispatch_SwapIntervalMESA(unsigned int interval)
 {
-    PFNGLXSWAPINTERVALMESAPROC pglXSwapIntervalMESA;
+    PFNGLXSWAPINTERVALMESAPROC pSwapIntervalMESA;
     __GLXvendorInfo *dd;
 
     if (!__VND->getCurrentContext())
@@ -872,52 +871,52 @@ static int dispatch_glXSwapIntervalMESA(unsigned int interval)
     if (dd == NULL)
         return 0;
 
-    __FETCH_FUNCTION_PTR(glXSwapIntervalMESA);
-    if (pglXSwapIntervalMESA == NULL)
+    __FETCH_FUNCTION_PTR(SwapIntervalMESA);
+    if (pSwapIntervalMESA == NULL)
         return 0;
 
-    return (*pglXSwapIntervalMESA)(interval);
+    return (*pSwapIntervalMESA)(interval);
 }
 
 
 
-static Bool dispatch_glXWaitForMscOML(Display *dpy, GLXDrawable drawable,
+static Bool dispatch_WaitForMscOML(Display *dpy, GLXDrawable drawable,
                                       int64_t target_msc, int64_t divisor,
                                       int64_t remainder, int64_t *ust,
                                       int64_t *msc, int64_t *sbc)
 {
-    PFNGLXWAITFORMSCOMLPROC pglXWaitForMscOML;
+    PFNGLXWAITFORMSCOMLPROC pWaitForMscOML;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, drawable);
     if (dd == NULL)
         return False;
 
-    __FETCH_FUNCTION_PTR(glXWaitForMscOML);
-    if (pglXWaitForMscOML == NULL)
+    __FETCH_FUNCTION_PTR(WaitForMscOML);
+    if (pWaitForMscOML == NULL)
         return False;
 
-    return (*pglXWaitForMscOML)(dpy, drawable, target_msc, divisor, remainder, ust, msc, sbc);
+    return (*pWaitForMscOML)(dpy, drawable, target_msc, divisor, remainder, ust, msc, sbc);
 }
 
 
 
-static Bool dispatch_glXWaitForSbcOML(Display *dpy, GLXDrawable drawable,
+static Bool dispatch_WaitForSbcOML(Display *dpy, GLXDrawable drawable,
                                       int64_t target_sbc, int64_t *ust,
                                       int64_t *msc, int64_t *sbc)
 {
-    PFNGLXWAITFORSBCOMLPROC pglXWaitForSbcOML;
+    PFNGLXWAITFORSBCOMLPROC pWaitForSbcOML;
     __GLXvendorInfo *dd;
 
     dd = GetDispatchFromDrawable(dpy, drawable);
     if (dd == NULL)
         return False;
 
-    __FETCH_FUNCTION_PTR(glXWaitForSbcOML);
-    if (pglXWaitForSbcOML == NULL)
+    __FETCH_FUNCTION_PTR(WaitForSbcOML);
+    if (pWaitForSbcOML == NULL)
         return False;
 
-    return (*pglXWaitForSbcOML)(dpy, drawable, target_sbc, ust, msc, sbc);
+    return (*pWaitForSbcOML)(dpy, drawable, target_sbc, ust, msc, sbc);
 }
 
 #undef __FETCH_FUNCTION_PTR
@@ -928,45 +927,44 @@ const void * const __glXDispatchFunctions[DI_LAST_INDEX + 1] = {
 #define __ATTRIB(field) \
     [DI_##field] = (void *)dispatch_##field
 
-    __ATTRIB(BindTexImageEXT),
+    __ATTRIB(BindSwapBarrierSGIX),
     __ATTRIB(BindTexImageEXT),
     __ATTRIB(ChooseFBConfigSGIX),
+    __ATTRIB(CopySubBufferMESA),
     __ATTRIB(CreateContextAttribsARB),
     __ATTRIB(CreateContextWithConfigSGIX),
     __ATTRIB(CreateGLXPbufferSGIX),
+    __ATTRIB(CreateGLXPixmapMESA),
     __ATTRIB(CreateGLXPixmapWithConfigSGIX),
     __ATTRIB(DestroyGLXPbufferSGIX),
     __ATTRIB(GetContextIDEXT),
     __ATTRIB(GetCurrentDisplayEXT),
     __ATTRIB(GetFBConfigAttribSGIX),
     __ATTRIB(GetFBConfigFromVisualSGIX),
+    __ATTRIB(GetMscRateOML),
+    __ATTRIB(GetScreenDriver),
     __ATTRIB(GetSelectedEventSGIX),
+    __ATTRIB(GetSwapIntervalMESA),
+    __ATTRIB(GetSyncValuesOML),
     __ATTRIB(GetVideoSyncSGI),
     __ATTRIB(GetVisualFromFBConfigSGIX),
+    __ATTRIB(JoinSwapGroupSGIX),
     __ATTRIB(QueryContextInfoEXT),
+    __ATTRIB(QueryCurrentRendererIntegerMESA),
+    __ATTRIB(QueryCurrentRendererStringMESA),
     __ATTRIB(QueryGLXPbufferSGIX),
+    __ATTRIB(QueryMaxSwapBarriersSGIX),
+    __ATTRIB(QueryRendererIntegerMESA),
+    __ATTRIB(QueryRendererStringMESA),
+    __ATTRIB(ReleaseBuffersMESA),
     __ATTRIB(ReleaseTexImageEXT),
     __ATTRIB(SelectEventSGIX),
+    __ATTRIB(SwapBuffersMscOML),
+    __ATTRIB(SwapIntervalMESA),
     __ATTRIB(SwapIntervalSGI),
+    __ATTRIB(WaitForMscOML),
+    __ATTRIB(WaitForSbcOML),
     __ATTRIB(WaitVideoSyncSGI),
-    __ATTRIB(glXBindSwapBarrierSGIX),
-    __ATTRIB(glXCopySubBufferMESA),
-    __ATTRIB(glXCreateGLXPixmapMESA),
-    __ATTRIB(glXGetMscRateOML),
-    __ATTRIB(glXGetScreenDriver),
-    __ATTRIB(glXGetSwapIntervalMESA),
-    __ATTRIB(glXGetSyncValuesOML),
-    __ATTRIB(glXJoinSwapGroupSGIX),
-    __ATTRIB(glXQueryCurrentRendererIntegerMESA),
-    __ATTRIB(glXQueryCurrentRendererStringMESA),
-    __ATTRIB(glXQueryMaxSwapBarriersSGIX),
-    __ATTRIB(glXQueryRendererIntegerMESA),
-    __ATTRIB(glXQueryRendererStringMESA),
-    __ATTRIB(glXReleaseBuffersMESA),
-    __ATTRIB(glXSwapBuffersMscOML),
-    __ATTRIB(glXSwapIntervalMESA),
-    __ATTRIB(glXWaitForMscOML),
-    __ATTRIB(glXWaitForSbcOML),
 
     [DI_LAST_INDEX] = NULL,
 #undef __ATTRIB

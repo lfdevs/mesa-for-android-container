@@ -1,4 +1,6 @@
 libGL.so.1 libgl1-mesa-glx | libgl1
+ (arch=!hurd-any)MesaGLInteropGLXExportObject@Base 12.0.4
+ (arch=!hurd-any)MesaGLInteropGLXQueryDeviceInfo@Base 12.0.4
  glAccum@Base 0
  glActiveShaderProgram@Base 12.0.1
  glActiveTexture@Base 0

@@ -291,12 +291,18 @@ _mesa_new_shader_program(GLuint name)
  * Clear (free) the shader program state that gets produced by linking.
  */
 void
-_mesa_clear_shader_program_data(struct gl_shader_program *shProg)
+_mesa_clear_shader_program_data(struct gl_context *ctx,
+                                struct gl_shader_program *shProg)
 {
-   unsigned i;
+   for (gl_shader_stage sh = 0; sh < MESA_SHADER_STAGES; sh++) {
+      if (shProg->_LinkedShaders[sh] != NULL) {
+         _mesa_delete_linked_shader(ctx, shProg->_LinkedShaders[sh]);
+         shProg->_LinkedShaders[sh] = NULL;
+      }
+   }
 
    if (shProg->UniformStorage) {
-      for (i = 0; i < shProg->NumUniformStorage; ++i)
+      for (unsigned i = 0; i < shProg->NumUniformStorage; ++i)
          _mesa_uniform_detach_all_driver_storage(&shProg->UniformStorage[i]);
       ralloc_free(shProg->UniformStorage);
       shProg->NumUniformStorage = 0;
@@ -347,11 +353,10 @@ _mesa_free_shader_program_data(struct gl_context *ctx,
                                struct gl_shader_program *shProg)
 {
    GLuint i;
-   gl_shader_stage sh;
 
    assert(shProg->Type == GL_SHADER_PROGRAM_MESA);
 
-   _mesa_clear_shader_program_data(shProg);
+   _mesa_clear_shader_program_data(ctx, shProg);
 
    if (shProg->AttributeBindings) {
       string_to_uint_map_dtor(shProg->AttributeBindings);
@@ -384,14 +389,6 @@ _mesa_free_shader_program_data(struct gl_context *ctx,
    free(shProg->TransformFeedback.VaryingNames);
    shProg->TransformFeedback.VaryingNames = NULL;
    shProg->TransformFeedback.NumVarying = 0;
-
-
-   for (sh = 0; sh < MESA_SHADER_STAGES; sh++) {
-      if (shProg->_LinkedShaders[sh] != NULL) {
-	 _mesa_delete_linked_shader(ctx, shProg->_LinkedShaders[sh]);
-	 shProg->_LinkedShaders[sh] = NULL;
-      }
-   }
 
    free(shProg->Label);
    shProg->Label = NULL;

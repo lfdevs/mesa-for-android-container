@@ -1370,7 +1370,7 @@ emit_vert_end(struct vc4_compile *c,
               struct vc4_varying_slot *fs_inputs,
               uint32_t num_fs_inputs)
 {
-        struct qreg rcp_w = qir_RCP(c, c->outputs[c->output_position_index + 3]);
+        struct qreg rcp_w = ntq_rcp(c, c->outputs[c->output_position_index + 3]);
 
         emit_stub_vpm_read(c);
 

@@ -50,6 +50,9 @@ static void __glXGLVNDSetDispatchIndex(const GLubyte *procName, int index)
 {
     unsigned internalIndex = FindGLXFunction(procName);
 
+    if (internalIndex == DI_FUNCTION_COUNT)
+        return; /* unknown or static dispatch */
+
     __glXDispatchTableIndices[internalIndex] = index;
 }
 

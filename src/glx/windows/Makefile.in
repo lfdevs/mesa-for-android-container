@@ -537,7 +537,8 @@ libwindowsglx_la_SOURCES = \
 	windowsgl.h \
 	windowsgl_internal.h \
 	windows_drawable.c \
-	wgl.c
+	wgl.c \
+	wgl.h
 
 libwindowsglx_la_CFLAGS = \
 	-I$(top_srcdir)/include \

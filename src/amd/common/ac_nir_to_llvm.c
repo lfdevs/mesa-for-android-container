@@ -2609,6 +2609,24 @@ static void emit_barrier(struct nir_to_llvm_context *ctx)
 			    ctx->voidt, NULL, 0, 0);
 }
 
+static void emit_discard_if(struct nir_to_llvm_context *ctx,
+			    nir_intrinsic_instr *instr)
+{
+	LLVMValueRef cond;
+	ctx->shader_info->fs.can_discard = true;
+
+	cond = LLVMBuildICmp(ctx->builder, LLVMIntNE,
+			     get_src(ctx, instr->src[0]),
+			     ctx->i32zero, "");
+
+	cond = LLVMBuildSelect(ctx->builder, cond,
+			       LLVMConstReal(ctx->f32, -1.0f),
+			       ctx->f32zero, "");
+	emit_llvm_intrinsic(ctx, "llvm.AMDGPU.kill",
+			    LLVMVoidTypeInContext(ctx->context),
+			    &cond, 1, 0);
+}
+
 static LLVMValueRef
 visit_load_local_invocation_index(struct nir_to_llvm_context *ctx)
 {
@@ -2920,6 +2938,9 @@ static void visit_intrinsic(struct nir_to_llvm_context *ctx,
 		emit_llvm_intrinsic(ctx, "llvm.AMDGPU.kilp",
 				    LLVMVoidTypeInContext(ctx->context),
 				    NULL, 0, 0);
+		break;
+	case nir_intrinsic_discard_if:
+		emit_discard_if(ctx, instr);
 		break;
 	case nir_intrinsic_memory_barrier:
 		emit_waitcnt(ctx);
@@ -4352,11 +4373,9 @@ handle_fs_outputs_post(struct nir_to_llvm_context *ctx,
 
 	for (unsigned i = 0; i < RADEON_LLVM_MAX_OUTPUTS; ++i) {
 		LLVMValueRef values[4];
-		bool last;
+
 		if (!(ctx->output_mask & (1ull << i)))
 			continue;
-
-		last = ctx->output_mask <= ((1ull << (i + 1)) - 1);
 
 		if (i == FRAG_RESULT_DEPTH) {
 			ctx->shader_info->fs.writes_z = true;
@@ -4367,9 +4386,13 @@ handle_fs_outputs_post(struct nir_to_llvm_context *ctx,
 			stencil = to_float(ctx, LLVMBuildLoad(ctx->builder,
 							      ctx->outputs[radeon_llvm_reg_index_soa(i, 0)], ""));
 		} else {
+			bool last = false;
 			for (unsigned j = 0; j < 4; j++)
 				values[j] = to_float(ctx, LLVMBuildLoad(ctx->builder,
 									ctx->outputs[radeon_llvm_reg_index_soa(i, j)], ""));
+
+			if (!ctx->shader_info->fs.writes_z && !ctx->shader_info->fs.writes_stencil)
+				last = ctx->output_mask <= ((1ull << (i + 1)) - 1);
 
 			si_export_mrt_color(ctx, values, V_008DFC_SQ_EXP_MRT + index, last);
 			index++;

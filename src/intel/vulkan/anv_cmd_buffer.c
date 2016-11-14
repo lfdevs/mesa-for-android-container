@@ -658,7 +658,7 @@ anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
    struct anv_push_constants *data =
       cmd_buffer->state.push_constants[stage];
    const struct brw_stage_prog_data *prog_data =
-      anv_shader_bin_get_prog_data(cmd_buffer->state.pipeline->shaders[stage]);
+      cmd_buffer->state.pipeline->shaders[stage]->prog_data;
 
    /* If we don't actually have any push constants, bail. */
    if (data == NULL || prog_data == NULL || prog_data->nr_params == 0)
