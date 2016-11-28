@@ -60,11 +60,6 @@
 #include "util/hash_table.h"
 #include "util/mesa-sha1.h"
 
-#ifdef _MSC_VER
-#include <stdlib.h>
-#define PATH_MAX _MAX_PATH
-#endif
-
 /**
  * Return mask of GLSL_x flags by examining the MESA_GLSL env var.
  */
@@ -112,13 +107,6 @@ _mesa_get_shader_capture_path(void)
    if (!read_env_var) {
       path = getenv("MESA_SHADER_CAPTURE_PATH");
       read_env_var = true;
-      if (path &&
-          strlen(path) > PATH_MAX - strlen("/fp-4294967295.shader_test")) {
-         GET_CURRENT_CONTEXT(ctx);
-         _mesa_warning(ctx, "MESA_SHADER_CAPTURE_PATH too long; ignoring "
-                            "request to capture shaders");
-         path = NULL;
-      }
    }
 
    return path;
@@ -1101,11 +1089,8 @@ _mesa_link_program(struct gl_context *ctx, struct gl_shader_program *shProg)
    const char *capture_path = _mesa_get_shader_capture_path();
    if (shProg->Name != 0 && shProg->Name != ~0 && capture_path != NULL) {
       FILE *file;
-      char filename[PATH_MAX];
-
-      _mesa_snprintf(filename, sizeof(filename), "%s/%u.shader_test",
-                     capture_path, shProg->Name);
-
+      char *filename = ralloc_asprintf(NULL, "%s/%u.shader_test",
+                                       capture_path, shProg->Name);
       file = fopen(filename, "w");
       if (file) {
          fprintf(file, "[require]\nGLSL%s >= %u.%02u\n",
@@ -1124,6 +1109,8 @@ _mesa_link_program(struct gl_context *ctx, struct gl_shader_program *shProg)
       } else {
          _mesa_warning(ctx, "Failed to open %s", filename);
       }
+
+      ralloc_free(filename);
    }
 
    if (shProg->LinkStatus == GL_FALSE &&
@@ -1618,9 +1605,9 @@ generate_sha1(const char *source, char sha_str[64])
  *
  * <path>/<stage prefix>_<CHECKSUM>.glsl
  */
-static void
+static char *
 construct_name(const gl_shader_stage stage, const char *source,
-               const char *path, char *name, unsigned length)
+               const char *path)
 {
    char sha[64];
    static const char *types[] = {
@@ -1628,8 +1615,7 @@ construct_name(const gl_shader_stage stage, const char *source,
    };
 
    generate_sha1(source, sha);
-   _mesa_snprintf(name, length, "%s/%s_%s.glsl", path, types[stage],
-                  sha);
+   return ralloc_asprintf(NULL, "%s/%s_%s.glsl", path, types[stage], sha);
 }
 
 /**
@@ -1638,7 +1624,6 @@ construct_name(const gl_shader_stage stage, const char *source,
 static void
 dump_shader(const gl_shader_stage stage, const char *source)
 {
-   char name[PATH_MAX];
    static bool path_exists = true;
    char *dump_path;
    FILE *f;
@@ -1652,7 +1637,7 @@ dump_shader(const gl_shader_stage stage, const char *source)
       return;
    }
 
-   construct_name(stage, source, dump_path, name, PATH_MAX);
+   char *name = construct_name(stage, source, dump_path);
 
    f = fopen(name, "w");
    if (f) {
@@ -1663,6 +1648,7 @@ dump_shader(const gl_shader_stage stage, const char *source)
       _mesa_warning(ctx, "could not open %s for dumping shader (%s)", name,
                     strerror(errno));
    }
+   ralloc_free(name);
 }
 
 /**
@@ -1672,7 +1658,6 @@ dump_shader(const gl_shader_stage stage, const char *source)
 static GLcharARB *
 read_shader(const gl_shader_stage stage, const char *source)
 {
-   char name[PATH_MAX];
    char *read_path;
    static bool path_exists = true;
    int len, shader_size = 0;
@@ -1688,9 +1673,9 @@ read_shader(const gl_shader_stage stage, const char *source)
       return NULL;
    }
 
-   construct_name(stage, source, read_path, name, PATH_MAX);
-
+   char *name = construct_name(stage, source, read_path);
    f = fopen(name, "r");
+   ralloc_free(name);
    if (!f)
       return NULL;
 

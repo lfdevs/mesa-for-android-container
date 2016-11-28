@@ -107,6 +107,8 @@ else
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
 	confflags_GALLIUM += --enable-vdpau
 	confflags_GALLIUM += --enable-va
+	confflags_GALLIUM += --enable-gallium-extra-hud
+	confflags_GALLIUM += --enable-lmsensors
 endif
 
 confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"

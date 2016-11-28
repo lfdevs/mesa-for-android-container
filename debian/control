@@ -16,6 +16,7 @@ Build-Depends:
  libexpat1-dev,
  dpkg-dev (>= 1.16.1),
  libgcrypt20-dev [amd64 i386 arm64 armhf ppc64el x32],
+ libsensors4-dev [!hurd-any],
  libxfixes-dev,
  libxdamage-dev,
  libxext-dev,

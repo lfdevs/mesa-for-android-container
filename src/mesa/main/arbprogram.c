@@ -41,11 +41,6 @@
 #include "program/program.h"
 #include "program/prog_print.h"
 
-#ifdef _MSC_VER
-#include <stdlib.h>
-#define PATH_MAX _MAX_PATH
-#endif
-
 /**
  * Bind a program (make it current)
  * \note Called from the GL API dispatcher by both glBindProgramNV
@@ -388,12 +383,12 @@ _mesa_ProgramStringARB(GLenum target, GLenum format, GLsizei len,
    const char *capture_path = _mesa_get_shader_capture_path();
    if (capture_path != NULL) {
       FILE *file;
-      char filename[PATH_MAX];
       const char *shader_type =
          target == GL_FRAGMENT_PROGRAM_ARB ? "fragment" : "vertex";
+      char *filename =
+         ralloc_asprintf(NULL, "%s/%cp-%u.shader_test",
+                         capture_path, shader_type[0], base->Id);
 
-      _mesa_snprintf(filename, sizeof(filename), "%s/%cp-%u.shader_test",
-                     capture_path, shader_type[0], base->Id);
       file = fopen(filename, "w");
       if (file) {
          fprintf(file,
@@ -403,6 +398,7 @@ _mesa_ProgramStringARB(GLenum target, GLenum format, GLsizei len,
       } else {
          _mesa_warning(ctx, "Failed to open %s", filename);
       }
+      ralloc_free(filename);
    }
 }
 
