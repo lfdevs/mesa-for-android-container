@@ -339,7 +339,7 @@ isl_msaa_interleaved_scale_px_to_sa(uint32_t samples,
    if (width)
       *width = isl_align(*width, 2) * px_size_sa.width;
    if (height)
-      *height = isl_align(*height, 2) * px_size_sa.width;
+      *height = isl_align(*height, 2) * px_size_sa.height;
 }
 
 static enum isl_array_pitch_span

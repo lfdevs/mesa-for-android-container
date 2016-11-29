@@ -1343,12 +1343,22 @@ flush_compute_descriptor_set(struct anv_cmd_buffer *cmd_buffer)
    struct anv_state surfaces = { 0, }, samplers = { 0, };
    VkResult result;
 
-   result = emit_samplers(cmd_buffer, MESA_SHADER_COMPUTE, &samplers);
-   if (result != VK_SUCCESS)
-      return result;
    result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, &surfaces);
-   if (result != VK_SUCCESS)
-      return result;
+   if (result != VK_SUCCESS) {
+      result = anv_cmd_buffer_new_binding_table_block(cmd_buffer);
+      assert(result == VK_SUCCESS);
+
+      /* Re-emit state base addresses so we get the new surface state base
+       * address before we start emitting binding tables etc.
+       */
+      genX(cmd_buffer_emit_state_base_address)(cmd_buffer);
+
+      result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, &surfaces);
+      assert(result == VK_SUCCESS);
+   }
+   result = emit_samplers(cmd_buffer, MESA_SHADER_COMPUTE, &samplers);
+   assert(result == VK_SUCCESS);
+
 
    struct anv_state push_state = anv_cmd_buffer_cs_push_constants(cmd_buffer);
 
@@ -1408,8 +1418,20 @@ genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
 
    genX(flush_pipeline_select_gpgpu)(cmd_buffer);
 
-   if (cmd_buffer->state.compute_dirty & ANV_CMD_DIRTY_PIPELINE)
+   if (cmd_buffer->state.compute_dirty & ANV_CMD_DIRTY_PIPELINE) {
+      /* From the Sky Lake PRM Vol 2a, MEDIA_VFE_STATE:
+       *
+       *    "A stalling PIPE_CONTROL is required before MEDIA_VFE_STATE unless
+       *    the only bits that are changed are scoreboard related: Scoreboard
+       *    Enable, Scoreboard Type, Scoreboard Mask, Scoreboard * Delta. For
+       *    these scoreboard related states, a MEDIA_STATE_FLUSH is
+       *    sufficient."
+       */
+      cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_CS_STALL_BIT;
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
       anv_batch_emit_batch(&cmd_buffer->batch, &pipeline->batch);
+   }
 
    if ((cmd_buffer->state.descriptors_dirty & VK_SHADER_STAGE_COMPUTE_BIT) ||
        (cmd_buffer->state.compute_dirty & ANV_CMD_DIRTY_PIPELINE)) {
@@ -1661,6 +1683,35 @@ genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer)
    }
 }
 
+void
+genX(cmd_buffer_emit_gen7_depth_flush)(struct anv_cmd_buffer *cmd_buffer)
+{
+   if (GEN_GEN >= 8)
+      return;
+
+   /* From the Haswell PRM, documentation for 3DSTATE_DEPTH_BUFFER:
+    *
+    *    "Restriction: Prior to changing Depth/Stencil Buffer state (i.e., any
+    *    combination of 3DSTATE_DEPTH_BUFFER, 3DSTATE_CLEAR_PARAMS,
+    *    3DSTATE_STENCIL_BUFFER, 3DSTATE_HIER_DEPTH_BUFFER) SW must first
+    *    issue a pipelined depth stall (PIPE_CONTROL with Depth Stall bit
+    *    set), followed by a pipelined depth cache flush (PIPE_CONTROL with
+    *    Depth Flush Bit set, followed by another pipelined depth stall
+    *    (PIPE_CONTROL with Depth Stall Bit set), unless SW can otherwise
+    *    guarantee that the pipeline from WM onwards is already flushed (e.g.,
+    *    via a preceding MI_FLUSH)."
+    */
+   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+      pipe.DepthStallEnable = true;
+   }
+   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+      pipe.DepthCacheFlushEnable = true;
+   }
+   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+      pipe.DepthStallEnable = true;
+   }
+}
+
 static void
 cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
 {
@@ -1676,6 +1727,8 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
 
    /* FIXME: Implement the PMA stall W/A */
    /* FIXME: Width and Height are wrong */
+
+   genX(cmd_buffer_emit_gen7_depth_flush)(cmd_buffer);
 
    /* Emit 3DSTATE_DEPTH_BUFFER */
    if (has_depth) {

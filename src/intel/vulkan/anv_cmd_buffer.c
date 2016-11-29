@@ -318,6 +318,9 @@ void anv_FreeCommandBuffers(
    for (uint32_t i = 0; i < commandBufferCount; i++) {
       ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, pCommandBuffers[i]);
 
+      if (!cmd_buffer)
+         continue;
+
       anv_cmd_buffer_destroy(cmd_buffer);
    }
 }
@@ -795,6 +798,9 @@ void anv_DestroyCommandPool(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_cmd_pool, pool, commandPool);
+
+   if (!pool)
+      return;
 
    list_for_each_entry_safe(struct anv_cmd_buffer, cmd_buffer,
                             &pool->cmd_buffers, pool_link) {

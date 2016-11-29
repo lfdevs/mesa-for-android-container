@@ -275,8 +275,12 @@ anv_DestroyImage(VkDevice _device, VkImage _image,
                  const VkAllocationCallbacks *pAllocator)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
+   ANV_FROM_HANDLE(anv_image, image, _image);
 
-   vk_free2(&device->alloc, pAllocator, anv_image_from_handle(_image));
+   if (!image)
+      return;
+
+   vk_free2(&device->alloc, pAllocator, image);
 }
 
 VkResult anv_BindImageMemory(
@@ -565,6 +569,9 @@ anv_DestroyImageView(VkDevice _device, VkImageView _iview,
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_image_view, iview, _iview);
 
+   if (!iview)
+      return;
+
    if (iview->color_rt_surface_state.alloc_size > 0) {
       anv_state_pool_free(&device->surface_state_pool,
                           iview->color_rt_surface_state);
@@ -654,6 +661,9 @@ anv_DestroyBufferView(VkDevice _device, VkBufferView bufferView,
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_buffer_view, view, bufferView);
+
+   if (!view)
+      return;
 
    if (view->surface_state.alloc_size > 0)
       anv_state_pool_free(&device->surface_state_pool,

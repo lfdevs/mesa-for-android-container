@@ -253,6 +253,10 @@ HASH		^{SPC}#{SPC}
 				    yylval->n = strtol(yytext, NULL, 10);
 				    return INTCONSTANT;
 				}
+<PP>0				{
+				    yylval->n = 0;
+				    return INTCONSTANT;
+				}
 <PP>\n				{ BEGIN 0; yylineno++; yycolumn = 0; return EOL; }
 <PP>.				{ return yytext[0]; }
 

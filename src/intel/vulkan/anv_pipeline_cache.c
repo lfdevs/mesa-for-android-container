@@ -454,6 +454,9 @@ void anv_DestroyPipelineCache(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_pipeline_cache, cache, _cache);
 
+   if (!cache)
+      return;
+
    anv_pipeline_cache_finish(cache);
 
    vk_free2(&device->alloc, pAllocator, cache);

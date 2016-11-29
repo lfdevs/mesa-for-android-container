@@ -76,6 +76,9 @@ void anv_DestroySurfaceKHR(
    ANV_FROM_HANDLE(anv_instance, instance, _instance);
    ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
 
+   if (!surface)
+      return;
+
    vk_free2(&instance->alloc, pAllocator, surface);
 }
 
@@ -294,6 +297,9 @@ void anv_DestroySwapchainKHR(
    ANV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
    const VkAllocationCallbacks *alloc;
 
+   if (!swapchain)
+      return;
+
    if (pAllocator)
      alloc = pAllocator;
    else
@@ -323,13 +329,20 @@ VkResult anv_AcquireNextImageKHR(
     VkSwapchainKHR                               _swapchain,
     uint64_t                                     timeout,
     VkSemaphore                                  semaphore,
-    VkFence                                      fence,
+    VkFence                                      _fence,
     uint32_t*                                    pImageIndex)
 {
    ANV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
+   ANV_FROM_HANDLE(anv_fence, fence, _fence);
 
-   return swapchain->acquire_next_image(swapchain, timeout, semaphore,
-                                        pImageIndex);
+   VkResult result = swapchain->acquire_next_image(swapchain, timeout,
+                                                   semaphore, pImageIndex);
+
+   /* Thanks to implicit sync, the image is ready immediately. */
+   if (fence)
+      fence->state = ANV_FENCE_STATE_SIGNALED;
+
+   return result;
 }
 
 VkResult anv_QueuePresentKHR(

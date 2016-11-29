@@ -2291,6 +2291,7 @@ void radv_CmdPipelineBarrier(
 			break;
 		case VK_ACCESS_COLOR_ATTACHMENT_READ_BIT:
 		case VK_ACCESS_TRANSFER_READ_BIT:
+		case VK_ACCESS_INPUT_ATTACHMENT_READ_BIT:
 			flush_bits |= RADV_CMD_FLUSH_AND_INV_FRAMEBUFFER | RADV_CMD_FLAG_INV_GLOBAL_L2;
 		default:
 			break;

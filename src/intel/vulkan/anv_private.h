@@ -577,6 +577,7 @@ struct anv_device {
     uint32_t                                    default_mocs;
 
     pthread_mutex_t                             mutex;
+    pthread_cond_t                              queue_submit;
 };
 
 void anv_device_get_cache_uuid(void *uuid);
@@ -1251,11 +1252,23 @@ anv_cmd_buffer_get_depth_stencil_view(const struct anv_cmd_buffer *cmd_buffer);
 
 void anv_cmd_buffer_dump(struct anv_cmd_buffer *cmd_buffer);
 
+enum anv_fence_state {
+   /** Indicates that this is a new (or newly reset fence) */
+   ANV_FENCE_STATE_RESET,
+
+   /** Indicates that this fence has been submitted to the GPU but is still
+    * (as far as we know) in use by the GPU.
+    */
+   ANV_FENCE_STATE_SUBMITTED,
+
+   ANV_FENCE_STATE_SIGNALED,
+};
+
 struct anv_fence {
    struct anv_bo bo;
    struct drm_i915_gem_execbuffer2 execbuf;
    struct drm_i915_gem_exec_object2 exec2_objects[1];
-   bool ready;
+   enum anv_fence_state state;
 };
 
 struct anv_event {

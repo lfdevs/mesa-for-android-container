@@ -463,6 +463,9 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties(
    uint32_t maxArraySize;
    VkSampleCountFlags sampleCounts = VK_SAMPLE_COUNT_1_BIT;
 
+   if (anv_formats[format].isl_format == ISL_FORMAT_UNSUPPORTED)
+      goto unsupported;
+
    anv_physical_device_get_format_properties(physical_device, format,
                                              &format_props);
 

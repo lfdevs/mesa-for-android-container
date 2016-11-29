@@ -213,7 +213,7 @@ static void
 upload_default_color(struct brw_context *brw,
                      const struct gl_sampler_object *sampler,
                      mesa_format format, GLenum base_format,
-                     bool is_integer_format,
+                     bool is_integer_format, bool is_stencil_sampling,
                      uint32_t *sdc_offset)
 {
    union gl_color_union color;
@@ -277,7 +277,7 @@ upload_default_color(struct brw_context *brw,
       uint32_t *sdc = brw_state_batch(brw, AUB_TRACE_SAMPLER_DEFAULT_COLOR,
                                       4 * 4, 64, sdc_offset);
       memcpy(sdc, color.ui, 4 * 4);
-   } else if (brw->is_haswell && is_integer_format) {
+   } else if (brw->is_haswell && (is_integer_format || is_stencil_sampling)) {
       /* Haswell's integer border color support is completely insane:
        * SAMPLER_BORDER_COLOR_STATE is 20 DWords.  The first four are
        * for float colors.  The next 12 DWords are MBZ and only exist to
@@ -291,10 +291,9 @@ upload_default_color(struct brw_context *brw,
       memset(sdc, 0, 20 * 4);
       sdc = &sdc[16];
 
+      bool stencil = format == MESA_FORMAT_S_UINT8 || is_stencil_sampling;
       const int bits_per_channel =
-         _mesa_get_format_bits(format,
-                               format == MESA_FORMAT_S_UINT8 ?
-                               GL_STENCIL_BITS : GL_RED_BITS);
+         _mesa_get_format_bits(format, stencil ? GL_STENCIL_BITS : GL_RED_BITS);
 
       /* From the Haswell PRM, "Command Reference: Structures", Page 36:
        * "If any color channel is missing from the surface format,
@@ -389,12 +388,13 @@ upload_default_color(struct brw_context *brw,
  * Sets the sampler state for a single unit based off of the sampler key
  * entry.
  */
-void
+static void
 brw_update_sampler_state(struct brw_context *brw,
                          GLenum target, bool tex_cube_map_seamless,
                          GLfloat tex_unit_lod_bias,
                          mesa_format format, GLenum base_format,
                          bool is_integer_format,
+                         bool is_stencil_sampling,
                          const struct gl_sampler_object *sampler,
                          uint32_t *sampler_state,
                          uint32_t batch_offset_for_sampler_state)
@@ -516,8 +516,8 @@ brw_update_sampler_state(struct brw_context *brw,
    if (wrap_mode_needs_border_color(wrap_s) ||
        wrap_mode_needs_border_color(wrap_t) ||
        wrap_mode_needs_border_color(wrap_r)) {
-      upload_default_color(brw, sampler,
-                           format, base_format, is_integer_format,
+      upload_default_color(brw, sampler, format, base_format,
+                           is_integer_format, is_stencil_sampling,
                            &border_color_offset);
    }
 
@@ -555,7 +555,7 @@ update_sampler_state(struct brw_context *brw,
    brw_update_sampler_state(brw, texObj->Target, ctx->Texture.CubeMapSeamless,
                             texUnit->LodBias,
                             firstImage->TexFormat, firstImage->_BaseFormat,
-                            texObj->_IsIntegerFormat,
+                            texObj->_IsIntegerFormat, texObj->StencilSampling,
                             sampler,
                             sampler_state, batch_offset_for_sampler_state);
 }

@@ -288,6 +288,9 @@ void radv_DestroySwapchainKHR(
 	RADV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
 	const VkAllocationCallbacks *alloc;
 
+	if (!_swapchain)
+		return;
+
 	if (pAllocator)
 		alloc = pAllocator;
 	else

@@ -307,7 +307,10 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         }
 
         vc4_start_draw(vc4);
-        vc4_update_compiled_shaders(vc4, info->mode);
+        if (!vc4_update_compiled_shaders(vc4, info->mode)) {
+                debug_warn_once("shader compile failed, skipping draw call.\n");
+                return;
+        }
 
         vc4_emit_state(pctx);
 

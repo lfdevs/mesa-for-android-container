@@ -247,7 +247,7 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
 
                 case QOP_ROT_MUL:
                         assert(inst->src[0].file == QFILE_TEMP);
-                        class_bits[inst->src[0].index] &= ~CLASS_BIT_R0_R3;
+                        class_bits[inst->src[0].index] &= CLASS_BIT_R0_R3;
                         break;
 
                 default:
@@ -323,7 +323,8 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
         if (!ok) {
                 fprintf(stderr, "Failed to register allocate:\n");
                 qir_dump(c);
-                abort();
+                c->failed = true;
+                return NULL;
         }
 
         for (uint32_t i = 0; i < c->num_temps; i++) {

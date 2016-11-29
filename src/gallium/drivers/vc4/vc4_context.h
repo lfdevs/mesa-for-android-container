@@ -156,6 +156,12 @@ struct vc4_compiled_shader {
 
         bool disable_early_z;
 
+        /* Set if the compile failed, likely due to register allocation
+         * failure.  In this case, we have no shader to run and should not try
+         * to do any draws.
+         */
+        bool failed;
+
         uint8_t num_inputs;
 
         /* Byte offsets for the start of the vertex attributes 0-7, and the
@@ -449,7 +455,7 @@ void vc4_flush_jobs_reading_resource(struct vc4_context *vc4,
 void vc4_emit_state(struct pipe_context *pctx);
 void vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c);
 struct qpu_reg *vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c);
-void vc4_update_compiled_shaders(struct vc4_context *vc4, uint8_t prim_mode);
+bool vc4_update_compiled_shaders(struct vc4_context *vc4, uint8_t prim_mode);
 
 bool vc4_rt_format_supported(enum pipe_format f);
 bool vc4_rt_format_is_565(enum pipe_format f);

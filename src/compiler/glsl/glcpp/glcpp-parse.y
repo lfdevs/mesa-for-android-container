@@ -176,7 +176,7 @@ add_builtin_define(glcpp_parser_t *parser, const char *name, int value);
          * (such as the <HASH> and <DEFINE> start conditions in the lexer). */
 %token DEFINED ELIF_EXPANDED HASH_TOKEN DEFINE_TOKEN FUNC_IDENTIFIER OBJ_IDENTIFIER ELIF ELSE ENDIF ERROR_TOKEN IF IFDEF IFNDEF LINE PRAGMA UNDEF VERSION_TOKEN GARBAGE IDENTIFIER IF_EXPANDED INTEGER INTEGER_STRING LINE_EXPANDED NEWLINE OTHER PLACEHOLDER SPACE PLUS_PLUS MINUS_MINUS
 %token PASTE
-%type <ival> INTEGER operator SPACE integer_constant
+%type <ival> INTEGER operator SPACE integer_constant version_constant
 %type <expression_value> expression
 %type <str> IDENTIFIER FUNC_IDENTIFIER OBJ_IDENTIFIER INTEGER_STRING OTHER ERROR_TOKEN PRAGMA
 %type <string_list> identifier_list
@@ -424,14 +424,14 @@ control_line_success:
 |	HASH_TOKEN ENDIF {
 		_glcpp_parser_skip_stack_pop (parser, & @1);
 	} NEWLINE
-|	HASH_TOKEN VERSION_TOKEN integer_constant NEWLINE {
-		if (parser->version != 0) {
+|	HASH_TOKEN VERSION_TOKEN version_constant NEWLINE {
+		if (parser->version_set) {
 			glcpp_error(& @1, parser, "#version must appear on the first line");
 		}
 		_glcpp_parser_handle_version_declaration(parser, $3, NULL, true);
 	}
-|	HASH_TOKEN VERSION_TOKEN integer_constant IDENTIFIER NEWLINE {
-		if (parser->version != 0) {
+|	HASH_TOKEN VERSION_TOKEN version_constant IDENTIFIER NEWLINE {
+		if (parser->version_set) {
 			glcpp_error(& @1, parser, "#version must appear on the first line");
 		}
 		_glcpp_parser_handle_version_declaration(parser, $3, $4, true);
@@ -468,6 +468,17 @@ integer_constant:
 	}
 |	INTEGER {
 		$$ = $1;
+	}
+
+version_constant:
+	INTEGER_STRING {
+	   /* Both octal and hexadecimal constants begin with 0. */
+	   if ($1[0] == '0' && $1[1] != '\0') {
+		glcpp_error(&@1, parser, "invalid #version \"%s\" (not a decimal constant)", $1);
+		$$ = 0;
+	   } else {
+		$$ = strtoll($1, NULL, 10);
+	   }
 	}
 
 expression:
@@ -1376,6 +1387,7 @@ glcpp_parser_create(glcpp_extension_iterator extensions, void *state, gl_api api
    parser->state = state;
    parser->api = api;
    parser->version = 0;
+   parser->version_set = false;
 
    parser->has_new_line_number = 0;
    parser->new_line_number = 1;
@@ -2318,10 +2330,11 @@ _glcpp_parser_handle_version_declaration(glcpp_parser_t *parser, intmax_t versio
                                          const char *es_identifier,
                                          bool explicitly_set)
 {
-   if (parser->version != 0)
+   if (parser->version_set)
       return;
 
    parser->version = version;
+   parser->version_set = true;
 
    add_builtin_define (parser, "__VERSION__", version);
 

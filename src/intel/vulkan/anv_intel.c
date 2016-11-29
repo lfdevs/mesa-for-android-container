@@ -55,7 +55,7 @@ VkResult anv_CreateDmaBufImageINTEL(
       goto fail;
    }
 
-   uint64_t size = pCreateInfo->strideInBytes * pCreateInfo->extent.height;
+   uint64_t size = (uint64_t)pCreateInfo->strideInBytes * pCreateInfo->extent.height;
 
    anv_bo_init(&mem->bo, gem_handle, size);
 

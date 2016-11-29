@@ -523,6 +523,7 @@ struct vc4_compile {
 
         uint32_t program_id;
         uint32_t variant_id;
+        bool failed;
 };
 
 /* Special nir_load_input intrinsic index for loading the current TLB

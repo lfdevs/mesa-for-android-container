@@ -1984,7 +1984,7 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
       } else {
          for (unsigned i = 0; i < num_components; i++) {
             bld.MOV(offset(dst, bld, i),
-                    fs_reg(ATTR, imm_offset + i, dst.type));
+                    fs_reg(ATTR, imm_offset + i + first_component, dst.type));
          }
       }
       return;

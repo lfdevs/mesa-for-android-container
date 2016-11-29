@@ -896,6 +896,12 @@ VkResult anv_CreateDevice(
 
    pthread_mutex_init(&device->mutex, NULL);
 
+   pthread_condattr_t condattr;
+   pthread_condattr_init(&condattr);
+   pthread_condattr_setclock(&condattr, CLOCK_MONOTONIC);
+   pthread_cond_init(&device->queue_submit, NULL);
+   pthread_condattr_destroy(&condattr);
+
    anv_bo_pool_init(&device->batch_bo_pool, device);
 
    anv_block_pool_init(&device->dynamic_state_block_pool, device, 16384);
@@ -1001,10 +1007,11 @@ VkResult anv_EnumerateInstanceExtensionProperties(
       return VK_SUCCESS;
    }
 
-   assert(*pPropertyCount >= ARRAY_SIZE(global_extensions));
+   *pPropertyCount = MIN2(*pPropertyCount, ARRAY_SIZE(global_extensions));
+   typed_memcpy(pProperties, global_extensions, *pPropertyCount);
 
-   *pPropertyCount = ARRAY_SIZE(global_extensions);
-   memcpy(pProperties, global_extensions, sizeof(global_extensions));
+   if (*pPropertyCount < ARRAY_SIZE(global_extensions))
+      return VK_INCOMPLETE;
 
    return VK_SUCCESS;
 }
@@ -1020,10 +1027,11 @@ VkResult anv_EnumerateDeviceExtensionProperties(
       return VK_SUCCESS;
    }
 
-   assert(*pPropertyCount >= ARRAY_SIZE(device_extensions));
+   *pPropertyCount = MIN2(*pPropertyCount, ARRAY_SIZE(device_extensions));
+   typed_memcpy(pProperties, device_extensions, *pPropertyCount);
 
-   *pPropertyCount = ARRAY_SIZE(device_extensions);
-   memcpy(pProperties, device_extensions, sizeof(device_extensions));
+   if (*pPropertyCount < ARRAY_SIZE(device_extensions))
+      return VK_INCOMPLETE;
 
    return VK_SUCCESS;
 }
@@ -1141,6 +1149,11 @@ VkResult anv_QueueSubmit(
       result = anv_device_execbuf(device, &fence->execbuf, &fence_bo);
       if (result != VK_SUCCESS)
          goto out;
+
+      /* Update the fence and wake up any waiters */
+      assert(fence->state == ANV_FENCE_STATE_RESET);
+      fence->state = ANV_FENCE_STATE_SUBMITTED;
+      pthread_cond_broadcast(&device->queue_submit);
    }
 
 out:
@@ -1518,7 +1531,11 @@ VkResult anv_CreateFence(
    fence->execbuf.rsvd1 = device->context_id;
    fence->execbuf.rsvd2 = 0;
 
-   fence->ready = false;
+   if (pCreateInfo->flags & VK_FENCE_CREATE_SIGNALED_BIT) {
+      fence->state = ANV_FENCE_STATE_SIGNALED;
+   } else {
+      fence->state = ANV_FENCE_STATE_RESET;
+   }
 
    *pFence = anv_fence_to_handle(fence);
 
@@ -1533,6 +1550,9 @@ void anv_DestroyFence(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_fence, fence, _fence);
 
+   if (!fence)
+      return;
+
    assert(fence->bo.map == fence);
    anv_bo_pool_free(&device->batch_bo_pool, &fence->bo);
 }
@@ -1544,7 +1564,7 @@ VkResult anv_ResetFences(
 {
    for (uint32_t i = 0; i < fenceCount; i++) {
       ANV_FROM_HANDLE(anv_fence, fence, pFences[i]);
-      fence->ready = false;
+      fence->state = ANV_FENCE_STATE_RESET;
    }
 
    return VK_SUCCESS;
@@ -1559,26 +1579,41 @@ VkResult anv_GetFenceStatus(
    int64_t t = 0;
    int ret;
 
-   if (fence->ready)
+   switch (fence->state) {
+   case ANV_FENCE_STATE_RESET:
+      /* If it hasn't even been sent off to the GPU yet, it's not ready */
+      return VK_NOT_READY;
+
+   case ANV_FENCE_STATE_SIGNALED:
+      /* It's been signaled, return success */
       return VK_SUCCESS;
 
-   ret = anv_gem_wait(device, fence->bo.gem_handle, &t);
-   if (ret == 0) {
-      fence->ready = true;
-      return VK_SUCCESS;
+   case ANV_FENCE_STATE_SUBMITTED:
+      /* It's been submitted to the GPU but we don't know if it's done yet. */
+      ret = anv_gem_wait(device, fence->bo.gem_handle, &t);
+      if (ret == 0) {
+         fence->state = ANV_FENCE_STATE_SIGNALED;
+         return VK_SUCCESS;
+      } else {
+         return VK_NOT_READY;
+      }
+   default:
+      unreachable("Invalid fence status");
    }
-
-   return VK_NOT_READY;
 }
+
+#define NSEC_PER_SEC 1000000000
+#define INT_TYPE_MAX(type) ((1ull << (sizeof(type) * 8 - 1)) - 1)
 
 VkResult anv_WaitForFences(
     VkDevice                                    _device,
     uint32_t                                    fenceCount,
     const VkFence*                              pFences,
     VkBool32                                    waitAll,
-    uint64_t                                    timeout)
+    uint64_t                                    _timeout)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
+   int ret;
 
    /* DRM_IOCTL_I915_GEM_WAIT uses a signed 64 bit timeout and is supposed
     * to block indefinitely timeouts <= 0.  Unfortunately, this was broken
@@ -1587,22 +1622,107 @@ VkResult anv_WaitForFences(
     * best we can do is to clamp the timeout to INT64_MAX.  This limits the
     * maximum timeout from 584 years to 292 years - likely not a big deal.
     */
-   if (timeout > INT64_MAX)
-      timeout = INT64_MAX;
+   int64_t timeout = MIN2(_timeout, INT64_MAX);
 
-   int64_t t = timeout;
+   uint32_t pending_fences = fenceCount;
+   while (pending_fences) {
+      pending_fences = 0;
+      bool signaled_fences = false;
+      for (uint32_t i = 0; i < fenceCount; i++) {
+         ANV_FROM_HANDLE(anv_fence, fence, pFences[i]);
+         switch (fence->state) {
+         case ANV_FENCE_STATE_RESET:
+            /* This fence hasn't been submitted yet, we'll catch it the next
+             * time around.  Yes, this may mean we dead-loop but, short of
+             * lots of locking and a condition variable, there's not much that
+             * we can do about that.
+             */
+            pending_fences++;
+            continue;
 
-   /* FIXME: handle !waitAll */
+         case ANV_FENCE_STATE_SIGNALED:
+            /* This fence is not pending.  If waitAll isn't set, we can return
+             * early.  Otherwise, we have to keep going.
+             */
+            if (!waitAll)
+               return VK_SUCCESS;
+            continue;
 
-   for (uint32_t i = 0; i < fenceCount; i++) {
-      ANV_FROM_HANDLE(anv_fence, fence, pFences[i]);
-      int ret = anv_gem_wait(device, fence->bo.gem_handle, &t);
-      if (ret == -1 && errno == ETIME) {
-         return VK_TIMEOUT;
-      } else if (ret == -1) {
-         /* We don't know the real error. */
-         return vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "gem wait failed: %m");
+         case ANV_FENCE_STATE_SUBMITTED:
+            /* These are the fences we really care about.  Go ahead and wait
+             * on it until we hit a timeout.
+             */
+            ret = anv_gem_wait(device, fence->bo.gem_handle, &timeout);
+            if (ret == -1 && errno == ETIME) {
+               return VK_TIMEOUT;
+            } else if (ret == -1) {
+               /* We don't know the real error. */
+               return vk_errorf(VK_ERROR_DEVICE_LOST, "gem wait failed: %m");
+            } else {
+               fence->state = ANV_FENCE_STATE_SIGNALED;
+               signaled_fences = true;
+               if (!waitAll)
+                  return VK_SUCCESS;
+               continue;
+            }
+         }
+      }
+
+      if (pending_fences && !signaled_fences) {
+         /* If we've hit this then someone decided to vkWaitForFences before
+          * they've actually submitted any of them to a queue.  This is a
+          * fairly pessimal case, so it's ok to lock here and use a standard
+          * pthreads condition variable.
+          */
+         pthread_mutex_lock(&device->mutex);
+
+         /* It's possible that some of the fences have changed state since the
+          * last time we checked.  Now that we have the lock, check for
+          * pending fences again and don't wait if it's changed.
+          */
+         uint32_t now_pending_fences = 0;
+         for (uint32_t i = 0; i < fenceCount; i++) {
+            ANV_FROM_HANDLE(anv_fence, fence, pFences[i]);
+            if (fence->state == ANV_FENCE_STATE_RESET)
+               now_pending_fences++;
+         }
+         assert(now_pending_fences <= pending_fences);
+
+         if (now_pending_fences == pending_fences) {
+            struct timespec before;
+            clock_gettime(CLOCK_MONOTONIC, &before);
+
+            uint32_t abs_nsec = before.tv_nsec + timeout % NSEC_PER_SEC;
+            uint64_t abs_sec = before.tv_sec + (abs_nsec / NSEC_PER_SEC) +
+                               (timeout / NSEC_PER_SEC);
+            abs_nsec %= NSEC_PER_SEC;
+
+            /* Avoid roll-over in tv_sec on 32-bit systems if the user
+             * provided timeout is UINT64_MAX
+             */
+            struct timespec abstime;
+            abstime.tv_nsec = abs_nsec;
+            abstime.tv_sec = MIN2(abs_sec, INT_TYPE_MAX(abstime.tv_sec));
+
+            ret = pthread_cond_timedwait(&device->queue_submit,
+                                         &device->mutex, &abstime);
+            assert(ret != EINVAL);
+
+            struct timespec after;
+            clock_gettime(CLOCK_MONOTONIC, &after);
+            uint64_t time_elapsed =
+               ((uint64_t)after.tv_sec * NSEC_PER_SEC + after.tv_nsec) -
+               ((uint64_t)before.tv_sec * NSEC_PER_SEC + before.tv_nsec);
+
+            if (time_elapsed >= timeout) {
+               pthread_mutex_unlock(&device->mutex);
+               return VK_TIMEOUT;
+            }
+
+            timeout -= time_elapsed;
+         }
+
+         pthread_mutex_unlock(&device->mutex);
       }
    }
 
@@ -1671,6 +1791,9 @@ void anv_DestroyEvent(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_event, event, _event);
+
+   if (!event)
+      return;
 
    anv_state_pool_free(&device->dynamic_state_pool, event->state);
 }
@@ -1764,6 +1887,9 @@ void anv_DestroyBuffer(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
 
+   if (!buffer)
+      return;
+
    vk_free2(&device->alloc, pAllocator, buffer);
 }
 
@@ -1790,6 +1916,9 @@ void anv_DestroySampler(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_sampler, sampler, _sampler);
+
+   if (!sampler)
+      return;
 
    vk_free2(&device->alloc, pAllocator, sampler);
 }
@@ -1834,6 +1963,9 @@ void anv_DestroyFramebuffer(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_framebuffer, fb, _fb);
+
+   if (!fb)
+      return;
 
    vk_free2(&device->alloc, pAllocator, fb);
 }

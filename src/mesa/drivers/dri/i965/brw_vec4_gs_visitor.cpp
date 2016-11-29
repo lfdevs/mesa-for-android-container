@@ -626,7 +626,8 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
    shader = brw_postprocess_nir(shader, compiler->devinfo, is_scalar);
 
    prog_data->include_primitive_id =
-      (shader->info.inputs_read & VARYING_BIT_PRIMITIVE_ID) != 0;
+      (shader->info.inputs_read & VARYING_BIT_PRIMITIVE_ID) ||
+      (shader->info.system_values_read & (1 << SYSTEM_VALUE_PRIMITIVE_ID));
 
    prog_data->invocations = shader->info.gs.invocations;
 

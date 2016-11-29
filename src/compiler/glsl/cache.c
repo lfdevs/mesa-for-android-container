@@ -612,19 +612,18 @@ cache_put(struct program_cache *cache,
 
    p_atomic_add(cache->size, size);
 
+ done:
+   if (fd_final != -1)
+      close(fd_final);
    /* This close finally releases the flock, (now that the final dile
     * has been renamed into place and the size has been added).
     */
-   close(fd);
-   fd = -1;
-
- done:
+   if (fd != -1)
+      close(fd);
    if (filename_tmp)
       ralloc_free(filename_tmp);
    if (filename)
       ralloc_free(filename);
-   if (fd != -1)
-      close(fd);
 }
 
 void *

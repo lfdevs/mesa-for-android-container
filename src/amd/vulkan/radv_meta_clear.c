@@ -998,7 +998,7 @@ radv_cmd_clear_image(struct radv_cmd_buffer *cmd_buffer,
 		const VkImageSubresourceRange *range = &ranges[r];
 		for (uint32_t l = 0; l < radv_get_levelCount(image, range); ++l) {
 			const uint32_t layer_count = image->type == VK_IMAGE_TYPE_3D ?
-				radv_minify(image->extent.depth, l) :
+				radv_minify(image->extent.depth, range->baseMipLevel + l) :
 				radv_get_layerCount(image, range);
 			for (uint32_t s = 0; s < layer_count; ++s) {
 				struct radv_image_view iview;

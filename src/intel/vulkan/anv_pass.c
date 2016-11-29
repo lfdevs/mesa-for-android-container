@@ -146,6 +146,9 @@ void anv_DestroyRenderPass(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_render_pass, pass, _pass);
 
+   if (!pass)
+      return;
+
    vk_free2(&device->alloc, pAllocator, pass->subpass_attachments);
    vk_free2(&device->alloc, pAllocator, pass);
 }

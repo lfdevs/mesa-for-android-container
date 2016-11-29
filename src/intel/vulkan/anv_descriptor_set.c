@@ -200,6 +200,9 @@ void anv_DestroyDescriptorSetLayout(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_descriptor_set_layout, set_layout, _set_layout);
 
+   if (!set_layout)
+      return;
+
    vk_free2(&device->alloc, pAllocator, set_layout);
 }
 
@@ -282,6 +285,9 @@ void anv_DestroyPipelineLayout(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_pipeline_layout, pipeline_layout, _pipelineLayout);
 
+   if (!pipeline_layout)
+      return;
+
    vk_free2(&device->alloc, pAllocator, pipeline_layout);
 }
 
@@ -354,6 +360,9 @@ void anv_DestroyDescriptorPool(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_descriptor_pool, pool, _pool);
+
+   if (!pool)
+      return;
 
    anv_state_stream_finish(&pool->surface_state_stream);
    vk_free2(&device->alloc, pAllocator, pool);
@@ -545,6 +554,9 @@ VkResult anv_FreeDescriptorSets(
 
    for (uint32_t i = 0; i < count; i++) {
       ANV_FROM_HANDLE(anv_descriptor_set, set, pDescriptorSets[i]);
+
+      if (!set)
+         continue;
 
       anv_descriptor_set_destroy(device, pool, set);
    }

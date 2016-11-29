@@ -642,7 +642,8 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname,
       *params = shProg->Validated;
       return;
    case GL_INFO_LOG_LENGTH:
-      *params = shProg->InfoLog ? strlen(shProg->InfoLog) + 1 : 0;
+      *params = (shProg->InfoLog && shProg->InfoLog[0] != '\0') ?
+         strlen(shProg->InfoLog) + 1 : 0;
       return;
    case GL_ATTACHED_SHADERS:
       *params = shProg->NumShaders;
@@ -890,7 +891,8 @@ get_shaderiv(struct gl_context *ctx, GLuint name, GLenum pname, GLint *params)
       *params = shader->CompileStatus;
       break;
    case GL_INFO_LOG_LENGTH:
-      *params = shader->InfoLog ? strlen(shader->InfoLog) + 1 : 0;
+      *params = (shader->InfoLog && shader->InfoLog[0] != '\0') ?
+         strlen(shader->InfoLog) + 1 : 0;
       break;
    case GL_SHADER_SOURCE_LENGTH:
       *params = shader->Source ? strlen((char *) shader->Source) + 1 : 0;

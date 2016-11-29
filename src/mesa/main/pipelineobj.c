@@ -645,7 +645,8 @@ _mesa_GetProgramPipelineiv(GLuint pipeline, GLenum pname, GLint *params)
       *params = pipe->ActiveProgram ? pipe->ActiveProgram->Name : 0;
       return;
    case GL_INFO_LOG_LENGTH:
-      *params = pipe->InfoLog ? strlen(pipe->InfoLog) + 1 : 0;
+      *params = (pipe->InfoLog && pipe->InfoLog[0] != '\0') ?
+         strlen(pipe->InfoLog) + 1 : 0;
       return;
    case GL_VALIDATE_STATUS:
       *params = pipe->Validated;

@@ -75,6 +75,9 @@ void anv_DestroyShaderModule(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_shader_module, module, _module);
 
+   if (!module)
+      return;
+
    vk_free2(&device->alloc, pAllocator, module);
 }
 
@@ -188,6 +191,9 @@ void anv_DestroyPipeline(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_pipeline, pipeline, _pipeline);
+
+   if (!pipeline)
+      return;
 
    anv_reloc_list_finish(&pipeline->batch_relocs,
                          pAllocator ? pAllocator : &device->alloc);

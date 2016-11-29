@@ -1,3 +1,12 @@
+mesa (13.0.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * workaround-binutils-mips-844357.diff: Add workaround for broken
+    binutils on mips*. Fixes invalid symbol table of libGL.so.1. See
+    also Bug #844357.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 29 Nov 2016 16:29:00 +0100
+
 mesa (13.0.1-2) unstable; urgency=medium
 
   * Cherry-pick commit 1809f17 (mesa: Drop PATH_MAX usage.) from

@@ -157,7 +157,6 @@ ir_visitor_status
 output_read_remover::visit_leave(ir_emit_vertex *ir)
 {
    hash_table_call_foreach(replacements, emit_return_copy, ir);
-   _mesa_hash_table_clear(replacements, NULL);
    return visit_continue;
 }
 

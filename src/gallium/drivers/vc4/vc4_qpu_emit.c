@@ -565,9 +565,12 @@ vc4_generate_code_block(struct vc4_compile *c,
 void
 vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
 {
-        struct qpu_reg *temp_registers = vc4_register_allocate(vc4, c);
         struct qblock *start_block = list_first_entry(&c->blocks,
                                                       struct qblock, link);
+
+        struct qpu_reg *temp_registers = vc4_register_allocate(vc4, c);
+        if (!temp_registers)
+                return;
 
         switch (c->stage) {
         case QSTAGE_VERT:

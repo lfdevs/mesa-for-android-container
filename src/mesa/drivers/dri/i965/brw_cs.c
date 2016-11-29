@@ -231,7 +231,7 @@ brw_upload_cs_prog(struct brw_context *brw)
                          &brw->cs.base.prog_data)) {
       bool success =
          brw_codegen_cs_prog(brw,
-                             ctx->Shader.CurrentProgram[MESA_SHADER_COMPUTE],
+                             ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE],
                              cp, &key);
       (void) success;
       assert(success);

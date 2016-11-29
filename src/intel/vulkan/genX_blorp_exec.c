@@ -164,6 +164,8 @@ genX(blorp_exec)(struct blorp_batch *batch,
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
+   genX(cmd_buffer_emit_gen7_depth_flush)(cmd_buffer);
+
    blorp_exec(batch, params);
 
    cmd_buffer->state.vb_dirty = ~0;

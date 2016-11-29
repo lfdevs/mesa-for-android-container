@@ -129,8 +129,9 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libvulkan_wsi_la_LIBADD =
-am__libvulkan_wsi_la_SOURCES_DIST = wsi_common.h wsi_common_x11.c \
-	wsi_common_x11.h wsi_common_wayland.c wsi_common_wayland.h
+am__libvulkan_wsi_la_SOURCES_DIST = wsi_common.h wsi_common_queue.h \
+	wsi_common_x11.c wsi_common_x11.h wsi_common_wayland.c \
+	wsi_common_wayland.h
 am__objects_1 =
 am__objects_2 = wsi_common_x11.lo
 @HAVE_PLATFORM_X11_TRUE@am__objects_3 = $(am__objects_2)
@@ -507,7 +508,8 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 VULKAN_WSI_FILES := \
-	wsi_common.h
+	wsi_common.h \
+	wsi_common_queue.h
 
 VULKAN_WSI_WAYLAND_FILES := \
 	wsi_common_wayland.c \
