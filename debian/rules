@@ -8,14 +8,7 @@
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
-DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
-DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
-ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
-	confflags += --build=$(DEB_HOST_GNU_TYPE)
-else
-	confflags += --build=$(DEB_BUILD_GNU_TYPE) --host=$(DEB_HOST_GNU_TYPE)
-endif
 
 ifeq (,$(filter $(DEB_HOST_ARCH), armhf))
 buildflags = \
@@ -111,6 +104,12 @@ else
 	confflags_GALLIUM += --enable-lmsensors
 endif
 
+# Disable assembly usage on x32 otherwise Mesa defaults to x86_64 assembly
+# which doesn't work on x32 (see #758094)
+ifneq (,$(filter $(DEB_HOST_ARCH), x32))
+	confflags += --disable-asm
+endif
+
 confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
 confflags_GLES = --enable-gles1 --enable-gles2
 confflags_GALLIUM += --with-gallium-drivers="$(GALLIUM_DRIVERS)"
@@ -150,7 +149,6 @@ override_dh_clean:
 
 override_dh_auto_configure:
 	dh_auto_configure -- \
-		--disable-silent-rules \
 		$(confflags)
 
 override_dh_auto_install:
@@ -218,8 +216,7 @@ override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4
 
 %:
-	dh $@ --with quilt,autoreconf \
-		--parallel \
+	dh $@ --with quilt \
 		--builddirectory=build/
 
 # For maintainer use only, generate a tarball:

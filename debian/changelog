@@ -1,3 +1,27 @@
+mesa (13.0.2-3) unstable; urgency=medium
+
+  * Fix typo to correctly disable asm on x32. Should fix FTBFS on x32.
+  * Add debian/source/format file.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 15 Dec 2016 16:42:25 +0100
+
+mesa (13.0.2-2) unstable; urgency=medium
+
+  * Bump llvm/libclang build-deps to >= 1:3.9.1.
+    - Enables support for OpenCL on AMD Polaris GPUs (Closes: #848173).
+  * Cherry-pick 6dc96de (cso: don't release sampler states that are
+    bound) from upstream master branch. Fixes random GPU hangs on
+    radeonsi (AMD Southern Islands and newer) in many games.
+  * Bump debhelper compat to 10.
+  * Stop passing --disable-silent-rules to configure, debhelper does
+    that for a while.
+  * Drop no longer needed dpkg-dev versioned build-dependency.
+  * Drop redundant cross-build detection, debhelper does this for us
+    already.
+  * Disable assembly usage on x32. Related to Bug #758094.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 15 Dec 2016 15:16:56 +0100
+
 mesa (13.0.2-1) unstable; urgency=medium
 
   * New upstream release.

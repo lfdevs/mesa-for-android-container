@@ -188,7 +188,9 @@ cso_insert_state(struct cso_cache *sc,
                  void *state)
 {
    struct cso_hash *hash = _cso_hash_for_type(sc, type);
-   sanitize_hash(sc, hash, type, sc->max_size);
+
+   if (type != CSO_SAMPLER)
+      sanitize_hash(sc, hash, type, sc->max_size);
 
    return cso_hash_insert(hash, hash_key, state);
 }
