@@ -154,6 +154,12 @@ static void si_emit_derived_tess_state(struct si_context *sctx,
 	 */
 	*num_patches = MIN2(*num_patches, 40);
 
+	/* SI bug workaround - limit LS-HS threadgroups to only one wave. */
+	if (sctx->b.chip_class == SI) {
+		unsigned one_wave = 64 / MAX2(num_tcs_input_cp, num_tcs_output_cp);
+		*num_patches = MIN2(*num_patches, one_wave);
+	}
+
 	output_patch0_offset = input_patch_size * *num_patches;
 	perpatch_output_offset = output_patch0_offset + pervertex_output_patch_size;
 
@@ -162,11 +168,13 @@ static void si_emit_derived_tess_state(struct si_context *sctx,
 
 	if (sctx->b.chip_class >= CIK) {
 		assert(lds_size <= 65536);
-		ls_rsrc2 |= S_00B52C_LDS_SIZE(align(lds_size, 512) / 512);
+		lds_size = align(lds_size, 512) / 512;
 	} else {
 		assert(lds_size <= 32768);
-		ls_rsrc2 |= S_00B52C_LDS_SIZE(align(lds_size, 256) / 256);
+		lds_size = align(lds_size, 256) / 256;
 	}
+	si_multiwave_lds_size_workaround(sctx->screen, &lds_size);
+	ls_rsrc2 |= S_00B52C_LDS_SIZE(lds_size);
 
 	if (sctx->last_ls == ls->current &&
 	    sctx->last_tcs == tcs &&
@@ -284,10 +292,18 @@ static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 
 		/* Needed for 028B6C_DISTRIBUTION_MODE != 0 */
 		if (sctx->screen->has_distributed_tess) {
-			if (sctx->gs_shader.cso)
+			if (sctx->gs_shader.cso) {
 				partial_es_wave = true;
-			else
+
+				/* GPU hang workaround. */
+				if (sctx->b.family == CHIP_TONGA ||
+				    sctx->b.family == CHIP_FIJI ||
+				    sctx->b.family == CHIP_POLARIS10 ||
+				    sctx->b.family == CHIP_POLARIS11)
+					partial_vs_wave = true;
+			} else {
 				partial_vs_wave = true;
+			}
 		}
 	}
 

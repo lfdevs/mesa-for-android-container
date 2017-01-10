@@ -1356,21 +1356,12 @@ flush_compute_descriptor_set(struct anv_cmd_buffer *cmd_buffer)
       result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, &surfaces);
       assert(result == VK_SUCCESS);
    }
+
    result = emit_samplers(cmd_buffer, MESA_SHADER_COMPUTE, &samplers);
    assert(result == VK_SUCCESS);
 
-
-   struct anv_state push_state = anv_cmd_buffer_cs_push_constants(cmd_buffer);
-
    const struct brw_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
    const struct brw_stage_prog_data *prog_data = &cs_prog_data->base;
-
-   if (push_state.alloc_size) {
-      anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_CURBE_LOAD), curbe) {
-         curbe.CURBETotalDataLength    = push_state.alloc_size;
-         curbe.CURBEDataStartAddress   = push_state.offset;
-      }
-   }
 
    const uint32_t slm_size = encode_slm_size(GEN_GEN, prog_data->total_shared);
 
@@ -1439,6 +1430,18 @@ genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
       result = flush_compute_descriptor_set(cmd_buffer);
       assert(result == VK_SUCCESS);
       cmd_buffer->state.descriptors_dirty &= ~VK_SHADER_STAGE_COMPUTE_BIT;
+   }
+
+   if (cmd_buffer->state.push_constants_dirty & VK_SHADER_STAGE_COMPUTE_BIT) {
+      struct anv_state push_state =
+         anv_cmd_buffer_cs_push_constants(cmd_buffer);
+
+      if (push_state.alloc_size) {
+         anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_CURBE_LOAD), curbe) {
+            curbe.CURBETotalDataLength    = push_state.alloc_size;
+            curbe.CURBEDataStartAddress   = push_state.offset;
+         }
+      }
    }
 
    cmd_buffer->state.compute_dirty = 0;
@@ -1796,10 +1799,10 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
    if (has_hiz) {
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_HIER_DEPTH_BUFFER), hdb) {
          hdb.HierarchicalDepthBufferObjectControlState = GENX(MOCS);
-         hdb.SurfacePitch = image->hiz_surface.isl.row_pitch - 1;
+         hdb.SurfacePitch = image->aux_surface.isl.row_pitch - 1;
          hdb.SurfaceBaseAddress = (struct anv_address) {
             .bo = image->bo,
-            .offset = image->offset + image->hiz_surface.offset,
+            .offset = image->offset + image->aux_surface.offset,
          };
 #if GEN_GEN >= 8
          /* From the SKL PRM Vol2a:
@@ -1809,11 +1812,14 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
           *    - SURFTYPE_1D: distance in pixels between array slices
           *    - SURFTYPE_2D/CUBE: distance in rows between array slices
           *    - SURFTYPE_3D: distance in rows between R - slices
+          *
+          * Unfortunately, the docs aren't 100% accurate here.  They fail to
+          * mention that the 1-D rule only applies to linear 1-D images.
+          * Since depth and HiZ buffers are always tiled, they are treated as
+          * 2-D images.  Prior to Sky Lake, this field is always in rows.
           */
          hdb.SurfaceQPitch =
-            image->hiz_surface.isl.dim == ISL_SURF_DIM_1D ?
-               isl_surf_get_array_pitch_el(&image->hiz_surface.isl) >> 2 :
-               isl_surf_get_array_pitch_el_rows(&image->hiz_surface.isl) >> 2;
+            isl_surf_get_array_pitch_el_rows(&image->aux_surface.isl) >> 2;
 #endif
       }
    } else {

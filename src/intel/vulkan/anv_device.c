@@ -24,6 +24,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -162,8 +163,6 @@ anv_physical_device_init(struct anv_physical_device *device,
          device->info.max_cs_threads = max_cs_threads;
    }
 
-   close(fd);
-
    brw_process_intel_debug_variable();
 
    device->compiler = brw_compiler_create(NULL, &device->info);
@@ -175,12 +174,15 @@ anv_physical_device_init(struct anv_physical_device *device,
    device->compiler->shader_perf_log = compiler_perf_log;
 
    result = anv_init_wsi(device);
-   if (result != VK_SUCCESS)
-       goto fail;
+   if (result != VK_SUCCESS) {
+      ralloc_free(device->compiler);
+      goto fail;
+   }
 
    /* XXX: Actually detect bit6 swizzling */
    isl_device_init(&device->isl_dev, &device->info, swizzled);
 
+   close(fd);
    return VK_SUCCESS;
 
 fail:
@@ -527,7 +529,7 @@ void anv_GetPhysicalDeviceProperties(
       .maxGeometryTotalOutputComponents         = 1024,
       .maxFragmentInputComponents               = 128,
       .maxFragmentOutputAttachments             = 8,
-      .maxFragmentDualSrcAttachments            = 2,
+      .maxFragmentDualSrcAttachments            = 1,
       .maxFragmentCombinedOutputResources       = 8,
       .maxComputeSharedMemorySize               = 32768,
       .maxComputeWorkGroupCount                 = { 65535, 65535, 65535 },
@@ -967,9 +969,9 @@ void anv_DestroyDevice(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
 
-   anv_queue_finish(&device->queue);
-
    anv_device_finish_blorp(device);
+
+   anv_queue_finish(&device->queue);
 
 #ifdef HAVE_VALGRIND
    /* We only need to free these to prevent valgrind errors.  The backing
@@ -978,21 +980,26 @@ void anv_DestroyDevice(
    anv_state_pool_free(&device->dynamic_state_pool, device->border_colors);
 #endif
 
+   anv_scratch_pool_finish(device, &device->scratch_pool);
+
    anv_gem_munmap(device->workaround_bo.map, device->workaround_bo.size);
    anv_gem_close(device, device->workaround_bo.gem_handle);
 
-   anv_bo_pool_finish(&device->batch_bo_pool);
-   anv_state_pool_finish(&device->dynamic_state_pool);
-   anv_block_pool_finish(&device->dynamic_state_block_pool);
-   anv_state_pool_finish(&device->instruction_state_pool);
-   anv_block_pool_finish(&device->instruction_block_pool);
    anv_state_pool_finish(&device->surface_state_pool);
    anv_block_pool_finish(&device->surface_state_block_pool);
-   anv_scratch_pool_finish(device, &device->scratch_pool);
+   anv_state_pool_finish(&device->instruction_state_pool);
+   anv_block_pool_finish(&device->instruction_block_pool);
+   anv_state_pool_finish(&device->dynamic_state_pool);
+   anv_block_pool_finish(&device->dynamic_state_block_pool);
+
+   anv_bo_pool_finish(&device->batch_bo_pool);
+
+   pthread_cond_destroy(&device->queue_submit);
+   pthread_mutex_destroy(&device->mutex);
+
+   anv_gem_destroy_context(device, device->context_id);
 
    close(device->fd);
-
-   pthread_mutex_destroy(&device->mutex);
 
    vk_free(&device->alloc, device);
 }
@@ -1236,6 +1243,9 @@ VkResult anv_AllocateMemory(
 
    mem->type_index = pAllocateInfo->memoryTypeIndex;
 
+   mem->map = NULL;
+   mem->map_size = 0;
+
    *pMem = anv_device_memory_to_handle(mem);
 
    return VK_SUCCESS;
@@ -1256,6 +1266,9 @@ void anv_FreeMemory(
 
    if (mem == NULL)
       return;
+
+   if (mem->map)
+      anv_UnmapMemory(_device, _mem);
 
    if (mem->bo.map)
       anv_gem_munmap(mem->bo.map, mem->bo.size);
@@ -1303,8 +1316,12 @@ VkResult anv_MapMemory(
    /* Let's map whole pages */
    map_size = align_u64(map_size, 4096);
 
-   mem->map = anv_gem_mmap(device, mem->bo.gem_handle,
-                           map_offset, map_size, gem_flags);
+   void *map = anv_gem_mmap(device, mem->bo.gem_handle,
+                            map_offset, map_size, gem_flags);
+   if (map == MAP_FAILED)
+      return vk_error(VK_ERROR_MEMORY_MAP_FAILED);
+
+   mem->map = map;
    mem->map_size = map_size;
 
    *ppData = mem->map + (offset - map_offset);
@@ -1322,6 +1339,9 @@ void anv_UnmapMemory(
       return;
 
    anv_gem_munmap(mem->map, mem->map_size);
+
+   mem->map = NULL;
+   mem->map_size = 0;
 }
 
 static void

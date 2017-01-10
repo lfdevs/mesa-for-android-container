@@ -111,6 +111,7 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 TESTS = test_fs_cmod_propagation$(EXEEXT) \
+	test_fs_copy_propagation$(EXEEXT) \
 	test_fs_saturate_propagation$(EXEEXT) test_eu_compact$(EXEEXT) \
 	test_vf_float_conversions$(EXEEXT) \
 	test_vec4_cmod_propagation$(EXEEXT) \
@@ -262,6 +263,7 @@ libi965_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(libi965_gen9_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 am__EXEEXT_1 = test_fs_cmod_propagation$(EXEEXT) \
+	test_fs_copy_propagation$(EXEEXT) \
 	test_fs_saturate_propagation$(EXEEXT) test_eu_compact$(EXEEXT) \
 	test_vf_float_conversions$(EXEEXT) \
 	test_vec4_cmod_propagation$(EXEEXT) \
@@ -280,6 +282,12 @@ am_test_fs_cmod_propagation_OBJECTS =  \
 test_fs_cmod_propagation_OBJECTS =  \
 	$(am_test_fs_cmod_propagation_OBJECTS)
 test_fs_cmod_propagation_DEPENDENCIES =  \
+	$(top_builddir)/src/gtest/libgtest.la $(am__DEPENDENCIES_2)
+am_test_fs_copy_propagation_OBJECTS =  \
+	test_fs_copy_propagation.$(OBJEXT)
+test_fs_copy_propagation_OBJECTS =  \
+	$(am_test_fs_copy_propagation_OBJECTS)
+test_fs_copy_propagation_DEPENDENCIES =  \
 	$(top_builddir)/src/gtest/libgtest.la $(am__DEPENDENCIES_2)
 am_test_fs_saturate_propagation_OBJECTS =  \
 	test_fs_saturate_propagation.$(OBJEXT)
@@ -369,6 +377,7 @@ SOURCES = $(libi965_compiler_la_SOURCES) $(libi965_dri_la_SOURCES) \
 	$(libi965_gen9_la_SOURCES) $(test_eu_compact_SOURCES) \
 	$(nodist_EXTRA_test_eu_compact_SOURCES) \
 	$(test_fs_cmod_propagation_SOURCES) \
+	$(test_fs_copy_propagation_SOURCES) \
 	$(test_fs_saturate_propagation_SOURCES) \
 	$(test_vec4_cmod_propagation_SOURCES) \
 	$(test_vec4_copy_propagation_SOURCES) \
@@ -379,6 +388,7 @@ DIST_SOURCES = $(libi965_compiler_la_SOURCES) \
 	$(libi965_gen7_la_SOURCES) $(libi965_gen75_la_SOURCES) \
 	$(libi965_gen8_la_SOURCES) $(libi965_gen9_la_SOURCES) \
 	$(test_eu_compact_SOURCES) $(test_fs_cmod_propagation_SOURCES) \
+	$(test_fs_copy_propagation_SOURCES) \
 	$(test_fs_saturate_propagation_SOURCES) \
 	$(test_vec4_cmod_propagation_SOURCES) \
 	$(test_vec4_copy_propagation_SOURCES) \
@@ -1260,6 +1270,13 @@ test_fs_cmod_propagation_LDADD = \
 	$(top_builddir)/src/gtest/libgtest.la \
 	$(TEST_LIBS)
 
+test_fs_copy_propagation_SOURCES = \
+	test_fs_copy_propagation.cpp
+
+test_fs_copy_propagation_LDADD = \
+	$(top_builddir)/src/gtest/libgtest.la \
+	$(TEST_LIBS)
+
 test_fs_saturate_propagation_SOURCES = \
 	test_fs_saturate_propagation.cpp
 
@@ -1384,6 +1401,10 @@ test_eu_compact$(EXEEXT): $(test_eu_compact_OBJECTS) $(test_eu_compact_DEPENDENC
 test_fs_cmod_propagation$(EXEEXT): $(test_fs_cmod_propagation_OBJECTS) $(test_fs_cmod_propagation_DEPENDENCIES) $(EXTRA_test_fs_cmod_propagation_DEPENDENCIES) 
 	@rm -f test_fs_cmod_propagation$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(test_fs_cmod_propagation_OBJECTS) $(test_fs_cmod_propagation_LDADD) $(LIBS)
+
+test_fs_copy_propagation$(EXEEXT): $(test_fs_copy_propagation_OBJECTS) $(test_fs_copy_propagation_DEPENDENCIES) $(EXTRA_test_fs_copy_propagation_DEPENDENCIES) 
+	@rm -f test_fs_copy_propagation$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(test_fs_copy_propagation_OBJECTS) $(test_fs_copy_propagation_LDADD) $(LIBS)
 
 test_fs_saturate_propagation$(EXEEXT): $(test_fs_saturate_propagation_OBJECTS) $(test_fs_saturate_propagation_DEPENDENCIES) $(EXTRA_test_fs_saturate_propagation_DEPENDENCIES) 
 	@rm -f test_fs_saturate_propagation$(EXEEXT)
@@ -1611,6 +1632,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libi965_gen9_la-genX_blorp_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_eu_compact.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_fs_cmod_propagation.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_fs_copy_propagation.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_fs_saturate_propagation.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_vec4_cmod_propagation.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_vec4_copy_propagation.Po@am__quote@
@@ -1902,6 +1924,13 @@ recheck: all $(check_PROGRAMS)
 test_fs_cmod_propagation.log: test_fs_cmod_propagation$(EXEEXT)
 	@p='test_fs_cmod_propagation$(EXEEXT)'; \
 	b='test_fs_cmod_propagation'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test_fs_copy_propagation.log: test_fs_copy_propagation$(EXEEXT)
+	@p='test_fs_copy_propagation$(EXEEXT)'; \
+	b='test_fs_copy_propagation'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

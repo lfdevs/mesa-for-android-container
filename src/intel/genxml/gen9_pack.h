@@ -8220,7 +8220,6 @@ GEN9_MI_SEMAPHORE_SIGNAL_pack(__gen_user_data *data, void * restrict dst,
 #define GEN9_MI_SEMAPHORE_WAIT_header           \
    .CommandType                         =      0,  \
    .MICommandOpcode                     =     28,  \
-   .RegisterPollMode                    =      1,  \
    .DWordLength                         =      2
 
 struct GEN9_MI_SEMAPHORE_WAIT {
@@ -8229,7 +8228,7 @@ struct GEN9_MI_SEMAPHORE_WAIT {
    uint32_t                             MemoryType;
 #define PerProcessGraphicsAddress                0
 #define GlobalGraphicsAddress                    1
-   uint32_t                             RegisterPollMode;
+   bool                                 RegisterPollMode;
    uint32_t                             WaitMode;
 #define PollingMode                              1
 #define SignalMode                               0

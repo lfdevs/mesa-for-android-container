@@ -1,0 +1,387 @@
+commit e933246013eef376804662f3fcf4646c143c6c88
+Author: Heiko Przybyl <lil_tux@web.de>
+Date:   Sun Nov 20 14:42:28 2016 +0100
+
+    r600/sb: Fix loop optimization related hangs on eg
+    
+    Make sure unused ops and their references are removed, prior to entering
+    the GCM (global code motion) pass, to stop GCM from breaking the loop
+    logic and thus hanging the GPU.
+    
+    Turns out, that sb has problems with loops and node optimizations
+    regarding associative folding:
+    
+    - the global code motion (gcm) pass moves ops up a loop level/basic block
+    until they've fulfilled their total usage count
+    - if there are ops folded into others, the usage count won't be
+    fulfilled and thus the op moved way up to the top
+    - within GCM the op would be visited and their deps would be moved
+    alongside it, to fulfill the src constaints
+    - in a loop, an unused op is moved out of the loop and GCM would move
+    the src value ops up as well
+    - now here arises the problem: if the loop counter is one of the src
+    values it would get moved up as well, the loop break condition would
+    never get hit and the shader turn into an endless loop, resulting in the
+    GPU hanging and being reset
+    
+    A reduced (albeit nonsense) piglit example would be:
+    
+    [require]
+    GLSL >= 1.20
+    
+    [fragment shader]
+    
+    uniform int SIZE;
+    uniform vec4 lights[512];
+    
+    void main()
+    {
+        float x = 0;
+        for(int i = 0; i < SIZE; i++)
+            x += lights[2*i+1].x;
+    }
+    
+    [test]
+    uniform int SIZE 1
+    draw rect -1 -1 2 2
+    
+    Which gets optimized to:
+    
+    ===== SHADER #12 OPT ================================== PS/BARTS/EVERGREEN =====
+    ===== 42 dw ===== 1 gprs ===== 2 stack =========================================
+    ALU 3 @24
+         1      y: MOV                R0.y,  0
+                t: MULLO_UINT         R0.w,  [0x00000002 2.8026e-45].x, R0.z
+    
+    LOOP_START_DX10 @22
+    PUSH @6
+    ALU 1 @30 KC0[CB0:0-15]
+         2 M    x: PRED_SETGE_INT     __.x,  R0.z, KC0[0].x
+    JUMP @14 POP:1
+    LOOP_BREAK @20
+    POP @14 POP:1
+    ALU 2 @32
+         3      x: ADD_INT            R0.x,  R0.w, [0x00000002 2.8026e-45].x
+    
+    TEX 1 @36
+                   VFETCH             R0.x___, R0.x,   RID:0   MFC:16 UCF:0 FMT[..]
+    ALU 1 @40
+         4      y: ADD                R0.y,  R0.y, R0.x
+    LOOP_END @4
+    EXPORT_DONE        PIXEL 0     R0.____  EOP
+    ===== SHADER_END ===============================================================
+    
+    Notice R0.z being the loop counter/break condition relevant register
+    and being never incremented at all. Also some of the loop content
+    has been moved out of it, to fulfill the requirements for the one unused
+    op.
+    
+    With a debug build of mesa this would produce an error like
+    error at : PRED_SETGE_INT     __, __, EM.2,    R1.x.2||FP@R0.z, C0.x
+      : operand value R1.x.2||FP@R0.z was not previously written to its gpr
+    and the compilation would fail due to this. On a release build it gets
+    passed to the GPU.
+    
+    When using this patch, the loop remains intact:
+    
+    ===== SHADER #12 OPT ================================== PS/BARTS/EVERGREEN =====
+    ===== 48 dw ===== 1 gprs ===== 2 stack =========================================
+    ALU 2 @24
+         1      y: MOV                R0.y,  0
+                z: MOV                R0.z,  0
+    LOOP_START_DX10 @22
+    PUSH @6
+    ALU 1 @28 KC0[CB0:0-15]
+         2 M    x: PRED_SETGE_INT     __.x,  R0.z, KC0[0].x
+    JUMP @14 POP:1
+    LOOP_BREAK @20
+    POP @14 POP:1
+    ALU 4 @30
+         3      t: MULLO_UINT         T0.x,  [0x00000002 2.8026e-45].x, R0.z
+    
+         4      x: ADD_INT            R0.x,  T0.x, [0x00000002 2.8026e-45].x
+    
+    TEX 1 @40
+                   VFETCH             R0.x___, R0.x,   RID:0   MFC:16 UCF:0 FMT[..]
+    ALU 2 @44
+         5      y: ADD                R0.y,  R0.y, R0.x
+                z: ADD_INT            R0.z,  R0.z, 1
+    LOOP_END @4
+    EXPORT_DONE        PIXEL 0     R0.____  EOP
+    ===== SHADER_END ===============================================================
+    
+    Piglit: ./piglit summary console -d results/*_gpu_noglx
+            name: unpatched_gpu_noglx patched_gpu_noglx
+            ----  ------------------- -----------------
+            pass:               18016             18021
+            fail:                 748               743
+            crash:                  7                 7
+            skip:                1124              1124
+            timeout:                0                 0
+            warn:                  13                13
+            incomplete:             0                 0
+            dmesg-warn:             0                 0
+            dmesg-fail:             0                 0
+            changes:                0                 5
+            fixes:                  0                 5
+            regressions:            0                 0
+            total:              19908             19908
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=94900
+    Tested-by: Heiko Przybyl <lil_tux@web.de>
+    Tested-on: Barts PRO HD6850
+    Signed-off-by: Heiko Przybyl <lil_tux@web.de>
+    Signed-off-by: Marek Olšák <marek.olsak@amd.com>
+
+diff --git a/src/gallium/drivers/r600/sb/sb_dce_cleanup.cpp b/src/gallium/drivers/r600/sb/sb_dce_cleanup.cpp
+index 79aef91..abae2bf 100644
+--- a/src/gallium/drivers/r600/sb/sb_dce_cleanup.cpp
++++ b/src/gallium/drivers/r600/sb/sb_dce_cleanup.cpp
+@@ -30,6 +30,18 @@
+ 
+ namespace r600_sb {
+ 
++int dce_cleanup::run() {
++	int r;
++
++	// Run cleanup for as long as there are unused nodes.
++	do {
++		nodes_changed = false;
++		r = vpass::run();
++	} while (r == 0 && nodes_changed);
++
++	return r;
++}
++
+ bool dce_cleanup::visit(node& n, bool enter) {
+ 	if (enter) {
+ 	} else {
+@@ -110,7 +122,18 @@ bool dce_cleanup::visit(region_node& n, bool enter) {
+ void dce_cleanup::cleanup_dst(node& n) {
+ 	if (!cleanup_dst_vec(n.dst) && remove_unused &&
+ 			!n.dst.empty() && !(n.flags & NF_DONT_KILL) && n.parent)
++	{
++		// Delete use references to the removed node from the src values.
++		for (vvec::iterator I = n.src.begin(), E = n.src.end(); I != E; ++I) {
++			value* v = *I;
++			if (v && v->def && v->uses.size())
++			{
++				v->remove_use(&n);
++			}
++		}
+ 		n.remove();
++		nodes_changed = true;
++	}
+ }
+ 
+ bool dce_cleanup::visit(container_node& n, bool enter) {
+@@ -130,7 +153,7 @@ bool dce_cleanup::cleanup_dst_vec(vvec& vv) {
+ 		if (v->gvn_source && v->gvn_source->is_dead())
+ 			v->gvn_source = NULL;
+ 
+-		if (v->is_dead() || (remove_unused && !v->is_rel() && !v->uses))
++		if (v->is_dead() || (remove_unused && !v->is_rel() && !v->uses.size()))
+ 			v = NULL;
+ 		else
+ 			alive = true;
+diff --git a/src/gallium/drivers/r600/sb/sb_gcm.cpp b/src/gallium/drivers/r600/sb/sb_gcm.cpp
+index 236b2ea..9c75389 100644
+--- a/src/gallium/drivers/r600/sb/sb_gcm.cpp
++++ b/src/gallium/drivers/r600/sb/sb_gcm.cpp
+@@ -199,10 +199,9 @@ void gcm::td_release_val(value *v) {
+ 		sblog << "\n";
+ 	);
+ 
+-	use_info *u = v->uses;
+-	while (u) {
++	for (uselist::iterator I = v->uses.begin(), E = v->uses.end(); I != E; ++I) {
++		use_info *u = *I;
+ 		if (u->op->parent != &pending) {
+-			u = u->next;
+ 			continue;
+ 		}
+ 
+@@ -212,6 +211,7 @@ void gcm::td_release_val(value *v) {
+ 			sblog << "\n";
+ 		);
+ 
++		assert(uses[u->op] > 0);
+ 		if (--uses[u->op] == 0) {
+ 			GCM_DUMP(
+ 				sblog << "td        released : ";
+@@ -222,7 +222,6 @@ void gcm::td_release_val(value *v) {
+ 			pending.remove_node(u->op);
+ 			ready.push_back(u->op);
+ 		}
+-		u = u->next;
+ 	}
+ 
+ }
+diff --git a/src/gallium/drivers/r600/sb/sb_ir.cpp b/src/gallium/drivers/r600/sb/sb_ir.cpp
+index 5226893..d989dce 100644
+--- a/src/gallium/drivers/r600/sb/sb_ir.cpp
++++ b/src/gallium/drivers/r600/sb/sb_ir.cpp
+@@ -255,7 +255,7 @@ void container_node::expand() {
+ void node::remove() {parent->remove_node(this);
+ }
+ 
+-value_hash node::hash_src() {
++value_hash node::hash_src() const {
+ 
+ 	value_hash h = 12345;
+ 
+@@ -269,7 +269,7 @@ value_hash node::hash_src() {
+ }
+ 
+ 
+-value_hash node::hash() {
++value_hash node::hash() const {
+ 
+ 	if (parent && parent->subtype == NST_LOOP_PHI_CONTAINER)
+ 		return 47451;
+diff --git a/src/gallium/drivers/r600/sb/sb_ir.h b/src/gallium/drivers/r600/sb/sb_ir.h
+index 4fc4da2..74c0549 100644
+--- a/src/gallium/drivers/r600/sb/sb_ir.h
++++ b/src/gallium/drivers/r600/sb/sb_ir.h
+@@ -446,15 +446,16 @@ enum use_kind {
+ };
+ 
+ struct use_info {
+-	use_info *next;
+ 	node *op;
+ 	use_kind kind;
+ 	int arg;
+ 
+-	use_info(node *n, use_kind kind, int arg, use_info* next)
+-		: next(next), op(n), kind(kind), arg(arg) {}
++	use_info(node *n, use_kind kind, int arg)
++		: op(n), kind(kind), arg(arg) {}
+ };
+ 
++typedef std::list< use_info * > uselist;
++
+ enum constraint_kind {
+ 	CK_SAME_REG,
+ 	CK_PACKED_BS,
+@@ -498,7 +499,7 @@ public:
+ 	value_hash ghash;
+ 
+ 	node *def, *adef;
+-	use_info *uses;
++	uselist uses;
+ 
+ 	ra_constraint *constraint;
+ 	ra_chunk *chunk;
+@@ -585,6 +586,7 @@ public:
+ 	}
+ 
+ 	void add_use(node *n, use_kind kind, int arg);
++	void remove_use(const node *n);
+ 
+ 	value_hash hash();
+ 	value_hash rel_hash();
+@@ -790,8 +792,8 @@ public:
+ 	void replace_with(node *n);
+ 	void remove();
+ 
+-	virtual value_hash hash();
+-	value_hash hash_src();
++	virtual value_hash hash() const;
++	value_hash hash_src() const;
+ 
+ 	virtual bool fold_dispatch(expr_handler *ex);
+ 
+diff --git a/src/gallium/drivers/r600/sb/sb_pass.h b/src/gallium/drivers/r600/sb/sb_pass.h
+index 0346df1..e878f8c 100644
+--- a/src/gallium/drivers/r600/sb/sb_pass.h
++++ b/src/gallium/drivers/r600/sb/sb_pass.h
+@@ -124,7 +124,9 @@ class dce_cleanup : public vpass {
+ public:
+ 
+ 	dce_cleanup(shader &s) : vpass(s),
+-		remove_unused(s.dce_flags & DF_REMOVE_UNUSED) {}
++		remove_unused(s.dce_flags & DF_REMOVE_UNUSED), nodes_changed(false) {}
++
++	virtual int run();
+ 
+ 	virtual bool visit(node &n, bool enter);
+ 	virtual bool visit(alu_group_node &n, bool enter);
+@@ -140,6 +142,8 @@ private:
+ 	void cleanup_dst(node &n);
+ 	bool cleanup_dst_vec(vvec &vv);
+ 
++	// Did we alter/remove nodes during a single pass?
++	bool nodes_changed;
+ };
+ 
+ 
+diff --git a/src/gallium/drivers/r600/sb/sb_valtable.cpp b/src/gallium/drivers/r600/sb/sb_valtable.cpp
+index eb242b1..a8b7b49 100644
+--- a/src/gallium/drivers/r600/sb/sb_valtable.cpp
++++ b/src/gallium/drivers/r600/sb/sb_valtable.cpp
+@@ -220,17 +220,33 @@ void value::add_use(node* n, use_kind kind, int arg) {
+ 	dump::dump_op(n);
+ 	sblog << "     kind " << kind << "    arg " << arg << "\n";
+ 	}
+-	uses = new use_info(n, kind, arg, uses);
++	uses.push_back(new use_info(n, kind, arg));
+ }
+ 
+-unsigned value::use_count() {
+-	use_info *u = uses;
+-	unsigned c = 0;
+-	while (u) {
+-		++c;
+-		u = u->next;
++struct use_node_comp {
++	explicit use_node_comp(const node *n) : n(n) {}
++	bool operator() (const use_info *u) {
++		return u->op->hash() == n->hash();
++	}
++
++	private:
++		const node *n;
++};
++
++void value::remove_use(const node *n) {
++	uselist::iterator it =
++		std::find_if(uses.begin(), uses.end(), use_node_comp(n));
++
++	if (it != uses.end())
++	{
++		// TODO assert((*it)->kind == kind) ?
++		// TODO assert((*it)->arg == arg) ?
++		uses.erase(it);
+ 	}
+-	return c;
++}
++
++unsigned value::use_count() {
++	return uses.size();
+ }
+ 
+ bool value::is_global() {
+@@ -274,13 +290,7 @@ bool value::is_prealloc() {
+ }
+ 
+ void value::delete_uses() {
+-	use_info *u, *c = uses;
+-	while (c) {
+-		u = c->next;
+-		delete c;
+-		c = u;
+-	}
+-	uses = NULL;
++	uses.erase(uses.begin(), uses.end());
+ }
+ 
+ void ra_constraint::update_values() {
+@@ -468,7 +478,7 @@ bool r600_sb::sb_value_set::add_vec(vvec& vv) {
+ bool r600_sb::sb_value_set::contains(value* v) {
+ 	unsigned b = v->uid - 1;
+ 	if (b < bs.size())
+-		return bs.get(v->uid - 1);
++		return bs.get(b);
+ 	else
+ 		return false;
+ }

@@ -401,9 +401,15 @@ glsl_glsl_test_DEPENDENCIES = glsl/libglsl.la glsl/libstandalone.la \
 am_glsl_tests_blob_test_OBJECTS = glsl/tests/blob_test.$(OBJEXT)
 glsl_tests_blob_test_OBJECTS = $(am_glsl_tests_blob_test_OBJECTS)
 glsl_tests_blob_test_DEPENDENCIES = glsl/libglsl.la
-am_glsl_tests_cache_test_OBJECTS = glsl/tests/cache_test.$(OBJEXT)
+am_glsl_tests_cache_test_OBJECTS =  \
+	glsl/tests/glsl_tests_cache_test-cache_test.$(OBJEXT)
 glsl_tests_cache_test_OBJECTS = $(am_glsl_tests_cache_test_OBJECTS)
-glsl_tests_cache_test_DEPENDENCIES = glsl/libglsl.la
+glsl_tests_cache_test_DEPENDENCIES = glsl/libglsl.la \
+	$(am__DEPENDENCIES_1)
+glsl_tests_cache_test_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(glsl_tests_cache_test_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 am_glsl_tests_general_ir_test_OBJECTS =  \
 	glsl/tests/builtin_variable_test.$(OBJEXT) \
 	glsl/tests/invalidate_locations_test.$(OBJEXT) \
@@ -1389,8 +1395,12 @@ glsl_tests_blob_test_LDADD = \
 glsl_tests_cache_test_SOURCES = \
 	glsl/tests/cache_test.c
 
+glsl_tests_cache_test_CFLAGS = \
+	$(PTHREAD_CFLAGS)
+
 glsl_tests_cache_test_LDADD = \
-	glsl/libglsl.la
+	glsl/libglsl.la					\
+	$(PTHREAD_LIBS)
 
 glsl_tests_general_ir_test_SOURCES = \
 	glsl/tests/builtin_variable_test.cpp		\
@@ -2024,12 +2034,13 @@ glsl/tests/blob_test.$(OBJEXT): glsl/tests/$(am__dirstamp) \
 glsl/tests/blob-test$(EXEEXT): $(glsl_tests_blob_test_OBJECTS) $(glsl_tests_blob_test_DEPENDENCIES) $(EXTRA_glsl_tests_blob_test_DEPENDENCIES) glsl/tests/$(am__dirstamp)
 	@rm -f glsl/tests/blob-test$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(glsl_tests_blob_test_OBJECTS) $(glsl_tests_blob_test_LDADD) $(LIBS)
-glsl/tests/cache_test.$(OBJEXT): glsl/tests/$(am__dirstamp) \
+glsl/tests/glsl_tests_cache_test-cache_test.$(OBJEXT):  \
+	glsl/tests/$(am__dirstamp) \
 	glsl/tests/$(DEPDIR)/$(am__dirstamp)
 
 glsl/tests/cache-test$(EXEEXT): $(glsl_tests_cache_test_OBJECTS) $(glsl_tests_cache_test_DEPENDENCIES) $(EXTRA_glsl_tests_cache_test_DEPENDENCIES) glsl/tests/$(am__dirstamp)
 	@rm -f glsl/tests/cache-test$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(glsl_tests_cache_test_OBJECTS) $(glsl_tests_cache_test_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(glsl_tests_cache_test_LINK) $(glsl_tests_cache_test_OBJECTS) $(glsl_tests_cache_test_LDADD) $(LIBS)
 glsl/tests/builtin_variable_test.$(OBJEXT):  \
 	glsl/tests/$(am__dirstamp) \
 	glsl/tests/$(DEPDIR)/$(am__dirstamp)
@@ -2220,9 +2231,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/glcpp/$(DEPDIR)/pp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/blob_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/builtin_variable_test.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/cache_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/copy_constant_to_storage_tests.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/general_ir_test.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/glsl_tests_cache_test-cache_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/invalidate_locations_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/sampler_types_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/set_uniform_initializer_tests.Po@am__quote@
@@ -2330,6 +2341,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+glsl/tests/glsl_tests_cache_test-cache_test.o: glsl/tests/cache_test.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(glsl_tests_cache_test_CFLAGS) $(CFLAGS) -MT glsl/tests/glsl_tests_cache_test-cache_test.o -MD -MP -MF glsl/tests/$(DEPDIR)/glsl_tests_cache_test-cache_test.Tpo -c -o glsl/tests/glsl_tests_cache_test-cache_test.o `test -f 'glsl/tests/cache_test.c' || echo '$(srcdir)/'`glsl/tests/cache_test.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) glsl/tests/$(DEPDIR)/glsl_tests_cache_test-cache_test.Tpo glsl/tests/$(DEPDIR)/glsl_tests_cache_test-cache_test.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='glsl/tests/cache_test.c' object='glsl/tests/glsl_tests_cache_test-cache_test.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(glsl_tests_cache_test_CFLAGS) $(CFLAGS) -c -o glsl/tests/glsl_tests_cache_test-cache_test.o `test -f 'glsl/tests/cache_test.c' || echo '$(srcdir)/'`glsl/tests/cache_test.c
+
+glsl/tests/glsl_tests_cache_test-cache_test.obj: glsl/tests/cache_test.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(glsl_tests_cache_test_CFLAGS) $(CFLAGS) -MT glsl/tests/glsl_tests_cache_test-cache_test.obj -MD -MP -MF glsl/tests/$(DEPDIR)/glsl_tests_cache_test-cache_test.Tpo -c -o glsl/tests/glsl_tests_cache_test-cache_test.obj `if test -f 'glsl/tests/cache_test.c'; then $(CYGPATH_W) 'glsl/tests/cache_test.c'; else $(CYGPATH_W) '$(srcdir)/glsl/tests/cache_test.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) glsl/tests/$(DEPDIR)/glsl_tests_cache_test-cache_test.Tpo glsl/tests/$(DEPDIR)/glsl_tests_cache_test-cache_test.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='glsl/tests/cache_test.c' object='glsl/tests/glsl_tests_cache_test-cache_test.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(glsl_tests_cache_test_CFLAGS) $(CFLAGS) -c -o glsl/tests/glsl_tests_cache_test-cache_test.obj `if test -f 'glsl/tests/cache_test.c'; then $(CYGPATH_W) 'glsl/tests/cache_test.c'; else $(CYGPATH_W) '$(srcdir)/glsl/tests/cache_test.c'; fi`
 
 spirv/spirv2nir-spirv2nir.o: spirv/spirv2nir.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(spirv2nir_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT spirv/spirv2nir-spirv2nir.o -MD -MP -MF spirv/$(DEPDIR)/spirv2nir-spirv2nir.Tpo -c -o spirv/spirv2nir-spirv2nir.o `test -f 'spirv/spirv2nir.c' || echo '$(srcdir)/'`spirv/spirv2nir.c

@@ -3563,9 +3563,17 @@ builtin_builder::_tanh(const glsl_type *type)
    ir_variable *x = in_var(type, "x");
    MAKE_SIG(type, v130, 1, x);
 
+   /* Clamp x to [-10, +10] to avoid precision problems.
+    * When x > 10, e^(-x) is so small relative to e^x that it gets flushed to
+    * zero in the computation e^x + e^(-x). The same happens in the other
+    * direction when x < -10.
+    */
+   ir_variable *t = body.make_temp(type, "tmp");
+   body.emit(assign(t, min2(max2(x, imm(-10.0f)), imm(10.0f))));
+
    /* (e^x - e^(-x)) / (e^x + e^(-x)) */
-   body.emit(ret(div(sub(exp(x), exp(neg(x))),
-                     add(exp(x), exp(neg(x))))));
+   body.emit(ret(div(sub(exp(t), exp(neg(t))),
+                     add(exp(t), exp(neg(t))))));
 
    return sig;
 }

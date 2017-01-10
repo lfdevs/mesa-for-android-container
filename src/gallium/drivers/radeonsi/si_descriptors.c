@@ -413,13 +413,13 @@ static void si_set_sampler_view(struct si_context *sctx,
 	struct si_sampler_views *views = &sctx->samplers[shader].views;
 	struct si_sampler_view *rview = (struct si_sampler_view*)view;
 	struct si_descriptors *descs = si_sampler_descriptors(sctx, shader);
+	uint32_t *desc = descs->list + slot * 16;
 
 	if (views->views[slot] == view && !disallow_early_out)
 		return;
 
 	if (view) {
 		struct r600_texture *rtex = (struct r600_texture *)view->texture;
-		uint32_t *desc = descs->list + slot * 16;
 
 		assert(rtex); /* views with texture == NULL aren't supported */
 		pipe_sampler_view_reference(&views->views[slot], view);
@@ -468,9 +468,14 @@ static void si_set_sampler_view(struct si_context *sctx,
 					   rview->is_stencil_sampler, true);
 	} else {
 		pipe_sampler_view_reference(&views->views[slot], NULL);
-		memcpy(descs->list + slot*16, null_texture_descriptor, 8*4);
+		memcpy(desc, null_texture_descriptor, 8*4);
 		/* Only clear the lower dwords of FMASK. */
-		memcpy(descs->list + slot*16 + 8, null_texture_descriptor, 4*4);
+		memcpy(desc + 8, null_texture_descriptor, 4*4);
+		/* Re-set the sampler state if we are transitioning from FMASK. */
+		if (views->sampler_states[slot])
+			memcpy(desc + 12,
+			       views->sampler_states[slot], 4*4);
+
 		views->enabled_mask &= ~(1u << slot);
 	}
 
@@ -803,10 +808,10 @@ static void si_bind_sampler_states(struct pipe_context *ctx,
 		/* If FMASK is bound, don't overwrite it.
 		 * The sampler state will be set after FMASK is unbound.
 		 */
-		if (samplers->views.views[i] &&
-		    samplers->views.views[i]->texture &&
-		    samplers->views.views[i]->texture->target != PIPE_BUFFER &&
-		    ((struct r600_texture*)samplers->views.views[i]->texture)->fmask.size)
+		if (samplers->views.views[slot] &&
+		    samplers->views.views[slot]->texture &&
+		    samplers->views.views[slot]->texture->target != PIPE_BUFFER &&
+		    ((struct r600_texture*)samplers->views.views[slot]->texture)->fmask.size)
 			continue;
 
 		memcpy(desc->list + slot * 16 + 12, sstates[i]->val, 4*4);

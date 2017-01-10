@@ -1777,10 +1777,15 @@ static bool si_update_gs_ring_buffers(struct si_context *sctx)
 				   sctx->esgs_ring, 0, sctx->esgs_ring->width0,
 				   false, false, 0, 0, 0);
 	}
-	if (sctx->gsvs_ring)
+	if (sctx->gsvs_ring) {
 		si_set_ring_buffer(&sctx->b.b, SI_VS_RING_GSVS,
 				   sctx->gsvs_ring, 0, sctx->gsvs_ring->width0,
 				   false, false, 0, 0, 0);
+
+		/* Also update SI_GS_RING_GSVSi descriptors. */
+		sctx->last_gsvs_itemsize = 0;
+	}
+
 	return true;
 }
 

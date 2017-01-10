@@ -129,7 +129,7 @@ fs_copy_prop_dataflow::fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
          foreach_in_list(acp_entry, entry, &out_acp[block->num][i]) {
             acp[next_acp] = entry;
 
-            /* opt_copy_propagate_local populates out_acp with copies created
+            /* opt_copy_propagation_local populates out_acp with copies created
              * in a block which are still live at the end of the block.  This
              * is exactly what we want in the COPY set.
              */
@@ -431,7 +431,9 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
    if (entry->saturate) {
       switch(inst->opcode) {
       case BRW_OPCODE_SEL:
-         if (inst->src[1].file != IMM ||
+         if ((inst->conditional_mod != BRW_CONDITIONAL_GE &&
+              inst->conditional_mod != BRW_CONDITIONAL_L) ||
+             inst->src[1].file != IMM ||
              inst->src[1].f < 0.0 ||
              inst->src[1].f > 1.0) {
             return false;
@@ -735,8 +737,8 @@ can_propagate_from(fs_inst *inst)
  * list.
  */
 bool
-fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
-                                     exec_list *acp)
+fs_visitor::opt_copy_propagation_local(void *copy_prop_ctx, bblock_t *block,
+                                       exec_list *acp)
 {
    bool progress = false;
 
@@ -819,7 +821,7 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
 }
 
 bool
-fs_visitor::opt_copy_propagate()
+fs_visitor::opt_copy_propagation()
 {
    bool progress = false;
    void *copy_prop_ctx = ralloc_context(NULL);
@@ -832,8 +834,8 @@ fs_visitor::opt_copy_propagate()
     * the set of copies available at the end of the block.
     */
    foreach_block (block, cfg) {
-      progress = opt_copy_propagate_local(copy_prop_ctx, block,
-                                          out_acp[block->num]) || progress;
+      progress = opt_copy_propagation_local(copy_prop_ctx, block,
+                                            out_acp[block->num]) || progress;
    }
 
    /* Do dataflow analysis for those available copies. */
@@ -852,7 +854,8 @@ fs_visitor::opt_copy_propagate()
          }
       }
 
-      progress = opt_copy_propagate_local(copy_prop_ctx, block, in_acp) || progress;
+      progress = opt_copy_propagation_local(copy_prop_ctx, block, in_acp) ||
+                 progress;
    }
 
    for (int i = 0; i < cfg->num_blocks; i++)

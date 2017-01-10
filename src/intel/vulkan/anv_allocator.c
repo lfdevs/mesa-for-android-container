@@ -246,10 +246,12 @@ anv_ptr_free_list_push(void **list, void *elem)
 static uint32_t
 anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state);
 
-void
+VkResult
 anv_block_pool_init(struct anv_block_pool *pool,
                     struct anv_device *device, uint32_t block_size)
 {
+   VkResult result;
+
    assert(util_is_power_of_two(block_size));
 
    pool->device = device;
@@ -260,17 +262,23 @@ anv_block_pool_init(struct anv_block_pool *pool,
 
    pool->fd = memfd_create("block pool", MFD_CLOEXEC);
    if (pool->fd == -1)
-      return;
+      return vk_error(VK_ERROR_INITIALIZATION_FAILED);
 
    /* Just make it 2GB up-front.  The Linux kernel won't actually back it
     * with pages until we either map and fault on one of them or we use
     * userptr and send a chunk of it off to the GPU.
     */
-   if (ftruncate(pool->fd, BLOCK_POOL_MEMFD_SIZE) == -1)
-      return;
+   if (ftruncate(pool->fd, BLOCK_POOL_MEMFD_SIZE) == -1) {
+      result = vk_error(VK_ERROR_INITIALIZATION_FAILED);
+      goto fail_fd;
+   }
 
-   u_vector_init(&pool->mmap_cleanups,
-                   round_to_power_of_two(sizeof(struct anv_mmap_cleanup)), 128);
+   if (!u_vector_init(&pool->mmap_cleanups,
+                      round_to_power_of_two(sizeof(struct anv_mmap_cleanup)),
+                      128)) {
+      result = vk_error(VK_ERROR_INITIALIZATION_FAILED);
+      goto fail_fd;
+   }
 
    pool->state.next = 0;
    pool->state.end = 0;
@@ -279,6 +287,13 @@ anv_block_pool_init(struct anv_block_pool *pool,
 
    /* Immediately grow the pool so we'll have a backing bo. */
    pool->state.end = anv_block_pool_grow(pool, &pool->state);
+
+   return VK_SUCCESS;
+
+ fail_fd:
+   close(pool->fd);
+
+   return result;
 }
 
 void

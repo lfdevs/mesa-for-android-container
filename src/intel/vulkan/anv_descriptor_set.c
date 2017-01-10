@@ -498,6 +498,7 @@ anv_descriptor_set_destroy(struct anv_device *device,
       struct surface_state_free_list_entry *entry =
          set->buffer_views[b].surface_state.map;
       entry->next = pool->surface_state_free_list;
+      entry->offset = set->buffer_views[b].surface_state.offset;
       pool->surface_state_free_list = entry;
    }
 

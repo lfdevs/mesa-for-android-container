@@ -65,6 +65,7 @@ wsi_queue_init(struct wsi_queue *queue, int length)
    if (ret)
       goto fail_cond;
 
+   pthread_condattr_destroy(&condattr);
    return 0;
 
 fail_cond:

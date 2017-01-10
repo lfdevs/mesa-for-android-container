@@ -3194,7 +3194,7 @@
       <value name="Per Process Graphics Address" value="0"/>
       <value name="Global Graphics Address" value="1"/>
     </field>
-    <field name="Register Poll Mode" start="16" end="16" type="uint" default="1"/>
+    <field name="Register Poll Mode" start="16" end="16" type="bool"/>
     <field name="Wait Mode" start="15" end="15" type="uint">
       <value name="Polling Mode" value="1"/>
       <value name="Signal Mode" value="0"/>

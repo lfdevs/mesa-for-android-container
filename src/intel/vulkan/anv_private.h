@@ -416,8 +416,8 @@ anv_state_clflush(struct anv_state state)
    anv_clflush_range(state.map, state.alloc_size);
 }
 
-void anv_block_pool_init(struct anv_block_pool *pool,
-                         struct anv_device *device, uint32_t block_size);
+VkResult anv_block_pool_init(struct anv_block_pool *pool,
+                             struct anv_device *device, uint32_t block_size);
 void anv_block_pool_finish(struct anv_block_pool *pool);
 int32_t anv_block_pool_alloc(struct anv_block_pool *pool);
 int32_t anv_block_pool_alloc_back(struct anv_block_pool *pool);
@@ -1526,10 +1526,11 @@ struct anv_image {
 
       struct {
          struct anv_surface depth_surface;
-         struct anv_surface hiz_surface;
          struct anv_surface stencil_surface;
       };
    };
+
+   struct anv_surface aux_surface;
 };
 
 static inline uint32_t
@@ -1593,11 +1594,11 @@ anv_image_get_surface_for_aspect_mask(const struct anv_image *image,
 static inline bool
 anv_image_has_hiz(const struct anv_image *image)
 {
-   /* We must check the aspect because anv_image::hiz_surface belongs to
-    * a union.
+   /* We must check the aspect because anv_image::aux_surface may be used for
+    * any type of auxiliary surface, not just HiZ.
     */
    return (image->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
-          image->hiz_surface.isl.size > 0;
+          image->aux_surface.isl.size > 0;
 }
 
 struct anv_buffer_view {

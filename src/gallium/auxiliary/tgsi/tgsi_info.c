@@ -485,6 +485,7 @@ tgsi_opcode_infer_src_type( uint opcode )
    case TGSI_OPCODE_UMUL_HI:
    case TGSI_OPCODE_UP2H:
    case TGSI_OPCODE_U2I64:
+   case TGSI_OPCODE_MEMBAR:
       return TGSI_TYPE_UNSIGNED;
    case TGSI_OPCODE_IMUL_HI:
    case TGSI_OPCODE_I2F:

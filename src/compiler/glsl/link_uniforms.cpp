@@ -633,6 +633,8 @@ private:
          uniform->opaque[shader_type].index = this->next_subroutine;
          uniform->opaque[shader_type].active = true;
 
+         prog->_LinkedShaders[shader_type]->NumSubroutineUniforms++;
+
          /* Increment the subroutine index by 1 for non-arrays and by the
           * number of array elements for arrays.
           */

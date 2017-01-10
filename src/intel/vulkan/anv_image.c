@@ -194,8 +194,8 @@ make_surface(const struct anv_device *dev,
          anv_finishme("Test gen8 multisampled HiZ");
       } else {
          isl_surf_get_hiz_surf(&dev->isl_dev, &image->depth_surface.isl,
-                               &image->hiz_surface.isl);
-         add_surface(image, &image->hiz_surface);
+                               &image->aux_surface.isl);
+         add_surface(image, &image->aux_surface);
       }
    }
 
@@ -306,16 +306,16 @@ VkResult anv_BindImageMemory(
       /* The offset and size must be a multiple of 4K or else the
        * anv_gem_mmap call below will return NULL.
        */
-      assert((image->offset + image->hiz_surface.offset) % 4096 == 0);
-      assert(image->hiz_surface.isl.size % 4096 == 0);
+      assert((image->offset + image->aux_surface.offset) % 4096 == 0);
+      assert(image->aux_surface.isl.size % 4096 == 0);
 
       /* HiZ surfaces need to have their memory cleared to 0 before they
        * can be used.  If we let it have garbage data, it can cause GPU
        * hangs on some hardware.
        */
       void *map = anv_gem_mmap(device, image->bo->gem_handle,
-                               image->offset + image->hiz_surface.offset,
-                               image->hiz_surface.isl.size,
+                               image->offset + image->aux_surface.offset,
+                               image->aux_surface.isl.size,
                                device->info.has_llc ? 0 : I915_MMAP_WC);
 
       /* If anv_gem_mmap returns NULL, it's likely that the kernel was
@@ -324,9 +324,9 @@ VkResult anv_BindImageMemory(
       if (map == NULL)
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-      memset(map, 0, image->hiz_surface.isl.size);
+      memset(map, 0, image->aux_surface.isl.size);
 
-      anv_gem_munmap(map, image->hiz_surface.isl.size);
+      anv_gem_munmap(map, image->aux_surface.isl.size);
    }
 
    return VK_SUCCESS;

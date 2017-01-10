@@ -1,3 +1,19 @@
+mesa (13.0.3-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+
+  [ Andreas Boll ]
+  * Add vl-zscan-fix-Fix-trivial-sign-compare-warnings.diff: Fixes mpeg2
+    decoding on radeon GPUs without native mpeg2 support (Closes:
+    #846297).  Thanks to Jörg-Volker Peetz for reporting and tracking
+    down this regression!
+  * Add r600-sb-Fix-loop-optimization-related-hangs-on-eg.diff: Fixes
+    GPU hangs on r600g (Evergreen and Northern Islands GPUs) in many
+    games.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 10 Jan 2017 17:38:23 +0200
+
 mesa (13.0.2-3) unstable; urgency=medium
 
   * Fix typo to correctly disable asm on x32. Should fix FTBFS on x32.

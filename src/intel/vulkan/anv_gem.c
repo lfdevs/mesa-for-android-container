@@ -88,10 +88,8 @@ anv_gem_mmap(struct anv_device *device, uint32_t gem_handle,
    };
 
    int ret = anv_ioctl(device->fd, DRM_IOCTL_I915_GEM_MMAP, &gem_mmap);
-   if (ret != 0) {
-      /* FIXME: Is NULL the right error return? Cf MAP_INVALID */
-      return NULL;
-   }
+   if (ret != 0)
+      return MAP_FAILED;
 
    VG(VALGRIND_MALLOCLIKE_BLOCK(gem_mmap.addr_ptr, gem_mmap.size, 0, 1));
    return (void *)(uintptr_t) gem_mmap.addr_ptr;

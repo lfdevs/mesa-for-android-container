@@ -343,6 +343,7 @@ static bool si_switch_compute_shader(struct si_context *sctx,
 			lds_blocks += align(program->local_size, 512) >> 9;
 		}
 
+		/* TODO: use si_multiwave_lds_size_workaround */
 		assert(lds_blocks <= 0xFF);
 
 		config->rsrc2 &= C_00B84C_LDS_SIZE;

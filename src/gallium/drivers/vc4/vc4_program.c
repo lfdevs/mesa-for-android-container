@@ -1865,22 +1865,29 @@ ntq_emit_if(struct vc4_compile *c, nir_if *if_stmt)
 static void
 ntq_emit_jump(struct vc4_compile *c, nir_jump_instr *jump)
 {
+        struct qblock *jump_block;
         switch (jump->type) {
         case nir_jump_break:
-                qir_SF(c, c->execute);
-                qir_MOV_cond(c, QPU_COND_ZS, c->execute,
-                             qir_uniform_ui(c, c->loop_break_block->index));
+                jump_block = c->loop_break_block;
                 break;
-
         case nir_jump_continue:
-                qir_SF(c, c->execute);
-                qir_MOV_cond(c, QPU_COND_ZS, c->execute,
-                             qir_uniform_ui(c, c->loop_cont_block->index));
+                jump_block = c->loop_cont_block;
                 break;
-
-        case nir_jump_return:
-                unreachable("All returns shouold be lowered\n");
+        default:
+                unreachable("Unsupported jump type\n");
         }
+
+        qir_SF(c, c->execute);
+        qir_MOV_cond(c, QPU_COND_ZS, c->execute,
+                     qir_uniform_ui(c, jump_block->index));
+
+        /* Jump to the destination block if everyone has taken the jump. */
+        qir_SF(c, qir_SUB(c, c->execute, qir_uniform_ui(c, jump_block->index)));
+        qir_BRANCH(c, QPU_COND_BRANCH_ALL_ZS);
+        struct qblock *new_block = qir_new_block(c);
+        qir_link_blocks(c->cur_block, jump_block);
+        qir_link_blocks(c->cur_block, new_block);
+        qir_set_emit_block(c, new_block);
 }
 
 static void

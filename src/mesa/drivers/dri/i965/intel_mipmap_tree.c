@@ -2159,6 +2159,8 @@ intel_miptree_make_shareable(struct brw_context *brw,
       intel_miptree_release(&mt->mcs_mt);
       mt->fast_clear_state = INTEL_FAST_CLEAR_STATE_NO_MCS;
    }
+
+   mt->disable_aux_buffers = true;
 }
 
 

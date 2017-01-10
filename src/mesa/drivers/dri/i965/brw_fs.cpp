@@ -5692,7 +5692,7 @@ fs_visitor::optimize()
 
       OPT(opt_algebraic);
       OPT(opt_cse);
-      OPT(opt_copy_propagate);
+      OPT(opt_copy_propagation);
       OPT(opt_predicated_break, this);
       OPT(opt_cmod_propagation);
       OPT(dead_code_eliminate);
@@ -5716,7 +5716,7 @@ fs_visitor::optimize()
    }
 
    if (OPT(lower_d2x)) {
-      OPT(opt_copy_propagate);
+      OPT(opt_copy_propagation);
       OPT(dead_code_eliminate);
    }
 
@@ -5728,12 +5728,12 @@ fs_visitor::optimize()
    OPT(lower_logical_sends);
 
    if (progress) {
-      OPT(opt_copy_propagate);
+      OPT(opt_copy_propagation);
       /* Only run after logical send lowering because it's easier to implement
        * in terms of physical sends.
        */
       if (OPT(opt_zero_samples))
-         OPT(opt_copy_propagate);
+         OPT(opt_copy_propagation);
       /* Run after logical send lowering to give it a chance to CSE the
        * LOAD_PAYLOAD instructions created to construct the payloads of
        * e.g. texturing messages in cases where it wasn't possible to CSE the
@@ -5762,7 +5762,7 @@ fs_visitor::optimize()
    if (devinfo->gen <= 5 && OPT(lower_minmax)) {
       OPT(opt_cmod_propagation);
       OPT(opt_cse);
-      OPT(opt_copy_propagate);
+      OPT(opt_copy_propagation);
       OPT(dead_code_eliminate);
    }
 

@@ -187,7 +187,10 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen,
 
 	/* SI + AMDGPU + CE = GPU hang */
 	if (!(sscreen->b.debug_flags & DBG_NO_CE) && ws->cs_add_const_ib &&
-	    sscreen->b.chip_class != SI) {
+	    sscreen->b.chip_class != SI &&
+	    /* These can't use CE due to a power gating bug in the kernel. */
+	    sscreen->b.family != CHIP_CARRIZO &&
+	    sscreen->b.family != CHIP_STONEY) {
 		sctx->ce_ib = ws->cs_add_const_ib(sctx->b.gfx.cs);
 		if (!sctx->ce_ib)
 			goto fail;

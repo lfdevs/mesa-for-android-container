@@ -453,8 +453,14 @@ static void *si_create_blend_state_mode(struct pipe_context *ctx,
 			S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
 
 		/* Only set dual source blending for MRT0 to avoid a hang. */
-		if (i >= 1 && blend->dual_src_blend)
+		if (i >= 1 && blend->dual_src_blend) {
+			/* Vulkan does this for dual source blending. */
+			if (i == 1)
+				blend_cntl |= S_028780_ENABLE(1);
+
+			si_pm4_set_reg(pm4, R_028780_CB_BLEND0_CONTROL + i * 4, blend_cntl);
 			continue;
+		}
 
 		/* Only addition and subtraction equations are supported with
 		 * dual source blending.
@@ -463,16 +469,14 @@ static void *si_create_blend_state_mode(struct pipe_context *ctx,
 		    (eqRGB == PIPE_BLEND_MIN || eqRGB == PIPE_BLEND_MAX ||
 		     eqA == PIPE_BLEND_MIN || eqA == PIPE_BLEND_MAX)) {
 			assert(!"Unsupported equation for dual source blending");
+			si_pm4_set_reg(pm4, R_028780_CB_BLEND0_CONTROL + i * 4, blend_cntl);
 			continue;
 		}
-
-		if (!state->rt[j].colormask)
-			continue;
 
 		/* cb_render_state will disable unused ones */
 		blend->cb_target_mask |= (unsigned)state->rt[j].colormask << (4 * i);
 
-		if (!state->rt[j].blend_enable) {
+		if (!state->rt[j].colormask || !state->rt[j].blend_enable) {
 			si_pm4_set_reg(pm4, R_028780_CB_BLEND0_CONTROL + i * 4, blend_cntl);
 			continue;
 		}
@@ -553,6 +557,17 @@ static void *si_create_blend_state_mode(struct pipe_context *ctx,
 	}
 
 	if (sctx->b.family == CHIP_STONEY) {
+		/* Disable RB+ blend optimizations for dual source blending.
+		 * Vulkan does this.
+		 */
+		if (blend->dual_src_blend) {
+			for (int i = 0; i < 8; i++) {
+				sx_mrt_blend_opt[i] =
+					S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_NONE) |
+					S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_NONE);
+			}
+		}
+
 		for (int i = 0; i < 8; i++)
 			si_pm4_set_reg(pm4, R_028760_SX_MRT0_BLEND_OPT + i * 4,
 				       sx_mrt_blend_opt[i]);
