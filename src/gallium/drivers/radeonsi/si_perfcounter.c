@@ -590,7 +590,8 @@ static void si_pc_emit_stop(struct r600_common_context *ctx,
 {
 	struct radeon_winsys_cs *cs = ctx->gfx.cs;
 
-	r600_gfx_write_fence(ctx, buffer, va, 1, 0);
+	r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS, 0, 1,
+				 buffer, va, 1, 0);
 	r600_gfx_wait_fence(ctx, va, 0, 0xffffffff);
 
 	radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));

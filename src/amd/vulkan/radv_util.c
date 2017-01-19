@@ -65,25 +65,6 @@ void radv_printflike(3, 4)
 	fprintf(stderr, "%s:%d: FINISHME: %s\n", file, line, buffer);
 }
 
-void radv_noreturn radv_printflike(1, 2)
-	radv_abortf(const char *format, ...)
-{
-	va_list va;
-
-	va_start(va, format);
-	radv_abortfv(format, va);
-	va_end(va);
-}
-
-void radv_noreturn
-radv_abortfv(const char *format, va_list va)
-{
-	fprintf(stderr, "vk: error: ");
-	vfprintf(stderr, format, va);
-	fprintf(stderr, "\n");
-	abort();
-}
-
 VkResult
 __vk_errorf(VkResult error, const char *file, int line, const char *format, ...)
 {

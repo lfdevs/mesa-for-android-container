@@ -372,13 +372,11 @@ brw_is_color_fast_clear_compatible(struct brw_context *brw,
 /**
  * Convert the given color to a bitfield suitable for ORing into DWORD 7 of
  * SURFACE_STATE (DWORD 12-15 on SKL+).
- *
- * Returned boolean tells if the given color differs from the stored.
  */
-bool
-brw_meta_set_fast_clear_color(struct brw_context *brw,
-                              struct intel_mipmap_tree *mt,
-                              const union gl_color_union *color)
+union gl_color_union
+brw_meta_convert_fast_clear_color(const struct brw_context *brw,
+                                  const struct intel_mipmap_tree *mt,
+                                  const union gl_color_union *color)
 {
    union gl_color_union override_color = *color;
 
@@ -410,7 +408,7 @@ brw_meta_set_fast_clear_color(struct brw_context *brw,
          override_color.f[3] = 1.0f;
    }
 
-   /* Handle linear→SRGB conversion */
+   /* Handle linear to SRGB conversion */
    if (brw->ctx.Color.sRGBEnabled &&
        _mesa_get_srgb_format_linear(mt->format) != mt->format) {
       for (int i = 0; i < 3; i++) {
@@ -419,24 +417,33 @@ brw_meta_set_fast_clear_color(struct brw_context *brw,
       }
    }
 
-   bool updated;
-   if (brw->gen >= 9) {
-      updated = memcmp(&mt->gen9_fast_clear_color, &override_color,
-                       sizeof(mt->gen9_fast_clear_color));
-      mt->gen9_fast_clear_color = override_color;
-   } else {
-      const uint32_t old_color_value = mt->fast_clear_color_value;
+   return override_color;
+}
 
-      mt->fast_clear_color_value = 0;
+/* Returned boolean tells if the given color differs from the current. */
+bool
+brw_meta_set_fast_clear_color(struct brw_context *brw,
+                              union gl_color_union *curr_color,
+                              const union gl_color_union *new_color)
+{
+   bool updated;
+
+   if (brw->gen >= 9) {
+      updated = memcmp(curr_color, new_color, sizeof(*curr_color));
+      *curr_color = *new_color;
+   } else {
+      const uint32_t old_color_value = *(uint32_t *)curr_color;
+      uint32_t adjusted = 0;
+
       for (int i = 0; i < 4; i++) {
          /* Testing for non-0 works for integer and float colors */
-         if (override_color.f[i] != 0.0f) {
-             mt->fast_clear_color_value |=
-                1 << (GEN7_SURFACE_CLEAR_COLOR_SHIFT + (3 - i));
+         if (new_color->f[i] != 0.0f) {
+            adjusted |= 1 << (GEN7_SURFACE_CLEAR_COLOR_SHIFT + (3 - i));
          }
       }
 
-      updated = (old_color_value != mt->fast_clear_color_value);
+      updated = (old_color_value != adjusted);
+      *(uint32_t *)curr_color = adjusted;
    }
 
    return updated;

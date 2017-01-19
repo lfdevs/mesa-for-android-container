@@ -34,6 +34,7 @@
 #include "builder.h"
 
 #include "tgsi/tgsi_strings.h"
+#include "util/u_format.h"
 #include "gallivm/lp_bld_init.h"
 #include "gallivm/lp_bld_flow.h"
 #include "gallivm/lp_bld_struct.h"
@@ -41,6 +42,7 @@
 
 #include "swr_context.h"
 #include "swr_context_llvm.h"
+#include "swr_resource.h"
 #include "swr_state.h"
 #include "swr_screen.h"
 
@@ -85,18 +87,36 @@ swr_generate_sampler_key(const struct lp_tgsi_info &info,
          info.base.file_max[TGSI_FILE_SAMPLER_VIEW] + 1;
       for (unsigned i = 0; i < key.nr_sampler_views; i++) {
          if (info.base.file_mask[TGSI_FILE_SAMPLER_VIEW] & (1 << i)) {
+            const struct pipe_sampler_view *view =
+               ctx->sampler_views[shader_type][i];
             lp_sampler_static_texture_state(
-               &key.sampler[i].texture_state,
-               ctx->sampler_views[shader_type][i]);
+               &key.sampler[i].texture_state, view);
+            if (view) {
+               struct swr_resource *swr_res = swr_resource(view->texture);
+               const struct util_format_description *desc =
+                  util_format_description(view->format);
+               if (swr_res->has_depth && swr_res->has_stencil &&
+                   !util_format_has_depth(desc))
+                  key.sampler[i].texture_state.format = PIPE_FORMAT_S8_UINT;
+            }
          }
       }
    } else {
       key.nr_sampler_views = key.nr_samplers;
       for (unsigned i = 0; i < key.nr_sampler_views; i++) {
          if (info.base.file_mask[TGSI_FILE_SAMPLER] & (1 << i)) {
+            const struct pipe_sampler_view *view =
+               ctx->sampler_views[shader_type][i];
             lp_sampler_static_texture_state(
-               &key.sampler[i].texture_state,
-               ctx->sampler_views[shader_type][i]);
+               &key.sampler[i].texture_state, view);
+            if (view) {
+               struct swr_resource *swr_res = swr_resource(view->texture);
+               const struct util_format_description *desc =
+                  util_format_description(view->format);
+               if (swr_res->has_depth && swr_res->has_stencil &&
+                   !util_format_has_depth(desc))
+                  key.sampler[i].texture_state.format = PIPE_FORMAT_S8_UINT;
+            }
          }
       }
    }
@@ -111,6 +131,7 @@ swr_generate_fs_key(struct swr_jit_fs_key &key,
 
    key.nr_cbufs = ctx->framebuffer.nr_cbufs;
    key.light_twoside = ctx->rasterizer->light_twoside;
+   key.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable;
    memcpy(&key.vs_output_semantic_name,
           &ctx->vs->info.base.output_semantic_name,
           sizeof(key.vs_output_semantic_name));
@@ -323,9 +344,7 @@ BuilderSWR::CompileVS(struct swr_context *ctx, swr_jit_vs_key &key)
    debug_printf("vert shader  %p\n", pFunc);
    assert(pFunc && "Error: VertShader = NULL");
 
-#if (LLVM_VERSION_MAJOR == 3) && (LLVM_VERSION_MINOR >= 5)
    JM()->mIsModuleFinalized = true;
-#endif
 
    return pFunc;
 }
@@ -349,15 +368,6 @@ locate_linkage(ubyte name, ubyte index, struct tgsi_shader_info *info)
       if ((info->output_semantic_name[i] == name)
           && (info->output_semantic_index[i] == index)) {
          return i - 1; // position is not part of the linkage
-      }
-   }
-
-   if (name == TGSI_SEMANTIC_COLOR) { // BCOLOR fallback
-      for (int i = 0; i < PIPE_MAX_SHADER_OUTPUTS; i++) {
-         if ((info->output_semantic_name[i] == TGSI_SEMANTIC_BCOLOR)
-             && (info->output_semantic_index[i] == index)) {
-            return i - 1; // position is not part of the linkage
-         }
       }
    }
 
@@ -445,7 +455,8 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
 
       // load/compute w
       Value *vw = nullptr, *pAttribs;
-      if (interpMode == TGSI_INTERPOLATE_PERSPECTIVE) {
+      if (interpMode == TGSI_INTERPOLATE_PERSPECTIVE ||
+          interpMode == TGSI_INTERPOLATE_COLOR) {
          pAttribs = pPerspAttribs;
          switch (interpLoc) {
          case TGSI_INTERPOLATE_LOC_CENTER:
@@ -480,8 +491,14 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
          inputs[attrib][3] = wrap(VIMMED1(1.0f));
          continue;
       } else if (semantic_name == TGSI_SEMANTIC_POSITION) { // gl_FragCoord
-         inputs[attrib][0] = wrap(LOAD(pPS, {0, SWR_PS_CONTEXT_vX, PixelPositions_center}, "vX"));
-         inputs[attrib][1] = wrap(LOAD(pPS, {0, SWR_PS_CONTEXT_vY, PixelPositions_center}, "vY"));
+         if (swr_fs->info.base.properties[TGSI_PROPERTY_FS_COORD_PIXEL_CENTER] ==
+             TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER) {
+            inputs[attrib][0] = wrap(LOAD(pPS, {0, SWR_PS_CONTEXT_vX, PixelPositions_center}, "vX"));
+            inputs[attrib][1] = wrap(LOAD(pPS, {0, SWR_PS_CONTEXT_vY, PixelPositions_center}, "vY"));
+         } else {
+            inputs[attrib][0] = wrap(LOAD(pPS, {0, SWR_PS_CONTEXT_vX, PixelPositions_UL}, "vX"));
+            inputs[attrib][1] = wrap(LOAD(pPS, {0, SWR_PS_CONTEXT_vY, PixelPositions_UL}, "vY"));
+         }
          inputs[attrib][2] = wrap(LOAD(pPS, {0, SWR_PS_CONTEXT_vZ}, "vZ"));
          inputs[attrib][3] =
             wrap(LOAD(pPS, {0, SWR_PS_CONTEXT_vOneOverW, PixelPositions_center}, "vOneOverW"));
@@ -497,24 +514,58 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
 
       unsigned linkedAttrib =
          locate_linkage(semantic_name, semantic_idx, &ctx->vs->info.base);
-      if (linkedAttrib == 0xFFFFFFFF) {
-         // not found - check for point sprite
-         if (ctx->rasterizer->sprite_coord_enable) {
-            linkedAttrib = ctx->vs->info.base.num_outputs - 1;
-            swr_fs->pointSpriteMask |= (1 << linkedAttrib);
-         } else {
-            fprintf(stderr,
-                    "Missing %s[%d]\n",
-                    tgsi_semantic_names[semantic_name],
-                    semantic_idx);
-            assert(0 && "attribute linkage not found");
+      if (semantic_name == TGSI_SEMANTIC_GENERIC &&
+          key.sprite_coord_enable & (1 << semantic_idx)) {
+         /* we add an extra attrib to the backendState in swr_update_derived. */
+         linkedAttrib = ctx->vs->info.base.num_outputs - 1;
+         swr_fs->pointSpriteMask |= (1 << linkedAttrib);
+      } else if (linkedAttrib == 0xFFFFFFFF) {
+         inputs[attrib][0] = wrap(VIMMED1(0.0f));
+         inputs[attrib][1] = wrap(VIMMED1(0.0f));
+         inputs[attrib][2] = wrap(VIMMED1(0.0f));
+         inputs[attrib][3] = wrap(VIMMED1(1.0f));
+         /* If we're reading in color and 2-sided lighting is enabled, we have
+          * to keep going.
+          */
+         if (semantic_name != TGSI_SEMANTIC_COLOR || !key.light_twoside)
+            continue;
+      } else {
+         if (interpMode == TGSI_INTERPOLATE_CONSTANT) {
+            swr_fs->constantMask |= 1 << linkedAttrib;
+         } else if (interpMode == TGSI_INTERPOLATE_COLOR) {
+            swr_fs->flatConstantMask |= 1 << linkedAttrib;
          }
       }
 
-      if (interpMode == TGSI_INTERPOLATE_CONSTANT) {
-         swr_fs->constantMask |= 1 << linkedAttrib;
-      } else if (interpMode == TGSI_INTERPOLATE_COLOR) {
-         swr_fs->flatConstantMask |= 1 << linkedAttrib;
+      unsigned bcolorAttrib = 0xFFFFFFFF;
+      Value *offset = NULL;
+      if (semantic_name == TGSI_SEMANTIC_COLOR && key.light_twoside) {
+         bcolorAttrib = locate_linkage(
+               TGSI_SEMANTIC_BCOLOR, semantic_idx, &ctx->vs->info.base);
+         /* Neither front nor back colors were available. Nothing to load. */
+         if (bcolorAttrib == 0xFFFFFFFF && linkedAttrib == 0xFFFFFFFF)
+            continue;
+         /* If there is no front color, just always use the back color. */
+         if (linkedAttrib == 0xFFFFFFFF)
+            linkedAttrib = bcolorAttrib;
+
+         if (bcolorAttrib != 0xFFFFFFFF) {
+            if (interpMode == TGSI_INTERPOLATE_CONSTANT) {
+               swr_fs->constantMask |= 1 << bcolorAttrib;
+            } else if (interpMode == TGSI_INTERPOLATE_COLOR) {
+               swr_fs->flatConstantMask |= 1 << bcolorAttrib;
+            }
+
+            unsigned diff = 12 * (bcolorAttrib - linkedAttrib);
+
+            if (diff) {
+               Value *back =
+                  XOR(C(1), LOAD(pPS, {0, SWR_PS_CONTEXT_frontFace}), "backFace");
+
+               offset = MUL(back, C(diff));
+               offset->setName("offset");
+            }
+         }
       }
 
       for (int channel = 0; channel < TGSI_NUM_CHANNELS; channel++) {
@@ -523,28 +574,10 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
             Value *indexB = C(linkedAttrib * 12 + channel + 4);
             Value *indexC = C(linkedAttrib * 12 + channel + 8);
 
-            if ((semantic_name == TGSI_SEMANTIC_COLOR)
-                && ctx->rasterizer->light_twoside) {
-               unsigned bcolorAttrib = locate_linkage(
-                  TGSI_SEMANTIC_BCOLOR, semantic_idx, &ctx->vs->info.base);
-
-               unsigned diff = 12 * (bcolorAttrib - linkedAttrib);
-
-               Value *back =
-                  XOR(C(1), LOAD(pPS, {0, SWR_PS_CONTEXT_frontFace}), "backFace");
-
-               Value *offset = MUL(back, C(diff));
-               offset->setName("offset");
-
+            if (offset) {
                indexA = ADD(indexA, offset);
                indexB = ADD(indexB, offset);
                indexC = ADD(indexC, offset);
-
-               if (interpMode == TGSI_INTERPOLATE_CONSTANT) {
-                  swr_fs->constantMask |= 1 << bcolorAttrib;
-               } else if (interpMode == TGSI_INTERPOLATE_COLOR) {
-                  swr_fs->flatConstantMask |= 1 << bcolorAttrib;
-               }
             }
 
             Value *va = VBROADCAST(LOAD(GEP(pAttribs, indexA)));
@@ -562,7 +595,8 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
                Value *interp1 = FMUL(vb, vj);
                interp = FADD(interp, interp1);
                interp = FADD(interp, vc);
-               if (interpMode == TGSI_INTERPOLATE_PERSPECTIVE)
+               if (interpMode == TGSI_INTERPOLATE_PERSPECTIVE ||
+                   interpMode == TGSI_INTERPOLATE_COLOR)
                   interp = FMUL(interp, vw);
                inputs[attrib][channel] = wrap(interp);
             }
@@ -619,7 +653,8 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
 
             LLVMValueRef out =
                LLVMBuildLoad(gallivm->builder, outputs[attrib][channel], "");
-            if (swr_fs->info.base.properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS]) {
+            if (swr_fs->info.base.properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS] &&
+                swr_fs->info.base.output_semantic_index[attrib] == 0) {
                for (uint32_t rt = 0; rt < key.nr_cbufs; rt++) {
                   STORE(unwrap(out),
                         pPS,
@@ -669,9 +704,7 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
    debug_printf("frag shader  %p\n", kernel);
    assert(kernel && "Error: FragShader = NULL");
 
-#if (LLVM_VERSION_MAJOR == 3) && (LLVM_VERSION_MINOR >= 5)
    JM()->mIsModuleFinalized = true;
-#endif
 
    return kernel;
 }

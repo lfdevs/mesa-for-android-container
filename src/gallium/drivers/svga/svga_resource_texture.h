@@ -78,10 +78,22 @@ struct svga_texture
    struct svga_winsys_surface *handle;
 
    /**
+    * Whether the host side surface is validated, either through the
+    * InvalidateGBSurface command or after the surface is updated
+    * or rendered to.
+    */
+   boolean validated;
+
+   /**
     * Whether the host side surface is imported and not created by this
     * driver.
     */
    boolean imported;
+
+   /**
+    * Whether texture upload buffer can be used on this texture
+    */
+   boolean can_use_upload;
 
    unsigned size;  /**< Approximate size in bytes */
 
@@ -190,6 +202,7 @@ svga_define_texture_level(struct svga_texture *tex,
 {
    check_face_level(tex, face, level);
    tex->defined[face] |= 1 << level;
+   tex->validated = TRUE;
 }
 
 
@@ -208,6 +221,7 @@ svga_set_texture_rendered_to(struct svga_texture *tex,
 {
    check_face_level(tex, face, level);
    tex->rendered_to[face] |= 1 << level;
+   tex->validated = TRUE;
 }
 
 
@@ -278,8 +292,8 @@ void
 svga_texture_transfer_map_upload_destroy(struct svga_context *svga);
 
 boolean
-svga_texture_transfer_map_can_upload(struct svga_context *svga,
-                                     struct svga_transfer *st);
+svga_texture_transfer_map_can_upload(const struct svga_screen *svgascreen,
+                                     const struct pipe_resource *pt);
 
 void *
 svga_texture_transfer_map_upload(struct svga_context *svga,

@@ -32,12 +32,18 @@
 ///
 
 #include "llvm/codegen.hpp"
+#include "llvm/compat.hpp"
 #include "llvm/metadata.hpp"
 #include "core/error.hpp"
 #include "util/algorithm.hpp"
 
 #include <map>
+#if HAVE_LLVM < 0x0400
 #include <llvm/Bitcode/ReaderWriter.h>
+#else
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#endif
 #include <llvm/Support/raw_ostream.h>
 
 using namespace clover;
@@ -80,10 +86,11 @@ clover::llvm::print_module_bitcode(const ::llvm::Module &mod) {
 }
 
 module
-clover::llvm::build_module_library(const ::llvm::Module &mod) {
+clover::llvm::build_module_library(const ::llvm::Module &mod,
+                                   enum module::section::type section_type) {
    module m;
    const auto code = emit_code(mod);
-   m.secs.emplace_back(0, module::section::text, code.size(), code);
+   m.secs.emplace_back(0, section_type, code.size(), code);
    return m;
 }
 
@@ -92,8 +99,10 @@ clover::llvm::parse_module_library(const module &m, ::llvm::LLVMContext &ctx,
                                    std::string &r_log) {
    auto mod = ::llvm::parseBitcodeFile(::llvm::MemoryBufferRef(
                                         as_string(m.secs[0].data), " "), ctx);
-   if (!mod)
-      fail(r_log, error(CL_INVALID_PROGRAM), mod.getError().message());
+
+   compat::handle_module_error(mod, [&](const std::string &s) {
+         fail(r_log, error(CL_INVALID_PROGRAM), s);
+      });
 
    return std::unique_ptr<::llvm::Module>(std::move(*mod));
 }

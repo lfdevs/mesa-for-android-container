@@ -251,8 +251,8 @@ struct bool32_vec {
 };
 
 static nir_const_value
-evaluate_b2f(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_b2f(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -262,7 +262,7 @@ evaluate_b2f(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  bool src0 = _src[0].u32[_i] != 0;
+                  const bool src0 = _src[0].u32[_i] != 0;
 
                float32_t dst = src0 ? 1.0f : 0.0f;
 
@@ -276,7 +276,7 @@ evaluate_b2f(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  bool src0 = _src[0].u32[_i] != 0;
+                  const bool src0 = _src[0].u32[_i] != 0;
 
                float32_t dst = src0 ? 1.0f : 0.0f;
 
@@ -293,8 +293,8 @@ evaluate_b2f(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_b2i(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_b2i(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -304,7 +304,7 @@ evaluate_b2i(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  bool src0 = _src[0].u32[_i] != 0;
+                  const bool src0 = _src[0].u32[_i] != 0;
 
                int32_t dst = src0 ? 1 : 0;
 
@@ -318,7 +318,7 @@ evaluate_b2i(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  bool src0 = _src[0].u32[_i] != 0;
+                  const bool src0 = _src[0].u32[_i] != 0;
 
                int32_t dst = src0 ? 1 : 0;
 
@@ -335,8 +335,8 @@ evaluate_b2i(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ball_fequal2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ball_fequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -345,14 +345,18 @@ evaluate_ball_fequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
+            0,
+            0,
          };
 
          struct bool32_vec dst;
@@ -367,14 +371,18 @@ evaluate_ball_fequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
+            0,
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
+            0,
+            0,
          };
 
          struct bool32_vec dst;
@@ -393,8 +401,8 @@ evaluate_ball_fequal2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ball_fequal3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ball_fequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -403,16 +411,18 @@ evaluate_ball_fequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
+            0,
          };
 
          struct bool32_vec dst;
@@ -427,16 +437,18 @@ evaluate_ball_fequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
+            0,
          };
 
          struct bool32_vec dst;
@@ -455,8 +467,8 @@ evaluate_ball_fequal3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ball_fequal4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ball_fequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -465,14 +477,14 @@ evaluate_ball_fequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
                _src[0].f32[3],
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -491,14 +503,14 @@ evaluate_ball_fequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
                _src[0].f64[3],
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
@@ -521,8 +533,8 @@ evaluate_ball_fequal4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ball_iequal2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ball_iequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -531,14 +543,18 @@ evaluate_ball_iequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int32_vec src0 = {
+         const struct int32_vec src0 = {
                _src[0].i32[0],
                _src[0].i32[1],
+            0,
+            0,
          };
 
-         struct int32_vec src1 = {
+         const struct int32_vec src1 = {
                _src[1].i32[0],
                _src[1].i32[1],
+            0,
+            0,
          };
 
          struct bool32_vec dst;
@@ -553,14 +569,18 @@ evaluate_ball_iequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int64_vec src0 = {
+         const struct int64_vec src0 = {
                _src[0].i64[0],
                _src[0].i64[1],
+            0,
+            0,
          };
 
-         struct int64_vec src1 = {
+         const struct int64_vec src1 = {
                _src[1].i64[0],
                _src[1].i64[1],
+            0,
+            0,
          };
 
          struct bool32_vec dst;
@@ -579,8 +599,8 @@ evaluate_ball_iequal2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ball_iequal3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ball_iequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -589,16 +609,18 @@ evaluate_ball_iequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int32_vec src0 = {
+         const struct int32_vec src0 = {
                _src[0].i32[0],
                _src[0].i32[1],
                _src[0].i32[2],
+            0,
          };
 
-         struct int32_vec src1 = {
+         const struct int32_vec src1 = {
                _src[1].i32[0],
                _src[1].i32[1],
                _src[1].i32[2],
+            0,
          };
 
          struct bool32_vec dst;
@@ -613,16 +635,18 @@ evaluate_ball_iequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int64_vec src0 = {
+         const struct int64_vec src0 = {
                _src[0].i64[0],
                _src[0].i64[1],
                _src[0].i64[2],
+            0,
          };
 
-         struct int64_vec src1 = {
+         const struct int64_vec src1 = {
                _src[1].i64[0],
                _src[1].i64[1],
                _src[1].i64[2],
+            0,
          };
 
          struct bool32_vec dst;
@@ -641,8 +665,8 @@ evaluate_ball_iequal3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ball_iequal4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ball_iequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -651,14 +675,14 @@ evaluate_ball_iequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int32_vec src0 = {
+         const struct int32_vec src0 = {
                _src[0].i32[0],
                _src[0].i32[1],
                _src[0].i32[2],
                _src[0].i32[3],
          };
 
-         struct int32_vec src1 = {
+         const struct int32_vec src1 = {
                _src[1].i32[0],
                _src[1].i32[1],
                _src[1].i32[2],
@@ -677,14 +701,14 @@ evaluate_ball_iequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int64_vec src0 = {
+         const struct int64_vec src0 = {
                _src[0].i64[0],
                _src[0].i64[1],
                _src[0].i64[2],
                _src[0].i64[3],
          };
 
-         struct int64_vec src1 = {
+         const struct int64_vec src1 = {
                _src[1].i64[0],
                _src[1].i64[1],
                _src[1].i64[2],
@@ -707,8 +731,8 @@ evaluate_ball_iequal4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_bany_fnequal2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bany_fnequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -717,14 +741,18 @@ evaluate_bany_fnequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
+            0,
+            0,
          };
 
          struct bool32_vec dst;
@@ -739,14 +767,18 @@ evaluate_bany_fnequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
+            0,
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
+            0,
+            0,
          };
 
          struct bool32_vec dst;
@@ -765,8 +797,8 @@ evaluate_bany_fnequal2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_bany_fnequal3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bany_fnequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -775,16 +807,18 @@ evaluate_bany_fnequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
+            0,
          };
 
          struct bool32_vec dst;
@@ -799,16 +833,18 @@ evaluate_bany_fnequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
+            0,
          };
 
          struct bool32_vec dst;
@@ -827,8 +863,8 @@ evaluate_bany_fnequal3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_bany_fnequal4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bany_fnequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -837,14 +873,14 @@ evaluate_bany_fnequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
                _src[0].f32[3],
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -863,14 +899,14 @@ evaluate_bany_fnequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
                _src[0].f64[3],
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
@@ -893,8 +929,8 @@ evaluate_bany_fnequal4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_bany_inequal2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bany_inequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -903,14 +939,18 @@ evaluate_bany_inequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int32_vec src0 = {
+         const struct int32_vec src0 = {
                _src[0].i32[0],
                _src[0].i32[1],
+            0,
+            0,
          };
 
-         struct int32_vec src1 = {
+         const struct int32_vec src1 = {
                _src[1].i32[0],
                _src[1].i32[1],
+            0,
+            0,
          };
 
          struct bool32_vec dst;
@@ -925,14 +965,18 @@ evaluate_bany_inequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int64_vec src0 = {
+         const struct int64_vec src0 = {
                _src[0].i64[0],
                _src[0].i64[1],
+            0,
+            0,
          };
 
-         struct int64_vec src1 = {
+         const struct int64_vec src1 = {
                _src[1].i64[0],
                _src[1].i64[1],
+            0,
+            0,
          };
 
          struct bool32_vec dst;
@@ -951,8 +995,8 @@ evaluate_bany_inequal2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_bany_inequal3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bany_inequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -961,16 +1005,18 @@ evaluate_bany_inequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int32_vec src0 = {
+         const struct int32_vec src0 = {
                _src[0].i32[0],
                _src[0].i32[1],
                _src[0].i32[2],
+            0,
          };
 
-         struct int32_vec src1 = {
+         const struct int32_vec src1 = {
                _src[1].i32[0],
                _src[1].i32[1],
                _src[1].i32[2],
+            0,
          };
 
          struct bool32_vec dst;
@@ -985,16 +1031,18 @@ evaluate_bany_inequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int64_vec src0 = {
+         const struct int64_vec src0 = {
                _src[0].i64[0],
                _src[0].i64[1],
                _src[0].i64[2],
+            0,
          };
 
-         struct int64_vec src1 = {
+         const struct int64_vec src1 = {
                _src[1].i64[0],
                _src[1].i64[1],
                _src[1].i64[2],
+            0,
          };
 
          struct bool32_vec dst;
@@ -1013,8 +1061,8 @@ evaluate_bany_inequal3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_bany_inequal4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bany_inequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1023,14 +1071,14 @@ evaluate_bany_inequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int32_vec src0 = {
+         const struct int32_vec src0 = {
                _src[0].i32[0],
                _src[0].i32[1],
                _src[0].i32[2],
                _src[0].i32[3],
          };
 
-         struct int32_vec src1 = {
+         const struct int32_vec src1 = {
                _src[1].i32[0],
                _src[1].i32[1],
                _src[1].i32[2],
@@ -1049,14 +1097,14 @@ evaluate_bany_inequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct int64_vec src0 = {
+         const struct int64_vec src0 = {
                _src[0].i64[0],
                _src[0].i64[1],
                _src[0].i64[2],
                _src[0].i64[3],
          };
 
-         struct int64_vec src1 = {
+         const struct int64_vec src1 = {
                _src[1].i64[0],
                _src[1].i64[1],
                _src[1].i64[2],
@@ -1079,8 +1127,8 @@ evaluate_bany_inequal4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_bcsel(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bcsel(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1090,10 +1138,10 @@ evaluate_bcsel(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  bool src0 = _src[0].u32[_i] != 0;
-                  uint32_t src1 =
+                  const bool src0 = _src[0].u32[_i] != 0;
+                  const uint32_t src1 =
                      _src[1].u32[_i];
-                  uint32_t src2 =
+                  const uint32_t src2 =
                      _src[2].u32[_i];
 
                uint32_t dst = src0 ? src1 : src2;
@@ -1108,10 +1156,10 @@ evaluate_bcsel(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  bool src0 = _src[0].u32[_i] != 0;
-                  uint64_t src1 =
+                  const bool src0 = _src[0].u32[_i] != 0;
+                  const uint64_t src1 =
                      _src[1].u64[_i];
-                  uint64_t src2 =
+                  const uint64_t src2 =
                      _src[2].u64[_i];
 
                uint64_t dst = src0 ? src1 : src2;
@@ -1129,8 +1177,8 @@ evaluate_bcsel(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_bfi(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bfi(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1140,14 +1188,15 @@ evaluate_bfi(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
-                  uint32_t src2 =
+                  const uint32_t src2 =
                      _src[2].u32[_i];
 
                uint32_t dst;
+
                
 unsigned mask = src0, insert = src1, base = src2;
 if (mask == 0) {
@@ -1172,14 +1221,15 @@ if (mask == 0) {
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
-                  uint32_t src2 =
+                  const uint32_t src2 =
                      _src[2].u32[_i];
 
                uint32_t dst;
+
                
 unsigned mask = src0, insert = src1, base = src2;
 if (mask == 0) {
@@ -1207,8 +1257,8 @@ if (mask == 0) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_bfm(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bfm(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1218,12 +1268,13 @@ evaluate_bfm(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                uint32_t dst;
+
                
 int bits = src0, offset = src1;
 if (offset < 0 || bits < 0 || offset > 31 || bits > 31 || offset + bits > 32)
@@ -1242,12 +1293,13 @@ else
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                uint32_t dst;
+
                
 int bits = src0, offset = src1;
 if (offset < 0 || bits < 0 || offset > 31 || bits > 31 || offset + bits > 32)
@@ -1269,8 +1321,8 @@ else
    return _dst_val;
 }
 static nir_const_value
-evaluate_bit_count(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bit_count(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1280,10 +1332,11 @@ evaluate_bit_count(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                uint32_t dst;
+
                
 dst = 0;
 for (unsigned bit = 0; bit < 32; bit++) {
@@ -1302,10 +1355,11 @@ for (unsigned bit = 0; bit < 32; bit++) {
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                uint32_t dst;
+
                
 dst = 0;
 for (unsigned bit = 0; bit < 32; bit++) {
@@ -1327,8 +1381,8 @@ for (unsigned bit = 0; bit < 32; bit++) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_bitfield_insert(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bitfield_insert(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1338,16 +1392,17 @@ evaluate_bitfield_insert(unsigned num_components, unsigned bit_size,
 
                                                 
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
-                  int32_t src3 =
+                  const int32_t src3 =
                      _src[3].i32[_i];
 
                uint32_t dst;
+
                
 unsigned base = src0, insert = src1;
 int offset = src2, bits = src3;
@@ -1371,16 +1426,17 @@ if (bits == 0) {
 
                                                 
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
-                  int32_t src3 =
+                  const int32_t src3 =
                      _src[3].i32[_i];
 
                uint32_t dst;
+
                
 unsigned base = src0, insert = src1;
 int offset = src2, bits = src3;
@@ -1407,8 +1463,8 @@ if (bits == 0) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_bitfield_reverse(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_bitfield_reverse(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1418,10 +1474,11 @@ evaluate_bitfield_reverse(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                uint32_t dst;
+
                
 /* we're not winning any awards for speed here, but that's ok */
 dst = 0;
@@ -1439,10 +1496,11 @@ for (unsigned bit = 0; bit < 32; bit++)
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                uint32_t dst;
+
                
 /* we're not winning any awards for speed here, but that's ok */
 dst = 0;
@@ -1463,8 +1521,8 @@ for (unsigned bit = 0; bit < 32; bit++)
    return _dst_val;
 }
 static nir_const_value
-evaluate_d2b(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_d2b(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1474,7 +1532,7 @@ evaluate_d2b(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                bool32_t dst = src0 != 0.0;
@@ -1489,7 +1547,7 @@ evaluate_d2b(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                bool32_t dst = src0 != 0.0;
@@ -1507,8 +1565,8 @@ evaluate_d2b(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_d2f(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_d2f(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1518,7 +1576,7 @@ evaluate_d2f(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float32_t dst = src0;
@@ -1533,7 +1591,7 @@ evaluate_d2f(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float32_t dst = src0;
@@ -1551,8 +1609,8 @@ evaluate_d2f(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_d2i(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_d2i(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1562,7 +1620,7 @@ evaluate_d2i(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                int32_t dst = src0;
@@ -1577,7 +1635,7 @@ evaluate_d2i(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                int32_t dst = src0;
@@ -1595,8 +1653,8 @@ evaluate_d2i(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_d2u(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_d2u(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1606,7 +1664,7 @@ evaluate_d2u(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                uint32_t dst = src0;
@@ -1621,7 +1679,7 @@ evaluate_d2u(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                uint32_t dst = src0;
@@ -1639,8 +1697,8 @@ evaluate_d2u(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_extract_i16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_extract_i16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1650,9 +1708,9 @@ evaluate_extract_i16(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = (int16_t)(src0 >> (src1 * 16));
@@ -1667,9 +1725,9 @@ evaluate_extract_i16(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = (int16_t)(src0 >> (src1 * 16));
@@ -1687,8 +1745,8 @@ evaluate_extract_i16(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_extract_i8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_extract_i8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1698,9 +1756,9 @@ evaluate_extract_i8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = (int8_t)(src0 >> (src1 * 8));
@@ -1715,9 +1773,9 @@ evaluate_extract_i8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = (int8_t)(src0 >> (src1 * 8));
@@ -1735,8 +1793,8 @@ evaluate_extract_i8(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_extract_u16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_extract_u16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1746,9 +1804,9 @@ evaluate_extract_u16(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = (uint16_t)(src0 >> (src1 * 16));
@@ -1763,9 +1821,9 @@ evaluate_extract_u16(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = (uint16_t)(src0 >> (src1 * 16));
@@ -1783,8 +1841,8 @@ evaluate_extract_u16(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_extract_u8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_extract_u8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1794,9 +1852,9 @@ evaluate_extract_u8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = (uint8_t)(src0 >> (src1 * 8));
@@ -1811,9 +1869,9 @@ evaluate_extract_u8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = (uint8_t)(src0 >> (src1 * 8));
@@ -1831,8 +1889,8 @@ evaluate_extract_u8(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_f2b(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_f2b(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1842,7 +1900,7 @@ evaluate_f2b(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                bool32_t dst = src0 != 0.0f;
@@ -1857,7 +1915,7 @@ evaluate_f2b(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                bool32_t dst = src0 != 0.0f;
@@ -1875,8 +1933,8 @@ evaluate_f2b(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_f2d(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_f2d(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1886,7 +1944,7 @@ evaluate_f2d(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float64_t dst = src0;
@@ -1901,7 +1959,7 @@ evaluate_f2d(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float64_t dst = src0;
@@ -1919,8 +1977,8 @@ evaluate_f2d(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_f2i(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_f2i(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1930,7 +1988,7 @@ evaluate_f2i(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                int32_t dst = src0;
@@ -1945,7 +2003,7 @@ evaluate_f2i(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                int32_t dst = src0;
@@ -1963,8 +2021,8 @@ evaluate_f2i(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_f2u(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_f2u(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -1974,7 +2032,7 @@ evaluate_f2u(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                uint32_t dst = src0;
@@ -1989,7 +2047,7 @@ evaluate_f2u(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                uint32_t dst = src0;
@@ -2007,8 +2065,8 @@ evaluate_f2u(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fabs(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fabs(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2018,7 +2076,7 @@ evaluate_fabs(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
@@ -2033,7 +2091,7 @@ evaluate_fabs(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
@@ -2051,8 +2109,8 @@ evaluate_fabs(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fadd(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fadd(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2062,9 +2120,9 @@ evaluate_fadd(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = src0 + src1;
@@ -2079,9 +2137,9 @@ evaluate_fadd(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = src0 + src1;
@@ -2099,8 +2157,8 @@ evaluate_fadd(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fall_equal2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fall_equal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2109,14 +2167,18 @@ evaluate_fall_equal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -2131,14 +2193,18 @@ evaluate_fall_equal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -2157,8 +2223,8 @@ evaluate_fall_equal2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fall_equal3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fall_equal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2167,16 +2233,18 @@ evaluate_fall_equal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
+            0,
          };
 
          struct float32_vec dst;
@@ -2191,16 +2259,18 @@ evaluate_fall_equal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
+            0,
          };
 
          struct float32_vec dst;
@@ -2219,8 +2289,8 @@ evaluate_fall_equal3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fall_equal4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fall_equal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2229,14 +2299,14 @@ evaluate_fall_equal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
                _src[0].f32[3],
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -2255,14 +2325,14 @@ evaluate_fall_equal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
                _src[0].f32[3],
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -2285,8 +2355,8 @@ evaluate_fall_equal4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fand(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fand(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2296,9 +2366,9 @@ evaluate_fand(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = ((src0 != 0.0f) && (src1 != 0.0f)) ? 1.0f : 0.0f;
@@ -2313,9 +2383,9 @@ evaluate_fand(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = ((src0 != 0.0f) && (src1 != 0.0f)) ? 1.0f : 0.0f;
@@ -2333,8 +2403,8 @@ evaluate_fand(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fany_nequal2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fany_nequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2343,14 +2413,18 @@ evaluate_fany_nequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -2365,14 +2439,18 @@ evaluate_fany_nequal2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -2391,8 +2469,8 @@ evaluate_fany_nequal2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fany_nequal3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fany_nequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2401,16 +2479,18 @@ evaluate_fany_nequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
+            0,
          };
 
          struct float32_vec dst;
@@ -2425,16 +2505,18 @@ evaluate_fany_nequal3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
+            0,
          };
 
          struct float32_vec dst;
@@ -2453,8 +2535,8 @@ evaluate_fany_nequal3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fany_nequal4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fany_nequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2463,14 +2545,14 @@ evaluate_fany_nequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
                _src[0].f32[3],
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -2489,14 +2571,14 @@ evaluate_fany_nequal4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
                _src[0].f32[3],
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -2519,8 +2601,8 @@ evaluate_fany_nequal4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fceil(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fceil(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2530,7 +2612,7 @@ evaluate_fceil(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? ceil(src0) : ceilf(src0);
@@ -2545,7 +2627,7 @@ evaluate_fceil(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? ceil(src0) : ceilf(src0);
@@ -2563,8 +2645,8 @@ evaluate_fceil(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fcos(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fcos(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2574,7 +2656,7 @@ evaluate_fcos(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? cos(src0) : cosf(src0);
@@ -2589,7 +2671,7 @@ evaluate_fcos(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? cos(src0) : cosf(src0);
@@ -2607,8 +2689,8 @@ evaluate_fcos(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fcsel(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fcsel(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2618,11 +2700,11 @@ evaluate_fcsel(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
-                  float32_t src2 =
+                  const float32_t src2 =
                      _src[2].f32[_i];
 
                float32_t dst = (src0 != 0.0f) ? src1 : src2;
@@ -2637,11 +2719,11 @@ evaluate_fcsel(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
-                  float32_t src2 =
+                  const float32_t src2 =
                      _src[2].f32[_i];
 
                float32_t dst = (src0 != 0.0f) ? src1 : src2;
@@ -2659,8 +2741,8 @@ evaluate_fcsel(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fddx(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fddx(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2699,8 +2781,8 @@ evaluate_fddx(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fddx_coarse(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fddx_coarse(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2739,8 +2821,8 @@ evaluate_fddx_coarse(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fddx_fine(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fddx_fine(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2779,8 +2861,8 @@ evaluate_fddx_fine(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fddy(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fddy(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2819,8 +2901,8 @@ evaluate_fddy(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fddy_coarse(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fddy_coarse(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2859,8 +2941,8 @@ evaluate_fddy_coarse(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fddy_fine(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fddy_fine(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2899,8 +2981,8 @@ evaluate_fddy_fine(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdiv(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2910,9 +2992,9 @@ evaluate_fdiv(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = src0 / src1;
@@ -2927,9 +3009,9 @@ evaluate_fdiv(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = src0 / src1;
@@ -2947,8 +3029,8 @@ evaluate_fdiv(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdot2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdot2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -2957,14 +3039,18 @@ evaluate_fdot2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -2979,14 +3065,18 @@ evaluate_fdot2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
+            0,
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
+            0,
+            0,
          };
 
          struct float64_vec dst;
@@ -3005,8 +3095,8 @@ evaluate_fdot2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdot3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdot3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3015,16 +3105,18 @@ evaluate_fdot3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
+            0,
          };
 
          struct float32_vec dst;
@@ -3039,16 +3131,18 @@ evaluate_fdot3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
+            0,
          };
 
          struct float64_vec dst;
@@ -3067,8 +3161,8 @@ evaluate_fdot3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdot4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdot4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3077,14 +3171,14 @@ evaluate_fdot4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
                _src[0].f32[3],
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -3103,14 +3197,14 @@ evaluate_fdot4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
                _src[0].f64[3],
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
@@ -3133,8 +3227,8 @@ evaluate_fdot4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdot_replicated2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdot_replicated2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3143,14 +3237,18 @@ evaluate_fdot_replicated2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -3168,14 +3266,18 @@ evaluate_fdot_replicated2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
+            0,
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
+            0,
+            0,
          };
 
          struct float64_vec dst;
@@ -3197,8 +3299,8 @@ evaluate_fdot_replicated2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdot_replicated3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdot_replicated3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3207,16 +3309,18 @@ evaluate_fdot_replicated3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
+            0,
          };
 
          struct float32_vec dst;
@@ -3234,16 +3338,18 @@ evaluate_fdot_replicated3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
+            0,
          };
 
          struct float64_vec dst;
@@ -3265,8 +3371,8 @@ evaluate_fdot_replicated3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdot_replicated4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdot_replicated4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3275,14 +3381,14 @@ evaluate_fdot_replicated4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
                _src[0].f32[3],
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -3304,14 +3410,14 @@ evaluate_fdot_replicated4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
                _src[0].f64[3],
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
@@ -3337,8 +3443,8 @@ evaluate_fdot_replicated4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdph(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdph(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3347,13 +3453,14 @@ evaluate_fdph(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -3372,13 +3479,14 @@ evaluate_fdph(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
@@ -3401,8 +3509,8 @@ evaluate_fdph(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fdph_replicated(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fdph_replicated(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3411,13 +3519,14 @@ evaluate_fdph_replicated(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
                _src[1].f32[1],
                _src[1].f32[2],
@@ -3439,13 +3548,14 @@ evaluate_fdph_replicated(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float64_vec src0 = {
+         const struct float64_vec src0 = {
                _src[0].f64[0],
                _src[0].f64[1],
                _src[0].f64[2],
+            0,
          };
 
-         struct float64_vec src1 = {
+         const struct float64_vec src1 = {
                _src[1].f64[0],
                _src[1].f64[1],
                _src[1].f64[2],
@@ -3471,8 +3581,8 @@ evaluate_fdph_replicated(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_feq(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_feq(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3482,9 +3592,9 @@ evaluate_feq(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                bool32_t dst = src0 == src1;
@@ -3499,9 +3609,9 @@ evaluate_feq(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                bool32_t dst = src0 == src1;
@@ -3519,8 +3629,8 @@ evaluate_feq(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fexp2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fexp2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3530,7 +3640,7 @@ evaluate_fexp2(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = exp2f(src0);
@@ -3545,7 +3655,7 @@ evaluate_fexp2(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = exp2f(src0);
@@ -3563,8 +3673,8 @@ evaluate_fexp2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ffloor(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ffloor(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3574,7 +3684,7 @@ evaluate_ffloor(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? floor(src0) : floorf(src0);
@@ -3589,7 +3699,7 @@ evaluate_ffloor(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? floor(src0) : floorf(src0);
@@ -3607,8 +3717,8 @@ evaluate_ffloor(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ffma(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ffma(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3618,11 +3728,11 @@ evaluate_ffma(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
-                  float32_t src2 =
+                  const float32_t src2 =
                      _src[2].f32[_i];
 
                float32_t dst = src0 * src1 + src2;
@@ -3637,11 +3747,11 @@ evaluate_ffma(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
-                  float64_t src2 =
+                  const float64_t src2 =
                      _src[2].f64[_i];
 
                float64_t dst = src0 * src1 + src2;
@@ -3659,8 +3769,8 @@ evaluate_ffma(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ffract(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ffract(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3670,7 +3780,7 @@ evaluate_ffract(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = src0 - (bit_size == 64 ? floor(src0) : floorf(src0));
@@ -3685,7 +3795,7 @@ evaluate_ffract(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = src0 - (bit_size == 64 ? floor(src0) : floorf(src0));
@@ -3703,8 +3813,8 @@ evaluate_ffract(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fge(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fge(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3714,9 +3824,9 @@ evaluate_fge(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                bool32_t dst = src0 >= src1;
@@ -3731,9 +3841,9 @@ evaluate_fge(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                bool32_t dst = src0 >= src1;
@@ -3751,8 +3861,8 @@ evaluate_fge(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_find_lsb(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_find_lsb(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3762,10 +3872,11 @@ evaluate_find_lsb(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst;
+
                
 dst = -1;
 for (unsigned bit = 0; bit < 32; bit++) {
@@ -3786,10 +3897,11 @@ for (unsigned bit = 0; bit < 32; bit++) {
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst;
+
                
 dst = -1;
 for (unsigned bit = 0; bit < 32; bit++) {
@@ -3813,8 +3925,8 @@ for (unsigned bit = 0; bit < 32; bit++) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_flog2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_flog2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3824,7 +3936,7 @@ evaluate_flog2(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = log2f(src0);
@@ -3839,7 +3951,7 @@ evaluate_flog2(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = log2f(src0);
@@ -3857,8 +3969,8 @@ evaluate_flog2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_flrp(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_flrp(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3868,11 +3980,11 @@ evaluate_flrp(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
-                  float32_t src2 =
+                  const float32_t src2 =
                      _src[2].f32[_i];
 
                float32_t dst = src0 * (1 - src2) + src1 * src2;
@@ -3887,11 +3999,11 @@ evaluate_flrp(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
-                  float64_t src2 =
+                  const float64_t src2 =
                      _src[2].f64[_i];
 
                float64_t dst = src0 * (1 - src2) + src1 * src2;
@@ -3909,8 +4021,8 @@ evaluate_flrp(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_flt(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_flt(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3920,9 +4032,9 @@ evaluate_flt(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                bool32_t dst = src0 < src1;
@@ -3937,9 +4049,9 @@ evaluate_flt(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                bool32_t dst = src0 < src1;
@@ -3957,8 +4069,8 @@ evaluate_flt(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fmax(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fmax(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -3968,9 +4080,9 @@ evaluate_fmax(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = fmaxf(src0, src1);
@@ -3985,9 +4097,9 @@ evaluate_fmax(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = fmaxf(src0, src1);
@@ -4005,8 +4117,8 @@ evaluate_fmax(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fmin(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fmin(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4016,9 +4128,9 @@ evaluate_fmin(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = fminf(src0, src1);
@@ -4033,9 +4145,9 @@ evaluate_fmin(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = fminf(src0, src1);
@@ -4053,8 +4165,8 @@ evaluate_fmin(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fmod(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fmod(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4064,9 +4176,9 @@ evaluate_fmod(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = src0 - src1 * floorf(src0 / src1);
@@ -4081,9 +4193,9 @@ evaluate_fmod(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = src0 - src1 * floorf(src0 / src1);
@@ -4101,8 +4213,8 @@ evaluate_fmod(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fmov(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fmov(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4112,7 +4224,7 @@ evaluate_fmov(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = src0;
@@ -4127,7 +4239,7 @@ evaluate_fmov(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = src0;
@@ -4145,8 +4257,8 @@ evaluate_fmov(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fmul(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fmul(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4156,9 +4268,9 @@ evaluate_fmul(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = src0 * src1;
@@ -4173,9 +4285,9 @@ evaluate_fmul(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = src0 * src1;
@@ -4193,8 +4305,8 @@ evaluate_fmul(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fne(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fne(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4204,9 +4316,9 @@ evaluate_fne(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                bool32_t dst = src0 != src1;
@@ -4221,9 +4333,9 @@ evaluate_fne(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                bool32_t dst = src0 != src1;
@@ -4241,8 +4353,8 @@ evaluate_fne(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fneg(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fneg(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4252,7 +4364,7 @@ evaluate_fneg(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = -src0;
@@ -4267,7 +4379,7 @@ evaluate_fneg(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = -src0;
@@ -4285,8 +4397,8 @@ evaluate_fneg(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise1_1(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise1_1(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4323,8 +4435,8 @@ evaluate_fnoise1_1(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise1_2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise1_2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4361,8 +4473,8 @@ evaluate_fnoise1_2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise1_3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise1_3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4399,8 +4511,8 @@ evaluate_fnoise1_3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise1_4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise1_4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4437,48 +4549,8 @@ evaluate_fnoise1_4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise2_1(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
-{
-   nir_const_value _dst_val = { {0, } };
-
-   switch (bit_size) {
-   case 32: {
-      
-
-            
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
-
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-
-      break;
-   }
-   case 64: {
-      
-
-            
-         struct float64_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
-
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
-
-   return _dst_val;
-}
-static nir_const_value
-evaluate_fnoise2_2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise2_1(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4517,8 +4589,8 @@ evaluate_fnoise2_2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise2_3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise2_2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4557,8 +4629,8 @@ evaluate_fnoise2_3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise2_4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise2_3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4597,8 +4669,8 @@ evaluate_fnoise2_4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise3_1(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise2_4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4613,7 +4685,6 @@ evaluate_fnoise3_1(unsigned num_components, unsigned bit_size,
 
                _dst_val.f32[0] = dst.x;
                _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
 
       break;
    }
@@ -4627,7 +4698,6 @@ evaluate_fnoise3_1(unsigned num_components, unsigned bit_size,
 
                _dst_val.f64[0] = dst.x;
                _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
 
       break;
    }
@@ -4639,8 +4709,8 @@ evaluate_fnoise3_1(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise3_2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise3_1(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4681,8 +4751,8 @@ evaluate_fnoise3_2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise3_3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise3_2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4723,8 +4793,8 @@ evaluate_fnoise3_3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise3_4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise3_3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4765,8 +4835,8 @@ evaluate_fnoise3_4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise4_1(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise3_4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4782,7 +4852,6 @@ evaluate_fnoise4_1(unsigned num_components, unsigned bit_size,
                _dst_val.f32[0] = dst.x;
                _dst_val.f32[1] = dst.y;
                _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
 
       break;
    }
@@ -4797,7 +4866,6 @@ evaluate_fnoise4_1(unsigned num_components, unsigned bit_size,
                _dst_val.f64[0] = dst.x;
                _dst_val.f64[1] = dst.y;
                _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
 
       break;
    }
@@ -4809,8 +4877,8 @@ evaluate_fnoise4_1(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise4_2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise4_1(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4853,8 +4921,8 @@ evaluate_fnoise4_2(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise4_3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise4_2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4897,8 +4965,8 @@ evaluate_fnoise4_3(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnoise4_4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise4_3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4941,8 +5009,52 @@ evaluate_fnoise4_4(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fnot(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fnoise4_4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+   switch (bit_size) {
+   case 32: {
+      
+
+            
+         struct float32_vec dst;
+
+            dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+               _dst_val.f32[0] = dst.x;
+               _dst_val.f32[1] = dst.y;
+               _dst_val.f32[2] = dst.z;
+               _dst_val.f32[3] = dst.w;
+
+      break;
+   }
+   case 64: {
+      
+
+            
+         struct float64_vec dst;
+
+            dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+               _dst_val.f64[0] = dst.x;
+               _dst_val.f64[1] = dst.y;
+               _dst_val.f64[2] = dst.z;
+               _dst_val.f64[3] = dst.w;
+
+      break;
+   }
+
+   default:
+      unreachable("unknown bit width");
+   }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_fnot(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4952,7 +5064,7 @@ evaluate_fnot(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? ((src0 == 0.0) ? 1.0 : 0.0f) : ((src0 == 0.0f) ? 1.0f : 0.0f);
@@ -4967,7 +5079,7 @@ evaluate_fnot(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? ((src0 == 0.0) ? 1.0 : 0.0f) : ((src0 == 0.0f) ? 1.0f : 0.0f);
@@ -4985,8 +5097,8 @@ evaluate_fnot(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_for(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_for(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -4996,9 +5108,9 @@ evaluate_for(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = ((src0 != 0.0f) || (src1 != 0.0f)) ? 1.0f : 0.0f;
@@ -5013,9 +5125,9 @@ evaluate_for(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = ((src0 != 0.0f) || (src1 != 0.0f)) ? 1.0f : 0.0f;
@@ -5033,8 +5145,8 @@ evaluate_for(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fpow(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fpow(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5044,9 +5156,9 @@ evaluate_fpow(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = bit_size == 64 ? powf(src0, src1) : pow(src0, src1);
@@ -5061,9 +5173,9 @@ evaluate_fpow(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = bit_size == 64 ? powf(src0, src1) : pow(src0, src1);
@@ -5081,8 +5193,8 @@ evaluate_fpow(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fquantize2f16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fquantize2f16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5092,7 +5204,7 @@ evaluate_fquantize2f16(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = (fabs(src0) < ldexpf(1.0, -14)) ? copysignf(0.0f, src0) : _mesa_half_to_float(_mesa_float_to_half(src0));
@@ -5107,7 +5219,7 @@ evaluate_fquantize2f16(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = (fabs(src0) < ldexpf(1.0, -14)) ? copysignf(0.0f, src0) : _mesa_half_to_float(_mesa_float_to_half(src0));
@@ -5125,8 +5237,8 @@ evaluate_fquantize2f16(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_frcp(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_frcp(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5136,7 +5248,7 @@ evaluate_frcp(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? 1.0 / src0 : 1.0f / src0;
@@ -5151,7 +5263,7 @@ evaluate_frcp(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? 1.0 / src0 : 1.0f / src0;
@@ -5169,8 +5281,8 @@ evaluate_frcp(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_frem(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_frem(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5180,9 +5292,9 @@ evaluate_frem(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = src0 - src1 * truncf(src0 / src1);
@@ -5197,9 +5309,9 @@ evaluate_frem(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = src0 - src1 * truncf(src0 / src1);
@@ -5217,8 +5329,8 @@ evaluate_frem(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fround_even(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fround_even(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5228,7 +5340,7 @@ evaluate_fround_even(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? _mesa_roundeven(src0) : _mesa_roundevenf(src0);
@@ -5243,7 +5355,7 @@ evaluate_fround_even(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? _mesa_roundeven(src0) : _mesa_roundevenf(src0);
@@ -5261,8 +5373,8 @@ evaluate_fround_even(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_frsq(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_frsq(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5272,7 +5384,7 @@ evaluate_frsq(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0);
@@ -5287,7 +5399,7 @@ evaluate_frsq(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0);
@@ -5305,8 +5417,8 @@ evaluate_frsq(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fsat(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fsat(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5316,7 +5428,7 @@ evaluate_fsat(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? ((src0 > 1.0) ? 1.0 : ((src0 <= 0.0) ? 0.0 : src0)) : ((src0 > 1.0f) ? 1.0f : ((src0 <= 0.0f) ? 0.0f : src0));
@@ -5331,7 +5443,7 @@ evaluate_fsat(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? ((src0 > 1.0) ? 1.0 : ((src0 <= 0.0) ? 0.0 : src0)) : ((src0 > 1.0f) ? 1.0f : ((src0 <= 0.0f) ? 0.0f : src0));
@@ -5349,8 +5461,8 @@ evaluate_fsat(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fsign(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fsign(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5360,7 +5472,7 @@ evaluate_fsign(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? ((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : ((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f));
@@ -5375,7 +5487,7 @@ evaluate_fsign(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? ((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : ((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f));
@@ -5393,8 +5505,8 @@ evaluate_fsign(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fsin(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fsin(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5404,7 +5516,7 @@ evaluate_fsin(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? sin(src0) : sinf(src0);
@@ -5419,7 +5531,7 @@ evaluate_fsin(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? sin(src0) : sinf(src0);
@@ -5437,8 +5549,8 @@ evaluate_fsin(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fsqrt(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fsqrt(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5448,7 +5560,7 @@ evaluate_fsqrt(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? sqrt(src0) : sqrtf(src0);
@@ -5463,7 +5575,7 @@ evaluate_fsqrt(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? sqrt(src0) : sqrtf(src0);
@@ -5481,8 +5593,8 @@ evaluate_fsqrt(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fsub(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fsub(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5492,9 +5604,9 @@ evaluate_fsub(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = src0 - src1;
@@ -5509,9 +5621,9 @@ evaluate_fsub(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  float64_t src1 =
+                  const float64_t src1 =
                      _src[1].f64[_i];
 
                float64_t dst = src0 - src1;
@@ -5529,8 +5641,8 @@ evaluate_fsub(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ftrunc(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ftrunc(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5540,7 +5652,7 @@ evaluate_ftrunc(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
 
                float32_t dst = bit_size == 64 ? trunc(src0) : truncf(src0);
@@ -5555,7 +5667,7 @@ evaluate_ftrunc(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
 
                float64_t dst = bit_size == 64 ? trunc(src0) : truncf(src0);
@@ -5573,8 +5685,8 @@ evaluate_ftrunc(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_fxor(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_fxor(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5584,9 +5696,9 @@ evaluate_fxor(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 != 0.0f && src1 == 0.0f) || (src0 == 0.0f && src1 != 0.0f) ? 1.0f : 0.0f;
@@ -5601,9 +5713,9 @@ evaluate_fxor(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 != 0.0f && src1 == 0.0f) || (src0 == 0.0f && src1 != 0.0f) ? 1.0f : 0.0f;
@@ -5621,8 +5733,8 @@ evaluate_fxor(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_i2b(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_i2b(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5632,7 +5744,7 @@ evaluate_i2b(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                bool32_t dst = src0 != 0;
@@ -5647,7 +5759,7 @@ evaluate_i2b(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                bool32_t dst = src0 != 0;
@@ -5665,8 +5777,8 @@ evaluate_i2b(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_i2d(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_i2d(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5676,7 +5788,7 @@ evaluate_i2d(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                float64_t dst = src0;
@@ -5691,7 +5803,7 @@ evaluate_i2d(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                float64_t dst = src0;
@@ -5709,8 +5821,8 @@ evaluate_i2d(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_i2f(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_i2f(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5720,7 +5832,7 @@ evaluate_i2f(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                float32_t dst = src0;
@@ -5735,7 +5847,7 @@ evaluate_i2f(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                float32_t dst = src0;
@@ -5753,8 +5865,8 @@ evaluate_i2f(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_iabs(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_iabs(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5764,7 +5876,7 @@ evaluate_iabs(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst = (src0 < 0) ? -src0 : src0;
@@ -5779,7 +5891,7 @@ evaluate_iabs(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
 
                int64_t dst = (src0 < 0) ? -src0 : src0;
@@ -5797,8 +5909,8 @@ evaluate_iabs(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_iadd(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_iadd(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5808,9 +5920,9 @@ evaluate_iadd(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src0 + src1;
@@ -5825,9 +5937,9 @@ evaluate_iadd(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src0 + src1;
@@ -5845,8 +5957,8 @@ evaluate_iadd(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_iand(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_iand(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5856,9 +5968,9 @@ evaluate_iand(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src0 & src1;
@@ -5873,9 +5985,9 @@ evaluate_iand(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src0 & src1;
@@ -5893,8 +6005,8 @@ evaluate_iand(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ibfe(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ibfe(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5904,14 +6016,15 @@ evaluate_ibfe(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
 
                int32_t dst;
+
                
 int base = src0;
 int offset = src1, bits = src2;
@@ -5936,14 +6049,15 @@ if (bits == 0) {
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
 
                int32_t dst;
+
                
 int base = src0;
 int offset = src1, bits = src2;
@@ -5971,8 +6085,8 @@ if (bits == 0) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_ibitfield_extract(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ibitfield_extract(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -5982,14 +6096,15 @@ evaluate_ibitfield_extract(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
 
                int32_t dst;
+
                
 int base = src0;
 int offset = src1, bits = src2;
@@ -6012,14 +6127,15 @@ if (bits == 0) {
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
 
                int32_t dst;
+
                
 int base = src0;
 int offset = src1, bits = src2;
@@ -6045,8 +6161,8 @@ if (bits == 0) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_idiv(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_idiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6056,9 +6172,9 @@ evaluate_idiv(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src0 / src1;
@@ -6073,9 +6189,9 @@ evaluate_idiv(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src0 / src1;
@@ -6093,8 +6209,8 @@ evaluate_idiv(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ieq(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ieq(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6104,9 +6220,9 @@ evaluate_ieq(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                bool32_t dst = src0 == src1;
@@ -6121,9 +6237,9 @@ evaluate_ieq(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                bool32_t dst = src0 == src1;
@@ -6141,8 +6257,8 @@ evaluate_ieq(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ifind_msb(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ifind_msb(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6152,10 +6268,11 @@ evaluate_ifind_msb(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst;
+
                
 dst = -1;
 for (int bit = 31; bit >= 0; bit--) {
@@ -6180,10 +6297,11 @@ for (int bit = 31; bit >= 0; bit--) {
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst;
+
                
 dst = -1;
 for (int bit = 31; bit >= 0; bit--) {
@@ -6211,8 +6329,8 @@ for (int bit = 31; bit >= 0; bit--) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_ige(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ige(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6222,9 +6340,9 @@ evaluate_ige(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                bool32_t dst = src0 >= src1;
@@ -6239,9 +6357,9 @@ evaluate_ige(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                bool32_t dst = src0 >= src1;
@@ -6259,8 +6377,8 @@ evaluate_ige(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ilt(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ilt(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6270,9 +6388,9 @@ evaluate_ilt(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                bool32_t dst = src0 < src1;
@@ -6287,9 +6405,9 @@ evaluate_ilt(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                bool32_t dst = src0 < src1;
@@ -6307,8 +6425,8 @@ evaluate_ilt(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_imax(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_imax(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6318,9 +6436,9 @@ evaluate_imax(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src1 > src0 ? src1 : src0;
@@ -6335,9 +6453,9 @@ evaluate_imax(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src1 > src0 ? src1 : src0;
@@ -6355,8 +6473,8 @@ evaluate_imax(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_imin(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_imin(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6366,9 +6484,9 @@ evaluate_imin(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src1 > src0 ? src0 : src1;
@@ -6383,9 +6501,9 @@ evaluate_imin(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src1 > src0 ? src0 : src1;
@@ -6403,8 +6521,8 @@ evaluate_imin(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_imod(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_imod(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6414,9 +6532,9 @@ evaluate_imod(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src1 == 0 ? 0 : ((src0 % src1 == 0 || (src0 >= 0) == (src1 >= 0)) ?                 src0 % src1 : src0 % src1 + src1);
@@ -6431,9 +6549,9 @@ evaluate_imod(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src1 == 0 ? 0 : ((src0 % src1 == 0 || (src0 >= 0) == (src1 >= 0)) ?                 src0 % src1 : src0 % src1 + src1);
@@ -6451,8 +6569,8 @@ evaluate_imod(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_imov(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_imov(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6462,7 +6580,7 @@ evaluate_imov(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst = src0;
@@ -6477,7 +6595,7 @@ evaluate_imov(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
 
                int64_t dst = src0;
@@ -6495,8 +6613,8 @@ evaluate_imov(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_imul(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_imul(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6506,9 +6624,9 @@ evaluate_imul(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src0 * src1;
@@ -6523,9 +6641,9 @@ evaluate_imul(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src0 * src1;
@@ -6543,8 +6661,8 @@ evaluate_imul(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_imul_high(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_imul_high(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6554,9 +6672,9 @@ evaluate_imul_high(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = (int32_t)(((int64_t) src0 * (int64_t) src1) >> 32);
@@ -6571,9 +6689,9 @@ evaluate_imul_high(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = (int32_t)(((int64_t) src0 * (int64_t) src1) >> 32);
@@ -6591,8 +6709,8 @@ evaluate_imul_high(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ine(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ine(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6602,9 +6720,9 @@ evaluate_ine(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                bool32_t dst = src0 != src1;
@@ -6619,9 +6737,9 @@ evaluate_ine(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                bool32_t dst = src0 != src1;
@@ -6639,8 +6757,8 @@ evaluate_ine(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ineg(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ineg(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6650,7 +6768,7 @@ evaluate_ineg(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst = -src0;
@@ -6665,7 +6783,7 @@ evaluate_ineg(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
 
                int64_t dst = -src0;
@@ -6683,8 +6801,8 @@ evaluate_ineg(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_inot(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_inot(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6694,7 +6812,7 @@ evaluate_inot(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst = ~src0;
@@ -6709,7 +6827,7 @@ evaluate_inot(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
 
                int64_t dst = ~src0;
@@ -6727,8 +6845,8 @@ evaluate_inot(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ior(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ior(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6738,9 +6856,9 @@ evaluate_ior(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src0 | src1;
@@ -6755,9 +6873,9 @@ evaluate_ior(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src0 | src1;
@@ -6775,8 +6893,8 @@ evaluate_ior(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_irem(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_irem(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6786,9 +6904,9 @@ evaluate_irem(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src1 == 0 ? 0 : src0 % src1;
@@ -6803,9 +6921,9 @@ evaluate_irem(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src1 == 0 ? 0 : src0 % src1;
@@ -6823,8 +6941,8 @@ evaluate_irem(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ishl(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ishl(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6834,9 +6952,9 @@ evaluate_ishl(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src0 << src1;
@@ -6851,9 +6969,9 @@ evaluate_ishl(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src0 << src1;
@@ -6871,8 +6989,8 @@ evaluate_ishl(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ishr(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ishr(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6882,9 +7000,9 @@ evaluate_ishr(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src0 >> src1;
@@ -6899,9 +7017,9 @@ evaluate_ishr(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src0 >> src1;
@@ -6919,8 +7037,8 @@ evaluate_ishr(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_isign(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_isign(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6930,7 +7048,7 @@ evaluate_isign(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
 
                int32_t dst = (src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1);
@@ -6945,7 +7063,7 @@ evaluate_isign(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
 
                int64_t dst = (src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1);
@@ -6963,8 +7081,8 @@ evaluate_isign(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_isub(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_isub(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -6974,9 +7092,9 @@ evaluate_isub(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst = src0 - src1;
@@ -6991,9 +7109,9 @@ evaluate_isub(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int64_t src0 =
+                  const int64_t src0 =
                      _src[0].i64[_i];
-                  int64_t src1 =
+                  const int64_t src1 =
                      _src[1].i64[_i];
 
                int64_t dst = src0 - src1;
@@ -7011,8 +7129,8 @@ evaluate_isub(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ixor(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ixor(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7022,9 +7140,9 @@ evaluate_ixor(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src0 ^ src1;
@@ -7039,9 +7157,9 @@ evaluate_ixor(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src0 ^ src1;
@@ -7059,8 +7177,8 @@ evaluate_ixor(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ldexp(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ldexp(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7070,12 +7188,13 @@ evaluate_ldexp(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                float32_t dst;
+
                
 dst = (bit_size == 64) ? ldexp(src0, src1) : ldexpf(src0, src1);
 /* flush denormals to zero. */
@@ -7093,12 +7212,13 @@ if (!isnormal(dst))
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float64_t src0 =
+                  const float64_t src0 =
                      _src[0].f64[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                float64_t dst;
+
                
 dst = (bit_size == 64) ? ldexp(src0, src1) : ldexpf(src0, src1);
 /* flush denormals to zero. */
@@ -7119,8 +7239,8 @@ if (!isnormal(dst))
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_double_2x32(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_double_2x32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7129,9 +7249,11 @@ evaluate_pack_double_2x32(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
                _src[0].u32[1],
+            0,
+            0,
          };
 
          struct uint64_vec dst;
@@ -7146,9 +7268,11 @@ evaluate_pack_double_2x32(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
                _src[0].u32[1],
+            0,
+            0,
          };
 
          struct uint64_vec dst;
@@ -7167,8 +7291,8 @@ evaluate_pack_double_2x32(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_double_2x32_split(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_double_2x32_split(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7178,9 +7302,9 @@ evaluate_pack_double_2x32_split(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint64_t dst = src0 | ((uint64_t)src1 << 32);
@@ -7195,9 +7319,9 @@ evaluate_pack_double_2x32_split(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint64_t dst = src0 | ((uint64_t)src1 << 32);
@@ -7215,8 +7339,8 @@ evaluate_pack_double_2x32_split(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_half_2x16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_half_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7225,9 +7349,11 @@ evaluate_pack_half_2x16(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7245,9 +7371,11 @@ dst.x |= ((uint32_t) pack_half_1x16(src0.y)) << 16;
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7269,8 +7397,8 @@ dst.x |= ((uint32_t) pack_half_1x16(src0.y)) << 16;
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_half_2x16_split(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_half_2x16_split(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7279,12 +7407,18 @@ evaluate_pack_half_2x16_split(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
+            0,
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
+            0,
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7299,12 +7433,18 @@ evaluate_pack_half_2x16_split(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
+            0,
+            0,
+            0,
          };
 
-         struct float32_vec src1 = {
+         const struct float32_vec src1 = {
                _src[1].f32[0],
+            0,
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7323,8 +7463,8 @@ evaluate_pack_half_2x16_split(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_snorm_2x16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_snorm_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7333,9 +7473,11 @@ evaluate_pack_snorm_2x16(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7353,9 +7495,11 @@ dst.x |= ((uint32_t) pack_snorm_1x16(src0.y)) << 16;
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7377,8 +7521,8 @@ dst.x |= ((uint32_t) pack_snorm_1x16(src0.y)) << 16;
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_snorm_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_snorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7387,7 +7531,7 @@ evaluate_pack_snorm_4x8(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
@@ -7411,7 +7555,7 @@ dst.x |= ((uint32_t) pack_snorm_1x8(src0.w)) << 24;
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
@@ -7439,8 +7583,8 @@ dst.x |= ((uint32_t) pack_snorm_1x8(src0.w)) << 24;
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_unorm_2x16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_unorm_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7449,9 +7593,11 @@ evaluate_pack_unorm_2x16(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7469,9 +7615,11 @@ dst.x |= ((uint32_t) pack_unorm_1x16(src0.y)) << 16;
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7493,8 +7641,8 @@ dst.x |= ((uint32_t) pack_unorm_1x16(src0.y)) << 16;
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_unorm_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_unorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7503,7 +7651,7 @@ evaluate_pack_unorm_4x8(unsigned num_components, unsigned bit_size,
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
@@ -7527,7 +7675,7 @@ dst.x |= ((uint32_t) pack_unorm_1x8(src0.w)) << 24;
       
 
 
-         struct float32_vec src0 = {
+         const struct float32_vec src0 = {
                _src[0].f32[0],
                _src[0].f32[1],
                _src[0].f32[2],
@@ -7555,8 +7703,8 @@ dst.x |= ((uint32_t) pack_unorm_1x8(src0.w)) << 24;
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_uvec2_to_uint(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_uvec2_to_uint(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7565,9 +7713,11 @@ evaluate_pack_uvec2_to_uint(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
                _src[0].u32[1],
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7584,9 +7734,11 @@ dst.x = (src0.x & 0xffff) | (src0.y << 16);
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
                _src[0].u32[1],
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -7607,8 +7759,8 @@ dst.x = (src0.x & 0xffff) | (src0.y << 16);
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_uvec4_to_uint(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_pack_uvec4_to_uint(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7617,7 +7769,7 @@ evaluate_pack_uvec4_to_uint(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
                _src[0].u32[1],
                _src[0].u32[2],
@@ -7641,7 +7793,7 @@ dst.x = (src0.x <<  0) |
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
                _src[0].u32[1],
                _src[0].u32[2],
@@ -7669,8 +7821,8 @@ dst.x = (src0.x <<  0) |
    return _dst_val;
 }
 static nir_const_value
-evaluate_seq(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_seq(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7680,9 +7832,9 @@ evaluate_seq(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 == src1) ? 1.0f : 0.0f;
@@ -7697,9 +7849,9 @@ evaluate_seq(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 == src1) ? 1.0f : 0.0f;
@@ -7717,8 +7869,8 @@ evaluate_seq(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_sge(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_sge(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7728,9 +7880,9 @@ evaluate_sge(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 >= src1) ? 1.0f : 0.0f;
@@ -7745,9 +7897,9 @@ evaluate_sge(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 >= src1) ? 1.0f : 0.0f;
@@ -7765,8 +7917,8 @@ evaluate_sge(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_slt(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_slt(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7776,9 +7928,9 @@ evaluate_slt(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 < src1) ? 1.0f : 0.0f;
@@ -7793,9 +7945,9 @@ evaluate_slt(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 < src1) ? 1.0f : 0.0f;
@@ -7813,8 +7965,8 @@ evaluate_slt(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_sne(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_sne(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7824,9 +7976,9 @@ evaluate_sne(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 != src1) ? 1.0f : 0.0f;
@@ -7841,9 +7993,9 @@ evaluate_sne(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  float32_t src0 =
+                  const float32_t src0 =
                      _src[0].f32[_i];
-                  float32_t src1 =
+                  const float32_t src1 =
                      _src[1].f32[_i];
 
                float32_t dst = (src0 != src1) ? 1.0f : 0.0f;
@@ -7861,8 +8013,8 @@ evaluate_sne(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_u2d(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_u2d(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7872,7 +8024,7 @@ evaluate_u2d(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                float64_t dst = src0;
@@ -7887,7 +8039,7 @@ evaluate_u2d(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                float64_t dst = src0;
@@ -7905,8 +8057,8 @@ evaluate_u2d(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_u2f(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_u2f(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7916,7 +8068,7 @@ evaluate_u2f(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                float32_t dst = src0;
@@ -7931,7 +8083,7 @@ evaluate_u2f(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                float32_t dst = src0;
@@ -7949,8 +8101,8 @@ evaluate_u2f(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_uadd_carry(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_uadd_carry(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -7960,9 +8112,9 @@ evaluate_uadd_carry(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src0 + src1 < src0;
@@ -7977,9 +8129,9 @@ evaluate_uadd_carry(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src0 + src1 < src0;
@@ -7997,8 +8149,8 @@ evaluate_uadd_carry(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ubfe(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ubfe(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8008,14 +8160,15 @@ evaluate_ubfe(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
 
                uint32_t dst;
+
                
 unsigned base = src0;
 int offset = src1, bits = src2;
@@ -8040,14 +8193,15 @@ if (bits == 0) {
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
 
                uint32_t dst;
+
                
 unsigned base = src0;
 int offset = src1, bits = src2;
@@ -8075,8 +8229,8 @@ if (bits == 0) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_ubitfield_extract(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ubitfield_extract(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8086,14 +8240,15 @@ evaluate_ubitfield_extract(unsigned num_components, unsigned bit_size,
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
 
                uint32_t dst;
+
                
 unsigned base = src0;
 int offset = src1, bits = src2;
@@ -8116,14 +8271,15 @@ if (bits == 0) {
 
                                     
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
-                  int32_t src2 =
+                  const int32_t src2 =
                      _src[2].i32[_i];
 
                uint32_t dst;
+
                
 unsigned base = src0;
 int offset = src1, bits = src2;
@@ -8149,8 +8305,8 @@ if (bits == 0) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_udiv(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_udiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8160,9 +8316,9 @@ evaluate_udiv(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src0 / src1;
@@ -8177,9 +8333,9 @@ evaluate_udiv(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src0 / src1;
@@ -8197,8 +8353,8 @@ evaluate_udiv(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ufind_msb(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ufind_msb(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8208,10 +8364,11 @@ evaluate_ufind_msb(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                int32_t dst;
+
                
 dst = -1;
 for (int bit = 31; bit > 0; bit--) {
@@ -8232,10 +8389,11 @@ for (int bit = 31; bit > 0; bit--) {
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
 
                int32_t dst;
+
                
 dst = -1;
 for (int bit = 31; bit > 0; bit--) {
@@ -8259,8 +8417,8 @@ for (int bit = 31; bit > 0; bit--) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_uge(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_uge(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8270,9 +8428,9 @@ evaluate_uge(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                bool32_t dst = src0 >= src1;
@@ -8287,9 +8445,9 @@ evaluate_uge(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                bool32_t dst = src0 >= src1;
@@ -8307,8 +8465,8 @@ evaluate_uge(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ult(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ult(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8318,9 +8476,9 @@ evaluate_ult(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                bool32_t dst = src0 < src1;
@@ -8335,9 +8493,9 @@ evaluate_ult(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                bool32_t dst = src0 < src1;
@@ -8355,8 +8513,8 @@ evaluate_ult(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_umax(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_umax(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8366,9 +8524,9 @@ evaluate_umax(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src1 > src0 ? src1 : src0;
@@ -8383,9 +8541,9 @@ evaluate_umax(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src1 > src0 ? src1 : src0;
@@ -8403,8 +8561,8 @@ evaluate_umax(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_umax_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_umax_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8414,12 +8572,13 @@ evaluate_umax_4x8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -8437,12 +8596,13 @@ for (int i = 0; i < 32; i += 8) {
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -8463,8 +8623,8 @@ for (int i = 0; i < 32; i += 8) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_umin(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_umin(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8474,9 +8634,9 @@ evaluate_umin(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src1 > src0 ? src0 : src1;
@@ -8491,9 +8651,9 @@ evaluate_umin(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src1 > src0 ? src0 : src1;
@@ -8511,8 +8671,8 @@ evaluate_umin(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_umin_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_umin_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8522,12 +8682,13 @@ evaluate_umin_4x8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -8545,12 +8706,13 @@ for (int i = 0; i < 32; i += 8) {
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -8571,8 +8733,8 @@ for (int i = 0; i < 32; i += 8) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_umod(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_umod(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8582,9 +8744,9 @@ evaluate_umod(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src1 == 0 ? 0 : src0 % src1;
@@ -8599,9 +8761,9 @@ evaluate_umod(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src1 == 0 ? 0 : src0 % src1;
@@ -8619,8 +8781,8 @@ evaluate_umod(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_umul_high(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_umul_high(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8630,9 +8792,9 @@ evaluate_umul_high(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = (uint32_t)(((uint64_t) src0 * (uint64_t) src1) >> 32);
@@ -8647,9 +8809,9 @@ evaluate_umul_high(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = (uint32_t)(((uint64_t) src0 * (uint64_t) src1) >> 32);
@@ -8667,8 +8829,8 @@ evaluate_umul_high(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_umul_unorm_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_umul_unorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8678,12 +8840,13 @@ evaluate_umul_unorm_4x8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -8703,12 +8866,13 @@ for (int i = 0; i < 32; i += 8) {
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -8731,8 +8895,8 @@ for (int i = 0; i < 32; i += 8) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_double_2x32(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_double_2x32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8741,8 +8905,11 @@ evaluate_unpack_double_2x32(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint64_vec src0 = {
+         const struct uint64_vec src0 = {
                _src[0].u64[0],
+            0,
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -8758,8 +8925,11 @@ evaluate_unpack_double_2x32(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint64_vec src0 = {
+         const struct uint64_vec src0 = {
                _src[0].u64[0],
+            0,
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -8779,8 +8949,8 @@ evaluate_unpack_double_2x32(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_double_2x32_split_x(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_double_2x32_split_x(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8790,7 +8960,7 @@ evaluate_unpack_double_2x32_split_x(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
 
                uint32_t dst = src0;
@@ -8805,7 +8975,7 @@ evaluate_unpack_double_2x32_split_x(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
 
                uint32_t dst = src0;
@@ -8823,8 +8993,8 @@ evaluate_unpack_double_2x32_split_x(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_double_2x32_split_y(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_double_2x32_split_y(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8834,7 +9004,7 @@ evaluate_unpack_double_2x32_split_y(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
 
                uint32_t dst = src0 >> 32;
@@ -8849,7 +9019,7 @@ evaluate_unpack_double_2x32_split_y(unsigned num_components, unsigned bit_size,
 
             
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
 
                uint32_t dst = src0 >> 32;
@@ -8867,8 +9037,8 @@ evaluate_unpack_double_2x32_split_y(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_half_2x16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_half_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8877,8 +9047,11 @@ evaluate_unpack_half_2x16(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -8897,8 +9070,11 @@ dst.y = unpack_half_1x16((uint16_t)(src0.x << 16));
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -8921,8 +9097,8 @@ dst.y = unpack_half_1x16((uint16_t)(src0.x << 16));
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_half_2x16_split_x(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_half_2x16_split_x(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8931,8 +9107,11 @@ evaluate_unpack_half_2x16_split_x(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -8947,8 +9126,11 @@ evaluate_unpack_half_2x16_split_x(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -8967,8 +9149,8 @@ evaluate_unpack_half_2x16_split_x(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_half_2x16_split_y(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_half_2x16_split_y(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -8977,8 +9159,11 @@ evaluate_unpack_half_2x16_split_y(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -8993,8 +9178,11 @@ evaluate_unpack_half_2x16_split_y(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9013,8 +9201,8 @@ evaluate_unpack_half_2x16_split_y(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_snorm_2x16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_snorm_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9023,8 +9211,11 @@ evaluate_unpack_snorm_2x16(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9043,8 +9234,11 @@ dst.y = unpack_snorm_1x16((uint16_t)(src0.x << 16));
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9067,8 +9261,8 @@ dst.y = unpack_snorm_1x16((uint16_t)(src0.x << 16));
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_snorm_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_snorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9077,8 +9271,11 @@ evaluate_unpack_snorm_4x8(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9101,8 +9298,11 @@ dst.w = unpack_snorm_1x8((uint8_t)(src0.x >> 24));
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9129,8 +9329,8 @@ dst.w = unpack_snorm_1x8((uint8_t)(src0.x >> 24));
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_unorm_2x16(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_unorm_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9139,8 +9339,11 @@ evaluate_unpack_unorm_2x16(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9159,8 +9362,11 @@ dst.y = unpack_unorm_1x16((uint16_t)(src0.x << 16));
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9183,8 +9389,8 @@ dst.y = unpack_unorm_1x16((uint16_t)(src0.x << 16));
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_unorm_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_unpack_unorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9193,8 +9399,11 @@ evaluate_unpack_unorm_4x8(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9217,8 +9426,11 @@ dst.w = unpack_unorm_1x8((uint8_t)(src0.x >> 24));
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct float32_vec dst;
@@ -9245,8 +9457,8 @@ dst.w = unpack_unorm_1x8((uint8_t)(src0.x >> 24));
    return _dst_val;
 }
 static nir_const_value
-evaluate_usadd_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_usadd_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9256,12 +9468,13 @@ evaluate_usadd_4x8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -9279,12 +9492,13 @@ for (int i = 0; i < 32; i += 8) {
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -9305,8 +9519,8 @@ for (int i = 0; i < 32; i += 8) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_ushr(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ushr(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9316,9 +9530,9 @@ evaluate_ushr(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src0 >> src1;
@@ -9333,9 +9547,9 @@ evaluate_ushr(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src0 >> src1;
@@ -9353,8 +9567,8 @@ evaluate_ushr(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_ussub_4x8(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_ussub_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9364,12 +9578,13 @@ evaluate_ussub_4x8(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -9390,12 +9605,13 @@ for (int i = 0; i < 32; i += 8) {
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  int32_t src0 =
+                  const int32_t src0 =
                      _src[0].i32[_i];
-                  int32_t src1 =
+                  const int32_t src1 =
                      _src[1].i32[_i];
 
                int32_t dst;
+
                
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
@@ -9419,8 +9635,8 @@ for (int i = 0; i < 32; i += 8) {
    return _dst_val;
 }
 static nir_const_value
-evaluate_usub_borrow(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_usub_borrow(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9430,9 +9646,9 @@ evaluate_usub_borrow(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint32_t src0 =
+                  const uint32_t src0 =
                      _src[0].u32[_i];
-                  uint32_t src1 =
+                  const uint32_t src1 =
                      _src[1].u32[_i];
 
                uint32_t dst = src0 < src1;
@@ -9447,9 +9663,9 @@ evaluate_usub_borrow(unsigned num_components, unsigned bit_size,
 
                         
          for (unsigned _i = 0; _i < num_components; _i++) {
-                  uint64_t src0 =
+                  const uint64_t src0 =
                      _src[0].u64[_i];
-                  uint64_t src1 =
+                  const uint64_t src1 =
                      _src[1].u64[_i];
 
                uint64_t dst = src0 < src1;
@@ -9467,8 +9683,8 @@ evaluate_usub_borrow(unsigned num_components, unsigned bit_size,
    return _dst_val;
 }
 static nir_const_value
-evaluate_vec2(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_vec2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9477,12 +9693,18 @@ evaluate_vec2(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint32_vec src1 = {
+         const struct uint32_vec src1 = {
                _src[1].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -9501,12 +9723,18 @@ dst.y = src1.x;
       
 
 
-         struct uint64_vec src0 = {
+         const struct uint64_vec src0 = {
                _src[0].u64[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint64_vec src1 = {
+         const struct uint64_vec src1 = {
                _src[1].u64[0],
+            0,
+            0,
+            0,
          };
 
          struct uint64_vec dst;
@@ -9529,8 +9757,8 @@ dst.y = src1.x;
    return _dst_val;
 }
 static nir_const_value
-evaluate_vec3(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_vec3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9539,16 +9767,25 @@ evaluate_vec3(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint32_vec src1 = {
+         const struct uint32_vec src1 = {
                _src[1].u32[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint32_vec src2 = {
+         const struct uint32_vec src2 = {
                _src[2].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -9569,16 +9806,25 @@ dst.z = src2.x;
       
 
 
-         struct uint64_vec src0 = {
+         const struct uint64_vec src0 = {
                _src[0].u64[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint64_vec src1 = {
+         const struct uint64_vec src1 = {
                _src[1].u64[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint64_vec src2 = {
+         const struct uint64_vec src2 = {
                _src[2].u64[0],
+            0,
+            0,
+            0,
          };
 
          struct uint64_vec dst;
@@ -9603,8 +9849,8 @@ dst.z = src2.x;
    return _dst_val;
 }
 static nir_const_value
-evaluate_vec4(unsigned num_components, unsigned bit_size,
-                 nir_const_value *_src)
+evaluate_vec4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
@@ -9613,20 +9859,32 @@ evaluate_vec4(unsigned num_components, unsigned bit_size,
       
 
 
-         struct uint32_vec src0 = {
+         const struct uint32_vec src0 = {
                _src[0].u32[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint32_vec src1 = {
+         const struct uint32_vec src1 = {
                _src[1].u32[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint32_vec src2 = {
+         const struct uint32_vec src2 = {
                _src[2].u32[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint32_vec src3 = {
+         const struct uint32_vec src3 = {
                _src[3].u32[0],
+            0,
+            0,
+            0,
          };
 
          struct uint32_vec dst;
@@ -9649,20 +9907,32 @@ dst.w = src3.x;
       
 
 
-         struct uint64_vec src0 = {
+         const struct uint64_vec src0 = {
                _src[0].u64[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint64_vec src1 = {
+         const struct uint64_vec src1 = {
                _src[1].u64[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint64_vec src2 = {
+         const struct uint64_vec src2 = {
                _src[2].u64[0],
+            0,
+            0,
+            0,
          };
 
-         struct uint64_vec src3 = {
+         const struct uint64_vec src3 = {
                _src[3].u64[0],
+            0,
+            0,
+            0,
          };
 
          struct uint64_vec dst;
@@ -9694,742 +9964,374 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
                       unsigned bit_width, nir_const_value *src)
 {
    switch (op) {
-   case nir_op_b2f: {
+   case nir_op_b2f:
       return evaluate_b2f(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_b2i: {
+   case nir_op_b2i:
       return evaluate_b2i(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ball_fequal2: {
+   case nir_op_ball_fequal2:
       return evaluate_ball_fequal2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ball_fequal3: {
+   case nir_op_ball_fequal3:
       return evaluate_ball_fequal3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ball_fequal4: {
+   case nir_op_ball_fequal4:
       return evaluate_ball_fequal4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ball_iequal2: {
+   case nir_op_ball_iequal2:
       return evaluate_ball_iequal2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ball_iequal3: {
+   case nir_op_ball_iequal3:
       return evaluate_ball_iequal3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ball_iequal4: {
+   case nir_op_ball_iequal4:
       return evaluate_ball_iequal4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bany_fnequal2: {
+   case nir_op_bany_fnequal2:
       return evaluate_bany_fnequal2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bany_fnequal3: {
+   case nir_op_bany_fnequal3:
       return evaluate_bany_fnequal3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bany_fnequal4: {
+   case nir_op_bany_fnequal4:
       return evaluate_bany_fnequal4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bany_inequal2: {
+   case nir_op_bany_inequal2:
       return evaluate_bany_inequal2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bany_inequal3: {
+   case nir_op_bany_inequal3:
       return evaluate_bany_inequal3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bany_inequal4: {
+   case nir_op_bany_inequal4:
       return evaluate_bany_inequal4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bcsel: {
+   case nir_op_bcsel:
       return evaluate_bcsel(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bfi: {
+   case nir_op_bfi:
       return evaluate_bfi(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bfm: {
+   case nir_op_bfm:
       return evaluate_bfm(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bit_count: {
+   case nir_op_bit_count:
       return evaluate_bit_count(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bitfield_insert: {
+   case nir_op_bitfield_insert:
       return evaluate_bitfield_insert(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_bitfield_reverse: {
+   case nir_op_bitfield_reverse:
       return evaluate_bitfield_reverse(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_d2b: {
+   case nir_op_d2b:
       return evaluate_d2b(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_d2f: {
+   case nir_op_d2f:
       return evaluate_d2f(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_d2i: {
+   case nir_op_d2i:
       return evaluate_d2i(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_d2u: {
+   case nir_op_d2u:
       return evaluate_d2u(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_extract_i16: {
+   case nir_op_extract_i16:
       return evaluate_extract_i16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_extract_i8: {
+   case nir_op_extract_i8:
       return evaluate_extract_i8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_extract_u16: {
+   case nir_op_extract_u16:
       return evaluate_extract_u16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_extract_u8: {
+   case nir_op_extract_u8:
       return evaluate_extract_u8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_f2b: {
+   case nir_op_f2b:
       return evaluate_f2b(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_f2d: {
+   case nir_op_f2d:
       return evaluate_f2d(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_f2i: {
+   case nir_op_f2i:
       return evaluate_f2i(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_f2u: {
+   case nir_op_f2u:
       return evaluate_f2u(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fabs: {
+   case nir_op_fabs:
       return evaluate_fabs(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fadd: {
+   case nir_op_fadd:
       return evaluate_fadd(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fall_equal2: {
+   case nir_op_fall_equal2:
       return evaluate_fall_equal2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fall_equal3: {
+   case nir_op_fall_equal3:
       return evaluate_fall_equal3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fall_equal4: {
+   case nir_op_fall_equal4:
       return evaluate_fall_equal4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fand: {
+   case nir_op_fand:
       return evaluate_fand(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fany_nequal2: {
+   case nir_op_fany_nequal2:
       return evaluate_fany_nequal2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fany_nequal3: {
+   case nir_op_fany_nequal3:
       return evaluate_fany_nequal3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fany_nequal4: {
+   case nir_op_fany_nequal4:
       return evaluate_fany_nequal4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fceil: {
+   case nir_op_fceil:
       return evaluate_fceil(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fcos: {
+   case nir_op_fcos:
       return evaluate_fcos(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fcsel: {
+   case nir_op_fcsel:
       return evaluate_fcsel(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fddx: {
+   case nir_op_fddx:
       return evaluate_fddx(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fddx_coarse: {
+   case nir_op_fddx_coarse:
       return evaluate_fddx_coarse(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fddx_fine: {
+   case nir_op_fddx_fine:
       return evaluate_fddx_fine(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fddy: {
+   case nir_op_fddy:
       return evaluate_fddy(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fddy_coarse: {
+   case nir_op_fddy_coarse:
       return evaluate_fddy_coarse(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fddy_fine: {
+   case nir_op_fddy_fine:
       return evaluate_fddy_fine(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdiv: {
+   case nir_op_fdiv:
       return evaluate_fdiv(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdot2: {
+   case nir_op_fdot2:
       return evaluate_fdot2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdot3: {
+   case nir_op_fdot3:
       return evaluate_fdot3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdot4: {
+   case nir_op_fdot4:
       return evaluate_fdot4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdot_replicated2: {
+   case nir_op_fdot_replicated2:
       return evaluate_fdot_replicated2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdot_replicated3: {
+   case nir_op_fdot_replicated3:
       return evaluate_fdot_replicated3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdot_replicated4: {
+   case nir_op_fdot_replicated4:
       return evaluate_fdot_replicated4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdph: {
+   case nir_op_fdph:
       return evaluate_fdph(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fdph_replicated: {
+   case nir_op_fdph_replicated:
       return evaluate_fdph_replicated(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_feq: {
+   case nir_op_feq:
       return evaluate_feq(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fexp2: {
+   case nir_op_fexp2:
       return evaluate_fexp2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ffloor: {
+   case nir_op_ffloor:
       return evaluate_ffloor(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ffma: {
+   case nir_op_ffma:
       return evaluate_ffma(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ffract: {
+   case nir_op_ffract:
       return evaluate_ffract(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fge: {
+   case nir_op_fge:
       return evaluate_fge(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_find_lsb: {
+   case nir_op_find_lsb:
       return evaluate_find_lsb(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_flog2: {
+   case nir_op_flog2:
       return evaluate_flog2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_flrp: {
+   case nir_op_flrp:
       return evaluate_flrp(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_flt: {
+   case nir_op_flt:
       return evaluate_flt(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fmax: {
+   case nir_op_fmax:
       return evaluate_fmax(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fmin: {
+   case nir_op_fmin:
       return evaluate_fmin(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fmod: {
+   case nir_op_fmod:
       return evaluate_fmod(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fmov: {
+   case nir_op_fmov:
       return evaluate_fmov(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fmul: {
+   case nir_op_fmul:
       return evaluate_fmul(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fne: {
+   case nir_op_fne:
       return evaluate_fne(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fneg: {
+   case nir_op_fneg:
       return evaluate_fneg(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise1_1: {
+   case nir_op_fnoise1_1:
       return evaluate_fnoise1_1(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise1_2: {
+   case nir_op_fnoise1_2:
       return evaluate_fnoise1_2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise1_3: {
+   case nir_op_fnoise1_3:
       return evaluate_fnoise1_3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise1_4: {
+   case nir_op_fnoise1_4:
       return evaluate_fnoise1_4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise2_1: {
+   case nir_op_fnoise2_1:
       return evaluate_fnoise2_1(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise2_2: {
+   case nir_op_fnoise2_2:
       return evaluate_fnoise2_2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise2_3: {
+   case nir_op_fnoise2_3:
       return evaluate_fnoise2_3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise2_4: {
+   case nir_op_fnoise2_4:
       return evaluate_fnoise2_4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise3_1: {
+   case nir_op_fnoise3_1:
       return evaluate_fnoise3_1(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise3_2: {
+   case nir_op_fnoise3_2:
       return evaluate_fnoise3_2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise3_3: {
+   case nir_op_fnoise3_3:
       return evaluate_fnoise3_3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise3_4: {
+   case nir_op_fnoise3_4:
       return evaluate_fnoise3_4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise4_1: {
+   case nir_op_fnoise4_1:
       return evaluate_fnoise4_1(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise4_2: {
+   case nir_op_fnoise4_2:
       return evaluate_fnoise4_2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise4_3: {
+   case nir_op_fnoise4_3:
       return evaluate_fnoise4_3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnoise4_4: {
+   case nir_op_fnoise4_4:
       return evaluate_fnoise4_4(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fnot: {
+   case nir_op_fnot:
       return evaluate_fnot(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_for: {
+   case nir_op_for:
       return evaluate_for(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fpow: {
+   case nir_op_fpow:
       return evaluate_fpow(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fquantize2f16: {
+   case nir_op_fquantize2f16:
       return evaluate_fquantize2f16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_frcp: {
+   case nir_op_frcp:
       return evaluate_frcp(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_frem: {
+   case nir_op_frem:
       return evaluate_frem(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fround_even: {
+   case nir_op_fround_even:
       return evaluate_fround_even(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_frsq: {
+   case nir_op_frsq:
       return evaluate_frsq(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fsat: {
+   case nir_op_fsat:
       return evaluate_fsat(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fsign: {
+   case nir_op_fsign:
       return evaluate_fsign(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fsin: {
+   case nir_op_fsin:
       return evaluate_fsin(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fsqrt: {
+   case nir_op_fsqrt:
       return evaluate_fsqrt(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fsub: {
+   case nir_op_fsub:
       return evaluate_fsub(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ftrunc: {
+   case nir_op_ftrunc:
       return evaluate_ftrunc(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_fxor: {
+   case nir_op_fxor:
       return evaluate_fxor(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_i2b: {
+   case nir_op_i2b:
       return evaluate_i2b(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_i2d: {
+   case nir_op_i2d:
       return evaluate_i2d(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_i2f: {
+   case nir_op_i2f:
       return evaluate_i2f(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_iabs: {
+   case nir_op_iabs:
       return evaluate_iabs(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_iadd: {
+   case nir_op_iadd:
       return evaluate_iadd(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_iand: {
+   case nir_op_iand:
       return evaluate_iand(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ibfe: {
+   case nir_op_ibfe:
       return evaluate_ibfe(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ibitfield_extract: {
+   case nir_op_ibitfield_extract:
       return evaluate_ibitfield_extract(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_idiv: {
+   case nir_op_idiv:
       return evaluate_idiv(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ieq: {
+   case nir_op_ieq:
       return evaluate_ieq(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ifind_msb: {
+   case nir_op_ifind_msb:
       return evaluate_ifind_msb(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ige: {
+   case nir_op_ige:
       return evaluate_ige(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ilt: {
+   case nir_op_ilt:
       return evaluate_ilt(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_imax: {
+   case nir_op_imax:
       return evaluate_imax(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_imin: {
+   case nir_op_imin:
       return evaluate_imin(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_imod: {
+   case nir_op_imod:
       return evaluate_imod(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_imov: {
+   case nir_op_imov:
       return evaluate_imov(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_imul: {
+   case nir_op_imul:
       return evaluate_imul(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_imul_high: {
+   case nir_op_imul_high:
       return evaluate_imul_high(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ine: {
+   case nir_op_ine:
       return evaluate_ine(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ineg: {
+   case nir_op_ineg:
       return evaluate_ineg(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_inot: {
+   case nir_op_inot:
       return evaluate_inot(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ior: {
+   case nir_op_ior:
       return evaluate_ior(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_irem: {
+   case nir_op_irem:
       return evaluate_irem(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ishl: {
+   case nir_op_ishl:
       return evaluate_ishl(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ishr: {
+   case nir_op_ishr:
       return evaluate_ishr(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_isign: {
+   case nir_op_isign:
       return evaluate_isign(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_isub: {
+   case nir_op_isub:
       return evaluate_isub(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ixor: {
+   case nir_op_ixor:
       return evaluate_ixor(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ldexp: {
+   case nir_op_ldexp:
       return evaluate_ldexp(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_double_2x32: {
+   case nir_op_pack_double_2x32:
       return evaluate_pack_double_2x32(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_double_2x32_split: {
+   case nir_op_pack_double_2x32_split:
       return evaluate_pack_double_2x32_split(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_half_2x16: {
+   case nir_op_pack_half_2x16:
       return evaluate_pack_half_2x16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_half_2x16_split: {
+   case nir_op_pack_half_2x16_split:
       return evaluate_pack_half_2x16_split(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_snorm_2x16: {
+   case nir_op_pack_snorm_2x16:
       return evaluate_pack_snorm_2x16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_snorm_4x8: {
+   case nir_op_pack_snorm_4x8:
       return evaluate_pack_snorm_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_unorm_2x16: {
+   case nir_op_pack_unorm_2x16:
       return evaluate_pack_unorm_2x16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_unorm_4x8: {
+   case nir_op_pack_unorm_4x8:
       return evaluate_pack_unorm_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_uvec2_to_uint: {
+   case nir_op_pack_uvec2_to_uint:
       return evaluate_pack_uvec2_to_uint(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_pack_uvec4_to_uint: {
+   case nir_op_pack_uvec4_to_uint:
       return evaluate_pack_uvec4_to_uint(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_seq: {
+   case nir_op_seq:
       return evaluate_seq(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_sge: {
+   case nir_op_sge:
       return evaluate_sge(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_slt: {
+   case nir_op_slt:
       return evaluate_slt(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_sne: {
+   case nir_op_sne:
       return evaluate_sne(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_u2d: {
+   case nir_op_u2d:
       return evaluate_u2d(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_u2f: {
+   case nir_op_u2f:
       return evaluate_u2f(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_uadd_carry: {
+   case nir_op_uadd_carry:
       return evaluate_uadd_carry(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ubfe: {
+   case nir_op_ubfe:
       return evaluate_ubfe(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ubitfield_extract: {
+   case nir_op_ubitfield_extract:
       return evaluate_ubitfield_extract(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_udiv: {
+   case nir_op_udiv:
       return evaluate_udiv(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ufind_msb: {
+   case nir_op_ufind_msb:
       return evaluate_ufind_msb(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_uge: {
+   case nir_op_uge:
       return evaluate_uge(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ult: {
+   case nir_op_ult:
       return evaluate_ult(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_umax: {
+   case nir_op_umax:
       return evaluate_umax(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_umax_4x8: {
+   case nir_op_umax_4x8:
       return evaluate_umax_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_umin: {
+   case nir_op_umin:
       return evaluate_umin(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_umin_4x8: {
+   case nir_op_umin_4x8:
       return evaluate_umin_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_umod: {
+   case nir_op_umod:
       return evaluate_umod(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_umul_high: {
+   case nir_op_umul_high:
       return evaluate_umul_high(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_umul_unorm_4x8: {
+   case nir_op_umul_unorm_4x8:
       return evaluate_umul_unorm_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_double_2x32: {
+   case nir_op_unpack_double_2x32:
       return evaluate_unpack_double_2x32(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_double_2x32_split_x: {
+   case nir_op_unpack_double_2x32_split_x:
       return evaluate_unpack_double_2x32_split_x(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_double_2x32_split_y: {
+   case nir_op_unpack_double_2x32_split_y:
       return evaluate_unpack_double_2x32_split_y(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_half_2x16: {
+   case nir_op_unpack_half_2x16:
       return evaluate_unpack_half_2x16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_half_2x16_split_x: {
+   case nir_op_unpack_half_2x16_split_x:
       return evaluate_unpack_half_2x16_split_x(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_half_2x16_split_y: {
+   case nir_op_unpack_half_2x16_split_y:
       return evaluate_unpack_half_2x16_split_y(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_snorm_2x16: {
+   case nir_op_unpack_snorm_2x16:
       return evaluate_unpack_snorm_2x16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_snorm_4x8: {
+   case nir_op_unpack_snorm_4x8:
       return evaluate_unpack_snorm_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_unorm_2x16: {
+   case nir_op_unpack_unorm_2x16:
       return evaluate_unpack_unorm_2x16(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_unpack_unorm_4x8: {
+   case nir_op_unpack_unorm_4x8:
       return evaluate_unpack_unorm_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_usadd_4x8: {
+   case nir_op_usadd_4x8:
       return evaluate_usadd_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ushr: {
+   case nir_op_ushr:
       return evaluate_ushr(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_ussub_4x8: {
+   case nir_op_ussub_4x8:
       return evaluate_ussub_4x8(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_usub_borrow: {
+   case nir_op_usub_borrow:
       return evaluate_usub_borrow(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_vec2: {
+   case nir_op_vec2:
       return evaluate_vec2(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_vec3: {
+   case nir_op_vec3:
       return evaluate_vec3(num_components, bit_width, src);
-      break;
-   }
-   case nir_op_vec4: {
+   case nir_op_vec4:
       return evaluate_vec4(num_components, bit_width, src);
-      break;
-   }
    default:
       unreachable("shouldn't get here");
    }

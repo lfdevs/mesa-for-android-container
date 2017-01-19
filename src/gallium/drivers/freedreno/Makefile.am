@@ -20,6 +20,7 @@ libfreedreno_la_SOURCES = \
 	$(a2xx_SOURCES) \
 	$(a3xx_SOURCES) \
 	$(a4xx_SOURCES) \
+	$(a5xx_SOURCES) \
 	$(ir3_SOURCES) \
 	$(ir3_GENERATED_FILES)
 

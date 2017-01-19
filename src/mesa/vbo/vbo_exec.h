@@ -109,13 +109,13 @@ struct vbo_exec_context
       /** pointers into the current 'vertex' array, declared above */
       fi_type *attrptr[VBO_ATTRIB_MAX];
 
-      struct gl_client_array arrays[VERT_ATTRIB_MAX];
+      struct gl_vertex_array arrays[VERT_ATTRIB_MAX];
 
       /* According to program mode, the values above plus current
        * values are squashed down to the 32 attributes passed to the
        * vertex program below:
        */
-      const struct gl_client_array *inputs[VERT_ATTRIB_MAX];
+      const struct gl_vertex_array *inputs[VERT_ATTRIB_MAX];
    } vtx;
 
    struct {
@@ -129,7 +129,7 @@ struct vbo_exec_context
        * mode, etc.  These are the attributes as seen by vertex
        * programs:
        */
-      const struct gl_client_array *inputs[VERT_ATTRIB_MAX];
+      const struct gl_vertex_array *inputs[VERT_ATTRIB_MAX];
       GLboolean recalculate_inputs;
    } array;
 
@@ -152,8 +152,6 @@ void vbo_exec_invalidate_state( struct gl_context *ctx, GLbitfield new_state );
 
 /* Internal functions:
  */
-void vbo_reset_attr(struct vbo_exec_context *exec, GLuint attr);
-
 void vbo_exec_vtx_init( struct vbo_exec_context *exec );
 void vbo_exec_vtx_destroy( struct vbo_exec_context *exec );
 

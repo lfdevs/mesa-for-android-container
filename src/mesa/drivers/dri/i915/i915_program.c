@@ -517,18 +517,18 @@ i915_fini_program(struct i915_fragment_program *p)
    }
 
    if (p->error) {
-      p->FragProg.Base.NumNativeInstructions = 0;
-      p->FragProg.Base.NumNativeAluInstructions = 0;
-      p->FragProg.Base.NumNativeTexInstructions = 0;
-      p->FragProg.Base.NumNativeTexIndirections = 0;
+      p->FragProg.arb.NumNativeInstructions = 0;
+      p->FragProg.arb.NumNativeAluInstructions = 0;
+      p->FragProg.arb.NumNativeTexInstructions = 0;
+      p->FragProg.arb.NumNativeTexIndirections = 0;
    }
    else {
-      p->FragProg.Base.NumNativeInstructions = (p->nr_alu_insn +
+      p->FragProg.arb.NumNativeInstructions = (p->nr_alu_insn +
                                                 p->nr_tex_insn +
                                                 p->nr_decl_insn);
-      p->FragProg.Base.NumNativeAluInstructions = p->nr_alu_insn;
-      p->FragProg.Base.NumNativeTexInstructions = p->nr_tex_insn;
-      p->FragProg.Base.NumNativeTexIndirections = p->nr_tex_indirect;
+      p->FragProg.arb.NumNativeAluInstructions = p->nr_alu_insn;
+      p->FragProg.arb.NumNativeTexInstructions = p->nr_tex_insn;
+      p->FragProg.arb.NumNativeTexIndirections = p->nr_tex_indirect;
    }
 
    p->declarations[0] |= program_size + decl_size - 2;

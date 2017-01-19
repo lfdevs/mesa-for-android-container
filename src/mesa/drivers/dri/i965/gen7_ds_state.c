@@ -32,15 +32,14 @@ gen7_upload_tes_push_constants(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->tes.base;
    /* BRW_NEW_TESS_PROGRAMS */
-   const struct brw_tess_eval_program *tep =
-      (struct brw_tess_eval_program *) brw->tess_eval_program;
+   const struct brw_program *tep = brw_program_const(brw->tess_eval_program);
 
    if (tep) {
       /* BRW_NEW_TES_PROG_DATA */
       const struct brw_stage_prog_data *prog_data = brw->tes.base.prog_data;
       _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_TESS_EVAL);
-      gen6_upload_push_constants(brw, &tep->program.Base, prog_data,
-                                      stage_state, AUB_TRACE_VS_CONSTANTS);
+      gen6_upload_push_constants(brw, &tep->program, prog_data, stage_state,
+                                 AUB_TRACE_VS_CONSTANTS);
    }
 
    gen7_upload_constant_state(brw, stage_state, tep, _3DSTATE_CONSTANT_DS);

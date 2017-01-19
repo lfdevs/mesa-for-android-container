@@ -1001,17 +1001,20 @@ do_assignment(exec_list *instructions, struct _mesa_glsl_parse_state *state,
     * i = j += 1;
     */
    if (needs_rvalue) {
-      ir_variable *var = new(ctx) ir_variable(rhs->type, "assignment_tmp",
-                                              ir_var_temporary);
-      instructions->push_tail(var);
-      instructions->push_tail(assign(var, rhs));
-
+      ir_rvalue *rvalue;
       if (!error_emitted) {
-         ir_dereference_variable *deref_var = new(ctx) ir_dereference_variable(var);
-         instructions->push_tail(new(ctx) ir_assignment(lhs, deref_var));
-      }
-      ir_rvalue *rvalue = new(ctx) ir_dereference_variable(var);
+         ir_variable *var = new(ctx) ir_variable(rhs->type, "assignment_tmp",
+                                                 ir_var_temporary);
+         instructions->push_tail(var);
+         instructions->push_tail(assign(var, rhs));
 
+         ir_dereference_variable *deref_var =
+            new(ctx) ir_dereference_variable(var);
+         instructions->push_tail(new(ctx) ir_assignment(lhs, deref_var));
+         rvalue = new(ctx) ir_dereference_variable(var);
+      } else {
+         rvalue = ir_rvalue::error_value(ctx);
+      }
       *out_rvalue = rvalue;
    } else {
       if (!error_emitted)
@@ -2631,6 +2634,28 @@ is_varying_var(ir_variable *var, gl_shader_stage target)
    }
 }
 
+static bool
+is_allowed_invariant(ir_variable *var, struct _mesa_glsl_parse_state *state)
+{
+   if (is_varying_var(var, state->stage))
+      return true;
+
+   /* From Section 4.6.1 ("The Invariant Qualifier") GLSL 1.20 spec:
+    * "Only variables output from a vertex shader can be candidates
+    * for invariance".
+    */
+   if (!state->is_version(130, 0))
+      return false;
+
+   /*
+    * Later specs remove this language - so allowed invariant
+    * on fragment shader outputs as well.
+    */
+   if (state->stage == MESA_SHADER_FRAGMENT &&
+       var->data.mode == ir_var_shader_out)
+      return true;
+   return false;
+}
 
 /**
  * Matrix layout qualifiers are only allowed on certain types
@@ -3629,6 +3654,16 @@ apply_layout_qualifier_to_variable(const struct ast_type_qualifier *qual,
       _mesa_glsl_error(loc, state, "early_fragment_tests layout qualifier only "
                        "valid in fragment shader input layout declaration.");
    }
+
+   if (qual->flags.q.inner_coverage) {
+      _mesa_glsl_error(loc, state, "inner_coverage layout qualifier only "
+                       "valid in fragment shader input layout declaration.");
+   }
+
+   if (qual->flags.q.post_depth_coverage) {
+      _mesa_glsl_error(loc, state, "post_depth_coverage layout qualifier only "
+                       "valid in fragment shader input layout declaration.");
+   }
 }
 
 static void
@@ -4482,7 +4517,7 @@ ast_declarator_list::hir(exec_list *instructions,
             _mesa_glsl_error(& loc, state,
                              "undeclared variable `%s' cannot be marked "
                              "invariant", decl->identifier);
-         } else if (!is_varying_var(earlier, state->stage)) {
+         } else if (!is_allowed_invariant(earlier, state)) {
             _mesa_glsl_error(&loc, state,
                              "`%s' cannot be marked invariant; interfaces between "
                              "shader stages only.", decl->identifier);
@@ -4778,7 +4813,7 @@ ast_declarator_list::hir(exec_list *instructions,
       }
 
       if (this->type->qualifier.flags.q.invariant) {
-         if (!is_varying_var(var, state->stage)) {
+         if (!is_allowed_invariant(var, state)) {
             _mesa_glsl_error(&loc, state,
                              "`%s' cannot be marked invariant; interfaces between "
                              "shader stages only", var->name);
@@ -5004,6 +5039,24 @@ ast_declarator_list::hir(exec_list *instructions,
           *     * A matrix
           *     * A structure
           *     * An array of array
+          *
+          * ES 3.20 updates this to apply to tessellation and geometry shaders
+          * as well.  Because there are per-vertex arrays in the new stages,
+          * it strikes the "array of..." rules and replaces them with these:
+          *
+          *     * For per-vertex-arrayed variables (applies to tessellation
+          *       control, tessellation evaluation and geometry shaders):
+          *
+          *       * Per-vertex-arrayed arrays of arrays
+          *       * Per-vertex-arrayed arrays of structures
+          *
+          *     * For non-per-vertex-arrayed variables:
+          *
+          *       * An array of arrays
+          *       * An array of structures
+          *
+          * which basically says to unwrap the per-vertex aspect and apply
+          * the old rules.
           */
          if (state->es_shader) {
             if (var->type->is_array() &&
@@ -5013,21 +5066,29 @@ ast_declarator_list::hir(exec_list *instructions,
                                 "cannot have an array of arrays",
                                 _mesa_shader_stage_to_string(state->stage));
             }
-            if (state->stage == MESA_SHADER_VERTEX) {
-               if (var->type->is_array() &&
-                   var->type->fields.array->is_record()) {
-                  _mesa_glsl_error(&loc, state,
-                                   "vertex shader output "
-                                   "cannot have an array of structs");
+            if (state->stage <= MESA_SHADER_GEOMETRY) {
+               const glsl_type *type = var->type;
+
+               if (state->stage == MESA_SHADER_TESS_CTRL &&
+                   !var->data.patch && var->type->is_array()) {
+                  type = var->type->fields.array;
                }
-               if (var->type->is_record()) {
-                  for (unsigned i = 0; i < var->type->length; i++) {
-                     if (var->type->fields.structure[i].type->is_array() ||
-                         var->type->fields.structure[i].type->is_record())
+
+               if (type->is_array() && type->fields.array->is_record()) {
+                  _mesa_glsl_error(&loc, state,
+                                   "%s shader output cannot have "
+                                   "an array of structs",
+                                   _mesa_shader_stage_to_string(state->stage));
+               }
+               if (type->is_record()) {
+                  for (unsigned i = 0; i < type->length; i++) {
+                     if (type->fields.structure[i].type->is_array() ||
+                         type->fields.structure[i].type->is_record())
                         _mesa_glsl_error(&loc, state,
-                                         "vertex shader output cannot have a "
+                                         "%s shader output cannot have a "
                                          "struct that contains an "
-                                         "array or struct");
+                                         "array or struct",
+                                         _mesa_shader_stage_to_string(state->stage));
                   }
                }
             }
@@ -6639,8 +6700,8 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
     * the types to HIR.  This ensures that structure definitions embedded in
     * other structure definitions or in interface blocks are processed.
     */
-   glsl_struct_field *const fields = ralloc_array(state, glsl_struct_field,
-                                                  decl_count);
+   glsl_struct_field *const fields = rzalloc_array(state, glsl_struct_field,
+                                                   decl_count);
 
    bool first_member = true;
    bool first_member_has_explicit_location = false;
@@ -7519,6 +7580,8 @@ ast_interface_block::hir(exec_list *instructions,
       glsl_type::get_interface_instance(fields,
                                         num_variables,
                                         packing,
+                                        matrix_layout ==
+                                           GLSL_MATRIX_LAYOUT_ROW_MAJOR,
                                         this->block_name);
 
    unsigned component_size = block_type->contains_double() ? 8 : 4;
@@ -7930,16 +7993,9 @@ ast_gs_input_layout::hir(exec_list *instructions,
 {
    YYLTYPE loc = this->get_location();
 
-   /* If any geometry input layout declaration preceded this one, make sure it
-    * was consistent with this one.
-    */
-   if (state->gs_input_prim_type_specified &&
-       state->in_qualifier->prim_type != this->prim_type) {
-      _mesa_glsl_error(&loc, state,
-                       "geometry shader input layout does not match"
-                       " previous declaration");
-      return NULL;
-   }
+   /* Should have been prevented by the parser. */
+   assert(!state->gs_input_prim_type_specified
+          || state->in_qualifier->prim_type == this->prim_type);
 
    /* If any shader inputs occurred before this declaration and specified an
     * array size, make sure the size they specified is consistent with the

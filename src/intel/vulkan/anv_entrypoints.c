@@ -39,20 +39,20 @@ static const char strings[] =
    "vkCreateInstance\0"
    "vkDestroyInstance\0"
    "vkEnumeratePhysicalDevices\0"
-   "vkGetPhysicalDeviceFeatures\0"
-   "vkGetPhysicalDeviceFormatProperties\0"
-   "vkGetPhysicalDeviceImageFormatProperties\0"
+   "vkGetDeviceProcAddr\0"
+   "vkGetInstanceProcAddr\0"
    "vkGetPhysicalDeviceProperties\0"
    "vkGetPhysicalDeviceQueueFamilyProperties\0"
    "vkGetPhysicalDeviceMemoryProperties\0"
-   "vkGetInstanceProcAddr\0"
-   "vkGetDeviceProcAddr\0"
+   "vkGetPhysicalDeviceFeatures\0"
+   "vkGetPhysicalDeviceFormatProperties\0"
+   "vkGetPhysicalDeviceImageFormatProperties\0"
    "vkCreateDevice\0"
    "vkDestroyDevice\0"
-   "vkEnumerateInstanceExtensionProperties\0"
-   "vkEnumerateDeviceExtensionProperties\0"
    "vkEnumerateInstanceLayerProperties\0"
+   "vkEnumerateInstanceExtensionProperties\0"
    "vkEnumerateDeviceLayerProperties\0"
+   "vkEnumerateDeviceExtensionProperties\0"
    "vkGetDeviceQueue\0"
    "vkQueueSubmit\0"
    "vkQueueWaitIdle\0"
@@ -64,10 +64,10 @@ static const char strings[] =
    "vkFlushMappedMemoryRanges\0"
    "vkInvalidateMappedMemoryRanges\0"
    "vkGetDeviceMemoryCommitment\0"
-   "vkBindBufferMemory\0"
-   "vkBindImageMemory\0"
    "vkGetBufferMemoryRequirements\0"
+   "vkBindBufferMemory\0"
    "vkGetImageMemoryRequirements\0"
+   "vkBindImageMemory\0"
    "vkGetImageSparseMemoryRequirements\0"
    "vkGetPhysicalDeviceSparseImageFormatProperties\0"
    "vkQueueBindSparse\0"
@@ -173,6 +173,17 @@ static const char strings[] =
    "vkCmdNextSubpass\0"
    "vkCmdEndRenderPass\0"
    "vkCmdExecuteCommands\0"
+   "vkCreateAndroidSurfaceKHR\0"
+   "vkGetPhysicalDeviceDisplayPropertiesKHR\0"
+   "vkGetPhysicalDeviceDisplayPlanePropertiesKHR\0"
+   "vkGetDisplayPlaneSupportedDisplaysKHR\0"
+   "vkGetDisplayModePropertiesKHR\0"
+   "vkCreateDisplayModeKHR\0"
+   "vkGetDisplayPlaneCapabilitiesKHR\0"
+   "vkCreateDisplayPlaneSurfaceKHR\0"
+   "vkCreateSharedSwapchainsKHR\0"
+   "vkCreateMirSurfaceKHR\0"
+   "vkGetPhysicalDeviceMirPresentationSupportKHR\0"
    "vkDestroySurfaceKHR\0"
    "vkGetPhysicalDeviceSurfaceSupportKHR\0"
    "vkGetPhysicalDeviceSurfaceCapabilitiesKHR\0"
@@ -183,28 +194,35 @@ static const char strings[] =
    "vkGetSwapchainImagesKHR\0"
    "vkAcquireNextImageKHR\0"
    "vkQueuePresentKHR\0"
-   "vkGetPhysicalDeviceDisplayPropertiesKHR\0"
-   "vkGetPhysicalDeviceDisplayPlanePropertiesKHR\0"
-   "vkGetDisplayPlaneSupportedDisplaysKHR\0"
-   "vkGetDisplayModePropertiesKHR\0"
-   "vkCreateDisplayModeKHR\0"
-   "vkGetDisplayPlaneCapabilitiesKHR\0"
-   "vkCreateDisplayPlaneSurfaceKHR\0"
-   "vkCreateSharedSwapchainsKHR\0"
+   "vkCreateWaylandSurfaceKHR\0"
+   "vkGetPhysicalDeviceWaylandPresentationSupportKHR\0"
+   "vkCreateWin32SurfaceKHR\0"
+   "vkGetPhysicalDeviceWin32PresentationSupportKHR\0"
    "vkCreateXlibSurfaceKHR\0"
    "vkGetPhysicalDeviceXlibPresentationSupportKHR\0"
    "vkCreateXcbSurfaceKHR\0"
    "vkGetPhysicalDeviceXcbPresentationSupportKHR\0"
-   "vkCreateWaylandSurfaceKHR\0"
-   "vkGetPhysicalDeviceWaylandPresentationSupportKHR\0"
-   "vkCreateMirSurfaceKHR\0"
-   "vkGetPhysicalDeviceMirPresentationSupportKHR\0"
-   "vkCreateAndroidSurfaceKHR\0"
-   "vkCreateWin32SurfaceKHR\0"
-   "vkGetPhysicalDeviceWin32PresentationSupportKHR\0"
    "vkCreateDebugReportCallbackEXT\0"
    "vkDestroyDebugReportCallbackEXT\0"
    "vkDebugReportMessageEXT\0"
+   "vkDebugMarkerSetObjectNameEXT\0"
+   "vkDebugMarkerSetObjectTagEXT\0"
+   "vkCmdDebugMarkerBeginEXT\0"
+   "vkCmdDebugMarkerEndEXT\0"
+   "vkCmdDebugMarkerInsertEXT\0"
+   "vkGetPhysicalDeviceExternalImageFormatPropertiesNV\0"
+   "vkGetMemoryWin32HandleNV\0"
+   "vkCmdDrawIndirectCountAMD\0"
+   "vkCmdDrawIndexedIndirectCountAMD\0"
+   "vkCmdProcessCommandsNVX\0"
+   "vkCmdReserveSpaceForCommandsNVX\0"
+   "vkCreateIndirectCommandsLayoutNVX\0"
+   "vkDestroyIndirectCommandsLayoutNVX\0"
+   "vkCreateObjectTableNVX\0"
+   "vkDestroyObjectTableNVX\0"
+   "vkRegisterObjectsNVX\0"
+   "vkUnregisterObjectsNVX\0"
+   "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX\0"
    "vkCreateDmaBufImageINTEL\0"
    ;
 
@@ -212,20 +230,20 @@ static const struct anv_entrypoint entrypoints[] = {
    {     0, 0x38a581a6 },
    {    17, 0x9bd21af2 },
    {    35, 0x5787c327 },
-   {    62, 0x113e2f33 },
-   {    90, 0x3e54b398 },
-   {   126, 0xdd36a867 },
-   {   167, 0x52fe22c9 },
-   {   197, 0x4e5fc88a },
-   {   238, 0xa90da4da },
-   {   274, 0x3d2ae9ad },
-   {   296, 0xba013486 },
+   {    62, 0xba013486 },
+   {    82, 0x3d2ae9ad },
+   {   104, 0x52fe22c9 },
+   {   134, 0x4e5fc88a },
+   {   175, 0xa90da4da },
+   {   211, 0x113e2f33 },
+   {   239, 0x3e54b398 },
+   {   275, 0xdd36a867 },
    {   316, 0x085ed23f },
    {   331, 0x1fbcc9cb },
-   {   347, 0xeb27627e },
-   {   386, 0x5fd13eed },
-   {   423, 0x081f69d8 },
-   {   458, 0x2f8566e7 },
+   {   347, 0x081f69d8 },
+   {   382, 0xeb27627e },
+   {   421, 0x2f8566e7 },
+   {   454, 0x5fd13eed },
    {   491, 0xcc920d9a },
    {   508, 0xfa4713ec },
    {   522, 0x6f8fc2a5 },
@@ -237,10 +255,10 @@ static const struct anv_entrypoint entrypoints[] = {
    {   611, 0xff52f051 },
    {   637, 0x1e115cca },
    {   668, 0x46e38db5 },
-   {   696, 0x06bcbdcb },
-   {   715, 0x5caaae4a },
-   {   733, 0xab98422a },
-   {   763, 0x916f1e63 },
+   {   696, 0xab98422a },
+   {   726, 0x06bcbdcb },
+   {   745, 0x916f1e63 },
+   {   774, 0x5caaae4a },
    {   792, 0x15855f5b },
    {   827, 0x272ef8ef },
    {   874, 0xc3628a09 },
@@ -346,39 +364,57 @@ static const struct anv_entrypoint entrypoints[] = {
    {  2848, 0x2eeec2f9 },
    {  2865, 0xdcdb0235 },
    {  2884, 0x9eaabe40 },
-   {  2905, 0xf204ce7d },
-   {  2925, 0x1a687885 },
-   {  2962, 0x77890558 },
-   {  3004, 0xe32227c8 },
-   {  3041, 0x31c3cbd1 },
-   {  3083, 0xcdefcaa8 },
-   {  3104, 0x5a93ab74 },
-   {  3126, 0x57695f28 },
-   {  3150, 0xc3fedb2e },
-   {  3172, 0xfc5fb6ce },
-   {  3190, 0x0fa0cd2e },
-   {  3230, 0xb9b8ddba },
-   {  3275, 0xabef4889 },
-   {  3313, 0x36b8a8de },
-   {  3343, 0xcc0bde41 },
-   {  3366, 0x4b60d48c },
-   {  3399, 0x7ac4dacb },
-   {  3430, 0x47655c4a },
-   {  3458, 0xa693bc66 },
-   {  3481, 0x34a063ab },
-   {  3527, 0xc5e5b106 },
-   {  3549, 0x41782cb9 },
-   {  3594, 0x2b2a4b79 },
-   {  3620, 0x84e085ac },
-   {  3669, 0x2ce93a55 },
-   {  3691, 0xcf1e6028 },
-   {  3736, 0x03667f4e },
-   {  3762, 0xfa2ba1e2 },
-   {  3786, 0x80e72505 },
+   {  2905, 0x03667f4e },
+   {  2931, 0x0fa0cd2e },
+   {  2971, 0xb9b8ddba },
+   {  3016, 0xabef4889 },
+   {  3054, 0x36b8a8de },
+   {  3084, 0xcc0bde41 },
+   {  3107, 0x4b60d48c },
+   {  3140, 0x7ac4dacb },
+   {  3171, 0x47655c4a },
+   {  3199, 0x2ce93a55 },
+   {  3221, 0xcf1e6028 },
+   {  3266, 0xf204ce7d },
+   {  3286, 0x1a687885 },
+   {  3323, 0x77890558 },
+   {  3365, 0xe32227c8 },
+   {  3402, 0x31c3cbd1 },
+   {  3444, 0xcdefcaa8 },
+   {  3465, 0x5a93ab74 },
+   {  3487, 0x57695f28 },
+   {  3511, 0xc3fedb2e },
+   {  3533, 0xfc5fb6ce },
+   {  3551, 0x2b2a4b79 },
+   {  3577, 0x84e085ac },
+   {  3626, 0xfa2ba1e2 },
+   {  3650, 0x80e72505 },
+   {  3697, 0xa693bc66 },
+   {  3720, 0x34a063ab },
+   {  3766, 0xc5e5b106 },
+   {  3788, 0x41782cb9 },
    {  3833, 0x0987ef56 },
    {  3864, 0x43d4c4e2 },
    {  3896, 0xa4e75334 },
-   {  3920, 0x6392dfa7 },
+   {  3920, 0xe206fb25 },
+   {  3950, 0x30799448 },
+   {  3979, 0xaec8bb10 },
+   {  4004, 0xd6a1433e },
+   {  4027, 0x0173d440 },
+   {  4053, 0xc8420c4c },
+   {  4104, 0x0c8795b9 },
+   {  4129, 0xe5ad0a50 },
+   {  4155, 0xc86e9287 },
+   {  4188, 0x736675ae },
+   {  4212, 0x016068ae },
+   {  4244, 0xe619127f },
+   {  4278, 0x1c3d25d3 },
+   {  4313, 0x4948814a },
+   {  4336, 0x957087d6 },
+   {  4360, 0xe04e9f74 },
+   {  4381, 0x5babdfe5 },
+   {  4404, 0x93de8434 },
+   {  4454, 0x6392dfa7 },
 };
 
 
@@ -391,20 +427,20 @@ static const struct anv_entrypoint entrypoints[] = {
 VkResult anv_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
 void anv_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult anv_EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices) __attribute__ ((weak));
-void anv_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
-void anv_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
-VkResult anv_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
+PFN_vkVoidFunction anv_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+PFN_vkVoidFunction anv_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
 void anv_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties) __attribute__ ((weak));
 void anv_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties) __attribute__ ((weak));
 void anv_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties) __attribute__ ((weak));
-PFN_vkVoidFunction anv_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
-PFN_vkVoidFunction anv_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+void anv_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
+void anv_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
+VkResult anv_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
 VkResult anv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice) __attribute__ ((weak));
 void anv_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
-VkResult anv_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
-VkResult anv_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult anv_EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult anv_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult anv_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult anv_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 void anv_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) __attribute__ ((weak));
 VkResult anv_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) __attribute__ ((weak));
 VkResult anv_QueueWaitIdle(VkQueue queue) __attribute__ ((weak));
@@ -416,10 +452,10 @@ void anv_UnmapMemory(VkDevice device, VkDeviceMemory memory) __attribute__ ((wea
 VkResult anv_FlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 VkResult anv_InvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 void anv_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes) __attribute__ ((weak));
-VkResult anv_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
-VkResult anv_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void anv_GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult anv_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void anv_GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult anv_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void anv_GetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements) __attribute__ ((weak));
 void anv_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties) __attribute__ ((weak));
 VkResult anv_QueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence) __attribute__ ((weak));
@@ -505,7 +541,7 @@ void anv_CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLa
 void anv_CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter) __attribute__ ((weak));
 void anv_CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
 void anv_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
-void anv_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const uint32_t* pData) __attribute__ ((weak));
+void anv_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData) __attribute__ ((weak));
 void anv_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data) __attribute__ ((weak));
 void anv_CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
 void anv_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
@@ -525,6 +561,23 @@ void anv_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeg
 void anv_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents) __attribute__ ((weak));
 void anv_CmdEndRenderPass(VkCommandBuffer commandBuffer) __attribute__ ((weak));
 void anv_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult anv_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+VkResult anv_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult anv_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult anv_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
+VkResult anv_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult anv_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
+VkResult anv_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
+VkResult anv_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+VkResult anv_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult anv_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 anv_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
 void anv_DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult anv_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported) __attribute__ ((weak));
 VkResult anv_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) __attribute__ ((weak));
@@ -535,14 +588,18 @@ void anv_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const Vk
 VkResult anv_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages) __attribute__ ((weak));
 VkResult anv_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) __attribute__ ((weak));
 VkResult anv_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) __attribute__ ((weak));
-VkResult anv_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult anv_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult anv_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
-VkResult anv_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult anv_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR*pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
-VkResult anv_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
-VkResult anv_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-VkResult anv_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkResult anv_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkBool32 anv_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult anv_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 anv_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 VkResult anv_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -555,50 +612,49 @@ VkResult anv_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateIn
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkBool32 anv_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkResult anv_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkBool32 anv_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkResult anv_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkBool32 anv_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-VkResult anv_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkResult anv_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkBool32 anv_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult anv_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void anv_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void anv_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
-VkResult anv_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
+VkResult anv_DebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo) __attribute__ ((weak));
+VkResult anv_DebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo) __attribute__ ((weak));
+void anv_CmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+void anv_CmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer) __attribute__ ((weak));
+void anv_CmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+VkResult anv_GetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult anv_GetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, HANDLE* pHandle) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+void anv_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void anv_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void anv_CmdProcessCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdProcessCommandsInfoNVX* pProcessCommandsInfo) __attribute__ ((weak));
+void anv_CmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdReserveSpaceForCommandsInfoNVX* pReserveSpaceInfo) __attribute__ ((weak));
+VkResult anv_CreateIndirectCommandsLayoutNVX(VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutNVX* pIndirectCommandsLayout) __attribute__ ((weak));
+void anv_DestroyIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult anv_CreateObjectTableNVX(VkDevice device, const VkObjectTableCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkObjectTableNVX* pObjectTable) __attribute__ ((weak));
+void anv_DestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult anv_RegisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectTableEntryNVX* const*    ppObjectTableEntries, const uint32_t* pObjectIndices) __attribute__ ((weak));
+VkResult anv_UnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectEntryTypeNVX* pObjectEntryTypes, const uint32_t* pObjectIndices) __attribute__ ((weak));
+void anv_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits) __attribute__ ((weak));
+VkResult anv_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
 const struct anv_dispatch_table anv_layer = {
    .CreateInstance = anv_CreateInstance,
    .DestroyInstance = anv_DestroyInstance,
    .EnumeratePhysicalDevices = anv_EnumeratePhysicalDevices,
-   .GetPhysicalDeviceFeatures = anv_GetPhysicalDeviceFeatures,
-   .GetPhysicalDeviceFormatProperties = anv_GetPhysicalDeviceFormatProperties,
-   .GetPhysicalDeviceImageFormatProperties = anv_GetPhysicalDeviceImageFormatProperties,
+   .GetDeviceProcAddr = anv_GetDeviceProcAddr,
+   .GetInstanceProcAddr = anv_GetInstanceProcAddr,
    .GetPhysicalDeviceProperties = anv_GetPhysicalDeviceProperties,
    .GetPhysicalDeviceQueueFamilyProperties = anv_GetPhysicalDeviceQueueFamilyProperties,
    .GetPhysicalDeviceMemoryProperties = anv_GetPhysicalDeviceMemoryProperties,
-   .GetInstanceProcAddr = anv_GetInstanceProcAddr,
-   .GetDeviceProcAddr = anv_GetDeviceProcAddr,
+   .GetPhysicalDeviceFeatures = anv_GetPhysicalDeviceFeatures,
+   .GetPhysicalDeviceFormatProperties = anv_GetPhysicalDeviceFormatProperties,
+   .GetPhysicalDeviceImageFormatProperties = anv_GetPhysicalDeviceImageFormatProperties,
    .CreateDevice = anv_CreateDevice,
    .DestroyDevice = anv_DestroyDevice,
-   .EnumerateInstanceExtensionProperties = anv_EnumerateInstanceExtensionProperties,
-   .EnumerateDeviceExtensionProperties = anv_EnumerateDeviceExtensionProperties,
    .EnumerateInstanceLayerProperties = anv_EnumerateInstanceLayerProperties,
+   .EnumerateInstanceExtensionProperties = anv_EnumerateInstanceExtensionProperties,
    .EnumerateDeviceLayerProperties = anv_EnumerateDeviceLayerProperties,
+   .EnumerateDeviceExtensionProperties = anv_EnumerateDeviceExtensionProperties,
    .GetDeviceQueue = anv_GetDeviceQueue,
    .QueueSubmit = anv_QueueSubmit,
    .QueueWaitIdle = anv_QueueWaitIdle,
@@ -610,10 +666,10 @@ const struct anv_dispatch_table anv_layer = {
    .FlushMappedMemoryRanges = anv_FlushMappedMemoryRanges,
    .InvalidateMappedMemoryRanges = anv_InvalidateMappedMemoryRanges,
    .GetDeviceMemoryCommitment = anv_GetDeviceMemoryCommitment,
-   .BindBufferMemory = anv_BindBufferMemory,
-   .BindImageMemory = anv_BindImageMemory,
    .GetBufferMemoryRequirements = anv_GetBufferMemoryRequirements,
+   .BindBufferMemory = anv_BindBufferMemory,
    .GetImageMemoryRequirements = anv_GetImageMemoryRequirements,
+   .BindImageMemory = anv_BindImageMemory,
    .GetImageSparseMemoryRequirements = anv_GetImageSparseMemoryRequirements,
    .GetPhysicalDeviceSparseImageFormatProperties = anv_GetPhysicalDeviceSparseImageFormatProperties,
    .QueueBindSparse = anv_QueueBindSparse,
@@ -719,6 +775,23 @@ const struct anv_dispatch_table anv_layer = {
    .CmdNextSubpass = anv_CmdNextSubpass,
    .CmdEndRenderPass = anv_CmdEndRenderPass,
    .CmdExecuteCommands = anv_CmdExecuteCommands,
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = anv_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+   .GetPhysicalDeviceDisplayPropertiesKHR = anv_GetPhysicalDeviceDisplayPropertiesKHR,
+   .GetPhysicalDeviceDisplayPlanePropertiesKHR = anv_GetPhysicalDeviceDisplayPlanePropertiesKHR,
+   .GetDisplayPlaneSupportedDisplaysKHR = anv_GetDisplayPlaneSupportedDisplaysKHR,
+   .GetDisplayModePropertiesKHR = anv_GetDisplayModePropertiesKHR,
+   .CreateDisplayModeKHR = anv_CreateDisplayModeKHR,
+   .GetDisplayPlaneCapabilitiesKHR = anv_GetDisplayPlaneCapabilitiesKHR,
+   .CreateDisplayPlaneSurfaceKHR = anv_CreateDisplayPlaneSurfaceKHR,
+   .CreateSharedSwapchainsKHR = anv_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = anv_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = anv_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
    .DestroySurfaceKHR = anv_DestroySurfaceKHR,
    .GetPhysicalDeviceSurfaceSupportKHR = anv_GetPhysicalDeviceSurfaceSupportKHR,
    .GetPhysicalDeviceSurfaceCapabilitiesKHR = anv_GetPhysicalDeviceSurfaceCapabilitiesKHR,
@@ -729,14 +802,18 @@ const struct anv_dispatch_table anv_layer = {
    .GetSwapchainImagesKHR = anv_GetSwapchainImagesKHR,
    .AcquireNextImageKHR = anv_AcquireNextImageKHR,
    .QueuePresentKHR = anv_QueuePresentKHR,
-   .GetPhysicalDeviceDisplayPropertiesKHR = anv_GetPhysicalDeviceDisplayPropertiesKHR,
-   .GetPhysicalDeviceDisplayPlanePropertiesKHR = anv_GetPhysicalDeviceDisplayPlanePropertiesKHR,
-   .GetDisplayPlaneSupportedDisplaysKHR = anv_GetDisplayPlaneSupportedDisplaysKHR,
-   .GetDisplayModePropertiesKHR = anv_GetDisplayModePropertiesKHR,
-   .CreateDisplayModeKHR = anv_CreateDisplayModeKHR,
-   .GetDisplayPlaneCapabilitiesKHR = anv_GetDisplayPlaneCapabilitiesKHR,
-   .CreateDisplayPlaneSurfaceKHR = anv_CreateDisplayPlaneSurfaceKHR,
-   .CreateSharedSwapchainsKHR = anv_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .CreateWaylandSurfaceKHR = anv_CreateWaylandSurfaceKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .GetPhysicalDeviceWaylandPresentationSupportKHR = anv_GetPhysicalDeviceWaylandPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = anv_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = anv_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .CreateXlibSurfaceKHR = anv_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -749,50 +826,49 @@ const struct anv_dispatch_table anv_layer = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .GetPhysicalDeviceXcbPresentationSupportKHR = anv_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .CreateWaylandSurfaceKHR = anv_CreateWaylandSurfaceKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .GetPhysicalDeviceWaylandPresentationSupportKHR = anv_GetPhysicalDeviceWaylandPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .CreateMirSurfaceKHR = anv_CreateMirSurfaceKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .GetPhysicalDeviceMirPresentationSupportKHR = anv_GetPhysicalDeviceMirPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-   .CreateAndroidSurfaceKHR = anv_CreateAndroidSurfaceKHR,
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .CreateWin32SurfaceKHR = anv_CreateWin32SurfaceKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .GetPhysicalDeviceWin32PresentationSupportKHR = anv_GetPhysicalDeviceWin32PresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = anv_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = anv_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = anv_DebugReportMessageEXT,
+   .DebugMarkerSetObjectNameEXT = anv_DebugMarkerSetObjectNameEXT,
+   .DebugMarkerSetObjectTagEXT = anv_DebugMarkerSetObjectTagEXT,
+   .CmdDebugMarkerBeginEXT = anv_CmdDebugMarkerBeginEXT,
+   .CmdDebugMarkerEndEXT = anv_CmdDebugMarkerEndEXT,
+   .CmdDebugMarkerInsertEXT = anv_CmdDebugMarkerInsertEXT,
+   .GetPhysicalDeviceExternalImageFormatPropertiesNV = anv_GetPhysicalDeviceExternalImageFormatPropertiesNV,
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetMemoryWin32HandleNV = anv_GetMemoryWin32HandleNV,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+   .CmdDrawIndirectCountAMD = anv_CmdDrawIndirectCountAMD,
+   .CmdDrawIndexedIndirectCountAMD = anv_CmdDrawIndexedIndirectCountAMD,
+   .CmdProcessCommandsNVX = anv_CmdProcessCommandsNVX,
+   .CmdReserveSpaceForCommandsNVX = anv_CmdReserveSpaceForCommandsNVX,
+   .CreateIndirectCommandsLayoutNVX = anv_CreateIndirectCommandsLayoutNVX,
+   .DestroyIndirectCommandsLayoutNVX = anv_DestroyIndirectCommandsLayoutNVX,
+   .CreateObjectTableNVX = anv_CreateObjectTableNVX,
+   .DestroyObjectTableNVX = anv_DestroyObjectTableNVX,
+   .RegisterObjectsNVX = anv_RegisterObjectsNVX,
+   .UnregisterObjectsNVX = anv_UnregisterObjectsNVX,
+   .GetPhysicalDeviceGeneratedCommandsPropertiesNVX = anv_GetPhysicalDeviceGeneratedCommandsPropertiesNVX,
    .CreateDmaBufImageINTEL = anv_CreateDmaBufImageINTEL,
 };
 
 VkResult gen7_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
 void gen7_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult gen7_EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices) __attribute__ ((weak));
-void gen7_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
-void gen7_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
-VkResult gen7_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
+PFN_vkVoidFunction gen7_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+PFN_vkVoidFunction gen7_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
 void gen7_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties) __attribute__ ((weak));
 void gen7_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties) __attribute__ ((weak));
 void gen7_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties) __attribute__ ((weak));
-PFN_vkVoidFunction gen7_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
-PFN_vkVoidFunction gen7_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+void gen7_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
+void gen7_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
+VkResult gen7_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
 VkResult gen7_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice) __attribute__ ((weak));
 void gen7_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
-VkResult gen7_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
-VkResult gen7_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult gen7_EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult gen7_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult gen7_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult gen7_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 void gen7_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) __attribute__ ((weak));
 VkResult gen7_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) __attribute__ ((weak));
 VkResult gen7_QueueWaitIdle(VkQueue queue) __attribute__ ((weak));
@@ -804,10 +880,10 @@ void gen7_UnmapMemory(VkDevice device, VkDeviceMemory memory) __attribute__ ((we
 VkResult gen7_FlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 VkResult gen7_InvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 void gen7_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes) __attribute__ ((weak));
-VkResult gen7_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
-VkResult gen7_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen7_GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult gen7_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen7_GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult gen7_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen7_GetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements) __attribute__ ((weak));
 void gen7_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties) __attribute__ ((weak));
 VkResult gen7_QueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence) __attribute__ ((weak));
@@ -893,7 +969,7 @@ void gen7_CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageL
 void gen7_CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter) __attribute__ ((weak));
 void gen7_CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
 void gen7_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
-void gen7_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const uint32_t* pData) __attribute__ ((weak));
+void gen7_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData) __attribute__ ((weak));
 void gen7_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data) __attribute__ ((weak));
 void gen7_CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
 void gen7_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
@@ -913,6 +989,23 @@ void gen7_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBe
 void gen7_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents) __attribute__ ((weak));
 void gen7_CmdEndRenderPass(VkCommandBuffer commandBuffer) __attribute__ ((weak));
 void gen7_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen7_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen7_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen7_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen7_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
+VkResult gen7_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen7_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
+VkResult gen7_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
+VkResult gen7_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+VkResult gen7_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult gen7_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 gen7_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
 void gen7_DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult gen7_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported) __attribute__ ((weak));
 VkResult gen7_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) __attribute__ ((weak));
@@ -923,14 +1016,18 @@ void gen7_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const V
 VkResult gen7_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages) __attribute__ ((weak));
 VkResult gen7_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) __attribute__ ((weak));
 VkResult gen7_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) __attribute__ ((weak));
-VkResult gen7_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen7_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen7_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
-VkResult gen7_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen7_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR*pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
-VkResult gen7_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
-VkResult gen7_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-VkResult gen7_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkResult gen7_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkBool32 gen7_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen7_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 gen7_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 VkResult gen7_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -943,50 +1040,49 @@ VkResult gen7_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateI
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkBool32 gen7_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkResult gen7_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkBool32 gen7_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkResult gen7_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkBool32 gen7_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-VkResult gen7_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkResult gen7_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkBool32 gen7_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult gen7_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void gen7_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void gen7_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
-VkResult gen7_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
+VkResult gen7_DebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo) __attribute__ ((weak));
+VkResult gen7_DebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo) __attribute__ ((weak));
+void gen7_CmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+void gen7_CmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer) __attribute__ ((weak));
+void gen7_CmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+VkResult gen7_GetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen7_GetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, HANDLE* pHandle) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+void gen7_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void gen7_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void gen7_CmdProcessCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdProcessCommandsInfoNVX* pProcessCommandsInfo) __attribute__ ((weak));
+void gen7_CmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdReserveSpaceForCommandsInfoNVX* pReserveSpaceInfo) __attribute__ ((weak));
+VkResult gen7_CreateIndirectCommandsLayoutNVX(VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutNVX* pIndirectCommandsLayout) __attribute__ ((weak));
+void gen7_DestroyIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult gen7_CreateObjectTableNVX(VkDevice device, const VkObjectTableCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkObjectTableNVX* pObjectTable) __attribute__ ((weak));
+void gen7_DestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult gen7_RegisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectTableEntryNVX* const*    ppObjectTableEntries, const uint32_t* pObjectIndices) __attribute__ ((weak));
+VkResult gen7_UnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectEntryTypeNVX* pObjectEntryTypes, const uint32_t* pObjectIndices) __attribute__ ((weak));
+void gen7_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits) __attribute__ ((weak));
+VkResult gen7_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
 const struct anv_dispatch_table gen7_layer = {
    .CreateInstance = gen7_CreateInstance,
    .DestroyInstance = gen7_DestroyInstance,
    .EnumeratePhysicalDevices = gen7_EnumeratePhysicalDevices,
-   .GetPhysicalDeviceFeatures = gen7_GetPhysicalDeviceFeatures,
-   .GetPhysicalDeviceFormatProperties = gen7_GetPhysicalDeviceFormatProperties,
-   .GetPhysicalDeviceImageFormatProperties = gen7_GetPhysicalDeviceImageFormatProperties,
+   .GetDeviceProcAddr = gen7_GetDeviceProcAddr,
+   .GetInstanceProcAddr = gen7_GetInstanceProcAddr,
    .GetPhysicalDeviceProperties = gen7_GetPhysicalDeviceProperties,
    .GetPhysicalDeviceQueueFamilyProperties = gen7_GetPhysicalDeviceQueueFamilyProperties,
    .GetPhysicalDeviceMemoryProperties = gen7_GetPhysicalDeviceMemoryProperties,
-   .GetInstanceProcAddr = gen7_GetInstanceProcAddr,
-   .GetDeviceProcAddr = gen7_GetDeviceProcAddr,
+   .GetPhysicalDeviceFeatures = gen7_GetPhysicalDeviceFeatures,
+   .GetPhysicalDeviceFormatProperties = gen7_GetPhysicalDeviceFormatProperties,
+   .GetPhysicalDeviceImageFormatProperties = gen7_GetPhysicalDeviceImageFormatProperties,
    .CreateDevice = gen7_CreateDevice,
    .DestroyDevice = gen7_DestroyDevice,
-   .EnumerateInstanceExtensionProperties = gen7_EnumerateInstanceExtensionProperties,
-   .EnumerateDeviceExtensionProperties = gen7_EnumerateDeviceExtensionProperties,
    .EnumerateInstanceLayerProperties = gen7_EnumerateInstanceLayerProperties,
+   .EnumerateInstanceExtensionProperties = gen7_EnumerateInstanceExtensionProperties,
    .EnumerateDeviceLayerProperties = gen7_EnumerateDeviceLayerProperties,
+   .EnumerateDeviceExtensionProperties = gen7_EnumerateDeviceExtensionProperties,
    .GetDeviceQueue = gen7_GetDeviceQueue,
    .QueueSubmit = gen7_QueueSubmit,
    .QueueWaitIdle = gen7_QueueWaitIdle,
@@ -998,10 +1094,10 @@ const struct anv_dispatch_table gen7_layer = {
    .FlushMappedMemoryRanges = gen7_FlushMappedMemoryRanges,
    .InvalidateMappedMemoryRanges = gen7_InvalidateMappedMemoryRanges,
    .GetDeviceMemoryCommitment = gen7_GetDeviceMemoryCommitment,
-   .BindBufferMemory = gen7_BindBufferMemory,
-   .BindImageMemory = gen7_BindImageMemory,
    .GetBufferMemoryRequirements = gen7_GetBufferMemoryRequirements,
+   .BindBufferMemory = gen7_BindBufferMemory,
    .GetImageMemoryRequirements = gen7_GetImageMemoryRequirements,
+   .BindImageMemory = gen7_BindImageMemory,
    .GetImageSparseMemoryRequirements = gen7_GetImageSparseMemoryRequirements,
    .GetPhysicalDeviceSparseImageFormatProperties = gen7_GetPhysicalDeviceSparseImageFormatProperties,
    .QueueBindSparse = gen7_QueueBindSparse,
@@ -1107,6 +1203,23 @@ const struct anv_dispatch_table gen7_layer = {
    .CmdNextSubpass = gen7_CmdNextSubpass,
    .CmdEndRenderPass = gen7_CmdEndRenderPass,
    .CmdExecuteCommands = gen7_CmdExecuteCommands,
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = gen7_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+   .GetPhysicalDeviceDisplayPropertiesKHR = gen7_GetPhysicalDeviceDisplayPropertiesKHR,
+   .GetPhysicalDeviceDisplayPlanePropertiesKHR = gen7_GetPhysicalDeviceDisplayPlanePropertiesKHR,
+   .GetDisplayPlaneSupportedDisplaysKHR = gen7_GetDisplayPlaneSupportedDisplaysKHR,
+   .GetDisplayModePropertiesKHR = gen7_GetDisplayModePropertiesKHR,
+   .CreateDisplayModeKHR = gen7_CreateDisplayModeKHR,
+   .GetDisplayPlaneCapabilitiesKHR = gen7_GetDisplayPlaneCapabilitiesKHR,
+   .CreateDisplayPlaneSurfaceKHR = gen7_CreateDisplayPlaneSurfaceKHR,
+   .CreateSharedSwapchainsKHR = gen7_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = gen7_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = gen7_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
    .DestroySurfaceKHR = gen7_DestroySurfaceKHR,
    .GetPhysicalDeviceSurfaceSupportKHR = gen7_GetPhysicalDeviceSurfaceSupportKHR,
    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen7_GetPhysicalDeviceSurfaceCapabilitiesKHR,
@@ -1117,14 +1230,18 @@ const struct anv_dispatch_table gen7_layer = {
    .GetSwapchainImagesKHR = gen7_GetSwapchainImagesKHR,
    .AcquireNextImageKHR = gen7_AcquireNextImageKHR,
    .QueuePresentKHR = gen7_QueuePresentKHR,
-   .GetPhysicalDeviceDisplayPropertiesKHR = gen7_GetPhysicalDeviceDisplayPropertiesKHR,
-   .GetPhysicalDeviceDisplayPlanePropertiesKHR = gen7_GetPhysicalDeviceDisplayPlanePropertiesKHR,
-   .GetDisplayPlaneSupportedDisplaysKHR = gen7_GetDisplayPlaneSupportedDisplaysKHR,
-   .GetDisplayModePropertiesKHR = gen7_GetDisplayModePropertiesKHR,
-   .CreateDisplayModeKHR = gen7_CreateDisplayModeKHR,
-   .GetDisplayPlaneCapabilitiesKHR = gen7_GetDisplayPlaneCapabilitiesKHR,
-   .CreateDisplayPlaneSurfaceKHR = gen7_CreateDisplayPlaneSurfaceKHR,
-   .CreateSharedSwapchainsKHR = gen7_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .CreateWaylandSurfaceKHR = gen7_CreateWaylandSurfaceKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .GetPhysicalDeviceWaylandPresentationSupportKHR = gen7_GetPhysicalDeviceWaylandPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = gen7_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = gen7_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .CreateXlibSurfaceKHR = gen7_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -1137,50 +1254,49 @@ const struct anv_dispatch_table gen7_layer = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .GetPhysicalDeviceXcbPresentationSupportKHR = gen7_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .CreateWaylandSurfaceKHR = gen7_CreateWaylandSurfaceKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .GetPhysicalDeviceWaylandPresentationSupportKHR = gen7_GetPhysicalDeviceWaylandPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .CreateMirSurfaceKHR = gen7_CreateMirSurfaceKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .GetPhysicalDeviceMirPresentationSupportKHR = gen7_GetPhysicalDeviceMirPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-   .CreateAndroidSurfaceKHR = gen7_CreateAndroidSurfaceKHR,
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .CreateWin32SurfaceKHR = gen7_CreateWin32SurfaceKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .GetPhysicalDeviceWin32PresentationSupportKHR = gen7_GetPhysicalDeviceWin32PresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = gen7_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = gen7_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = gen7_DebugReportMessageEXT,
+   .DebugMarkerSetObjectNameEXT = gen7_DebugMarkerSetObjectNameEXT,
+   .DebugMarkerSetObjectTagEXT = gen7_DebugMarkerSetObjectTagEXT,
+   .CmdDebugMarkerBeginEXT = gen7_CmdDebugMarkerBeginEXT,
+   .CmdDebugMarkerEndEXT = gen7_CmdDebugMarkerEndEXT,
+   .CmdDebugMarkerInsertEXT = gen7_CmdDebugMarkerInsertEXT,
+   .GetPhysicalDeviceExternalImageFormatPropertiesNV = gen7_GetPhysicalDeviceExternalImageFormatPropertiesNV,
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetMemoryWin32HandleNV = gen7_GetMemoryWin32HandleNV,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+   .CmdDrawIndirectCountAMD = gen7_CmdDrawIndirectCountAMD,
+   .CmdDrawIndexedIndirectCountAMD = gen7_CmdDrawIndexedIndirectCountAMD,
+   .CmdProcessCommandsNVX = gen7_CmdProcessCommandsNVX,
+   .CmdReserveSpaceForCommandsNVX = gen7_CmdReserveSpaceForCommandsNVX,
+   .CreateIndirectCommandsLayoutNVX = gen7_CreateIndirectCommandsLayoutNVX,
+   .DestroyIndirectCommandsLayoutNVX = gen7_DestroyIndirectCommandsLayoutNVX,
+   .CreateObjectTableNVX = gen7_CreateObjectTableNVX,
+   .DestroyObjectTableNVX = gen7_DestroyObjectTableNVX,
+   .RegisterObjectsNVX = gen7_RegisterObjectsNVX,
+   .UnregisterObjectsNVX = gen7_UnregisterObjectsNVX,
+   .GetPhysicalDeviceGeneratedCommandsPropertiesNVX = gen7_GetPhysicalDeviceGeneratedCommandsPropertiesNVX,
    .CreateDmaBufImageINTEL = gen7_CreateDmaBufImageINTEL,
 };
 
 VkResult gen75_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
 void gen75_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult gen75_EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices) __attribute__ ((weak));
-void gen75_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
-void gen75_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
-VkResult gen75_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
+PFN_vkVoidFunction gen75_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+PFN_vkVoidFunction gen75_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
 void gen75_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties) __attribute__ ((weak));
 void gen75_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties) __attribute__ ((weak));
 void gen75_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties) __attribute__ ((weak));
-PFN_vkVoidFunction gen75_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
-PFN_vkVoidFunction gen75_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+void gen75_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
+void gen75_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
+VkResult gen75_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
 VkResult gen75_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice) __attribute__ ((weak));
 void gen75_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
-VkResult gen75_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
-VkResult gen75_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult gen75_EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult gen75_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult gen75_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult gen75_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 void gen75_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) __attribute__ ((weak));
 VkResult gen75_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) __attribute__ ((weak));
 VkResult gen75_QueueWaitIdle(VkQueue queue) __attribute__ ((weak));
@@ -1192,10 +1308,10 @@ void gen75_UnmapMemory(VkDevice device, VkDeviceMemory memory) __attribute__ ((w
 VkResult gen75_FlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 VkResult gen75_InvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 void gen75_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes) __attribute__ ((weak));
-VkResult gen75_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
-VkResult gen75_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen75_GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult gen75_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen75_GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult gen75_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen75_GetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements) __attribute__ ((weak));
 void gen75_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties) __attribute__ ((weak));
 VkResult gen75_QueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence) __attribute__ ((weak));
@@ -1281,7 +1397,7 @@ void gen75_CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImage
 void gen75_CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter) __attribute__ ((weak));
 void gen75_CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
 void gen75_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
-void gen75_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const uint32_t* pData) __attribute__ ((weak));
+void gen75_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData) __attribute__ ((weak));
 void gen75_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data) __attribute__ ((weak));
 void gen75_CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
 void gen75_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
@@ -1301,6 +1417,23 @@ void gen75_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassB
 void gen75_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents) __attribute__ ((weak));
 void gen75_CmdEndRenderPass(VkCommandBuffer commandBuffer) __attribute__ ((weak));
 void gen75_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen75_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen75_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen75_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen75_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
+VkResult gen75_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen75_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
+VkResult gen75_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
+VkResult gen75_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+VkResult gen75_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult gen75_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 gen75_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
 void gen75_DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult gen75_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported) __attribute__ ((weak));
 VkResult gen75_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) __attribute__ ((weak));
@@ -1311,14 +1444,18 @@ void gen75_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const 
 VkResult gen75_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages) __attribute__ ((weak));
 VkResult gen75_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) __attribute__ ((weak));
 VkResult gen75_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) __attribute__ ((weak));
-VkResult gen75_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen75_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen75_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
-VkResult gen75_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen75_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR*pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
-VkResult gen75_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
-VkResult gen75_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-VkResult gen75_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkResult gen75_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkBool32 gen75_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen75_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 gen75_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 VkResult gen75_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -1331,50 +1468,49 @@ VkResult gen75_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreate
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkBool32 gen75_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkResult gen75_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkBool32 gen75_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkResult gen75_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkBool32 gen75_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-VkResult gen75_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkResult gen75_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkBool32 gen75_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult gen75_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void gen75_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void gen75_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
-VkResult gen75_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
+VkResult gen75_DebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo) __attribute__ ((weak));
+VkResult gen75_DebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo) __attribute__ ((weak));
+void gen75_CmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+void gen75_CmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer) __attribute__ ((weak));
+void gen75_CmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+VkResult gen75_GetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen75_GetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, HANDLE* pHandle) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+void gen75_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void gen75_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void gen75_CmdProcessCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdProcessCommandsInfoNVX* pProcessCommandsInfo) __attribute__ ((weak));
+void gen75_CmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdReserveSpaceForCommandsInfoNVX* pReserveSpaceInfo) __attribute__ ((weak));
+VkResult gen75_CreateIndirectCommandsLayoutNVX(VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutNVX* pIndirectCommandsLayout) __attribute__ ((weak));
+void gen75_DestroyIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult gen75_CreateObjectTableNVX(VkDevice device, const VkObjectTableCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkObjectTableNVX* pObjectTable) __attribute__ ((weak));
+void gen75_DestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult gen75_RegisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectTableEntryNVX* const*    ppObjectTableEntries, const uint32_t* pObjectIndices) __attribute__ ((weak));
+VkResult gen75_UnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectEntryTypeNVX* pObjectEntryTypes, const uint32_t* pObjectIndices) __attribute__ ((weak));
+void gen75_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits) __attribute__ ((weak));
+VkResult gen75_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
 const struct anv_dispatch_table gen75_layer = {
    .CreateInstance = gen75_CreateInstance,
    .DestroyInstance = gen75_DestroyInstance,
    .EnumeratePhysicalDevices = gen75_EnumeratePhysicalDevices,
-   .GetPhysicalDeviceFeatures = gen75_GetPhysicalDeviceFeatures,
-   .GetPhysicalDeviceFormatProperties = gen75_GetPhysicalDeviceFormatProperties,
-   .GetPhysicalDeviceImageFormatProperties = gen75_GetPhysicalDeviceImageFormatProperties,
+   .GetDeviceProcAddr = gen75_GetDeviceProcAddr,
+   .GetInstanceProcAddr = gen75_GetInstanceProcAddr,
    .GetPhysicalDeviceProperties = gen75_GetPhysicalDeviceProperties,
    .GetPhysicalDeviceQueueFamilyProperties = gen75_GetPhysicalDeviceQueueFamilyProperties,
    .GetPhysicalDeviceMemoryProperties = gen75_GetPhysicalDeviceMemoryProperties,
-   .GetInstanceProcAddr = gen75_GetInstanceProcAddr,
-   .GetDeviceProcAddr = gen75_GetDeviceProcAddr,
+   .GetPhysicalDeviceFeatures = gen75_GetPhysicalDeviceFeatures,
+   .GetPhysicalDeviceFormatProperties = gen75_GetPhysicalDeviceFormatProperties,
+   .GetPhysicalDeviceImageFormatProperties = gen75_GetPhysicalDeviceImageFormatProperties,
    .CreateDevice = gen75_CreateDevice,
    .DestroyDevice = gen75_DestroyDevice,
-   .EnumerateInstanceExtensionProperties = gen75_EnumerateInstanceExtensionProperties,
-   .EnumerateDeviceExtensionProperties = gen75_EnumerateDeviceExtensionProperties,
    .EnumerateInstanceLayerProperties = gen75_EnumerateInstanceLayerProperties,
+   .EnumerateInstanceExtensionProperties = gen75_EnumerateInstanceExtensionProperties,
    .EnumerateDeviceLayerProperties = gen75_EnumerateDeviceLayerProperties,
+   .EnumerateDeviceExtensionProperties = gen75_EnumerateDeviceExtensionProperties,
    .GetDeviceQueue = gen75_GetDeviceQueue,
    .QueueSubmit = gen75_QueueSubmit,
    .QueueWaitIdle = gen75_QueueWaitIdle,
@@ -1386,10 +1522,10 @@ const struct anv_dispatch_table gen75_layer = {
    .FlushMappedMemoryRanges = gen75_FlushMappedMemoryRanges,
    .InvalidateMappedMemoryRanges = gen75_InvalidateMappedMemoryRanges,
    .GetDeviceMemoryCommitment = gen75_GetDeviceMemoryCommitment,
-   .BindBufferMemory = gen75_BindBufferMemory,
-   .BindImageMemory = gen75_BindImageMemory,
    .GetBufferMemoryRequirements = gen75_GetBufferMemoryRequirements,
+   .BindBufferMemory = gen75_BindBufferMemory,
    .GetImageMemoryRequirements = gen75_GetImageMemoryRequirements,
+   .BindImageMemory = gen75_BindImageMemory,
    .GetImageSparseMemoryRequirements = gen75_GetImageSparseMemoryRequirements,
    .GetPhysicalDeviceSparseImageFormatProperties = gen75_GetPhysicalDeviceSparseImageFormatProperties,
    .QueueBindSparse = gen75_QueueBindSparse,
@@ -1495,6 +1631,23 @@ const struct anv_dispatch_table gen75_layer = {
    .CmdNextSubpass = gen75_CmdNextSubpass,
    .CmdEndRenderPass = gen75_CmdEndRenderPass,
    .CmdExecuteCommands = gen75_CmdExecuteCommands,
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = gen75_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+   .GetPhysicalDeviceDisplayPropertiesKHR = gen75_GetPhysicalDeviceDisplayPropertiesKHR,
+   .GetPhysicalDeviceDisplayPlanePropertiesKHR = gen75_GetPhysicalDeviceDisplayPlanePropertiesKHR,
+   .GetDisplayPlaneSupportedDisplaysKHR = gen75_GetDisplayPlaneSupportedDisplaysKHR,
+   .GetDisplayModePropertiesKHR = gen75_GetDisplayModePropertiesKHR,
+   .CreateDisplayModeKHR = gen75_CreateDisplayModeKHR,
+   .GetDisplayPlaneCapabilitiesKHR = gen75_GetDisplayPlaneCapabilitiesKHR,
+   .CreateDisplayPlaneSurfaceKHR = gen75_CreateDisplayPlaneSurfaceKHR,
+   .CreateSharedSwapchainsKHR = gen75_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = gen75_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = gen75_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
    .DestroySurfaceKHR = gen75_DestroySurfaceKHR,
    .GetPhysicalDeviceSurfaceSupportKHR = gen75_GetPhysicalDeviceSurfaceSupportKHR,
    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen75_GetPhysicalDeviceSurfaceCapabilitiesKHR,
@@ -1505,14 +1658,18 @@ const struct anv_dispatch_table gen75_layer = {
    .GetSwapchainImagesKHR = gen75_GetSwapchainImagesKHR,
    .AcquireNextImageKHR = gen75_AcquireNextImageKHR,
    .QueuePresentKHR = gen75_QueuePresentKHR,
-   .GetPhysicalDeviceDisplayPropertiesKHR = gen75_GetPhysicalDeviceDisplayPropertiesKHR,
-   .GetPhysicalDeviceDisplayPlanePropertiesKHR = gen75_GetPhysicalDeviceDisplayPlanePropertiesKHR,
-   .GetDisplayPlaneSupportedDisplaysKHR = gen75_GetDisplayPlaneSupportedDisplaysKHR,
-   .GetDisplayModePropertiesKHR = gen75_GetDisplayModePropertiesKHR,
-   .CreateDisplayModeKHR = gen75_CreateDisplayModeKHR,
-   .GetDisplayPlaneCapabilitiesKHR = gen75_GetDisplayPlaneCapabilitiesKHR,
-   .CreateDisplayPlaneSurfaceKHR = gen75_CreateDisplayPlaneSurfaceKHR,
-   .CreateSharedSwapchainsKHR = gen75_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .CreateWaylandSurfaceKHR = gen75_CreateWaylandSurfaceKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .GetPhysicalDeviceWaylandPresentationSupportKHR = gen75_GetPhysicalDeviceWaylandPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = gen75_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = gen75_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .CreateXlibSurfaceKHR = gen75_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -1525,50 +1682,49 @@ const struct anv_dispatch_table gen75_layer = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .GetPhysicalDeviceXcbPresentationSupportKHR = gen75_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .CreateWaylandSurfaceKHR = gen75_CreateWaylandSurfaceKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .GetPhysicalDeviceWaylandPresentationSupportKHR = gen75_GetPhysicalDeviceWaylandPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .CreateMirSurfaceKHR = gen75_CreateMirSurfaceKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .GetPhysicalDeviceMirPresentationSupportKHR = gen75_GetPhysicalDeviceMirPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-   .CreateAndroidSurfaceKHR = gen75_CreateAndroidSurfaceKHR,
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .CreateWin32SurfaceKHR = gen75_CreateWin32SurfaceKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .GetPhysicalDeviceWin32PresentationSupportKHR = gen75_GetPhysicalDeviceWin32PresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = gen75_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = gen75_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = gen75_DebugReportMessageEXT,
+   .DebugMarkerSetObjectNameEXT = gen75_DebugMarkerSetObjectNameEXT,
+   .DebugMarkerSetObjectTagEXT = gen75_DebugMarkerSetObjectTagEXT,
+   .CmdDebugMarkerBeginEXT = gen75_CmdDebugMarkerBeginEXT,
+   .CmdDebugMarkerEndEXT = gen75_CmdDebugMarkerEndEXT,
+   .CmdDebugMarkerInsertEXT = gen75_CmdDebugMarkerInsertEXT,
+   .GetPhysicalDeviceExternalImageFormatPropertiesNV = gen75_GetPhysicalDeviceExternalImageFormatPropertiesNV,
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetMemoryWin32HandleNV = gen75_GetMemoryWin32HandleNV,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+   .CmdDrawIndirectCountAMD = gen75_CmdDrawIndirectCountAMD,
+   .CmdDrawIndexedIndirectCountAMD = gen75_CmdDrawIndexedIndirectCountAMD,
+   .CmdProcessCommandsNVX = gen75_CmdProcessCommandsNVX,
+   .CmdReserveSpaceForCommandsNVX = gen75_CmdReserveSpaceForCommandsNVX,
+   .CreateIndirectCommandsLayoutNVX = gen75_CreateIndirectCommandsLayoutNVX,
+   .DestroyIndirectCommandsLayoutNVX = gen75_DestroyIndirectCommandsLayoutNVX,
+   .CreateObjectTableNVX = gen75_CreateObjectTableNVX,
+   .DestroyObjectTableNVX = gen75_DestroyObjectTableNVX,
+   .RegisterObjectsNVX = gen75_RegisterObjectsNVX,
+   .UnregisterObjectsNVX = gen75_UnregisterObjectsNVX,
+   .GetPhysicalDeviceGeneratedCommandsPropertiesNVX = gen75_GetPhysicalDeviceGeneratedCommandsPropertiesNVX,
    .CreateDmaBufImageINTEL = gen75_CreateDmaBufImageINTEL,
 };
 
 VkResult gen8_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
 void gen8_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult gen8_EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices) __attribute__ ((weak));
-void gen8_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
-void gen8_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
-VkResult gen8_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
+PFN_vkVoidFunction gen8_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+PFN_vkVoidFunction gen8_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
 void gen8_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties) __attribute__ ((weak));
 void gen8_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties) __attribute__ ((weak));
 void gen8_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties) __attribute__ ((weak));
-PFN_vkVoidFunction gen8_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
-PFN_vkVoidFunction gen8_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+void gen8_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
+void gen8_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
+VkResult gen8_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
 VkResult gen8_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice) __attribute__ ((weak));
 void gen8_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
-VkResult gen8_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
-VkResult gen8_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult gen8_EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult gen8_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult gen8_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult gen8_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 void gen8_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) __attribute__ ((weak));
 VkResult gen8_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) __attribute__ ((weak));
 VkResult gen8_QueueWaitIdle(VkQueue queue) __attribute__ ((weak));
@@ -1580,10 +1736,10 @@ void gen8_UnmapMemory(VkDevice device, VkDeviceMemory memory) __attribute__ ((we
 VkResult gen8_FlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 VkResult gen8_InvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 void gen8_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes) __attribute__ ((weak));
-VkResult gen8_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
-VkResult gen8_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen8_GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult gen8_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen8_GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult gen8_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen8_GetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements) __attribute__ ((weak));
 void gen8_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties) __attribute__ ((weak));
 VkResult gen8_QueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence) __attribute__ ((weak));
@@ -1669,7 +1825,7 @@ void gen8_CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageL
 void gen8_CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter) __attribute__ ((weak));
 void gen8_CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
 void gen8_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
-void gen8_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const uint32_t* pData) __attribute__ ((weak));
+void gen8_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData) __attribute__ ((weak));
 void gen8_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data) __attribute__ ((weak));
 void gen8_CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
 void gen8_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
@@ -1689,6 +1845,23 @@ void gen8_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBe
 void gen8_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents) __attribute__ ((weak));
 void gen8_CmdEndRenderPass(VkCommandBuffer commandBuffer) __attribute__ ((weak));
 void gen8_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen8_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen8_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen8_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen8_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
+VkResult gen8_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen8_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
+VkResult gen8_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
+VkResult gen8_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+VkResult gen8_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult gen8_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 gen8_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
 void gen8_DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult gen8_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported) __attribute__ ((weak));
 VkResult gen8_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) __attribute__ ((weak));
@@ -1699,14 +1872,18 @@ void gen8_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const V
 VkResult gen8_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages) __attribute__ ((weak));
 VkResult gen8_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) __attribute__ ((weak));
 VkResult gen8_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) __attribute__ ((weak));
-VkResult gen8_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen8_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen8_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
-VkResult gen8_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen8_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR*pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
-VkResult gen8_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
-VkResult gen8_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-VkResult gen8_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkResult gen8_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkBool32 gen8_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen8_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 gen8_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 VkResult gen8_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -1719,50 +1896,49 @@ VkResult gen8_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateI
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkBool32 gen8_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkResult gen8_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkBool32 gen8_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkResult gen8_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkBool32 gen8_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-VkResult gen8_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkResult gen8_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkBool32 gen8_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult gen8_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void gen8_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void gen8_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
-VkResult gen8_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
+VkResult gen8_DebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo) __attribute__ ((weak));
+VkResult gen8_DebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo) __attribute__ ((weak));
+void gen8_CmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+void gen8_CmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer) __attribute__ ((weak));
+void gen8_CmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+VkResult gen8_GetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen8_GetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, HANDLE* pHandle) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+void gen8_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void gen8_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void gen8_CmdProcessCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdProcessCommandsInfoNVX* pProcessCommandsInfo) __attribute__ ((weak));
+void gen8_CmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdReserveSpaceForCommandsInfoNVX* pReserveSpaceInfo) __attribute__ ((weak));
+VkResult gen8_CreateIndirectCommandsLayoutNVX(VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutNVX* pIndirectCommandsLayout) __attribute__ ((weak));
+void gen8_DestroyIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult gen8_CreateObjectTableNVX(VkDevice device, const VkObjectTableCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkObjectTableNVX* pObjectTable) __attribute__ ((weak));
+void gen8_DestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult gen8_RegisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectTableEntryNVX* const*    ppObjectTableEntries, const uint32_t* pObjectIndices) __attribute__ ((weak));
+VkResult gen8_UnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectEntryTypeNVX* pObjectEntryTypes, const uint32_t* pObjectIndices) __attribute__ ((weak));
+void gen8_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits) __attribute__ ((weak));
+VkResult gen8_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
 const struct anv_dispatch_table gen8_layer = {
    .CreateInstance = gen8_CreateInstance,
    .DestroyInstance = gen8_DestroyInstance,
    .EnumeratePhysicalDevices = gen8_EnumeratePhysicalDevices,
-   .GetPhysicalDeviceFeatures = gen8_GetPhysicalDeviceFeatures,
-   .GetPhysicalDeviceFormatProperties = gen8_GetPhysicalDeviceFormatProperties,
-   .GetPhysicalDeviceImageFormatProperties = gen8_GetPhysicalDeviceImageFormatProperties,
+   .GetDeviceProcAddr = gen8_GetDeviceProcAddr,
+   .GetInstanceProcAddr = gen8_GetInstanceProcAddr,
    .GetPhysicalDeviceProperties = gen8_GetPhysicalDeviceProperties,
    .GetPhysicalDeviceQueueFamilyProperties = gen8_GetPhysicalDeviceQueueFamilyProperties,
    .GetPhysicalDeviceMemoryProperties = gen8_GetPhysicalDeviceMemoryProperties,
-   .GetInstanceProcAddr = gen8_GetInstanceProcAddr,
-   .GetDeviceProcAddr = gen8_GetDeviceProcAddr,
+   .GetPhysicalDeviceFeatures = gen8_GetPhysicalDeviceFeatures,
+   .GetPhysicalDeviceFormatProperties = gen8_GetPhysicalDeviceFormatProperties,
+   .GetPhysicalDeviceImageFormatProperties = gen8_GetPhysicalDeviceImageFormatProperties,
    .CreateDevice = gen8_CreateDevice,
    .DestroyDevice = gen8_DestroyDevice,
-   .EnumerateInstanceExtensionProperties = gen8_EnumerateInstanceExtensionProperties,
-   .EnumerateDeviceExtensionProperties = gen8_EnumerateDeviceExtensionProperties,
    .EnumerateInstanceLayerProperties = gen8_EnumerateInstanceLayerProperties,
+   .EnumerateInstanceExtensionProperties = gen8_EnumerateInstanceExtensionProperties,
    .EnumerateDeviceLayerProperties = gen8_EnumerateDeviceLayerProperties,
+   .EnumerateDeviceExtensionProperties = gen8_EnumerateDeviceExtensionProperties,
    .GetDeviceQueue = gen8_GetDeviceQueue,
    .QueueSubmit = gen8_QueueSubmit,
    .QueueWaitIdle = gen8_QueueWaitIdle,
@@ -1774,10 +1950,10 @@ const struct anv_dispatch_table gen8_layer = {
    .FlushMappedMemoryRanges = gen8_FlushMappedMemoryRanges,
    .InvalidateMappedMemoryRanges = gen8_InvalidateMappedMemoryRanges,
    .GetDeviceMemoryCommitment = gen8_GetDeviceMemoryCommitment,
-   .BindBufferMemory = gen8_BindBufferMemory,
-   .BindImageMemory = gen8_BindImageMemory,
    .GetBufferMemoryRequirements = gen8_GetBufferMemoryRequirements,
+   .BindBufferMemory = gen8_BindBufferMemory,
    .GetImageMemoryRequirements = gen8_GetImageMemoryRequirements,
+   .BindImageMemory = gen8_BindImageMemory,
    .GetImageSparseMemoryRequirements = gen8_GetImageSparseMemoryRequirements,
    .GetPhysicalDeviceSparseImageFormatProperties = gen8_GetPhysicalDeviceSparseImageFormatProperties,
    .QueueBindSparse = gen8_QueueBindSparse,
@@ -1883,6 +2059,23 @@ const struct anv_dispatch_table gen8_layer = {
    .CmdNextSubpass = gen8_CmdNextSubpass,
    .CmdEndRenderPass = gen8_CmdEndRenderPass,
    .CmdExecuteCommands = gen8_CmdExecuteCommands,
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = gen8_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+   .GetPhysicalDeviceDisplayPropertiesKHR = gen8_GetPhysicalDeviceDisplayPropertiesKHR,
+   .GetPhysicalDeviceDisplayPlanePropertiesKHR = gen8_GetPhysicalDeviceDisplayPlanePropertiesKHR,
+   .GetDisplayPlaneSupportedDisplaysKHR = gen8_GetDisplayPlaneSupportedDisplaysKHR,
+   .GetDisplayModePropertiesKHR = gen8_GetDisplayModePropertiesKHR,
+   .CreateDisplayModeKHR = gen8_CreateDisplayModeKHR,
+   .GetDisplayPlaneCapabilitiesKHR = gen8_GetDisplayPlaneCapabilitiesKHR,
+   .CreateDisplayPlaneSurfaceKHR = gen8_CreateDisplayPlaneSurfaceKHR,
+   .CreateSharedSwapchainsKHR = gen8_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = gen8_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = gen8_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
    .DestroySurfaceKHR = gen8_DestroySurfaceKHR,
    .GetPhysicalDeviceSurfaceSupportKHR = gen8_GetPhysicalDeviceSurfaceSupportKHR,
    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen8_GetPhysicalDeviceSurfaceCapabilitiesKHR,
@@ -1893,14 +2086,18 @@ const struct anv_dispatch_table gen8_layer = {
    .GetSwapchainImagesKHR = gen8_GetSwapchainImagesKHR,
    .AcquireNextImageKHR = gen8_AcquireNextImageKHR,
    .QueuePresentKHR = gen8_QueuePresentKHR,
-   .GetPhysicalDeviceDisplayPropertiesKHR = gen8_GetPhysicalDeviceDisplayPropertiesKHR,
-   .GetPhysicalDeviceDisplayPlanePropertiesKHR = gen8_GetPhysicalDeviceDisplayPlanePropertiesKHR,
-   .GetDisplayPlaneSupportedDisplaysKHR = gen8_GetDisplayPlaneSupportedDisplaysKHR,
-   .GetDisplayModePropertiesKHR = gen8_GetDisplayModePropertiesKHR,
-   .CreateDisplayModeKHR = gen8_CreateDisplayModeKHR,
-   .GetDisplayPlaneCapabilitiesKHR = gen8_GetDisplayPlaneCapabilitiesKHR,
-   .CreateDisplayPlaneSurfaceKHR = gen8_CreateDisplayPlaneSurfaceKHR,
-   .CreateSharedSwapchainsKHR = gen8_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .CreateWaylandSurfaceKHR = gen8_CreateWaylandSurfaceKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .GetPhysicalDeviceWaylandPresentationSupportKHR = gen8_GetPhysicalDeviceWaylandPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = gen8_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = gen8_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .CreateXlibSurfaceKHR = gen8_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -1913,50 +2110,49 @@ const struct anv_dispatch_table gen8_layer = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .GetPhysicalDeviceXcbPresentationSupportKHR = gen8_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .CreateWaylandSurfaceKHR = gen8_CreateWaylandSurfaceKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .GetPhysicalDeviceWaylandPresentationSupportKHR = gen8_GetPhysicalDeviceWaylandPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .CreateMirSurfaceKHR = gen8_CreateMirSurfaceKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .GetPhysicalDeviceMirPresentationSupportKHR = gen8_GetPhysicalDeviceMirPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-   .CreateAndroidSurfaceKHR = gen8_CreateAndroidSurfaceKHR,
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .CreateWin32SurfaceKHR = gen8_CreateWin32SurfaceKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .GetPhysicalDeviceWin32PresentationSupportKHR = gen8_GetPhysicalDeviceWin32PresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = gen8_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = gen8_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = gen8_DebugReportMessageEXT,
+   .DebugMarkerSetObjectNameEXT = gen8_DebugMarkerSetObjectNameEXT,
+   .DebugMarkerSetObjectTagEXT = gen8_DebugMarkerSetObjectTagEXT,
+   .CmdDebugMarkerBeginEXT = gen8_CmdDebugMarkerBeginEXT,
+   .CmdDebugMarkerEndEXT = gen8_CmdDebugMarkerEndEXT,
+   .CmdDebugMarkerInsertEXT = gen8_CmdDebugMarkerInsertEXT,
+   .GetPhysicalDeviceExternalImageFormatPropertiesNV = gen8_GetPhysicalDeviceExternalImageFormatPropertiesNV,
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetMemoryWin32HandleNV = gen8_GetMemoryWin32HandleNV,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+   .CmdDrawIndirectCountAMD = gen8_CmdDrawIndirectCountAMD,
+   .CmdDrawIndexedIndirectCountAMD = gen8_CmdDrawIndexedIndirectCountAMD,
+   .CmdProcessCommandsNVX = gen8_CmdProcessCommandsNVX,
+   .CmdReserveSpaceForCommandsNVX = gen8_CmdReserveSpaceForCommandsNVX,
+   .CreateIndirectCommandsLayoutNVX = gen8_CreateIndirectCommandsLayoutNVX,
+   .DestroyIndirectCommandsLayoutNVX = gen8_DestroyIndirectCommandsLayoutNVX,
+   .CreateObjectTableNVX = gen8_CreateObjectTableNVX,
+   .DestroyObjectTableNVX = gen8_DestroyObjectTableNVX,
+   .RegisterObjectsNVX = gen8_RegisterObjectsNVX,
+   .UnregisterObjectsNVX = gen8_UnregisterObjectsNVX,
+   .GetPhysicalDeviceGeneratedCommandsPropertiesNVX = gen8_GetPhysicalDeviceGeneratedCommandsPropertiesNVX,
    .CreateDmaBufImageINTEL = gen8_CreateDmaBufImageINTEL,
 };
 
 VkResult gen9_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
 void gen9_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult gen9_EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices) __attribute__ ((weak));
-void gen9_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
-void gen9_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
-VkResult gen9_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
+PFN_vkVoidFunction gen9_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+PFN_vkVoidFunction gen9_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
 void gen9_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties) __attribute__ ((weak));
 void gen9_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties) __attribute__ ((weak));
 void gen9_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties) __attribute__ ((weak));
-PFN_vkVoidFunction gen9_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
-PFN_vkVoidFunction gen9_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+void gen9_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
+void gen9_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
+VkResult gen9_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
 VkResult gen9_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice) __attribute__ ((weak));
 void gen9_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
-VkResult gen9_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
-VkResult gen9_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult gen9_EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult gen9_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult gen9_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult gen9_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 void gen9_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) __attribute__ ((weak));
 VkResult gen9_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) __attribute__ ((weak));
 VkResult gen9_QueueWaitIdle(VkQueue queue) __attribute__ ((weak));
@@ -1968,10 +2164,10 @@ void gen9_UnmapMemory(VkDevice device, VkDeviceMemory memory) __attribute__ ((we
 VkResult gen9_FlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 VkResult gen9_InvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 void gen9_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes) __attribute__ ((weak));
-VkResult gen9_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
-VkResult gen9_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen9_GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult gen9_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen9_GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult gen9_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void gen9_GetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements) __attribute__ ((weak));
 void gen9_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties) __attribute__ ((weak));
 VkResult gen9_QueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence) __attribute__ ((weak));
@@ -2057,7 +2253,7 @@ void gen9_CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageL
 void gen9_CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter) __attribute__ ((weak));
 void gen9_CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
 void gen9_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
-void gen9_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const uint32_t* pData) __attribute__ ((weak));
+void gen9_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData) __attribute__ ((weak));
 void gen9_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data) __attribute__ ((weak));
 void gen9_CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
 void gen9_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
@@ -2077,6 +2273,23 @@ void gen9_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBe
 void gen9_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents) __attribute__ ((weak));
 void gen9_CmdEndRenderPass(VkCommandBuffer commandBuffer) __attribute__ ((weak));
 void gen9_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen9_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+VkResult gen9_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen9_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen9_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
+VkResult gen9_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult gen9_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
+VkResult gen9_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
+VkResult gen9_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+VkResult gen9_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult gen9_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 gen9_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
 void gen9_DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult gen9_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported) __attribute__ ((weak));
 VkResult gen9_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) __attribute__ ((weak));
@@ -2087,14 +2300,18 @@ void gen9_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const V
 VkResult gen9_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages) __attribute__ ((weak));
 VkResult gen9_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) __attribute__ ((weak));
 VkResult gen9_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) __attribute__ ((weak));
-VkResult gen9_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen9_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen9_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
-VkResult gen9_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult gen9_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR*pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
-VkResult gen9_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
-VkResult gen9_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-VkResult gen9_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkResult gen9_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkBool32 gen9_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen9_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 gen9_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 VkResult gen9_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -2107,50 +2324,49 @@ VkResult gen9_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateI
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkBool32 gen9_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkResult gen9_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkBool32 gen9_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkResult gen9_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkBool32 gen9_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-VkResult gen9_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkResult gen9_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkBool32 gen9_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult gen9_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void gen9_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void gen9_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
-VkResult gen9_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
+VkResult gen9_DebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo) __attribute__ ((weak));
+VkResult gen9_DebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo) __attribute__ ((weak));
+void gen9_CmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+void gen9_CmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer) __attribute__ ((weak));
+void gen9_CmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+VkResult gen9_GetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult gen9_GetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, HANDLE* pHandle) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+void gen9_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void gen9_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void gen9_CmdProcessCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdProcessCommandsInfoNVX* pProcessCommandsInfo) __attribute__ ((weak));
+void gen9_CmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdReserveSpaceForCommandsInfoNVX* pReserveSpaceInfo) __attribute__ ((weak));
+VkResult gen9_CreateIndirectCommandsLayoutNVX(VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutNVX* pIndirectCommandsLayout) __attribute__ ((weak));
+void gen9_DestroyIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult gen9_CreateObjectTableNVX(VkDevice device, const VkObjectTableCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkObjectTableNVX* pObjectTable) __attribute__ ((weak));
+void gen9_DestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult gen9_RegisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectTableEntryNVX* const*    ppObjectTableEntries, const uint32_t* pObjectIndices) __attribute__ ((weak));
+VkResult gen9_UnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectEntryTypeNVX* pObjectEntryTypes, const uint32_t* pObjectIndices) __attribute__ ((weak));
+void gen9_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits) __attribute__ ((weak));
+VkResult gen9_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
 const struct anv_dispatch_table gen9_layer = {
    .CreateInstance = gen9_CreateInstance,
    .DestroyInstance = gen9_DestroyInstance,
    .EnumeratePhysicalDevices = gen9_EnumeratePhysicalDevices,
-   .GetPhysicalDeviceFeatures = gen9_GetPhysicalDeviceFeatures,
-   .GetPhysicalDeviceFormatProperties = gen9_GetPhysicalDeviceFormatProperties,
-   .GetPhysicalDeviceImageFormatProperties = gen9_GetPhysicalDeviceImageFormatProperties,
+   .GetDeviceProcAddr = gen9_GetDeviceProcAddr,
+   .GetInstanceProcAddr = gen9_GetInstanceProcAddr,
    .GetPhysicalDeviceProperties = gen9_GetPhysicalDeviceProperties,
    .GetPhysicalDeviceQueueFamilyProperties = gen9_GetPhysicalDeviceQueueFamilyProperties,
    .GetPhysicalDeviceMemoryProperties = gen9_GetPhysicalDeviceMemoryProperties,
-   .GetInstanceProcAddr = gen9_GetInstanceProcAddr,
-   .GetDeviceProcAddr = gen9_GetDeviceProcAddr,
+   .GetPhysicalDeviceFeatures = gen9_GetPhysicalDeviceFeatures,
+   .GetPhysicalDeviceFormatProperties = gen9_GetPhysicalDeviceFormatProperties,
+   .GetPhysicalDeviceImageFormatProperties = gen9_GetPhysicalDeviceImageFormatProperties,
    .CreateDevice = gen9_CreateDevice,
    .DestroyDevice = gen9_DestroyDevice,
-   .EnumerateInstanceExtensionProperties = gen9_EnumerateInstanceExtensionProperties,
-   .EnumerateDeviceExtensionProperties = gen9_EnumerateDeviceExtensionProperties,
    .EnumerateInstanceLayerProperties = gen9_EnumerateInstanceLayerProperties,
+   .EnumerateInstanceExtensionProperties = gen9_EnumerateInstanceExtensionProperties,
    .EnumerateDeviceLayerProperties = gen9_EnumerateDeviceLayerProperties,
+   .EnumerateDeviceExtensionProperties = gen9_EnumerateDeviceExtensionProperties,
    .GetDeviceQueue = gen9_GetDeviceQueue,
    .QueueSubmit = gen9_QueueSubmit,
    .QueueWaitIdle = gen9_QueueWaitIdle,
@@ -2162,10 +2378,10 @@ const struct anv_dispatch_table gen9_layer = {
    .FlushMappedMemoryRanges = gen9_FlushMappedMemoryRanges,
    .InvalidateMappedMemoryRanges = gen9_InvalidateMappedMemoryRanges,
    .GetDeviceMemoryCommitment = gen9_GetDeviceMemoryCommitment,
-   .BindBufferMemory = gen9_BindBufferMemory,
-   .BindImageMemory = gen9_BindImageMemory,
    .GetBufferMemoryRequirements = gen9_GetBufferMemoryRequirements,
+   .BindBufferMemory = gen9_BindBufferMemory,
    .GetImageMemoryRequirements = gen9_GetImageMemoryRequirements,
+   .BindImageMemory = gen9_BindImageMemory,
    .GetImageSparseMemoryRequirements = gen9_GetImageSparseMemoryRequirements,
    .GetPhysicalDeviceSparseImageFormatProperties = gen9_GetPhysicalDeviceSparseImageFormatProperties,
    .QueueBindSparse = gen9_QueueBindSparse,
@@ -2271,6 +2487,23 @@ const struct anv_dispatch_table gen9_layer = {
    .CmdNextSubpass = gen9_CmdNextSubpass,
    .CmdEndRenderPass = gen9_CmdEndRenderPass,
    .CmdExecuteCommands = gen9_CmdExecuteCommands,
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = gen9_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+   .GetPhysicalDeviceDisplayPropertiesKHR = gen9_GetPhysicalDeviceDisplayPropertiesKHR,
+   .GetPhysicalDeviceDisplayPlanePropertiesKHR = gen9_GetPhysicalDeviceDisplayPlanePropertiesKHR,
+   .GetDisplayPlaneSupportedDisplaysKHR = gen9_GetDisplayPlaneSupportedDisplaysKHR,
+   .GetDisplayModePropertiesKHR = gen9_GetDisplayModePropertiesKHR,
+   .CreateDisplayModeKHR = gen9_CreateDisplayModeKHR,
+   .GetDisplayPlaneCapabilitiesKHR = gen9_GetDisplayPlaneCapabilitiesKHR,
+   .CreateDisplayPlaneSurfaceKHR = gen9_CreateDisplayPlaneSurfaceKHR,
+   .CreateSharedSwapchainsKHR = gen9_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = gen9_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = gen9_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
    .DestroySurfaceKHR = gen9_DestroySurfaceKHR,
    .GetPhysicalDeviceSurfaceSupportKHR = gen9_GetPhysicalDeviceSurfaceSupportKHR,
    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen9_GetPhysicalDeviceSurfaceCapabilitiesKHR,
@@ -2281,14 +2514,18 @@ const struct anv_dispatch_table gen9_layer = {
    .GetSwapchainImagesKHR = gen9_GetSwapchainImagesKHR,
    .AcquireNextImageKHR = gen9_AcquireNextImageKHR,
    .QueuePresentKHR = gen9_QueuePresentKHR,
-   .GetPhysicalDeviceDisplayPropertiesKHR = gen9_GetPhysicalDeviceDisplayPropertiesKHR,
-   .GetPhysicalDeviceDisplayPlanePropertiesKHR = gen9_GetPhysicalDeviceDisplayPlanePropertiesKHR,
-   .GetDisplayPlaneSupportedDisplaysKHR = gen9_GetDisplayPlaneSupportedDisplaysKHR,
-   .GetDisplayModePropertiesKHR = gen9_GetDisplayModePropertiesKHR,
-   .CreateDisplayModeKHR = gen9_CreateDisplayModeKHR,
-   .GetDisplayPlaneCapabilitiesKHR = gen9_GetDisplayPlaneCapabilitiesKHR,
-   .CreateDisplayPlaneSurfaceKHR = gen9_CreateDisplayPlaneSurfaceKHR,
-   .CreateSharedSwapchainsKHR = gen9_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .CreateWaylandSurfaceKHR = gen9_CreateWaylandSurfaceKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .GetPhysicalDeviceWaylandPresentationSupportKHR = gen9_GetPhysicalDeviceWaylandPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = gen9_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = gen9_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .CreateXlibSurfaceKHR = gen9_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -2301,30 +2538,29 @@ const struct anv_dispatch_table gen9_layer = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .GetPhysicalDeviceXcbPresentationSupportKHR = gen9_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .CreateWaylandSurfaceKHR = gen9_CreateWaylandSurfaceKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .GetPhysicalDeviceWaylandPresentationSupportKHR = gen9_GetPhysicalDeviceWaylandPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .CreateMirSurfaceKHR = gen9_CreateMirSurfaceKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .GetPhysicalDeviceMirPresentationSupportKHR = gen9_GetPhysicalDeviceMirPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-   .CreateAndroidSurfaceKHR = gen9_CreateAndroidSurfaceKHR,
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .CreateWin32SurfaceKHR = gen9_CreateWin32SurfaceKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .GetPhysicalDeviceWin32PresentationSupportKHR = gen9_GetPhysicalDeviceWin32PresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = gen9_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = gen9_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = gen9_DebugReportMessageEXT,
+   .DebugMarkerSetObjectNameEXT = gen9_DebugMarkerSetObjectNameEXT,
+   .DebugMarkerSetObjectTagEXT = gen9_DebugMarkerSetObjectTagEXT,
+   .CmdDebugMarkerBeginEXT = gen9_CmdDebugMarkerBeginEXT,
+   .CmdDebugMarkerEndEXT = gen9_CmdDebugMarkerEndEXT,
+   .CmdDebugMarkerInsertEXT = gen9_CmdDebugMarkerInsertEXT,
+   .GetPhysicalDeviceExternalImageFormatPropertiesNV = gen9_GetPhysicalDeviceExternalImageFormatPropertiesNV,
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetMemoryWin32HandleNV = gen9_GetMemoryWin32HandleNV,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+   .CmdDrawIndirectCountAMD = gen9_CmdDrawIndirectCountAMD,
+   .CmdDrawIndexedIndirectCountAMD = gen9_CmdDrawIndexedIndirectCountAMD,
+   .CmdProcessCommandsNVX = gen9_CmdProcessCommandsNVX,
+   .CmdReserveSpaceForCommandsNVX = gen9_CmdReserveSpaceForCommandsNVX,
+   .CreateIndirectCommandsLayoutNVX = gen9_CreateIndirectCommandsLayoutNVX,
+   .DestroyIndirectCommandsLayoutNVX = gen9_DestroyIndirectCommandsLayoutNVX,
+   .CreateObjectTableNVX = gen9_CreateObjectTableNVX,
+   .DestroyObjectTableNVX = gen9_DestroyObjectTableNVX,
+   .RegisterObjectsNVX = gen9_RegisterObjectsNVX,
+   .UnregisterObjectsNVX = gen9_UnregisterObjectsNVX,
+   .GetPhysicalDeviceGeneratedCommandsPropertiesNVX = gen9_GetPhysicalDeviceGeneratedCommandsPropertiesNVX,
    .CreateDmaBufImageINTEL = gen9_CreateDmaBufImageINTEL,
 };
 
@@ -2362,53 +2598,53 @@ anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
 /* Hash table stats:
  * size 256 entries
  * collisions  entries
- *      0       111
- *      1        30
+ *      0       116
+ *      1        34
  *      2        10
- *      3         7
- *      4         6
- *      5         1
- *      6         1
- *      7         1
- *      8         1
- *      9+        2
+ *      3        10
+ *      4         3
+ *      5         3
+ *      6         3
+ *      7         2
+ *      8         2
+ *      9+        5
  */
 
 #define none 0xffff
 
 static const uint16_t map[] = {
-    0x0044,   none,   none,   none, 0x0096, 0x002b, 0x0040, 0x0061,
-    0x0049, 0x0022, 0x0056,   none,   none,   none, 0x0095,   none,
-      none,   none,   none, 0x0067,   none,   none,   none, 0x0099,
-    0x0052, 0x009d, 0x0058, 0x004c,   none, 0x0069,   none,   none,
+    0x0044,   none,   none,   none, 0x008d, 0x002b, 0x0040, 0x0061,
+    0x0049, 0x0022, 0x0056,   none, 0x00b8,   none, 0x008c,   none,
+    0x00ab, 0x00ad,   none, 0x0067,   none,   none,   none, 0x0090,
+    0x0052, 0x00a4, 0x0058, 0x004c,   none, 0x0069,   none,   none,
       none,   none, 0x0054,   none, 0x0014, 0x005b, 0x0070, 0x0002,
-    0x007c,   none, 0x001e, 0x002f,   none,   none, 0x0077, 0x0018,
-    0x004b, 0x002a,   none, 0x0003, 0x0065, 0x0080, 0x006d, 0x0053,
-      none,   none, 0x004d, 0x0090, 0x0024,   none, 0x005e, 0x000b,
-    0x0088, 0x0091,   none,   none, 0x005c, 0x0033,   none, 0x00a8,
-    0x0087, 0x003f, 0x001d, 0x002c, 0x0082, 0x005a, 0x00a2,   none,
-      none, 0x0019, 0x0046, 0x003a, 0x0093, 0x00a1, 0x0034,   none,
-    0x0051,   none,   none, 0x0020,   none, 0x0066, 0x0075,   none,
-      none, 0x00a3, 0x0035, 0x001f, 0x006f, 0x0060, 0x0047, 0x0005,
+    0x007c,   none, 0x001c, 0x002f, 0x00bb,   none, 0x0077, 0x0018,
+    0x004b, 0x002a,   none, 0x0008, 0x0065, 0x0080, 0x006d, 0x0053,
+    0x00a9,   none, 0x004d, 0x0093, 0x0024, 0x00b4, 0x005e, 0x000b,
+    0x0088, 0x008a,   none,   none, 0x005c, 0x0033,   none, 0x00a8,
+    0x0087, 0x003f, 0x001f, 0x002c, 0x0082, 0x005a, 0x0089,   none,
+    0x00b0, 0x0019, 0x0046, 0x003a, 0x008e, 0x0092, 0x0034,   none,
+    0x0051,   none, 0x00ba, 0x0020,   none, 0x0066, 0x0075, 0x00ae,
+      none, 0x009b, 0x0035, 0x001e, 0x006f, 0x0060, 0x0047, 0x000a,
     0x0023, 0x00a6,   none, 0x006b,   none, 0x0041, 0x0028,   none,
-    0x0068,   none,   none, 0x003e, 0x0048, 0x007b, 0x0055, 0x00a5,
-      none, 0x0045, 0x006e, 0x0084,   none, 0x0089, 0x000d, 0x0030,
-      none, 0x0027, 0x0081, 0x009a, 0x005d, 0x008a, 0x000a, 0x008f,
-      none, 0x0063, 0x0007,   none, 0x0098, 0x0097,   none,   none,
+    0x0068,   none,   none, 0x003e, 0x0048, 0x007b, 0x0055, 0x00a1,
+      none, 0x0045, 0x006e, 0x0084,   none, 0x0094, 0x000e, 0x0030,
+      none, 0x0027, 0x0081, 0x0091, 0x005d, 0x0095, 0x0003, 0x009a,
+      none, 0x0063, 0x0006,   none, 0x008f, 0x009c,   none,   none,
       none, 0x0059, 0x0026,   none, 0x003c,   none, 0x0037,   none,
-    0x0004, 0x0038, 0x0011,   none, 0x0072, 0x0016,   none, 0x003d,
-    0x00a4, 0x006a, 0x003b,   none, 0x004a, 0x0013, 0x0000, 0x007a,
-    0x002e, 0x0071,   none, 0x009c, 0x0074, 0x0009, 0x004f, 0x0029,
-      none, 0x004e, 0x009b, 0x0031,   none, 0x001b,   none, 0x0073,
-    0x005f, 0x0032, 0x0078, 0x008e,   none,   none,   none, 0x006c,
-      none,   none, 0x0036,   none, 0x0050, 0x009f, 0x007d,   none,
-    0x008c, 0x0006, 0x001a, 0x000c, 0x009e, 0x0094, 0x0092,   none,
-      none, 0x008d, 0x00a0, 0x0015, 0x0083, 0x0043,   none,   none,
-    0x000f, 0x00a7, 0x0008,   none, 0x0025, 0x007f, 0x001c,   none,
-    0x0076,   none, 0x0064, 0x0085,   none,   none,   none, 0x0010,
-    0x007e,   none,   none, 0x0017, 0x0012, 0x000e,   none, 0x0021,
-    0x008b, 0x0079, 0x0001, 0x00a9,   none, 0x002d,   none,   none,
-      none, 0x0086,   none, 0x0062,   none, 0x0057, 0x0042, 0x0039,
+    0x0009, 0x0038, 0x0011,   none, 0x0072, 0x0016,   none, 0x003d,
+    0x00a0, 0x006a, 0x003b,   none, 0x004a, 0x0013, 0x0000, 0x007a,
+    0x002e, 0x0071,   none, 0x00a3, 0x0074, 0x0004, 0x004f, 0x0029,
+    0x00ac, 0x004e, 0x009e, 0x0031,   none, 0x001b,   none, 0x0073,
+    0x005f, 0x0032, 0x0078, 0x0099, 0x00b6,   none,   none, 0x006c,
+    0x00b1, 0x00b2, 0x0036,   none, 0x0050, 0x00a2, 0x007d,   none,
+    0x0097, 0x0005, 0x001a, 0x000c, 0x00a5, 0x008b, 0x009d,   none,
+      none, 0x0098, 0x009f, 0x0015, 0x0083, 0x0043, 0x00b7,   none,
+    0x000d, 0x00a7, 0x0007,   none, 0x0025, 0x007f, 0x001d, 0x00af,
+    0x0076,   none, 0x0064, 0x0085,   none, 0x00b9, 0x00b5, 0x000f,
+    0x007e,   none,   none, 0x0017, 0x0012, 0x0010,   none, 0x0021,
+    0x0096, 0x0079, 0x0001, 0x00aa,   none, 0x002d,   none,   none,
+      none, 0x0086, 0x00b3, 0x0062,   none, 0x0057, 0x0042, 0x0039,
 };
 
 void *

@@ -251,6 +251,7 @@ struct ureg_dst
 ureg_DECL_output_layout(struct ureg_program *,
                         unsigned semantic_name,
                         unsigned semantic_index,
+                        unsigned streams,
                         unsigned index,
                         unsigned usage_mask,
                         unsigned array_id,

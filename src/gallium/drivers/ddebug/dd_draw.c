@@ -559,7 +559,7 @@ dd_flush_and_check_hang(struct dd_context *dctx,
    if (!fence)
       return false;
 
-   idle = screen->fence_finish(screen, NULL, fence, timeout_ms * 1000000);
+   idle = screen->fence_finish(screen, pipe, fence, timeout_ms * 1000000);
    screen->fence_reference(screen, &fence, NULL);
    if (!idle)
       fprintf(stderr, "dd: GPU hang detected!\n");

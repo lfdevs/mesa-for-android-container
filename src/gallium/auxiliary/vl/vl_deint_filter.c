@@ -173,21 +173,21 @@ create_deint_frag_shader(struct vl_deint_filter *filter, unsigned field,
       // cur vs prev2
       ureg_TEX(shader, t_a, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_bot), sampler_cur);
       ureg_TEX(shader, t_b, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_bot), sampler_prevprev);
-      ureg_SUB(shader, ureg_writemask(t_diff, TGSI_WRITEMASK_X), ureg_src(t_a), ureg_src(t_b));
+      ureg_ADD(shader, ureg_writemask(t_diff, TGSI_WRITEMASK_X), ureg_src(t_a), ureg_negate(ureg_src(t_b)));
       // prev vs next
       ureg_TEX(shader, t_a, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_top), sampler_prev);
       ureg_TEX(shader, t_b, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_top), sampler_next);
-      ureg_SUB(shader, ureg_writemask(t_diff, TGSI_WRITEMASK_Y), ureg_src(t_a), ureg_src(t_b));
+      ureg_ADD(shader, ureg_writemask(t_diff, TGSI_WRITEMASK_Y), ureg_src(t_a), ureg_negate(ureg_src(t_b)));
    } else {
       /* interpolating bottom field -> current field is a top field */
       // cur vs prev2
       ureg_TEX(shader, t_a, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_top), sampler_cur);
       ureg_TEX(shader, t_b, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_top), sampler_prevprev);
-      ureg_SUB(shader, ureg_writemask(t_diff, TGSI_WRITEMASK_X), ureg_src(t_a), ureg_src(t_b));
+      ureg_ADD(shader, ureg_writemask(t_diff, TGSI_WRITEMASK_X), ureg_src(t_a), ureg_negate(ureg_src(t_b)));
       // prev vs next
       ureg_TEX(shader, t_a, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_bot), sampler_prev);
       ureg_TEX(shader, t_b, TGSI_TEXTURE_2D_ARRAY, ureg_src(t_comp_bot), sampler_next);
-      ureg_SUB(shader, ureg_writemask(t_diff, TGSI_WRITEMASK_Y), ureg_src(t_a), ureg_src(t_b));
+      ureg_ADD(shader, ureg_writemask(t_diff, TGSI_WRITEMASK_Y), ureg_src(t_a), ureg_negate(ureg_src(t_b)));
    }
 
    // absolute maximum of differences

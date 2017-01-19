@@ -146,6 +146,8 @@ struct _egl_api
    EGLBoolean (*GetSyncAttrib)(_EGLDriver *drv, _EGLDisplay *dpy,
                                _EGLSync *sync, EGLint attribute,
                                EGLAttrib *value);
+   EGLint (*DupNativeFenceFDANDROID)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                     _EGLSync *sync);
 
    EGLBoolean (*SwapBuffersRegionNOK)(_EGLDriver *drv, _EGLDisplay *disp,
                                       _EGLSurface *surf, EGLint numRects,
@@ -197,9 +199,6 @@ struct _egl_api
                                 struct mesa_glinterop_export_in *in,
                                 struct mesa_glinterop_export_out *out);
 };
-
-EGLint _eglConvertIntsToAttribs(const EGLint *int_list,
-                                EGLAttrib **out_attrib_list);
 
 #ifdef __cplusplus
 }

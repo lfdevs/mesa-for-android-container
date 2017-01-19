@@ -34,6 +34,7 @@ VULKAN_FILES := \
 	anv_nir.h \
 	anv_nir_apply_dynamic_offsets.c \
 	anv_nir_apply_pipeline_layout.c \
+	anv_nir_lower_input_attachments.c \
 	anv_nir_lower_push_constants.c \
 	anv_pass.c \
 	anv_pipeline.c \
@@ -42,7 +43,6 @@ VULKAN_FILES := \
 	anv_query.c \
 	anv_util.c \
 	anv_wsi.c \
-	genX_pipeline_util.h \
 	vk_format_info.h
 
 VULKAN_WSI_WAYLAND_FILES := \
@@ -59,38 +59,37 @@ VULKAN_GEM_STUB_FILES := \
 
 VULKAN_GENERATED_FILES := \
 	anv_entrypoints.c \
-	anv_entrypoints.h \
-	anv_timestamp.h
+	anv_entrypoints.h
 
 
 GEN7_FILES := \
 	genX_cmd_buffer.c \
 	genX_blorp_exec.c \
+	genX_gpu_memcpy.c \
 	genX_pipeline.c \
 	gen7_cmd_buffer.c \
-	gen7_pipeline.c \
 	genX_state.c
 
 GEN75_FILES := \
 	genX_cmd_buffer.c \
 	genX_blorp_exec.c \
+	genX_gpu_memcpy.c \
 	genX_pipeline.c \
 	gen7_cmd_buffer.c \
-	gen7_pipeline.c \
 	genX_state.c
 
 GEN8_FILES := \
 	genX_cmd_buffer.c \
 	genX_blorp_exec.c \
+	genX_gpu_memcpy.c \
 	genX_pipeline.c \
 	gen8_cmd_buffer.c \
-	gen8_pipeline.c \
 	genX_state.c
 
 GEN9_FILES := \
 	genX_cmd_buffer.c \
 	genX_blorp_exec.c \
+	genX_gpu_memcpy.c \
 	genX_pipeline.c \
 	gen8_cmd_buffer.c \
-	gen8_pipeline.c \
 	genX_state.c

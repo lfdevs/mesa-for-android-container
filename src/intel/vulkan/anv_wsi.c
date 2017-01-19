@@ -74,7 +74,7 @@ void anv_DestroySurfaceKHR(
     const VkAllocationCallbacks*                 pAllocator)
 {
    ANV_FROM_HANDLE(anv_instance, instance, _instance);
-   ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
 
    if (!surface)
       return;
@@ -89,7 +89,7 @@ VkResult anv_GetPhysicalDeviceSurfaceSupportKHR(
     VkBool32*                                   pSupported)
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
-   ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_interface *iface = device->wsi_device.wsi[surface->platform];
 
    return iface->get_support(surface, &device->wsi_device,
@@ -103,7 +103,7 @@ VkResult anv_GetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkSurfaceCapabilitiesKHR*                   pSurfaceCapabilities)
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
-   ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_interface *iface = device->wsi_device.wsi[surface->platform];
 
    return iface->get_capabilities(surface, pSurfaceCapabilities);
@@ -116,7 +116,7 @@ VkResult anv_GetPhysicalDeviceSurfaceFormatsKHR(
     VkSurfaceFormatKHR*                         pSurfaceFormats)
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
-   ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_interface *iface = device->wsi_device.wsi[surface->platform];
 
    return iface->get_formats(surface, &device->wsi_device, pSurfaceFormatCount,
@@ -130,7 +130,7 @@ VkResult anv_GetPhysicalDeviceSurfacePresentModesKHR(
     VkPresentModeKHR*                           pPresentModes)
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
-   ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, _surface);
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_interface *iface = device->wsi_device.wsi[surface->platform];
 
    return iface->get_present_modes(surface, pPresentModeCount,
@@ -200,7 +200,7 @@ x11_anv_wsi_image_create(VkDevice device_h,
    memory = anv_device_memory_from_handle(memory_h);
    memory->bo.is_winsys_bo = true;
 
-   anv_BindImageMemory(VK_NULL_HANDLE, image_h, memory_h, 0);
+   anv_BindImageMemory(device_h, image_h, memory_h, 0);
 
    struct anv_surface *surface = &image->color_surface;
    assert(surface->isl.tiling == ISL_TILING_X);
@@ -260,7 +260,7 @@ VkResult anv_CreateSwapchainKHR(
     VkSwapchainKHR*                              pSwapchain)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
-   ANV_FROM_HANDLE(_VkIcdSurfaceBase, surface, pCreateInfo->surface);
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, pCreateInfo->surface);
    struct wsi_interface *iface =
       device->instance->physicalDevice.wsi_device.wsi[surface->platform];
    struct wsi_swapchain *swapchain;

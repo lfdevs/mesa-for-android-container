@@ -33,7 +33,7 @@ $(GENXML_GENERATED_FILES): genxml/gen_pack_header.py
 
 .xml_pack.h:
 	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/genxml/gen_pack_header.py $< > $@
+	$(PYTHON_GEN) $(srcdir)/genxml/gen_pack_header.py $< > $@ || ($(RM) $@; false)
 
 # xxd generates variable names based on the path of the input file. We
 # prefer to generate our own name here, so it doesn't vary from

@@ -1080,11 +1080,6 @@ translate_instruction(struct fd2_compile_context *ctx,
 	case TGSI_OPCODE_POW:
 		translate_pow(ctx, inst);
 		break;
-	case TGSI_OPCODE_ABS:
-		instr = ir2_instr_create_alu(cf, MAXv, ~0);
-		add_regs_vector_1(ctx, inst, instr);
-		instr->regs[1]->flags |= IR2_REG_NEGATE; /* src0 */
-		break;
 	case TGSI_OPCODE_COS:
 	case TGSI_OPCODE_SIN:
 		translate_trig(ctx, inst, opc);

@@ -23,6 +23,9 @@ C_SOURCES := \
 	indexbuffer9.h \
 	iunknown.c \
 	iunknown.h \
+	nine_buffer_upload.c \
+	nine_buffer_upload.h \
+	nine_csmt_helper.h \
 	nine_debug.c \
 	nine_debug.h \
 	nine_defines.h \
@@ -43,6 +46,8 @@ C_SOURCES := \
 	nine_pipe.h \
 	nine_quirk.c \
 	nine_quirk.h \
+	nine_queue.c \
+	nine_queue.h \
 	nine_shader.c \
 	nine_shader.h \
 	nine_state.c \

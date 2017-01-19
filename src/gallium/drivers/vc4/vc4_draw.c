@@ -155,7 +155,8 @@ vc4_emit_gl_shader_state(struct vc4_context *vc4,
         /* VC4_DIRTY_PRIM_MODE | VC4_DIRTY_RASTERIZER */
         cl_u16(&shader_rec,
                VC4_SHADER_FLAG_ENABLE_CLIPPING |
-               VC4_SHADER_FLAG_FS_SINGLE_THREAD |
+               (vc4->prog.fs->fs_threaded ?
+                0 : VC4_SHADER_FLAG_FS_SINGLE_THREAD) |
                ((info->mode == PIPE_PRIM_POINTS &&
                  vc4->rasterizer->base.point_size_per_vertex) ?
                 VC4_SHADER_FLAG_VS_POINT_SIZE : 0));
@@ -464,6 +465,13 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         }
 
         job->resolve |= PIPE_CLEAR_COLOR0;
+
+        /* If we've used half of the presumably 256MB CMA area, flush the job
+         * so that we don't accumulate a job that will end up not being
+         * executable.
+         */
+        if (job->bo_space > 128 * 1024 * 1024)
+                vc4_flush(pctx);
 
         if (vc4_debug & VC4_DEBUG_ALWAYS_FLUSH)
                 vc4_flush(pctx);

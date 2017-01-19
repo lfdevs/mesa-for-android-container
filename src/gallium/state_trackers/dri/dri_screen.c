@@ -143,7 +143,7 @@ dri_fill_in_modes(struct dri_screen *screen)
       stencil_bits_array[0] = 0;
       depth_buffer_factor = 1;
    }
- 
+
    msaa_samples_max = (screen->st_api->feature_mask & ST_API_FEATURE_MS_VISUALS_MASK)
       ? MSAA_VISUAL_MAX_SAMPLES : 1;
 

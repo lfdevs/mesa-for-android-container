@@ -2024,7 +2024,7 @@ yyreduce:
 	      state->inst_tail = (yyvsp[-1].inst);
 	      (yyvsp[-1].inst)->next = NULL;
 
-	      state->prog->NumInstructions++;
+              state->prog->arb.NumInstructions++;
 	   }
 	}
 #line 2031 "program/program_parse.tab.c" /* yacc.c:1646  */
@@ -2034,7 +2034,7 @@ yyreduce:
 #line 358 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = (yyvsp[0].inst);
-	   state->prog->NumAluInstructions++;
+           state->prog->arb.NumAluInstructions++;
 	}
 #line 2040 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
@@ -2043,7 +2043,7 @@ yyreduce:
 #line 363 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = (yyvsp[0].inst);
-	   state->prog->NumTexInstructions++;
+           state->prog->arb.NumTexInstructions++;
 	}
 #line 2049 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
@@ -2347,7 +2347,7 @@ yyreduce:
 		 YYERROR;
 	      }
 
-	      state->prog->OutputsWritten |= BITFIELD64_BIT((yyval.dst_reg).Index);
+              state->prog->info.outputs_written |= BITFIELD64_BIT((yyval.dst_reg).Index);
 	   }
 	}
 #line 2354 "program/program_parse.tab.c" /* yacc.c:1646  */
@@ -2519,7 +2519,7 @@ yyreduce:
 	      break;
 	   case at_attrib:
 	      set_src_reg(& (yyval.src_reg), PROGRAM_INPUT, s->attrib_binding);
-	      state->prog->InputsRead |= BITFIELD64_BIT((yyval.src_reg).Base.Index);
+              state->prog->info.inputs_read |= BITFIELD64_BIT((yyval.src_reg).Base.Index);
 
 	      if (!validate_inputs(& (yylsp[0]), state)) {
 		 YYERROR;
@@ -2538,7 +2538,7 @@ yyreduce:
 #line 768 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
     {
 	   set_src_reg(& (yyval.src_reg), PROGRAM_INPUT, (yyvsp[0].attrib));
-	   state->prog->InputsRead |= BITFIELD64_BIT((yyval.src_reg).Base.Index);
+           state->prog->info.inputs_read |= BITFIELD64_BIT((yyval.src_reg).Base.Index);
 
 	   if (!validate_inputs(& (yylsp[0]), state)) {
 	      YYERROR;
@@ -2560,7 +2560,7 @@ yyreduce:
 	   (yyval.src_reg).Base.File = (yyvsp[-3].sym)->param_binding_type;
 
 	   if ((yyvsp[-1].src_reg).Base.RelAddr) {
-              state->prog->IndirectRegisterFiles |= (1 << (yyval.src_reg).Base.File);
+              state->prog->arb.IndirectRegisterFiles |= (1 << (yyval.src_reg).Base.File);
 	      (yyvsp[-3].sym)->param_accessed_indirectly = 1;
 
 	      (yyval.src_reg).Base.RelAddr = 1;
@@ -4755,7 +4755,7 @@ set_src_reg_swz(struct asm_src_register *r, gl_register_file file, GLint index,
 int
 validate_inputs(struct YYLTYPE *locp, struct asm_parser_state *state)
 {
-   const GLbitfield64 inputs = state->prog->InputsRead | state->InputsBound;
+   const GLbitfield64 inputs = state->prog->info.inputs_read | state->InputsBound;
 
    if (((inputs & VERT_BIT_FF_ALL) & (inputs >> VERT_ATTRIB_GENERIC0)) != 0) {
       yyerror(locp, state, "illegal use of generic attribute and name attribute");
@@ -4784,18 +4784,19 @@ declare_variable(struct asm_parser_state *state, char *name, enum asm_type t,
 
       switch (t) {
       case at_temp:
-	 if (state->prog->NumTemporaries >= state->limits->MaxTemps) {
+         if (state->prog->arb.NumTemporaries >= state->limits->MaxTemps) {
 	    yyerror(locp, state, "too many temporaries declared");
 	    free(s);
 	    return NULL;
 	 }
 
-	 s->temp_binding = state->prog->NumTemporaries;
-	 state->prog->NumTemporaries++;
+         s->temp_binding = state->prog->arb.NumTemporaries;
+         state->prog->arb.NumTemporaries++;
 	 break;
 
       case at_address:
-	 if (state->prog->NumAddressRegs >= state->limits->MaxAddressRegs) {
+         if (state->prog->arb.NumAddressRegs >=
+             state->limits->MaxAddressRegs) {
 	    yyerror(locp, state, "too many address registers declared");
 	    free(s);
 	    return NULL;
@@ -4803,7 +4804,7 @@ declare_variable(struct asm_parser_state *state, char *name, enum asm_type t,
 
 	 /* FINISHME: Add support for multiple address registers.
 	  */
-	 state->prog->NumAddressRegs++;
+         state->prog->arb.NumAddressRegs++;
 	 break;
 
       default:
@@ -5048,7 +5049,7 @@ _mesa_parse_arb_program(struct gl_context *ctx, GLenum target, const GLubyte *st
 
    /* Make a copy of the program string and force it to be NUL-terminated.
     */
-   strz = (GLubyte *) malloc(len + 1);
+   strz = (GLubyte *) ralloc_size(state->mem_ctx, len + 1);
    if (strz == NULL) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glProgramStringARB");
       return GL_FALSE;
@@ -5101,41 +5102,43 @@ _mesa_parse_arb_program(struct gl_context *ctx, GLenum target, const GLubyte *st
    
    /* Add one instruction to store the "END" instruction.
     */
-   state->prog->Instructions =
-      _mesa_alloc_instructions(state->prog->NumInstructions + 1);
+   state->prog->arb.Instructions =
+      rzalloc_array(state->mem_ctx, struct prog_instruction,
+                    state->prog->arb.NumInstructions + 1);
 
-   if (state->prog->Instructions == NULL) {
+   if (state->prog->arb.Instructions == NULL) {
       goto error;
    }
 
    inst = state->inst_head;
-   for (i = 0; i < state->prog->NumInstructions; i++) {
+   for (i = 0; i < state->prog->arb.NumInstructions; i++) {
       struct asm_instruction *const temp = inst->next;
 
-      state->prog->Instructions[i] = inst->Base;
+      state->prog->arb.Instructions[i] = inst->Base;
       inst = temp;
    }
 
    /* Finally, tag on an OPCODE_END instruction */
    {
-      const GLuint numInst = state->prog->NumInstructions;
-      _mesa_init_instructions(state->prog->Instructions + numInst, 1);
-      state->prog->Instructions[numInst].Opcode = OPCODE_END;
+      const GLuint numInst = state->prog->arb.NumInstructions;
+      _mesa_init_instructions(state->prog->arb.Instructions + numInst, 1);
+      state->prog->arb.Instructions[numInst].Opcode = OPCODE_END;
    }
-   state->prog->NumInstructions++;
+   state->prog->arb.NumInstructions++;
 
-   state->prog->NumParameters = state->prog->Parameters->NumParameters;
-   state->prog->NumAttributes = _mesa_bitcount_64(state->prog->InputsRead);
+   state->prog->arb.NumParameters = state->prog->Parameters->NumParameters;
+   state->prog->arb.NumAttributes =
+      _mesa_bitcount_64(state->prog->info.inputs_read);
 
    /*
     * Initialize native counts to logical counts.  The device driver may
     * change them if program is translated into a hardware program.
     */
-   state->prog->NumNativeInstructions = state->prog->NumInstructions;
-   state->prog->NumNativeTemporaries = state->prog->NumTemporaries;
-   state->prog->NumNativeParameters = state->prog->NumParameters;
-   state->prog->NumNativeAttributes = state->prog->NumAttributes;
-   state->prog->NumNativeAddressRegs = state->prog->NumAddressRegs;
+   state->prog->arb.NumNativeInstructions = state->prog->arb.NumInstructions;
+   state->prog->arb.NumNativeTemporaries = state->prog->arb.NumTemporaries;
+   state->prog->arb.NumNativeParameters = state->prog->arb.NumParameters;
+   state->prog->arb.NumNativeAttributes = state->prog->arb.NumAttributes;
+   state->prog->arb.NumNativeAddressRegs = state->prog->arb.NumAddressRegs;
 
    result = GL_TRUE;
 

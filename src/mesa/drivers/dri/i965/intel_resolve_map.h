@@ -32,6 +32,63 @@ extern "C" {
 #endif
 
 /**
+ * Enum for keeping track of the fast clear state of a buffer associated with
+ * a miptree.
+ *
+ * Fast clear works by deferring the memory writes that would be used to clear
+ * the buffer, so that instead of performing them at the time of the clear
+ * operation, the hardware automatically performs them at the time that the
+ * buffer is later accessed for rendering.  The MCS buffer keeps track of
+ * which regions of the buffer still have pending clear writes.
+ *
+ * This enum keeps track of the driver's knowledge of pending fast clears in
+ * the MCS buffer.
+ *
+ * MCS buffers only exist on Gen7+.
+ */
+enum intel_fast_clear_state
+{
+   /**
+    * No deferred clears are pending for this miptree, and the contents of the
+    * color buffer are entirely correct.  An MCS buffer may or may not exist
+    * for this miptree.  If it does exist, it is entirely in the "no deferred
+    * clears pending" state.  If it does not exist, it will be created the
+    * first time a fast color clear is executed.
+    *
+    * In this state, the color buffer can be used for purposes other than
+    * rendering without needing a render target resolve.
+    *
+    * Since there is no such thing as a "fast color clear resolve" for MSAA
+    * buffers, an MSAA buffer will never be in this state.
+    */
+   INTEL_FAST_CLEAR_STATE_RESOLVED,
+
+   /**
+    * An MCS buffer exists for this miptree, and deferred clears are pending
+    * for some regions of the color buffer, as indicated by the MCS buffer.
+    * The contents of the color buffer are only correct for the regions where
+    * the MCS buffer doesn't indicate a deferred clear.
+    *
+    * If a single-sample buffer is in this state, a render target resolve must
+    * be performed before it can be used for purposes other than rendering.
+    */
+   INTEL_FAST_CLEAR_STATE_UNRESOLVED,
+
+   /**
+    * An MCS buffer exists for this miptree, and deferred clears are pending
+    * for the entire color buffer, and the contents of the MCS buffer reflect
+    * this.  The contents of the color buffer are undefined.
+    *
+    * If a single-sample buffer is in this state, a render target resolve must
+    * be performed before it can be used for purposes other than rendering.
+    *
+    * If the client attempts to clear a buffer which is already in this state,
+    * the clear can be safely skipped, since the buffer is already clear.
+    */
+   INTEL_FAST_CLEAR_STATE_CLEAR,
+};
+
+/**
  * \brief Map of miptree slices to needed resolves.
  *
  * The map is implemented as a linear doubly-linked list.
@@ -62,19 +119,40 @@ struct intel_resolve_map {
 
    uint32_t level;
    uint32_t layer;
-   enum blorp_hiz_op need;
+
+   union {
+      enum blorp_hiz_op need;
+      enum intel_fast_clear_state fast_clear_state;
+   };
 };
 
 void
 intel_resolve_map_set(struct exec_list *resolve_map,
-		      uint32_t level,
-		      uint32_t layer,
-		      enum blorp_hiz_op need);
+                      uint32_t level,
+                      uint32_t layer,
+                      unsigned new_state);
 
-struct intel_resolve_map *
+const struct intel_resolve_map *
+intel_resolve_map_find_any(const struct exec_list *resolve_map,
+                           uint32_t start_level, uint32_t num_levels,
+                           uint32_t start_layer, uint32_t num_layers);
+
+static inline const struct intel_resolve_map *
+intel_resolve_map_const_get(const struct exec_list *resolve_map,
+                            uint32_t level,
+                            uint32_t layer)
+{
+   return intel_resolve_map_find_any(resolve_map, level, 1, layer, 1);
+}
+
+static inline struct intel_resolve_map *
 intel_resolve_map_get(struct exec_list *resolve_map,
 		      uint32_t level,
-		      uint32_t layer);
+		      uint32_t layer)
+{
+   return (struct intel_resolve_map *)intel_resolve_map_find_any(
+                                         resolve_map, level, 1, layer, 1);
+}
 
 void
 intel_resolve_map_remove(struct intel_resolve_map *resolve_map);

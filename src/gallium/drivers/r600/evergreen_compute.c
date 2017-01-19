@@ -87,9 +87,7 @@ struct r600_resource *r600_compute_buffer_alloc_vram(struct r600_screen *screen,
 	assert(size);
 
 	buffer = pipe_buffer_create((struct pipe_screen*) screen,
-				    PIPE_BIND_CUSTOM,
-				    PIPE_USAGE_IMMUTABLE,
-				    size);
+				    0, PIPE_USAGE_IMMUTABLE, size);
 
 	return (struct r600_resource *)buffer;
 }
@@ -335,7 +333,7 @@ static void evergreen_compute_upload_input(struct pipe_context *ctx,
 	if (!shader->kernel_param) {
 		/* Add space for the grid dimensions */
 		shader->kernel_param = (struct r600_resource *)
-			pipe_buffer_create(ctx->screen, PIPE_BIND_CUSTOM,
+			pipe_buffer_create(ctx->screen, 0,
 					PIPE_USAGE_IMMUTABLE, input_size);
 	}
 

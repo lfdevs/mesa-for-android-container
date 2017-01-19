@@ -160,7 +160,7 @@ void r600_init_resource_fields(struct r600_common_screen *rscreen,
 
 	/* Tiled textures are unmappable. Always put them in VRAM. */
 	if (res->b.b.target != PIPE_BUFFER &&
-	    rtex->surface.level[0].mode >= RADEON_SURF_MODE_1D) {
+	    !rtex->surface.is_linear) {
 		res->domains = RADEON_DOMAIN_VRAM;
 		res->flags &= ~RADEON_FLAG_CPU_ACCESS;
 		res->flags |= RADEON_FLAG_NO_CPU_ACCESS |

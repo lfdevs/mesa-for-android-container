@@ -111,8 +111,9 @@ struct nine_ff_ps_key
             uint32_t projected : 16;
             uint32_t fog : 1; /* for vFog coming from VS */
             uint32_t fog_mode : 2;
+            uint32_t fog_source : 1; /* 0: Z, 1: W */
             uint32_t specular : 1;
-            uint32_t pad1 : 12; /* 9 32-bit words with this */
+            uint32_t pad1 : 11; /* 9 32-bit words with this */
             uint8_t colorarg_b4[3];
             uint8_t colorarg_b5[3];
             uint8_t alphaarg_b4[3]; /* 11 32-bit words plus a byte */
@@ -206,7 +207,7 @@ static void nine_ureg_tgsi_dump(struct ureg_program *ureg, boolean override)
  * CONST[12..15] D3DTS_VIEW^(-1)
  * CONST[16..18] Normal matrix
  *
- * CONST[19]      MATERIAL.Emissive + Material.Ambient * RS.Ambient
+ * CONST[19].xyz  MATERIAL.Emissive + Material.Ambient * RS.Ambient
  * CONST[20]      MATERIAL.Diffuse
  * CONST[21]      MATERIAL.Ambient
  * CONST[22]      MATERIAL.Specular
@@ -448,9 +449,9 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
             * position at the end.*/
             ureg_MOV(ureg, tmp, vs->aVtx);
             /* X from [X_min, X_min + width] to [-1, 1], same for Y. Z to [0, 1] */
-            ureg_SUB(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_XYZ), ureg_src(tmp), _CONST(101));
+            ureg_ADD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_XYZ), ureg_src(tmp), ureg_negate(_CONST(101)));
             ureg_MUL(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_XYZ), ureg_src(tmp), _CONST(100));
-            ureg_SUB(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_XY), ureg_src(tmp), ureg_imm1f(ureg, 1.0f));
+            ureg_ADD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_XY), ureg_src(tmp), ureg_imm1f(ureg, -1.0f));
             /* Y needs to be reversed */
             ureg_MOV(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_Y), ureg_negate(ureg_src(tmp)));
             /* inverse rhw */
@@ -510,7 +511,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
                 if (has_aNrm)
                     ureg_MAD(ureg, aNrm_dst, ureg_src(tmp2), ureg_scalar(vs->aWgt, i), ureg_src(aNrm_dst));
                 /* subtract weighted position value for last value */
-                ureg_SUB(ureg, sum_blendweights, ureg_src(sum_blendweights), ureg_scalar(vs->aWgt, i));
+                ureg_ADD(ureg, sum_blendweights, ureg_src(sum_blendweights), ureg_negate(ureg_scalar(vs->aWgt, i)));
             }
         }
 
@@ -660,7 +661,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
             ureg_DP3(ureg, tmp_x, ureg_src(aVtx_normed), vs->aNrm);
             ureg_MUL(ureg, tmp, vs->aNrm, _X(tmp));
             ureg_ADD(ureg, tmp, ureg_src(tmp), ureg_src(tmp));
-            ureg_SUB(ureg, ureg_writemask(input_coord, TGSI_WRITEMASK_XYZ), ureg_src(aVtx_normed), ureg_src(tmp));
+            ureg_ADD(ureg, ureg_writemask(input_coord, TGSI_WRITEMASK_XYZ), ureg_src(aVtx_normed), ureg_negate(ureg_src(tmp)));
             ureg_MOV(ureg, ureg_writemask(input_coord, TGSI_WRITEMASK_W), ureg_imm1f(ureg, 1.0f));
             ureg_release_temporary(ureg, aVtx_normed);
             dim_input = 4;
@@ -675,7 +676,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
             ureg_DP3(ureg, tmp_x, ureg_src(aVtx_normed), vs->aNrm);
             ureg_MUL(ureg, tmp, vs->aNrm, _X(tmp));
             ureg_ADD(ureg, tmp, ureg_src(tmp), ureg_src(tmp));
-            ureg_SUB(ureg, tmp, ureg_src(aVtx_normed), ureg_src(tmp));
+            ureg_ADD(ureg, tmp, ureg_src(aVtx_normed), ureg_negate(ureg_src(tmp)));
             /* now tmp = normed(Vtx) - 2 dot3(normed(Vtx), Nrm) Nrm */
             ureg_MOV(ureg, ureg_writemask(tmp2, TGSI_WRITEMASK_XYZ), ureg_src(tmp));
             ureg_MUL(ureg, tmp2, ureg_src(tmp2), ureg_src(tmp2));
@@ -814,10 +815,6 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
         ureg_MOV(ureg, rD, ureg_imm1f(ureg, 0.0f));
         ureg_MOV(ureg, rA, ureg_imm1f(ureg, 0.0f));
         ureg_MOV(ureg, rS, ureg_imm1f(ureg, 0.0f));
-        rD = ureg_saturate(rD);
-        rA = ureg_saturate(rA);
-        rS = ureg_saturate(rS);
-
 
         /* loop management */
         ureg_BGNLOOP(ureg, &label[loop_label]);
@@ -832,7 +829,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
             /* hitDir = light.position - eyeVtx
              * d = length(hitDir)
              */
-            ureg_SUB(ureg, rHit, cLPos, vs->aVtx);
+            ureg_ADD(ureg, rHit, cLPos, ureg_negate(vs->aVtx));
             ureg_DP3(ureg, tmp_x, ureg_src(rHit), ureg_src(rHit));
             ureg_RSQ(ureg, tmp_y, _X(tmp));
             ureg_MUL(ureg, tmp_x, _X(tmp), _Y(tmp)); /* length */
@@ -866,7 +863,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
              *     spotAtt = (rho - light.cphi2) / (light.ctht2 - light.cphi2) ^ light.falloff
              */
             ureg_DP3(ureg, tmp_y, ureg_negate(ureg_src(rHit)), cLDir); /* rho */
-            ureg_SUB(ureg, tmp_x, _Y(tmp), cLPhi);
+            ureg_ADD(ureg, tmp_x, _Y(tmp), ureg_negate(cLPhi));
             ureg_MUL(ureg, tmp_x, _X(tmp), cLSDiv);
             ureg_POW(ureg, tmp_x, _X(tmp), cLFOff); /* spotAtten */
             ureg_SGE(ureg, tmp_z, _Y(tmp), cLTht); /* if inside theta && phi */
@@ -882,14 +879,20 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
         if (has_aNrm) {
             if (key->localviewer) {
                 ureg_normalize3(ureg, rMid, vs->aVtx);
-                ureg_SUB(ureg, rMid, ureg_src(rHit), ureg_src(rMid));
+                ureg_ADD(ureg, rMid, ureg_src(rHit), ureg_negate(ureg_src(rMid)));
             } else {
-                ureg_SUB(ureg, rMid, ureg_src(rHit), ureg_imm3f(ureg, 0.0f, 0.0f, 1.0f));
+                ureg_ADD(ureg, rMid, ureg_src(rHit), ureg_imm3f(ureg, 0.0f, 0.0f, -1.0f));
             }
             ureg_normalize3(ureg, rMid, ureg_src(rMid));
+            ureg_DP3(ureg, ureg_saturate(tmp_x), vs->aNrm, ureg_src(rHit));
             ureg_DP3(ureg, ureg_saturate(tmp_y), vs->aNrm, ureg_src(rMid));
-            ureg_IF(ureg, _Y(tmp), &label[l++]);
+            ureg_MUL(ureg, tmp_z, _X(tmp), _Y(tmp));
+            /* Tests show that specular is computed only if (dp3(normal,hitDir) > 0).
+             * For front facing, it is more restrictive than test (dp3(normal,mid) > 0).
+             * No tests were made for backfacing, so add the two conditions */
+            ureg_IF(ureg, _Z(tmp), &label[l++]);
             {
+                ureg_DP3(ureg, ureg_saturate(tmp_y), vs->aNrm, ureg_src(rMid));
                 ureg_POW(ureg, tmp_y, _Y(tmp), mtlP);
                 ureg_MUL(ureg, tmp_y, _W(rAtt), _Y(tmp)); /* power factor * att */
                 ureg_MAD(ureg, rS, cLColS, _Y(tmp), ureg_src(rS)); /* accumulate specular */
@@ -897,7 +900,6 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
             ureg_fixup_label(ureg, label[l-1], ureg_get_instruction_number(ureg));
             ureg_ENDIF(ureg);
 
-            ureg_DP3(ureg, ureg_saturate(tmp_x), vs->aNrm, ureg_src(rHit));
             ureg_MUL(ureg, tmp_x, _W(rAtt), _X(tmp)); /* dp3(normal,hitDir) * att */
             ureg_MAD(ureg, rD, cLColD, _X(tmp), ureg_src(rD)); /* accumulate diffuse */
         }
@@ -914,11 +916,6 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
         ureg_fixup_label(ureg, label[loop_label], ureg_get_instruction_number(ureg));
         ureg_ENDLOOP(ureg, &label[loop_label]);
 
-        /* Set alpha factors of illumination to 1.0 for the multiplications. */
-        rD.WriteMask = TGSI_WRITEMASK_W; rD.Saturate = 0;
-        rA.WriteMask = TGSI_WRITEMASK_W; rA.Saturate = 0;
-        ureg_MOV(ureg, rD, ureg_imm1f(ureg, 1.0f));
-
         /* Apply to material:
          *
          * oCol[0] = (material.emissive + material.ambient * rs.ambient) +
@@ -926,16 +923,15 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
          *           material.diffuse * diffuse +
          * oCol[1] = material.specular * specular;
          */
-        if (key->mtl_emissive == 0 && key->mtl_ambient == 0) {
-            ureg_MOV(ureg, rA, ureg_imm1f(ureg, 1.0f));
-            ureg_MAD(ureg, tmp, ureg_src(rA), vs->mtlA, _CONST(19));
-        } else {
+        if (key->mtl_emissive == 0 && key->mtl_ambient == 0)
+            ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_XYZ), ureg_src(rA), vs->mtlA, _CONST(19));
+        else {
             ureg_ADD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_XYZ), ureg_src(rA), _CONST(25));
             ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_XYZ), vs->mtlA, ureg_src(tmp), vs->mtlE);
-            ureg_ADD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_W  ), vs->mtlA, vs->mtlE);
         }
 
-        ureg_MAD(ureg, oCol[0], ureg_src(rD), vs->mtlD, ureg_src(tmp));
+        ureg_MAD(ureg, ureg_writemask(oCol[0], TGSI_WRITEMASK_XYZ), ureg_src(rD), vs->mtlD, ureg_src(tmp));
+        ureg_MOV(ureg, ureg_writemask(oCol[0], TGSI_WRITEMASK_W), vs->mtlD);
         ureg_MUL(ureg, oCol[1], ureg_src(rS), vs->mtlS);
         ureg_release_temporary(ureg, rAtt);
         ureg_release_temporary(ureg, rHit);
@@ -949,15 +945,11 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
     } else
     /* COLOR */
     if (key->darkness) {
-        if (key->mtl_emissive == 0 && key->mtl_ambient == 0) {
-            ureg_MAD(ureg, oCol[0], vs->mtlD, ureg_imm4f(ureg, 0.0f, 0.0f, 0.0f, 1.0f), _CONST(19));
-        } else {
-            struct ureg_dst tmp = ureg_DECL_temporary(ureg);
+        if (key->mtl_emissive == 0 && key->mtl_ambient == 0)
+            ureg_MOV(ureg, ureg_writemask(oCol[0], TGSI_WRITEMASK_XYZ), _CONST(19));
+        else
             ureg_MAD(ureg, ureg_writemask(oCol[0], TGSI_WRITEMASK_XYZ), vs->mtlA, _CONST(25), vs->mtlE);
-            ureg_ADD(ureg, ureg_writemask(tmp,     TGSI_WRITEMASK_W), vs->mtlA, vs->mtlE);
-            ureg_ADD(ureg, ureg_writemask(oCol[0], TGSI_WRITEMASK_W), vs->mtlD, _W(tmp));
-            ureg_release_temporary(ureg, tmp);
-        }
+        ureg_MOV(ureg, ureg_writemask(oCol[0], TGSI_WRITEMASK_W), vs->mtlD);
         ureg_MOV(ureg, oCol[1], ureg_imm1f(ureg, 0.0f));
     } else {
         ureg_MOV(ureg, oCol[0], vs->aCol[0]);
@@ -992,7 +984,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
             ureg_EX2(ureg, tmp_x, _X(tmp));
         } else
         if (key->fog_mode == D3DFOG_LINEAR) {
-            ureg_SUB(ureg, tmp_x, _XXXX(_CONST(28)), _Z(tmp));
+            ureg_ADD(ureg, tmp_x, _XXXX(_CONST(28)), ureg_negate(_Z(tmp)));
             ureg_MUL(ureg, ureg_saturate(tmp_x), _X(tmp), _YYYY(_CONST(28)));
         }
         ureg_MOV(ureg, oFog, _X(tmp));
@@ -1065,7 +1057,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
 
     ureg_END(ureg);
     nine_ureg_tgsi_dump(ureg, FALSE);
-    return ureg_create_shader_and_destroy(ureg, device->pipe);
+    return ureg_create_shader_and_destroy(ureg, device->context.pipe);
 }
 
 /* PS FF constants layout:
@@ -1140,7 +1132,7 @@ ps_get_ts_arg(struct ps_build_ctx *ps, unsigned ta)
     }
     if (ta & D3DTA_COMPLEMENT) {
         struct ureg_dst dst = ureg_DECL_temporary(ps->ureg);
-        ureg_SUB(ps->ureg, dst, ureg_imm1f(ps->ureg, 1.0f), reg);
+        ureg_ADD(ps->ureg, dst, ureg_imm1f(ps->ureg, 1.0f), ureg_negate(reg));
         reg = ureg_src(dst);
     }
     if (ta & D3DTA_ALPHAREPLICATE)
@@ -1243,17 +1235,17 @@ ps_do_ts_op(struct ps_build_ctx *ps, unsigned top, struct ureg_dst dst, struct u
         break;
     case D3DTOP_ADDSIGNED:
         ureg_ADD(ureg, tmp, arg[1], arg[2]);
-        ureg_SUB(ureg, dst, ureg_src(tmp), ureg_imm1f(ureg, 0.5f));
+        ureg_ADD(ureg, dst, ureg_src(tmp), ureg_imm1f(ureg, -0.5f));
         break;
     case D3DTOP_ADDSIGNED2X:
         ureg_ADD(ureg, tmp, arg[1], arg[2]);
         ureg_MAD(ureg, dst, ureg_src(tmp), ureg_imm1f(ureg, 2.0f), ureg_imm1f(ureg, -1.0f));
         break;
     case D3DTOP_SUBTRACT:
-        ureg_SUB(ureg, dst, arg[1], arg[2]);
+        ureg_ADD(ureg, dst, arg[1], ureg_negate(arg[2]));
         break;
     case D3DTOP_ADDSMOOTH:
-        ureg_SUB(ureg, tmp, ureg_imm1f(ureg, 1.0f), arg[1]);
+        ureg_ADD(ureg, tmp, ureg_imm1f(ureg, 1.0f), ureg_negate(arg[1]));
         ureg_MAD(ureg, dst, ureg_src(tmp), arg[2], arg[1]);
         break;
     case D3DTOP_BLENDDIFFUSEALPHA:
@@ -1267,7 +1259,7 @@ ps_do_ts_op(struct ps_build_ctx *ps, unsigned top, struct ureg_dst dst, struct u
         ureg_LRP(ureg, dst, _WWWW(_CONST(20)), arg[1], arg[2]);
         break;
     case D3DTOP_BLENDTEXTUREALPHAPM:
-        ureg_SUB(ureg, tmp_x, ureg_imm1f(ureg, 1.0f), _W(ps->rTex));
+        ureg_ADD(ureg, tmp_x, ureg_imm1f(ureg, 1.0f), ureg_negate(_W(ps->rTex)));
         ureg_MAD(ureg, dst, arg[2], _X(tmp), arg[1]);
         break;
     case D3DTOP_BLENDCURRENTALPHA:
@@ -1284,11 +1276,11 @@ ps_do_ts_op(struct ps_build_ctx *ps, unsigned top, struct ureg_dst dst, struct u
         ureg_MAD(ureg, dst, arg[1], arg[2], _WWWW(arg[1]));
         break;
     case D3DTOP_MODULATEINVALPHA_ADDCOLOR:
-        ureg_SUB(ureg, tmp_x, ureg_imm1f(ureg, 1.0f), _WWWW(arg[1]));
+        ureg_ADD(ureg, tmp_x, ureg_imm1f(ureg, 1.0f), ureg_negate(_WWWW(arg[1])));
         ureg_MAD(ureg, dst, _X(tmp), arg[2], arg[1]);
         break;
     case D3DTOP_MODULATEINVCOLOR_ADDALPHA:
-        ureg_SUB(ureg, tmp, ureg_imm1f(ureg, 1.0f), arg[1]);
+        ureg_ADD(ureg, tmp, ureg_imm1f(ureg, 1.0f), ureg_negate(arg[1]));
         ureg_MAD(ureg, dst, ureg_src(tmp), arg[2], _WWWW(arg[1]));
         break;
     case D3DTOP_BUMPENVMAP:
@@ -1296,8 +1288,8 @@ ps_do_ts_op(struct ps_build_ctx *ps, unsigned top, struct ureg_dst dst, struct u
     case D3DTOP_BUMPENVMAPLUMINANCE:
         break;
     case D3DTOP_DOTPRODUCT3:
-        ureg_SUB(ureg, tmp, arg[1], ureg_imm4f(ureg,0.5,0.5,0.5,0.5));
-        ureg_SUB(ureg, tmp2, arg[2] , ureg_imm4f(ureg,0.5,0.5,0.5,0.5));
+        ureg_ADD(ureg, tmp, arg[1], ureg_imm4f(ureg,-0.5,-0.5,-0.5,-0.5));
+        ureg_ADD(ureg, tmp2, arg[2] , ureg_imm4f(ureg,-0.5,-0.5,-0.5,-0.5));
         ureg_DP3(ureg, tmp, ureg_src(tmp), ureg_src(tmp2));
         ureg_MUL(ureg, ureg_saturate(dst), ureg_src(tmp), ureg_imm4f(ureg,4.0,4.0,4.0,4.0));
         break;
@@ -1341,7 +1333,7 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
     ps.rTexSrc = ureg_src(ps.rTex);
 
     /* Initial values */
-    ureg_MOV(ureg, ps.rCur, ureg_imm1f(ureg, 0.0f));
+    ureg_MOV(ureg, ps.rCur, ps.vC[0]);
     ureg_MOV(ureg, ps.rTmp, ureg_imm1f(ureg, 0.0f));
     ureg_MOV(ureg, ps.rTex, ureg_imm1f(ureg, 0.0f));
 
@@ -1384,11 +1376,6 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
 
     oCol = ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 0);
 
-    if (key->ts[0].colorop == D3DTOP_DISABLE &&
-        key->ts[0].alphaop == D3DTOP_DISABLE)
-        ureg_MOV(ureg, ps.rCur, ps.vC[0]);
-    /* Or is it undefined then ? */
-
     /* Run stages.
      */
     for (s = 0; s < 8; ++s) {
@@ -1399,9 +1386,10 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
         struct ureg_dst dst;
         struct ureg_src arg[3];
 
-        if (key->ts[s].colorop == D3DTOP_DISABLE &&
-            key->ts[s].alphaop == D3DTOP_DISABLE)
+        if (key->ts[s].colorop == D3DTOP_DISABLE) {
+            assert (key->ts[s].alphaop == D3DTOP_DISABLE);
             continue;
+        }
         ps.stage.index = s;
 
         DBG("STAGE[%u]: colorop=%s alphaop=%s\n", s,
@@ -1461,29 +1449,6 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
                 ureg_MUL(ureg, ps.rTex, ureg_src(ps.rTex), _X(delta));
         }
 
-        if (((s == 0 && key->ts[0].colorop != D3DTOP_BUMPENVMAP &&
-              key->ts[0].colorop != D3DTOP_BUMPENVMAPLUMINANCE) ||
-             (s == 1 &&
-              (key->ts[0].colorop == D3DTOP_BUMPENVMAP ||
-               key->ts[0].colorop == D3DTOP_BUMPENVMAPLUMINANCE)))&&
-            (key->ts[s].resultarg != 0 /* not current */ ||
-             key->ts[s].colorop == D3DTOP_DISABLE ||
-             key->ts[s].alphaop == D3DTOP_DISABLE ||
-             key->ts[s].colorop == D3DTOP_BLENDCURRENTALPHA ||
-             key->ts[s].alphaop == D3DTOP_BLENDCURRENTALPHA ||
-             key->ts[s].colorarg0 == D3DTA_CURRENT ||
-             key->ts[s].colorarg1 == D3DTA_CURRENT ||
-             key->ts[s].colorarg2 == D3DTA_CURRENT ||
-             key->ts[s].alphaarg0 == D3DTA_CURRENT ||
-             key->ts[s].alphaarg1 == D3DTA_CURRENT ||
-             key->ts[s].alphaarg2 == D3DTA_CURRENT)) {
-            /* Initialize D3DTA_CURRENT.
-             * (Yes we can do this before the loop but not until
-             *  NVE4 has an instruction scheduling pass.)
-             */
-            ureg_MOV(ureg, ps.rCur, ps.vC[0]);
-        }
-
         if (key->ts[s].colorop == D3DTOP_BUMPENVMAP ||
             key->ts[s].colorop == D3DTOP_BUMPENVMAPLUMINANCE)
             continue;
@@ -1528,11 +1493,12 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
     }
 
     if (key->specular)
-        ureg_ADD(ureg, ps.rCur, ps.rCurSrc, ps.vC[1]);
+        ureg_ADD(ureg, ureg_writemask(ps.rCur, TGSI_WRITEMASK_XYZ), ps.rCurSrc, ps.vC[1]);
 
     /* Fog.
      */
     if (key->fog_mode) {
+        struct ureg_dst rFog = ureg_writemask(ps.rTmp, TGSI_WRITEMASK_X);
         struct ureg_src vPos;
         if (device->screen->get_param(device->screen,
                                       PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL)) {
@@ -1542,20 +1508,35 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
                                       TGSI_INTERPOLATE_LINEAR);
         }
 
-        struct ureg_dst rFog = ureg_writemask(ps.rTmp, TGSI_WRITEMASK_X);
+        /* Source is either W or Z.
+         * When we use vs ff,
+         * Z is when an orthogonal projection matrix is detected,
+         * W (WFOG) else.
+         * Z is used for programmable vs.
+         * Note: Tests indicate that the projection matrix coefficients do
+         * actually affect pixel fog (and not vertex fog) when vs ff is used,
+         * which justifies taking the position's w instead of taking the z coordinate
+         * before the projection in the vs shader.
+         */
+        if (!key->fog_source)
+            ureg_MOV(ureg, rFog, _ZZZZ(vPos));
+        else
+            /* Position's w is 1/w */
+            ureg_RCP(ureg, rFog, _WWWW(vPos));
+
         if (key->fog_mode == D3DFOG_EXP) {
-            ureg_MUL(ureg, rFog, _ZZZZ(vPos), _ZZZZ(_CONST(22)));
+            ureg_MUL(ureg, rFog, _X(rFog), _ZZZZ(_CONST(22)));
             ureg_MUL(ureg, rFog, _X(rFog), ureg_imm1f(ureg, -1.442695f));
             ureg_EX2(ureg, rFog, _X(rFog));
         } else
         if (key->fog_mode == D3DFOG_EXP2) {
-            ureg_MUL(ureg, rFog, _ZZZZ(vPos), _ZZZZ(_CONST(22)));
+            ureg_MUL(ureg, rFog, _X(rFog), _ZZZZ(_CONST(22)));
             ureg_MUL(ureg, rFog, _X(rFog), _X(rFog));
             ureg_MUL(ureg, rFog, _X(rFog), ureg_imm1f(ureg, -1.442695f));
             ureg_EX2(ureg, rFog, _X(rFog));
         } else
         if (key->fog_mode == D3DFOG_LINEAR) {
-            ureg_SUB(ureg, rFog, _XXXX(_CONST(22)), _ZZZZ(vPos));
+            ureg_ADD(ureg, rFog, _XXXX(_CONST(22)), ureg_negate(_X(rFog)));
             ureg_MUL(ureg, ureg_saturate(rFog), _X(rFog), _YYYY(_CONST(22)));
         }
         ureg_LRP(ureg, ureg_writemask(oCol, TGSI_WRITEMASK_XYZ), _X(rFog), ps.rCurSrc, _CONST(21));
@@ -1571,13 +1552,13 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
 
     ureg_END(ureg);
     nine_ureg_tgsi_dump(ureg, FALSE);
-    return ureg_create_shader_and_destroy(ureg, device->pipe);
+    return ureg_create_shader_and_destroy(ureg, device->context.pipe);
 }
 
 static struct NineVertexShader9 *
 nine_ff_get_vs(struct NineDevice9 *device)
 {
-    const struct nine_state *state = &device->state;
+    const struct nine_context *context = &device->context;
     struct NineVertexShader9 *vs;
     enum pipe_error err;
     struct vs_build_ctx bld;
@@ -1596,11 +1577,11 @@ nine_ff_get_vs(struct NineDevice9 *device)
     bld.key = &key;
 
     /* FIXME: this shouldn't be NULL, but it is on init */
-    if (state->vdecl) {
+    if (context->vdecl) {
         key.color0in_one = 1;
         key.color1in_zero = 1;
-        for (i = 0; i < state->vdecl->nelems; i++) {
-            uint16_t usage = state->vdecl->usage_map[i];
+        for (i = 0; i < context->vdecl->nelems; i++) {
+            uint16_t usage = context->vdecl->usage_map[i];
             if (usage == NINE_DECLUSAGE_POSITIONT)
                 key.position_t = 1;
             else if (usage == NINE_DECLUSAGE_i(COLOR, 0))
@@ -1621,7 +1602,7 @@ nine_ff_get_vs(struct NineDevice9 *device)
             else if (usage % NINE_DECLUSAGE_COUNT == NINE_DECLUSAGE_TEXCOORD) {
                 s = usage / NINE_DECLUSAGE_COUNT;
                 if (s < 8)
-                    input_texture_coord[s] = nine_decltype_get_dim(state->vdecl->decls[i].Type);
+                    input_texture_coord[s] = nine_decltype_get_dim(context->vdecl->decls[i].Type);
                 else
                     DBG("FF given texture coordinate >= 8. Ignoring\n");
             } else if (usage < NINE_DECLUSAGE_NONE)
@@ -1635,34 +1616,34 @@ nine_ff_get_vs(struct NineDevice9 *device)
                          (1 << NINE_DECLUSAGE_TESSFACTOR) | (1 << NINE_DECLUSAGE_SAMPLE));
     if (!key.position_t)
         key.passthrough = 0;
-    key.pointscale = !!state->rs[D3DRS_POINTSCALEENABLE];
+    key.pointscale = !!context->rs[D3DRS_POINTSCALEENABLE];
 
-    key.lighting = !!state->rs[D3DRS_LIGHTING] &&  state->ff.num_lights_active;
-    key.darkness = !!state->rs[D3DRS_LIGHTING] && !state->ff.num_lights_active;
+    key.lighting = !!context->rs[D3DRS_LIGHTING] &&  context->ff.num_lights_active;
+    key.darkness = !!context->rs[D3DRS_LIGHTING] && !context->ff.num_lights_active;
     if (key.position_t) {
         key.darkness = 0; /* |= key.lighting; */ /* XXX ? */
         key.lighting = 0;
     }
-    if ((key.lighting | key.darkness) && state->rs[D3DRS_COLORVERTEX]) {
+    if ((key.lighting | key.darkness) && context->rs[D3DRS_COLORVERTEX]) {
         uint32_t mask = (key.color0in_one ? 0 : 1) | (key.color1in_zero ? 0 : 2);
-        key.mtl_diffuse = state->rs[D3DRS_DIFFUSEMATERIALSOURCE] & mask;
-        key.mtl_ambient = state->rs[D3DRS_AMBIENTMATERIALSOURCE] & mask;
-        key.mtl_specular = state->rs[D3DRS_SPECULARMATERIALSOURCE] & mask;
-        key.mtl_emissive = state->rs[D3DRS_EMISSIVEMATERIALSOURCE] & mask;
+        key.mtl_diffuse = context->rs[D3DRS_DIFFUSEMATERIALSOURCE] & mask;
+        key.mtl_ambient = context->rs[D3DRS_AMBIENTMATERIALSOURCE] & mask;
+        key.mtl_specular = context->rs[D3DRS_SPECULARMATERIALSOURCE] & mask;
+        key.mtl_emissive = context->rs[D3DRS_EMISSIVEMATERIALSOURCE] & mask;
     }
-    key.fog = !!state->rs[D3DRS_FOGENABLE];
-    key.fog_mode = (!key.position_t && state->rs[D3DRS_FOGENABLE]) ? state->rs[D3DRS_FOGVERTEXMODE] : 0;
+    key.fog = !!context->rs[D3DRS_FOGENABLE];
+    key.fog_mode = (!key.position_t && context->rs[D3DRS_FOGENABLE]) ? context->rs[D3DRS_FOGVERTEXMODE] : 0;
     if (key.fog_mode)
-        key.fog_range = state->rs[D3DRS_RANGEFOGENABLE];
+        key.fog_range = context->rs[D3DRS_RANGEFOGENABLE];
 
-    key.localviewer = !!state->rs[D3DRS_LOCALVIEWER];
-    key.normalizenormals = !!state->rs[D3DRS_NORMALIZENORMALS];
-    key.ucp = !!state->rs[D3DRS_CLIPPLANEENABLE];
+    key.localviewer = !!context->rs[D3DRS_LOCALVIEWER];
+    key.normalizenormals = !!context->rs[D3DRS_NORMALIZENORMALS];
+    key.ucp = !!context->rs[D3DRS_CLIPPLANEENABLE];
 
-    if (state->rs[D3DRS_VERTEXBLEND] != D3DVBF_DISABLE) {
-        key.vertexblend_indexed = !!state->rs[D3DRS_INDEXEDVERTEXBLENDENABLE] && has_indexes;
+    if (context->rs[D3DRS_VERTEXBLEND] != D3DVBF_DISABLE) {
+        key.vertexblend_indexed = !!context->rs[D3DRS_INDEXEDVERTEXBLENDENABLE] && has_indexes;
 
-        switch (state->rs[D3DRS_VERTEXBLEND]) {
+        switch (context->rs[D3DRS_VERTEXBLEND]) {
         case D3DVBF_0WEIGHTS: key.vertexblend = key.vertexblend_indexed; break;
         case D3DVBF_1WEIGHTS: key.vertexblend = 2; break;
         case D3DVBF_2WEIGHTS: key.vertexblend = 3; break;
@@ -1672,27 +1653,28 @@ nine_ff_get_vs(struct NineDevice9 *device)
             assert(!"invalid D3DVBF");
             break;
         }
-        if (!has_weights && state->rs[D3DRS_VERTEXBLEND] != D3DVBF_0WEIGHTS)
+        if (!has_weights && context->rs[D3DRS_VERTEXBLEND] != D3DVBF_0WEIGHTS)
             key.vertexblend = 0; /* TODO: if key.vertexblend_indexed, perhaps it should use 1.0 as weight, or revert to D3DVBF_0WEIGHTS */
     }
 
     for (s = 0; s < 8; ++s) {
-        unsigned gen = (state->ff.tex_stage[s][D3DTSS_TEXCOORDINDEX] >> 16) + 1;
+        unsigned gen = (context->ff.tex_stage[s][D3DTSS_TEXCOORDINDEX] >> 16) + 1;
+        unsigned idx = context->ff.tex_stage[s][D3DTSS_TEXCOORDINDEX] & 7;
         unsigned dim;
 
         if (key.position_t && gen > NINED3DTSS_TCI_PASSTHRU)
             gen = NINED3DTSS_TCI_PASSTHRU;
 
-        if (!input_texture_coord[s] && gen == NINED3DTSS_TCI_PASSTHRU)
+        if (!input_texture_coord[idx] && gen == NINED3DTSS_TCI_PASSTHRU)
             gen = NINED3DTSS_TCI_DISABLE;
 
         key.tc_gen |= gen << (s * 3);
-        key.tc_idx |= (state->ff.tex_stage[s][D3DTSS_TEXCOORDINDEX] & 7) << (s * 3);
-        key.tc_dim_input |= ((input_texture_coord[s]-1) & 0x3) << (s * 2);
+        key.tc_idx |= idx << (s * 3);
+        key.tc_dim_input |= ((input_texture_coord[idx]-1) & 0x3) << (s * 2);
 
-        dim = state->ff.tex_stage[s][D3DTSS_TEXTURETRANSFORMFLAGS] & 0x7;
+        dim = context->ff.tex_stage[s][D3DTSS_TEXTURETRANSFORMFLAGS] & 0x7;
         if (dim > 4)
-            dim = input_texture_coord[s];
+            dim = input_texture_coord[idx];
         if (dim == 1) /* NV behaviour */
             dim = 0;
         key.tc_dim_output |= dim << (s * 3);
@@ -1725,10 +1707,14 @@ nine_ff_get_vs(struct NineDevice9 *device)
     return vs;
 }
 
+#define GET_D3DTS(n) nine_state_access_transform(&context->ff, D3DTS_##n, FALSE)
+#define IS_D3DTS_DIRTY(s,n) ((s)->ff.changed.transform[(D3DTS_##n) / 32] & (1 << ((D3DTS_##n) % 32)))
+
 static struct NinePixelShader9 *
 nine_ff_get_ps(struct NineDevice9 *device)
 {
-    struct nine_state *state = &device->state;
+    struct nine_context *context = &device->context;
+    D3DMATRIX *projection_matrix = GET_D3DTS(PROJECTION);
     struct NinePixelShader9 *ps;
     enum pipe_error err;
     struct nine_ff_ps_key key;
@@ -1739,55 +1725,65 @@ nine_ff_get_ps(struct NineDevice9 *device)
 
     memset(&key, 0, sizeof(key));
     for (s = 0; s < 8; ++s) {
-        key.ts[s].colorop = state->ff.tex_stage[s][D3DTSS_COLOROP];
-        key.ts[s].alphaop = state->ff.tex_stage[s][D3DTSS_ALPHAOP];
-        /* MSDN says D3DTOP_DISABLE disables this and all subsequent stages. */
-        /* ALPHAOP cannot be disabled if COLOROP is enabled. */
+        key.ts[s].colorop = context->ff.tex_stage[s][D3DTSS_COLOROP];
+        key.ts[s].alphaop = context->ff.tex_stage[s][D3DTSS_ALPHAOP];
+        const uint8_t used_c = ps_d3dtop_args_mask(key.ts[s].colorop);
+        const uint8_t used_a = ps_d3dtop_args_mask(key.ts[s].alphaop);
+        /* MSDN says D3DTOP_DISABLE disables this and all subsequent stages.
+         * ALPHAOP cannot be enabled if COLOROP is disabled.
+         * Verified on Windows. */
         if (key.ts[s].colorop == D3DTOP_DISABLE) {
             key.ts[s].alphaop = D3DTOP_DISABLE; /* DISABLE == 1, avoid degenerate keys */
             break;
         }
 
-        if (!state->texture[s] &&
-            state->ff.tex_stage[s][D3DTSS_COLORARG1] == D3DTA_TEXTURE) {
-            /* This should also disable the stage. */
+        if (!context->texture[s].enabled &&
+            ((context->ff.tex_stage[s][D3DTSS_COLORARG0] == D3DTA_TEXTURE &&
+              used_c & 0x1) ||
+             (context->ff.tex_stage[s][D3DTSS_COLORARG1] == D3DTA_TEXTURE &&
+              used_c & 0x2) ||
+             (context->ff.tex_stage[s][D3DTSS_COLORARG2] == D3DTA_TEXTURE &&
+              used_c & 0x4))) {
+            /* Tested on Windows: Invalid texture read disables the stage
+             * and the subsequent ones, but only for colorop. For alpha,
+             * it's as if the texture had alpha of 1.0, which is what
+             * has our dummy texture in that case. Invalid color also
+             * disabled the following alpha stages. */
             key.ts[s].colorop = key.ts[s].alphaop = D3DTOP_DISABLE;
             break;
         }
 
-        if (state->ff.tex_stage[s][D3DTSS_COLORARG0] == D3DTA_TEXTURE ||
-            state->ff.tex_stage[s][D3DTSS_COLORARG1] == D3DTA_TEXTURE ||
-            state->ff.tex_stage[s][D3DTSS_COLORARG2] == D3DTA_TEXTURE ||
-            state->ff.tex_stage[s][D3DTSS_ALPHAARG0] == D3DTA_TEXTURE ||
-            state->ff.tex_stage[s][D3DTSS_ALPHAARG1] == D3DTA_TEXTURE ||
-            state->ff.tex_stage[s][D3DTSS_ALPHAARG2] == D3DTA_TEXTURE)
+        if (context->ff.tex_stage[s][D3DTSS_COLORARG0] == D3DTA_TEXTURE ||
+            context->ff.tex_stage[s][D3DTSS_COLORARG1] == D3DTA_TEXTURE ||
+            context->ff.tex_stage[s][D3DTSS_COLORARG2] == D3DTA_TEXTURE ||
+            context->ff.tex_stage[s][D3DTSS_ALPHAARG0] == D3DTA_TEXTURE ||
+            context->ff.tex_stage[s][D3DTSS_ALPHAARG1] == D3DTA_TEXTURE ||
+            context->ff.tex_stage[s][D3DTSS_ALPHAARG2] == D3DTA_TEXTURE)
             sampler_mask |= (1 << s);
 
         if (key.ts[s].colorop != D3DTOP_DISABLE) {
-            uint8_t used_c = ps_d3dtop_args_mask(key.ts[s].colorop);
-            if (used_c & 0x1) key.ts[s].colorarg0 = state->ff.tex_stage[s][D3DTSS_COLORARG0];
-            if (used_c & 0x2) key.ts[s].colorarg1 = state->ff.tex_stage[s][D3DTSS_COLORARG1];
-            if (used_c & 0x4) key.ts[s].colorarg2 = state->ff.tex_stage[s][D3DTSS_COLORARG2];
-            if (used_c & 0x1) key.colorarg_b4[0] |= (state->ff.tex_stage[s][D3DTSS_COLORARG0] >> 4) << s;
-            if (used_c & 0x1) key.colorarg_b5[0] |= (state->ff.tex_stage[s][D3DTSS_COLORARG0] >> 5) << s;
-            if (used_c & 0x2) key.colorarg_b4[1] |= (state->ff.tex_stage[s][D3DTSS_COLORARG1] >> 4) << s;
-            if (used_c & 0x2) key.colorarg_b5[1] |= (state->ff.tex_stage[s][D3DTSS_COLORARG1] >> 5) << s;
-            if (used_c & 0x4) key.colorarg_b4[2] |= (state->ff.tex_stage[s][D3DTSS_COLORARG2] >> 4) << s;
-            if (used_c & 0x4) key.colorarg_b5[2] |= (state->ff.tex_stage[s][D3DTSS_COLORARG2] >> 5) << s;
+            if (used_c & 0x1) key.ts[s].colorarg0 = context->ff.tex_stage[s][D3DTSS_COLORARG0];
+            if (used_c & 0x2) key.ts[s].colorarg1 = context->ff.tex_stage[s][D3DTSS_COLORARG1];
+            if (used_c & 0x4) key.ts[s].colorarg2 = context->ff.tex_stage[s][D3DTSS_COLORARG2];
+            if (used_c & 0x1) key.colorarg_b4[0] |= (context->ff.tex_stage[s][D3DTSS_COLORARG0] >> 4) << s;
+            if (used_c & 0x1) key.colorarg_b5[0] |= (context->ff.tex_stage[s][D3DTSS_COLORARG0] >> 5) << s;
+            if (used_c & 0x2) key.colorarg_b4[1] |= (context->ff.tex_stage[s][D3DTSS_COLORARG1] >> 4) << s;
+            if (used_c & 0x2) key.colorarg_b5[1] |= (context->ff.tex_stage[s][D3DTSS_COLORARG1] >> 5) << s;
+            if (used_c & 0x4) key.colorarg_b4[2] |= (context->ff.tex_stage[s][D3DTSS_COLORARG2] >> 4) << s;
+            if (used_c & 0x4) key.colorarg_b5[2] |= (context->ff.tex_stage[s][D3DTSS_COLORARG2] >> 5) << s;
         }
         if (key.ts[s].alphaop != D3DTOP_DISABLE) {
-            uint8_t used_a = ps_d3dtop_args_mask(key.ts[s].alphaop);
-            if (used_a & 0x1) key.ts[s].alphaarg0 = state->ff.tex_stage[s][D3DTSS_ALPHAARG0];
-            if (used_a & 0x2) key.ts[s].alphaarg1 = state->ff.tex_stage[s][D3DTSS_ALPHAARG1];
-            if (used_a & 0x4) key.ts[s].alphaarg2 = state->ff.tex_stage[s][D3DTSS_ALPHAARG2];
-            if (used_a & 0x1) key.alphaarg_b4[0] |= (state->ff.tex_stage[s][D3DTSS_ALPHAARG0] >> 4) << s;
-            if (used_a & 0x2) key.alphaarg_b4[1] |= (state->ff.tex_stage[s][D3DTSS_ALPHAARG1] >> 4) << s;
-            if (used_a & 0x4) key.alphaarg_b4[2] |= (state->ff.tex_stage[s][D3DTSS_ALPHAARG2] >> 4) << s;
+            if (used_a & 0x1) key.ts[s].alphaarg0 = context->ff.tex_stage[s][D3DTSS_ALPHAARG0];
+            if (used_a & 0x2) key.ts[s].alphaarg1 = context->ff.tex_stage[s][D3DTSS_ALPHAARG1];
+            if (used_a & 0x4) key.ts[s].alphaarg2 = context->ff.tex_stage[s][D3DTSS_ALPHAARG2];
+            if (used_a & 0x1) key.alphaarg_b4[0] |= (context->ff.tex_stage[s][D3DTSS_ALPHAARG0] >> 4) << s;
+            if (used_a & 0x2) key.alphaarg_b4[1] |= (context->ff.tex_stage[s][D3DTSS_ALPHAARG1] >> 4) << s;
+            if (used_a & 0x4) key.alphaarg_b4[2] |= (context->ff.tex_stage[s][D3DTSS_ALPHAARG2] >> 4) << s;
         }
-        key.ts[s].resultarg = state->ff.tex_stage[s][D3DTSS_RESULTARG] == D3DTA_TEMP;
+        key.ts[s].resultarg = context->ff.tex_stage[s][D3DTSS_RESULTARG] == D3DTA_TEMP;
 
-        if (state->texture[s]) {
-            switch (state->texture[s]->base.type) {
+        if (context->texture[s].enabled) {
+            switch (context->texture[s].type) {
             case D3DRTYPE_TEXTURE:       key.ts[s].textarget = 1; break;
             case D3DRTYPE_VOLUMETEXTURE: key.ts[s].textarget = 2; break;
             case D3DRTYPE_CUBETEXTURE:   key.ts[s].textarget = 3; break;
@@ -1800,14 +1796,43 @@ nine_ff_get_ps(struct NineDevice9 *device)
         }
     }
 
-    key.projected = nine_ff_get_projected_key(state);
-    key.specular = !!state->rs[D3DRS_SPECULARENABLE];
+    /* Note: If colorop is D3DTOP_DISABLE for the first stage
+     * (which implies alphaop is too), nothing particular happens,
+     * that is, current is equal to diffuse (which is the case anyway,
+     * because it is how it is initialized).
+     * Special case seems if alphaop is D3DTOP_DISABLE and not colorop,
+     * because then if the resultarg is TEMP, then diffuse alpha is written
+     * to it. */
+    if (key.ts[0].colorop != D3DTOP_DISABLE &&
+        key.ts[0].alphaop == D3DTOP_DISABLE &&
+        key.ts[0].resultarg != 0) {
+        key.ts[0].alphaop = D3DTOP_SELECTARG1;
+        key.ts[0].alphaarg1 = D3DTA_DIFFUSE;
+    }
+    /* When no alpha stage writes to current, diffuse alpha is taken.
+     * Since we initialize current to diffuse, we have the behaviour. */
+
+    /* Last stage always writes to Current */
+    if (s >= 1)
+        key.ts[s-1].resultarg = 0;
+
+    key.projected = nine_ff_get_projected_key(context);
+    key.specular = !!context->rs[D3DRS_SPECULARENABLE];
 
     for (; s < 8; ++s)
         key.ts[s].colorop = key.ts[s].alphaop = D3DTOP_DISABLE;
-    if (state->rs[D3DRS_FOGENABLE])
-        key.fog_mode = state->rs[D3DRS_FOGTABLEMODE];
-    key.fog = !!state->rs[D3DRS_FOGENABLE];
+    if (context->rs[D3DRS_FOGENABLE])
+        key.fog_mode = context->rs[D3DRS_FOGTABLEMODE];
+    key.fog = !!context->rs[D3DRS_FOGENABLE];
+    /* Pixel fog (with WFOG advertised): source is either Z or W.
+     * W is the source if vs ff is used, and the
+     * projection matrix is not orthogonal.
+     * Tests on Win 10 seem to indicate _34
+     * and _33 are checked against 0, 1. */
+    if (key.fog_mode && key.fog)
+        key.fog_source = !context->programmable_vs &&
+            !(projection_matrix->_34 == 0.0f &&
+              projection_matrix->_44 == 1.0f);
 
     ps = util_hash_table_get(device->ff.ht_ps, &key);
     if (ps)
@@ -1830,12 +1855,10 @@ nine_ff_get_ps(struct NineDevice9 *device)
     return ps;
 }
 
-#define GET_D3DTS(n) nine_state_access_transform(state, D3DTS_##n, FALSE)
-#define IS_D3DTS_DIRTY(s,n) ((s)->ff.changed.transform[(D3DTS_##n) / 32] & (1 << ((D3DTS_##n) % 32)))
 static void
 nine_ff_load_vs_transforms(struct NineDevice9 *device)
 {
-    struct nine_state *state = &device->state;
+    struct nine_context *context = &device->context;
     D3DMATRIX T;
     D3DMATRIX *M = (D3DMATRIX *)device->ff.vs_const;
     unsigned i;
@@ -1843,9 +1866,9 @@ nine_ff_load_vs_transforms(struct NineDevice9 *device)
     /* TODO: make this nicer, and only upload the ones we need */
     /* TODO: use ff.vs_const as storage of W, V, P matrices */
 
-    if (IS_D3DTS_DIRTY(state, WORLD) ||
-        IS_D3DTS_DIRTY(state, VIEW) ||
-        IS_D3DTS_DIRTY(state, PROJECTION)) {
+    if (IS_D3DTS_DIRTY(context, WORLD) ||
+        IS_D3DTS_DIRTY(context, VIEW) ||
+        IS_D3DTS_DIRTY(context, PROJECTION)) {
         /* WVP, WV matrices */
         nine_d3d_matrix_matrix_mul(&M[1], GET_D3DTS(WORLD), GET_D3DTS(VIEW));
         nine_d3d_matrix_matrix_mul(&M[0], &M[1], GET_D3DTS(PROJECTION));
@@ -1862,43 +1885,42 @@ nine_ff_load_vs_transforms(struct NineDevice9 *device)
         M[40] = M[1];
     }
 
-    if (state->rs[D3DRS_VERTEXBLEND] != D3DVBF_DISABLE) {
+    if (context->rs[D3DRS_VERTEXBLEND] != D3DVBF_DISABLE) {
         /* load other world matrices */
         for (i = 1; i <= 8; ++i) {
             nine_d3d_matrix_matrix_mul(&M[40 + i], GET_D3DTS(WORLDMATRIX(i)), GET_D3DTS(VIEW));
         }
     }
 
-    device->ff.vs_const[30 * 4] = asfloat(state->rs[D3DRS_TWEENFACTOR]);
+    device->ff.vs_const[30 * 4] = asfloat(context->rs[D3DRS_TWEENFACTOR]);
 }
 
 static void
 nine_ff_load_lights(struct NineDevice9 *device)
 {
-    struct nine_state *state = &device->state;
+    struct nine_context *context = &device->context;
     struct fvec4 *dst = (struct fvec4 *)device->ff.vs_const;
     unsigned l;
 
-    if (state->changed.group & NINE_STATE_FF_MATERIAL) {
-        const D3DMATERIAL9 *mtl = &state->ff.material;
+    if (context->changed.group & NINE_STATE_FF_MATERIAL) {
+        const D3DMATERIAL9 *mtl = &context->ff.material;
 
         memcpy(&dst[20], &mtl->Diffuse, 4 * sizeof(float));
         memcpy(&dst[21], &mtl->Ambient, 4 * sizeof(float));
         memcpy(&dst[22], &mtl->Specular, 4 * sizeof(float));
         dst[23].x = mtl->Power;
         memcpy(&dst[24], &mtl->Emissive, 4 * sizeof(float));
-        d3dcolor_to_rgba(&dst[25].x, state->rs[D3DRS_AMBIENT]);
+        d3dcolor_to_rgba(&dst[25].x, context->rs[D3DRS_AMBIENT]);
         dst[19].x = dst[25].x * mtl->Ambient.r + mtl->Emissive.r;
         dst[19].y = dst[25].y * mtl->Ambient.g + mtl->Emissive.g;
         dst[19].z = dst[25].z * mtl->Ambient.b + mtl->Emissive.b;
-        dst[19].w = mtl->Ambient.a + mtl->Emissive.a;
     }
 
-    if (!(state->changed.group & NINE_STATE_FF_LIGHTING))
+    if (!(context->changed.group & NINE_STATE_FF_LIGHTING))
         return;
 
-    for (l = 0; l < state->ff.num_lights_active; ++l) {
-        const D3DLIGHT9 *light = &state->ff.light[state->ff.active_light[l]];
+    for (l = 0; l < context->ff.num_lights_active; ++l) {
+        const D3DLIGHT9 *light = &context->ff.light[context->ff.active_light[l]];
 
         dst[32 + l * 8].x = light->Type;
         dst[32 + l * 8].y = light->Attenuation0;
@@ -1914,84 +1936,84 @@ nine_ff_load_lights(struct NineDevice9 *device)
         dst[38 + l * 8].x = cosf(light->Theta * 0.5f);
         dst[38 + l * 8].y = cosf(light->Phi * 0.5f);
         dst[38 + l * 8].z = 1.0f / (dst[38 + l * 8].x - dst[38 + l * 8].y);
-        dst[39 + l * 8].w = (l + 1) == state->ff.num_lights_active;
+        dst[39 + l * 8].w = (l + 1) == context->ff.num_lights_active;
     }
 }
 
 static void
 nine_ff_load_point_and_fog_params(struct NineDevice9 *device)
 {
-    const struct nine_state *state = &device->state;
+    struct nine_context *context = &device->context;
     struct fvec4 *dst = (struct fvec4 *)device->ff.vs_const;
 
-    if (!(state->changed.group & NINE_STATE_FF_OTHER))
+    if (!(context->changed.group & NINE_STATE_FF_OTHER))
         return;
-    dst[26].x = asfloat(state->rs[D3DRS_POINTSIZE_MIN]);
-    dst[26].y = asfloat(state->rs[D3DRS_POINTSIZE_MAX]);
-    dst[26].z = asfloat(state->rs[D3DRS_POINTSIZE]);
-    dst[26].w = asfloat(state->rs[D3DRS_POINTSCALE_A]);
-    dst[27].x = asfloat(state->rs[D3DRS_POINTSCALE_B]);
-    dst[27].y = asfloat(state->rs[D3DRS_POINTSCALE_C]);
-    dst[28].x = asfloat(state->rs[D3DRS_FOGEND]);
-    dst[28].y = 1.0f / (asfloat(state->rs[D3DRS_FOGEND]) - asfloat(state->rs[D3DRS_FOGSTART]));
+    dst[26].x = asfloat(context->rs[D3DRS_POINTSIZE_MIN]);
+    dst[26].y = asfloat(context->rs[D3DRS_POINTSIZE_MAX]);
+    dst[26].z = asfloat(context->rs[D3DRS_POINTSIZE]);
+    dst[26].w = asfloat(context->rs[D3DRS_POINTSCALE_A]);
+    dst[27].x = asfloat(context->rs[D3DRS_POINTSCALE_B]);
+    dst[27].y = asfloat(context->rs[D3DRS_POINTSCALE_C]);
+    dst[28].x = asfloat(context->rs[D3DRS_FOGEND]);
+    dst[28].y = 1.0f / (asfloat(context->rs[D3DRS_FOGEND]) - asfloat(context->rs[D3DRS_FOGSTART]));
     if (isinf(dst[28].y))
         dst[28].y = 0.0f;
-    dst[28].z = asfloat(state->rs[D3DRS_FOGDENSITY]);
+    dst[28].z = asfloat(context->rs[D3DRS_FOGDENSITY]);
 }
 
 static void
 nine_ff_load_tex_matrices(struct NineDevice9 *device)
 {
-    struct nine_state *state = &device->state;
+    struct nine_context *context = &device->context;
     D3DMATRIX *M = (D3DMATRIX *)device->ff.vs_const;
     unsigned s;
 
-    if (!(state->ff.changed.transform[0] & 0xff0000))
+    if (!(context->ff.changed.transform[0] & 0xff0000))
         return;
     for (s = 0; s < 8; ++s) {
-        if (IS_D3DTS_DIRTY(state, TEXTURE0 + s))
-            nine_d3d_matrix_transpose(&M[32 + s], nine_state_access_transform(state, D3DTS_TEXTURE0 + s, FALSE));
+        if (IS_D3DTS_DIRTY(context, TEXTURE0 + s))
+            nine_d3d_matrix_transpose(&M[32 + s], nine_state_access_transform(&context->ff, D3DTS_TEXTURE0 + s, FALSE));
     }
 }
 
 static void
 nine_ff_load_ps_params(struct NineDevice9 *device)
 {
-    const struct nine_state *state = &device->state;
+    struct nine_context *context = &device->context;
     struct fvec4 *dst = (struct fvec4 *)device->ff.ps_const;
     unsigned s;
 
-    if (!(state->changed.group & (NINE_STATE_FF_PSSTAGES | NINE_STATE_FF_OTHER)))
+    if (!(context->changed.group & (NINE_STATE_FF_PSSTAGES | NINE_STATE_FF_OTHER)))
         return;
 
     for (s = 0; s < 8; ++s)
-        d3dcolor_to_rgba(&dst[s].x, state->ff.tex_stage[s][D3DTSS_CONSTANT]);
+        d3dcolor_to_rgba(&dst[s].x, context->ff.tex_stage[s][D3DTSS_CONSTANT]);
 
     for (s = 0; s < 8; ++s) {
-        dst[8 + s].x = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVMAT00]);
-        dst[8 + s].y = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVMAT01]);
-        dst[8 + s].z = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVMAT10]);
-        dst[8 + s].w = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVMAT11]);
+        dst[8 + s].x = asfloat(context->ff.tex_stage[s][D3DTSS_BUMPENVMAT00]);
+        dst[8 + s].y = asfloat(context->ff.tex_stage[s][D3DTSS_BUMPENVMAT01]);
+        dst[8 + s].z = asfloat(context->ff.tex_stage[s][D3DTSS_BUMPENVMAT10]);
+        dst[8 + s].w = asfloat(context->ff.tex_stage[s][D3DTSS_BUMPENVMAT11]);
         if (s & 1) {
-            dst[16 + s / 2].z = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLSCALE]);
-            dst[16 + s / 2].w = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLOFFSET]);
+            dst[16 + s / 2].z = asfloat(context->ff.tex_stage[s][D3DTSS_BUMPENVLSCALE]);
+            dst[16 + s / 2].w = asfloat(context->ff.tex_stage[s][D3DTSS_BUMPENVLOFFSET]);
         } else {
-            dst[16 + s / 2].x = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLSCALE]);
-            dst[16 + s / 2].y = asfloat(state->ff.tex_stage[s][D3DTSS_BUMPENVLOFFSET]);
+            dst[16 + s / 2].x = asfloat(context->ff.tex_stage[s][D3DTSS_BUMPENVLSCALE]);
+            dst[16 + s / 2].y = asfloat(context->ff.tex_stage[s][D3DTSS_BUMPENVLOFFSET]);
         }
     }
 
-    d3dcolor_to_rgba(&dst[20].x, state->rs[D3DRS_TEXTUREFACTOR]);
-    d3dcolor_to_rgba(&dst[21].x, state->rs[D3DRS_FOGCOLOR]);
-    dst[22].x = asfloat(state->rs[D3DRS_FOGEND]);
-    dst[22].y = 1.0f / (asfloat(state->rs[D3DRS_FOGEND]) - asfloat(state->rs[D3DRS_FOGSTART]));
-    dst[22].z = asfloat(state->rs[D3DRS_FOGDENSITY]);
+    d3dcolor_to_rgba(&dst[20].x, context->rs[D3DRS_TEXTUREFACTOR]);
+    d3dcolor_to_rgba(&dst[21].x, context->rs[D3DRS_FOGCOLOR]);
+    dst[22].x = asfloat(context->rs[D3DRS_FOGEND]);
+    dst[22].y = 1.0f / (asfloat(context->rs[D3DRS_FOGEND]) - asfloat(context->rs[D3DRS_FOGSTART]));
+    dst[22].z = asfloat(context->rs[D3DRS_FOGDENSITY]);
 }
 
 static void
 nine_ff_load_viewport_info(struct NineDevice9 *device)
 {
-    D3DVIEWPORT9 *viewport = &device->state.viewport;
+    D3DVIEWPORT9 *viewport = &device->context.viewport;
     struct fvec4 *dst = (struct fvec4 *)device->ff.vs_const;
     float diffZ = viewport->MaxZ - viewport->MinZ;
 
@@ -2010,29 +2032,29 @@ nine_ff_load_viewport_info(struct NineDevice9 *device)
 void
 nine_ff_update(struct NineDevice9 *device)
 {
-    struct nine_state *state = &device->state;
+    struct nine_context *context = &device->context;
     struct pipe_constant_buffer cb;
 
-    DBG("vs=%p ps=%p\n", device->state.vs, device->state.ps);
+    DBG("vs=%p ps=%p\n", context->vs, context->ps);
 
     /* NOTE: the only reference belongs to the hash table */
-    if (!state->programmable_vs) {
+    if (!context->programmable_vs) {
         device->ff.vs = nine_ff_get_vs(device);
-        device->state.changed.group |= NINE_STATE_VS;
+        context->changed.group |= NINE_STATE_VS;
     }
-    if (!device->state.ps) {
+    if (!context->ps) {
         device->ff.ps = nine_ff_get_ps(device);
-        device->state.changed.group |= NINE_STATE_PS;
+        context->changed.group |= NINE_STATE_PS;
     }
 
-    if (!state->programmable_vs) {
+    if (!context->programmable_vs) {
         nine_ff_load_vs_transforms(device);
         nine_ff_load_tex_matrices(device);
         nine_ff_load_lights(device);
         nine_ff_load_point_and_fog_params(device);
         nine_ff_load_viewport_info(device);
 
-        memset(state->ff.changed.transform, 0, sizeof(state->ff.changed.transform));
+        memset(context->ff.changed.transform, 0, sizeof(context->ff.changed.transform));
 
         cb.buffer_offset = 0;
         cb.buffer = NULL;
@@ -2040,21 +2062,22 @@ nine_ff_update(struct NineDevice9 *device)
         cb.buffer_size = NINE_FF_NUM_VS_CONST * 4 * sizeof(float);
 
         if (!device->driver_caps.user_cbufs) {
+            context->pipe_data.cb_vs_ff.buffer_size = cb.buffer_size;
             u_upload_data(device->constbuf_uploader,
                           0,
                           cb.buffer_size,
                           device->constbuf_alignment,
                           cb.user_buffer,
-                          &cb.buffer_offset,
-                          &cb.buffer);
+                          &context->pipe_data.cb_vs_ff.buffer_offset,
+                          &context->pipe_data.cb_vs_ff.buffer);
             u_upload_unmap(device->constbuf_uploader);
-            cb.user_buffer = NULL;
-        }
-        state->pipe.cb_vs_ff = cb;
-        state->commit |= NINE_STATE_COMMIT_CONST_VS;
+            context->pipe_data.cb_vs_ff.user_buffer = NULL;
+        } else
+            context->pipe_data.cb_vs_ff = cb;
+        context->commit |= NINE_STATE_COMMIT_CONST_VS;
     }
 
-    if (!device->state.ps) {
+    if (!context->ps) {
         nine_ff_load_ps_params(device);
 
         cb.buffer_offset = 0;
@@ -2063,21 +2086,22 @@ nine_ff_update(struct NineDevice9 *device)
         cb.buffer_size = NINE_FF_NUM_PS_CONST * 4 * sizeof(float);
 
         if (!device->driver_caps.user_cbufs) {
+            context->pipe_data.cb_ps_ff.buffer_size = cb.buffer_size;
             u_upload_data(device->constbuf_uploader,
                           0,
                           cb.buffer_size,
                           device->constbuf_alignment,
                           cb.user_buffer,
-                          &cb.buffer_offset,
-                          &cb.buffer);
+                          &context->pipe_data.cb_ps_ff.buffer_offset,
+                          &context->pipe_data.cb_ps_ff.buffer);
             u_upload_unmap(device->constbuf_uploader);
-            cb.user_buffer = NULL;
-        }
-        state->pipe.cb_ps_ff = cb;
-        state->commit |= NINE_STATE_COMMIT_CONST_PS;
+            context->pipe_data.cb_ps_ff.user_buffer = NULL;
+        } else
+            context->pipe_data.cb_ps_ff = cb;
+        context->commit |= NINE_STATE_COMMIT_CONST_PS;
     }
 
-    device->state.changed.group &= ~NINE_STATE_FF;
+    context->changed.group &= ~NINE_STATE_FF;
 }
 
 
@@ -2131,25 +2155,29 @@ nine_ff_fini(struct NineDevice9 *device)
 static void
 nine_ff_prune_vs(struct NineDevice9 *device)
 {
+    struct nine_context *context = &device->context;
+
     if (device->ff.num_vs > 100) {
         /* could destroy the bound one here, so unbind */
-        device->pipe->bind_vs_state(device->pipe, NULL);
+        context->pipe->bind_vs_state(context->pipe, NULL);
         util_hash_table_foreach(device->ff.ht_vs, nine_ff_ht_delete_cb, NULL);
         util_hash_table_clear(device->ff.ht_vs);
         device->ff.num_vs = 0;
-        device->state.changed.group |= NINE_STATE_VS;
+        context->changed.group |= NINE_STATE_VS;
     }
 }
 static void
 nine_ff_prune_ps(struct NineDevice9 *device)
 {
+    struct nine_context *context = &device->context;
+
     if (device->ff.num_ps > 100) {
         /* could destroy the bound one here, so unbind */
-        device->pipe->bind_fs_state(device->pipe, NULL);
+        context->pipe->bind_fs_state(context->pipe, NULL);
         util_hash_table_foreach(device->ff.ht_ps, nine_ff_ht_delete_cb, NULL);
         util_hash_table_clear(device->ff.ht_ps);
         device->ff.num_ps = 0;
-        device->state.changed.group |= NINE_STATE_PS;
+        context->changed.group |= NINE_STATE_PS;
     }
 }
 

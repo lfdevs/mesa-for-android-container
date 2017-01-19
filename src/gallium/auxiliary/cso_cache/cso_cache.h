@@ -129,6 +129,7 @@ struct cso_sampler {
    void *data;
    cso_state_callback delete_state;
    struct pipe_context *context;
+   unsigned hash_key;
 };
 
 struct cso_velems_state {

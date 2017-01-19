@@ -32,7 +32,7 @@
 #include "si_pipe.h"
 #include "sid.h"
 
-#define MAX_GLOBAL_BUFFERS 20
+#define MAX_GLOBAL_BUFFERS 22
 
 struct si_compute {
 	unsigned ir_type;
@@ -126,6 +126,7 @@ static void *si_create_compute_state(
 		p_atomic_inc(&sscreen->b.num_shaders_created);
 
 		program->shader.selector = &sel;
+		program->shader.is_monolithic = true;
 
 		if (si_shader_create(sscreen, sctx->tm, &program->shader,
 		                     &sctx->b.debug)) {
@@ -169,8 +170,12 @@ static void *si_create_compute_state(
 				     &program->shader.config, 0);
 		}
 		si_shader_dump(sctx->screen, &program->shader, &sctx->b.debug,
-			       PIPE_SHADER_COMPUTE, stderr);
-		si_shader_binary_upload(sctx->screen, &program->shader);
+			       PIPE_SHADER_COMPUTE, stderr, true);
+		if (si_shader_binary_upload(sctx->screen, &program->shader) < 0) {
+			fprintf(stderr, "LLVM failed to upload shader\n");
+			FREE(program);
+			return NULL;
+		}
 	}
 
 	return program;
@@ -191,17 +196,19 @@ static void si_set_global_binding(
 	struct si_context *sctx = (struct si_context*)ctx;
 	struct si_compute *program = sctx->cs_shader_state.program;
 
+	assert(first + n <= MAX_GLOBAL_BUFFERS);
+
 	if (!resources) {
-		for (i = first; i < first + n; i++) {
-			pipe_resource_reference(&program->global_buffers[i], NULL);
+		for (i = 0; i < n; i++) {
+			pipe_resource_reference(&program->global_buffers[first + i], NULL);
 		}
 		return;
 	}
 
-	for (i = first; i < first + n; i++) {
+	for (i = 0; i < n; i++) {
 		uint64_t va;
 		uint32_t offset;
-		pipe_resource_reference(&program->global_buffers[i], resources[i]);
+		pipe_resource_reference(&program->global_buffers[first + i], resources[i]);
 		va = r600_resource(resources[i])->gpu_address;
 		offset = util_le32_to_cpu(*handles[i]);
 		va += offset;
@@ -281,9 +288,9 @@ static bool si_setup_compute_scratch_buffer(struct si_context *sctx,
 	if (scratch_bo_size < scratch_needed) {
 		r600_resource_reference(&sctx->compute_scratch_buffer, NULL);
 
-		sctx->compute_scratch_buffer =
-				si_resource_create_custom(&sctx->screen->b.b,
-                                PIPE_USAGE_DEFAULT, scratch_needed);
+		sctx->compute_scratch_buffer = (struct r600_resource*)
+			pipe_buffer_create(&sctx->screen->b.b, 0,
+					   PIPE_USAGE_DEFAULT, scratch_needed);
 
 		if (!sctx->compute_scratch_buffer)
 			return false;

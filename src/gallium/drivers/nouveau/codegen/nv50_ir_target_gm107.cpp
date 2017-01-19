@@ -68,6 +68,259 @@ TargetGM107::isOpSupported(operation op, DataType ty) const
    return true;
 }
 
+// Return true when an instruction supports the reuse flag. When supported, the
+// hardware will use the operand reuse cache introduced since Maxwell, which
+// should try to reduce bank conflicts by caching values for the subsequent
+// instructions. Note that the next instructions have to use the same GPR id in
+// the same operand slot.
+bool
+TargetGM107::isReuseSupported(const Instruction *insn) const
+{
+   const OpClass cl = getOpClass(insn->op);
+
+   // TODO: double-check!
+   switch (cl) {
+   case OPCLASS_ARITH:
+   case OPCLASS_COMPARE:
+   case OPCLASS_LOGIC:
+   case OPCLASS_MOVE:
+   case OPCLASS_SHIFT:
+      return true;
+   case OPCLASS_BITFIELD:
+      if (insn->op == OP_INSBF || insn->op == OP_EXTBF)
+         return true;
+      break;
+   default:
+      break;
+   }
+   return false;
+}
+
+// Return true when an instruction requires to set up a barrier because it
+// doesn't operate at a fixed latency. Variable latency instructions are memory
+// operations, double precision operations, special function unit operations
+// and other low throughput instructions.
+bool
+TargetGM107::isBarrierRequired(const Instruction *insn) const
+{
+   const OpClass cl = getOpClass(insn->op);
+
+   if (insn->dType == TYPE_F64 || insn->sType == TYPE_F64)
+      return true;
+
+   switch (cl) {
+   case OPCLASS_ATOMIC:
+   case OPCLASS_LOAD:
+   case OPCLASS_STORE:
+   case OPCLASS_SURFACE:
+   case OPCLASS_TEXTURE:
+      return true;
+   case OPCLASS_SFU:
+      switch (insn->op) {
+      case OP_COS:
+      case OP_EX2:
+      case OP_LG2:
+      case OP_LINTERP:
+      case OP_PINTERP:
+      case OP_RCP:
+      case OP_RSQ:
+      case OP_SIN:
+         return true;
+      default:
+         break;
+      }
+      break;
+   case OPCLASS_BITFIELD:
+      switch (insn->op) {
+      case OP_BFIND:
+      case OP_POPCNT:
+         return true;
+      default:
+         break;
+      }
+      break;
+   case OPCLASS_CONTROL:
+      switch (insn->op) {
+      case OP_EMIT:
+      case OP_RESTART:
+         return true;
+      default:
+         break;
+      }
+      break;
+   case OPCLASS_OTHER:
+      switch (insn->op) {
+      case OP_AFETCH:
+      case OP_PFETCH:
+      case OP_PIXLD:
+      case OP_RDSV:
+      case OP_SHFL:
+         return true;
+      default:
+         break;
+      }
+      break;
+   case OPCLASS_ARITH:
+      // TODO: IMUL/IMAD require barriers too, use of XMAD instead!
+      if ((insn->op == OP_MUL || insn->op == OP_MAD) &&
+          !isFloatType(insn->dType))
+         return true;
+      break;
+   case OPCLASS_CONVERT:
+      if (insn->def(0).getFile() != FILE_PREDICATE &&
+          insn->src(0).getFile() != FILE_PREDICATE)
+         return true;
+      break;
+   default:
+      break;
+   }
+   return false;
+}
+
+bool
+TargetGM107::canDualIssue(const Instruction *a, const Instruction *b) const
+{
+   // TODO
+   return false;
+}
+
+// Return the number of stall counts needed to complete a single instruction.
+// On Maxwell GPUs, the pipeline depth is 6, but some instructions require
+// different number of stall counts like memory operations.
+int
+TargetGM107::getLatency(const Instruction *insn) const
+{
+   // TODO: better values! This should be good enough for now though.
+   switch (insn->op) {
+   case OP_EMIT:
+   case OP_EXPORT:
+   case OP_PIXLD:
+   case OP_RESTART:
+   case OP_STORE:
+   case OP_SUSTB:
+   case OP_SUSTP:
+      return 1;
+   case OP_SHFL:
+      return 2;
+   case OP_ADD:
+   case OP_AND:
+   case OP_EXTBF:
+   case OP_FMA:
+   case OP_INSBF:
+   case OP_MAD:
+   case OP_MAX:
+   case OP_MIN:
+   case OP_MOV:
+   case OP_MUL:
+   case OP_NOT:
+   case OP_OR:
+   case OP_PREEX2:
+   case OP_PRESIN:
+   case OP_QUADOP:
+   case OP_SELP:
+   case OP_SET:
+   case OP_SET_AND:
+   case OP_SET_OR:
+   case OP_SET_XOR:
+   case OP_SHL:
+   case OP_SHLADD:
+   case OP_SHR:
+   case OP_SLCT:
+   case OP_SUB:
+   case OP_VOTE:
+   case OP_XOR:
+      if (insn->dType != TYPE_F64)
+         return 6;
+      break;
+   case OP_ABS:
+   case OP_CEIL:
+   case OP_CVT:
+   case OP_FLOOR:
+   case OP_NEG:
+   case OP_SAT:
+   case OP_TRUNC:
+      if (insn->op == OP_CVT && (insn->def(0).getFile() == FILE_PREDICATE ||
+                                 insn->src(0).getFile() == FILE_PREDICATE))
+         return 6;
+      break;
+   case OP_BFIND:
+   case OP_COS:
+   case OP_EX2:
+   case OP_LG2:
+   case OP_POPCNT:
+   case OP_QUADON:
+   case OP_QUADPOP:
+   case OP_RCP:
+   case OP_RSQ:
+   case OP_SIN:
+      return 13;
+   default:
+      break;
+   }
+   // Use the maximum number of stall counts for other instructions.
+   return 15;
+}
+
+// Return the operand read latency which is the number of stall counts before
+// an instruction can read its sources. For memory operations like ATOM, LOAD
+// and STORE, the memory access has to be indirect.
+int
+TargetGM107::getReadLatency(const Instruction *insn) const
+{
+   switch (insn->op) {
+   case OP_ABS:
+   case OP_BFIND:
+   case OP_CEIL:
+   case OP_COS:
+   case OP_EX2:
+   case OP_FLOOR:
+   case OP_LG2:
+   case OP_NEG:
+   case OP_POPCNT:
+   case OP_RCP:
+   case OP_RSQ:
+   case OP_SAT:
+   case OP_SIN:
+   case OP_SULDB:
+   case OP_SULDP:
+   case OP_SUREDB:
+   case OP_SUREDP:
+   case OP_SUSTB:
+   case OP_SUSTP:
+   case OP_TRUNC:
+      return 4;
+   case OP_CVT:
+      if (insn->def(0).getFile() != FILE_PREDICATE &&
+          insn->src(0).getFile() != FILE_PREDICATE)
+         return 4;
+      break;
+   case OP_ATOM:
+   case OP_LOAD:
+   case OP_STORE:
+      if (insn->src(0).isIndirect(0)) {
+         switch (insn->src(0).getFile()) {
+         case FILE_MEMORY_SHARED:
+         case FILE_MEMORY_CONST:
+            return 2;
+         case FILE_MEMORY_GLOBAL:
+         case FILE_MEMORY_LOCAL:
+            return 4;
+         default:
+            break;
+         }
+      }
+      break;
+   case OP_EXPORT:
+   case OP_PFETCH:
+   case OP_SHFL:
+   case OP_VFETCH:
+      return 2;
+   default:
+      break;
+   }
+   return 0;
+}
+
 bool
 TargetGM107::runLegalizePass(Program *prog, CGStage stage) const
 {

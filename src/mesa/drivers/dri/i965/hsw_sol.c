@@ -201,6 +201,9 @@ hsw_pause_transform_feedback(struct gl_context *ctx,
       (struct brw_transform_feedback_object *) obj;
 
    if (brw->is_haswell) {
+      /* Flush any drawing so that the counters have the right values. */
+      brw_emit_mi_flush(brw);
+
       /* Save the SOL buffer offset register values. */
       for (int i = 0; i < BRW_MAX_XFB_STREAMS; i++) {
          BEGIN_BATCH(3);

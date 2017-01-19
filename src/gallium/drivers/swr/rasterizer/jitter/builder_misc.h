@@ -113,6 +113,8 @@ Value *GATHERDD(Value* src, Value* pBase, Value* indices, Value* mask, Value* sc
 void GATHER4DD(const SWR_FORMAT_INFO &info, Value* pSrcBase, Value* byteOffsets,
                Value* mask, Value* vGatherComponents[], bool bPackedOutput);
 
+Value *GATHERPD(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale);
+
 void SCATTERPS(Value* pDst, Value* vSrc, Value* vOffsets, Value* vMask);
 
 void Shuffle8bpcGather4(const SWR_FORMAT_INFO &info, Value* vGatherInput, Value* vGatherOutput[], bool bPackedOutput);

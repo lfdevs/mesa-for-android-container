@@ -43,7 +43,7 @@ upload_3dstate_so_buffers(struct brw_context *brw)
    struct gl_transform_feedback_object *xfb_obj =
       ctx->TransformFeedback.CurrentObject;
    const struct gl_transform_feedback_info *linked_xfb_info =
-      &xfb_obj->shader_program->LinkedTransformFeedback;
+      xfb_obj->program->sh.LinkedTransformFeedback;
    int i;
 
    /* Set up the up to 4 output buffers.  These are the ranges defined in the
@@ -103,7 +103,7 @@ gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
    struct gl_transform_feedback_object *xfb_obj =
       ctx->TransformFeedback.CurrentObject;
    const struct gl_transform_feedback_info *linked_xfb_info =
-      &xfb_obj->shader_program->LinkedTransformFeedback;
+      xfb_obj->program->sh.LinkedTransformFeedback;
    uint16_t so_decl[MAX_VERTEX_STREAMS][128];
    int buffer_mask[MAX_VERTEX_STREAMS] = {0, 0, 0, 0};
    int next_offset[MAX_VERTEX_STREAMS] = {0, 0, 0, 0};
@@ -228,12 +228,12 @@ upload_3dstate_streamout(struct brw_context *brw, bool active,
    /* BRW_NEW_TRANSFORM_FEEDBACK */
    struct gl_transform_feedback_object *xfb_obj =
       ctx->TransformFeedback.CurrentObject;
-   const struct gl_transform_feedback_info *linked_xfb_info =
-      &xfb_obj->shader_program->LinkedTransformFeedback;
    uint32_t dw1 = 0, dw2 = 0, dw3 = 0, dw4 = 0;
    int i;
 
    if (active) {
+      const struct gl_transform_feedback_info *linked_xfb_info =
+         xfb_obj->program->sh.LinkedTransformFeedback;
       int urb_entry_read_offset = 0;
       int urb_entry_read_length = (vue_map->num_slots + 1) / 2 -
 	 urb_entry_read_offset;

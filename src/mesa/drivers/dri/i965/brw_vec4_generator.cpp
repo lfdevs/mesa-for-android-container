@@ -106,6 +106,7 @@ generate_math2_gen4(struct brw_codegen *p,
 static void
 generate_tex(struct brw_codegen *p,
              struct brw_vue_prog_data *prog_data,
+             gl_shader_stage stage,
              vec4_instruction *inst,
              struct brw_reg dst,
              struct brw_reg src,
@@ -238,8 +239,16 @@ generate_tex(struct brw_codegen *p,
              */
             dw2 |= GEN9_SAMPLER_SIMD_MODE_EXTENSION_SIMD4X2;
 
-         if (dw2)
+         /* The VS, DS, and FS stages have the g0.2 payload delivered as 0,
+          * so header0.2 is 0 when g0 is copied.  The HS and GS stages do
+          * not, so we must set to to 0 to avoid setting undesirable bits
+          * in the message header.
+          */
+         if (dw2 ||
+             stage == MESA_SHADER_TESS_CTRL ||
+             stage == MESA_SHADER_GEOMETRY) {
             brw_MOV(p, get_element_ud(header, 2), brw_imm_ud(dw2));
+         }
 
          brw_adjust_sampler_state_pointer(p, header, sampler_index);
          brw_pop_insn_state(p);
@@ -298,8 +307,12 @@ generate_tex(struct brw_codegen *p,
       if (brw_regs_equal(&surface_reg, &sampler_reg)) {
          brw_MUL(p, addr, sampler_reg, brw_imm_uw(0x101));
       } else {
-         brw_SHL(p, addr, sampler_reg, brw_imm_ud(8));
-         brw_OR(p, addr, addr, surface_reg);
+         if (sampler_reg.file == BRW_IMMEDIATE_VALUE) {
+            brw_OR(p, addr, surface_reg, brw_imm_ud(sampler_reg.ud << 8));
+         } else {
+            brw_SHL(p, addr, sampler_reg, brw_imm_ud(8));
+            brw_OR(p, addr, addr, surface_reg);
+         }
       }
       if (base_binding_table_index)
          brw_ADD(p, addr, addr, brw_imm_ud(base_binding_table_index));
@@ -1140,8 +1153,9 @@ generate_scratch_read(struct brw_codegen *p,
    else
       msg_type = BRW_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
 
-   const unsigned target_cache = devinfo->gen >= 7 ?
-      BRW_DATAPORT_READ_TARGET_DATA_CACHE :
+   const unsigned target_cache =
+      devinfo->gen >= 7 ? GEN7_SFID_DATAPORT_DATA_CACHE :
+      devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_RENDER_CACHE :
       BRW_DATAPORT_READ_TARGET_RENDER_CACHE;
 
    /* Each of the 8 channel enables is considered for whether each
@@ -1169,6 +1183,10 @@ generate_scratch_write(struct brw_codegen *p,
                        struct brw_reg index)
 {
    const struct gen_device_info *devinfo = p->devinfo;
+   const unsigned target_cache =
+      (devinfo->gen >= 7 ? GEN7_SFID_DATAPORT_DATA_CACHE :
+       devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_RENDER_CACHE :
+       BRW_DATAPORT_READ_TARGET_RENDER_CACHE);
    struct brw_reg header = brw_vec8_grf(0, 0);
    bool write_commit;
 
@@ -1228,6 +1246,7 @@ generate_scratch_write(struct brw_codegen *p,
                             brw_scratch_surface_idx(p),
 			    BRW_DATAPORT_OWORD_DUAL_BLOCK_1OWORD,
 			    msg_type,
+                            target_cache,
 			    3, /* mlen */
 			    true, /* header present */
 			    false, /* not a render target write */
@@ -1245,6 +1264,9 @@ generate_pull_constant_load(struct brw_codegen *p,
                             struct brw_reg offset)
 {
    const struct gen_device_info *devinfo = p->devinfo;
+   const unsigned target_cache =
+      (devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_SAMPLER_CACHE :
+       BRW_DATAPORT_READ_TARGET_DATA_CACHE);
    assert(index.file == BRW_IMMEDIATE_VALUE &&
 	  index.type == BRW_REGISTER_TYPE_UD);
    uint32_t surf_index = index.ud;
@@ -1290,7 +1312,7 @@ generate_pull_constant_load(struct brw_codegen *p,
 			   surf_index,
 			   BRW_DATAPORT_OWORD_DUAL_BLOCK_1OWORD,
 			   msg_type,
-			   BRW_DATAPORT_READ_TARGET_DATA_CACHE,
+                           target_cache,
 			   2, /* mlen */
                            true, /* header_present */
 			   1 /* rlen */);
@@ -1498,6 +1520,16 @@ generate_code(struct brw_codegen *p,
       brw_set_default_saturate(p, inst->saturate);
       brw_set_default_mask_control(p, inst->force_writemask_all);
       brw_set_default_acc_write_control(p, inst->writes_accumulator);
+      brw_set_default_exec_size(p, cvt(inst->exec_size) - 1);
+
+      assert(inst->group % inst->exec_size == 0);
+      assert(inst->group % 8 == 0 ||
+             inst->dst.type == BRW_REGISTER_TYPE_DF ||
+             inst->src[0].type == BRW_REGISTER_TYPE_DF ||
+             inst->src[1].type == BRW_REGISTER_TYPE_DF ||
+             inst->src[2].type == BRW_REGISTER_TYPE_DF);
+      if (!inst->force_writemask_all)
+         brw_set_default_group(p, inst->group);
 
       assert(inst->base_mrf + inst->mlen <= BRW_MAX_MRF(devinfo->gen));
       assert(inst->mlen <= BRW_MAX_MSG_LENGTH);
@@ -1725,7 +1757,8 @@ generate_code(struct brw_codegen *p,
       case SHADER_OPCODE_TG4:
       case SHADER_OPCODE_TG4_OFFSET:
       case SHADER_OPCODE_SAMPLEINFO:
-         generate_tex(p, prog_data, inst, dst, src[0], src[1], src[2]);
+         generate_tex(p, prog_data, nir->stage,
+                      inst, dst, src[0], src[1], src[2]);
          break;
 
       case VS_OPCODE_URB_WRITE:
@@ -1896,6 +1929,100 @@ generate_code(struct brw_codegen *p,
          break;
       }
 
+      case VEC4_OPCODE_FROM_DOUBLE: {
+         assert(type_sz(src[0].type) == 8);
+         assert(type_sz(dst.type) == 4);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_1);
+
+         dst.hstride = BRW_HORIZONTAL_STRIDE_2;
+         dst.width = BRW_WIDTH_4;
+         src[0].vstride = BRW_VERTICAL_STRIDE_4;
+         src[0].width = BRW_WIDTH_4;
+         brw_MOV(p, dst, src[0]);
+
+         struct brw_reg dst_as_src = dst;
+         dst.hstride = BRW_HORIZONTAL_STRIDE_1;
+         dst.width = BRW_WIDTH_8;
+         brw_MOV(p, dst, dst_as_src);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_16);
+         break;
+      }
+
+      case VEC4_OPCODE_TO_DOUBLE: {
+         assert(type_sz(src[0].type) == 4);
+         assert(type_sz(dst.type) == 8);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_1);
+
+         struct brw_reg tmp = retype(dst, src[0].type);
+         tmp.hstride = BRW_HORIZONTAL_STRIDE_2;
+         tmp.width = BRW_WIDTH_4;
+         src[0].vstride = BRW_VERTICAL_STRIDE_4;
+         src[0].hstride = BRW_HORIZONTAL_STRIDE_1;
+         src[0].width = BRW_WIDTH_4;
+         brw_MOV(p, tmp, src[0]);
+
+         tmp.vstride = BRW_VERTICAL_STRIDE_8;
+         tmp.hstride = BRW_HORIZONTAL_STRIDE_2;
+         tmp.width = BRW_WIDTH_4;
+         brw_MOV(p, dst, tmp);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_16);
+         break;
+      }
+
+      case VEC4_OPCODE_PICK_LOW_32BIT:
+      case VEC4_OPCODE_PICK_HIGH_32BIT: {
+         /* Stores the low/high 32-bit of each 64-bit element in src[0] into
+          * dst using ALIGN1 mode and a <8,4,2>:UD region on the source.
+          */
+         assert(type_sz(src[0].type) == 8);
+         assert(type_sz(dst.type) == 4);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_1);
+
+         dst = retype(dst, BRW_REGISTER_TYPE_UD);
+         dst.hstride = BRW_HORIZONTAL_STRIDE_1;
+
+         src[0] = retype(src[0], BRW_REGISTER_TYPE_UD);
+         if (inst->opcode == VEC4_OPCODE_PICK_HIGH_32BIT)
+            src[0] = suboffset(src[0], 1);
+         src[0].vstride = BRW_VERTICAL_STRIDE_8;
+         src[0].width = BRW_WIDTH_4;
+         src[0].hstride = BRW_HORIZONTAL_STRIDE_2;
+         brw_MOV(p, dst, src[0]);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_16);
+         break;
+      }
+
+      case VEC4_OPCODE_SET_LOW_32BIT:
+      case VEC4_OPCODE_SET_HIGH_32BIT: {
+         /* Reads consecutive 32-bit elements from src[0] and writes
+          * them to the low/high 32-bit of each 64-bit element in dst.
+          */
+         assert(type_sz(src[0].type) == 4);
+         assert(type_sz(dst.type) == 8);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_1);
+
+         dst = retype(dst, BRW_REGISTER_TYPE_UD);
+         if (inst->opcode == VEC4_OPCODE_SET_HIGH_32BIT)
+            dst = suboffset(dst, 1);
+         dst.hstride = BRW_HORIZONTAL_STRIDE_2;
+
+         src[0] = retype(src[0], BRW_REGISTER_TYPE_UD);
+         src[0].vstride = BRW_VERTICAL_STRIDE_4;
+         src[0].width = BRW_WIDTH_4;
+         src[0].hstride = BRW_HORIZONTAL_STRIDE_1;
+         brw_MOV(p, dst, src[0]);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_16);
+         break;
+      }
+
       case VEC4_OPCODE_PACK_BYTES: {
          /* Is effectively:
           *
@@ -2045,8 +2172,8 @@ generate_code(struct brw_codegen *p,
 
    if (unlikely(debug_flag)) {
       fprintf(stderr, "Native code for %s %s shader %s:\n",
-              nir->info.label ? nir->info.label : "unnamed",
-              _mesa_shader_stage_to_string(nir->stage), nir->info.name);
+              nir->info->label ? nir->info->label : "unnamed",
+              _mesa_shader_stage_to_string(nir->stage), nir->info->name);
 
       fprintf(stderr, "%s vec4 shader: %d instructions. %d loops. %u cycles. %d:%d "
                       "spills:fills. Compacted %d to %d bytes (%.0f%%)\n",

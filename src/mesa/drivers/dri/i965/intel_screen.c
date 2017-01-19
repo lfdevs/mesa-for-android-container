@@ -230,6 +230,9 @@ static struct intel_image_format intel_image_formats[] = {
    { __DRI_IMAGE_FOURCC_XBGR8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR8888, 4 }, } },
 
+   { __DRI_IMAGE_FOURCC_ARGB1555, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB1555, 2 } } },
+
    { __DRI_IMAGE_FOURCC_RGB565, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_RGB565, 2 } } },
 
@@ -1268,6 +1271,96 @@ intel_detect_timestamp(struct intel_screen *screen)
    return 0;
 }
 
+ /**
+ * Test if we can use MI_LOAD_REGISTER_MEM from an untrusted batchbuffer.
+ *
+ * Some combinations of hardware and kernel versions allow this feature,
+ * while others don't.  Instead of trying to enumerate every case, just
+ * try and write a register and see if works.
+ */
+static bool
+intel_detect_pipelined_register(struct intel_screen *screen,
+                                int reg, uint32_t expected_value, bool reset)
+{
+   drm_intel_bo *results, *bo;
+   uint32_t *batch;
+   uint32_t offset = 0;
+   bool success = false;
+
+   /* Create a zero'ed temporary buffer for reading our results */
+   results = drm_intel_bo_alloc(screen->bufmgr, "registers", 4096, 0);
+   if (results == NULL)
+      goto err;
+
+   bo = drm_intel_bo_alloc(screen->bufmgr, "batchbuffer", 4096, 0);
+   if (bo == NULL)
+      goto err_results;
+
+   if (drm_intel_bo_map(bo, 1))
+      goto err_batch;
+
+   batch = bo->virtual;
+
+   /* Write the register. */
+   *batch++ = MI_LOAD_REGISTER_IMM | (3 - 2);
+   *batch++ = reg;
+   *batch++ = expected_value;
+
+   /* Save the register's value back to the buffer. */
+   *batch++ = MI_STORE_REGISTER_MEM | (3 - 2);
+   *batch++ = reg;
+   drm_intel_bo_emit_reloc(bo, (char *)batch -(char *)bo->virtual,
+                           results, offset*sizeof(uint32_t),
+                           I915_GEM_DOMAIN_INSTRUCTION,
+                           I915_GEM_DOMAIN_INSTRUCTION);
+   *batch++ = results->offset + offset*sizeof(uint32_t);
+
+   /* And afterwards clear the register */
+   if (reset) {
+      *batch++ = MI_LOAD_REGISTER_IMM | (3 - 2);
+      *batch++ = reg;
+      *batch++ = 0;
+   }
+
+   *batch++ = MI_BATCH_BUFFER_END;
+
+   drm_intel_bo_mrb_exec(bo, ALIGN((char *)batch - (char *)bo->virtual, 8),
+                         NULL, 0, 0,
+                         I915_EXEC_RENDER);
+
+   /* Check whether the value got written. */
+   if (drm_intel_bo_map(results, false) == 0) {
+      success = *((uint32_t *)results->virtual + offset) == expected_value;
+      drm_intel_bo_unmap(results);
+   }
+
+err_batch:
+   drm_intel_bo_unreference(bo);
+err_results:
+   drm_intel_bo_unreference(results);
+err:
+   return success;
+}
+
+static bool
+intel_detect_pipelined_so(struct intel_screen *screen)
+{
+   /* Supposedly, Broadwell just works. */
+   if (screen->devinfo.gen >= 8)
+      return true;
+
+   if (screen->devinfo.gen <= 6)
+      return false;
+
+   /* We use SO_WRITE_OFFSET0 since you're supposed to write it (unlike the
+    * statistics registers), and we already reset it to zero before using it.
+    */
+   return intel_detect_pipelined_register(screen,
+                                          GEN7_SO_WRITE_OFFSET(0),
+                                          0x1337d0d0,
+                                          false);
+}
+
 /**
  * Return array of MSAA modes supported by the hardware. The array is
  * zero-terminated and sorted in decreasing order.
@@ -1445,7 +1538,8 @@ set_max_gl_versions(struct intel_screen *screen)
       dri_screen->max_gl_es2_version = has_astc ? 32 : 31;
       break;
    case 7:
-      dri_screen->max_gl_core_version = 33;
+      dri_screen->max_gl_core_version = screen->devinfo.is_haswell &&
+         can_do_pipelined_register_writes(screen) ? 45 : 33;
       dri_screen->max_gl_compat_version = 30;
       dri_screen->max_gl_es1_version = 11;
       dri_screen->max_gl_es2_version = screen->devinfo.is_haswell ? 31 : 30;
@@ -1640,6 +1734,9 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
       screen->subslice_total = 1 << (screen->devinfo.gt - 1);
    }
 
+   if (intel_detect_pipelined_so(screen))
+      screen->kernel_features |= KERNEL_ALLOWS_SOL_OFFSET_WRITES;
+
    const char *force_msaa = getenv("INTEL_FORCE_MSAA");
    if (force_msaa) {
       screen->winsys_msaa_samples_override =
@@ -1676,13 +1773,29 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
       screen->cmd_parser_version = 0;
    }
 
+   if (screen->devinfo.gen >= 8 || screen->cmd_parser_version >= 2)
+      screen->kernel_features |= KERNEL_ALLOWS_PREDICATE_WRITES;
+
+   /* Haswell requires command parser version 4 in order to have L3
+    * atomic scratch1 and chicken3 bits
+    */
+   if (screen->devinfo.is_haswell && screen->cmd_parser_version >= 4) {
+      screen->kernel_features |=
+         KERNEL_ALLOWS_HSW_SCRATCH1_AND_ROW_CHICKEN3;
+   }
+
    /* Haswell requires command parser version 6 in order to write to the
     * MI_MATH GPR registers, and version 7 in order to use
     * MI_LOAD_REGISTER_REG (which all users of MI_MATH use).
     */
-   screen->has_mi_math_and_lrr = screen->devinfo.gen >= 8 ||
-                                      (screen->devinfo.is_haswell &&
-                                       screen->cmd_parser_version >= 7);
+   if (screen->devinfo.gen >= 8 ||
+       (screen->devinfo.is_haswell && screen->cmd_parser_version >= 7)) {
+      screen->kernel_features |= KERNEL_ALLOWS_MI_MATH_AND_LRR;
+   }
+
+   /* Gen7 needs at least command parser version 5 to support compute */
+   if (screen->devinfo.gen >= 8 || screen->cmd_parser_version >= 5)
+      screen->kernel_features |= KERNEL_ALLOWS_COMPUTE_DISPATCH;
 
    dri_screen->extensions = !screen->has_context_reset_notification
       ? screenExtensions : intelRobustScreenExtensions;

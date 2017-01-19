@@ -76,7 +76,7 @@ nv98_decoder_vp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
    enum pipe_video_format codec = u_reduce_video_profile(dec->base.profile);
    struct nouveau_bo *bsp_bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH];
    struct nouveau_bo *inter_bo = dec->inter_bo[comm_seq & 1];
-   u32 fence_extra = 0, codec_extra = 0;
+   u32 codec_extra = 0;
    struct nouveau_pushbuf_refn bo_refs[] = {
       { inter_bo, NOUVEAU_BO_WR | NOUVEAU_BO_VRAM },
       { dec->ref_bo, NOUVEAU_BO_WR | NOUVEAU_BO_VRAM },
@@ -87,10 +87,6 @@ nv98_decoder_vp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
       { dec->fw_bo, NOUVEAU_BO_RD | NOUVEAU_BO_VRAM },
    };
    int num_refs = ARRAY_SIZE(bo_refs) - !dec->fw_bo;
-
-#if NOUVEAU_VP3_DEBUG_FENCE
-   fence_extra = 4;
-#endif
 
    if (codec == PIPE_VIDEO_FORMAT_MPEG4_AVC) {
       nouveau_vp3_inter_sizes(dec, desc.h264->slice_count, &slice_size, &bucket_size, &ring_size);
@@ -115,8 +111,7 @@ nv98_decoder_vp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
    if (!is_ref && (dec->refs[target->valid_ref].decoded_top && dec->refs[target->valid_ref].decoded_bottom))
       nv98_decoder_kick_ref(dec, target);
 
-   nouveau_pushbuf_space(push, 8 + 3 * (codec != PIPE_VIDEO_FORMAT_MPEG12) +
-              6 + codec_extra + fence_extra + 2, num_refs, 0);
+   nouveau_pushbuf_space(push, 32 + codec_extra, num_refs, 0);
 
    nouveau_pushbuf_refn(push, bo_refs, num_refs);
 

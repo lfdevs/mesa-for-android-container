@@ -128,13 +128,19 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
       goto no_handle;
    }
 
-   vl_compositor_init(&dev->compositor, dev->context);
+   if (!vl_compositor_init(&dev->compositor, dev->context)) {
+       ret = VDP_STATUS_ERROR;
+       goto no_compositor;
+   }
+
    pipe_mutex_init(dev->mutex);
 
    *get_proc_address = &vlVdpGetProcAddress;
 
    return VDP_STATUS_OK;
 
+no_compositor:
+   vlRemoveDataHTAB(*device);
 no_handle:
    pipe_sampler_view_reference(&dev->dummy_sv, NULL);
 no_resource:
@@ -320,54 +326,4 @@ vlVdpDefaultSamplerViewTemplate(struct pipe_sampler_view *templ, struct pipe_res
       templ->swizzle_b = PIPE_SWIZZLE_1;
    if (desc->swizzle[3] == PIPE_SWIZZLE_0)
       templ->swizzle_a = PIPE_SWIZZLE_1;
-}
-
-void
-vlVdpResolveDelayedRendering(vlVdpDevice *dev, struct pipe_surface *surface, struct u_rect *dirty_area)
-{
-   struct vl_compositor_state *cstate;
-   vlVdpOutputSurface *vlsurface;
-
-   assert(dev);
-
-   cstate = dev->delayed_rendering.cstate;
-   if (!cstate)
-      return;
-
-   vlsurface = vlGetDataHTAB(dev->delayed_rendering.surface);
-   if (!vlsurface)
-      return;
-
-   if (!surface) {
-      surface = vlsurface->surface;
-      dirty_area = &vlsurface->dirty_area;
-   }
-
-   vl_compositor_render(cstate, &dev->compositor, surface, dirty_area, true);
-
-   dev->delayed_rendering.surface = VDP_INVALID_HANDLE;
-   dev->delayed_rendering.cstate = NULL;
-
-   /* test if we need to create a new sampler for the just filled texture */
-   if (surface->texture != vlsurface->sampler_view->texture) {
-      struct pipe_resource *res = surface->texture;
-      struct pipe_sampler_view sv_templ;
-
-      vlVdpDefaultSamplerViewTemplate(&sv_templ, res);
-      pipe_sampler_view_reference(&vlsurface->sampler_view, NULL);
-      vlsurface->sampler_view = dev->context->create_sampler_view(dev->context, res, &sv_templ);
-   }
-
-   return;
-}
-
-void
-vlVdpSave4DelayedRendering(vlVdpDevice *dev, VdpOutputSurface surface, struct vl_compositor_state *cstate)
-{
-   assert(dev);
-
-   vlVdpResolveDelayedRendering(dev, NULL, NULL);
-
-   dev->delayed_rendering.surface = surface;
-   dev->delayed_rendering.cstate = cstate;
 }

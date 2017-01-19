@@ -489,11 +489,10 @@ void draw_update_viewport_flags(struct draw_context *draw);
 
 /** 
  * Return index i from the index buffer.
- * If the index buffer would overflow we return the
- * maximum possible index.
+ * If the index buffer would overflow we return index 0.
  */
 #define DRAW_GET_IDX(_elts, _i)                   \
-   (((_i) >= draw->pt.user.eltMax) ? DRAW_MAX_FETCH_IDX : (_elts)[_i])
+   (((_i) >= draw->pt.user.eltMax) ? 0 : (_elts)[_i])
 
 /**
  * Return index of the given viewport clamping it
@@ -515,7 +514,7 @@ draw_overflow_uadd(unsigned a, unsigned b,
                    unsigned overflow_value)
 {
    unsigned res = a + b;
-   if (res < a || res < b) {
+   if (res < a) {
       res = overflow_value;
    }
    return res;

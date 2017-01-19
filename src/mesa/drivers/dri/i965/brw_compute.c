@@ -239,7 +239,7 @@ brw_dispatch_compute_common(struct gl_context *ctx)
    if (brw->always_flush_batch)
       intel_batchbuffer_flush(brw);
 
-   brw_state_cache_check_size(brw);
+   brw_program_cache_check_size(brw);
 
    /* Note: since compute shaders can't write to framebuffers, there's no need
     * to call brw_postdraw_set_buffers_need_resolve().

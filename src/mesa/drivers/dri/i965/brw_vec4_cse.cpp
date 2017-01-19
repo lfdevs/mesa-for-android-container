@@ -130,6 +130,8 @@ instructions_match(vec4_instruction *a, vec4_instruction *b)
           a->dst.writemask == b->dst.writemask &&
           a->force_writemask_all == b->force_writemask_all &&
           a->size_written == b->size_written &&
+          a->exec_size == b->exec_size &&
+          a->group == b->group &&
           operands_match(a, b);
 }
 
@@ -181,9 +183,16 @@ vec4_visitor::opt_cse_local(bblock_t *block)
                                               regs_written(entry->generator)),
                                            NULL), inst->dst.type);
 
-               for (unsigned i = 0; i < regs_written(entry->generator); ++i) {
-                  vec4_instruction *copy = MOV(offset(entry->generator->dst, i),
-                                               offset(entry->tmp, i));
+               const unsigned width = entry->generator->exec_size;
+               unsigned component_size = width * type_sz(entry->tmp.type);
+               unsigned num_copy_movs =
+                  DIV_ROUND_UP(entry->generator->size_written, component_size);
+               for (unsigned i = 0; i < num_copy_movs; ++i) {
+                  vec4_instruction *copy =
+                     MOV(offset(entry->generator->dst, width, i),
+                         offset(entry->tmp, width, i));
+                  copy->exec_size = width;
+                  copy->group = entry->generator->group;
                   copy->force_writemask_all =
                      entry->generator->force_writemask_all;
                   entry->generator->insert_after(block, copy);
@@ -195,10 +204,16 @@ vec4_visitor::opt_cse_local(bblock_t *block)
             /* dest <- temp */
             if (!inst->dst.is_null()) {
                assert(inst->dst.type == entry->tmp.type);
-
-               for (unsigned i = 0; i < regs_written(inst); ++i) {
-                  vec4_instruction *copy = MOV(offset(inst->dst, i),
-                                               offset(entry->tmp, i));
+               const unsigned width = inst->exec_size;
+               unsigned component_size = width * type_sz(inst->dst.type);
+               unsigned num_copy_movs =
+                  DIV_ROUND_UP(inst->size_written, component_size);
+               for (unsigned i = 0; i < num_copy_movs; ++i) {
+                  vec4_instruction *copy =
+                     MOV(offset(inst->dst, width, i),
+                         offset(entry->tmp, width, i));
+                  copy->exec_size = inst->exec_size;
+                  copy->group = inst->group;
                   copy->force_writemask_all = inst->force_writemask_all;
                   inst->insert_before(block, copy);
                }
@@ -246,7 +261,7 @@ vec4_visitor::opt_cse_local(bblock_t *block)
              * more -- a sure sign they'll fail operands_match().
              */
             if (src->file == VGRF) {
-               if (var_range_end(var_from_reg(alloc, dst_reg(*src)), 4) < ip) {
+               if (var_range_end(var_from_reg(alloc, dst_reg(*src)), 8) < ip) {
                   entry->remove();
                   ralloc_free(entry);
                   break;

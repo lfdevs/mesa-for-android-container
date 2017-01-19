@@ -1,5 +1,4 @@
 
-#include "util/u_format.h"
 #include "util/u_framebuffer.h"
 #include "util/u_math.h"
 #include "util/u_viewport.h"
@@ -605,7 +604,9 @@ nvc0_validate_min_samples(struct nvc0_context *nvc0)
       // If we're using the incoming sample mask and doing sample shading, we
       // have to do sample shading "to the max", otherwise there's no way to
       // tell which sets of samples are covered by the current invocation.
-      if (nvc0->fragprog->fp.sample_mask_in)
+      // Similarly for reading the framebuffer.
+      if (nvc0->fragprog->fp.sample_mask_in ||
+          nvc0->fragprog->fp.reads_framebuffer)
          samples = util_framebuffer_get_num_samples(&nvc0->framebuffer);
       samples |= NVC0_3D_SAMPLE_SHADING_ENABLE;
    }
@@ -672,25 +673,6 @@ nvc0_validate_zsa_fb(struct nvc0_context *nvc0)
 }
 
 static void
-nvc0_validate_blend_fb(struct nvc0_context *nvc0)
-{
-   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-   struct pipe_framebuffer_state *fb = &nvc0->framebuffer;
-   uint32_t ms = 0;
-
-   if ((!fb->nr_cbufs || !fb->cbufs[0] ||
-        !util_format_is_pure_integer(fb->cbufs[0]->format)) && nvc0->blend) {
-      if (nvc0->blend->pipe.alpha_to_coverage)
-         ms |= NVC0_3D_MULTISAMPLE_CTRL_ALPHA_TO_COVERAGE;
-      if (nvc0->blend->pipe.alpha_to_one)
-         ms |= NVC0_3D_MULTISAMPLE_CTRL_ALPHA_TO_ONE;
-   }
-
-   BEGIN_NVC0(push, NVC0_3D(MULTISAMPLE_CTRL), 1);
-   PUSH_DATA (push, ms);
-}
-
-static void
 nvc0_validate_rast_fb(struct nvc0_context *nvc0)
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
@@ -718,6 +700,93 @@ nvc0_validate_tess_state(struct nvc0_context *nvc0)
    BEGIN_NVC0(push, NVC0_3D(TESS_LEVEL_OUTER(0)), 6);
    PUSH_DATAp(push, nvc0->default_tess_outer, 4);
    PUSH_DATAp(push, nvc0->default_tess_inner, 2);
+}
+
+/* If we have a frag shader bound which tries to read from the framebuffer, we
+ * have to make sure that the fb is bound as a texture in the expected
+ * location. For Fermi, that's in the special driver slot 16, while for Kepler
+ * it's a regular binding stored in the driver constbuf.
+ */
+static void
+nvc0_validate_fbread(struct nvc0_context *nvc0)
+{
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nvc0_screen *screen = nvc0->screen;
+   struct pipe_context *pipe = &nvc0->base.pipe;
+   struct pipe_sampler_view *old_view = nvc0->fbtexture;
+   struct pipe_sampler_view *new_view = NULL;
+
+   if (nvc0->fragprog &&
+       nvc0->fragprog->fp.reads_framebuffer &&
+       nvc0->framebuffer.nr_cbufs &&
+       nvc0->framebuffer.cbufs[0]) {
+      struct pipe_sampler_view tmpl;
+      struct pipe_surface *sf = nvc0->framebuffer.cbufs[0];
+
+      tmpl.target = PIPE_TEXTURE_2D_ARRAY;
+      tmpl.format = sf->format;
+      tmpl.u.tex.first_level = tmpl.u.tex.last_level = sf->u.tex.level;
+      tmpl.u.tex.first_layer = sf->u.tex.first_layer;
+      tmpl.u.tex.last_layer = sf->u.tex.last_layer;
+      tmpl.swizzle_r = PIPE_SWIZZLE_X;
+      tmpl.swizzle_g = PIPE_SWIZZLE_Y;
+      tmpl.swizzle_b = PIPE_SWIZZLE_Z;
+      tmpl.swizzle_a = PIPE_SWIZZLE_W;
+
+      /* Bail if it's the same parameters */
+      if (old_view && old_view->texture == sf->texture &&
+          old_view->format == sf->format &&
+          old_view->u.tex.first_level == sf->u.tex.level &&
+          old_view->u.tex.first_layer == sf->u.tex.first_layer &&
+          old_view->u.tex.last_layer == sf->u.tex.last_layer)
+         return;
+
+      new_view = pipe->create_sampler_view(pipe, sf->texture, &tmpl);
+   } else if (old_view == NULL) {
+      return;
+   }
+
+   if (old_view)
+      pipe_sampler_view_reference(&nvc0->fbtexture, NULL);
+   nvc0->fbtexture = new_view;
+
+   if (screen->default_tsc->id < 0) {
+      struct nv50_tsc_entry *tsc = nv50_tsc_entry(screen->default_tsc);
+      tsc->id = nvc0_screen_tsc_alloc(screen, tsc);
+      nvc0->base.push_data(&nvc0->base, screen->txc, 65536 + tsc->id * 32,
+                           NV_VRAM_DOMAIN(&screen->base), 32, tsc->tsc);
+      screen->tsc.lock[tsc->id / 32] |= 1 << (tsc->id % 32);
+
+      IMMED_NVC0(push, NVC0_3D(TSC_FLUSH), 0);
+      if (screen->base.class_3d < NVE4_3D_CLASS) {
+         BEGIN_NVC0(push, NVC0_3D(BIND_TSC2(0)), 1);
+         PUSH_DATA (push, (tsc->id << 12) | 1);
+      }
+   }
+
+   if (new_view) {
+      struct nv50_tic_entry *tic = nv50_tic_entry(new_view);
+      assert(tic->id < 0);
+      tic->id = nvc0_screen_tic_alloc(screen, tic);
+      nvc0->base.push_data(&nvc0->base, screen->txc, tic->id * 32,
+                           NV_VRAM_DOMAIN(&screen->base), 32, tic->tic);
+      screen->tic.lock[tic->id / 32] |= 1 << (tic->id % 32);
+
+      if (screen->base.class_3d >= NVE4_3D_CLASS) {
+         BEGIN_NVC0(push, NVC0_3D(CB_SIZE), 3);
+         PUSH_DATA (push, NVC0_CB_AUX_SIZE);
+         PUSH_DATAh(push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(4));
+         PUSH_DATA (push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(4));
+         BEGIN_1IC0(push, NVC0_3D(CB_POS), 1 + 1);
+         PUSH_DATA (push, NVC0_CB_AUX_FB_TEX_INFO);
+         PUSH_DATA (push, (screen->default_tsc->id << 20) | tic->id);
+      } else {
+         BEGIN_NVC0(push, NVC0_3D(BIND_TIC2(0)), 1);
+         PUSH_DATA (push, (tic->id << 9) | 1);
+      }
+
+      IMMED_NVC0(push, NVC0_3D(TIC_FLUSH), 0);
+   }
 }
 
 static void
@@ -792,7 +861,6 @@ validate_list_3d[] = {
     { nvc0_validate_fp_zsa_rast,   NVC0_NEW_3D_FRAGPROG | NVC0_NEW_3D_ZSA |
                                    NVC0_NEW_3D_RASTERIZER },
     { nvc0_validate_zsa_fb,        NVC0_NEW_3D_ZSA | NVC0_NEW_3D_FRAMEBUFFER },
-    { nvc0_validate_blend_fb,      NVC0_NEW_3D_BLEND | NVC0_NEW_3D_FRAMEBUFFER },
     { nvc0_validate_rast_fb,       NVC0_NEW_3D_RASTERIZER | NVC0_NEW_3D_FRAMEBUFFER },
     { nvc0_validate_clip,          NVC0_NEW_3D_CLIP | NVC0_NEW_3D_RASTERIZER |
                                    NVC0_NEW_3D_VERTPROG |
@@ -802,6 +870,8 @@ validate_list_3d[] = {
     { nvc0_validate_textures,      NVC0_NEW_3D_TEXTURES },
     { nvc0_validate_samplers,      NVC0_NEW_3D_SAMPLERS },
     { nve4_set_tex_handles,        NVC0_NEW_3D_TEXTURES | NVC0_NEW_3D_SAMPLERS },
+    { nvc0_validate_fbread,        NVC0_NEW_3D_FRAGPROG |
+                                   NVC0_NEW_3D_FRAMEBUFFER },
     { nvc0_vertex_arrays_validate, NVC0_NEW_3D_VERTEX | NVC0_NEW_3D_ARRAYS },
     { nvc0_validate_surfaces,      NVC0_NEW_3D_SURFACES },
     { nvc0_validate_buffers,       NVC0_NEW_3D_BUFFERS },

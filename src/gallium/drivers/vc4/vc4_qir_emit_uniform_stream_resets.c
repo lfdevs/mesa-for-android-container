@@ -36,24 +36,10 @@
 #include "util/u_math.h"
 
 static bool
-inst_reads_a_uniform(struct qinst *inst)
-{
-        if (qir_is_tex(inst))
-                return true;
-
-        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
-                if (inst->src[i].file == QFILE_UNIF)
-                        return true;
-        }
-
-        return false;
-}
-
-static bool
 block_reads_any_uniform(struct qblock *block)
 {
         qir_for_each_inst(inst, block) {
-                if (inst_reads_a_uniform(inst))
+                if (qir_has_uniform_read(inst))
                         return true;
         }
 
@@ -94,7 +80,7 @@ qir_emit_uniform_stream_resets(struct vc4_compile *c)
                 }
 
                 qir_for_each_inst(inst, block) {
-                        if (inst_reads_a_uniform(inst))
+                        if (qir_has_uniform_read(inst))
                                 uniform_count++;
                 }
         }

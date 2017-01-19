@@ -42,14 +42,25 @@
 #define SAMPLES_PER_SEC 10000
 
 #define GRBM_STATUS		0x8010
+#define SPI_BUSY(x)		(((x) >> 22) & 0x1)
 #define GUI_ACTIVE(x)		(((x) >> 31) & 0x1)
 
-static bool r600_is_gpu_busy(struct r600_common_screen *rscreen)
+static void r600_update_grbm_counters(struct r600_common_screen *rscreen,
+				      union r600_grbm_counters *counters)
 {
 	uint32_t value = 0;
 
 	rscreen->ws->read_registers(rscreen->ws, GRBM_STATUS, 1, &value);
-	return GUI_ACTIVE(value);
+
+	if (SPI_BUSY(value))
+		p_atomic_inc(&counters->named.spi_busy);
+	else
+		p_atomic_inc(&counters->named.spi_idle);
+
+	if (GUI_ACTIVE(value))
+		p_atomic_inc(&counters->named.gui_busy);
+	else
+		p_atomic_inc(&counters->named.gui_idle);
 }
 
 static PIPE_THREAD_ROUTINE(r600_gpu_load_thread, param)
@@ -77,10 +88,7 @@ static PIPE_THREAD_ROUTINE(r600_gpu_load_thread, param)
 		last_time = cur_time;
 
 		/* Update the counters. */
-		if (r600_is_gpu_busy(rscreen))
-			p_atomic_inc(&rscreen->gpu_load_counter_busy);
-		else
-			p_atomic_inc(&rscreen->gpu_load_counter_idle);
+		r600_update_grbm_counters(rscreen, &rscreen->grbm_counters);
 	}
 	p_atomic_dec(&rscreen->gpu_load_stop_thread);
 	return 0;
@@ -96,7 +104,8 @@ void r600_gpu_load_kill_thread(struct r600_common_screen *rscreen)
 	rscreen->gpu_load_thread = 0;
 }
 
-static uint64_t r600_gpu_load_read_counter(struct r600_common_screen *rscreen)
+static uint64_t r600_read_counter(struct r600_common_screen *rscreen,
+				  unsigned busy_index)
 {
 	/* Start the thread if needed. */
 	if (!rscreen->gpu_load_thread) {
@@ -108,34 +117,55 @@ static uint64_t r600_gpu_load_read_counter(struct r600_common_screen *rscreen)
 		pipe_mutex_unlock(rscreen->gpu_load_mutex);
 	}
 
-	/* The busy counter is in the lower 32 bits.
-	 * The idle counter is in the upper 32 bits. */
-	return p_atomic_read(&rscreen->gpu_load_counter_busy) |
-	       ((uint64_t)p_atomic_read(&rscreen->gpu_load_counter_idle) << 32);
+	unsigned busy = p_atomic_read(&rscreen->grbm_counters.array[busy_index]);
+	unsigned idle = p_atomic_read(&rscreen->grbm_counters.array[busy_index + 1]);
+
+	return busy | ((uint64_t)idle << 32);
 }
 
-/**
- * Just return the counters.
- */
-uint64_t r600_gpu_load_begin(struct r600_common_screen *rscreen)
+static unsigned r600_end_counter(struct r600_common_screen *rscreen,
+				 uint64_t begin, unsigned busy_index)
 {
-	return r600_gpu_load_read_counter(rscreen);
-}
-
-unsigned r600_gpu_load_end(struct r600_common_screen *rscreen, uint64_t begin)
-{
-	uint64_t end = r600_gpu_load_read_counter(rscreen);
+	uint64_t end = r600_read_counter(rscreen, busy_index);
 	unsigned busy = (end & 0xffffffff) - (begin & 0xffffffff);
 	unsigned idle = (end >> 32) - (begin >> 32);
 
-	/* Calculate the GPU load.
+	/* Calculate the % of time the busy counter was being incremented.
 	 *
-	 * If no counters have been incremented, return the current load.
+	 * If no counters were incremented, return the current counter status.
 	 * It's for the case when the load is queried faster than
 	 * the counters are updated.
 	 */
-	if (idle || busy)
+	if (idle || busy) {
 		return busy*100 / (busy + idle);
-	else
-		return r600_is_gpu_busy(rscreen) ? 100 : 0;
+	} else {
+		union r600_grbm_counters counters;
+
+		memset(&counters, 0, sizeof(counters));
+		r600_update_grbm_counters(rscreen, &counters);
+		return counters.array[busy_index] ? 100 : 0;
+	}
+}
+
+#define BUSY_INDEX(rscreen, field) (&rscreen->grbm_counters.named.field##_busy - \
+				    rscreen->grbm_counters.array)
+
+uint64_t r600_begin_counter_spi(struct r600_common_screen *rscreen)
+{
+	return r600_read_counter(rscreen, BUSY_INDEX(rscreen, spi));
+}
+
+unsigned r600_end_counter_spi(struct r600_common_screen *rscreen, uint64_t begin)
+{
+	return r600_end_counter(rscreen, begin, BUSY_INDEX(rscreen, spi));
+}
+
+uint64_t r600_begin_counter_gui(struct r600_common_screen *rscreen)
+{
+	return r600_read_counter(rscreen, BUSY_INDEX(rscreen, gui));
+}
+
+unsigned r600_end_counter_gui(struct r600_common_screen *rscreen, uint64_t begin)
+{
+	return r600_end_counter(rscreen, begin, BUSY_INDEX(rscreen, gui));
 }

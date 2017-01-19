@@ -27,7 +27,7 @@
 
 class symbol_table_entry {
 public:
-   DECLARE_RALLOC_CXX_OPERATORS(symbol_table_entry);
+   DECLARE_LINEAR_ALLOC_CXX_OPERATORS(symbol_table_entry);
 
    bool add_interface(const glsl_type *i, enum ir_variable_mode mode)
    {
@@ -106,6 +106,7 @@ glsl_symbol_table::glsl_symbol_table()
    this->separate_function_namespace = false;
    this->table = _mesa_symbol_table_ctor();
    this->mem_ctx = ralloc_context(NULL);
+   this->linalloc = linear_alloc_parent(this->mem_ctx, 0);
 }
 
 glsl_symbol_table::~glsl_symbol_table()
@@ -149,7 +150,7 @@ bool glsl_symbol_table::add_variable(ir_variable *v)
 	  * entry includes a function, propagate that to this block - otherwise
 	  * the new variable declaration would shadow the function.
 	  */
-	 symbol_table_entry *entry = new(mem_ctx) symbol_table_entry(v);
+	 symbol_table_entry *entry = new(linalloc) symbol_table_entry(v);
 	 if (existing != NULL)
 	    entry->f = existing->f;
 	 int added = _mesa_symbol_table_add_symbol(table, v->name, entry);
@@ -161,13 +162,13 @@ bool glsl_symbol_table::add_variable(ir_variable *v)
    }
 
    /* 1.20+ rules: */
-   symbol_table_entry *entry = new(mem_ctx) symbol_table_entry(v);
+   symbol_table_entry *entry = new(linalloc) symbol_table_entry(v);
    return _mesa_symbol_table_add_symbol(table, v->name, entry) == 0;
 }
 
 bool glsl_symbol_table::add_type(const char *name, const glsl_type *t)
 {
-   symbol_table_entry *entry = new(mem_ctx) symbol_table_entry(t);
+   symbol_table_entry *entry = new(linalloc) symbol_table_entry(t);
    return _mesa_symbol_table_add_symbol(table, name, entry) == 0;
 }
 
@@ -178,7 +179,7 @@ bool glsl_symbol_table::add_interface(const char *name, const glsl_type *i,
    symbol_table_entry *entry = get_entry(name);
    if (entry == NULL) {
       symbol_table_entry *entry =
-         new(mem_ctx) symbol_table_entry(i, mode);
+         new(linalloc) symbol_table_entry(i, mode);
       bool add_interface_symbol_result =
          _mesa_symbol_table_add_symbol(table, name, entry) == 0;
       assert(add_interface_symbol_result);
@@ -198,7 +199,7 @@ bool glsl_symbol_table::add_function(ir_function *f)
 	 return true;
       }
    }
-   symbol_table_entry *entry = new(mem_ctx) symbol_table_entry(f);
+   symbol_table_entry *entry = new(linalloc) symbol_table_entry(f);
    return _mesa_symbol_table_add_symbol(table, f->name, entry) == 0;
 }
 
@@ -207,11 +208,11 @@ bool glsl_symbol_table::add_default_precision_qualifier(const char *type_name,
 {
    char *name = ralloc_asprintf(mem_ctx, "#default_precision_%s", type_name);
 
-   ast_type_specifier *default_specifier = new(mem_ctx) ast_type_specifier(name);
+   ast_type_specifier *default_specifier = new(linalloc) ast_type_specifier(name);
    default_specifier->default_precision = precision;
 
    symbol_table_entry *entry =
-      new(mem_ctx) symbol_table_entry(default_specifier);
+      new(linalloc) symbol_table_entry(default_specifier);
 
    if (!get_entry(name))
       return _mesa_symbol_table_add_symbol(table, name, entry) == 0;
@@ -221,7 +222,7 @@ bool glsl_symbol_table::add_default_precision_qualifier(const char *type_name,
 
 void glsl_symbol_table::add_global_function(ir_function *f)
 {
-   symbol_table_entry *entry = new(mem_ctx) symbol_table_entry(f);
+   symbol_table_entry *entry = new(linalloc) symbol_table_entry(f);
    int added = _mesa_symbol_table_add_global_symbol(table, f->name, entry);
    assert(added == 0);
    (void)added;

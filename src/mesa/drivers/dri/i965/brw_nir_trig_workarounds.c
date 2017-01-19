@@ -29,6 +29,7 @@ static const nir_search_expression search1 = {
    false,
    nir_op_fcos,
    { &search1_0.value },
+   NULL,
 };
    
 #include "compiler/nir/nir_search_helpers.h"
@@ -45,6 +46,7 @@ static const nir_search_expression replace1_0 = {
    false,
    nir_op_fcos,
    { &replace1_0_0.value },
+   NULL,
 };
 
 #include "compiler/nir/nir_search_helpers.h"
@@ -58,6 +60,7 @@ static const nir_search_expression replace1 = {
    false,
    nir_op_fmul,
    { &replace1_0.value, &replace1_1.value },
+   NULL,
 };
 
 static const struct transform brw_nir_apply_trig_workarounds_fcos_xforms[] = {
@@ -78,6 +81,7 @@ static const nir_search_expression search0 = {
    false,
    nir_op_fsin,
    { &search0_0.value },
+   NULL,
 };
    
 #include "compiler/nir/nir_search_helpers.h"
@@ -94,6 +98,7 @@ static const nir_search_expression replace0_0 = {
    false,
    nir_op_fsin,
    { &replace0_0_0.value },
+   NULL,
 };
 
 #include "compiler/nir/nir_search_helpers.h"
@@ -107,6 +112,7 @@ static const nir_search_expression replace0 = {
    false,
    nir_op_fmul,
    { &replace0_0.value, &replace0_1.value },
+   NULL,
 };
 
 static const struct transform brw_nir_apply_trig_workarounds_fsin_xforms[] = {

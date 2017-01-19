@@ -39,20 +39,20 @@ static const char strings[] =
    "vkCreateInstance\0"
    "vkDestroyInstance\0"
    "vkEnumeratePhysicalDevices\0"
-   "vkGetPhysicalDeviceFeatures\0"
-   "vkGetPhysicalDeviceFormatProperties\0"
-   "vkGetPhysicalDeviceImageFormatProperties\0"
+   "vkGetDeviceProcAddr\0"
+   "vkGetInstanceProcAddr\0"
    "vkGetPhysicalDeviceProperties\0"
    "vkGetPhysicalDeviceQueueFamilyProperties\0"
    "vkGetPhysicalDeviceMemoryProperties\0"
-   "vkGetInstanceProcAddr\0"
-   "vkGetDeviceProcAddr\0"
+   "vkGetPhysicalDeviceFeatures\0"
+   "vkGetPhysicalDeviceFormatProperties\0"
+   "vkGetPhysicalDeviceImageFormatProperties\0"
    "vkCreateDevice\0"
    "vkDestroyDevice\0"
-   "vkEnumerateInstanceExtensionProperties\0"
-   "vkEnumerateDeviceExtensionProperties\0"
    "vkEnumerateInstanceLayerProperties\0"
+   "vkEnumerateInstanceExtensionProperties\0"
    "vkEnumerateDeviceLayerProperties\0"
+   "vkEnumerateDeviceExtensionProperties\0"
    "vkGetDeviceQueue\0"
    "vkQueueSubmit\0"
    "vkQueueWaitIdle\0"
@@ -64,10 +64,10 @@ static const char strings[] =
    "vkFlushMappedMemoryRanges\0"
    "vkInvalidateMappedMemoryRanges\0"
    "vkGetDeviceMemoryCommitment\0"
-   "vkBindBufferMemory\0"
-   "vkBindImageMemory\0"
    "vkGetBufferMemoryRequirements\0"
+   "vkBindBufferMemory\0"
    "vkGetImageMemoryRequirements\0"
+   "vkBindImageMemory\0"
    "vkGetImageSparseMemoryRequirements\0"
    "vkGetPhysicalDeviceSparseImageFormatProperties\0"
    "vkQueueBindSparse\0"
@@ -173,6 +173,17 @@ static const char strings[] =
    "vkCmdNextSubpass\0"
    "vkCmdEndRenderPass\0"
    "vkCmdExecuteCommands\0"
+   "vkCreateAndroidSurfaceKHR\0"
+   "vkGetPhysicalDeviceDisplayPropertiesKHR\0"
+   "vkGetPhysicalDeviceDisplayPlanePropertiesKHR\0"
+   "vkGetDisplayPlaneSupportedDisplaysKHR\0"
+   "vkGetDisplayModePropertiesKHR\0"
+   "vkCreateDisplayModeKHR\0"
+   "vkGetDisplayPlaneCapabilitiesKHR\0"
+   "vkCreateDisplayPlaneSurfaceKHR\0"
+   "vkCreateSharedSwapchainsKHR\0"
+   "vkCreateMirSurfaceKHR\0"
+   "vkGetPhysicalDeviceMirPresentationSupportKHR\0"
    "vkDestroySurfaceKHR\0"
    "vkGetPhysicalDeviceSurfaceSupportKHR\0"
    "vkGetPhysicalDeviceSurfaceCapabilitiesKHR\0"
@@ -183,48 +194,55 @@ static const char strings[] =
    "vkGetSwapchainImagesKHR\0"
    "vkAcquireNextImageKHR\0"
    "vkQueuePresentKHR\0"
-   "vkGetPhysicalDeviceDisplayPropertiesKHR\0"
-   "vkGetPhysicalDeviceDisplayPlanePropertiesKHR\0"
-   "vkGetDisplayPlaneSupportedDisplaysKHR\0"
-   "vkGetDisplayModePropertiesKHR\0"
-   "vkCreateDisplayModeKHR\0"
-   "vkGetDisplayPlaneCapabilitiesKHR\0"
-   "vkCreateDisplayPlaneSurfaceKHR\0"
-   "vkCreateSharedSwapchainsKHR\0"
+   "vkCreateWaylandSurfaceKHR\0"
+   "vkGetPhysicalDeviceWaylandPresentationSupportKHR\0"
+   "vkCreateWin32SurfaceKHR\0"
+   "vkGetPhysicalDeviceWin32PresentationSupportKHR\0"
    "vkCreateXlibSurfaceKHR\0"
    "vkGetPhysicalDeviceXlibPresentationSupportKHR\0"
    "vkCreateXcbSurfaceKHR\0"
    "vkGetPhysicalDeviceXcbPresentationSupportKHR\0"
-   "vkCreateWaylandSurfaceKHR\0"
-   "vkGetPhysicalDeviceWaylandPresentationSupportKHR\0"
-   "vkCreateMirSurfaceKHR\0"
-   "vkGetPhysicalDeviceMirPresentationSupportKHR\0"
-   "vkCreateAndroidSurfaceKHR\0"
-   "vkCreateWin32SurfaceKHR\0"
-   "vkGetPhysicalDeviceWin32PresentationSupportKHR\0"
    "vkCreateDebugReportCallbackEXT\0"
    "vkDestroyDebugReportCallbackEXT\0"
    "vkDebugReportMessageEXT\0"
+   "vkDebugMarkerSetObjectNameEXT\0"
+   "vkDebugMarkerSetObjectTagEXT\0"
+   "vkCmdDebugMarkerBeginEXT\0"
+   "vkCmdDebugMarkerEndEXT\0"
+   "vkCmdDebugMarkerInsertEXT\0"
+   "vkGetPhysicalDeviceExternalImageFormatPropertiesNV\0"
+   "vkGetMemoryWin32HandleNV\0"
+   "vkCmdDrawIndirectCountAMD\0"
+   "vkCmdDrawIndexedIndirectCountAMD\0"
+   "vkCmdProcessCommandsNVX\0"
+   "vkCmdReserveSpaceForCommandsNVX\0"
+   "vkCreateIndirectCommandsLayoutNVX\0"
+   "vkDestroyIndirectCommandsLayoutNVX\0"
+   "vkCreateObjectTableNVX\0"
+   "vkDestroyObjectTableNVX\0"
+   "vkRegisterObjectsNVX\0"
+   "vkUnregisterObjectsNVX\0"
+   "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX\0"
    ;
 
 static const struct radv_entrypoint entrypoints[] = {
    {     0, 0x38a581a6 },
    {    17, 0x9bd21af2 },
    {    35, 0x5787c327 },
-   {    62, 0x113e2f33 },
-   {    90, 0x3e54b398 },
-   {   126, 0xdd36a867 },
-   {   167, 0x52fe22c9 },
-   {   197, 0x4e5fc88a },
-   {   238, 0xa90da4da },
-   {   274, 0x3d2ae9ad },
-   {   296, 0xba013486 },
+   {    62, 0xba013486 },
+   {    82, 0x3d2ae9ad },
+   {   104, 0x52fe22c9 },
+   {   134, 0x4e5fc88a },
+   {   175, 0xa90da4da },
+   {   211, 0x113e2f33 },
+   {   239, 0x3e54b398 },
+   {   275, 0xdd36a867 },
    {   316, 0x085ed23f },
    {   331, 0x1fbcc9cb },
-   {   347, 0xeb27627e },
-   {   386, 0x5fd13eed },
-   {   423, 0x081f69d8 },
-   {   458, 0x2f8566e7 },
+   {   347, 0x081f69d8 },
+   {   382, 0xeb27627e },
+   {   421, 0x2f8566e7 },
+   {   454, 0x5fd13eed },
    {   491, 0xcc920d9a },
    {   508, 0xfa4713ec },
    {   522, 0x6f8fc2a5 },
@@ -236,10 +254,10 @@ static const struct radv_entrypoint entrypoints[] = {
    {   611, 0xff52f051 },
    {   637, 0x1e115cca },
    {   668, 0x46e38db5 },
-   {   696, 0x06bcbdcb },
-   {   715, 0x5caaae4a },
-   {   733, 0xab98422a },
-   {   763, 0x916f1e63 },
+   {   696, 0xab98422a },
+   {   726, 0x06bcbdcb },
+   {   745, 0x916f1e63 },
+   {   774, 0x5caaae4a },
    {   792, 0x15855f5b },
    {   827, 0x272ef8ef },
    {   874, 0xc3628a09 },
@@ -345,38 +363,56 @@ static const struct radv_entrypoint entrypoints[] = {
    {  2848, 0x2eeec2f9 },
    {  2865, 0xdcdb0235 },
    {  2884, 0x9eaabe40 },
-   {  2905, 0xf204ce7d },
-   {  2925, 0x1a687885 },
-   {  2962, 0x77890558 },
-   {  3004, 0xe32227c8 },
-   {  3041, 0x31c3cbd1 },
-   {  3083, 0xcdefcaa8 },
-   {  3104, 0x5a93ab74 },
-   {  3126, 0x57695f28 },
-   {  3150, 0xc3fedb2e },
-   {  3172, 0xfc5fb6ce },
-   {  3190, 0x0fa0cd2e },
-   {  3230, 0xb9b8ddba },
-   {  3275, 0xabef4889 },
-   {  3313, 0x36b8a8de },
-   {  3343, 0xcc0bde41 },
-   {  3366, 0x4b60d48c },
-   {  3399, 0x7ac4dacb },
-   {  3430, 0x47655c4a },
-   {  3458, 0xa693bc66 },
-   {  3481, 0x34a063ab },
-   {  3527, 0xc5e5b106 },
-   {  3549, 0x41782cb9 },
-   {  3594, 0x2b2a4b79 },
-   {  3620, 0x84e085ac },
-   {  3669, 0x2ce93a55 },
-   {  3691, 0xcf1e6028 },
-   {  3736, 0x03667f4e },
-   {  3762, 0xfa2ba1e2 },
-   {  3786, 0x80e72505 },
+   {  2905, 0x03667f4e },
+   {  2931, 0x0fa0cd2e },
+   {  2971, 0xb9b8ddba },
+   {  3016, 0xabef4889 },
+   {  3054, 0x36b8a8de },
+   {  3084, 0xcc0bde41 },
+   {  3107, 0x4b60d48c },
+   {  3140, 0x7ac4dacb },
+   {  3171, 0x47655c4a },
+   {  3199, 0x2ce93a55 },
+   {  3221, 0xcf1e6028 },
+   {  3266, 0xf204ce7d },
+   {  3286, 0x1a687885 },
+   {  3323, 0x77890558 },
+   {  3365, 0xe32227c8 },
+   {  3402, 0x31c3cbd1 },
+   {  3444, 0xcdefcaa8 },
+   {  3465, 0x5a93ab74 },
+   {  3487, 0x57695f28 },
+   {  3511, 0xc3fedb2e },
+   {  3533, 0xfc5fb6ce },
+   {  3551, 0x2b2a4b79 },
+   {  3577, 0x84e085ac },
+   {  3626, 0xfa2ba1e2 },
+   {  3650, 0x80e72505 },
+   {  3697, 0xa693bc66 },
+   {  3720, 0x34a063ab },
+   {  3766, 0xc5e5b106 },
+   {  3788, 0x41782cb9 },
    {  3833, 0x0987ef56 },
    {  3864, 0x43d4c4e2 },
    {  3896, 0xa4e75334 },
+   {  3920, 0xe206fb25 },
+   {  3950, 0x30799448 },
+   {  3979, 0xaec8bb10 },
+   {  4004, 0xd6a1433e },
+   {  4027, 0x0173d440 },
+   {  4053, 0xc8420c4c },
+   {  4104, 0x0c8795b9 },
+   {  4129, 0xe5ad0a50 },
+   {  4155, 0xc86e9287 },
+   {  4188, 0x736675ae },
+   {  4212, 0x016068ae },
+   {  4244, 0xe619127f },
+   {  4278, 0x1c3d25d3 },
+   {  4313, 0x4948814a },
+   {  4336, 0x957087d6 },
+   {  4360, 0xe04e9f74 },
+   {  4381, 0x5babdfe5 },
+   {  4404, 0x93de8434 },
 };
 
 
@@ -389,20 +425,20 @@ static const struct radv_entrypoint entrypoints[] = {
 VkResult radv_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
 void radv_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult radv_EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices) __attribute__ ((weak));
-void radv_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
-void radv_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
-VkResult radv_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
+PFN_vkVoidFunction radv_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+PFN_vkVoidFunction radv_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
 void radv_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties) __attribute__ ((weak));
 void radv_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties) __attribute__ ((weak));
 void radv_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties) __attribute__ ((weak));
-PFN_vkVoidFunction radv_GetInstanceProcAddr(VkInstance instance, const char* pName) __attribute__ ((weak));
-PFN_vkVoidFunction radv_GetDeviceProcAddr(VkDevice device, const char* pName) __attribute__ ((weak));
+void radv_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) __attribute__ ((weak));
+void radv_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) __attribute__ ((weak));
+VkResult radv_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) __attribute__ ((weak));
 VkResult radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice) __attribute__ ((weak));
 void radv_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
-VkResult radv_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
-VkResult radv_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult radv_EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult radv_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 VkResult radv_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties) __attribute__ ((weak));
+VkResult radv_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) __attribute__ ((weak));
 void radv_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) __attribute__ ((weak));
 VkResult radv_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) __attribute__ ((weak));
 VkResult radv_QueueWaitIdle(VkQueue queue) __attribute__ ((weak));
@@ -414,10 +450,10 @@ void radv_UnmapMemory(VkDevice device, VkDeviceMemory memory) __attribute__ ((we
 VkResult radv_FlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 VkResult radv_InvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) __attribute__ ((weak));
 void radv_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes) __attribute__ ((weak));
-VkResult radv_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
-VkResult radv_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void radv_GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult radv_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void radv_GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements) __attribute__ ((weak));
+VkResult radv_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) __attribute__ ((weak));
 void radv_GetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements) __attribute__ ((weak));
 void radv_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties) __attribute__ ((weak));
 VkResult radv_QueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence) __attribute__ ((weak));
@@ -503,7 +539,7 @@ void radv_CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageL
 void radv_CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter) __attribute__ ((weak));
 void radv_CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
 void radv_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions) __attribute__ ((weak));
-void radv_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const uint32_t* pData) __attribute__ ((weak));
+void radv_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData) __attribute__ ((weak));
 void radv_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data) __attribute__ ((weak));
 void radv_CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
 void radv_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) __attribute__ ((weak));
@@ -523,6 +559,23 @@ void radv_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBe
 void radv_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents) __attribute__ ((weak));
 void radv_CmdEndRenderPass(VkCommandBuffer commandBuffer) __attribute__ ((weak));
 void radv_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult radv_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+VkResult radv_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult radv_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult radv_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
+VkResult radv_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
+VkResult radv_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
+VkResult radv_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
+VkResult radv_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+VkResult radv_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult radv_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 radv_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_MIR_KHR
 void radv_DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 VkResult radv_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported) __attribute__ ((weak));
 VkResult radv_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) __attribute__ ((weak));
@@ -533,14 +586,18 @@ void radv_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const V
 VkResult radv_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages) __attribute__ ((weak));
 VkResult radv_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) __attribute__ ((weak));
 VkResult radv_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) __attribute__ ((weak));
-VkResult radv_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult radv_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult radv_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
-VkResult radv_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
-VkResult radv_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR*pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
-VkResult radv_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
-VkResult radv_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-VkResult radv_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkResult radv_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkBool32 radv_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult radv_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 radv_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 VkResult radv_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -553,49 +610,48 @@ VkResult radv_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateI
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkBool32 radv_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkResult radv_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkBool32 radv_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkResult radv_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkBool32 radv_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-VkResult radv_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkResult radv_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkBool32 radv_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) __attribute__ ((weak));
-#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult radv_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
 void radv_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
 void radv_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
+VkResult radv_DebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo) __attribute__ ((weak));
+VkResult radv_DebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo) __attribute__ ((weak));
+void radv_CmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+void radv_CmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer) __attribute__ ((weak));
+void radv_CmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo) __attribute__ ((weak));
+VkResult radv_GetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult radv_GetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, HANDLE* pHandle) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_WIN32_KHR
+void radv_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void radv_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+void radv_CmdProcessCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdProcessCommandsInfoNVX* pProcessCommandsInfo) __attribute__ ((weak));
+void radv_CmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdReserveSpaceForCommandsInfoNVX* pReserveSpaceInfo) __attribute__ ((weak));
+VkResult radv_CreateIndirectCommandsLayoutNVX(VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutNVX* pIndirectCommandsLayout) __attribute__ ((weak));
+void radv_DestroyIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult radv_CreateObjectTableNVX(VkDevice device, const VkObjectTableCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkObjectTableNVX* pObjectTable) __attribute__ ((weak));
+void radv_DestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+VkResult radv_RegisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectTableEntryNVX* const*    ppObjectTableEntries, const uint32_t* pObjectIndices) __attribute__ ((weak));
+VkResult radv_UnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectEntryTypeNVX* pObjectEntryTypes, const uint32_t* pObjectIndices) __attribute__ ((weak));
+void radv_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits) __attribute__ ((weak));
 
 const struct radv_dispatch_table radv_layer = {
    .CreateInstance = radv_CreateInstance,
    .DestroyInstance = radv_DestroyInstance,
    .EnumeratePhysicalDevices = radv_EnumeratePhysicalDevices,
-   .GetPhysicalDeviceFeatures = radv_GetPhysicalDeviceFeatures,
-   .GetPhysicalDeviceFormatProperties = radv_GetPhysicalDeviceFormatProperties,
-   .GetPhysicalDeviceImageFormatProperties = radv_GetPhysicalDeviceImageFormatProperties,
+   .GetDeviceProcAddr = radv_GetDeviceProcAddr,
+   .GetInstanceProcAddr = radv_GetInstanceProcAddr,
    .GetPhysicalDeviceProperties = radv_GetPhysicalDeviceProperties,
    .GetPhysicalDeviceQueueFamilyProperties = radv_GetPhysicalDeviceQueueFamilyProperties,
    .GetPhysicalDeviceMemoryProperties = radv_GetPhysicalDeviceMemoryProperties,
-   .GetInstanceProcAddr = radv_GetInstanceProcAddr,
-   .GetDeviceProcAddr = radv_GetDeviceProcAddr,
+   .GetPhysicalDeviceFeatures = radv_GetPhysicalDeviceFeatures,
+   .GetPhysicalDeviceFormatProperties = radv_GetPhysicalDeviceFormatProperties,
+   .GetPhysicalDeviceImageFormatProperties = radv_GetPhysicalDeviceImageFormatProperties,
    .CreateDevice = radv_CreateDevice,
    .DestroyDevice = radv_DestroyDevice,
-   .EnumerateInstanceExtensionProperties = radv_EnumerateInstanceExtensionProperties,
-   .EnumerateDeviceExtensionProperties = radv_EnumerateDeviceExtensionProperties,
    .EnumerateInstanceLayerProperties = radv_EnumerateInstanceLayerProperties,
+   .EnumerateInstanceExtensionProperties = radv_EnumerateInstanceExtensionProperties,
    .EnumerateDeviceLayerProperties = radv_EnumerateDeviceLayerProperties,
+   .EnumerateDeviceExtensionProperties = radv_EnumerateDeviceExtensionProperties,
    .GetDeviceQueue = radv_GetDeviceQueue,
    .QueueSubmit = radv_QueueSubmit,
    .QueueWaitIdle = radv_QueueWaitIdle,
@@ -607,10 +663,10 @@ const struct radv_dispatch_table radv_layer = {
    .FlushMappedMemoryRanges = radv_FlushMappedMemoryRanges,
    .InvalidateMappedMemoryRanges = radv_InvalidateMappedMemoryRanges,
    .GetDeviceMemoryCommitment = radv_GetDeviceMemoryCommitment,
-   .BindBufferMemory = radv_BindBufferMemory,
-   .BindImageMemory = radv_BindImageMemory,
    .GetBufferMemoryRequirements = radv_GetBufferMemoryRequirements,
+   .BindBufferMemory = radv_BindBufferMemory,
    .GetImageMemoryRequirements = radv_GetImageMemoryRequirements,
+   .BindImageMemory = radv_BindImageMemory,
    .GetImageSparseMemoryRequirements = radv_GetImageSparseMemoryRequirements,
    .GetPhysicalDeviceSparseImageFormatProperties = radv_GetPhysicalDeviceSparseImageFormatProperties,
    .QueueBindSparse = radv_QueueBindSparse,
@@ -716,6 +772,23 @@ const struct radv_dispatch_table radv_layer = {
    .CmdNextSubpass = radv_CmdNextSubpass,
    .CmdEndRenderPass = radv_CmdEndRenderPass,
    .CmdExecuteCommands = radv_CmdExecuteCommands,
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .CreateAndroidSurfaceKHR = radv_CreateAndroidSurfaceKHR,
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+   .GetPhysicalDeviceDisplayPropertiesKHR = radv_GetPhysicalDeviceDisplayPropertiesKHR,
+   .GetPhysicalDeviceDisplayPlanePropertiesKHR = radv_GetPhysicalDeviceDisplayPlanePropertiesKHR,
+   .GetDisplayPlaneSupportedDisplaysKHR = radv_GetDisplayPlaneSupportedDisplaysKHR,
+   .GetDisplayModePropertiesKHR = radv_GetDisplayModePropertiesKHR,
+   .CreateDisplayModeKHR = radv_CreateDisplayModeKHR,
+   .GetDisplayPlaneCapabilitiesKHR = radv_GetDisplayPlaneCapabilitiesKHR,
+   .CreateDisplayPlaneSurfaceKHR = radv_CreateDisplayPlaneSurfaceKHR,
+   .CreateSharedSwapchainsKHR = radv_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .CreateMirSurfaceKHR = radv_CreateMirSurfaceKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+   .GetPhysicalDeviceMirPresentationSupportKHR = radv_GetPhysicalDeviceMirPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_MIR_KHR
    .DestroySurfaceKHR = radv_DestroySurfaceKHR,
    .GetPhysicalDeviceSurfaceSupportKHR = radv_GetPhysicalDeviceSurfaceSupportKHR,
    .GetPhysicalDeviceSurfaceCapabilitiesKHR = radv_GetPhysicalDeviceSurfaceCapabilitiesKHR,
@@ -726,14 +799,18 @@ const struct radv_dispatch_table radv_layer = {
    .GetSwapchainImagesKHR = radv_GetSwapchainImagesKHR,
    .AcquireNextImageKHR = radv_AcquireNextImageKHR,
    .QueuePresentKHR = radv_QueuePresentKHR,
-   .GetPhysicalDeviceDisplayPropertiesKHR = radv_GetPhysicalDeviceDisplayPropertiesKHR,
-   .GetPhysicalDeviceDisplayPlanePropertiesKHR = radv_GetPhysicalDeviceDisplayPlanePropertiesKHR,
-   .GetDisplayPlaneSupportedDisplaysKHR = radv_GetDisplayPlaneSupportedDisplaysKHR,
-   .GetDisplayModePropertiesKHR = radv_GetDisplayModePropertiesKHR,
-   .CreateDisplayModeKHR = radv_CreateDisplayModeKHR,
-   .GetDisplayPlaneCapabilitiesKHR = radv_GetDisplayPlaneCapabilitiesKHR,
-   .CreateDisplayPlaneSurfaceKHR = radv_CreateDisplayPlaneSurfaceKHR,
-   .CreateSharedSwapchainsKHR = radv_CreateSharedSwapchainsKHR,
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .CreateWaylandSurfaceKHR = radv_CreateWaylandSurfaceKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+   .GetPhysicalDeviceWaylandPresentationSupportKHR = radv_GetPhysicalDeviceWaylandPresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .CreateWin32SurfaceKHR = radv_CreateWin32SurfaceKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetPhysicalDeviceWin32PresentationSupportKHR = radv_GetPhysicalDeviceWin32PresentationSupportKHR,
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .CreateXlibSurfaceKHR = radv_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -746,30 +823,29 @@ const struct radv_dispatch_table radv_layer = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
    .GetPhysicalDeviceXcbPresentationSupportKHR = radv_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .CreateWaylandSurfaceKHR = radv_CreateWaylandSurfaceKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-   .GetPhysicalDeviceWaylandPresentationSupportKHR = radv_GetPhysicalDeviceWaylandPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .CreateMirSurfaceKHR = radv_CreateMirSurfaceKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-   .GetPhysicalDeviceMirPresentationSupportKHR = radv_GetPhysicalDeviceMirPresentationSupportKHR,
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-   .CreateAndroidSurfaceKHR = radv_CreateAndroidSurfaceKHR,
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .CreateWin32SurfaceKHR = radv_CreateWin32SurfaceKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-   .GetPhysicalDeviceWin32PresentationSupportKHR = radv_GetPhysicalDeviceWin32PresentationSupportKHR,
-#endif // VK_USE_PLATFORM_WIN32_KHR
    .CreateDebugReportCallbackEXT = radv_CreateDebugReportCallbackEXT,
    .DestroyDebugReportCallbackEXT = radv_DestroyDebugReportCallbackEXT,
    .DebugReportMessageEXT = radv_DebugReportMessageEXT,
+   .DebugMarkerSetObjectNameEXT = radv_DebugMarkerSetObjectNameEXT,
+   .DebugMarkerSetObjectTagEXT = radv_DebugMarkerSetObjectTagEXT,
+   .CmdDebugMarkerBeginEXT = radv_CmdDebugMarkerBeginEXT,
+   .CmdDebugMarkerEndEXT = radv_CmdDebugMarkerEndEXT,
+   .CmdDebugMarkerInsertEXT = radv_CmdDebugMarkerInsertEXT,
+   .GetPhysicalDeviceExternalImageFormatPropertiesNV = radv_GetPhysicalDeviceExternalImageFormatPropertiesNV,
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+   .GetMemoryWin32HandleNV = radv_GetMemoryWin32HandleNV,
+#endif // VK_USE_PLATFORM_WIN32_KHR
+   .CmdDrawIndirectCountAMD = radv_CmdDrawIndirectCountAMD,
+   .CmdDrawIndexedIndirectCountAMD = radv_CmdDrawIndexedIndirectCountAMD,
+   .CmdProcessCommandsNVX = radv_CmdProcessCommandsNVX,
+   .CmdReserveSpaceForCommandsNVX = radv_CmdReserveSpaceForCommandsNVX,
+   .CreateIndirectCommandsLayoutNVX = radv_CreateIndirectCommandsLayoutNVX,
+   .DestroyIndirectCommandsLayoutNVX = radv_DestroyIndirectCommandsLayoutNVX,
+   .CreateObjectTableNVX = radv_CreateObjectTableNVX,
+   .DestroyObjectTableNVX = radv_DestroyObjectTableNVX,
+   .RegisterObjectsNVX = radv_RegisterObjectsNVX,
+   .UnregisterObjectsNVX = radv_UnregisterObjectsNVX,
+   .GetPhysicalDeviceGeneratedCommandsPropertiesNVX = radv_GetPhysicalDeviceGeneratedCommandsPropertiesNVX,
 };
 
 
@@ -783,53 +859,53 @@ radv_resolve_entrypoint(uint32_t index)
 /* Hash table stats:
  * size 256 entries
  * collisions  entries
- *      0       111
- *      1        30
+ *      0       116
+ *      1        34
  *      2        10
- *      3         7
- *      4         5
- *      5         1
- *      6         1
+ *      3        10
+ *      4         3
+ *      5         3
+ *      6         3
  *      7         1
- *      8         1
- *      9+        2
+ *      8         2
+ *      9+        5
  */
 
 #define none 0xffff
 
 static const uint16_t map[] = {
-    0x0044,   none,   none,   none, 0x0096, 0x002b, 0x0040, 0x0061,
-    0x0049, 0x0022, 0x0056,   none,   none,   none, 0x0095,   none,
-      none,   none,   none, 0x0067,   none,   none,   none, 0x0099,
-    0x0052, 0x009d, 0x0058, 0x004c,   none, 0x0069,   none,   none,
+    0x0044,   none,   none,   none, 0x008d, 0x002b, 0x0040, 0x0061,
+    0x0049, 0x0022, 0x0056,   none, 0x00b8,   none, 0x008c,   none,
+    0x00ab, 0x00ad,   none, 0x0067,   none,   none,   none, 0x0090,
+    0x0052, 0x00a4, 0x0058, 0x004c,   none, 0x0069,   none,   none,
       none,   none, 0x0054,   none, 0x0014, 0x005b, 0x0070, 0x0002,
-    0x007c,   none, 0x001e, 0x002f,   none,   none, 0x0077, 0x0018,
-    0x004b, 0x002a,   none, 0x0003, 0x0065, 0x0080, 0x006d, 0x0053,
-      none,   none, 0x004d, 0x0090, 0x0024,   none, 0x005e, 0x000b,
-    0x0088, 0x0091,   none,   none, 0x005c, 0x0033,   none, 0x00a8,
-    0x0087, 0x003f, 0x001d, 0x002c, 0x0082, 0x005a, 0x00a2,   none,
-      none, 0x0019, 0x0046, 0x003a, 0x0093, 0x00a1, 0x0034,   none,
-    0x0051,   none,   none, 0x0020,   none, 0x0066, 0x0075,   none,
-      none, 0x00a3, 0x0035, 0x001f, 0x006f, 0x0060, 0x0047, 0x0005,
+    0x007c,   none, 0x001c, 0x002f,   none,   none, 0x0077, 0x0018,
+    0x004b, 0x002a,   none, 0x0008, 0x0065, 0x0080, 0x006d, 0x0053,
+    0x00a9,   none, 0x004d, 0x0093, 0x0024, 0x00b4, 0x005e, 0x000b,
+    0x0088, 0x008a,   none,   none, 0x005c, 0x0033,   none, 0x00a8,
+    0x0087, 0x003f, 0x001f, 0x002c, 0x0082, 0x005a, 0x0089,   none,
+    0x00b0, 0x0019, 0x0046, 0x003a, 0x008e, 0x0092, 0x0034,   none,
+    0x0051,   none, 0x00ba, 0x0020,   none, 0x0066, 0x0075, 0x00ae,
+      none, 0x009b, 0x0035, 0x001e, 0x006f, 0x0060, 0x0047, 0x000a,
     0x0023, 0x00a6,   none, 0x006b,   none, 0x0041, 0x0028,   none,
-    0x0068,   none,   none, 0x003e, 0x0048, 0x007b, 0x0055, 0x00a5,
-      none, 0x0045, 0x006e, 0x0084,   none, 0x0089, 0x000d, 0x0030,
-      none, 0x0027, 0x0081, 0x009a, 0x005d, 0x008a, 0x000a, 0x008f,
-      none, 0x0063, 0x0007,   none, 0x0098, 0x0097,   none,   none,
+    0x0068,   none,   none, 0x003e, 0x0048, 0x007b, 0x0055, 0x00a1,
+      none, 0x0045, 0x006e, 0x0084,   none, 0x0094, 0x000e, 0x0030,
+      none, 0x0027, 0x0081, 0x0091, 0x005d, 0x0095, 0x0003, 0x009a,
+      none, 0x0063, 0x0006,   none, 0x008f, 0x009c,   none,   none,
       none, 0x0059, 0x0026,   none, 0x003c,   none, 0x0037,   none,
-    0x0004, 0x0038, 0x0011,   none, 0x0072, 0x0016,   none, 0x003d,
-    0x00a4, 0x006a, 0x003b,   none, 0x004a, 0x0013, 0x0000, 0x007a,
-    0x002e, 0x0071,   none, 0x009c, 0x0074, 0x0009, 0x004f, 0x0029,
-      none, 0x004e, 0x009b, 0x0031,   none, 0x001b,   none, 0x0073,
-    0x005f, 0x0032, 0x0078, 0x008e,   none,   none,   none, 0x006c,
-      none,   none, 0x0036,   none, 0x0050, 0x009f, 0x007d,   none,
-    0x008c, 0x0006, 0x001a, 0x000c, 0x009e, 0x0094, 0x0092,   none,
-      none, 0x008d, 0x00a0, 0x0015, 0x0083, 0x0043,   none,   none,
-    0x000f, 0x00a7, 0x0008,   none, 0x0025, 0x007f, 0x001c,   none,
-    0x0076,   none, 0x0064, 0x0085,   none,   none,   none, 0x0010,
-    0x007e,   none,   none, 0x0017, 0x0012, 0x000e,   none, 0x0021,
-    0x008b, 0x0079, 0x0001,   none,   none, 0x002d,   none,   none,
-      none, 0x0086,   none, 0x0062,   none, 0x0057, 0x0042, 0x0039,
+    0x0009, 0x0038, 0x0011,   none, 0x0072, 0x0016,   none, 0x003d,
+    0x00a0, 0x006a, 0x003b,   none, 0x004a, 0x0013, 0x0000, 0x007a,
+    0x002e, 0x0071,   none, 0x00a3, 0x0074, 0x0004, 0x004f, 0x0029,
+    0x00ac, 0x004e, 0x009e, 0x0031,   none, 0x001b,   none, 0x0073,
+    0x005f, 0x0032, 0x0078, 0x0099, 0x00b6,   none,   none, 0x006c,
+    0x00b1, 0x00b2, 0x0036,   none, 0x0050, 0x00a2, 0x007d,   none,
+    0x0097, 0x0005, 0x001a, 0x000c, 0x00a5, 0x008b, 0x009d,   none,
+      none, 0x0098, 0x009f, 0x0015, 0x0083, 0x0043, 0x00b7,   none,
+    0x000d, 0x00a7, 0x0007,   none, 0x0025, 0x007f, 0x001d, 0x00af,
+    0x0076,   none, 0x0064, 0x0085,   none, 0x00b9, 0x00b5, 0x000f,
+    0x007e,   none,   none, 0x0017, 0x0012, 0x0010,   none, 0x0021,
+    0x0096, 0x0079, 0x0001, 0x00aa,   none, 0x002d,   none,   none,
+      none, 0x0086, 0x00b3, 0x0062,   none, 0x0057, 0x0042, 0x0039,
 };
 
 void *

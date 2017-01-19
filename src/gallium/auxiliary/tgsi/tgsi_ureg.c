@@ -127,6 +127,7 @@ struct ureg_program
    struct {
       unsigned semantic_name;
       unsigned semantic_index;
+      unsigned streams;
       unsigned usage_mask; /* = TGSI_WRITEMASK_* */
       unsigned first;
       unsigned last;
@@ -409,6 +410,7 @@ struct ureg_dst
 ureg_DECL_output_layout(struct ureg_program *ureg,
                         unsigned semantic_name,
                         unsigned semantic_index,
+                        unsigned streams,
                         unsigned index,
                         unsigned usage_mask,
                         unsigned array_id,
@@ -417,6 +419,10 @@ ureg_DECL_output_layout(struct ureg_program *ureg,
    unsigned i;
 
    assert(usage_mask != 0);
+   assert(!(streams & 0x03) || (usage_mask & 1));
+   assert(!(streams & 0x0c) || (usage_mask & 2));
+   assert(!(streams & 0x30) || (usage_mask & 4));
+   assert(!(streams & 0xc0) || (usage_mask & 8));
 
    for (i = 0; i < ureg->nr_outputs; i++) {
       if (ureg->output[i].semantic_name == semantic_name &&
@@ -441,9 +447,12 @@ ureg_DECL_output_layout(struct ureg_program *ureg,
    }
    else {
       set_bad( ureg );
+      i = 0;
    }
 
 out:
+   ureg->output[i].streams |= streams;
+
    return ureg_dst_array_register(TGSI_FILE_OUTPUT, ureg->output[i].first,
                                   array_id);
 }
@@ -457,7 +466,7 @@ ureg_DECL_output_masked(struct ureg_program *ureg,
                         unsigned array_id,
                         unsigned array_size)
 {
-   return ureg_DECL_output_layout(ureg, name, index,
+   return ureg_DECL_output_layout(ureg, name, index, 0,
                                   ureg->nr_output_regs, usage_mask, array_id, array_size);
 }
 
@@ -1554,6 +1563,7 @@ emit_decl_semantic(struct ureg_program *ureg,
                    unsigned last,
                    unsigned semantic_name,
                    unsigned semantic_index,
+                   unsigned streams,
                    unsigned usage_mask,
                    unsigned array_id)
 {
@@ -1574,6 +1584,10 @@ emit_decl_semantic(struct ureg_program *ureg,
    out[2].value = 0;
    out[2].decl_semantic.Name = semantic_name;
    out[2].decl_semantic.Index = semantic_index;
+   out[2].decl_semantic.StreamX = streams & 3;
+   out[2].decl_semantic.StreamY = (streams >> 2) & 3;
+   out[2].decl_semantic.StreamZ = (streams >> 4) & 3;
+   out[2].decl_semantic.StreamW = (streams >> 6) & 3;
 
    if (array_id) {
       out[3].value = 0;
@@ -1878,6 +1892,7 @@ static void emit_decls( struct ureg_program *ureg )
                                ureg->input[i].last,
                                ureg->input[i].semantic_name,
                                ureg->input[i].semantic_index,
+                               0,
                                TGSI_WRITEMASK_XYZW,
                                ureg->input[i].array_id);
          }
@@ -1891,6 +1906,7 @@ static void emit_decls( struct ureg_program *ureg )
                                   ureg->input[i].semantic_name,
                                   ureg->input[i].semantic_index +
                                   (j - ureg->input[i].first),
+                                  0,
                                   TGSI_WRITEMASK_XYZW, 0);
             }
          }
@@ -1904,6 +1920,7 @@ static void emit_decls( struct ureg_program *ureg )
                          i,
                          ureg->system_value[i].semantic_name,
                          ureg->system_value[i].semantic_index,
+                         0,
                          TGSI_WRITEMASK_XYZW, 0);
    }
 
@@ -1915,6 +1932,7 @@ static void emit_decls( struct ureg_program *ureg )
                             ureg->output[i].last,
                             ureg->output[i].semantic_name,
                             ureg->output[i].semantic_index,
+                            ureg->output[i].streams,
                             ureg->output[i].usage_mask,
                             ureg->output[i].array_id);
       }
@@ -1928,6 +1946,7 @@ static void emit_decls( struct ureg_program *ureg )
                                ureg->output[i].semantic_name,
                                ureg->output[i].semantic_index +
                                (j - ureg->output[i].first),
+                               ureg->output[i].streams,
                                ureg->output[i].usage_mask, 0);
          }
       }

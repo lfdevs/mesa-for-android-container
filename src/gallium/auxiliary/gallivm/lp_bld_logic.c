@@ -327,6 +327,8 @@ lp_build_select(struct lp_build_context *bld,
        * supported yet for a long time, and LLVM will generate poor code when
        * the mask is not the result of a comparison.
        * Also, llvm 3.7 may miscompile them (bug 94972).
+       * XXX: Even if the instruction was an SExt, this may still produce
+       * terrible code. Try piglit stencil-twoside.
        */
 
       /* Convert the mask to a vector of booleans.

@@ -149,7 +149,7 @@ brw_emit_sampler_state(struct brw_context *brw,
 static uint32_t
 translate_wrap_mode(struct brw_context *brw, GLenum wrap, bool using_nearest)
 {
-   switch( wrap ) {
+   switch (wrap) {
    case GL_REPEAT:
       return BRW_TEXCOORDMODE_WRAP;
    case GL_CLAMP:

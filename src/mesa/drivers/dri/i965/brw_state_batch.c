@@ -46,9 +46,10 @@ brw_track_state_batch(struct brw_context *brw,
    if (!brw->state_batch_list) {
       /* Our structs are always aligned to at least 32 bytes, so
        * our array doesn't need to be any larger
+       * TODO: don't use rzalloc
        */
-      brw->state_batch_list = ralloc_size(brw, sizeof(*brw->state_batch_list) *
-					  batch->bo->size / 32);
+      brw->state_batch_list = rzalloc_size(brw, sizeof(*brw->state_batch_list) *
+                                           batch->bo->size / 32);
    }
 
    brw->state_batch_list[brw->state_batch_count].offset = offset;

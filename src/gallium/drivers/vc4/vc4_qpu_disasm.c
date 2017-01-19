@@ -86,11 +86,11 @@ static const char *qpu_sig[] = {
 
 static const char *qpu_pack_mul[] = {
         [QPU_PACK_MUL_NOP] = "",
-        [QPU_PACK_MUL_8888] = "8888",
-        [QPU_PACK_MUL_8A] = "8a",
-        [QPU_PACK_MUL_8B] = "8b",
-        [QPU_PACK_MUL_8C] = "8c",
-        [QPU_PACK_MUL_8D] = "8d",
+        [QPU_PACK_MUL_8888] = ".8888",
+        [QPU_PACK_MUL_8A] = ".8a",
+        [QPU_PACK_MUL_8B] = ".8b",
+        [QPU_PACK_MUL_8C] = ".8c",
+        [QPU_PACK_MUL_8D] = ".8d",
 };
 
 /* The QPU unpack for A and R4 files can be described the same, it's just that
@@ -264,7 +264,7 @@ get_special_write_desc(int reg, bool is_a)
 void
 vc4_qpu_disasm_pack_mul(FILE *out, uint32_t pack)
 {
-        fprintf(out, ".%s", DESC(qpu_pack_mul, pack));
+        fprintf(out, "%s", DESC(qpu_pack_mul, pack));
 }
 
 void

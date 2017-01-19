@@ -298,6 +298,7 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
       return sws->have_vgpu10 ? SVGA3D_MAX_STREAMOUT_DECLS : 0;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+   case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
       return 0;
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
       return svgascreen->ms_samples ? 1 : 0;
@@ -368,6 +369,7 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_PCI_DEVICE:
    case PIPE_CAP_PCI_FUNCTION:
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+   case PIPE_CAP_NATIVE_FENCE_FD:
       return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 64;
@@ -418,6 +420,9 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
    case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
    case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
+   case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
+   case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
+   case PIPE_CAP_TGSI_FS_FBFETCH:
       return 0;
    }
 
@@ -498,6 +503,7 @@ vgpu9_get_shader_param(struct pipe_screen *screen, unsigned shader,
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+      case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
          return 0;
       case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
          return 32;
@@ -560,6 +566,7 @@ vgpu9_get_shader_param(struct pipe_screen *screen, unsigned shader,
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+      case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
          return 0;
       case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
          return 32;
@@ -655,6 +662,7 @@ vgpu10_get_shader_param(struct pipe_screen *screen, unsigned shader,
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
    case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+   case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
       return 0;
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;

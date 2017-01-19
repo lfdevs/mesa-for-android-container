@@ -39,6 +39,11 @@
 #include <llvm/Linker/Linker.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Target/TargetMachine.h>
+#if HAVE_LLVM >= 0x0400
+#include <llvm/Support/Error.h>
+#else
+#include <llvm/Support/ErrorOr.h>
+#endif
 
 #if HAVE_LLVM >= 0x0307
 #include <llvm/IR/LegacyPassManager.h>
@@ -158,6 +163,19 @@ namespace clover {
 #else
          const auto default_reloc_model = ::llvm::Reloc::Default;
 #endif
+
+         template<typename M, typename F> void
+         handle_module_error(M &mod, const F &f) {
+#if HAVE_LLVM >= 0x0400
+            if (::llvm::Error err = mod.takeError())
+               ::llvm::handleAllErrors(std::move(err), [&](::llvm::ErrorInfoBase &eib) {
+                     f(eib.message());
+                  });
+#else
+            if (!mod)
+               f(mod.getError().message());
+#endif
+         }
       }
    }
 }

@@ -92,6 +92,16 @@ clover::GetPlatformInfo(cl_platform_id d_platform, cl_platform_info param,
 }
 
 void *
+clover::GetExtensionFunctionAddressForPlatform(cl_platform_id d_platform,
+                                               const char *p_name) try {
+   obj(d_platform);
+   return GetExtensionFunctionAddress(p_name);
+
+} catch (error &e) {
+   return NULL;
+}
+
+void *
 clover::GetExtensionFunctionAddress(const char *p_name) {
    std::string name { p_name };
 
@@ -116,6 +126,12 @@ clGetPlatformInfo(cl_platform_id d_platform, cl_platform_info param,
 CLOVER_ICD_API void *
 clGetExtensionFunctionAddress(const char *p_name) {
    return GetExtensionFunctionAddress(p_name);
+}
+
+CLOVER_ICD_API void *
+clGetExtensionFunctionAddressForPlatform(cl_platform_id d_platform,
+                                         const char *p_name) {
+   return GetExtensionFunctionAddressForPlatform(d_platform, p_name);
 }
 
 CLOVER_ICD_API cl_int

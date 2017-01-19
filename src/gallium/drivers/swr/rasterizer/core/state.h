@@ -30,18 +30,6 @@
 #include "common/formats.h"
 #include "common/simdintrin.h"
 
-// clear flags
-#define SWR_CLEAR_NONE        0
-#define SWR_CLEAR_COLOR      (1 << 0)
-#define SWR_CLEAR_DEPTH      (1 << 1)
-#define SWR_CLEAR_STENCIL    (1 << 2)
-
-enum DRIVER_TYPE
-{
-    DX,
-    GL
-};
-
 //////////////////////////////////////////////////////////////////////////
 /// PRIMITIVE_TOPOLOGY.
 //////////////////////////////////////////////////////////////////////////
@@ -480,6 +468,21 @@ enum SWR_LOGIC_OP
     LOGICOP_SET,
 };
 
+//////////////////////////////////////////////////////////////////////////
+/// SWR_AUX_MODE
+/// @brief Specifies how the auxiliary buffer is used by the driver.
+//////////////////////////////////////////////////////////////////////////
+enum SWR_AUX_MODE
+{
+    AUX_MODE_NONE,
+    AUX_MODE_COLOR,
+    AUX_MODE_UAV,
+    AUX_MODE_DEPTH,
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// SWR_SURFACE_STATE
+//////////////////////////////////////////////////////////////////////////
 struct SWR_SURFACE_STATE
 {
     uint8_t *pBaseAddress;
@@ -506,6 +509,7 @@ struct SWR_SURFACE_STATE
     uint32_t lodOffsets[2][15]; // lod offsets for sampled surfaces
 
     uint8_t *pAuxBaseAddress;   // Used for compression, append/consume counter, etc.
+    SWR_AUX_MODE auxMode;      // @llvm_enum
 
     bool bInterleavedSamples;   // are MSAA samples stored interleaved or planar
 };
@@ -805,8 +809,12 @@ typedef void(__cdecl *PFN_CS_FUNC)(HANDLE hPrivateData, SWR_CS_CONTEXT* pCsConte
 typedef void(__cdecl *PFN_SO_FUNC)(SWR_STREAMOUT_CONTEXT& soContext);
 typedef void(__cdecl *PFN_PIXEL_KERNEL)(HANDLE hPrivateData, SWR_PS_CONTEXT *pContext);
 typedef void(__cdecl *PFN_CPIXEL_KERNEL)(HANDLE hPrivateData, SWR_PS_CONTEXT *pContext);
-typedef void(__cdecl *PFN_BLEND_JIT_FUNC)(const SWR_BLEND_STATE*, simdvector&, simdvector&, uint32_t, uint8_t*, simdvector&, simdscalari*, simdscalari*);
+typedef void(__cdecl *PFN_BLEND_JIT_FUNC)(const SWR_BLEND_STATE*, 
+    simdvector& vSrc, simdvector& vSrc1, simdscalar& vSrc0Alpha, uint32_t sample, 
+    uint8_t* pDst, simdvector& vResult, simdscalari* vOMask, simdscalari* vCoverageMask);
 typedef simdscalar(*PFN_QUANTIZE_DEPTH)(simdscalar);
+
+
 
 //////////////////////////////////////////////////////////////////////////
 /// FRONTEND_STATE
@@ -932,6 +940,7 @@ struct SWR_RASTSTATE
     uint32_t frontWinding           : 1;
     uint32_t scissorEnable          : 1;
     uint32_t depthClipEnable        : 1;
+    uint32_t clipHalfZ              : 1;
     uint32_t pointParam             : 1;
     uint32_t pointSpriteEnable      : 1;
     uint32_t pointSpriteTopOrigin   : 1;

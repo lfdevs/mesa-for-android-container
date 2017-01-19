@@ -427,7 +427,7 @@ static GLboolean r200_run_tcl_render( struct gl_context *ctx,
 	 We only need to change compsel. */
       GLuint out_compsel = 0;
       const GLbitfield64 vp_out =
-	 rmesa->curr_vp_hw->mesa_program.Base.OutputsWritten;
+	 rmesa->curr_vp_hw->mesa_program.info.outputs_written;
 
       vimap_rev = &rmesa->curr_vp_hw->inputmap_rev[0];
       assert(vp_out & BITFIELD64_BIT(VARYING_SLOT_POS));

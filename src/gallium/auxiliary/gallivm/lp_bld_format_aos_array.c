@@ -70,7 +70,14 @@ lp_build_fetch_rgba_aos_array(struct gallivm_state *gallivm,
 
    src_vec_type  = lp_build_vec_type(gallivm,  src_type);
 
-   /* Read whole vector from memory, unaligned */
+   /*
+    * Read whole vector from memory, unaligned.
+    * XXX: Note it's actually aligned to element type. Not sure if all
+    * callers are able to guarantee that (whereas for others, we should
+    * be able to use full alignment when there's 2 or 4 channels).
+    * (If all callers can guarantee element type alignment, we should
+    * relax alignment restrictions elsewhere.)
+    */
    ptr = LLVMBuildGEP(builder, base_ptr, &offset, 1, "");
    ptr = LLVMBuildPointerCast(builder, ptr, LLVMPointerType(src_vec_type, 0), "");
    res = LLVMBuildLoad(builder, ptr, "");

@@ -155,11 +155,14 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->htab)
       goto error_htab;
 
-   vl_compositor_init(&drv->compositor, drv->pipe);
-   vl_compositor_init_state(&drv->cstate, drv->pipe);
+   if (!vl_compositor_init(&drv->compositor, drv->pipe))
+      goto error_compositor;
+   if (!vl_compositor_init_state(&drv->cstate, drv->pipe))
+      goto error_compositor_state;
 
    vl_csc_get_matrix(VL_CSC_COLOR_STANDARD_BT_601, NULL, true, &drv->csc);
-   vl_compositor_set_csc_matrix(&drv->cstate, (const vl_csc_matrix *)&drv->csc, 1.0f, 0.0f);
+   if (!vl_compositor_set_csc_matrix(&drv->cstate, (const vl_csc_matrix *)&drv->csc, 1.0f, 0.0f))
+      goto error_csc_matrix;
    pipe_mutex_init(drv->mutex);
 
    ctx->pDriverData = (void *)drv;
@@ -176,6 +179,15 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    ctx->str_vendor = "mesa gallium vaapi";
 
    return VA_STATUS_SUCCESS;
+
+error_csc_matrix:
+   vl_compositor_cleanup_state(&drv->cstate);
+
+error_compositor_state:
+   vl_compositor_cleanup(&drv->compositor);
+
+error_compositor:
+   handle_table_destroy(drv->htab);
 
 error_htab:
    drv->pipe->destroy(drv->pipe);

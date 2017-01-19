@@ -38,6 +38,7 @@ struct pipe_context;
 struct cso_context;
 struct hud_context;
 struct u_upload_mgr;
+struct csmt_context;
 
 struct NineSwapChain9;
 struct NineStateBlock9;
@@ -52,11 +53,18 @@ struct NineDevice9
 
     /* G3D context */
     struct pipe_screen *screen;
+    /* For first time upload. No Sync with rendering thread */
+    struct pipe_context *pipe_secondary;
     struct pipe_screen *screen_sw;
-    struct pipe_context *pipe;
     struct pipe_context *pipe_sw;
-    struct cso_context *cso;
     struct cso_context *cso_sw;
+
+    /* CSMT context */
+    struct csmt_context *csmt_ctx;
+    BOOL csmt_active;
+
+    /* For DISCARD/NOOVERWRITE */
+    struct nine_buffer_upload *buffer_upload;
 
     /* creation parameters */
     D3DCAPS9 caps;
@@ -71,6 +79,8 @@ struct NineDevice9
     struct NineStateBlock9 *record;
     struct nine_state *update; /* state to update (&state / &record->state) */
     struct nine_state state;   /* device state */
+    struct nine_context context;
+    struct nine_state_sw_internal state_sw_internal;
 
     struct list_head update_buffers;
     struct list_head update_textures;
@@ -112,6 +122,7 @@ struct NineDevice9
         POINT pos;
         BOOL visible;
         boolean software;
+        void *hw_upload_temp;
     } cursor;
 
     struct {
@@ -197,9 +208,6 @@ NineDevice9_GetScreen( struct NineDevice9 *This );
 
 struct pipe_context *
 NineDevice9_GetPipe( struct NineDevice9 *This );
-
-struct cso_context *
-NineDevice9_GetCSO( struct NineDevice9 *This );
 
 const D3DCAPS9 *
 NineDevice9_GetCaps( struct NineDevice9 *This );

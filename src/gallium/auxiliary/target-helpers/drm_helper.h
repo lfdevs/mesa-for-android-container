@@ -266,5 +266,51 @@ pipe_vc4_create_screen(int fd)
 
 #endif
 
+#ifdef GALLIUM_ETNAVIV
+#include "etnaviv/drm/etnaviv_drm_public.h"
+
+struct pipe_screen *
+pipe_etna_create_screen(int fd)
+{
+   struct pipe_screen *screen;
+
+   screen = etna_drm_screen_create(fd);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+#else
+
+struct pipe_screen *
+pipe_etna_create_screen(int fd)
+{
+   fprintf(stderr, "etnaviv: driver missing\n");
+   return NULL;
+}
+
+#endif
+
+#ifdef GALLIUM_IMX
+#include "imx/drm/imx_drm_public.h"
+
+struct pipe_screen *
+pipe_imx_drm_create_screen(int fd)
+{
+   struct pipe_screen *screen;
+
+   screen = imx_drm_screen_create(fd);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+#else
+
+struct pipe_screen *
+pipe_imx_drm_create_screen(int fd)
+{
+   fprintf(stderr, "imx-drm: driver missing\n");
+   return NULL;
+}
+
+#endif
+
 
 #endif /* DRM_HELPER_H */

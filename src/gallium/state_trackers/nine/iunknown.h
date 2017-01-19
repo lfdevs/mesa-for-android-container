@@ -25,6 +25,7 @@
 
 #include "pipe/p_compiler.h"
 
+#include "util/u_atomic.h"
 #include "util/u_memory.h"
 
 #include "guid.h"
@@ -48,7 +49,12 @@ struct NineUnknown
     int32_t bind; /* internal bind count */
     boolean forward; /* whether to forward references to the container */
 
-    struct NineUnknown *container; /* referenced if (refs | bind) */
+    /* container: for surfaces and volumes only.
+     * Can be a texture, a volume texture or a swapchain.
+     * forward is set to false for the swapchain case.
+     * If forward is set, refs are passed to the container if forward is set
+     * and the container has bind increased if the object has non null bind. */
+    struct NineUnknown *container;
     struct NineDevice9 *device;    /* referenced if (refs) */
 
     const GUID **guids; /* for QueryInterface */
@@ -94,6 +100,9 @@ NineUnknown_AddRef( struct NineUnknown *This );
 ULONG NINE_WINAPI
 NineUnknown_Release( struct NineUnknown *This );
 
+ULONG NINE_WINAPI
+NineUnknown_ReleaseWithDtorLock( struct NineUnknown *This );
+
 HRESULT NINE_WINAPI
 NineUnknown_GetDevice( struct NineUnknown *This,
                        IDirect3DDevice9 **ppDevice );
@@ -127,28 +136,25 @@ NineUnknown_Destroy( struct NineUnknown *This )
 static inline UINT
 NineUnknown_Bind( struct NineUnknown *This )
 {
-    UINT b = ++This->bind;
+    UINT b = p_atomic_inc_return(&This->bind);
     assert(b);
-    if (b == 1 && This->container) {
-        if (This->container != NineUnknown(This->device))
-            NineUnknown_Bind(This->container);
-    }
+
+    if (b == 1 && This->forward)
+        NineUnknown_Bind(This->container);
+
     return b;
 }
 
 static inline UINT
 NineUnknown_Unbind( struct NineUnknown *This )
 {
-    UINT b = --This->bind;
-    if (!b) {
-        if (This->container) {
-            if (This->container != NineUnknown(This->device))
-                NineUnknown_Unbind(This->container);
-        } else
-        if (This->refs == 0) {
-            This->dtor(This);
-        }
-    }
+    UINT b = p_atomic_dec_return(&This->bind);
+
+    if (b == 0 && This->forward)
+        NineUnknown_Unbind(This->container);
+    else if (b == 0 && This->refs == 0 && !This->container)
+        This->dtor(This);
+
     return b;
 }
 
@@ -164,10 +170,7 @@ static inline void
 NineUnknown_Detach( struct NineUnknown *This )
 {
     assert(This->container && !This->forward);
-    if (This->refs)
-        NineUnknown_Unbind(This->container);
-    if (This->bind)
-        NineUnknown_Unbind(This->container);
+
     This->container = NULL;
     if (!(This->refs | This->bind))
         This->dtor(This);

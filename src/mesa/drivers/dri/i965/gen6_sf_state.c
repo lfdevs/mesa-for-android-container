@@ -177,8 +177,7 @@ calculate_attr_overrides(const struct brw_context *brw,
     * - VARYING_SLOT_{PSIZ,LAYER} and VARYING_SLOT_POS on gen6+
     */
 
-   bool fs_needs_vue_header =
-      brw->fragment_program->Base.nir->info.inputs_read &
+   bool fs_needs_vue_header = brw->fragment_program->info.inputs_read &
       (VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT);
 
    *urb_entry_read_offset = fs_needs_vue_header ? 0 : 1;

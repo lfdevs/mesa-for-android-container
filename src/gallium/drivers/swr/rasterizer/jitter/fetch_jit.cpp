@@ -46,6 +46,7 @@ enum ConversionType
     CONVERT_NORMALIZED,
     CONVERT_USCALED,
     CONVERT_SSCALED,
+    CONVERT_SFIXED,
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -424,6 +425,9 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
                 case SWR_TYPE_SSCALED:
                     vec = SI_TO_FP(vec, VectorType::get(mFP32Ty, 4));
                     break;
+                case SWR_TYPE_SFIXED:
+                    vec = FMUL(SI_TO_FP(vec, VectorType::get(mFP32Ty, 4)), VBROADCAST(C(1/65536.0f)));
+                    break;
                 case SWR_TYPE_UNKNOWN:
                 case SWR_TYPE_UNUSED:
                     SWR_ASSERT(false, "Unsupported type %d!", info.type[0]);
@@ -515,7 +519,7 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
 bool FetchJit::IsOddFormat(SWR_FORMAT format)
 {
     const SWR_FORMAT_INFO& info = GetFormatInfo(format);
-    if (info.bpc[0] != 8 && info.bpc[0] != 16 && info.bpc[0] != 32)
+    if (info.bpc[0] != 8 && info.bpc[0] != 16 && info.bpc[0] != 32 && info.bpc[0] != 64)
     {
         return true;
     }
@@ -910,6 +914,58 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE &fetchState,
                     }
                 }
                     break;
+                case 64:
+                {
+                    for (uint32_t i = 0; i < 4; i++)
+                    {
+                        if (isComponentEnabled(compMask, i))
+                        {
+                            // if we need to gather the component
+                            if (compCtrl[i] == StoreSrc)
+                            {
+                                Value *vMaskLo = VSHUFFLE(pMask, VUNDEF(mInt1Ty, 8), C({0, 1, 2, 3}));
+                                Value *vMaskHi = VSHUFFLE(pMask, VUNDEF(mInt1Ty, 8), C({4, 5, 6, 7}));
+                                vMaskLo = S_EXT(vMaskLo, VectorType::get(mInt64Ty, 4));
+                                vMaskHi = S_EXT(vMaskHi, VectorType::get(mInt64Ty, 4));
+                                vMaskLo = BITCAST(vMaskLo, VectorType::get(mDoubleTy, 4));
+                                vMaskHi = BITCAST(vMaskHi, VectorType::get(mDoubleTy, 4));
+
+                                Value *vOffsetsLo = VEXTRACTI128(vOffsets, C(0));
+                                Value *vOffsetsHi = VEXTRACTI128(vOffsets, C(1));
+
+                                Value *vZeroDouble = VECTOR_SPLAT(4, ConstantFP::get(IRB()->getDoubleTy(), 0.0f));
+
+                                Value* pGatherLo = GATHERPD(vZeroDouble,
+                                                            pStreamBase, vOffsetsLo, vMaskLo, C((char)1));
+                                Value* pGatherHi = GATHERPD(vZeroDouble,
+                                                            pStreamBase, vOffsetsHi, vMaskHi, C((char)1));
+
+                                pGatherLo = VCVTPD2PS(pGatherLo);
+                                pGatherHi = VCVTPD2PS(pGatherHi);
+
+                                Value *pGather = VSHUFFLE(pGatherLo, pGatherHi, C({0, 1, 2, 3, 4, 5, 6, 7}));
+
+                                vVertexElements[currentVertexElement++] = pGather;
+                            }
+                            else
+                            {
+                                vVertexElements[currentVertexElement++] = GenerateCompCtrlVector(compCtrl[i]);
+                            }
+
+                            if (currentVertexElement > 3)
+                            {
+                                StoreVertexElements(pVtxOut, outputElt++, 4, vVertexElements);
+                                // reset to the next vVertexElement to output
+                                currentVertexElement = 0;
+                            }
+
+                        }
+
+                        // offset base to the next component  in the vertex to gather
+                        pStreamBase = GEP(pStreamBase, C((char)8));
+                    }
+                }
+                    break;
                 default:
                     SWR_ASSERT(0, "Tried to fetch invalid FP format");
                     break;
@@ -942,6 +998,10 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE &fetchState,
                 case SWR_TYPE_SSCALED:
                     conversionType = CONVERT_SSCALED;
                     extendCastType = Instruction::CastOps::SIToFP;
+                    break;
+                case SWR_TYPE_SFIXED:
+                    conversionType = CONVERT_SFIXED;
+                    extendCastType = Instruction::CastOps::SExt;
                     break;
                 default:
                     break;
@@ -1033,6 +1093,10 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE &fetchState,
                                 else if (conversionType == CONVERT_SSCALED)
                                 {
                                     pGather = SI_TO_FP(pGather, mSimdFP32Ty);
+                                }
+                                else if (conversionType == CONVERT_SFIXED)
+                                {
+                                    pGather = FMUL(SI_TO_FP(pGather, mSimdFP32Ty), VBROADCAST(C(1/65536.0f)));
                                 }
 
                                 vVertexElements[currentVertexElement++] = pGather;
@@ -1717,6 +1781,8 @@ PFN_FETCH_FUNC JitFetchFunc(HANDLE hJitMgr, const HANDLE hFunc)
     fwrite((void *)pfnFetch, 1, 2048, fd);
     fclose(fd);
 #endif
+
+    pJitMgr->DumpAsm(const_cast<llvm::Function*>(func), "final");
 
     return pfnFetch;
 }

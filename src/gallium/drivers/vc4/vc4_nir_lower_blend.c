@@ -494,7 +494,7 @@ vc4_nir_emit_alpha_test_discard(struct vc4_compile *c, nir_builder *b,
         discard->num_components = 1;
         discard->src[0] = nir_src_for_ssa(nir_inot(b, condition));
         nir_builder_instr_insert(b, &discard->instr);
-        c->s->info.fs.uses_discard = true;
+        c->s->info->fs.uses_discard = true;
 }
 
 static nir_ssa_def *

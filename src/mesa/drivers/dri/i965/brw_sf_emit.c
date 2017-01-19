@@ -162,7 +162,7 @@ static void copy_flatshaded_attributes(struct brw_sf_compile *c,
    int i;
 
    for (i = 0; i < c->vue_map.num_slots; i++) {
-      if (c->key.interpolation_mode.mode[i] == INTERP_MODE_FLAT) {
+      if (c->key.interp_mode[i] == INTERP_MODE_FLAT) {
          brw_MOV(p,
                  get_vue_slot(c, dst, i),
                  get_vue_slot(c, src, i));
@@ -176,7 +176,7 @@ static int count_flatshaded_attributes(struct brw_sf_compile *c)
    int count = 0;
 
    for (i = 0; i < c->vue_map.num_slots; i++)
-      if (c->key.interpolation_mode.mode[i] == INTERP_MODE_FLAT)
+      if (c->key.interp_mode[i] == INTERP_MODE_FLAT)
          count++;
 
    return count;
@@ -342,7 +342,7 @@ calculate_masks(struct brw_sf_compile *c,
    *pc_linear = 0;
    *pc = 0xf;
 
-   interp = c->key.interpolation_mode.mode[vert_reg_to_vue_slot(c, reg, 0)];
+   interp = c->key.interp_mode[vert_reg_to_vue_slot(c, reg, 0)];
    if (interp == INTERP_MODE_SMOOTH) {
       *pc_linear = 0xf;
       *pc_persp = 0xf;
@@ -354,7 +354,7 @@ calculate_masks(struct brw_sf_compile *c,
    if (vert_reg_to_varying(c, reg, 1) != BRW_VARYING_SLOT_COUNT) {
       *pc |= 0xf0;
 
-      interp = c->key.interpolation_mode.mode[vert_reg_to_vue_slot(c, reg, 1)];
+      interp = c->key.interp_mode[vert_reg_to_vue_slot(c, reg, 1)];
       if (interp == INTERP_MODE_SMOOTH) {
          *pc_linear |= 0xf0;
          *pc_persp |= 0xf0;
@@ -428,7 +428,7 @@ void brw_emit_tri_setup(struct brw_sf_compile *c, bool allocate)
    if (c->key.do_twoside_color)
       do_twoside_color(c);
 
-   if (c->has_flat_shading)
+   if (c->key.contains_flat_varying)
       do_flatshade_triangle(c);
 
 
@@ -514,7 +514,7 @@ void brw_emit_line_setup(struct brw_sf_compile *c, bool allocate)
    invert_det(c);
    copy_z_inv_w(c);
 
-   if (c->has_flat_shading)
+   if (c->key.contains_flat_varying)
       do_flatshade_line(c);
 
    for (i = 0; i < c->nr_setup_regs; i++)

@@ -40,15 +40,15 @@ blend_func(unsigned func)
 {
 	switch (func) {
 	case PIPE_BLEND_ADD:
-		return BLEND_DST_PLUS_SRC;
+		return BLEND2_DST_PLUS_SRC;
 	case PIPE_BLEND_MIN:
-		return BLEND_MIN_DST_SRC;
+		return BLEND2_MIN_DST_SRC;
 	case PIPE_BLEND_MAX:
-		return BLEND_MAX_DST_SRC;
+		return BLEND2_MAX_DST_SRC;
 	case PIPE_BLEND_SUBTRACT:
-		return BLEND_SRC_MINUS_DST;
+		return BLEND2_SRC_MINUS_DST;
 	case PIPE_BLEND_REVERSE_SUBTRACT:
-		return BLEND_DST_MINUS_SRC;
+		return BLEND2_DST_MINUS_SRC;
 	default:
 		DBG("invalid blend func: %x", func);
 		return 0;

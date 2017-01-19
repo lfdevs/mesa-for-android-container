@@ -263,19 +263,3 @@ glXGetFBConfigFromVisualSGIX(Display * dpy, XVisualInfo * visinfo)
    return NULL;
 }
 #endif
-
-
-_X_EXPORT
-GLX_ALIAS_VOID(glXDestroyGLXPbufferSGIX,
-               (Display * dpy, GLXDrawable pbuf),
-               (dpy, pbuf), glXDestroyPbuffer)
-
-     _X_EXPORT GLX_ALIAS_VOID(glXSelectEventSGIX,
-                           (Display * dpy, GLXDrawable drawable,
-                            unsigned long mask), (dpy, drawable, mask),
-                           glXSelectEvent)
-
-     _X_EXPORT GLX_ALIAS_VOID(glXGetSelectedEventSGIX,
-                           (Display * dpy, GLXDrawable drawable,
-                            unsigned long *mask), (dpy, drawable, mask),
-                           glXGetSelectedEvent)

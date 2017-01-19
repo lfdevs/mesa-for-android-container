@@ -117,30 +117,35 @@ anv_shader_compile_to_nir(struct anv_device *device,
          assert(data + entry.size <= spec_info->pData + spec_info->dataSize);
 
          spec_entries[i].id = spec_info->pMapEntries[i].constantID;
-         spec_entries[i].data = *(const uint32_t *)data;
+         if (spec_info->dataSize == 8)
+            spec_entries[i].data64 = *(const uint64_t *)data;
+         else
+            spec_entries[i].data32 = *(const uint32_t *)data;
       }
    }
+
+   const struct nir_spirv_supported_extensions supported_ext = {
+      .float64 = device->instance->physicalDevice.info.gen >= 8,
+      .tessellation = true,
+   };
 
    nir_function *entry_point =
       spirv_to_nir(spirv, module->size / 4,
                    spec_entries, num_spec_entries,
-                   stage, entrypoint_name, nir_options);
+                   stage, entrypoint_name, &supported_ext, nir_options);
    nir_shader *nir = entry_point->shader;
    assert(nir->stage == stage);
    nir_validate_shader(nir);
 
    free(spec_entries);
 
-   if (stage == MESA_SHADER_FRAGMENT) {
-      nir_lower_wpos_center(nir);
-      nir_validate_shader(nir);
-   }
-
-   nir_lower_returns(nir);
-   nir_validate_shader(nir);
-
-   nir_inline_functions(nir);
-   nir_validate_shader(nir);
+   /* We have to lower away local constant initializers right before we
+    * inline functions.  That way they get properly initialized at the top
+    * of the function and not at the top of its caller.
+    */
+   NIR_PASS_V(nir, nir_lower_constant_initializers, nir_var_local);
+   NIR_PASS_V(nir, nir_lower_returns);
+   NIR_PASS_V(nir, nir_inline_functions);
 
    /* Pick off the single entrypoint that we want */
    foreach_list_typed_safe(nir_function, func, node, &nir->functions) {
@@ -150,36 +155,32 @@ anv_shader_compile_to_nir(struct anv_device *device,
    assert(exec_list_length(&nir->functions) == 1);
    entry_point->name = ralloc_strdup(entry_point, "main");
 
-   nir_remove_dead_variables(nir, nir_var_shader_in);
-   nir_remove_dead_variables(nir, nir_var_shader_out);
-   nir_remove_dead_variables(nir, nir_var_system_value);
-   nir_validate_shader(nir);
+   NIR_PASS_V(nir, nir_remove_dead_variables,
+              nir_var_shader_in | nir_var_shader_out | nir_var_system_value);
 
-   nir_propagate_invariant(nir);
-   nir_validate_shader(nir);
+   if (stage == MESA_SHADER_FRAGMENT)
+      NIR_PASS_V(nir, nir_lower_wpos_center);
 
-   nir_lower_io_to_temporaries(entry_point->shader, entry_point->impl,
-                               true, false);
-
-   nir_lower_system_values(nir);
-   nir_validate_shader(nir);
+   /* Now that we've deleted all but the main function, we can go ahead and
+    * lower the rest of the constant initializers.
+    */
+   NIR_PASS_V(nir, nir_lower_constant_initializers, ~0);
+   NIR_PASS_V(nir, nir_propagate_invariant);
+   NIR_PASS_V(nir, nir_lower_io_to_temporaries,
+              entry_point->impl, true, false);
+   NIR_PASS_V(nir, nir_lower_system_values);
 
    /* Vulkan uses the separate-shader linking model */
-   nir->info.separate_shader = true;
+   nir->info->separate_shader = true;
 
    nir = brw_preprocess_nir(compiler, nir);
 
+   NIR_PASS_V(nir, nir_lower_clip_cull_distance_arrays);
+
+   if (stage == MESA_SHADER_FRAGMENT)
+      NIR_PASS_V(nir, anv_nir_lower_input_attachments);
+
    nir_shader_gather_info(nir, entry_point->impl);
-
-   nir_variable_mode indirect_mask = 0;
-   if (compiler->glsl_compiler_options[stage].EmitNoIndirectInput)
-      indirect_mask |= nir_var_shader_in;
-   if (compiler->glsl_compiler_options[stage].EmitNoIndirectOutput)
-      indirect_mask |= nir_var_shader_out;
-   if (compiler->glsl_compiler_options[stage].EmitNoIndirectTemp)
-      indirect_mask |= nir_var_local;
-
-   nir_lower_indirect_derefs(nir, indirect_mask);
 
    return nir;
 }
@@ -219,7 +220,6 @@ static const uint32_t vk_to_gen_primitive_type[] = {
    [VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY]     = _3DPRIM_LINESTRIP_ADJ,
    [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY]  = _3DPRIM_TRILIST_ADJ,
    [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY] = _3DPRIM_TRISTRIP_ADJ,
-/*   [VK_PRIMITIVE_TOPOLOGY_PATCH_LIST]                = _3DPRIM_PATCHLIST_1 */
 };
 
 static void
@@ -256,17 +256,22 @@ populate_gs_prog_key(const struct gen_device_info *devinfo,
 }
 
 static void
-populate_wm_prog_key(const struct gen_device_info *devinfo,
+populate_wm_prog_key(const struct anv_pipeline *pipeline,
                      const VkGraphicsPipelineCreateInfo *info,
                      struct brw_wm_prog_key *key)
 {
+   const struct gen_device_info *devinfo = &pipeline->device->info;
    ANV_FROM_HANDLE(anv_render_pass, render_pass, info->renderPass);
 
    memset(key, 0, sizeof(*key));
 
    populate_sampler_prog_key(devinfo, &key->tex);
 
-   /* TODO: Fill out key->input_slots_valid */
+   /* TODO: we could set this to 0 based on the information in nir_shader, but
+    * this function is called before spirv_to_nir. */
+   const struct brw_vue_map *vue_map =
+      &anv_pipeline_get_last_vue_prog_data(pipeline)->vue_map;
+   key->input_slots_valid = vue_map->slots_valid;
 
    /* Vulkan doesn't specify a default */
    key->high_quality_derivatives = false;
@@ -316,7 +321,7 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
    if (nir == NULL)
       return NULL;
 
-   anv_nir_lower_push_constants(nir);
+   NIR_PASS_V(nir, anv_nir_lower_push_constants);
 
    /* Figure out the number of parameters */
    prog_data->nr_params = 0;
@@ -332,8 +337,8 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
    if (pipeline->layout && pipeline->layout->stage[stage].has_dynamic_offsets)
       prog_data->nr_params += MAX_DYNAMIC_BUFFERS * 2;
 
-   if (nir->info.num_images > 0) {
-      prog_data->nr_params += nir->info.num_images * BRW_IMAGE_PARAM_SIZE;
+   if (nir->info->num_images > 0) {
+      prog_data->nr_params += nir->info->num_images * BRW_IMAGE_PARAM_SIZE;
       pipeline->needs_data_cache = true;
    }
 
@@ -341,7 +346,7 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
       ((struct brw_cs_prog_data *)prog_data)->thread_local_id_index =
          prog_data->nr_params++; /* The CS Thread ID uniform */
 
-   if (nir->info.num_ssbos > 0)
+   if (nir->info->num_ssbos > 0)
       pipeline->needs_data_cache = true;
 
    if (prog_data->nr_params > 0) {
@@ -466,12 +471,13 @@ anv_pipeline_compile_vs(struct anv_pipeline *pipeline,
 
       ralloc_steal(mem_ctx, nir);
 
-      prog_data.inputs_read = nir->info.inputs_read;
+      prog_data.inputs_read = nir->info->inputs_read;
+      prog_data.double_inputs_read = nir->info->double_inputs_read;
 
       brw_compute_vue_map(&pipeline->device->info,
                           &prog_data.base.vue_map,
-                          nir->info.outputs_written,
-                          nir->info.separate_shader);
+                          nir->info->outputs_written,
+                          nir->info->separate_shader);
 
       unsigned code_size;
       const unsigned *shader_code =
@@ -494,18 +500,189 @@ anv_pipeline_compile_vs(struct anv_pipeline *pipeline,
       ralloc_free(mem_ctx);
    }
 
-   const struct brw_vs_prog_data *vs_prog_data =
-      (const struct brw_vs_prog_data *)bin->prog_data;
+   anv_pipeline_add_compiled_stage(pipeline, MESA_SHADER_VERTEX, bin);
 
-   if (vs_prog_data->base.dispatch_mode == DISPATCH_MODE_SIMD8) {
-      pipeline->vs_simd8 = bin->kernel.offset;
-      pipeline->vs_vec4 = NO_KERNEL;
-   } else {
-      pipeline->vs_simd8 = NO_KERNEL;
-      pipeline->vs_vec4 = bin->kernel.offset;
+   return VK_SUCCESS;
+}
+
+static void
+merge_tess_info(struct shader_info *tes_info,
+                const struct shader_info *tcs_info)
+{
+   /* The Vulkan 1.0.38 spec, section 21.1 Tessellator says:
+    *
+    *    "PointMode. Controls generation of points rather than triangles
+    *     or lines. This functionality defaults to disabled, and is
+    *     enabled if either shader stage includes the execution mode.
+    *
+    * and about Triangles, Quads, IsoLines, VertexOrderCw, VertexOrderCcw,
+    * PointMode, SpacingEqual, SpacingFractionalEven, SpacingFractionalOdd,
+    * and OutputVertices, it says:
+    *
+    *    "One mode must be set in at least one of the tessellation
+    *     shader stages."
+    *
+    * So, the fields can be set in either the TCS or TES, but they must
+    * agree if set in both.  Our backend looks at TES, so bitwise-or in
+    * the values from the TCS.
+    */
+   assert(tcs_info->tess.tcs_vertices_out == 0 ||
+          tes_info->tess.tcs_vertices_out == 0 ||
+          tcs_info->tess.tcs_vertices_out == tes_info->tess.tcs_vertices_out);
+   tes_info->tess.tcs_vertices_out |= tcs_info->tess.tcs_vertices_out;
+
+   assert(tcs_info->tess.spacing == TESS_SPACING_UNSPECIFIED ||
+          tes_info->tess.spacing == TESS_SPACING_UNSPECIFIED ||
+          tcs_info->tess.spacing == tes_info->tess.spacing);
+   tes_info->tess.spacing |= tcs_info->tess.spacing;
+
+   tes_info->tess.ccw |= tcs_info->tess.ccw;
+   tes_info->tess.point_mode |= tcs_info->tess.point_mode;
+}
+
+static VkResult
+anv_pipeline_compile_tcs_tes(struct anv_pipeline *pipeline,
+                             struct anv_pipeline_cache *cache,
+                             const VkGraphicsPipelineCreateInfo *info,
+                             struct anv_shader_module *tcs_module,
+                             const char *tcs_entrypoint,
+                             const VkSpecializationInfo *tcs_spec_info,
+                             struct anv_shader_module *tes_module,
+                             const char *tes_entrypoint,
+                             const VkSpecializationInfo *tes_spec_info)
+{
+   const struct gen_device_info *devinfo = &pipeline->device->info;
+   const struct brw_compiler *compiler =
+      pipeline->device->instance->physicalDevice.compiler;
+   struct anv_pipeline_bind_map tcs_map;
+   struct anv_pipeline_bind_map tes_map;
+   struct brw_tcs_prog_key tcs_key = { 0, };
+   struct brw_tes_prog_key tes_key = { 0, };
+   struct anv_shader_bin *tcs_bin = NULL;
+   struct anv_shader_bin *tes_bin = NULL;
+   unsigned char tcs_sha1[40];
+   unsigned char tes_sha1[40];
+
+   populate_sampler_prog_key(&pipeline->device->info, &tcs_key.tex);
+   populate_sampler_prog_key(&pipeline->device->info, &tes_key.tex);
+   tcs_key.input_vertices = info->pTessellationState->patchControlPoints;
+
+   if (cache) {
+      anv_hash_shader(tcs_sha1, &tcs_key, sizeof(tcs_key), tcs_module,
+                      tcs_entrypoint, pipeline->layout, tcs_spec_info);
+      anv_hash_shader(tes_sha1, &tes_key, sizeof(tes_key), tes_module,
+                      tes_entrypoint, pipeline->layout, tes_spec_info);
+      memcpy(&tcs_sha1[20], tes_sha1, 20);
+      memcpy(&tes_sha1[20], tcs_sha1, 20);
+      tcs_bin = anv_pipeline_cache_search(cache, tcs_sha1, sizeof(tcs_sha1));
+      tes_bin = anv_pipeline_cache_search(cache, tes_sha1, sizeof(tes_sha1));
    }
 
-   anv_pipeline_add_compiled_stage(pipeline, MESA_SHADER_VERTEX, bin);
+   if (tcs_bin == NULL || tes_bin == NULL) {
+      struct brw_tcs_prog_data tcs_prog_data = { 0, };
+      struct brw_tes_prog_data tes_prog_data = { 0, };
+      struct anv_pipeline_binding tcs_surface_to_descriptor[256];
+      struct anv_pipeline_binding tcs_sampler_to_descriptor[256];
+      struct anv_pipeline_binding tes_surface_to_descriptor[256];
+      struct anv_pipeline_binding tes_sampler_to_descriptor[256];
+
+      tcs_map = (struct anv_pipeline_bind_map) {
+         .surface_to_descriptor = tcs_surface_to_descriptor,
+         .sampler_to_descriptor = tcs_sampler_to_descriptor
+      };
+      tes_map = (struct anv_pipeline_bind_map) {
+         .surface_to_descriptor = tes_surface_to_descriptor,
+         .sampler_to_descriptor = tes_sampler_to_descriptor
+      };
+
+      nir_shader *tcs_nir =
+         anv_pipeline_compile(pipeline, tcs_module, tcs_entrypoint,
+                              MESA_SHADER_TESS_CTRL, tcs_spec_info,
+                              &tcs_prog_data.base.base, &tcs_map);
+      nir_shader *tes_nir =
+         anv_pipeline_compile(pipeline, tes_module, tes_entrypoint,
+                              MESA_SHADER_TESS_EVAL, tes_spec_info,
+                              &tes_prog_data.base.base, &tes_map);
+      if (tcs_nir == NULL || tes_nir == NULL)
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      nir_lower_tes_patch_vertices(tes_nir,
+                                   tcs_nir->info->tess.tcs_vertices_out);
+
+      /* Copy TCS info into the TES info */
+      merge_tess_info(tes_nir->info, tcs_nir->info);
+
+      anv_fill_binding_table(&tcs_prog_data.base.base, 0);
+      anv_fill_binding_table(&tes_prog_data.base.base, 0);
+
+      void *mem_ctx = ralloc_context(NULL);
+
+      ralloc_steal(mem_ctx, tcs_nir);
+      ralloc_steal(mem_ctx, tes_nir);
+
+      /* Whacking the key after cache lookup is a bit sketchy, but all of
+       * this comes from the SPIR-V, which is part of the hash used for the
+       * pipeline cache.  So it should be safe.
+       */
+      tcs_key.tes_primitive_mode = tes_nir->info->tess.primitive_mode;
+      tcs_key.outputs_written = tcs_nir->info->outputs_written;
+      tcs_key.patch_outputs_written = tcs_nir->info->patch_outputs_written;
+      tcs_key.quads_workaround =
+         devinfo->gen < 9 &&
+         tes_nir->info->tess.primitive_mode == 7 /* GL_QUADS */ &&
+         tes_nir->info->tess.spacing == TESS_SPACING_EQUAL;
+
+      tes_key.inputs_read = tcs_key.outputs_written;
+      tes_key.patch_inputs_read = tcs_key.patch_outputs_written;
+
+      unsigned code_size;
+      const int shader_time_index = -1;
+      const unsigned *shader_code;
+
+      shader_code =
+         brw_compile_tcs(compiler, NULL, mem_ctx, &tcs_key, &tcs_prog_data,
+                         tcs_nir, shader_time_index, &code_size, NULL);
+      if (shader_code == NULL) {
+         ralloc_free(mem_ctx);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+
+      tcs_bin = anv_pipeline_upload_kernel(pipeline, cache,
+                                           tcs_sha1, sizeof(tcs_sha1),
+                                           shader_code, code_size,
+                                           &tcs_prog_data.base.base,
+                                           sizeof(tcs_prog_data),
+                                           &tcs_map);
+      if (!tcs_bin) {
+         ralloc_free(mem_ctx);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+
+      shader_code =
+         brw_compile_tes(compiler, NULL, mem_ctx, &tes_key,
+                         &tcs_prog_data.base.vue_map, &tes_prog_data, tes_nir,
+                         NULL, shader_time_index, &code_size, NULL);
+      if (shader_code == NULL) {
+         ralloc_free(mem_ctx);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+
+      tes_bin = anv_pipeline_upload_kernel(pipeline, cache,
+                                           tes_sha1, sizeof(tes_sha1),
+                                           shader_code, code_size,
+                                           &tes_prog_data.base.base,
+                                           sizeof(tes_prog_data),
+                                           &tes_map);
+      if (!tes_bin) {
+         ralloc_free(mem_ctx);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+
+      ralloc_free(mem_ctx);
+   }
+
+   anv_pipeline_add_compiled_stage(pipeline, MESA_SHADER_TESS_CTRL, tcs_bin);
+   anv_pipeline_add_compiled_stage(pipeline, MESA_SHADER_TESS_EVAL, tes_bin);
 
    return VK_SUCCESS;
 }
@@ -557,8 +734,8 @@ anv_pipeline_compile_gs(struct anv_pipeline *pipeline,
 
       brw_compute_vue_map(&pipeline->device->info,
                           &prog_data.base.vue_map,
-                          nir->info.outputs_written,
-                          nir->info.separate_shader);
+                          nir->info->outputs_written,
+                          nir->info->separate_shader);
 
       unsigned code_size;
       const unsigned *shader_code =
@@ -582,8 +759,6 @@ anv_pipeline_compile_gs(struct anv_pipeline *pipeline,
       ralloc_free(mem_ctx);
    }
 
-   pipeline->gs_kernel = bin->kernel.offset;
-
    anv_pipeline_add_compiled_stage(pipeline, MESA_SHADER_GEOMETRY, bin);
 
    return VK_SUCCESS;
@@ -604,7 +779,7 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
    struct anv_shader_bin *bin = NULL;
    unsigned char sha1[20];
 
-   populate_wm_prog_key(&pipeline->device->info, info, &key);
+   populate_wm_prog_key(pipeline, info, &key);
 
    if (cache) {
       anv_hash_shader(sha1, &key, sizeof(key), module, entrypoint,
@@ -688,7 +863,7 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
       unsigned code_size;
       const unsigned *shader_code =
          brw_compile_fs(compiler, NULL, mem_ctx, &key, &prog_data, nir,
-                        NULL, -1, -1, true, false, &code_size, NULL);
+                        NULL, -1, -1, true, false, NULL, &code_size, NULL);
       if (shader_code == NULL) {
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -705,8 +880,6 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
 
       ralloc_free(mem_ctx);
    }
-
-   pipeline->ps_ksp0 = bin->kernel.offset;
 
    anv_pipeline_add_compiled_stage(pipeline, MESA_SHADER_FRAGMENT, bin);
 
@@ -778,8 +951,6 @@ anv_pipeline_compile_cs(struct anv_pipeline *pipeline,
 
       ralloc_free(mem_ctx);
    }
-
-   pipeline->cs_simd = bin->kernel.offset;
 
    anv_pipeline_add_compiled_stage(pipeline, MESA_SHADER_COMPUTE, bin);
 
@@ -1030,11 +1201,6 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
     */
    memset(pipeline->shaders, 0, sizeof(pipeline->shaders));
 
-   pipeline->vs_simd8 = NO_KERNEL;
-   pipeline->vs_vec4 = NO_KERNEL;
-   pipeline->gs_kernel = NO_KERNEL;
-   pipeline->ps_ksp0 = NO_KERNEL;
-
    pipeline->active_stages = 0;
 
    const VkPipelineShaderStageCreateInfo *pStages[MESA_SHADER_STAGES] = { 0, };
@@ -1054,8 +1220,15 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
          goto compile_fail;
    }
 
-   if (modules[MESA_SHADER_TESS_CTRL] || modules[MESA_SHADER_TESS_EVAL])
-      anv_finishme("no tessellation support");
+   if (modules[MESA_SHADER_TESS_EVAL]) {
+      anv_pipeline_compile_tcs_tes(pipeline, cache, pCreateInfo,
+                                   modules[MESA_SHADER_TESS_CTRL],
+                                   pStages[MESA_SHADER_TESS_CTRL]->pName,
+                                   pStages[MESA_SHADER_TESS_CTRL]->pSpecializationInfo,
+                                   modules[MESA_SHADER_TESS_EVAL],
+                                   pStages[MESA_SHADER_TESS_EVAL]->pName,
+                                   pStages[MESA_SHADER_TESS_EVAL]->pSpecializationInfo);
+   }
 
    if (modules[MESA_SHADER_GEOMETRY]) {
       result = anv_pipeline_compile_gs(pipeline, cache, pCreateInfo,
@@ -1115,8 +1288,14 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
 
    const VkPipelineInputAssemblyStateCreateInfo *ia_info =
       pCreateInfo->pInputAssemblyState;
+   const VkPipelineTessellationStateCreateInfo *tess_info =
+      pCreateInfo->pTessellationState;
    pipeline->primitive_restart = ia_info->primitiveRestartEnable;
-   pipeline->topology = vk_to_gen_primitive_type[ia_info->topology];
+
+   if (anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL))
+      pipeline->topology = _3DPRIM_PATCHLIST(tess_info->patchControlPoints);
+   else
+      pipeline->topology = vk_to_gen_primitive_type[ia_info->topology];
 
    return VK_SUCCESS;
 

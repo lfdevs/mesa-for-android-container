@@ -25,6 +25,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
+	$(GLPROTO_CFLAGS) \
 	$(X11_INCLUDES)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \

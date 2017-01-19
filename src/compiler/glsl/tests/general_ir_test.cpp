@@ -38,6 +38,7 @@ TEST(ir_variable_constructor, interface)
       glsl_type::get_interface_instance(f,
                                         ARRAY_SIZE(f),
                                         GLSL_INTERFACE_PACKING_STD140,
+                                        false,
                                         "simple_interface");
 
    static const char name[] = "named_instance";
@@ -63,6 +64,7 @@ TEST(ir_variable_constructor, interface_array)
       glsl_type::get_interface_instance(f,
                                         ARRAY_SIZE(f),
                                         GLSL_INTERFACE_PACKING_STD140,
+                                        false,
                                         "simple_interface");
 
    const glsl_type *const interface_array =

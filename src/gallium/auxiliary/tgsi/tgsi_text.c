@@ -208,14 +208,17 @@ static boolean parse_int( const char **pcur, int *val )
    return FALSE;
 }
 
-static boolean parse_identifier( const char **pcur, char *ret )
+static boolean parse_identifier( const char **pcur, char *ret, size_t len )
 {
    const char *cur = *pcur;
    int i = 0;
    if (is_alpha_underscore( cur )) {
       ret[i++] = *cur++;
-      while (is_alpha_underscore( cur ) || is_digit( cur ))
+      while (is_alpha_underscore( cur ) || is_digit( cur )) {
+         if (i == len - 1)
+            return FALSE;
          ret[i++] = *cur++;
+      }
       ret[i++] = '\0';
       *pcur = cur;
       return TRUE;
@@ -1546,6 +1549,54 @@ static boolean parse_declaration( struct translate_ctx *ctx )
 
    cur = ctx->cur;
    eat_opt_white( &cur );
+   if (*cur == ',' &&
+       file == TGSI_FILE_OUTPUT && ctx->processor == PIPE_SHADER_GEOMETRY) {
+      cur++;
+      eat_opt_white(&cur);
+      if (str_match_nocase_whole(&cur, "STREAM")) {
+         uint stream[4];
+
+         eat_opt_white(&cur);
+         if (*cur != '(') {
+            report_error(ctx, "Expected '('");
+            return FALSE;
+         }
+         cur++;
+
+         for (int i = 0; i < 4; ++i) {
+            eat_opt_white(&cur);
+            if (!parse_uint(&cur, &stream[i])) {
+               report_error(ctx, "Expected literal integer");
+               return FALSE;
+            }
+
+            eat_opt_white(&cur);
+            if (i < 3) {
+               if (*cur != ',') {
+                  report_error(ctx, "Expected ','");
+                  return FALSE;
+               }
+               cur++;
+            }
+         }
+
+         if (*cur != ')') {
+            report_error(ctx, "Expected ')'");
+            return FALSE;
+         }
+         cur++;
+
+         decl.Semantic.StreamX = stream[0];
+         decl.Semantic.StreamY = stream[1];
+         decl.Semantic.StreamZ = stream[2];
+         decl.Semantic.StreamW = stream[3];
+
+         ctx->cur = cur;
+      }
+   }
+
+   cur = ctx->cur;
+   eat_opt_white( &cur );
    if (*cur == ',' && !is_vs_input) {
       uint i;
 
@@ -1739,7 +1790,7 @@ static boolean parse_property( struct translate_ctx *ctx )
       report_error( ctx, "Syntax error" );
       return FALSE;
    }
-   if (!parse_identifier( &ctx->cur, id )) {
+   if (!parse_identifier( &ctx->cur, id, sizeof(id) )) {
       report_error( ctx, "Syntax error" );
       return FALSE;
    }

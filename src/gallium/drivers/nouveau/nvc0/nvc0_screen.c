@@ -38,6 +38,8 @@
 #include "nvc0/mme/com9097.mme.h"
 #include "nvc0/mme/com90c0.mme.h"
 
+#include "nv50/g80_texture.xml.h"
+
 static boolean
 nvc0_screen_is_format_supported(struct pipe_screen *pscreen,
                                 enum pipe_format format,
@@ -125,9 +127,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
       return 128 * 1024 * 1024;
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
-      if (class_3d <= NVF0_3D_CLASS)
-         return 430;
-      return 410;
+      return 430;
    case PIPE_CAP_MAX_RENDER_TARGETS:
       return 8;
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -189,6 +189,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUERY_TIME_ELAPSED:
    case PIPE_CAP_OCCLUSION_QUERY:
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+   case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
@@ -248,6 +249,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return (class_3d >= NVE4_3D_CLASS) ? 1 : 0;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
+   case PIPE_CAP_TGSI_FS_FBFETCH:
+      return class_3d >= NVE4_3D_CLASS; /* needs testing on fermi */
 
    /* unsupported caps */
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
@@ -273,6 +276,9 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_PCI_DEVICE:
    case PIPE_CAP_PCI_FUNCTION:
    case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
+   case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
+   case PIPE_CAP_NATIVE_FENCE_FD:
+   case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -373,6 +379,7 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       return 1;
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+   case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
       return 0;
    case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       return NVC0_MAX_BUFFERS;
@@ -383,11 +390,10 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
-      if (class_3d == NVE4_3D_CLASS || class_3d == NVF0_3D_CLASS)
+      if (class_3d >= NVE4_3D_CLASS)
          return NVC0_MAX_IMAGES;
-      if (class_3d < NVE4_3D_CLASS)
-         if (shader == PIPE_SHADER_FRAGMENT || shader == PIPE_SHADER_COMPUTE)
-            return NVC0_MAX_IMAGES;
+      if (shader == PIPE_SHADER_FRAGMENT || shader == PIPE_SHADER_COMPUTE)
+         return NVC0_MAX_IMAGES;
       return 0;
    default:
       NOUVEAU_ERR("unknown PIPE_SHADER_CAP %d\n", param);
@@ -532,6 +538,7 @@ nvc0_screen_destroy(struct pipe_screen *pscreen)
    nouveau_heap_destroy(&screen->lib_code);
    nouveau_heap_destroy(&screen->text_heap);
 
+   FREE(screen->default_tsc);
    FREE(screen->tic.entries);
 
    nouveau_object_del(&screen->eng3d);
@@ -1223,7 +1230,10 @@ nvc0_screen_create(struct nouveau_device *dev)
    if (!nvc0_blitter_create(screen))
       goto fail;
 
-   nouveau_fence_new(&screen->base, &screen->base.fence.current, false);
+   screen->default_tsc = CALLOC_STRUCT(nv50_tsc_entry);
+   screen->default_tsc->tsc[0] = G80_TSC_0_SRGB_CONVERSION;
+
+   nouveau_fence_new(&screen->base, &screen->base.fence.current);
 
    return &screen->base;
 

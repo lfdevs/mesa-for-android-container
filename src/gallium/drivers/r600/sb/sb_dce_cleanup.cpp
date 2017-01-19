@@ -30,6 +30,18 @@
 
 namespace r600_sb {
 
+int dce_cleanup::run() {
+	int r;
+
+	// Run cleanup for as long as there are unused nodes.
+	do {
+		nodes_changed = false;
+		r = vpass::run();
+	} while (r == 0 && nodes_changed);
+
+	return r;
+}
+
 bool dce_cleanup::visit(node& n, bool enter) {
 	if (enter) {
 	} else {
@@ -110,7 +122,18 @@ bool dce_cleanup::visit(region_node& n, bool enter) {
 void dce_cleanup::cleanup_dst(node& n) {
 	if (!cleanup_dst_vec(n.dst) && remove_unused &&
 			!n.dst.empty() && !(n.flags & NF_DONT_KILL) && n.parent)
+	{
+		// Delete use references to the removed node from the src values.
+		for (vvec::iterator I = n.src.begin(), E = n.src.end(); I != E; ++I) {
+			value* v = *I;
+			if (v && v->def && v->uses.size())
+			{
+				v->remove_use(&n);
+			}
+		}
 		n.remove();
+		nodes_changed = true;
+	}
 }
 
 bool dce_cleanup::visit(container_node& n, bool enter) {
@@ -130,7 +153,7 @@ bool dce_cleanup::cleanup_dst_vec(vvec& vv) {
 		if (v->gvn_source && v->gvn_source->is_dead())
 			v->gvn_source = NULL;
 
-		if (v->is_dead() || (remove_unused && !v->is_rel() && !v->uses))
+		if (v->is_dead() || (remove_unused && !v->is_rel() && !v->uses.size()))
 			v = NULL;
 		else
 			alive = true;

@@ -82,7 +82,8 @@ enum radeon_value_id {
     RADEON_MAPPED_GTT,
     RADEON_BUFFER_WAIT_TIME_NS,
     RADEON_TIMESTAMP,
-    RADEON_NUM_CS_FLUSHES,
+    RADEON_NUM_GFX_IBS,
+    RADEON_NUM_SDMA_IBS,
     RADEON_NUM_BYTES_MOVED,
     RADEON_NUM_EVICTIONS,
     RADEON_VRAM_USAGE,
@@ -255,99 +256,92 @@ enum radeon_feature_id {
     RADEON_FID_R300_CMASK_ACCESS,
 };
 
-#define RADEON_SURF_MAX_LEVEL                   32
+#define RADEON_SURF_MAX_LEVELS                  15
 
-#define RADEON_SURF_TYPE_MASK                   0xFF
-#define RADEON_SURF_TYPE_SHIFT                  0
-#define     RADEON_SURF_TYPE_1D                     0
-#define     RADEON_SURF_TYPE_2D                     1
-#define     RADEON_SURF_TYPE_3D                     2
-#define     RADEON_SURF_TYPE_CUBEMAP                3
-#define     RADEON_SURF_TYPE_1D_ARRAY               4
-#define     RADEON_SURF_TYPE_2D_ARRAY               5
-#define RADEON_SURF_MODE_MASK                   0xFF
-#define RADEON_SURF_MODE_SHIFT                  8
-#define     RADEON_SURF_MODE_LINEAR_ALIGNED         1
-#define     RADEON_SURF_MODE_1D                     2
-#define     RADEON_SURF_MODE_2D                     3
+enum radeon_surf_mode {
+    RADEON_SURF_MODE_LINEAR_ALIGNED = 1,
+    RADEON_SURF_MODE_1D = 2,
+    RADEON_SURF_MODE_2D = 3,
+};
+
+/* These are defined exactly like GB_TILE_MODEn.MICRO_TILE_MODE_NEW. */
+enum radeon_micro_mode {
+    RADEON_MICRO_MODE_DISPLAY = 0,
+    RADEON_MICRO_MODE_THIN = 1,
+    RADEON_MICRO_MODE_DEPTH = 2,
+    RADEON_MICRO_MODE_ROTATED = 3,
+};
+
+/* the first 16 bits are reserved for libdrm_radeon, don't use them */
 #define RADEON_SURF_SCANOUT                     (1 << 16)
 #define RADEON_SURF_ZBUFFER                     (1 << 17)
 #define RADEON_SURF_SBUFFER                     (1 << 18)
 #define RADEON_SURF_Z_OR_SBUFFER                (RADEON_SURF_ZBUFFER | RADEON_SURF_SBUFFER)
-#define RADEON_SURF_HAS_SBUFFER_MIPTREE         (1 << 19)
-#define RADEON_SURF_HAS_TILE_MODE_INDEX         (1 << 20)
+/* bits 19 and 20 are reserved for libdrm_radeon, don't use them */
 #define RADEON_SURF_FMASK                       (1 << 21)
 #define RADEON_SURF_DISABLE_DCC                 (1 << 22)
 #define RADEON_SURF_TC_COMPATIBLE_HTILE         (1 << 23)
-
-#define RADEON_SURF_GET(v, field)   (((v) >> RADEON_SURF_ ## field ## _SHIFT) & RADEON_SURF_ ## field ## _MASK)
-#define RADEON_SURF_SET(v, field)   (((v) & RADEON_SURF_ ## field ## _MASK) << RADEON_SURF_ ## field ## _SHIFT)
-#define RADEON_SURF_CLR(v, field)   ((v) & ~(RADEON_SURF_ ## field ## _MASK << RADEON_SURF_ ## field ## _SHIFT))
+#define RADEON_SURF_IMPORTED                    (1 << 24)
+#define RADEON_SURF_OPTIMIZE_FOR_SPACE          (1 << 25)
 
 struct radeon_surf_level {
     uint64_t                    offset;
     uint64_t                    slice_size;
-    uint32_t                    npix_x;
-    uint32_t                    npix_y;
-    uint32_t                    npix_z;
-    uint32_t                    nblk_x;
-    uint32_t                    nblk_y;
-    uint32_t                    nblk_z;
-    uint32_t                    pitch_bytes;
-    uint32_t                    mode;
     uint64_t                    dcc_offset;
     uint64_t                    dcc_fast_clear_size;
-    bool                        dcc_enabled;
+    uint16_t                    nblk_x;
+    uint16_t                    nblk_y;
+    enum radeon_surf_mode       mode;
 };
 
 struct radeon_surf {
-    /* These are inputs to the calculator. */
-    uint32_t                    npix_x;
-    uint32_t                    npix_y;
-    uint32_t                    npix_z;
-    uint32_t                    blk_w;
-    uint32_t                    blk_h;
-    uint32_t                    blk_d;
-    uint32_t                    array_size;
-    uint32_t                    last_level;
-    uint32_t                    bpe;
-    uint32_t                    nsamples;
+    /* Format properties. */
+    unsigned                    blk_w:4;
+    unsigned                    blk_h:4;
+    unsigned                    bpe:5;
+    /* Number of mipmap levels where DCC is enabled starting from level 0.
+     * Non-zero levels may be disabled due to alignment constraints, but not
+     * the first level.
+     */
+    unsigned                    num_dcc_levels:4;
+    unsigned                    is_linear:1;
     uint32_t                    flags;
 
     /* These are return values. Some of them can be set by the caller, but
      * they will be treated as hints (e.g. bankw, bankh) and might be
      * changed by the calculator.
      */
-    uint64_t                    bo_size;
-    uint64_t                    bo_alignment;
+    uint64_t                    surf_size;
+    uint64_t                    dcc_size;
+    uint64_t                    htile_size;
+
+    uint32_t                    surf_alignment;
+    uint32_t                    dcc_alignment;
+    uint32_t                    htile_alignment;
+
     /* This applies to EG and later. */
-    uint32_t                    bankw;
-    uint32_t                    bankh;
-    uint32_t                    mtilea;
-    uint32_t                    tile_split;
-    uint32_t                    stencil_tile_split;
-    struct radeon_surf_level    level[RADEON_SURF_MAX_LEVEL];
-    struct radeon_surf_level    stencil_level[RADEON_SURF_MAX_LEVEL];
-    uint32_t                    tiling_index[RADEON_SURF_MAX_LEVEL];
-    uint32_t                    stencil_tiling_index[RADEON_SURF_MAX_LEVEL];
-    uint32_t                    pipe_config;
-    uint32_t                    num_banks;
-    uint32_t                    macro_tile_index;
-    uint32_t                    micro_tile_mode; /* displayable, thin, depth, rotated */
+    unsigned                    bankw:4;  /* max 8 */
+    unsigned                    bankh:4;  /* max 8 */
+    unsigned                    mtilea:4; /* max 8 */
+    unsigned                    tile_split:13;         /* max 4K */
+    unsigned                    stencil_tile_split:13; /* max 4K */
+    unsigned                    pipe_config:5;      /* max 17 */
+    unsigned                    num_banks:5;        /* max 16 */
+    unsigned                    macro_tile_index:4; /* max 15 */
+    unsigned                    micro_tile_mode:3; /* displayable, thin, depth, rotated */
 
     /* Whether the depth miptree or stencil miptree as used by the DB are
      * adjusted from their TC compatible form to ensure depth/stencil
      * compatibility. If either is true, the corresponding plane cannot be
      * sampled from.
      */
-    bool                        depth_adjusted;
-    bool                        stencil_adjusted;
+    unsigned                    depth_adjusted:1;
+    unsigned                    stencil_adjusted:1;
 
-    uint64_t                    dcc_size;
-    uint64_t                    dcc_alignment;
-    /* TC-compatible HTILE only. */
-    uint64_t                    htile_size;
-    uint64_t                    htile_alignment;
+    struct radeon_surf_level    level[RADEON_SURF_MAX_LEVELS];
+    struct radeon_surf_level    stencil_level[RADEON_SURF_MAX_LEVELS];
+    uint8_t                     tiling_index[RADEON_SURF_MAX_LEVELS];
+    uint8_t                     stencil_tiling_index[RADEON_SURF_MAX_LEVELS];
 };
 
 struct radeon_bo_list_item {
@@ -739,18 +733,16 @@ struct radeon_winsys {
      * Initialize surface
      *
      * \param ws        The winsys this function is called from.
-     * \param surf      Surface structure ptr
+     * \param tex       Input texture description
+     * \param flags     Bitmask of RADEON_SURF_* flags
+     * \param bpe       Bytes per pixel, it can be different for Z buffers.
+     * \param mode      Preferred tile mode. (linear, 1D, or 2D)
+     * \param surf      Output structure
      */
     int (*surface_init)(struct radeon_winsys *ws,
-                        struct radeon_surf *surf);
-
-    /**
-     * Find best values for a surface
-     *
-     * \param ws        The winsys this function is called from.
-     * \param surf      Surface structure ptr
-     */
-    int (*surface_best)(struct radeon_winsys *ws,
+                        const struct pipe_resource *tex,
+                        unsigned flags, unsigned bpe,
+                        enum radeon_surf_mode mode,
                         struct radeon_surf *surf);
 
     uint64_t (*query_value)(struct radeon_winsys *ws,

@@ -301,7 +301,7 @@ static GLbitfield get_fp_input_mask( struct gl_context *ctx )
    /* _NEW_PROGRAM */
    const GLboolean vertexShader =
       (ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX] &&
-       ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX]->LinkStatus &&
+       ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX]->data->LinkStatus &&
        ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX]->_LinkedShaders[MESA_SHADER_VERTEX]);
    const GLboolean vertexProgram = ctx->VertexProgram._Enabled;
    GLbitfield fp_inputs = 0x0;
@@ -368,9 +368,9 @@ static GLbitfield get_fp_input_mask( struct gl_context *ctx )
       if (vertexShader)
          vprog = ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX]->_LinkedShaders[MESA_SHADER_VERTEX]->Program;
       else
-         vprog = &ctx->VertexProgram.Current->Base;
+         vprog = ctx->VertexProgram.Current;
 
-      vp_outputs = vprog->OutputsWritten;
+      vp_outputs = vprog->info.outputs_written;
 
       /* These get generated in the setup routine regardless of the
        * vertex program:
@@ -990,7 +990,7 @@ static void load_texture( texenv_fragment_program *p, GLuint unit )
 
    if (p->state->unit[unit].shadow) {
       texcoord = texcoord->clone(p->mem_ctx, NULL);
-      tex->shadow_comparitor = new(p->mem_ctx) ir_swizzle(texcoord,
+      tex->shadow_comparator = new(p->mem_ctx) ir_swizzle(texcoord,
 							  coords, 0, 0, 0,
 							  1);
       coords++;
@@ -1202,6 +1202,9 @@ create_new_program(struct gl_context *ctx, struct state_key *key)
 
    p.mem_ctx = ralloc_context(NULL);
    p.shader = _mesa_new_shader(0, MESA_SHADER_FRAGMENT);
+#ifdef DEBUG
+   p.shader->SourceChecksum = 0xf18ed; /* fixed */
+#endif
    p.shader->ir = new(p.shader) exec_list;
    state = new(p.shader) _mesa_glsl_parse_state(ctx, MESA_SHADER_FRAGMENT,
 						p.shader);
@@ -1219,7 +1222,19 @@ create_new_program(struct gl_context *ctx, struct state_key *key)
     */
    p.shader_program->SeparateShader = GL_TRUE;
 
-   state->language_version = 130;
+   /* The legacy GLSL shadow functions follow the depth texture
+    * mode and return vec4. The GLSL 1.30 shadow functions return float and
+    * ignore the depth texture mode. That's a shader and state dependency
+    * that's difficult to deal with. st/mesa uses a simple but not
+    * completely correct solution: if the shader declares GLSL >= 1.30 and
+    * the depth texture mode is GL_ALPHA (000X), it sets the XXXX swizzle
+    * instead. Thus, the GLSL 1.30 shadow function will get the result in .x
+    * and legacy shadow functions will get it in .w as expected.
+    * For the fixed-function fragment shader, use 120 to get correct behavior
+    * for GL_ALPHA.
+    */
+   state->language_version = 120;
+
    state->es_shader = false;
    if (_mesa_is_gles(ctx) && ctx->Extensions.OES_EGL_image_external)
       state->OES_EGL_image_external_enable = true;
@@ -1251,14 +1266,17 @@ create_new_program(struct gl_context *ctx, struct state_key *key)
    const struct gl_shader_compiler_options *options =
       &ctx->Const.ShaderCompilerOptions[MESA_SHADER_FRAGMENT];
 
-   while (do_common_optimization(p.shader->ir, false, false, options,
-                                 ctx->Const.NativeIntegers))
-      ;
+   /* Conservative approach: Don't optimize here, the linker does it too. */
+   if (!ctx->Const.GLSLOptimizeConservatively) {
+      while (do_common_optimization(p.shader->ir, false, false, options,
+                                    ctx->Const.NativeIntegers))
+         ;
+   }
+
    reparent_ir(p.shader->ir, p.shader->ir);
 
    p.shader->CompileStatus = true;
    p.shader->Version = state->language_version;
-   p.shader->info.uses_builtin_functions = state->uses_builtin_functions;
    p.shader_program->Shaders =
       (gl_shader **)malloc(sizeof(*p.shader_program->Shaders));
    p.shader_program->Shaders[0] = p.shader;
@@ -1266,9 +1284,9 @@ create_new_program(struct gl_context *ctx, struct state_key *key)
 
    _mesa_glsl_link_shader(ctx, p.shader_program);
 
-   if (!p.shader_program->LinkStatus)
+   if (!p.shader_program->data->LinkStatus)
       _mesa_problem(ctx, "Failed to link fixed function fragment shader: %s\n",
-		    p.shader_program->InfoLog);
+                    p.shader_program->data->InfoLog);
 
    ralloc_free(p.mem_ctx);
    return p.shader_program;

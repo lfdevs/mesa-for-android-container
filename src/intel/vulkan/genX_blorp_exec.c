@@ -87,22 +87,8 @@ blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
 
    uint32_t state_offset;
    struct anv_state bt_state =
-      anv_cmd_buffer_alloc_binding_table(cmd_buffer, num_entries,
-                                         &state_offset);
-   if (bt_state.map == NULL) {
-      /* We ran out of space.  Grab a new binding table block. */
-      VkResult result = anv_cmd_buffer_new_binding_table_block(cmd_buffer);
-      assert(result == VK_SUCCESS);
-
-      /* Re-emit state base addresses so we get the new surface state base
-       * address before we start emitting binding tables etc.
-       */
-      genX(cmd_buffer_emit_state_base_address)(cmd_buffer);
-
-      bt_state = anv_cmd_buffer_alloc_binding_table(cmd_buffer, num_entries,
-                                                    &state_offset);
-      assert(bt_state.map != NULL);
-   }
+      anv_cmd_buffer_alloc_blorp_binding_table(cmd_buffer, num_entries,
+                                               &state_offset);
 
    uint32_t *bt_map = bt_state.map;
    *bt_offset = bt_state.offset;
@@ -138,11 +124,13 @@ blorp_emit_urb_config(struct blorp_batch *batch, unsigned vs_entry_size)
    struct anv_device *device = batch->blorp->driver_ctx;
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
 
+   const unsigned entry_size[4] = { vs_entry_size, 1, 1, 1 };
+
    genX(emit_urb_setup)(device, &cmd_buffer->batch,
+                        cmd_buffer->state.current_l3_config,
                         VK_SHADER_STAGE_VERTEX_BIT |
                         VK_SHADER_STAGE_FRAGMENT_BIT,
-                        vs_entry_size, 0,
-                        cmd_buffer->state.current_l3_config);
+                        entry_size);
 }
 
 void genX(blorp_exec)(struct blorp_batch *batch,

@@ -101,7 +101,7 @@ void glcpp_set_column (int  column_no , yyscan_t yyscanner);
 #define RETURN_STRING_TOKEN(token)					\
 	do {								\
 		if (! parser->skipping) {				\
-			yylval->str = ralloc_strdup (yyextra, yytext);	\
+			yylval->str = linear_strdup(yyextra->linalloc, yytext);	\
 			RETURN_TOKEN_NEVER_SKIP (token);		\
 		}							\
 	} while(0)
@@ -175,7 +175,7 @@ glcpp_lex_update_state_per_token (glcpp_parser_t *parser, int token)
 
 SPACE		[[:space:]]
 NONSPACE	[^[:space:]]
-HSPACE		[ \t]
+HSPACE		[ \t\v\f]
 HASH		#
 NEWLINE		(\r\n|\n\r|\r|\n)
 IDENTIFIER	[_a-zA-Z][_a-zA-Z0-9]*

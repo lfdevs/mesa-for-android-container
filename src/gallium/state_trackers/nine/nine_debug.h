@@ -83,6 +83,7 @@ _nine_debug_printf( unsigned long flag,
 #define DBG_USER                 (1<<24)
 #define DBG_ERROR                (1<<25)
 #define DBG_WARN                 (1<<26)
+#define DBG_TID                  (1<<27)
 
 void
 _nine_stub( const char *file,

@@ -75,6 +75,9 @@ struct svga_surface
 };
 
 
+void
+svga_mark_surfaces_dirty(struct svga_context *svga);
+
 extern void
 svga_propagate_surface(struct svga_context *svga, struct pipe_surface *surf);
 

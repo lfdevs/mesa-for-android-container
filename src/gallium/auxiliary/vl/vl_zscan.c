@@ -152,7 +152,7 @@ create_vert_shader(struct vl_zscan *zscan)
    for (i = 0; i < zscan->num_channels; ++i) {
       ureg_ADD(shader, ureg_writemask(tmp, TGSI_WRITEMASK_X), ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_Y),
                ureg_imm1f(shader, 1.0f / (zscan->blocks_per_line * VL_BLOCK_WIDTH)
-                * (i - (signed)zscan->num_channels / 2)));
+                * ((signed)i - (signed)zscan->num_channels / 2)));
 
       ureg_MAD(shader, ureg_writemask(o_vtex[i], TGSI_WRITEMASK_X), vrect,
                ureg_imm1f(shader, 1.0f / zscan->blocks_per_line), ureg_src(tmp));

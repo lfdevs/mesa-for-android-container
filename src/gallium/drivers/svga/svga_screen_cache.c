@@ -25,7 +25,7 @@
 
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "util/u_hash.h"
+#include "util/crc32.h"
 
 #include "svga_debug.h"
 #include "svga_format.h"
@@ -433,10 +433,12 @@ svga_screen_cache_init(struct svga_screen *svgascreen)
  * allocate a new surface.
  * \param bind_flags  bitmask of PIPE_BIND_x flags
  * \param usage  one of PIPE_USAGE_x values
+ * \param validated return True if the surface is a reused surface
  */
 struct svga_winsys_surface *
 svga_screen_surface_create(struct svga_screen *svgascreen,
                            unsigned bind_flags, enum pipe_resource_usage usage,
+                           boolean *validated,
                            struct svga_host_surface_cache_key *key)
 {
    struct svga_winsys_screen *sws = svgascreen->sws;
@@ -510,6 +512,7 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
                      key->numMipLevels,
                      key->numFaces,
                      key->arraySize);
+         *validated = TRUE;
       }
    }
 
@@ -536,6 +539,8 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
                   key->size.width,
                   key->size.height,
                   key->size.depth);
+
+      *validated = FALSE;
    }
 
    return handle;

@@ -52,27 +52,9 @@
 #include "vc4_context.h"
 #include "vc4_tiling.h"
 
-/** Return the width in pixels of a 64-byte microtile. */
-uint32_t
-vc4_utile_width(int cpp)
-{
-        switch (cpp) {
-        case 1:
-        case 2:
-                return 8;
-        case 4:
-                return 4;
-        case 8:
-                return 2;
-        default:
-                fprintf(stderr, "unknown cpp: %d\n", cpp);
-                abort();
-        }
-}
-
-/** Return the height in pixels of a 64-byte microtile. */
-uint32_t
-vc4_utile_height(int cpp)
+/** Returns the stride in bytes of a 64-byte microtile. */
+static uint32_t
+vc4_utile_stride(int cpp)
 {
         switch (cpp) {
         case 1:
@@ -80,10 +62,9 @@ vc4_utile_height(int cpp)
         case 2:
         case 4:
         case 8:
-                return 4;
+                return 16;
         default:
-                fprintf(stderr, "unknown cpp: %d\n", cpp);
-                abort();
+                unreachable("bad cpp");
         }
 }
 
@@ -98,28 +79,24 @@ vc4_size_is_lt(uint32_t width, uint32_t height, int cpp)
                 height <= 4 * vc4_utile_height(cpp));
 }
 
-void
+static void
 vc4_load_utile(void *dst, void *src, uint32_t dst_stride, uint32_t cpp)
 {
-        uint32_t utile_h = vc4_utile_height(cpp);
-        uint32_t row_size = 64 / utile_h;
+        uint32_t src_stride = vc4_utile_stride(cpp);
 
-        for (int y = 0; y < utile_h; y++) {
-                memcpy(dst, src, row_size);
+        for (uint32_t src_offset = 0; src_offset < 64; src_offset += src_stride) {
+                memcpy(dst, src + src_offset, src_stride);
                 dst += dst_stride;
-                src += row_size;
         }
 }
 
-void
+static void
 vc4_store_utile(void *dst, void *src, uint32_t src_stride, uint32_t cpp)
 {
-        uint32_t utile_h = vc4_utile_height(cpp);
-        uint32_t row_size = 64 / utile_h;
+        uint32_t dst_stride = vc4_utile_stride(cpp);
 
-        for (int y = 0; y < utile_h; y++) {
-                memcpy(dst, src, row_size);
-                dst += row_size;
+        for (uint32_t dst_offset = 0; dst_offset < 64; dst_offset += dst_stride) {
+                memcpy(dst + dst_offset, src, dst_stride);
                 src += src_stride;
         }
 }
@@ -209,7 +186,10 @@ t_utile_address(uint32_t utile_x, uint32_t utile_y,
                                         odd_stile_map[stile_index] :
                                         even_stile_map[stile_index]);
 
-        uint32_t utile_offset = 64 * ((utile_y & 3) * 4 + (utile_x & 3));
+        /* This function no longer handles the utile offset within a subtile.
+         * Walking subtiles is the job of the LT image handler.
+         */
+        assert(!(utile_x & 3) && !(utile_y & 3));
 
 #if 0
         fprintf(stderr, "utile %d,%d -> %d + %d + %d (stride %d,%d) = %d\n",
@@ -219,29 +199,70 @@ t_utile_address(uint32_t utile_x, uint32_t utile_y,
                 tile_offset + stile_offset + utile_offset);
 #endif
 
-        return tile_offset + stile_offset + utile_offset;
+        return tile_offset + stile_offset;
 }
 
-static void
-vc4_load_t_image(void *dst, uint32_t dst_stride,
-                 void *src, uint32_t src_stride,
-                 int cpp, const struct pipe_box *box)
+/**
+ * Loads or stores a T texture image by breaking it down into subtiles
+ * (1024-byte, 4x4-utile) sub-images that we can use the LT tiling functions
+ * on.
+ */
+static inline void
+vc4_t_image_helper(void *gpu, uint32_t gpu_stride,
+                   void *cpu, uint32_t cpu_stride,
+                   int cpp, const struct pipe_box *box,
+                   bool to_cpu)
 {
         uint32_t utile_w = vc4_utile_width(cpp);
         uint32_t utile_h = vc4_utile_height(cpp);
-        uint32_t utile_stride = src_stride / cpp / utile_w;
-        uint32_t xstart = box->x / utile_w;
-        uint32_t ystart = box->y / utile_h;
+        uint32_t utile_w_shift = ffs(utile_w) - 1;
+        uint32_t utile_h_shift = ffs(utile_h) - 1;
+        uint32_t stile_w = 4 * utile_w;
+        uint32_t stile_h = 4 * utile_h;
+        assert(stile_w * stile_h * cpp == 1024);
+        uint32_t utile_stride = gpu_stride / cpp / utile_w;
+        uint32_t x1 = box->x;
+        uint32_t y1 = box->y;
+        uint32_t x2 = box->x + box->width;
+        uint32_t y2 = box->y + box->height;
+        struct pipe_box partial_box;
+        uint32_t gpu_lt_stride = stile_w * cpp;
 
-        for (uint32_t y = 0; y < box->height / utile_h; y++) {
-                for (int x = 0; x < box->width / utile_w; x++) {
-                        vc4_load_utile(dst + (y * utile_h * dst_stride +
-                                              x * utile_w * cpp),
-                                       src + t_utile_address(xstart + x,
-                                                             ystart + y,
-                                                             utile_stride),
-                                       dst_stride, cpp);
+        for (uint32_t y = y1; y < y2; y = align(y + 1, stile_h)) {
+                partial_box.y = y & (stile_h - 1);
+                partial_box.height = MIN2(y2 - y, stile_h - partial_box.y);
+
+                uint32_t cpu_offset = 0;
+                for (uint32_t x = x1; x < x2; x = align(x + 1, stile_w)) {
+                        partial_box.x = x & (stile_w - 1);
+                        partial_box.width = MIN2(x2 - x,
+                                                 stile_w - partial_box.x);
+
+                        /* The dst offset we want is the start of this
+                         * subtile
+                         */
+                        uint32_t gpu_offset =
+                                t_utile_address((x >> utile_w_shift) & ~0x3,
+                                                (y >> utile_h_shift) & ~0x3,
+                                                utile_stride);
+
+                        if (to_cpu) {
+                                vc4_load_lt_image(cpu + cpu_offset,
+                                                  cpu_stride,
+                                                  gpu + gpu_offset,
+                                                  gpu_lt_stride,
+                                                  cpp, &partial_box);
+                        } else {
+                                vc4_store_lt_image(gpu + gpu_offset,
+                                                   gpu_lt_stride,
+                                                   cpu + cpu_offset,
+                                                   cpu_stride,
+                                                   cpp, &partial_box);
+                        }
+
+                        cpu_offset += partial_box.width * cpp;
                 }
+                cpu += cpu_stride * partial_box.height;
         }
 }
 
@@ -250,22 +271,19 @@ vc4_store_t_image(void *dst, uint32_t dst_stride,
                   void *src, uint32_t src_stride,
                   int cpp, const struct pipe_box *box)
 {
-        uint32_t utile_w = vc4_utile_width(cpp);
-        uint32_t utile_h = vc4_utile_height(cpp);
-        uint32_t utile_stride = dst_stride / cpp / utile_w;
-        uint32_t xstart = box->x / utile_w;
-        uint32_t ystart = box->y / utile_h;
+        vc4_t_image_helper(dst, dst_stride,
+                           src, src_stride,
+                           cpp, box, false);
+}
 
-        for (uint32_t y = 0; y < box->height / utile_h; y++) {
-                for (int x = 0; x < box->width / utile_w; x++) {
-                        vc4_store_utile(dst + t_utile_address(xstart + x,
-                                                              ystart + y,
-                                                              utile_stride),
-                                        src + (y * utile_h * src_stride +
-                                               x * utile_w * cpp),
-                                        src_stride, cpp);
-                }
-        }
+static void
+vc4_load_t_image(void *dst, uint32_t dst_stride,
+                  void *src, uint32_t src_stride,
+                  int cpp, const struct pipe_box *box)
+{
+        vc4_t_image_helper(src, src_stride,
+                           dst, dst_stride,
+                           cpp, box, true);
 }
 
 /**

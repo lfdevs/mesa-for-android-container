@@ -323,8 +323,10 @@ svga_clear_texture(struct pipe_context *pipe,
       struct pipe_surface *dsv =
          svga_validate_surface_view(svga, svga_surface_dst);
 
-      if (!dsv)
+      if (!dsv) {
+         pipe_surface_reference(&surface, NULL);
          return;
+      }
 
       if (box->x == 0 && box->y == 0 && box->width == surface->width &&
           box->height == surface->height) {
@@ -382,8 +384,10 @@ svga_clear_texture(struct pipe_context *pipe,
       struct pipe_surface *rtv =
          svga_validate_surface_view(svga, svga_surface_dst);
 
-      if (!rtv)
+      if (!rtv) {
+         pipe_surface_reference(&surface, NULL);
          return;
+      }
 
       if (box->x == 0 && box->y == 0 && box->width == surface->width &&
           box->height == surface->height) {
@@ -449,11 +453,141 @@ svga_clear_texture(struct pipe_context *pipe,
          }
       }
    }
+   pipe_surface_reference(&surface, NULL);
 }
 
+/**
+ * \brief  Clear the whole render target using vgpu10 functionality
+ *
+ * \param svga[in]  The svga context
+ * \param dst[in]  The surface to clear
+ * \param color[in]  Clear color
+ * \return PIPE_OK if all well, PIPE_ERROR_OUT_OF_MEMORY if ran out of
+ * command submission resources.
+ */
+static enum pipe_error
+svga_try_clear_render_target(struct svga_context *svga,
+                             struct pipe_surface *dst,
+                             const union pipe_color_union *color)
+{
+   struct pipe_surface *rtv =
+      svga_validate_surface_view(svga, svga_surface(dst));
+
+   if (!rtv)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   return SVGA3D_vgpu10_ClearRenderTargetView(svga->swc, rtv, color->f);
+ }
+
+/**
+ * \brief  Clear part of render target using gallium blitter utilities
+ *
+ * \param svga[in]  The svga context
+ * \param dst[in]  The surface to clear
+ * \param color[in]  Clear color
+ * \param dstx[in]  Clear region left
+ * \param dsty[in]  Clear region top
+ * \param width[in]  Clear region width
+ * \param height[in]  Clear region height
+ */
+static void
+svga_blitter_clear_render_target(struct svga_context *svga,
+                                 struct pipe_surface *dst,
+                                 const union pipe_color_union *color,
+                                 unsigned dstx, unsigned dsty,
+                                 unsigned width, unsigned height)
+{
+   begin_blit(svga);
+   util_blitter_save_framebuffer(svga->blitter, &svga->curr.framebuffer);
+
+   util_blitter_clear_render_target(svga->blitter, dst, color,
+                                    dstx, dsty, width, height);
+}
+
+/**
+ * \brief Toggle conditional rendering if already enabled
+ *
+ * \param svga[in]  The svga context
+ * \param render_condition_enabled[in]  Whether to ignore requests to turn
+ * conditional rendering off
+ * \param on[in]  Whether to turn conditional rendering on or off
+ */
+static void
+svga_toggle_render_condition(struct svga_context *svga,
+                             boolean render_condition_enabled,
+                             boolean on)
+{
+   SVGA3dQueryId query_id;
+   enum pipe_error ret;
+
+   if (render_condition_enabled ||
+       svga->pred.query_id == SVGA3D_INVALID_ID) {
+      return;
+   }
+
+   /*
+    * If we get here, it means that the system supports
+    * conditional rendering since svga->pred.query_id has already been
+    * modified for this context and thus support has already been
+    * verified.
+    */
+   query_id = on ? svga->pred.query_id : SVGA3D_INVALID_ID;
+
+   ret = SVGA3D_vgpu10_SetPredication(svga->swc, query_id,
+                                      (uint32) svga->pred.cond);
+   if (ret == PIPE_ERROR_OUT_OF_MEMORY) {
+      svga_context_flush(svga, NULL);
+      ret = SVGA3D_vgpu10_SetPredication(svga->swc, query_id,
+                                         (uint32) svga->pred.cond);
+      assert(ret == PIPE_OK);
+   }
+}
+
+/**
+ * \brief Clear render target pipe callback
+ *
+ * \param pipe[in]  The pipe context
+ * \param dst[in]  The surface to clear
+ * \param color[in]  Clear color
+ * \param dstx[in]  Clear region left
+ * \param dsty[in]  Clear region top
+ * \param width[in]  Clear region width
+ * \param height[in]  Clear region height
+ * \param render_condition_enabled[in]  Whether to use conditional rendering
+ * to clear (if elsewhere enabled).
+ */
+static void
+svga_clear_render_target(struct pipe_context *pipe,
+                         struct pipe_surface *dst,
+                         const union pipe_color_union *color,
+                         unsigned dstx, unsigned dsty,
+                         unsigned width, unsigned height,
+                         bool render_condition_enabled)
+{
+    struct svga_context *svga = svga_context( pipe );
+
+    svga_toggle_render_condition(svga, render_condition_enabled, FALSE);
+    if (!svga_have_vgpu10(svga) || dstx != 0 || dsty != 0 ||
+        width != dst->width || height != dst->height) {
+       svga_blitter_clear_render_target(svga, dst, color, dstx, dsty, width,
+                                        height);
+    } else {
+       enum pipe_error ret;
+       
+       ret = svga_try_clear_render_target(svga, dst, color);
+       if (ret == PIPE_ERROR_OUT_OF_MEMORY) {
+          svga_context_flush( svga, NULL );
+          ret = svga_try_clear_render_target(svga, dst, color);
+       }
+       
+       assert (ret == PIPE_OK);
+    }
+    svga_toggle_render_condition(svga, render_condition_enabled, TRUE);
+}
 
 void svga_init_clear_functions(struct svga_context *svga)
 {
+   svga->pipe.clear_render_target = svga_clear_render_target;
    svga->pipe.clear_texture = svga_clear_texture;
    svga->pipe.clear = svga_clear;
 }

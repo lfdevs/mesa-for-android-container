@@ -301,7 +301,7 @@ void r600_test_dma(struct r600_common_screen *rscreen)
 		set_random_pixels(ctx, src, &src_cpu);
 
 		/* clear dst pixels */
-		rctx->clear_buffer(ctx, dst, 0, rdst->surface.bo_size, 0, true);
+		rctx->clear_buffer(ctx, dst, 0, rdst->surface.surf_size, 0, true);
 		memset(dst_cpu.ptr, 0, dst_cpu.layer_stride * tdst.array_size);
 
 		/* preparation */
@@ -331,8 +331,8 @@ void r600_test_dma(struct r600_common_screen *rscreen)
 				dstz = rand() % (tdst.array_size - depth + 1);
 
 				/* special code path to hit the tiled partial copies */
-				if (rsrc->surface.level[0].mode >= RADEON_SURF_MODE_1D &&
-				    rdst->surface.level[0].mode >= RADEON_SURF_MODE_1D &&
+				if (!rsrc->surface.is_linear &&
+				    !rdst->surface.is_linear &&
 				    rand() & 1) {
 					if (max_width < 8 || max_height < 8)
 						continue;
@@ -359,8 +359,8 @@ void r600_test_dma(struct r600_common_screen *rscreen)
 				}
 
 				/* special code path to hit out-of-bounds reads in L2T */
-				if (rsrc->surface.level[0].mode == RADEON_SURF_MODE_LINEAR_ALIGNED &&
-				    rdst->surface.level[0].mode >= RADEON_SURF_MODE_1D &&
+				if (rsrc->surface.is_linear &&
+				    !rdst->surface.is_linear &&
 				    rand() % 4 == 0) {
 					srcx = 0;
 					srcy = 0;

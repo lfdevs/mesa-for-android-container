@@ -43,7 +43,6 @@ static unsigned
 translate_opcode(uint opcode)
 {
    switch (opcode) {
-   case TGSI_OPCODE_ABS:        return SVGA3DOP_ABS;
    case TGSI_OPCODE_ADD:        return SVGA3DOP_ADD;
    case TGSI_OPCODE_DP2A:       return SVGA3DOP_DP2ADD;
    case TGSI_OPCODE_DP3:        return SVGA3DOP_DP3;
@@ -1400,30 +1399,6 @@ emit_ssg(struct svga_shader_emitter *emit,
    /* ADD  DST, TMP0, TMP1 */
    return submit_op2( emit, inst_token( SVGA3DOP_ADD ), dst, src( temp0 ),
                       src( temp1 ) );
-}
-
-
-/**
- * Translate/emit TGSI SUB instruction as:
- * ADD DST, SRC0, negate(SRC1)
- */
-static boolean
-emit_sub(struct svga_shader_emitter *emit,
-         const struct tgsi_full_instruction *insn)
-{
-   SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
-   struct src_register src0 = translate_src_register(
-      emit, &insn->Src[0] );
-   struct src_register src1 = translate_src_register(
-      emit, &insn->Src[1] );
-
-   src1 = negate(src1);
-
-   if (!submit_op2( emit, inst_token( SVGA3DOP_ADD ), dst,
-                    src0, src1 ))
-      return FALSE;
-
-   return TRUE;
 }
 
 
@@ -2989,9 +2964,6 @@ svga_emit_instruction(struct svga_shader_emitter *emit,
 
    case TGSI_OPCODE_SLE:
       return emit_select_op( emit, PIPE_FUNC_LEQUAL, insn );
-
-   case TGSI_OPCODE_SUB:
-      return emit_sub( emit, insn );
 
    case TGSI_OPCODE_POW:
       return emit_pow( emit, insn );

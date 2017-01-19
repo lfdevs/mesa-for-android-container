@@ -42,7 +42,7 @@
 #include "wsi_common_queue.h"
 
 #define typed_memcpy(dest, src, count) ({ \
-   static_assert(sizeof(*src) == sizeof(*dest), ""); \
+   STATIC_ASSERT(sizeof(*src) == sizeof(*dest)); \
    memcpy((dest), (src), (count) * sizeof(*(src))); \
 })
 
@@ -261,6 +261,9 @@ VkBool32 wsi_get_physical_device_xcb_presentation_support(
    struct wsi_x11_connection *wsi_conn =
       wsi_x11_get_connection(wsi_device, alloc, connection);
 
+   if (!wsi_conn)
+      return false;
+
    if (!wsi_conn->has_dri3) {
       fprintf(stderr, "vulkan: No DRI3 support\n");
       return false;
@@ -348,6 +351,9 @@ x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
     */
    xcb_visualtype_t *visual =
       get_visualtype_for_window(conn, window, &visual_depth);
+
+   if (!visual)
+      return VK_ERROR_SURFACE_LOST_KHR;
 
    geom = xcb_get_geometry_reply(conn, geom_cookie, &err);
    if (geom) {
@@ -447,7 +453,7 @@ VkResult wsi_create_xcb_surface(const VkAllocationCallbacks *pAllocator,
    surface->connection = pCreateInfo->connection;
    surface->window = pCreateInfo->window;
 
-   *pSurface = _VkIcdSurfaceBase_to_handle(&surface->base);
+   *pSurface = VkIcdSurfaceBase_to_handle(&surface->base);
    return VK_SUCCESS;
 }
 
@@ -466,7 +472,7 @@ VkResult wsi_create_xlib_surface(const VkAllocationCallbacks *pAllocator,
    surface->dpy = pCreateInfo->dpy;
    surface->window = pCreateInfo->window;
 
-   *pSurface = _VkIcdSurfaceBase_to_handle(&surface->base);
+   *pSurface = VkIcdSurfaceBase_to_handle(&surface->base);
    return VK_SUCCESS;
 }
 
@@ -891,6 +897,8 @@ x11_swapchain_destroy(struct wsi_swapchain *anv_chain,
                       const VkAllocationCallbacks *pAllocator)
 {
    struct x11_swapchain *chain = (struct x11_swapchain *)anv_chain;
+   xcb_void_cookie_t cookie;
+
    for (uint32_t i = 0; i < chain->image_count; i++)
       x11_image_finish(chain, pAllocator, &chain->images[i]);
 
@@ -904,6 +912,10 @@ x11_swapchain_destroy(struct wsi_swapchain *anv_chain,
    }
 
    xcb_unregister_for_special_event(chain->conn, chain->special_event);
+   cookie = xcb_present_select_input_checked(chain->conn, chain->event_id,
+                                             chain->window,
+                                             XCB_PRESENT_EVENT_MASK_NO_EVENT);
+   xcb_discard_reply(chain->conn, cookie.sequence);
 
    vk_free(pAllocator, chain);
 

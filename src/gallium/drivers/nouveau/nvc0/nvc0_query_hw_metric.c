@@ -34,8 +34,8 @@ static const struct nvc0_hw_metric_cfg {
    _Q(ACHIEVED_OCCUPANCY,
       "metric-achieved_occupancy",
       PERCENTAGE,
-      "Ratio of the average active warps per active cycle to the maximum number "
-      "of warps supported on a multiprocessor"),
+      "Ratio of the average active warps per active cycle to the maximum "
+      "number of warps supported on a multiprocessor"),
 
    _Q(BRANCH_EFFICIENCY,
       "metric-branch_efficiency",
@@ -70,8 +70,8 @@ static const struct nvc0_hw_metric_cfg {
    _Q(ISSUE_SLOT_UTILIZATION,
       "metric-issue_slot_utilization",
       PERCENTAGE,
-      "Percentage of issue slots that issued at least one instruction, averaged "
-      "across all cycles"),
+      "Percentage of issue slots that issued at least one instruction, "
+      "averaged across all cycles"),
 
    _Q(IPC,
       "metric-ipc",
@@ -83,6 +83,19 @@ static const struct nvc0_hw_metric_cfg {
       UINT64,
       "Average number of replays due to shared memory conflicts for each "
       "instruction executed"),
+
+   _Q(WARP_EXECUTION_EFFICIENCY,
+      "metric-warp_execution_efficiency",
+      PERCENTAGE,
+      "Ratio of the average active threads per warp to the maximum number of "
+      "threads per warp supported on a multiprocessor"),
+
+   _Q(WARP_NONPRED_EXECUTION_EFFICIENCY,
+      "metric-warp_nonpred_execution_efficiency",
+      PERCENTAGE,
+      "Ratio of the average active threads per warp executing non-predicated "
+      "instructions to the maximum number of threads per warp supported on a "
+      "multiprocessor"),
 };
 
 #undef _Q
@@ -178,9 +191,9 @@ static const struct nvc0_hw_metric_query_cfg *sm20_hw_metric_queries[] =
    &sm20_branch_efficiency,
    &sm20_inst_per_wrap,
    &sm20_inst_replay_overhead,
+   &sm20_ipc,
    &sm20_issued_ipc,
    &sm20_issue_slot_utilization,
-   &sm20_ipc,
 };
 
 /* ==== Compute capability 2.1 (GF108+ except GF110) ==== */
@@ -249,46 +262,19 @@ static const struct nvc0_hw_metric_query_cfg *sm21_hw_metric_queries[] =
    &sm21_inst_issued,
    &sm20_inst_per_wrap,
    &sm21_inst_replay_overhead,
+   &sm20_ipc,
    &sm21_issued_ipc,
    &sm21_issue_slots,
    &sm21_issue_slot_utilization,
-   &sm20_ipc,
 };
 
 /* ==== Compute capability 3.0 (GK104/GK106/GK107) ==== */
-static const struct nvc0_hw_metric_query_cfg
-sm30_achieved_occupancy =
-{
-   .type        = NVC0_HW_METRIC_QUERY_ACHIEVED_OCCUPANCY,
-   .queries[0]  = _SM(ACTIVE_WARPS),
-   .queries[1]  = _SM(ACTIVE_CYCLES),
-   .num_queries = 2,
-};
-
-static const struct nvc0_hw_metric_query_cfg
-sm30_branch_efficiency =
-{
-   .type        = NVC0_HW_METRIC_QUERY_BRANCH_EFFICIENCY,
-   .queries[0]  = _SM(BRANCH),
-   .queries[1]  = _SM(DIVERGENT_BRANCH),
-   .num_queries = 2,
-};
-
 static const struct nvc0_hw_metric_query_cfg
 sm30_inst_issued =
 {
    .type        = NVC0_HW_METRIC_QUERY_INST_ISSUED,
    .queries[0]  = _SM(INST_ISSUED1),
    .queries[1]  = _SM(INST_ISSUED2),
-   .num_queries = 2,
-};
-
-static const struct nvc0_hw_metric_query_cfg
-sm30_inst_per_wrap =
-{
-   .type        = NVC0_HW_METRIC_QUERY_INST_PER_WRAP,
-   .queries[0]  = _SM(INST_EXECUTED),
-   .queries[1]  = _SM(WARPS_LAUNCHED),
    .num_queries = 2,
 };
 
@@ -332,15 +318,6 @@ sm30_issue_slot_utilization =
 };
 
 static const struct nvc0_hw_metric_query_cfg
-sm30_ipc =
-{
-   .type        = NVC0_HW_METRIC_QUERY_IPC,
-   .queries[0]  = _SM(INST_EXECUTED),
-   .queries[1]  = _SM(ACTIVE_CYCLES),
-   .num_queries = 2,
-};
-
-static const struct nvc0_hw_metric_query_cfg
 sm30_shared_replay_overhead =
 {
    .type        = NVC0_HW_METRIC_QUERY_SHARED_REPLAY_OVERHEAD,
@@ -350,32 +327,69 @@ sm30_shared_replay_overhead =
    .num_queries = 3,
 };
 
+static const struct nvc0_hw_metric_query_cfg
+sm30_warp_execution_efficiency =
+{
+   .type        = NVC0_HW_METRIC_QUERY_WARP_EXECUTION_EFFICIENCY,
+   .queries[0]  = _SM(INST_EXECUTED),
+   .queries[1]  = _SM(TH_INST_EXECUTED),
+   .num_queries = 2,
+};
+
 static const struct nvc0_hw_metric_query_cfg *sm30_hw_metric_queries[] =
 {
-   &sm30_achieved_occupancy,
-   &sm30_branch_efficiency,
+   &sm20_achieved_occupancy,
+   &sm20_branch_efficiency,
    &sm30_inst_issued,
-   &sm30_inst_per_wrap,
+   &sm20_inst_per_wrap,
    &sm30_inst_replay_overhead,
+   &sm20_ipc,
    &sm30_issued_ipc,
    &sm30_issue_slots,
    &sm30_issue_slot_utilization,
-   &sm30_ipc,
    &sm30_shared_replay_overhead,
+   &sm30_warp_execution_efficiency,
 };
 
-/* ==== Compute capability 3.5 (GK110) ==== */
+/* ==== Compute capability 3.5 (GK110/GK208) ==== */
+static const struct nvc0_hw_metric_query_cfg
+sm35_warp_nonpred_execution_efficiency =
+{
+   .type        = NVC0_HW_METRIC_QUERY_WARP_NONPRED_EXECUTION_EFFICIENCY,
+   .queries[0]  = _SM(INST_EXECUTED),
+   .queries[1]  = _SM(NOT_PRED_OFF_INST_EXECUTED),
+   .num_queries = 2,
+};
+
 static const struct nvc0_hw_metric_query_cfg *sm35_hw_metric_queries[] =
 {
-   &sm30_achieved_occupancy,
+   &sm20_achieved_occupancy,
    &sm30_inst_issued,
-   &sm30_inst_per_wrap,
+   &sm20_inst_per_wrap,
    &sm30_inst_replay_overhead,
+   &sm20_ipc,
    &sm30_issued_ipc,
-   &sm30_inst_issued,
+   &sm30_issue_slots,
    &sm30_issue_slot_utilization,
-   &sm30_ipc,
    &sm30_shared_replay_overhead,
+   &sm30_warp_execution_efficiency,
+   &sm35_warp_nonpred_execution_efficiency,
+};
+
+/* ==== Compute capability 5.0 (GM107/GM108) ==== */
+static const struct nvc0_hw_metric_query_cfg *sm50_hw_metric_queries[] =
+{
+   &sm20_achieved_occupancy,
+   &sm20_branch_efficiency,
+   &sm30_inst_issued,
+   &sm20_inst_per_wrap,
+   &sm30_inst_replay_overhead,
+   &sm20_ipc,
+   &sm30_issued_ipc,
+   &sm30_issue_slots,
+   &sm30_issue_slot_utilization,
+   &sm30_warp_execution_efficiency,
+   &sm35_warp_nonpred_execution_efficiency,
 };
 
 #undef _SM
@@ -386,6 +400,9 @@ nvc0_hw_metric_get_queries(struct nvc0_screen *screen)
    struct nouveau_device *dev = screen->base.device;
 
    switch (screen->base.class_3d) {
+   case GM200_3D_CLASS:
+   case GM107_3D_CLASS:
+      return sm50_hw_metric_queries;
    case NVF0_3D_CLASS:
       return sm35_hw_metric_queries;
    case NVE4_3D_CLASS:
@@ -405,6 +422,9 @@ nvc0_hw_metric_get_num_queries(struct nvc0_screen *screen)
    struct nouveau_device *dev = screen->base.device;
 
    switch (screen->base.class_3d) {
+   case GM200_3D_CLASS:
+   case GM107_3D_CLASS:
+      return ARRAY_SIZE(sm50_hw_metric_queries);
    case NVF0_3D_CLASS:
       return ARRAY_SIZE(sm35_hw_metric_queries);
    case NVE4_3D_CLASS:
@@ -609,10 +629,32 @@ sm30_hw_metric_calc_result(struct nvc0_hw_query *hq, uint64_t res64[8])
       if (res64[2])
          return (res64[0] + res64[1]) / (double)res64[2];
       break;
+   case NVC0_HW_METRIC_QUERY_WARP_EXECUTION_EFFICIENCY:
+      /* thread_inst_executed / (inst_executed * max. number of threads per
+       * wrap) * 100 */
+      if (res64[0])
+         return (res64[1] / ((double)res64[0] * 32)) * 100;
+      break;
    default:
       debug_printf("invalid metric type: %d\n",
                    hq->base.type - NVC0_HW_METRIC_QUERY(0));
       break;
+   }
+   return 0;
+}
+
+static uint64_t
+sm35_hw_metric_calc_result(struct nvc0_hw_query *hq, uint64_t res64[8])
+{
+   switch (hq->base.type - NVC0_HW_METRIC_QUERY(0)) {
+   case NVC0_HW_METRIC_QUERY_WARP_NONPRED_EXECUTION_EFFICIENCY:
+      /* not_predicated_off_thread_inst_executed / (inst_executed * max. number
+       * of threads per wrap) * 100 */
+      if (res64[0])
+         return (res64[1] / ((double)res64[0] * 32)) * 100;
+      break;
+   default:
+      return sm30_hw_metric_calc_result(hq, res64);
    }
    return 0;
 }
@@ -640,7 +682,11 @@ nvc0_hw_metric_get_query_result(struct nvc0_context *nvc0,
    }
 
    switch (screen->base.class_3d) {
+   case GM200_3D_CLASS:
+   case GM107_3D_CLASS:
    case NVF0_3D_CLASS:
+      value = sm35_hw_metric_calc_result(hq, res64);
+      break;
    case NVE4_3D_CLASS:
       value = sm30_hw_metric_calc_result(hq, res64);
       break;
@@ -712,7 +758,7 @@ nvc0_hw_metric_get_driver_query_info(struct nvc0_screen *screen, unsigned id,
 
    if (id < count) {
       if (screen->compute) {
-         if (screen->base.class_3d <= NVF0_3D_CLASS) {
+         if (screen->base.class_3d <= GM200_3D_CLASS) {
             const struct nvc0_hw_metric_query_cfg **queries =
                nvc0_hw_metric_get_queries(screen);
             const struct nvc0_hw_metric_cfg *cfg =

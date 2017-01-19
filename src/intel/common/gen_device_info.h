@@ -41,6 +41,7 @@ struct gen_device_info
    bool is_haswell;
    bool is_cherryview;
    bool is_broxton;
+   bool is_kabylake;
 
    bool has_hiz_and_separate_stencil;
    bool must_use_separate_stencil;
@@ -135,12 +136,16 @@ struct gen_device_info
        * urb.size = URB Size (kbytes) / slice count
        */
       unsigned size;
-      unsigned min_vs_entries;
-      unsigned max_vs_entries;
-      unsigned max_tcs_entries;
-      unsigned min_ds_entries;
-      unsigned max_tes_entries;
-      unsigned max_gs_entries;
+
+      /**
+       * The minimum number of URB entries.  See the 3DSTATE_URB_<XS> docs.
+       */
+      unsigned min_entries[4];
+
+      /**
+       * The maximum number of URB entries.  See the 3DSTATE_URB_<XS> docs.
+       */
+      unsigned max_entries[4];
    } urb;
    /** @} */
 };

@@ -255,7 +255,7 @@ void container_node::expand() {
 void node::remove() {parent->remove_node(this);
 }
 
-value_hash node::hash_src() {
+value_hash node::hash_src() const {
 
 	value_hash h = 12345;
 
@@ -269,7 +269,7 @@ value_hash node::hash_src() {
 }
 
 
-value_hash node::hash() {
+value_hash node::hash() const {
 
 	if (parent && parent->subtype == NST_LOOP_PHI_CONTAINER)
 		return 47451;

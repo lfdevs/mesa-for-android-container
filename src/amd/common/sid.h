@@ -133,7 +133,9 @@
 #define   R_3F1_IB_BASE_HI                     0x3F1
 #define   R_3F2_CONTROL                        0x3F2
 #define     S_3F2_IB_SIZE(x)                   (((unsigned)(x) & 0xfffff) << 0)
+#define     G_3F2_IB_SIZE(x)                   (((unsigned)(x) >> 0) & 0xfffff)
 #define     S_3F2_CHAIN(x)                     (((unsigned)(x) & 0x1) << 20)
+#define     G_3F2_CHAIN(x)                     (((unsigned)(x) >> 20) & 0x1)
 #define     S_3F2_VALID(x)                     (((unsigned)(x) & 0x1) << 23)
 
 #define PKT3_COPY_DATA			       0x40
@@ -151,7 +153,12 @@
 #define PKT3_COND_WRITE                        0x45
 #define PKT3_EVENT_WRITE                       0x46
 #define PKT3_EVENT_WRITE_EOP                   0x47
-#define PKT3_EVENT_WRITE_EOS                   0x48
+/* CP DMA bug: Any use of CP_DMA.DST_SEL=TC must be avoided when EOS packets
+ * are used. Use DST_SEL=MC instead. For prefetch, use SRC_SEL=TC and
+ * DST_SEL=MC. Only CIK chips are affected.
+ */
+/*#define PKT3_EVENT_WRITE_EOS                   0x48*/ /* fix CP DMA before uncommenting */
+#define PKT3_RELEASE_MEM                       0x49
 #define PKT3_ONE_REG_WRITE                     0x57 /* not on CIK */
 #define PKT3_ACQUIRE_MEM                       0x58 /* new for CIK */
 #define PKT3_SET_CONFIG_REG                    0x68
@@ -7761,7 +7768,7 @@
 #define     V_028A90_FLUSH_HS_OUTPUT                                0x11
 #define     V_028A90_FLUSH_LS_OUTPUT                                0x12
 #define     V_028A90_CACHE_FLUSH_AND_INV_TS_EVENT                   0x14
-#define     V_028A90_ZPASS_DONE                                     0x15 /* not on CIK */
+#define     V_028A90_ZPASS_DONE                                     0x15
 #define     V_028A90_CACHE_FLUSH_AND_INV_EVENT                      0x16
 #define     V_028A90_PERFCOUNTER_START                              0x17
 #define     V_028A90_PERFCOUNTER_STOP                               0x18
@@ -7795,7 +7802,7 @@
 /* CIK */
 #define     V_028A90_PIXEL_PIPE_STAT_CONTROL                        0x38
 #define     V_028A90_PIXEL_PIPE_STAT_DUMP                           0x39
-#define     V_028A90_PIXEL_PIPE_STAT_RESET                          0x40
+#define     V_028A90_PIXEL_PIPE_STAT_RESET                          0x3A
 /*     */
 #define   S_028A90_ADDRESS_HI(x)                                      (((unsigned)(x) & 0x1FF) << 18)
 #define   G_028A90_ADDRESS_HI(x)                                      (((x) >> 18) & 0x1FF)
@@ -9016,8 +9023,10 @@
 /* SI async DMA Packet types */
 #define    SI_DMA_PACKET_WRITE                     0x2
 #define    SI_DMA_PACKET_COPY                      0x3
-#define    SI_DMA_COPY_MAX_SIZE                    0xfffe0
-#define    SI_DMA_COPY_MAX_SIZE_DW                 0xffff8
+#define    SI_DMA_COPY_MAX_BYTE_ALIGNED_SIZE       0xfffe0
+/* The documentation says 0xffff8 is the maximum size in dwords, which is
+ * 0x3fffe0 in bytes. */
+#define    SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE      0x3fffe0
 #define    SI_DMA_COPY_DWORD_ALIGNED               0x00
 #define    SI_DMA_COPY_BYTE_ALIGNED                0x40
 #define    SI_DMA_COPY_TILED                       0x8

@@ -706,6 +706,7 @@ brw_set_dp_write_message(struct brw_codegen *p,
 			 unsigned binding_table_index,
 			 unsigned msg_control,
 			 unsigned msg_type,
+                         unsigned target_cache,
 			 unsigned msg_length,
 			 bool header_present,
 			 unsigned last_render_target,
@@ -714,20 +715,8 @@ brw_set_dp_write_message(struct brw_codegen *p,
 			 unsigned send_commit_msg)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   unsigned sfid;
-
-   if (devinfo->gen >= 7) {
-      /* Use the Render Cache for RT writes; otherwise use the Data Cache */
-      if (msg_type == GEN6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE)
-	 sfid = GEN6_SFID_DATAPORT_RENDER_CACHE;
-      else
-	 sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
-   } else if (devinfo->gen == 6) {
-      /* Use the render cache for all write messages. */
-      sfid = GEN6_SFID_DATAPORT_RENDER_CACHE;
-   } else {
-      sfid = BRW_SFID_DATAPORT_WRITE;
-   }
+   const unsigned sfid = (devinfo->gen >= 6 ? target_cache :
+                          BRW_SFID_DATAPORT_WRITE);
 
    brw_set_message_descriptor(p, insn, sfid, msg_length, response_length,
 			      header_present, end_of_thread);
@@ -753,26 +742,8 @@ brw_set_dp_read_message(struct brw_codegen *p,
 			unsigned response_length)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   unsigned sfid;
-
-   if (devinfo->gen >= 7) {
-      if (target_cache == BRW_DATAPORT_READ_TARGET_RENDER_CACHE)
-         sfid = GEN6_SFID_DATAPORT_RENDER_CACHE;
-      else if (target_cache == BRW_DATAPORT_READ_TARGET_DATA_CACHE)
-         sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
-      else if (target_cache == BRW_DATAPORT_READ_TARGET_SAMPLER_CACHE)
-         sfid = GEN6_SFID_DATAPORT_SAMPLER_CACHE;
-      else
-         unreachable("Invalid target cache");
-
-   } else if (devinfo->gen == 6) {
-      if (target_cache == BRW_DATAPORT_READ_TARGET_RENDER_CACHE)
-	 sfid = GEN6_SFID_DATAPORT_RENDER_CACHE;
-      else
-	 sfid = GEN6_SFID_DATAPORT_SAMPLER_CACHE;
-   } else {
-      sfid = BRW_SFID_DATAPORT_READ;
-   }
+   const unsigned sfid = (devinfo->gen >= 6 ? target_cache :
+                          BRW_SFID_DATAPORT_READ);
 
    brw_set_message_descriptor(p, insn, sfid, msg_length, response_length,
 			      header_present, false);
@@ -1282,10 +1253,8 @@ brw_F16TO32(struct brw_codegen *p, struct brw_reg dst, struct brw_reg src)
 void brw_NOP(struct brw_codegen *p)
 {
    brw_inst *insn = next_insn(p, BRW_OPCODE_NOP);
-   brw_inst_set_exec_size(p->devinfo, insn, BRW_EXECUTE_1);
-   brw_set_dest(p, insn, retype(brw_vec1_grf(0,0), BRW_REGISTER_TYPE_UD));
-   brw_set_src0(p, insn, retype(brw_vec1_grf(0,0), BRW_REGISTER_TYPE_UD));
-   brw_set_src1(p, insn, brw_imm_ud(0x0));
+   memset(insn, 0, sizeof(*insn));
+   brw_inst_set_opcode(p->devinfo, insn, BRW_OPCODE_NOP);
 }
 
 
@@ -2075,6 +2044,10 @@ void brw_oword_block_write_scratch(struct brw_codegen *p,
 				   unsigned offset)
 {
    const struct gen_device_info *devinfo = p->devinfo;
+   const unsigned target_cache =
+      (devinfo->gen >= 7 ? GEN7_SFID_DATAPORT_DATA_CACHE :
+       devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_RENDER_CACHE :
+       BRW_DATAPORT_READ_TARGET_RENDER_CACHE);
    uint32_t msg_type;
 
    if (devinfo->gen >= 6)
@@ -2083,11 +2056,6 @@ void brw_oword_block_write_scratch(struct brw_codegen *p,
    mrf = retype(mrf, BRW_REGISTER_TYPE_UD);
 
    const unsigned mlen = 1 + num_regs;
-   const unsigned msg_control =
-      (num_regs == 1 ? BRW_DATAPORT_OWORD_BLOCK_2_OWORDS :
-       num_regs == 2 ? BRW_DATAPORT_OWORD_BLOCK_4_OWORDS :
-       num_regs == 4 ? BRW_DATAPORT_OWORD_BLOCK_8_OWORDS : 0);
-   assert(msg_control);
 
    /* Set up the message header.  This is g0, with g0.2 filled with
     * the offset.  We don't want to leave our offset around in g0 or
@@ -2161,8 +2129,9 @@ void brw_oword_block_write_scratch(struct brw_codegen *p,
       brw_set_dp_write_message(p,
 			       insn,
                                brw_scratch_surface_idx(p),
-			       msg_control,
+			       BRW_DATAPORT_OWORD_BLOCK_DWORDS(num_regs * 8),
 			       msg_type,
+                               target_cache,
 			       mlen,
 			       true, /* header_present */
 			       0, /* not a render target */
@@ -2207,14 +2176,10 @@ brw_oword_block_read_scratch(struct brw_codegen *p,
    dest = retype(dest, BRW_REGISTER_TYPE_UW);
 
    const unsigned rlen = num_regs;
-   const unsigned msg_control =
-      (num_regs == 1 ? BRW_DATAPORT_OWORD_BLOCK_2_OWORDS :
-       num_regs == 2 ? BRW_DATAPORT_OWORD_BLOCK_4_OWORDS :
-       num_regs == 4 ? BRW_DATAPORT_OWORD_BLOCK_8_OWORDS : 0);
-   assert(msg_control);
-   const unsigned target_cache = devinfo->gen >= 7 ?
-      BRW_DATAPORT_READ_TARGET_DATA_CACHE :
-      BRW_DATAPORT_READ_TARGET_RENDER_CACHE;
+   const unsigned target_cache =
+      (devinfo->gen >= 7 ? GEN7_SFID_DATAPORT_DATA_CACHE :
+       devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_RENDER_CACHE :
+       BRW_DATAPORT_READ_TARGET_RENDER_CACHE);
 
    {
       brw_push_insn_state(p);
@@ -2247,7 +2212,7 @@ brw_oword_block_read_scratch(struct brw_codegen *p,
       brw_set_dp_read_message(p,
 			      insn,
                               brw_scratch_surface_idx(p),
-			      msg_control,
+			      BRW_DATAPORT_OWORD_BLOCK_DWORDS(num_regs * 8),
 			      BRW_DATAPORT_READ_MESSAGE_OWORD_BLOCK_READ, /* msg_type */
 			      target_cache,
 			      1, /* msg_length */
@@ -2291,7 +2256,7 @@ gen7_block_read_scratch(struct brw_codegen *p,
 }
 
 /**
- * Read a float[4] vector from the data port Data Cache (const buffer).
+ * Read float[4] vectors from the data port constant cache.
  * Location (in buffer) should be a multiple of 16.
  * Used for fetching shader constants.
  */
@@ -2302,6 +2267,10 @@ void brw_oword_block_read(struct brw_codegen *p,
 			  uint32_t bind_table_index)
 {
    const struct gen_device_info *devinfo = p->devinfo;
+   const unsigned target_cache =
+      (devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_CONSTANT_CACHE :
+       BRW_DATAPORT_READ_TARGET_DATA_CACHE);
+   const unsigned exec_size = 1 << brw_inst_exec_size(devinfo, p->current);
 
    /* On newer hardware, offset is in units of owords. */
    if (devinfo->gen >= 6)
@@ -2310,11 +2279,12 @@ void brw_oword_block_read(struct brw_codegen *p,
    mrf = retype(mrf, BRW_REGISTER_TYPE_UD);
 
    brw_push_insn_state(p);
-   brw_set_default_exec_size(p, BRW_EXECUTE_8);
    brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
    brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
    brw_set_default_mask_control(p, BRW_MASK_DISABLE);
 
+   brw_push_insn_state(p);
+   brw_set_default_exec_size(p, BRW_EXECUTE_8);
    brw_MOV(p, mrf, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
 
    /* set message header global offset field (reg 0, element 2) */
@@ -2323,6 +2293,7 @@ void brw_oword_block_read(struct brw_codegen *p,
 			       mrf.nr,
 			       2), BRW_REGISTER_TYPE_UD),
 	   brw_imm_ud(offset));
+   brw_pop_insn_state(p);
 
    brw_inst *insn = next_insn(p, BRW_OPCODE_SEND);
 
@@ -2337,15 +2308,13 @@ void brw_oword_block_read(struct brw_codegen *p,
       brw_inst_set_base_mrf(devinfo, insn, mrf.nr);
    }
 
-   brw_set_dp_read_message(p,
-			   insn,
-			   bind_table_index,
-			   BRW_DATAPORT_OWORD_BLOCK_1_OWORDLOW,
+   brw_set_dp_read_message(p, insn, bind_table_index,
+                           BRW_DATAPORT_OWORD_BLOCK_DWORDS(exec_size),
 			   BRW_DATAPORT_READ_MESSAGE_OWORD_BLOCK_READ,
-			   BRW_DATAPORT_READ_TARGET_DATA_CACHE,
+			   target_cache,
 			   1, /* msg_length */
                            true, /* header_present */
-			   1); /* response_length (1 reg, 2 owords!) */
+			   DIV_ROUND_UP(exec_size, 8)); /* response_length */
 
    brw_pop_insn_state(p);
 }
@@ -2363,6 +2332,9 @@ void brw_fb_WRITE(struct brw_codegen *p,
                   bool header_present)
 {
    const struct gen_device_info *devinfo = p->devinfo;
+   const unsigned target_cache =
+      (devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_RENDER_CACHE :
+       BRW_DATAPORT_READ_TARGET_RENDER_CACHE);
    brw_inst *insn;
    unsigned msg_type;
    struct brw_reg dest, src0;
@@ -2399,6 +2371,7 @@ void brw_fb_WRITE(struct brw_codegen *p,
 			    binding_table_index,
 			    msg_control,
 			    msg_type,
+                            target_cache,
 			    msg_length,
 			    header_present,
 			    last_render_target,
@@ -2427,7 +2400,7 @@ gen9_fb_READ(struct brw_codegen *p,
    brw_set_dp_read_message(p, insn, binding_table_index,
                            per_sample << 5 | msg_subtype,
                            GEN9_DATAPORT_RC_RENDER_TARGET_READ,
-                           BRW_DATAPORT_READ_TARGET_RENDER_CACHE,
+                           GEN6_SFID_DATAPORT_RENDER_CACHE,
                            msg_length, true /* header_present */,
                            response_length);
    brw_inst_set_rt_slot_group(devinfo, insn,
@@ -2890,6 +2863,11 @@ brw_svb_write(struct brw_codegen *p,
               unsigned binding_table_index,
               bool   send_commit_msg)
 {
+   const struct gen_device_info *devinfo = p->devinfo;
+   const unsigned target_cache =
+      (devinfo->gen >= 7 ? GEN7_SFID_DATAPORT_DATA_CACHE :
+       devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_RENDER_CACHE :
+       BRW_DATAPORT_READ_TARGET_RENDER_CACHE);
    brw_inst *insn;
 
    gen6_resolve_implied_move(p, &src0, msg_reg_nr);
@@ -2902,6 +2880,7 @@ brw_svb_write(struct brw_codegen *p,
                             binding_table_index,
                             0, /* msg_control: ignored */
                             GEN6_DATAPORT_WRITE_MESSAGE_STREAMED_VB_WRITE,
+                            target_cache,
                             1, /* msg_length */
                             true, /* header_present */
                             0, /* last_render_target: ignored */
@@ -3608,6 +3587,8 @@ brw_barrier(struct brw_codegen *p, struct brw_reg src)
 
    assert(devinfo->gen >= 7);
 
+   brw_push_insn_state(p);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
    inst = next_insn(p, BRW_OPCODE_SEND);
    brw_set_dest(p, inst, retype(brw_null_reg(), BRW_REGISTER_TYPE_UW));
    brw_set_src0(p, inst, src);
@@ -3624,6 +3605,7 @@ brw_barrier(struct brw_codegen *p, struct brw_reg src)
                                   BRW_MESSAGE_GATEWAY_SFID_BARRIER_MSG);
 
    brw_inst_set_mask_control(devinfo, inst, BRW_MASK_DISABLE);
+   brw_pop_insn_state(p);
 }
 
 

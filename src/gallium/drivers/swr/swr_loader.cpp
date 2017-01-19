@@ -25,14 +25,16 @@
 #include "util/u_dl.h"
 #include "swr_public.h"
 
+#include "pipe/p_screen.h"
+
 #include <stdio.h>
-#include <dlfcn.h>
 
 typedef pipe_screen *(*screen_create_proc)(struct sw_winsys *winsys);
 
 struct pipe_screen *
 swr_create_screen(struct sw_winsys *winsys)
 {
+   char filename[256];
    fprintf(stderr, "SWR detected ");
 
    util_dl_library *pLibrary = nullptr;
@@ -40,21 +42,22 @@ swr_create_screen(struct sw_winsys *winsys)
    util_cpu_detect();
    if (util_cpu_caps.has_avx2) {
       fprintf(stderr, "AVX2\n");
-      pLibrary = util_dl_open("libswrAVX2.so");
+      sprintf(filename, "%s%s%s", UTIL_DL_PREFIX, "swrAVX2", UTIL_DL_EXT);
    } else if (util_cpu_caps.has_avx) {
       fprintf(stderr, "AVX\n");
-      pLibrary = util_dl_open("libswrAVX.so");
+      sprintf(filename, "%s%s%s", UTIL_DL_PREFIX, "swrAVX", UTIL_DL_EXT);
    } else {
       fprintf(stderr, "no AVX/AVX2 support.  Aborting!\n");
       exit(-1);
    }
+   pLibrary = util_dl_open(filename);
 
    if (!pLibrary) {
       fprintf(stderr, "SWR library load failure: %s\n", util_dl_error());
       exit(-1);
    }
 
-   util_dl_proc pScreenProc = util_dl_get_proc_address(pLibrary, "swr_create_screen");
+   util_dl_proc pScreenProc = util_dl_get_proc_address(pLibrary, "swr_create_screen_internal");
 
    if (!pScreenProc) {
       fprintf(stderr, "SWR library search failure: %s\n", util_dl_error());
@@ -65,3 +68,21 @@ swr_create_screen(struct sw_winsys *winsys)
 
    return pScreenCreate(winsys);
 }
+
+
+#ifdef _WIN32
+// swap function called from libl_gdi.c
+
+void
+swr_gdi_swap(struct pipe_screen *screen,
+             struct pipe_resource *res,
+             void *hDC)
+{
+   screen->flush_frontbuffer(screen,
+                             res,
+                             0, 0,
+                             hDC,
+                             NULL);
+}
+
+#endif /* _WIN32 */

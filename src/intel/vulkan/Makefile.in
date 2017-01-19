@@ -136,23 +136,25 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_PLATFORM_X11_TRUE@am__append_1 = \
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_1 = \
+@HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_builddir)/src/egl/wayland/wayland-drm \
+@HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_srcdir)/src/egl/wayland/wayland-drm
+
+@HAVE_PLATFORM_X11_TRUE@am__append_2 = \
 @HAVE_PLATFORM_X11_TRUE@	$(XCB_DRI3_CFLAGS) \
 @HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XCB_KHR \
 @HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XLIB_KHR
 
-@HAVE_PLATFORM_X11_TRUE@am__append_2 = $(VULKAN_WSI_X11_FILES)
+@HAVE_PLATFORM_X11_TRUE@am__append_3 = $(VULKAN_WSI_X11_FILES)
 
 # FIXME: Use pkg-config for X11-xcb ldflags.
-@HAVE_PLATFORM_X11_TRUE@am__append_3 = $(XCB_DRI3_LIBS) -lX11-xcb
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = \
-@HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_builddir)/src/egl/wayland/wayland-drm \
-@HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_srcdir)/src/egl/wayland/wayland-drm \
+@HAVE_PLATFORM_X11_TRUE@am__append_4 = $(XCB_DRI3_LIBS) -lX11-xcb
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_5 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
 
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_5 = $(VULKAN_WSI_WAYLAND_FILES)
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = \
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = $(VULKAN_WSI_WAYLAND_FILES)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_7 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_LIBS)
 
@@ -212,9 +214,9 @@ LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 libanv_gen7_la_LIBADD =
 am__objects_1 = libanv_gen7_la-genX_cmd_buffer.lo \
 	libanv_gen7_la-genX_blorp_exec.lo \
+	libanv_gen7_la-genX_gpu_memcpy.lo \
 	libanv_gen7_la-genX_pipeline.lo \
-	libanv_gen7_la-gen7_cmd_buffer.lo \
-	libanv_gen7_la-gen7_pipeline.lo libanv_gen7_la-genX_state.lo
+	libanv_gen7_la-gen7_cmd_buffer.lo libanv_gen7_la-genX_state.lo
 am_libanv_gen7_la_OBJECTS = $(am__objects_1)
 libanv_gen7_la_OBJECTS = $(am_libanv_gen7_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -228,9 +230,10 @@ libanv_gen7_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 libanv_gen75_la_LIBADD =
 am__objects_2 = libanv_gen75_la-genX_cmd_buffer.lo \
 	libanv_gen75_la-genX_blorp_exec.lo \
+	libanv_gen75_la-genX_gpu_memcpy.lo \
 	libanv_gen75_la-genX_pipeline.lo \
 	libanv_gen75_la-gen7_cmd_buffer.lo \
-	libanv_gen75_la-gen7_pipeline.lo libanv_gen75_la-genX_state.lo
+	libanv_gen75_la-genX_state.lo
 am_libanv_gen75_la_OBJECTS = $(am__objects_2)
 libanv_gen75_la_OBJECTS = $(am_libanv_gen75_la_OBJECTS)
 libanv_gen75_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
@@ -240,9 +243,9 @@ libanv_gen75_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 libanv_gen8_la_LIBADD =
 am__objects_3 = libanv_gen8_la-genX_cmd_buffer.lo \
 	libanv_gen8_la-genX_blorp_exec.lo \
+	libanv_gen8_la-genX_gpu_memcpy.lo \
 	libanv_gen8_la-genX_pipeline.lo \
-	libanv_gen8_la-gen8_cmd_buffer.lo \
-	libanv_gen8_la-gen8_pipeline.lo libanv_gen8_la-genX_state.lo
+	libanv_gen8_la-gen8_cmd_buffer.lo libanv_gen8_la-genX_state.lo
 am_libanv_gen8_la_OBJECTS = $(am__objects_3)
 libanv_gen8_la_OBJECTS = $(am_libanv_gen8_la_OBJECTS)
 libanv_gen8_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
@@ -252,9 +255,9 @@ libanv_gen8_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 libanv_gen9_la_LIBADD =
 am__objects_4 = libanv_gen9_la-genX_cmd_buffer.lo \
 	libanv_gen9_la-genX_blorp_exec.lo \
+	libanv_gen9_la-genX_gpu_memcpy.lo \
 	libanv_gen9_la-genX_pipeline.lo \
-	libanv_gen9_la-gen8_cmd_buffer.lo \
-	libanv_gen9_la-gen8_pipeline.lo libanv_gen9_la-genX_state.lo
+	libanv_gen9_la-gen8_cmd_buffer.lo libanv_gen9_la-genX_state.lo
 am_libanv_gen9_la_OBJECTS = $(am__objects_4)
 libanv_gen9_la_OBJECTS = $(am_libanv_gen9_la_OBJECTS)
 libanv_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
@@ -281,21 +284,22 @@ am_libvulkan_test_la_OBJECTS = $(am__objects_5)
 libvulkan_test_la_OBJECTS = $(am_libvulkan_test_la_OBJECTS)
 libvulkan_common_la_LIBADD =
 am__libvulkan_common_la_SOURCES_DIST = anv_entrypoints.c \
-	anv_entrypoints.h anv_timestamp.h anv_allocator.c \
-	anv_batch_chain.c anv_blorp.c anv_cmd_buffer.c \
-	anv_descriptor_set.c anv_device.c anv_dump.c anv_formats.c \
-	anv_genX.h anv_image.c anv_intel.c anv_nir.h \
-	anv_nir_apply_dynamic_offsets.c \
-	anv_nir_apply_pipeline_layout.c anv_nir_lower_push_constants.c \
-	anv_pass.c anv_pipeline.c anv_pipeline_cache.c anv_private.h \
-	anv_query.c anv_util.c anv_wsi.c genX_pipeline_util.h \
-	vk_format_info.h anv_wsi_x11.c anv_wsi_wayland.c
+	anv_entrypoints.h anv_allocator.c anv_batch_chain.c \
+	anv_blorp.c anv_cmd_buffer.c anv_descriptor_set.c anv_device.c \
+	anv_dump.c anv_formats.c anv_genX.h anv_image.c anv_intel.c \
+	anv_nir.h anv_nir_apply_dynamic_offsets.c \
+	anv_nir_apply_pipeline_layout.c \
+	anv_nir_lower_input_attachments.c \
+	anv_nir_lower_push_constants.c anv_pass.c anv_pipeline.c \
+	anv_pipeline_cache.c anv_private.h anv_query.c anv_util.c \
+	anv_wsi.c vk_format_info.h anv_wsi_x11.c anv_wsi_wayland.c
 am__objects_6 = anv_entrypoints.lo
 am__objects_7 = anv_allocator.lo anv_batch_chain.lo anv_blorp.lo \
 	anv_cmd_buffer.lo anv_descriptor_set.lo anv_device.lo \
 	anv_dump.lo anv_formats.lo anv_image.lo anv_intel.lo \
 	anv_nir_apply_dynamic_offsets.lo \
 	anv_nir_apply_pipeline_layout.lo \
+	anv_nir_lower_input_attachments.lo \
 	anv_nir_lower_push_constants.lo anv_pass.lo anv_pipeline.lo \
 	anv_pipeline_cache.lo anv_query.lo anv_util.lo anv_wsi.lo
 am__objects_8 = anv_wsi_x11.lo
@@ -615,6 +619,8 @@ AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANDROID_CFLAGS = @ANDROID_CFLAGS@
+ANDROID_LIBS = @ANDROID_LIBS@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -658,10 +664,11 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
-EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
+ETNAVIV_CFLAGS = @ETNAVIV_CFLAGS@
+ETNAVIV_LIBS = @ETNAVIV_LIBS@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -711,9 +718,7 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
-LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
-LIBSHA1_LIBS = @LIBSHA1_LIBS@
+LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
@@ -754,8 +759,6 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -792,8 +795,6 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
-SHA1_CFLAGS = @SHA1_CFLAGS@
-SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
 SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
@@ -802,7 +803,6 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
-TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -818,7 +818,6 @@ VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
 VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
-VG_LIB_DEPS = @VG_LIB_DEPS@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -925,6 +924,7 @@ VULKAN_FILES := \
 	anv_nir.h \
 	anv_nir_apply_dynamic_offsets.c \
 	anv_nir_apply_pipeline_layout.c \
+	anv_nir_lower_input_attachments.c \
 	anv_nir_lower_push_constants.c \
 	anv_pass.c \
 	anv_pipeline.c \
@@ -933,7 +933,6 @@ VULKAN_FILES := \
 	anv_query.c \
 	anv_util.c \
 	anv_wsi.c \
-	genX_pipeline_util.h \
 	vk_format_info.h
 
 VULKAN_WSI_WAYLAND_FILES := \
@@ -950,39 +949,38 @@ VULKAN_GEM_STUB_FILES := \
 
 VULKAN_GENERATED_FILES := \
 	anv_entrypoints.c \
-	anv_entrypoints.h \
-	anv_timestamp.h
+	anv_entrypoints.h
 
 GEN7_FILES := \
 	genX_cmd_buffer.c \
 	genX_blorp_exec.c \
+	genX_gpu_memcpy.c \
 	genX_pipeline.c \
 	gen7_cmd_buffer.c \
-	gen7_pipeline.c \
 	genX_state.c
 
 GEN75_FILES := \
 	genX_cmd_buffer.c \
 	genX_blorp_exec.c \
+	genX_gpu_memcpy.c \
 	genX_pipeline.c \
 	gen7_cmd_buffer.c \
-	gen7_pipeline.c \
 	genX_state.c
 
 GEN8_FILES := \
 	genX_cmd_buffer.c \
 	genX_blorp_exec.c \
+	genX_gpu_memcpy.c \
 	genX_pipeline.c \
 	gen8_cmd_buffer.c \
-	gen8_pipeline.c \
 	genX_state.c
 
 GEN9_FILES := \
 	genX_cmd_buffer.c \
 	genX_blorp_exec.c \
+	genX_gpu_memcpy.c \
 	genX_pipeline.c \
 	gen8_cmd_buffer.c \
-	gen8_pipeline.c \
 	genX_state.c
 
 vulkan_includedir = $(includedir)/vulkan
@@ -1002,8 +1000,7 @@ PER_GEN_LIBS = \
 noinst_LTLIBRARIES = $(PER_GEN_LIBS) libvulkan_common.la
 
 # The gallium includes are for the util/u_math.h include from main/macros.h
-AM_CPPFLAGS = $(INTEL_CFLAGS) $(VALGRIND_CFLAGS) $(DEFINES) \
-	-I$(top_srcdir)/include -I$(top_builddir)/src \
+AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_builddir)/src \
 	-I$(top_srcdir)/src -I$(top_srcdir)/src/vulkan/wsi \
 	-I$(top_builddir)/src/compiler -I$(top_srcdir)/src/compiler \
 	-I$(top_builddir)/src/compiler/nir -I$(top_srcdir)/src/mapi \
@@ -1013,7 +1010,8 @@ AM_CPPFLAGS = $(INTEL_CFLAGS) $(VALGRIND_CFLAGS) $(DEFINES) \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_builddir)/src/intel -I$(top_srcdir)/src/intel \
-	$(am__append_1) $(am__append_4)
+	$(am__append_1) $(INTEL_CFLAGS) $(VALGRIND_CFLAGS) $(DEFINES) \
+	$(am__append_2) $(am__append_5)
 AM_CFLAGS = \
 	$(VISIBILITY_CFLAGS) \
 	-Wno-override-init -msse2
@@ -1027,8 +1025,8 @@ libanv_gen8_la_SOURCES = $(GEN8_FILES)
 libanv_gen9_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=90
 libanv_gen9_la_SOURCES = $(GEN9_FILES)
 VULKAN_SOURCES = $(VULKAN_GENERATED_FILES) $(VULKAN_FILES) \
-	$(am__append_2) $(am__append_5)
-VULKAN_LIB_DEPS = $(am__append_3) $(am__append_6) libvulkan_common.la \
+	$(am__append_3) $(am__append_6)
+VULKAN_LIB_DEPS = $(am__append_4) $(am__append_7) libvulkan_common.la \
 	$(top_builddir)/src/vulkan/wsi/libvulkan_wsi.la \
 	$(top_builddir)/src/mesa/drivers/dri/i965/libi965_compiler.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
@@ -1040,6 +1038,7 @@ VULKAN_LIB_DEPS = $(am__append_3) $(am__append_6) libvulkan_common.la \
 libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 nodist_EXTRA_libvulkan_intel_la_SOURCES = dummy.cpp
 libvulkan_intel_la_SOURCES = $(VULKAN_GEM_FILES)
+vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 BUILT_SOURCES = $(VULKAN_GENERATED_FILES)
 CLEANFILES = $(BUILT_SOURCES) dev_icd.json intel_icd.@host_cpu@.json
 EXTRA_DIST = \
@@ -1249,6 +1248,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/anv_intel.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/anv_nir_apply_dynamic_offsets.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/anv_nir_apply_pipeline_layout.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/anv_nir_lower_input_attachments.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/anv_nir_lower_push_constants.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/anv_pass.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/anv_pipeline.Plo@am__quote@
@@ -1260,27 +1260,27 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/anv_wsi_x11.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen75_la-gen7_cmd_buffer.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen75_la-gen7_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen75_la-genX_blorp_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen75_la-genX_cmd_buffer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen75_la-genX_gpu_memcpy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen75_la-genX_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen75_la-genX_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen7_la-gen7_cmd_buffer.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen7_la-gen7_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen7_la-genX_blorp_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen7_la-genX_cmd_buffer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen7_la-genX_gpu_memcpy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen7_la-genX_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen7_la-genX_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen8_la-gen8_cmd_buffer.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen8_la-gen8_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen8_la-genX_blorp_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen8_la-genX_cmd_buffer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen8_la-genX_gpu_memcpy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen8_la-genX_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen8_la-genX_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen9_la-gen8_cmd_buffer.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen9_la-gen8_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen9_la-genX_blorp_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen9_la-genX_cmd_buffer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen9_la-genX_gpu_memcpy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen9_la-genX_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libanv_gen9_la-genX_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/block_pool_no_free.Po@am__quote@
@@ -1326,6 +1326,13 @@ libanv_gen7_la-genX_blorp_exec.lo: genX_blorp_exec.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen7_la_CFLAGS) $(CFLAGS) -c -o libanv_gen7_la-genX_blorp_exec.lo `test -f 'genX_blorp_exec.c' || echo '$(srcdir)/'`genX_blorp_exec.c
 
+libanv_gen7_la-genX_gpu_memcpy.lo: genX_gpu_memcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen7_la_CFLAGS) $(CFLAGS) -MT libanv_gen7_la-genX_gpu_memcpy.lo -MD -MP -MF $(DEPDIR)/libanv_gen7_la-genX_gpu_memcpy.Tpo -c -o libanv_gen7_la-genX_gpu_memcpy.lo `test -f 'genX_gpu_memcpy.c' || echo '$(srcdir)/'`genX_gpu_memcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen7_la-genX_gpu_memcpy.Tpo $(DEPDIR)/libanv_gen7_la-genX_gpu_memcpy.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='genX_gpu_memcpy.c' object='libanv_gen7_la-genX_gpu_memcpy.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen7_la_CFLAGS) $(CFLAGS) -c -o libanv_gen7_la-genX_gpu_memcpy.lo `test -f 'genX_gpu_memcpy.c' || echo '$(srcdir)/'`genX_gpu_memcpy.c
+
 libanv_gen7_la-genX_pipeline.lo: genX_pipeline.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen7_la_CFLAGS) $(CFLAGS) -MT libanv_gen7_la-genX_pipeline.lo -MD -MP -MF $(DEPDIR)/libanv_gen7_la-genX_pipeline.Tpo -c -o libanv_gen7_la-genX_pipeline.lo `test -f 'genX_pipeline.c' || echo '$(srcdir)/'`genX_pipeline.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen7_la-genX_pipeline.Tpo $(DEPDIR)/libanv_gen7_la-genX_pipeline.Plo
@@ -1339,13 +1346,6 @@ libanv_gen7_la-gen7_cmd_buffer.lo: gen7_cmd_buffer.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='gen7_cmd_buffer.c' object='libanv_gen7_la-gen7_cmd_buffer.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen7_la_CFLAGS) $(CFLAGS) -c -o libanv_gen7_la-gen7_cmd_buffer.lo `test -f 'gen7_cmd_buffer.c' || echo '$(srcdir)/'`gen7_cmd_buffer.c
-
-libanv_gen7_la-gen7_pipeline.lo: gen7_pipeline.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen7_la_CFLAGS) $(CFLAGS) -MT libanv_gen7_la-gen7_pipeline.lo -MD -MP -MF $(DEPDIR)/libanv_gen7_la-gen7_pipeline.Tpo -c -o libanv_gen7_la-gen7_pipeline.lo `test -f 'gen7_pipeline.c' || echo '$(srcdir)/'`gen7_pipeline.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen7_la-gen7_pipeline.Tpo $(DEPDIR)/libanv_gen7_la-gen7_pipeline.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='gen7_pipeline.c' object='libanv_gen7_la-gen7_pipeline.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen7_la_CFLAGS) $(CFLAGS) -c -o libanv_gen7_la-gen7_pipeline.lo `test -f 'gen7_pipeline.c' || echo '$(srcdir)/'`gen7_pipeline.c
 
 libanv_gen7_la-genX_state.lo: genX_state.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen7_la_CFLAGS) $(CFLAGS) -MT libanv_gen7_la-genX_state.lo -MD -MP -MF $(DEPDIR)/libanv_gen7_la-genX_state.Tpo -c -o libanv_gen7_la-genX_state.lo `test -f 'genX_state.c' || echo '$(srcdir)/'`genX_state.c
@@ -1368,6 +1368,13 @@ libanv_gen75_la-genX_blorp_exec.lo: genX_blorp_exec.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen75_la_CFLAGS) $(CFLAGS) -c -o libanv_gen75_la-genX_blorp_exec.lo `test -f 'genX_blorp_exec.c' || echo '$(srcdir)/'`genX_blorp_exec.c
 
+libanv_gen75_la-genX_gpu_memcpy.lo: genX_gpu_memcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen75_la_CFLAGS) $(CFLAGS) -MT libanv_gen75_la-genX_gpu_memcpy.lo -MD -MP -MF $(DEPDIR)/libanv_gen75_la-genX_gpu_memcpy.Tpo -c -o libanv_gen75_la-genX_gpu_memcpy.lo `test -f 'genX_gpu_memcpy.c' || echo '$(srcdir)/'`genX_gpu_memcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen75_la-genX_gpu_memcpy.Tpo $(DEPDIR)/libanv_gen75_la-genX_gpu_memcpy.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='genX_gpu_memcpy.c' object='libanv_gen75_la-genX_gpu_memcpy.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen75_la_CFLAGS) $(CFLAGS) -c -o libanv_gen75_la-genX_gpu_memcpy.lo `test -f 'genX_gpu_memcpy.c' || echo '$(srcdir)/'`genX_gpu_memcpy.c
+
 libanv_gen75_la-genX_pipeline.lo: genX_pipeline.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen75_la_CFLAGS) $(CFLAGS) -MT libanv_gen75_la-genX_pipeline.lo -MD -MP -MF $(DEPDIR)/libanv_gen75_la-genX_pipeline.Tpo -c -o libanv_gen75_la-genX_pipeline.lo `test -f 'genX_pipeline.c' || echo '$(srcdir)/'`genX_pipeline.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen75_la-genX_pipeline.Tpo $(DEPDIR)/libanv_gen75_la-genX_pipeline.Plo
@@ -1381,13 +1388,6 @@ libanv_gen75_la-gen7_cmd_buffer.lo: gen7_cmd_buffer.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='gen7_cmd_buffer.c' object='libanv_gen75_la-gen7_cmd_buffer.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen75_la_CFLAGS) $(CFLAGS) -c -o libanv_gen75_la-gen7_cmd_buffer.lo `test -f 'gen7_cmd_buffer.c' || echo '$(srcdir)/'`gen7_cmd_buffer.c
-
-libanv_gen75_la-gen7_pipeline.lo: gen7_pipeline.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen75_la_CFLAGS) $(CFLAGS) -MT libanv_gen75_la-gen7_pipeline.lo -MD -MP -MF $(DEPDIR)/libanv_gen75_la-gen7_pipeline.Tpo -c -o libanv_gen75_la-gen7_pipeline.lo `test -f 'gen7_pipeline.c' || echo '$(srcdir)/'`gen7_pipeline.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen75_la-gen7_pipeline.Tpo $(DEPDIR)/libanv_gen75_la-gen7_pipeline.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='gen7_pipeline.c' object='libanv_gen75_la-gen7_pipeline.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen75_la_CFLAGS) $(CFLAGS) -c -o libanv_gen75_la-gen7_pipeline.lo `test -f 'gen7_pipeline.c' || echo '$(srcdir)/'`gen7_pipeline.c
 
 libanv_gen75_la-genX_state.lo: genX_state.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen75_la_CFLAGS) $(CFLAGS) -MT libanv_gen75_la-genX_state.lo -MD -MP -MF $(DEPDIR)/libanv_gen75_la-genX_state.Tpo -c -o libanv_gen75_la-genX_state.lo `test -f 'genX_state.c' || echo '$(srcdir)/'`genX_state.c
@@ -1410,6 +1410,13 @@ libanv_gen8_la-genX_blorp_exec.lo: genX_blorp_exec.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen8_la_CFLAGS) $(CFLAGS) -c -o libanv_gen8_la-genX_blorp_exec.lo `test -f 'genX_blorp_exec.c' || echo '$(srcdir)/'`genX_blorp_exec.c
 
+libanv_gen8_la-genX_gpu_memcpy.lo: genX_gpu_memcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen8_la_CFLAGS) $(CFLAGS) -MT libanv_gen8_la-genX_gpu_memcpy.lo -MD -MP -MF $(DEPDIR)/libanv_gen8_la-genX_gpu_memcpy.Tpo -c -o libanv_gen8_la-genX_gpu_memcpy.lo `test -f 'genX_gpu_memcpy.c' || echo '$(srcdir)/'`genX_gpu_memcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen8_la-genX_gpu_memcpy.Tpo $(DEPDIR)/libanv_gen8_la-genX_gpu_memcpy.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='genX_gpu_memcpy.c' object='libanv_gen8_la-genX_gpu_memcpy.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen8_la_CFLAGS) $(CFLAGS) -c -o libanv_gen8_la-genX_gpu_memcpy.lo `test -f 'genX_gpu_memcpy.c' || echo '$(srcdir)/'`genX_gpu_memcpy.c
+
 libanv_gen8_la-genX_pipeline.lo: genX_pipeline.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen8_la_CFLAGS) $(CFLAGS) -MT libanv_gen8_la-genX_pipeline.lo -MD -MP -MF $(DEPDIR)/libanv_gen8_la-genX_pipeline.Tpo -c -o libanv_gen8_la-genX_pipeline.lo `test -f 'genX_pipeline.c' || echo '$(srcdir)/'`genX_pipeline.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen8_la-genX_pipeline.Tpo $(DEPDIR)/libanv_gen8_la-genX_pipeline.Plo
@@ -1423,13 +1430,6 @@ libanv_gen8_la-gen8_cmd_buffer.lo: gen8_cmd_buffer.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='gen8_cmd_buffer.c' object='libanv_gen8_la-gen8_cmd_buffer.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen8_la_CFLAGS) $(CFLAGS) -c -o libanv_gen8_la-gen8_cmd_buffer.lo `test -f 'gen8_cmd_buffer.c' || echo '$(srcdir)/'`gen8_cmd_buffer.c
-
-libanv_gen8_la-gen8_pipeline.lo: gen8_pipeline.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen8_la_CFLAGS) $(CFLAGS) -MT libanv_gen8_la-gen8_pipeline.lo -MD -MP -MF $(DEPDIR)/libanv_gen8_la-gen8_pipeline.Tpo -c -o libanv_gen8_la-gen8_pipeline.lo `test -f 'gen8_pipeline.c' || echo '$(srcdir)/'`gen8_pipeline.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen8_la-gen8_pipeline.Tpo $(DEPDIR)/libanv_gen8_la-gen8_pipeline.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='gen8_pipeline.c' object='libanv_gen8_la-gen8_pipeline.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen8_la_CFLAGS) $(CFLAGS) -c -o libanv_gen8_la-gen8_pipeline.lo `test -f 'gen8_pipeline.c' || echo '$(srcdir)/'`gen8_pipeline.c
 
 libanv_gen8_la-genX_state.lo: genX_state.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen8_la_CFLAGS) $(CFLAGS) -MT libanv_gen8_la-genX_state.lo -MD -MP -MF $(DEPDIR)/libanv_gen8_la-genX_state.Tpo -c -o libanv_gen8_la-genX_state.lo `test -f 'genX_state.c' || echo '$(srcdir)/'`genX_state.c
@@ -1452,6 +1452,13 @@ libanv_gen9_la-genX_blorp_exec.lo: genX_blorp_exec.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen9_la_CFLAGS) $(CFLAGS) -c -o libanv_gen9_la-genX_blorp_exec.lo `test -f 'genX_blorp_exec.c' || echo '$(srcdir)/'`genX_blorp_exec.c
 
+libanv_gen9_la-genX_gpu_memcpy.lo: genX_gpu_memcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen9_la_CFLAGS) $(CFLAGS) -MT libanv_gen9_la-genX_gpu_memcpy.lo -MD -MP -MF $(DEPDIR)/libanv_gen9_la-genX_gpu_memcpy.Tpo -c -o libanv_gen9_la-genX_gpu_memcpy.lo `test -f 'genX_gpu_memcpy.c' || echo '$(srcdir)/'`genX_gpu_memcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen9_la-genX_gpu_memcpy.Tpo $(DEPDIR)/libanv_gen9_la-genX_gpu_memcpy.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='genX_gpu_memcpy.c' object='libanv_gen9_la-genX_gpu_memcpy.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen9_la_CFLAGS) $(CFLAGS) -c -o libanv_gen9_la-genX_gpu_memcpy.lo `test -f 'genX_gpu_memcpy.c' || echo '$(srcdir)/'`genX_gpu_memcpy.c
+
 libanv_gen9_la-genX_pipeline.lo: genX_pipeline.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen9_la_CFLAGS) $(CFLAGS) -MT libanv_gen9_la-genX_pipeline.lo -MD -MP -MF $(DEPDIR)/libanv_gen9_la-genX_pipeline.Tpo -c -o libanv_gen9_la-genX_pipeline.lo `test -f 'genX_pipeline.c' || echo '$(srcdir)/'`genX_pipeline.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen9_la-genX_pipeline.Tpo $(DEPDIR)/libanv_gen9_la-genX_pipeline.Plo
@@ -1465,13 +1472,6 @@ libanv_gen9_la-gen8_cmd_buffer.lo: gen8_cmd_buffer.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='gen8_cmd_buffer.c' object='libanv_gen9_la-gen8_cmd_buffer.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen9_la_CFLAGS) $(CFLAGS) -c -o libanv_gen9_la-gen8_cmd_buffer.lo `test -f 'gen8_cmd_buffer.c' || echo '$(srcdir)/'`gen8_cmd_buffer.c
-
-libanv_gen9_la-gen8_pipeline.lo: gen8_pipeline.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen9_la_CFLAGS) $(CFLAGS) -MT libanv_gen9_la-gen8_pipeline.lo -MD -MP -MF $(DEPDIR)/libanv_gen9_la-gen8_pipeline.Tpo -c -o libanv_gen9_la-gen8_pipeline.lo `test -f 'gen8_pipeline.c' || echo '$(srcdir)/'`gen8_pipeline.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libanv_gen9_la-gen8_pipeline.Tpo $(DEPDIR)/libanv_gen9_la-gen8_pipeline.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='gen8_pipeline.c' object='libanv_gen9_la-gen8_pipeline.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen9_la_CFLAGS) $(CFLAGS) -c -o libanv_gen9_la-gen8_pipeline.lo `test -f 'gen8_pipeline.c' || echo '$(srcdir)/'`gen8_pipeline.c
 
 libanv_gen9_la-genX_state.lo: genX_state.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libanv_gen9_la_CFLAGS) $(CFLAGS) -MT libanv_gen9_la-genX_state.lo -MD -MP -MF $(DEPDIR)/libanv_gen9_la-genX_state.Tpo -c -o libanv_gen9_la-genX_state.lo `test -f 'genX_state.c' || echo '$(srcdir)/'`genX_state.c
@@ -1967,19 +1967,13 @@ uninstall-am: uninstall-icdconfDATA uninstall-libLTLIBRARIES \
 .PRECIOUS: Makefile
 
 
-anv_entrypoints.h : anv_entrypoints_gen.py $(vulkan_include_HEADERS)
-	$(AM_V_GEN) cat $(vulkan_include_HEADERS) |\
+anv_entrypoints.h : anv_entrypoints_gen.py $(vulkan_api_xml)
+	$(AM_V_GEN) cat $(vulkan_api_xml) |\
 	$(PYTHON2) $(srcdir)/anv_entrypoints_gen.py header > $@
 
-anv_entrypoints.c : anv_entrypoints_gen.py $(vulkan_include_HEADERS)
-	$(AM_V_GEN) cat $(vulkan_include_HEADERS) |\
+anv_entrypoints.c : anv_entrypoints_gen.py $(vulkan_api_xml)
+	$(AM_V_GEN) cat $(vulkan_api_xml) |\
 	$(PYTHON2) $(srcdir)/anv_entrypoints_gen.py code > $@
-
-.PHONY: anv_timestamp.h
-
-anv_timestamp.h:
-	@echo "Updating anv_timestamp.h"
-	$(AM_V_GEN) echo "#define ANV_TIMESTAMP \"$(TIMESTAMP_CMD)\"" > $@
 
 dev_icd.json : dev_icd.json.in
 	$(AM_V_GEN) $(SED) \

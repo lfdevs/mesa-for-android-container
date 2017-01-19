@@ -43,24 +43,36 @@ namespace ArchRast
     class EventManager
     {
     public:
-        void attach(EventHandler* pHandler)
+        EventManager() {}
+
+        ~EventManager()
+        {
+            // Event manager owns destroying handler objects once attached.
+            ///@note See comment for Detach.
+            for (auto pHandler : mHandlers)
+            {
+                delete pHandler;
+            }
+        }
+
+        void Attach(EventHandler* pHandler)
         {
             mHandlers.push_back(pHandler);
         }
 
-        void dispatch(Event& event)
+        void Dispatch(Event& event)
         {
             ///@todo Add event filter check here.
 
             for (auto pHandler : mHandlers)
             {
-                event.accept(pHandler);
+                event.Accept(pHandler);
             }
         }
     private:
 
         // Handlers stay registered for life
-        void detach(EventHandler* pHandler) { SWR_ASSERT(0); }
+        void Detach(EventHandler* pHandler) { SWR_ASSERT(0); }
 
         std::vector<EventHandler*> mHandlers;
     };

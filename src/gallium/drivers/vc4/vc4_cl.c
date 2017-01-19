@@ -28,7 +28,7 @@
 void
 vc4_init_cl(void *mem_ctx, struct vc4_cl *cl)
 {
-        cl->base = ralloc_size(mem_ctx, 1);
+        cl->base = rzalloc_size(mem_ctx, 1); /* TODO: don't use rzalloc */
         cl->next = cl->base;
         cl->size = 0;
 }
@@ -75,6 +75,8 @@ vc4_gem_hindex(struct vc4_job *job, struct vc4_bo *bo)
         out = cl_start(&job->bo_pointers);
         cl_ptr(&out, vc4_bo_reference(bo));
         cl_end(&job->bo_pointers, out);
+
+        job->bo_space += bo->size;
 
         return hindex;
 }

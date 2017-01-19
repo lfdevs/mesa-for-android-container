@@ -68,6 +68,19 @@ brw_compute_vue_map(const struct gen_device_info *devinfo,
    if (devinfo->gen < 6)
       separate = false;
 
+   if (separate) {
+      /* In SSO mode, we don't know whether the adjacent stage will
+       * read/write gl_ClipDistance, which has a fixed slot location.
+       * We have to assume the worst and reserve a slot for it, or else
+       * the rest of our varyings will be off by a slot.
+       *
+       * Note that we don't have to worry about COL/BFC, as those built-in
+       * variables only exist in legacy GL, which only supports VS and FS.
+       */
+      slots_valid |= BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST0);
+      slots_valid |= BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1);
+   }
+
    vue_map->slots_valid = slots_valid;
    vue_map->separate = separate;
 
@@ -168,14 +181,12 @@ brw_compute_vue_map(const struct gen_device_info *devinfo,
       const int varying = ffsll(generics) - 1;
       if (separate) {
          slot = first_generic_slot + varying - VARYING_SLOT_VAR0;
-         assign_vue_slot(vue_map, varying, slot);
-      } else {
-         assign_vue_slot(vue_map, varying, slot++);
       }
+      assign_vue_slot(vue_map, varying, slot++);
       generics &= ~BITFIELD64_BIT(varying);
    }
 
-   vue_map->num_slots = separate ? slot + 1 : slot;
+   vue_map->num_slots = slot;
    vue_map->num_per_vertex_slots = 0;
    vue_map->num_per_patch_slots = 0;
 }
@@ -191,6 +202,9 @@ brw_compute_tess_vue_map(struct brw_vue_map *vue_map,
 {
    /* I don't think anything actually uses this... */
    vue_map->slots_valid = vertex_slots;
+
+   /* separate isn't really meaningful, but make sure it's initialized */
+   vue_map->separate = false;
 
    vertex_slots &= ~(VARYING_BIT_TESS_LEVEL_OUTER |
                      VARYING_BIT_TESS_LEVEL_INNER);

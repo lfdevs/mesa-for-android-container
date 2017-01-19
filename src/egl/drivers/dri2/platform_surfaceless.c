@@ -134,8 +134,8 @@ dri2_surfaceless_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       goto cleanup_surface;
 
    dri2_surf->dri_drawable =
-      (*dri2_dpy->dri2->createNewDrawable)(dri2_dpy->dri_screen, config,
-                                           dri2_surf);
+      dri2_dpy->dri2->createNewDrawable(dri2_dpy->dri_screen, config,
+                                        dri2_surf);
    if (dri2_surf->dri_drawable == NULL) {
       _eglError(EGL_BAD_ALLOC, "dri2->createNewDrawable");
       goto cleanup_surface;
@@ -163,7 +163,7 @@ surfaceless_destroy_surface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *sur
 
    surfaceless_free_images(dri2_surf);
 
-   (*dri2_dpy->core->destroyDrawable)(dri2_surf->dri_drawable);
+   dri2_dpy->core->destroyDrawable(dri2_surf->dri_drawable);
 
    free(dri2_surf);
    return EGL_TRUE;
@@ -321,8 +321,6 @@ dri2_initialize_surfaceless(_EGLDriver *drv, _EGLDisplay *disp)
       err = "DRI2: failed to add configs";
       goto cleanup_screen;
    }
-
-   disp->Extensions.KHR_image_base = EGL_TRUE;
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.

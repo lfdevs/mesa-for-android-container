@@ -100,5 +100,9 @@ TODO: document the other workarounds.
         <application name="Rust" executable="rust">
             <option name="glsl_zero_init" value="true"/>
         </application>
+
+        <application name="Divinity: Original Sin Enhanced Edition" executable="EoCApp">
+            <option name="allow_glsl_extension_directive_midshader" value="true" />
+        </application>
     </device>
 </driconf>

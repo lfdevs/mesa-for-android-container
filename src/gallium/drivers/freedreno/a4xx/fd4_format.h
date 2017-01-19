@@ -36,7 +36,6 @@
 enum a4xx_vtx_fmt fd4_pipe2vtx(enum pipe_format format);
 enum a4xx_tex_fmt fd4_pipe2tex(enum pipe_format format);
 enum a4xx_color_fmt fd4_pipe2color(enum pipe_format format);
-enum pipe_format fd4_gmem_restore_format(enum pipe_format format);
 enum a3xx_color_swap fd4_pipe2swap(enum pipe_format format);
 enum a4xx_tex_fetchsize fd4_pipe2fetchsize(enum pipe_format format);
 enum a4xx_depth_format fd4_pipe2depth(enum pipe_format format);

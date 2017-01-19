@@ -225,7 +225,7 @@ static void upload_cc_unit(struct brw_context *brw)
       cc->cc2.depth_test = 1;
       cc->cc2.depth_test_function =
 	 intel_translate_compare_func(ctx->Depth.Func);
-      cc->cc2.depth_write_enable = ctx->Depth.Mask;
+      cc->cc2.depth_write_enable = brw_depth_writes_enabled(brw);
    }
 
    if (brw->stats_wm || unlikely(INTEL_DEBUG & DEBUG_STATS))

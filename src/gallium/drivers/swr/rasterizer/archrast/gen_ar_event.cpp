@@ -33,42 +33,232 @@
 
 using namespace ArchRast;
 
-void Start::accept(EventHandler* pHandler)
+void Start::Accept(EventHandler* pHandler)
 {
-    pHandler->handle(*this);
+    pHandler->Handle(*this);
 }
 
-void End::accept(EventHandler* pHandler)
+void End::Accept(EventHandler* pHandler)
 {
-    pHandler->handle(*this);
+    pHandler->Handle(*this);
 }
 
-void DrawInstancedEvent::accept(EventHandler* pHandler)
+void ThreadStartApiEvent::Accept(EventHandler* pHandler)
 {
-    pHandler->handle(*this);
+    pHandler->Handle(*this);
 }
 
-void DrawIndexedInstancedEvent::accept(EventHandler* pHandler)
+void ThreadStartWorkerEvent::Accept(EventHandler* pHandler)
 {
-    pHandler->handle(*this);
+    pHandler->Handle(*this);
 }
 
-void DispatchEvent::accept(EventHandler* pHandler)
+void DrawInstancedEvent::Accept(EventHandler* pHandler)
 {
-    pHandler->handle(*this);
+    pHandler->Handle(*this);
 }
 
-void FrameEndEvent::accept(EventHandler* pHandler)
+void DrawIndexedInstancedEvent::Accept(EventHandler* pHandler)
 {
-    pHandler->handle(*this);
+    pHandler->Handle(*this);
 }
 
-void FrontendStatsEvent::accept(EventHandler* pHandler)
+void DispatchEvent::Accept(EventHandler* pHandler)
 {
-    pHandler->handle(*this);
+    pHandler->Handle(*this);
 }
 
-void BackendStatsEvent::accept(EventHandler* pHandler)
+void FrameEndEvent::Accept(EventHandler* pHandler)
 {
-    pHandler->handle(*this);
+    pHandler->Handle(*this);
+}
+
+void FrontendStatsEvent::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void BackendStatsEvent::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyDepthStencilInfoSingleSample::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyDepthStencilInfoSampleRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyDepthStencilInfoNullPS::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateDepthStencilInfoSingleSample::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateDepthStencilInfoSampleRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateDepthStencilInfoNullPS::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyDepthInfoPixelRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateDepthInfoPixelRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void BackendDrawEndEvent::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void FrontendDrawEndEvent::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZSingleSample::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateZSingleSample::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyStencilSingleSample::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateStencilSingleSample::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZSampleRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateZSampleRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyStencilSampleRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateStencilSampleRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZNullPS::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyStencilNullPS::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZPixelRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateZPixelRate::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyOmZ::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyOmStencil::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateOmZ::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void LateOmStencil::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void GSPrimInfo::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void GSInputPrims::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void GSPrimsGen::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void GSVertsInput::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void ClipVertexCount::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void FlushVertClip::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void VertsClipped::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void TessPrimCount::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void TessPrimFlush::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
+}
+
+void TessPrims::Accept(EventHandler* pHandler)
+{
+    pHandler->Handle(*this);
 }

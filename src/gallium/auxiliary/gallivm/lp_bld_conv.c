@@ -456,21 +456,21 @@ int lp_build_conv_auto(struct gallivm_state *gallivm,
        src_type.sign == dst_type->sign)
       return num_dsts;
 
-   /* Special case 4x4f -> 1x16ub or 2x8f -> 1x16ub
+   /* Special case 4x4x32 -> 1x16x8 or 2x8x32 -> 1x16x8
     */
-   if (src_type.floating == 1 &&
-       src_type.fixed    == 0 &&
-       src_type.sign     == 1 &&
-       src_type.norm     == 0 &&
+   if (src_type.norm     == 0 &&
        src_type.width    == 32 &&
+       src_type.fixed    == 0 &&
 
        dst_type->floating == 0 &&
        dst_type->fixed    == 0 &&
-       dst_type->sign     == 0 &&
-       dst_type->norm     == 1 &&
-       dst_type->width    == 8)
-   {
-      /* Special case 4x4f --> 1x16ub */
+       dst_type->width    == 8 &&
+
+       ((src_type.floating == 1 && src_type.sign == 1 && dst_type->norm == 1) ||
+        (src_type.floating == 0 && dst_type->floating == 0 &&
+         src_type.sign == dst_type->sign && dst_type->norm == 0))) {
+
+      /* Special case 4x4x32 --> 1x16x8 */
       if (src_type.length == 4 &&
             (util_cpu_caps.has_sse2 || util_cpu_caps.has_altivec))
       {
@@ -481,7 +481,7 @@ int lp_build_conv_auto(struct gallivm_state *gallivm,
          return num_dsts;
       }
 
-      /* Special case 2x8f --> 1x16ub */
+      /* Special case 2x8x32 --> 1x16x8 */
       if (src_type.length == 8 &&
           util_cpu_caps.has_avx)
       {
@@ -497,8 +497,25 @@ int lp_build_conv_auto(struct gallivm_state *gallivm,
    if (src_type.width == dst_type->width) {
       lp_build_conv(gallivm, src_type, *dst_type, src, num_srcs, dst, num_dsts);
    } else {
-      for (i = 0; i < num_srcs; ++i) {
-         lp_build_conv(gallivm, src_type, *dst_type, &src[i], 1, &dst[i], 1);
+      /*
+       * If dst_width is 16 bits and src_width 32 and the dst vector size
+       * 64bit, try feeding 2 vectors at once so pack intrinsics can be used.
+       * (For AVX, this isn't needed, since we usually get 256bit src and
+       * 128bit dst vectors which works ok. If we do AVX2 pack this should
+       * be extended but need to be able to tell conversion code about pack
+       * ordering first.)
+       */
+      unsigned ratio = 1;
+      if (src_type.width == 2 * dst_type->width &&
+          src_type.length == dst_type->length &&
+          dst_type->floating == 0 && (num_srcs % 2 == 0) &&
+          dst_type->width * dst_type->length == 64) {
+         ratio = 2;
+         num_dsts /= 2;
+         dst_type->length *= 2;
+      }
+      for (i = 0; i < num_dsts; i++) {
+         lp_build_conv(gallivm, src_type, *dst_type, &src[i*ratio], ratio, &dst[i], 1);
       }
    }
 
@@ -541,20 +558,24 @@ lp_build_conv(struct gallivm_state *gallivm,
    num_tmps = num_srcs;
 
 
-   /* Special case 4x4f --> 1x16ub, 2x4f -> 1x8ub, 1x4f -> 1x4ub
+   /*
+    * Special case 4x4x32 --> 1x16x8, 2x4x32 -> 1x8x8, 1x4x32 -> 1x4x8
+    * Only float -> s/unorm8 and (u)int32->(u)int8.
+    * XXX: This should cover all interesting backend cases for 8 bit,
+    * but should use same strategy if dst is 16 bit.
     */
-   if (src_type.floating == 1 &&
-       src_type.fixed    == 0 &&
-       src_type.sign     == 1 &&
-       src_type.norm     == 0 &&
+   if (src_type.norm     == 0 &&
        src_type.width    == 32 &&
        src_type.length   == 4 &&
+       src_type.fixed    == 0 &&
 
        dst_type.floating == 0 &&
        dst_type.fixed    == 0 &&
-       dst_type.sign     == 0 &&
-       dst_type.norm     == 1 &&
        dst_type.width    == 8 &&
+
+       ((src_type.floating == 1 && src_type.sign == 1 && dst_type.norm == 1) ||
+        (src_type.floating == 0 && dst_type.floating == 0 &&
+         src_type.sign == dst_type.sign && dst_type.norm == 0)) &&
 
        ((dst_type.length == 16 && 4 * num_dsts == num_srcs) ||
         (num_dsts == 1 && dst_type.length * num_srcs == 16 && num_srcs != 3)) &&
@@ -564,7 +585,7 @@ lp_build_conv(struct gallivm_state *gallivm,
       struct lp_build_context bld;
       struct lp_type int16_type, int32_type;
       struct lp_type dst_type_ext = dst_type;
-      LLVMValueRef const_255f;
+      LLVMValueRef const_scale;
       unsigned i, j;
 
       lp_build_context_init(&bld, gallivm, src_type);
@@ -580,14 +601,54 @@ lp_build_conv(struct gallivm_state *gallivm,
       int32_type.length /= 4;
       int32_type.sign = 1;
 
-      const_255f = lp_build_const_vec(gallivm, src_type, 255.0f);
+      const_scale = lp_build_const_vec(gallivm, src_type, lp_const_scale(dst_type));
 
       for (i = 0; i < num_dsts; ++i, src += 4) {
          LLVMValueRef lo, hi;
 
-         for (j = 0; j < dst_type.length / 4; ++j) {
-            tmp[j] = LLVMBuildFMul(builder, src[j], const_255f, "");
-            tmp[j] = lp_build_iround(&bld, tmp[j]);
+         if (src_type.floating) {
+            for (j = 0; j < dst_type.length / 4; ++j) {
+               /*
+                * XXX This is not actually fully correct. The float to int
+                * conversion will produce 0x80000000 value for everything
+                * out of range and NaNs (on x86, llvm.x86.sse2.cvtps2dq).
+                * Hence, NaNs and negatives will get clamped just fine to zero
+                * (relying on clamping pack behavior) when converting to unorm,
+                * however too large values (both finite and infinite) will also
+                * end up as zero, not 255.
+                * For snorm, for now we'll keep bug compatibility with generic
+                * conversion path (meaning too large values are fine, but
+                * NaNs get converted to -128 (purely by luck, as we don't
+                * specify nan behavior for the max there) instead of 0).
+                */
+               if (dst_type.sign) {
+                  tmp[j] = lp_build_min(&bld, bld.one, src[j]);
+
+               }
+               else {
+                  if (0) {
+                     tmp[j] = lp_build_min_ext(&bld, bld.one, src[j],
+                                               GALLIVM_NAN_RETURN_NAN_FIRST_NONNAN);
+                  }
+                  tmp[j] = src[j];
+               }
+               tmp[j] = LLVMBuildFMul(builder, tmp[j], const_scale, "");
+               tmp[j] = lp_build_iround(&bld, tmp[j]);
+            }
+         } else {
+            for (j = 0; j < dst_type.length / 4; ++j) {
+               if (!dst_type.sign) {
+                  /*
+                   * Pack clamp is always signed->unsigned (or signed->signed).
+                   * Hence need min.
+                   */
+                  LLVMValueRef const_max;
+                  const_max = lp_build_const_int_vec(gallivm, src_type, 255);
+                  tmp[j] = lp_build_min(&bld, src[j], const_max);
+               } else {
+                  tmp[j] = src[j];
+               }
+            }
          }
 
          if (num_srcs == 1) {
@@ -612,20 +673,20 @@ lp_build_conv(struct gallivm_state *gallivm,
       return; 
    }
 
-   /* Special case 2x8f --> 1x16ub, 1x8f ->1x8ub
+   /* Special case 2x8x32 --> 1x16x8, 1x8x32 ->1x8x8
     */
-   else if (src_type.floating == 1 &&
-      src_type.fixed    == 0 &&
-      src_type.sign     == 1 &&
-      src_type.norm     == 0 &&
-      src_type.width    == 32 &&
-      src_type.length   == 8 &&
+   else if (src_type.norm     == 0 &&
+       src_type.width    == 32 &&
+       src_type.length   == 8 &&
+       src_type.fixed    == 0 &&
 
-      dst_type.floating == 0 &&
-      dst_type.fixed    == 0 &&
-      dst_type.sign     == 0 &&
-      dst_type.norm     == 1 &&
-      dst_type.width    == 8 &&
+       dst_type.floating == 0 &&
+       dst_type.fixed    == 0 &&
+       dst_type.width    == 8 &&
+
+       ((src_type.floating == 1 && src_type.sign == 1 && dst_type.norm == 1) ||
+        (src_type.floating == 0 && dst_type.floating == 0 &&
+         src_type.sign == dst_type.sign && dst_type.norm == 0)) &&
 
       ((dst_type.length == 16 && 2 * num_dsts == num_srcs) ||
        (num_dsts == 1 && dst_type.length * num_srcs == 8)) &&
@@ -635,7 +696,7 @@ lp_build_conv(struct gallivm_state *gallivm,
       struct lp_build_context bld;
       struct lp_type int16_type, int32_type;
       struct lp_type dst_type_ext = dst_type;
-      LLVMValueRef const_255f;
+      LLVMValueRef const_scale;
       unsigned i;
 
       lp_build_context_init(&bld, gallivm, src_type);
@@ -651,30 +712,44 @@ lp_build_conv(struct gallivm_state *gallivm,
       int32_type.length /= 4;
       int32_type.sign = 1;
 
-      const_255f = lp_build_const_vec(gallivm, src_type, 255.0f);
+      const_scale = lp_build_const_vec(gallivm, src_type, lp_const_scale(dst_type));
 
       for (i = 0; i < num_dsts; ++i, src += 2) {
-         LLVMValueRef lo, hi, a, b;
+         unsigned j;
+         for (j = 0; j < (num_srcs == 1 ? 1 : 2); j++) {
+            LLVMValueRef lo, hi, a;
 
-         a = LLVMBuildFMul(builder, src[0], const_255f, "");
-         a = lp_build_iround(&bld, a);
-         tmp[0] = lp_build_extract_range(gallivm, a, 0, 4);
-         tmp[1] = lp_build_extract_range(gallivm, a, 4, 4);
-         /* relying on clamping behavior of sse2 intrinsics here */
-         lo = lp_build_pack2(gallivm, int32_type, int16_type, tmp[0], tmp[1]);
+            a = src[j];
+            if (src_type.floating) {
+               if (dst_type.sign) {
+                  a = lp_build_min(&bld, bld.one, a);
+
+               }
+               else {
+                  if (0) {
+                     a = lp_build_min_ext(&bld, bld.one, a,
+                                          GALLIVM_NAN_RETURN_NAN_FIRST_NONNAN);
+                  }
+               }
+               a = LLVMBuildFMul(builder, a, const_scale, "");
+               a = lp_build_iround(&bld, a);
+            } else {
+               if (!dst_type.sign) {
+                  LLVMValueRef const_max;
+                  const_max = lp_build_const_int_vec(gallivm, src_type, 255);
+                  a = lp_build_min(&bld, a, const_max);
+               }
+            }
+            lo = lp_build_extract_range(gallivm, a, 0, 4);
+            hi = lp_build_extract_range(gallivm, a, 4, 4);
+            /* relying on clamping behavior of sse2 intrinsics here */
+            tmp[j] = lp_build_pack2(gallivm, int32_type, int16_type, lo, hi);
+         }
 
          if (num_srcs == 1) {
-            hi = lo;
+            tmp[1] = tmp[0];
          }
-         else {
-            b = LLVMBuildFMul(builder, src[1], const_255f, "");
-            b = lp_build_iround(&bld, b);
-            tmp[2] = lp_build_extract_range(gallivm, b, 0, 4);
-            tmp[3] = lp_build_extract_range(gallivm, b, 4, 4);
-            hi = lp_build_pack2(gallivm, int32_type, int16_type, tmp[2], tmp[3]);
-
-         }
-         dst[i] = lp_build_pack2(gallivm, int16_type, dst_type_ext, lo, hi);
+         dst[i] = lp_build_pack2(gallivm, int16_type, dst_type_ext, tmp[0], tmp[1]);
       }
 
       if (num_srcs == 1) {
@@ -841,6 +916,10 @@ lp_build_conv(struct gallivm_state *gallivm,
       new_type.width  = dst_type.width;
       new_type.length = dst_type.length;
 
+      /*
+       * Note that resize when using packs can sometimes get min/max
+       * clamping for free. Should be able to exploit this...
+       */
       lp_build_resize(gallivm, tmp_type, new_type, tmp, num_srcs, tmp, num_dsts);
 
       tmp_type = new_type;

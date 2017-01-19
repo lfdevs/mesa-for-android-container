@@ -259,9 +259,9 @@ nouveau_update_renderbuffers(__DRIcontext *dri_ctx, __DRIdrawable *draw)
 	else if (fb->Visual.haveStencilBuffer)
 		attachments[i++] = __DRI_BUFFER_STENCIL;
 
-	buffers = (*screen->dri2.loader->getBuffers)(draw, &draw->w, &draw->h,
-						     attachments, i, &count,
-						     draw->loaderPrivate);
+	buffers = screen->dri2.loader->getBuffers(draw, &draw->w, &draw->h,
+						  attachments, i, &count,
+						  draw->loaderPrivate);
 	if (buffers == NULL)
 		return;
 

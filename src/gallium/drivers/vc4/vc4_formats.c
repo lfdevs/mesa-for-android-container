@@ -83,6 +83,8 @@ static const struct vc4_format vc4_format_table[] = {
 
         FORMAT(B5G6R5_UNORM, RGB565, RGB565, SWIZ(X, Y, Z, 1)),
 
+        FORMAT(ETC1_RGB8, NO, ETC1, SWIZ(X, Y, Z, 1)),
+
         /* Depth sampling will be handled by doing nearest filtering and not
          * unpacking the RGBA value.
          */

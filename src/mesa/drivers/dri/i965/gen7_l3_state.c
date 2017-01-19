@@ -53,8 +53,8 @@ get_pipeline_state_l3_weights(const struct brw_context *brw)
          brw->ctx._Shader->CurrentProgram[stage_states[i]->stage];
       const struct brw_stage_prog_data *prog_data = stage_states[i]->prog_data;
 
-      needs_dc |= (prog && (prog->NumAtomicBuffers ||
-                            prog->NumShaderStorageBlocks)) ||
+      needs_dc |= (prog && (prog->data->NumAtomicBuffers ||
+                            prog->data->NumShaderStorageBlocks)) ||
          (prog_data && (prog_data->total_scratch || prog_data->nr_image_params));
       needs_slm |= prog_data && prog_data->total_shared;
    }
@@ -175,7 +175,7 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
 
       ADVANCE_BATCH();
 
-      if (brw->is_haswell && brw->screen->cmd_parser_version >= 4) {
+      if (can_do_hsw_l3_atomics(brw->screen)) {
          /* Enable L3 atomics on HSW if we have a DC partition, otherwise keep
           * them disabled to avoid crashing the system hard.
           */
@@ -229,7 +229,7 @@ emit_l3_state(struct brw_context *brw)
    const float dw_threshold = (brw->ctx.NewDriverState & BRW_NEW_BATCH ?
                                small_dw_threshold : large_dw_threshold);
 
-   if (dw > dw_threshold && brw->can_do_pipelined_register_writes) {
+   if (dw > dw_threshold && can_do_pipelined_register_writes(brw->screen)) {
       const struct gen_l3_config *const cfg =
          gen_get_l3_config(&brw->screen->devinfo, w);
 
@@ -296,7 +296,8 @@ gen7_restore_default_l3_config(struct brw_context *brw)
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct gen_l3_config *const cfg = gen_get_default_l3_config(devinfo);
 
-   if (cfg != brw->l3.config && brw->can_do_pipelined_register_writes) {
+   if (cfg != brw->l3.config &&
+       can_do_pipelined_register_writes(brw->screen)) {
       setup_l3_config(brw, cfg);
       update_urb_size(brw, cfg);
       brw->l3.config = cfg;

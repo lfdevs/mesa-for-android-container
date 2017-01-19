@@ -55,12 +55,12 @@ blorp_emit_reloc(struct blorp_batch *batch,
 
    uint32_t offset = (char *)location - (char *)brw->batch.map;
    if (brw->gen >= 8) {
-      return intel_batchbuffer_reloc64(brw, address.buffer, offset,
+      return intel_batchbuffer_reloc64(&brw->batch, address.buffer, offset,
                                        address.read_domains,
                                        address.write_domain,
                                        address.offset + delta);
    } else {
-      return intel_batchbuffer_reloc(brw, address.buffer, offset,
+      return intel_batchbuffer_reloc(&brw->batch, address.buffer, offset,
                                      address.read_domains,
                                      address.write_domain,
                                      address.offset + delta);
@@ -205,6 +205,10 @@ retry:
       gen7_disable_hw_binding_tables(brw);
 
    brw_emit_depth_stall_flushes(brw);
+
+#if GEN_GEN == 8
+   gen8_write_pma_stall_bits(brw, 0);
+#endif
 
    blorp_emit(batch, GENX(3DSTATE_DRAWING_RECTANGLE), rect) {
       rect.ClippedDrawingRectangleXMax = MAX2(params->x1, params->x0) - 1;

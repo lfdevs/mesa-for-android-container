@@ -68,7 +68,7 @@ brw_nir_setup_glsl_builtin_uniform(nir_variable *var,
 
 static void
 brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
-                           struct gl_shader_program *shader_prog,
+                           const struct gl_program *prog,
                            struct brw_stage_prog_data *stage_prog_data,
                            bool is_scalar)
 {
@@ -81,8 +81,9 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
     * with our name, or the prefix of a component that starts with our name.
     */
    unsigned uniform_index = var->data.driver_location / 4;
-   for (unsigned u = 0; u < shader_prog->NumUniformStorage; u++) {
-      struct gl_uniform_storage *storage = &shader_prog->UniformStorage[u];
+   for (unsigned u = 0; u < prog->sh.data->NumUniformStorage; u++) {
+      struct gl_uniform_storage *storage =
+         &prog->sh.data->UniformStorage[u];
 
       if (storage->builtin)
          continue;
@@ -107,7 +108,8 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
          unsigned max_vector_size = 4;
          if (storage->type->base_type == GLSL_TYPE_DOUBLE) {
             vector_size *= 2;
-            max_vector_size *= 2;
+            if (vector_size > 4)
+               max_vector_size = 8;
          }
 
          for (unsigned s = 0; s < vector_count; s++) {
@@ -129,9 +131,7 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
 }
 
 void
-brw_nir_setup_glsl_uniforms(nir_shader *shader,
-                            struct gl_shader_program *shader_prog,
-                            const struct gl_program *prog,
+brw_nir_setup_glsl_uniforms(nir_shader *shader, const struct gl_program *prog,
                             struct brw_stage_prog_data *stage_prog_data,
                             bool is_scalar)
 {
@@ -145,8 +145,8 @@ brw_nir_setup_glsl_uniforms(nir_shader *shader,
          brw_nir_setup_glsl_builtin_uniform(var, prog, stage_prog_data,
                                             is_scalar);
       } else {
-         brw_nir_setup_glsl_uniform(shader->stage, var, shader_prog,
-                                    stage_prog_data, is_scalar);
+         brw_nir_setup_glsl_uniform(shader->stage, var, prog, stage_prog_data,
+                                    is_scalar);
       }
    }
 }

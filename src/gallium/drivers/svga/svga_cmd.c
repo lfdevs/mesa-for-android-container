@@ -1870,6 +1870,24 @@ SVGA3D_InvalidateGBImagePartial(struct svga_winsys_context *swc,
    return PIPE_OK;
 }
 
+enum pipe_error
+SVGA3D_InvalidateGBSurface(struct svga_winsys_context *swc,
+                           struct svga_winsys_surface *surface)
+{
+   SVGA3dCmdInvalidateGBSurface *cmd =
+      SVGA3D_FIFOReserve(swc,
+                         SVGA_3D_CMD_INVALIDATE_GB_SURFACE,
+                         sizeof *cmd,
+                         1);  /* one relocation */
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   swc->surface_relocation(swc, &cmd->sid, NULL, surface,
+                           SVGA_RELOC_READ | SVGA_RELOC_INTERNAL);
+   swc->commit(swc);
+
+   return PIPE_OK;
+}
 
 enum pipe_error
 SVGA3D_SetGBShaderConstsInline(struct svga_winsys_context *swc,

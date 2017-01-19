@@ -61,7 +61,7 @@ void copy_propagation_test::SetUp()
 
    prog_data = ralloc(NULL, struct brw_wm_prog_data);
    nir_shader *shader =
-      nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL);
+      nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL, NULL);
 
    v = new copy_propagation_fs_visitor(compiler, prog_data, shader);
 

@@ -254,13 +254,16 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
       tex_obj = intel_texture_object(ctx->Texture.Unit[i]._Current);
       if (!tex_obj || !tex_obj->mt)
 	 continue;
-      intel_miptree_all_slices_resolve_depth(brw, tex_obj->mt);
+      if (intel_miptree_sample_with_hiz(brw, tex_obj->mt))
+         intel_miptree_all_slices_resolve_hiz(brw, tex_obj->mt);
+      else
+         intel_miptree_all_slices_resolve_depth(brw, tex_obj->mt);
       /* Sampling engine understands lossless compression and resolving
        * those surfaces should be skipped for performance reasons.
        */
       const int flags = intel_texture_view_requires_resolve(brw, tex_obj) ?
                            0 : INTEL_MIPTREE_IGNORE_CCS_E;
-      intel_miptree_resolve_color(brw, tex_obj->mt, flags);
+      intel_miptree_all_slices_resolve_color(brw, tex_obj->mt, flags);
       brw_render_cache_set_check_flush(brw, tex_obj->mt->bo);
 
       if (tex_obj->base.StencilSampling ||
@@ -275,9 +278,10 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
          ctx->_Shader->CurrentProgram[i] ?
             ctx->_Shader->CurrentProgram[i]->_LinkedShaders[i] : NULL;
 
-      if (unlikely(shader && shader->NumImages)) {
-         for (unsigned j = 0; j < shader->NumImages; j++) {
-            struct gl_image_unit *u = &ctx->ImageUnits[shader->ImageUnits[j]];
+      if (unlikely(shader && shader->Program->info.num_images)) {
+         for (unsigned j = 0; j < shader->Program->info.num_images; j++) {
+            struct gl_image_unit *u =
+               &ctx->ImageUnits[shader->Program->sh.ImageUnits[j]];
             tex_obj = intel_texture_object(u->TexObj);
 
             if (tex_obj && tex_obj->mt) {
@@ -288,7 +292,7 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
                 * compressed surfaces need to be resolved prior to accessing
                 * them. Hence skip setting INTEL_MIPTREE_IGNORE_CCS_E.
                 */
-               intel_miptree_resolve_color(brw, tex_obj->mt, 0);
+               intel_miptree_all_slices_resolve_color(brw, tex_obj->mt, 0);
 
                if (intel_miptree_is_lossless_compressed(brw, tex_obj->mt) &&
                    intel_disable_rb_aux_buffer(brw, tex_obj->mt->bo)) {
@@ -305,7 +309,7 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
    /* Resolve color buffers for non-coherent framebuffer fetch. */
    if (!ctx->Extensions.MESA_shader_framebuffer_fetch &&
        ctx->FragmentProgram._Current &&
-       ctx->FragmentProgram._Current->Base.nir->info.outputs_read) {
+       ctx->FragmentProgram._Current->info.outputs_read) {
       const struct gl_framebuffer *fb = ctx->DrawBuffer;
 
       for (unsigned i = 0; i < fb->_NumColorDrawBuffers; i++) {
@@ -313,8 +317,9 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
             intel_renderbuffer(fb->_ColorDrawBuffers[i]);
 
          if (irb &&
-             intel_miptree_resolve_color(brw, irb->mt,
-                                         INTEL_MIPTREE_IGNORE_CCS_E))
+             intel_miptree_resolve_color(
+                brw, irb->mt, irb->mt_level, irb->mt_layer, irb->layer_count,
+                INTEL_MIPTREE_IGNORE_CCS_E))
             brw_render_cache_set_check_flush(brw, irb->mt->bo);
       }
    }
@@ -345,7 +350,7 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
           * should be impossible to get here with such surfaces.
           */
          assert(!intel_miptree_is_lossless_compressed(brw, mt));
-         intel_miptree_resolve_color(brw, mt, 0);
+         intel_miptree_all_slices_resolve_color(brw, mt, 0);
          brw_render_cache_set_check_flush(brw, mt->bo);
       }
    }
@@ -464,7 +469,7 @@ brw_init_driver_functions(struct brw_context *brw,
 
    functions->NewTransformFeedback = brw_new_transform_feedback;
    functions->DeleteTransformFeedback = brw_delete_transform_feedback;
-   if (brw->screen->has_mi_math_and_lrr) {
+   if (can_do_mi_math_and_lrr(brw->screen)) {
       functions->BeginTransformFeedback = hsw_begin_transform_feedback;
       functions->EndTransformFeedback = hsw_end_transform_feedback;
       functions->PauseTransformFeedback = hsw_pause_transform_feedback;
@@ -498,7 +503,7 @@ brw_initialize_context_constants(struct brw_context *brw)
       [MESA_SHADER_GEOMETRY] = brw->gen >= 6,
       [MESA_SHADER_FRAGMENT] = true,
       [MESA_SHADER_COMPUTE] =
-         (ctx->API == API_OPENGL_CORE &&
+         ((ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGL_CORE) &&
           ctx->Const.MaxComputeWorkGroupSize[0] >= 1024) ||
          (ctx->API == API_OPENGLES2 &&
           ctx->Const.MaxComputeWorkGroupSize[0] >= 128) ||
@@ -523,19 +528,31 @@ brw_initialize_context_constants(struct brw_context *brw)
 
    ctx->Const.MaxTextureCoordUnits = 8; /* Mesa limit */
    ctx->Const.MaxImageUnits = MAX_IMAGE_UNITS;
-   ctx->Const.MaxRenderbufferSize = 8192;
-   ctx->Const.MaxTextureLevels = MIN2(14 /* 8192 */, MAX_TEXTURE_LEVELS);
+   if (brw->gen >= 7) {
+      ctx->Const.MaxRenderbufferSize = 16384;
+      ctx->Const.MaxTextureLevels = MIN2(15 /* 16384 */, MAX_TEXTURE_LEVELS);
+      ctx->Const.MaxCubeTextureLevels = 15; /* 16384 */
+   } else {
+      ctx->Const.MaxRenderbufferSize = 8192;
+      ctx->Const.MaxTextureLevels = MIN2(14 /* 8192 */, MAX_TEXTURE_LEVELS);
+      ctx->Const.MaxCubeTextureLevels = 14; /* 8192 */
+   }
    ctx->Const.Max3DTextureLevels = 12; /* 2048 */
-   ctx->Const.MaxCubeTextureLevels = 14; /* 8192 */
    ctx->Const.MaxArrayTextureLayers = brw->gen >= 7 ? 2048 : 512;
    ctx->Const.MaxTextureMbytes = 1536;
    ctx->Const.MaxTextureRectSize = 1 << 12;
    ctx->Const.MaxTextureMaxAnisotropy = 16.0;
+   ctx->Const.MaxTextureLodBias = 15.0;
    ctx->Const.StripTextureBorder = true;
-   if (brw->gen >= 7)
+   if (brw->gen >= 7) {
       ctx->Const.MaxProgramTextureGatherComponents = 4;
-   else if (brw->gen == 6)
+      ctx->Const.MinProgramTextureGatherOffset = -32;
+      ctx->Const.MaxProgramTextureGatherOffset = 31;
+   } else if (brw->gen == 6) {
       ctx->Const.MaxProgramTextureGatherComponents = 1;
+      ctx->Const.MinProgramTextureGatherOffset = -8;
+      ctx->Const.MaxProgramTextureGatherOffset = 7;
+   }
 
    ctx->Const.MaxUniformBlockSize = 65536;
 
@@ -592,7 +609,7 @@ brw_initialize_context_constants(struct brw_context *brw)
       BRW_MAX_SOL_BINDINGS / BRW_MAX_SOL_BUFFERS;
 
    ctx->Const.AlwaysUseGetTransformFeedbackVertexCount =
-      !brw->screen->has_mi_math_and_lrr;
+      !can_do_mi_math_and_lrr(brw->screen);
 
    int max_samples;
    const int *msaa_modes = intel_supported_msaa_modes(brw->screen);
@@ -656,7 +673,7 @@ brw_initialize_context_constants(struct brw_context *brw)
    if (brw->gen >= 5 || brw->is_g4x)
       ctx->Const.MaxClipPlanes = 8;
 
-   ctx->Const.LowerTessLevel = true;
+   ctx->Const.GLSLTessLevelsAsInputs = true;
    ctx->Const.LowerTCSPatchVerticesIn = brw->gen >= 8;
    ctx->Const.LowerTESPatchVerticesIn = true;
    ctx->Const.PrimitiveRestartForPatches = true;
@@ -778,8 +795,7 @@ brw_initialize_context_constants(struct brw_context *brw)
    }
 
    /* ARB_viewport_array, OES_viewport_array */
-   if ((brw->gen >= 6 && ctx->API == API_OPENGL_CORE) ||
-       (brw->gen >= 8  && ctx->API == API_OPENGLES2)) {
+   if (brw->gen >= 6) {
       ctx->Const.MaxViewports = GEN6_NUM_VIEWPORTS;
       ctx->Const.ViewportSubpixelBits = 0;
 
@@ -1044,7 +1060,7 @@ brwCreateContext(gl_api api,
 
    intel_fbo_init(brw);
 
-   intel_batchbuffer_init(brw);
+   intel_batchbuffer_init(&brw->batch, brw->bufmgr, brw->has_llc);
 
    if (brw->gen >= 6) {
       /* Create a new hardware context.  Using a hardware context means that
@@ -1107,8 +1123,10 @@ brwCreateContext(gl_api api,
       brw->perf_debug = true;
    }
 
-   if ((flags & __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS) != 0)
+   if ((flags & __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS) != 0) {
       ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT_ARB;
+      ctx->Const.RobustAccess = GL_TRUE;
+   }
 
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       brw_init_shader_time(brw);
@@ -1117,10 +1135,6 @@ brwCreateContext(gl_api api,
 
    _mesa_initialize_dispatch_tables(ctx);
    _mesa_initialize_vbo_vtxfmt(ctx);
-
-   if (ctx->Extensions.AMD_performance_monitor) {
-      brw_init_performance_monitors(brw);
-   }
 
    vbo_use_buffer_objects(ctx);
    vbo_always_unmap_buffers(ctx);
@@ -1185,7 +1199,7 @@ intelDestroyContext(__DRIcontext * driContextPriv)
       _swrast_DestroyContext(&brw->ctx);
 
    brw_fini_pipe_control(brw);
-   intel_batchbuffer_free(brw);
+   intel_batchbuffer_free(&brw->batch);
 
    drm_intel_bo_unreference(brw->throttle_batch[1]);
    drm_intel_bo_unreference(brw->throttle_batch[0]);
@@ -1344,10 +1358,13 @@ intel_resolve_for_dri2_flush(struct brw_context *brw,
       rb = intel_get_renderbuffer(fb, buffers[i]);
       if (rb == NULL || rb->mt == NULL)
          continue;
-      if (rb->mt->num_samples <= 1)
-         intel_miptree_resolve_color(brw, rb->mt, 0);
-      else
+      if (rb->mt->num_samples <= 1) {
+         assert(rb->mt_layer == 0 && rb->mt_level == 0 &&
+                rb->layer_count == 1);
+         intel_miptree_resolve_color(brw, rb->mt, 0, 0, 1, 0);
+      } else {
          intel_renderbuffer_downsample(brw, rb);
+      }
    }
 }
 

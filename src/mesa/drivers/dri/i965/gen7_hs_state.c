@@ -32,8 +32,7 @@ gen7_upload_tcs_push_constants(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->tcs.base;
    /* BRW_NEW_TESS_PROGRAMS */
-   const struct brw_tess_ctrl_program *tcp =
-      (struct brw_tess_ctrl_program *) brw->tess_ctrl_program;
+   const struct brw_program *tcp = brw_program_const(brw->tess_ctrl_program);
    bool active = brw->tess_eval_program;
 
    if (active) {
@@ -41,8 +40,8 @@ gen7_upload_tcs_push_constants(struct brw_context *brw)
       const struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
 
       _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_TESS_CTRL);
-      gen6_upload_push_constants(brw, &tcp->program.Base, prog_data,
-                                      stage_state, AUB_TRACE_VS_CONSTANTS);
+      gen6_upload_push_constants(brw, &tcp->program, prog_data, stage_state,
+                                 AUB_TRACE_VS_CONSTANTS);
    }
 
    gen7_upload_constant_state(brw, stage_state, active, _3DSTATE_CONSTANT_HS);

@@ -54,7 +54,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 2, 0, 0, 0, 0, 0, COMP, "SLT", TGSI_OPCODE_SLT },
    { 1, 2, 0, 0, 0, 0, 0, COMP, "SGE", TGSI_OPCODE_SGE },
    { 1, 3, 0, 0, 0, 0, 0, COMP, "MAD", TGSI_OPCODE_MAD },
-   { 1, 2, 0, 0, 0, 0, 0, COMP, "SUB", TGSI_OPCODE_SUB },
+   { 1, 2, 0, 0, 0, 0, 0, COMP, "", 17 }, /* removed */
    { 1, 3, 0, 0, 0, 0, 0, COMP, "LRP", TGSI_OPCODE_LRP },
    { 1, 3, 0, 0, 0, 0, 0, COMP, "FMA", TGSI_OPCODE_FMA },
    { 1, 1, 0, 0, 0, 0, 0, REPL, "SQRT", TGSI_OPCODE_SQRT },
@@ -70,7 +70,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 2, 0, 0, 0, 0, 0, REPL, "POW", TGSI_OPCODE_POW },
    { 1, 2, 0, 0, 0, 0, 0, COMP, "XPD", TGSI_OPCODE_XPD },
    { 1, 1, 0, 0, 0, 0, 0, COMP, "U2I64", TGSI_OPCODE_U2I64 },
-   { 1, 1, 0, 0, 0, 0, 0, COMP, "ABS", TGSI_OPCODE_ABS },
+   { 1, 1, 0, 0, 0, 0, 0, COMP, "", 33 }, /* removed */
    { 1, 1, 0, 0, 0, 0, 0, COMP, "I2I64", TGSI_OPCODE_I2I64 },
    { 1, 2, 0, 0, 0, 0, 0, REPL, "DPH", TGSI_OPCODE_DPH },
    { 1, 1, 0, 0, 0, 0, 0, REPL, "COS", TGSI_OPCODE_COS },
@@ -106,7 +106,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 3, 0, 0, 0, 0, 0, COMP, "CMP", TGSI_OPCODE_CMP },
    { 1, 1, 0, 0, 0, 0, 0, CHAN, "SCS", TGSI_OPCODE_SCS },
    { 1, 2, 1, 0, 0, 0, 0, OTHR, "TXB", TGSI_OPCODE_TXB },
-   { 0, 1, 0, 0, 0, 0, 1, NONE, "", 69 },      /* removed */
+   { 1, 1, 0, 0, 0, 0, 0, OTHR, "FBFETCH", TGSI_OPCODE_FBFETCH },
    { 1, 2, 0, 0, 0, 0, 0, COMP, "DIV", TGSI_OPCODE_DIV },
    { 1, 2, 0, 0, 0, 0, 0, REPL, "DP2", TGSI_OPCODE_DP2 },
    { 1, 2, 1, 0, 0, 0, 0, OTHR, "TXL", TGSI_OPCODE_TXL },
@@ -287,6 +287,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 2, 0, 0, 0, 0, 0, COMP, "U64DIV", TGSI_OPCODE_U64DIV },
    { 1, 2, 0, 0, 0, 0, 0, COMP, "I64MOD", TGSI_OPCODE_I64MOD },
    { 1, 2, 0, 0, 0, 0, 0, COMP, "U64MOD", TGSI_OPCODE_U64MOD },
+   { 1, 2, 0, 0, 0, 0, 0, COMP, "DDIV", TGSI_OPCODE_DDIV },
 };
 
 const struct tgsi_opcode_info *
@@ -417,6 +418,7 @@ tgsi_opcode_infer_type( uint opcode )
    case TGSI_OPCODE_DNEG:
    case TGSI_OPCODE_DMUL:
    case TGSI_OPCODE_DMAX:
+   case TGSI_OPCODE_DDIV:
    case TGSI_OPCODE_DMIN:
    case TGSI_OPCODE_DRCP:
    case TGSI_OPCODE_DSQRT:

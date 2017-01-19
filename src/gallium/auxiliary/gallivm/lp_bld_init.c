@@ -48,8 +48,12 @@
 #  define USE_MCJIT 1
 #elif defined(PIPE_ARCH_PPC_64) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_ARM) || defined(PIPE_ARCH_AARCH64)
 #  define USE_MCJIT 1
+#endif
+
+#if defined(USE_MCJIT)
+static const bool use_mcjit = USE_MCJIT;
 #else
-static bool USE_MCJIT = 0;
+static bool use_mcjit = FALSE;
 #endif
 
 
@@ -190,7 +194,7 @@ gallivm_free_ir(struct gallivm_state *gallivm)
 
    FREE(gallivm->module_name);
 
-   if (!USE_MCJIT) {
+   if (!use_mcjit) {
       /* Don't free the TargetData, it's owned by the exec engine */
    } else {
       if (gallivm->target) {
@@ -248,7 +252,7 @@ init_gallivm_engine(struct gallivm_state *gallivm)
                                                     gallivm->module,
                                                     gallivm->memorymgr,
                                                     (unsigned) optlevel,
-                                                    USE_MCJIT,
+                                                    use_mcjit,
                                                     &error);
       if (ret) {
          _debug_printf("%s\n", error);
@@ -257,7 +261,7 @@ init_gallivm_engine(struct gallivm_state *gallivm)
       }
    }
 
-   if (!USE_MCJIT) {
+   if (!use_mcjit) {
       gallivm->target = LLVMGetExecutionEngineTargetData(gallivm->engine);
       if (!gallivm->target)
          goto fail;
@@ -336,7 +340,7 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
     * complete when MC-JIT is created. So defer the MC-JIT engine creation for
     * now.
     */
-   if (!USE_MCJIT) {
+   if (!use_mcjit) {
       if (!init_gallivm_engine(gallivm)) {
          goto fail;
       }
@@ -395,10 +399,21 @@ lp_build_init(void)
    if (gallivm_initialized)
       return TRUE;
 
-   LLVMLinkInMCJIT();
-#if !defined(USE_MCJIT)
-   USE_MCJIT = debug_get_bool_option("GALLIVM_MCJIT", 0);
+
+   /* LLVMLinkIn* are no-ops at runtime.  They just ensure the respective
+    * component is linked at buildtime, which is sufficient for its static
+    * constructors to be called at load time.
+    */
+#if defined(USE_MCJIT)
+#  if USE_MCJIT
+      LLVMLinkInMCJIT();
+#  else
+      LLVMLinkInJIT();
+#  endif
+#else
+   use_mcjit = debug_get_bool_option("GALLIVM_MCJIT", FALSE);
    LLVMLinkInJIT();
+   LLVMLinkInMCJIT();
 #endif
 
 #ifdef DEBUG
@@ -457,7 +472,7 @@ lp_build_init(void)
       util_cpu_caps.has_f16c = 0;
       util_cpu_caps.has_fma = 0;
    }
-   if (HAVE_LLVM < 0x0304 || !USE_MCJIT) {
+   if (HAVE_LLVM < 0x0304 || !use_mcjit) {
       /* AVX2 support has only been tested with LLVM 3.4, and it requires
        * MCJIT. */
       util_cpu_caps.has_avx2 = 0;
@@ -609,7 +624,7 @@ gallivm_compile_module(struct gallivm_state *gallivm)
       debug_printf("Invoke as \"llc -o - %s\"\n", filename);
    }
 
-   if (USE_MCJIT) {
+   if (use_mcjit) {
       assert(!gallivm->engine);
       if (!init_gallivm_engine(gallivm)) {
          assert(0);

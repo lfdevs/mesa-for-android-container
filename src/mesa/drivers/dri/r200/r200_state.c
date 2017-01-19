@@ -61,6 +61,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r200_swtcl.h"
 #include "r200_vertprog.h"
 
+#include "util/simple_list.h"
 
 /* =============================================================
  * Alpha blending

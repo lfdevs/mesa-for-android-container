@@ -220,7 +220,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 	uint32_t face_regid, coord_regid, zwcoord_regid;
 	enum a3xx_threadsize fssz;
 	int constmode;
-	int i, j, k;
+	int i, j;
 
 	debug_assert(nr <= ARRAY_SIZE(color_regid));
 
@@ -342,45 +342,34 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			A4XX_SP_VS_PARAM_REG_PSIZEREGID(psize_regid) |
 			A4XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(s[FS].v->varying_in));
 
-	for (i = 0, j = -1; (i < 16) && (j < (int)s[FS].v->inputs_count); i++) {
+	struct ir3_shader_linkage l = {0};
+	ir3_link_shaders(&l, s[VS].v, s[FS].v);
+
+	for (i = 0, j = 0; (i < 16) && (j < l.cnt); i++) {
 		uint32_t reg = 0;
 
 		OUT_PKT0(ring, REG_A4XX_SP_VS_OUT_REG(i), 1);
 
-		j = ir3_next_varying(s[FS].v, j);
-		if (j < s[FS].v->inputs_count) {
-			k = ir3_find_output(s[VS].v, s[FS].v->inputs[j].slot);
-			reg |= A4XX_SP_VS_OUT_REG_A_REGID(s[VS].v->outputs[k].regid);
-			reg |= A4XX_SP_VS_OUT_REG_A_COMPMASK(s[FS].v->inputs[j].compmask);
-		}
+		reg |= A4XX_SP_VS_OUT_REG_A_REGID(l.var[j].regid);
+		reg |= A4XX_SP_VS_OUT_REG_A_COMPMASK(l.var[j].compmask);
+		j++;
 
-		j = ir3_next_varying(s[FS].v, j);
-		if (j < s[FS].v->inputs_count) {
-			k = ir3_find_output(s[VS].v, s[FS].v->inputs[j].slot);
-			reg |= A4XX_SP_VS_OUT_REG_B_REGID(s[VS].v->outputs[k].regid);
-			reg |= A4XX_SP_VS_OUT_REG_B_COMPMASK(s[FS].v->inputs[j].compmask);
-		}
+		reg |= A4XX_SP_VS_OUT_REG_B_REGID(l.var[j].regid);
+		reg |= A4XX_SP_VS_OUT_REG_B_COMPMASK(l.var[j].compmask);
+		j++;
 
 		OUT_RING(ring, reg);
 	}
 
-	for (i = 0, j = -1; (i < 8) && (j < (int)s[FS].v->inputs_count); i++) {
+	for (i = 0, j = 0; (i < 8) && (j < l.cnt); i++) {
 		uint32_t reg = 0;
 
 		OUT_PKT0(ring, REG_A4XX_SP_VS_VPC_DST_REG(i), 1);
 
-		j = ir3_next_varying(s[FS].v, j);
-		if (j < s[FS].v->inputs_count)
-			reg |= A4XX_SP_VS_VPC_DST_REG_OUTLOC0(s[FS].v->inputs[j].inloc);
-		j = ir3_next_varying(s[FS].v, j);
-		if (j < s[FS].v->inputs_count)
-			reg |= A4XX_SP_VS_VPC_DST_REG_OUTLOC1(s[FS].v->inputs[j].inloc);
-		j = ir3_next_varying(s[FS].v, j);
-		if (j < s[FS].v->inputs_count)
-			reg |= A4XX_SP_VS_VPC_DST_REG_OUTLOC2(s[FS].v->inputs[j].inloc);
-		j = ir3_next_varying(s[FS].v, j);
-		if (j < s[FS].v->inputs_count)
-			reg |= A4XX_SP_VS_VPC_DST_REG_OUTLOC3(s[FS].v->inputs[j].inloc);
+		reg |= A4XX_SP_VS_VPC_DST_REG_OUTLOC0(l.var[j++].loc + 8);
+		reg |= A4XX_SP_VS_VPC_DST_REG_OUTLOC1(l.var[j++].loc + 8);
+		reg |= A4XX_SP_VS_VPC_DST_REG_OUTLOC2(l.var[j++].loc + 8);
+		reg |= A4XX_SP_VS_VPC_DST_REG_OUTLOC3(l.var[j++].loc + 8);
 
 		OUT_RING(ring, reg);
 	}
@@ -515,10 +504,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			 */
 			unsigned compmask = s[FS].v->inputs[j].compmask;
 
-			/* TODO might be cleaner to just +8 in SP_VS_VPC_DST_REG
-			 * instead.. rather than -8 everywhere else..
-			 */
-			uint32_t inloc = s[FS].v->inputs[j].inloc - 8;
+			uint32_t inloc = s[FS].v->inputs[j].inloc;
 
 			if ((s[FS].v->inputs[j].interpolate == INTERP_MODE_FLAT) ||
 					(s[FS].v->inputs[j].rasterflat && emit->rasterflat)) {

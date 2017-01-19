@@ -80,25 +80,25 @@ static inline BOOL
 NineVertexShader9_UpdateKey( struct NineVertexShader9 *vs,
                              struct NineDevice9 *device )
 {
-    struct nine_state *state = &(device->state);
+    struct nine_context *context = &(device->context);
     uint8_t samplers_shadow;
     uint64_t key;
     BOOL res;
 
-    samplers_shadow = (uint8_t)((state->samplers_shadow & NINE_VS_SAMPLERS_MASK) >> NINE_SAMPLER_VS(0));
+    samplers_shadow = (uint8_t)((context->samplers_shadow & NINE_VS_SAMPLERS_MASK) >> NINE_SAMPLER_VS(0));
     samplers_shadow &= vs->sampler_mask;
     key = samplers_shadow;
 
     if (vs->byte_code.version < 0x30)
-        key |= (uint32_t) ((!!state->rs[D3DRS_FOGENABLE]) << 8);
-    key |= (uint32_t) (device->swvp << 9);
+        key |= (uint32_t) ((!!context->rs[D3DRS_FOGENABLE]) << 8);
+    key |= (uint32_t) (context->swvp << 9);
 
     /* We want to use a 64 bits key for performance.
      * Use compressed float16 values for the pointsize min/max in the key.
      * Shaders do not usually output psize.*/
     if (vs->point_size) {
-        key |= ((uint64_t)util_float_to_half(asfloat(state->rs[D3DRS_POINTSIZE_MIN]))) << 32;
-        key |= ((uint64_t)util_float_to_half(asfloat(state->rs[D3DRS_POINTSIZE_MAX]))) << 48;
+        key |= ((uint64_t)util_float_to_half(asfloat(context->rs[D3DRS_POINTSIZE_MIN]))) << 32;
+        key |= ((uint64_t)util_float_to_half(asfloat(context->rs[D3DRS_POINTSIZE_MAX]))) << 48;
     }
 
     res = vs->last_key != key;

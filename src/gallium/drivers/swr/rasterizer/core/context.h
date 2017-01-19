@@ -100,19 +100,11 @@ struct TRIANGLE_WORK_DESC
     TRI_FLAGS triFlags;
 };
 
-union CLEAR_FLAGS
-{
-    struct
-    {
-        uint32_t mask : 3;
-    };
-    uint32_t bits;
-};
-
 struct CLEAR_DESC
 {
     SWR_RECT rect;
-    CLEAR_FLAGS flags;
+    uint32_t attachmentMask;
+    uint32_t renderTargetArrayIndex;
     float clearRTColor[4];  // RGBA_32F
     float clearDepth;   // [0..1]
     uint8_t clearStencil;
@@ -297,14 +289,13 @@ OSALIGNLINE(struct) API_STATE
     SWR_BLEND_STATE         blendState;
     PFN_BLEND_JIT_FUNC      pfnBlendFunc[SWR_NUM_RENDERTARGETS];
 
-    // Stats are incremented when this is true.
-    bool enableStats;
-
     struct
     {
-        uint32_t colorHottileEnable : 8;
-        uint32_t depthHottileEnable: 1;
-        uint32_t stencilHottileEnable : 1;
+        uint32_t enableStatsFE : 1;             // Enable frontend pipeline stats
+        uint32_t enableStatsBE : 1;             // Enable backend pipeline stats
+        uint32_t colorHottileEnable : 8;        // Bitmask of enabled color hottiles
+        uint32_t depthHottileEnable: 1;         // Enable depth buffer hottile
+        uint32_t stencilHottileEnable : 1;      // Enable stencil buffer hottile
     };
 
     PFN_QUANTIZE_DEPTH      pfnQuantizeDepth;
@@ -404,7 +395,8 @@ struct DRAW_CONTEXT
     CachingArena*   pArena;
 
     uint32_t        drawId;
-    bool            dependent;
+    bool            dependentFE;    // Frontend work is dependent on all previous FE
+    bool            dependent;      // Backend work is dependent on all previous BE
     bool            isCompute;      // Is this DC a compute context?
     bool            cleanupState;   // True if this is the last draw using an entry in the state ring.
     volatile bool   doneFE;         // Is FE work done for this draw?
@@ -415,6 +407,8 @@ struct DRAW_CONTEXT
     volatile int32_t    threadsDone;
 
     SYNC_DESC       retireCallback; // Call this func when this DC is retired.
+
+
 };
 
 static_assert((sizeof(DRAW_CONTEXT) & 63) == 0, "Invalid size for DRAW_CONTEXT");
@@ -482,8 +476,6 @@ struct SWR_CONTEXT
     std::condition_variable FifosNotEmpty;
     std::mutex WaitLock;
 
-    DRIVER_TYPE driverType;
-
     uint32_t privateStateSize;
 
     HotTileMgr *pHotTileMgr;
@@ -495,6 +487,7 @@ struct SWR_CONTEXT
     PFN_UPDATE_SO_WRITE_OFFSET  pfnUpdateSoWriteOffset;
     PFN_UPDATE_STATS            pfnUpdateStats;
     PFN_UPDATE_STATS_FE         pfnUpdateStatsFE;
+
 
     // Global Stats
     SWR_STATS* pStats;
@@ -515,17 +508,17 @@ struct SWR_CONTEXT
     HANDLE* pArContext;
 };
 
-#define UPDATE_STAT(name, count) if (GetApiState(pDC).enableStats) { pDC->dynState.pStats[workerId].name += count; }
-#define UPDATE_STAT_FE(name, count) if (GetApiState(pDC).enableStats) { pDC->dynState.statsFE.name += count; }
+#define UPDATE_STAT_BE(name, count) if (GetApiState(pDC).enableStatsBE) { pDC->dynState.pStats[workerId].name += count; }
+#define UPDATE_STAT_FE(name, count) if (GetApiState(pDC).enableStatsFE) { pDC->dynState.statsFE.name += count; }
 
 // ArchRast instrumentation framework
 #define AR_WORKER_CTX  pContext->pArContext[workerId]
 #define AR_API_CTX     pContext->pArContext[pContext->NumWorkerThreads]
 
 #ifdef KNOB_ENABLE_AR
-    #define _AR_BEGIN(ctx, type, id)    ArchRast::dispatch(ctx, ArchRast::Start(ArchRast::type, id))
-    #define _AR_END(ctx, type, count)   ArchRast::dispatch(ctx, ArchRast::End(ArchRast::type, count))
-    #define _AR_EVENT(ctx, event)       ArchRast::dispatch(ctx, ArchRast::event)
+    #define _AR_BEGIN(ctx, type, id)    ArchRast::Dispatch(ctx, ArchRast::Start(ArchRast::type, id))
+    #define _AR_END(ctx, type, count)   ArchRast::Dispatch(ctx, ArchRast::End(ArchRast::type, count))
+    #define _AR_EVENT(ctx, event)       ArchRast::Dispatch(ctx, ArchRast::event)
 #else
     #ifdef KNOB_ENABLE_RDTSC
         #define _AR_BEGIN(ctx, type, id) (void)ctx; RDTSC_START(type)

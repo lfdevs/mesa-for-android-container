@@ -143,6 +143,7 @@ void
 lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
                         const struct util_format_description *format_desc,
                         struct lp_type type,
+                        boolean aligned,
                         LLVMValueRef base_ptr,
                         LLVMValueRef offsets,
                         LLVMValueRef i,

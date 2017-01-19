@@ -137,7 +137,7 @@ static int store_shader(struct pipe_context *ctx,
 
 	if (shader->bo == NULL) {
 		shader->bo = (struct r600_resource*)
-			pipe_buffer_create(ctx->screen, PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE, shader->shader.bc.ndw * 4);
+			pipe_buffer_create(ctx->screen, 0, PIPE_USAGE_IMMUTABLE, shader->shader.bc.ndw * 4);
 		if (shader->bo == NULL) {
 			return -ENOMEM;
 		}
@@ -3804,9 +3804,6 @@ static int tgsi_op2_64_params(struct r600_shader_ctx *ctx, bool singledest, bool
 		/* handle some special cases */
 		if (i == 1 || i == 3) {
 			switch (ctx->parse.FullToken.FullInstruction.Instruction.Opcode) {
-			case TGSI_OPCODE_SUB:
-				r600_bytecode_src_toggle_neg(&alu.src[1]);
-				break;
 			case TGSI_OPCODE_DABS:
 				r600_bytecode_src_set_abs(&alu.src[0]);
 				break;
@@ -3930,17 +3927,6 @@ static int tgsi_op2_s(struct r600_shader_ctx *ctx, int swap, int trans_only)
 		} else {
 			r600_bytecode_src(&alu.src[0], &ctx->src[1], i);
 			r600_bytecode_src(&alu.src[1], &ctx->src[0], i);
-		}
-		/* handle some special cases */
-		switch (inst->Instruction.Opcode) {
-		case TGSI_OPCODE_SUB:
-			r600_bytecode_src_toggle_neg(&alu.src[1]);
-			break;
-		case TGSI_OPCODE_ABS:
-			r600_bytecode_src_set_abs(&alu.src[0]);
-			break;
-		default:
-			break;
 		}
 		if (i == lasti || trans_only) {
 			alu.last = 1;
@@ -9009,7 +8995,6 @@ static const struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] 
 	[TGSI_OPCODE_SLT]	= { ALU_OP2_SETGT, tgsi_op2_swap},
 	[TGSI_OPCODE_SGE]	= { ALU_OP2_SETGE, tgsi_op2},
 	[TGSI_OPCODE_MAD]	= { ALU_OP3_MULADD, tgsi_op3},
-	[TGSI_OPCODE_SUB]	= { ALU_OP2_ADD, tgsi_op2},
 	[TGSI_OPCODE_LRP]	= { ALU_OP0_NOP, tgsi_lrp},
 	[TGSI_OPCODE_FMA]	= { ALU_OP0_NOP, tgsi_unsupported},
 	[TGSI_OPCODE_SQRT]	= { ALU_OP1_SQRT_IEEE, tgsi_trans_srcx_replicate},
@@ -9025,7 +9010,7 @@ static const struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] 
 	[TGSI_OPCODE_POW]	= { ALU_OP0_NOP, tgsi_pow},
 	[TGSI_OPCODE_XPD]	= { ALU_OP0_NOP, tgsi_xpd},
 	[32]			= { ALU_OP0_NOP, tgsi_unsupported},
-	[TGSI_OPCODE_ABS]	= { ALU_OP1_MOV, tgsi_op2},
+	[33]			= { ALU_OP0_NOP, tgsi_unsupported},
 	[34]			= { ALU_OP0_NOP, tgsi_unsupported},
 	[TGSI_OPCODE_DPH]	= { ALU_OP2_DOT4, tgsi_dp},
 	[TGSI_OPCODE_COS]	= { ALU_OP1_COS, tgsi_trig},
@@ -9208,7 +9193,6 @@ static const struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = 
 	[TGSI_OPCODE_SLT]	= { ALU_OP2_SETGT, tgsi_op2_swap},
 	[TGSI_OPCODE_SGE]	= { ALU_OP2_SETGE, tgsi_op2},
 	[TGSI_OPCODE_MAD]	= { ALU_OP3_MULADD, tgsi_op3},
-	[TGSI_OPCODE_SUB]	= { ALU_OP2_ADD, tgsi_op2},
 	[TGSI_OPCODE_LRP]	= { ALU_OP0_NOP, tgsi_lrp},
 	[TGSI_OPCODE_FMA]	= { ALU_OP3_FMA, tgsi_op3},
 	[TGSI_OPCODE_SQRT]	= { ALU_OP1_SQRT_IEEE, tgsi_trans_srcx_replicate},
@@ -9224,7 +9208,7 @@ static const struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = 
 	[TGSI_OPCODE_POW]	= { ALU_OP0_NOP, tgsi_pow},
 	[TGSI_OPCODE_XPD]	= { ALU_OP0_NOP, tgsi_xpd},
 	[32]			= { ALU_OP0_NOP, tgsi_unsupported},
-	[TGSI_OPCODE_ABS]	= { ALU_OP1_MOV, tgsi_op2},
+	[33]			= { ALU_OP0_NOP, tgsi_unsupported},
 	[34]			= { ALU_OP0_NOP, tgsi_unsupported},
 	[TGSI_OPCODE_DPH]	= { ALU_OP2_DOT4, tgsi_dp},
 	[TGSI_OPCODE_COS]	= { ALU_OP1_COS, tgsi_trig},
@@ -9431,7 +9415,6 @@ static const struct r600_shader_tgsi_instruction cm_shader_tgsi_instruction[] = 
 	[TGSI_OPCODE_SLT]	= { ALU_OP2_SETGT, tgsi_op2_swap},
 	[TGSI_OPCODE_SGE]	= { ALU_OP2_SETGE, tgsi_op2},
 	[TGSI_OPCODE_MAD]	= { ALU_OP3_MULADD, tgsi_op3},
-	[TGSI_OPCODE_SUB]	= { ALU_OP2_ADD, tgsi_op2},
 	[TGSI_OPCODE_LRP]	= { ALU_OP0_NOP, tgsi_lrp},
 	[TGSI_OPCODE_FMA]	= { ALU_OP3_FMA, tgsi_op3},
 	[TGSI_OPCODE_SQRT]	= { ALU_OP1_SQRT_IEEE, cayman_emit_float_instr},
@@ -9447,7 +9430,7 @@ static const struct r600_shader_tgsi_instruction cm_shader_tgsi_instruction[] = 
 	[TGSI_OPCODE_POW]	= { ALU_OP0_NOP, cayman_pow},
 	[TGSI_OPCODE_XPD]	= { ALU_OP0_NOP, tgsi_xpd},
 	[32]			= { ALU_OP0_NOP, tgsi_unsupported},
-	[TGSI_OPCODE_ABS]	= { ALU_OP1_MOV, tgsi_op2},
+	[33]			= { ALU_OP0_NOP, tgsi_unsupported},
 	[34]			= { ALU_OP0_NOP, tgsi_unsupported},
 	[TGSI_OPCODE_DPH]	= { ALU_OP2_DOT4, tgsi_dp},
 	[TGSI_OPCODE_COS]	= { ALU_OP1_COS, cayman_trig},

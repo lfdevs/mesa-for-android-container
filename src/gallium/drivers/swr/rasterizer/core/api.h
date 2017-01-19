@@ -137,10 +137,11 @@ typedef void(SWR_API *PFN_STORE_TILE)(HANDLE hPrivateContext, SWR_FORMAT srcForm
 /// @param renderTargetIndex - render target to store, can be color, depth or stencil
 /// @param x - destination x coordinate
 /// @param y - destination y coordinate
+/// @param renderTargetArrayIndex - render target array offset from arrayIndex
 /// @param pClearColor - pointer to the hot tile's clear value
 typedef void(SWR_API *PFN_CLEAR_TILE)(HANDLE hPrivateContext,
     SWR_RENDERTARGET_ATTACHMENT rtIndex,
-    uint32_t x, uint32_t y, const float* pClearColor);
+    uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex, const float* pClearColor);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Callback to allow driver to update their copy of streamout write offset.
@@ -192,8 +193,6 @@ struct SWR_THREADING_INFO
 /////////////////////////////////////////////////////////////////////////
 struct SWR_CREATECONTEXT_INFO
 {
-    DRIVER_TYPE driver;
-
     // External functions (e.g. sampler) need per draw context state.
     // Use SwrGetPrivateContextState() to access private state.
     uint32_t privateStateSize;
@@ -205,6 +204,7 @@ struct SWR_CREATECONTEXT_INFO
     PFN_UPDATE_SO_WRITE_OFFSET  pfnUpdateSoWriteOffset;
     PFN_UPDATE_STATS            pfnUpdateStats;
     PFN_UPDATE_STATS_FE         pfnUpdateStatsFE;
+
 
     // Pointer to rdtsc buckets mgr returned to the caller.
     // Only populated when KNOB_ENABLE_RDTSC is set
@@ -559,14 +559,16 @@ void SWR_API SwrStoreTiles(
 //////////////////////////////////////////////////////////////////////////
 /// @brief SwrClearRenderTarget - Clear attached render targets / depth / stencil
 /// @param hContext - Handle passed back from SwrCreateContext
-/// @param clearMask - combination of SWR_CLEAR_COLOR / SWR_CLEAR_DEPTH / SWR_CLEAR_STENCIL flags (or SWR_CLEAR_NONE)
+/// @param attachmentMask - combination of SWR_ATTACHMENT_*_BIT attachments to clear
+/// @param renderTargetArrayIndex - the RT array index to clear
 /// @param clearColor - color use for clearing render targets
 /// @param z - depth value use for clearing depth buffer
 /// @param stencil - stencil value used for clearing stencil buffer
 /// @param clearRect - The pixel-coordinate rectangle to clear in all cleared buffers
 void SWR_API SwrClearRenderTarget(
     HANDLE hContext,
-    uint32_t clearMask,
+    uint32_t attachmentMask,
+    uint32_t renderTargetArrayIndex,
     const float clearColor[4],
     float z,
     uint8_t stencil,
@@ -630,7 +632,15 @@ VOID* SWR_API SwrAllocDrawContextMemory(
 /// @brief Enables stats counting
 /// @param hContext - Handle passed back from SwrCreateContext
 /// @param enable - If true then counts are incremented.
-void SWR_API SwrEnableStats(
+void SWR_API SwrEnableStatsFE(
+    HANDLE hContext,
+    bool enable);
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Enables stats counting
+/// @param hContext - Handle passed back from SwrCreateContext
+/// @param enable - If true then counts are incremented.
+void SWR_API SwrEnableStatsBE(
     HANDLE hContext,
     bool enable);
 
@@ -640,4 +650,5 @@ void SWR_API SwrEnableStats(
 void SWR_API SwrEndFrame(
     HANDLE hContext);
 
-#endif//__SWR_API_H__
+
+#endif

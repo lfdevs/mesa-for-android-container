@@ -25,6 +25,8 @@
 #include "pipe/p_state.h"
 #include "util/u_inlines.h"
 
+#include "swr_fence_work.h"
+
 struct pipe_screen;
 
 struct swr_fence {
@@ -36,6 +38,12 @@ struct swr_fence {
    unsigned pending;
 
    unsigned id; /* Just for reference */
+   
+   struct {
+      uint32_t count;
+      struct swr_fence_work head;
+      struct swr_fence_work *tail;
+   } work;
 };
 
 

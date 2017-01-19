@@ -160,16 +160,6 @@ dri3_set_swap_interval(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
    return EGL_TRUE;
 }
 
-static xcb_screen_t *
-get_xcb_screen(xcb_screen_iterator_t iter, int screen)
-{
-    for (; iter.rem; --screen, xcb_screen_next(&iter))
-        if (screen == 0)
-            return iter.data;
-
-    return NULL;
-}
-
 static _EGLSurface *
 dri3_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
                     _EGLConfig *conf, void *native_surface,
@@ -180,8 +170,6 @@ dri3_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
    struct dri3_egl_surface *dri3_surf;
    const __DRIconfig *dri_config;
    xcb_drawable_t drawable;
-   xcb_screen_iterator_t s;
-   xcb_screen_t *screen;
 
    STATIC_ASSERT(sizeof(uintptr_t) == sizeof(native_surface));
    drawable = (uintptr_t) native_surface;
@@ -198,16 +186,9 @@ dri3_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       goto cleanup_surf;
 
    if (type == EGL_PBUFFER_BIT) {
-      s = xcb_setup_roots_iterator(xcb_get_setup(dri2_dpy->conn));
-      screen = get_xcb_screen(s, dri2_dpy->screen);
-      if (!screen) {
-         _eglError(EGL_BAD_NATIVE_WINDOW, "dri3_create_surface");
-         goto cleanup_surf;
-      }
-
       drawable = xcb_generate_id(dri2_dpy->conn);
       xcb_create_pixmap(dri2_dpy->conn, conf->BufferSize,
-                        drawable, screen->root,
+                        drawable, dri2_dpy->screen->root,
                         dri3_surf->base.Width, dri3_surf->base.Height);
    }
 
@@ -407,7 +388,7 @@ dri3_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
 
    /* No-op for a pixmap or pbuffer surface */
    if (draw->Type == EGL_PIXMAP_BIT || draw->Type == EGL_PBUFFER_BIT)
-      return 0;
+      return EGL_FALSE;
 
    return loader_dri3_swap_buffers_msc(&dri3_surf->loader_drawable,
                                        0, 0, 0, 0,
@@ -473,8 +454,6 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
    xcb_present_query_version_reply_t *present_query;
    xcb_present_query_version_cookie_t present_query_cookie;
    xcb_generic_error_t *error;
-   xcb_screen_iterator_t s;
-   xcb_screen_t *screen;
    const xcb_query_extension_reply_t *extension;
 
    xcb_prefetch_extension_data (dri2_dpy->conn, &xcb_dri3_id);
@@ -517,14 +496,7 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
    }
    free(present_query);
 
-   s = xcb_setup_roots_iterator(xcb_get_setup(dri2_dpy->conn));
-   screen = get_xcb_screen(s, dri2_dpy->screen);
-   if (!screen) {
-      _eglError(EGL_BAD_NATIVE_WINDOW, "dri3_x11_connect");
-      return EGL_FALSE;
-   }
-
-   dri2_dpy->fd = loader_dri3_open(dri2_dpy->conn, screen->root, 0);
+   dri2_dpy->fd = loader_dri3_open(dri2_dpy->conn, dri2_dpy->screen->root, 0);
    if (dri2_dpy->fd < 0) {
       int conn_error = xcb_connection_has_error(dri2_dpy->conn);
       _eglLog(_EGL_WARNING, "DRI3: Screen seems not DRI3 capable");

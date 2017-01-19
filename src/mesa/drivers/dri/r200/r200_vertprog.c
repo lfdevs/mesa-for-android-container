@@ -104,15 +104,15 @@ static GLboolean r200VertexProgUpdateParams(struct gl_context *ctx, struct r200_
    r200ContextPtr rmesa = R200_CONTEXT( ctx );
    GLfloat *fcmd = (GLfloat *)&rmesa->hw.vpp[0].cmd[VPP_CMD_0 + 1];
    int pi;
-   struct gl_vertex_program *mesa_vp = &vp->mesa_program;
+   struct gl_program *mesa_vp = &vp->mesa_program;
    struct gl_program_parameter_list *paramList;
    drm_radeon_cmd_header_t tmp;
 
    R200_STATECHANGE( rmesa, vpp[0] );
    R200_STATECHANGE( rmesa, vpp[1] );
-   assert(mesa_vp->Base.Parameters);
-   _mesa_load_state_parameters(ctx, mesa_vp->Base.Parameters);
-   paramList = mesa_vp->Base.Parameters;
+   assert(mesa_vp->Parameters);
+   _mesa_load_state_parameters(ctx, mesa_vp->Parameters);
+   paramList = mesa_vp->Parameters;
 
    if(paramList->NumParameters > R200_VSF_MAX_PARAM){
       fprintf(stderr, "%s:Params exhausted\n", __func__);
@@ -392,7 +392,7 @@ static unsigned long op_operands(enum prog_opcode opcode)
  */
 static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r200_vertex_program *vp)
 {
-   struct gl_vertex_program *mesa_vp = &vp->mesa_program;
+   struct gl_program *mesa_vp = &vp->mesa_program;
    struct prog_instruction *vpi;
    int i;
    VERTEX_SHADER_INSTRUCTION *o_inst;
@@ -409,30 +409,30 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
    vp->translated = GL_TRUE;
    vp->fogmode = ctx->Fog.Mode;
 
-   if (mesa_vp->Base.NumInstructions == 0)
+   if (mesa_vp->arb.NumInstructions == 0)
       return GL_FALSE;
 
 #if 0
-   if ((mesa_vp->Base.InputsRead &
+   if ((mesa_vp->info.inputs_read &
       ~(VERT_BIT_POS | VERT_BIT_NORMAL | VERT_BIT_COLOR0 | VERT_BIT_COLOR1 |
       VERT_BIT_FOG | VERT_BIT_TEX0 | VERT_BIT_TEX1 | VERT_BIT_TEX2 |
       VERT_BIT_TEX3 | VERT_BIT_TEX4 | VERT_BIT_TEX5)) != 0) {
       if (R200_DEBUG & RADEON_FALLBACKS) {
 	 fprintf(stderr, "can't handle vert prog inputs 0x%x\n",
-	    mesa_vp->Base.InputsRead);
+	    mesa_vp->info.inputs_read);
       }
       return GL_FALSE;
    }
 #endif
 
-   if ((mesa_vp->Base.OutputsWritten &
+   if ((mesa_vp->info.outputs_written &
       ~((1 << VARYING_SLOT_POS) | (1 << VARYING_SLOT_COL0) | (1 << VARYING_SLOT_COL1) |
       (1 << VARYING_SLOT_FOGC) | (1 << VARYING_SLOT_TEX0) | (1 << VARYING_SLOT_TEX1) |
       (1 << VARYING_SLOT_TEX2) | (1 << VARYING_SLOT_TEX3) | (1 << VARYING_SLOT_TEX4) |
       (1 << VARYING_SLOT_TEX5) | (1 << VARYING_SLOT_PSIZ))) != 0) {
       if (R200_DEBUG & RADEON_FALLBACKS) {
 	 fprintf(stderr, "can't handle vert prog outputs 0x%llx\n",
-                 (unsigned long long) mesa_vp->Base.OutputsWritten);
+                 (unsigned long long) mesa_vp->info.outputs_written);
       }
       return GL_FALSE;
    }
@@ -445,27 +445,28 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
    struct prog_dst_register dst;
 
 /* FIXME: is changing the prog safe to do here? */
-   if (mesa_vp->IsPositionInvariant &&
+   if (mesa_vp->arb.IsPositionInvariant &&
       /* make sure we only do this once */
-       !(mesa_vp->Base.OutputsWritten & (1 << VARYING_SLOT_POS))) {
+       !(mesa_vp->info.outputs_written & (1 << VARYING_SLOT_POS))) {
 	 _mesa_insert_mvp_code(ctx, mesa_vp);
       }
 
    /* for fogc, can't change mesa_vp, as it would hose swtnl, and exp with
       base e isn't directly available neither. */
-   if ((mesa_vp->Base.OutputsWritten & (1 << VARYING_SLOT_FOGC)) && !vp->fogpidx) {
+   if ((mesa_vp->info.outputs_written & (1 << VARYING_SLOT_FOGC)) &&
+       !vp->fogpidx) {
       struct gl_program_parameter_list *paramList;
       gl_state_index tokens[STATE_LENGTH] = { STATE_FOG_PARAMS, 0, 0, 0, 0 };
-      paramList = mesa_vp->Base.Parameters;
+      paramList = mesa_vp->Parameters;
       vp->fogpidx = _mesa_add_state_reference(paramList, tokens);
    }
 
    vp->pos_end = 0;
-   mesa_vp->Base.NumNativeInstructions = 0;
-   if (mesa_vp->Base.Parameters)
-      mesa_vp->Base.NumNativeParameters = mesa_vp->Base.Parameters->NumParameters;
+   mesa_vp->arb.NumNativeInstructions = 0;
+   if (mesa_vp->Parameters)
+      mesa_vp->arb.NumNativeParameters = mesa_vp->Parameters->NumParameters;
    else
-      mesa_vp->Base.NumNativeParameters = 0;
+      mesa_vp->arb.NumNativeParameters = 0;
 
    for(i = 0; i < VERT_ATTRIB_MAX; i++)
       vp->inputs[i] = -1;
@@ -491,42 +492,42 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
    Haven't seen attr 14 used, maybe that's for the hw pointsize vec1 (which is
    not possibe to use with vertex progs as it is lacking in vert prog specification) */
 /* may look different when using idx buf / input_route instead of se_vtx_fmt? */
-   if (mesa_vp->Base.InputsRead & VERT_BIT_POS) {
+   if (mesa_vp->info.inputs_read & VERT_BIT_POS) {
       vp->inputs[VERT_ATTRIB_POS] = 0;
       vp->inputmap_rev[0] = VERT_ATTRIB_POS;
       free_inputs &= ~(1 << 0);
       array_count++;
    }
-   if (mesa_vp->Base.InputsRead & VERT_BIT_WEIGHT) {
+   if (mesa_vp->info.inputs_read & VERT_BIT_WEIGHT) {
       vp->inputs[VERT_ATTRIB_WEIGHT] = 12;
       vp->inputmap_rev[1] = VERT_ATTRIB_WEIGHT;
       array_count++;
    }
-   if (mesa_vp->Base.InputsRead & VERT_BIT_NORMAL) {
+   if (mesa_vp->info.inputs_read & VERT_BIT_NORMAL) {
       vp->inputs[VERT_ATTRIB_NORMAL] = 1;
       vp->inputmap_rev[2] = VERT_ATTRIB_NORMAL;
       array_count++;
    }
-   if (mesa_vp->Base.InputsRead & VERT_BIT_COLOR0) {
+   if (mesa_vp->info.inputs_read & VERT_BIT_COLOR0) {
       vp->inputs[VERT_ATTRIB_COLOR0] = 2;
       vp->inputmap_rev[4] = VERT_ATTRIB_COLOR0;
       free_inputs &= ~(1 << 2);
       array_count++;
    }
-   if (mesa_vp->Base.InputsRead & VERT_BIT_COLOR1) {
+   if (mesa_vp->info.inputs_read & VERT_BIT_COLOR1) {
       vp->inputs[VERT_ATTRIB_COLOR1] = 3;
       vp->inputmap_rev[5] = VERT_ATTRIB_COLOR1;
       free_inputs &= ~(1 << 3);
       array_count++;
    }
-   if (mesa_vp->Base.InputsRead & VERT_BIT_FOG) {
+   if (mesa_vp->info.inputs_read & VERT_BIT_FOG) {
       vp->inputs[VERT_ATTRIB_FOG] = 15; array_count++;
       vp->inputmap_rev[3] = VERT_ATTRIB_FOG;
       array_count++;
    }
    /* VERT_ATTRIB_TEX0-5 */
    for (i = 0; i <= 5; i++) {
-      if (mesa_vp->Base.InputsRead & VERT_BIT_TEX(i)) {
+      if (mesa_vp->info.inputs_read & VERT_BIT_TEX(i)) {
 	 vp->inputs[VERT_ATTRIB_TEX(i)] = i + 6;
 	 vp->inputmap_rev[8 + i] = VERT_ATTRIB_TEX(i);
 	 free_inputs &= ~(1 << (i + 6));
@@ -535,7 +536,7 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
    }
    /* using VERT_ATTRIB_TEX6/7 would be illegal */
    for (; i < VERT_ATTRIB_TEX_MAX; i++) {
-      if (mesa_vp->Base.InputsRead & VERT_BIT_TEX(i)) {
+      if (mesa_vp->info.inputs_read & VERT_BIT_TEX(i)) {
           if (R200_DEBUG & RADEON_FALLBACKS) {
               fprintf(stderr, "texture attribute %d in vert prog\n", i);
           }
@@ -546,7 +547,7 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
    for (i = 0; i < VERT_ATTRIB_GENERIC_MAX; i++) {
       int j;
    /* completely ignore aliasing? */
-      if (mesa_vp->Base.InputsRead & VERT_BIT_GENERIC(i)) {
+      if (mesa_vp->info.inputs_read & VERT_BIT_GENERIC(i)) {
 	 array_count++;
 	 if (array_count > 12) {
 	    if (R200_DEBUG & RADEON_FALLBACKS) {
@@ -575,7 +576,7 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
       }
    }
 
-   if (!(mesa_vp->Base.OutputsWritten & (1 << VARYING_SLOT_POS))) {
+   if (!(mesa_vp->info.outputs_written & (1 << VARYING_SLOT_POS))) {
       if (R200_DEBUG & RADEON_FALLBACKS) {
 	 fprintf(stderr, "can't handle vert prog without position output\n");
       }
@@ -589,7 +590,7 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
    }
 
    o_inst = vp->instr;
-   for (vpi = mesa_vp->Base.Instructions; vpi->Opcode != OPCODE_END; vpi++, o_inst++){
+   for (vpi = mesa_vp->arb.Instructions; vpi->Opcode != OPCODE_END; vpi++, o_inst++){
       operands = op_operands(vpi->Opcode);
       are_srcs_scalar = operands & SCALAR_FLAG;
       operands &= OP_MASK;
@@ -1069,20 +1070,20 @@ else {
       }
 
       u_temp_used = (R200_VSF_MAX_TEMPS - 1) - u_temp_i;
-      if (mesa_vp->Base.NumNativeTemporaries <
-	 (mesa_vp->Base.NumTemporaries + u_temp_used)) {
-	 mesa_vp->Base.NumNativeTemporaries =
-	    mesa_vp->Base.NumTemporaries + u_temp_used;
+      if (mesa_vp->arb.NumNativeTemporaries <
+          (mesa_vp->arb.NumTemporaries + u_temp_used)) {
+         mesa_vp->arb.NumNativeTemporaries =
+            mesa_vp->arb.NumTemporaries + u_temp_used;
       }
-      if ((mesa_vp->Base.NumTemporaries + u_temp_used) > R200_VSF_MAX_TEMPS) {
+      if ((mesa_vp->arb.NumTemporaries + u_temp_used) > R200_VSF_MAX_TEMPS) {
 	 if (R200_DEBUG & RADEON_FALLBACKS) {
-	    fprintf(stderr, "Ran out of temps, num temps %d, us %d\n", mesa_vp->Base.NumTemporaries, u_temp_used);
+            fprintf(stderr, "Ran out of temps, num temps %d, us %d\n", mesa_vp->arb.NumTemporaries, u_temp_used);
 	 }
 	 return GL_FALSE;
       }
       u_temp_i = R200_VSF_MAX_TEMPS - 1;
       if(o_inst - vp->instr >= R200_VSF_MAX_INST) {
-	 mesa_vp->Base.NumNativeInstructions = 129;
+         mesa_vp->arb.NumNativeInstructions = 129;
 	 if (R200_DEBUG & RADEON_FALLBACKS) {
 	    fprintf(stderr, "more than 128 native instructions\n");
 	 }
@@ -1094,7 +1095,7 @@ else {
    }
 
    vp->native = GL_TRUE;
-   mesa_vp->Base.NumNativeInstructions = (o_inst - vp->instr);
+   mesa_vp->arb.NumNativeInstructions = (o_inst - vp->instr);
 #if 0
    fprintf(stderr, "hw program:\n");
    for(i=0; i < vp->program.length; i++)
@@ -1126,15 +1127,15 @@ void r200SetupVertexProg( struct gl_context *ctx ) {
    R200_STATECHANGE( rmesa, pvs );
 
    rmesa->hw.pvs.cmd[PVS_CNTL_1] = (0 << R200_PVS_CNTL_1_PROGRAM_START_SHIFT) |
-      ((vp->mesa_program.Base.NumNativeInstructions - 1) << R200_PVS_CNTL_1_PROGRAM_END_SHIFT) |
+      ((vp->mesa_program.arb.NumNativeInstructions - 1) << R200_PVS_CNTL_1_PROGRAM_END_SHIFT) |
       (vp->pos_end << R200_PVS_CNTL_1_POS_END_SHIFT);
    rmesa->hw.pvs.cmd[PVS_CNTL_2] = (0 << R200_PVS_CNTL_2_PARAM_OFFSET_SHIFT) |
-      (vp->mesa_program.Base.NumNativeParameters << R200_PVS_CNTL_2_PARAM_COUNT_SHIFT);
+      (vp->mesa_program.arb.NumNativeParameters << R200_PVS_CNTL_2_PARAM_COUNT_SHIFT);
 
    /* maybe user clip planes just work with vertex progs... untested */
    if (ctx->Transform.ClipPlanesEnabled) {
       R200_STATECHANGE( rmesa, tcl );
-      if (vp->mesa_program.IsPositionInvariant) {
+      if (vp->mesa_program.arb.IsPositionInvariant) {
 	 rmesa->hw.tcl.cmd[TCL_UCP_VERT_BLEND_CTL] |= (ctx->Transform.ClipPlanesEnabled << 2);
       }
       else {
@@ -1143,7 +1144,7 @@ void r200SetupVertexProg( struct gl_context *ctx ) {
    }
 
    if (vp != rmesa->curr_vp_hw) {
-      GLuint count = vp->mesa_program.Base.NumNativeInstructions;
+      GLuint count = vp->mesa_program.arb.NumNativeInstructions;
       drm_radeon_cmd_header_t tmp;
 
       R200_STATECHANGE( rmesa, vpi[0] );
@@ -1198,16 +1199,18 @@ r200BindProgram(struct gl_context *ctx, GLenum target, struct gl_program *prog)
 }
 
 static struct gl_program *
-r200NewProgram(struct gl_context *ctx, GLenum target, GLuint id)
+r200NewProgram(struct gl_context *ctx, GLenum target, GLuint id,
+               bool is_arb_asm)
 {
    switch(target){
    case GL_VERTEX_PROGRAM_ARB: {
-      struct r200_vertex_program *vp = CALLOC_STRUCT(r200_vertex_program);
-      return _mesa_init_gl_program(&vp->mesa_program.Base, target, id);
+      struct r200_vertex_program *vp = rzalloc(NULL,
+                                               struct r200_vertex_program);
+      return _mesa_init_gl_program(&vp->mesa_program, target, id, is_arb_asm);
    }
    case GL_FRAGMENT_PROGRAM_ARB: {
-      struct gl_fragment_program *prog = CALLOC_STRUCT(gl_fragment_program);
-      return _mesa_init_gl_program(&prog->Base, target, id);
+      struct gl_program *prog = rzalloc(NULL, struct gl_program);
+      return _mesa_init_gl_program(prog, target, id, is_arb_asm);
    }
    default:
       _mesa_problem(ctx, "Bad target in r200NewProgram");
@@ -1232,7 +1235,7 @@ r200ProgramStringNotify(struct gl_context *ctx, GLenum target, struct gl_program
    case GL_VERTEX_PROGRAM_ARB:
       vp->translated = GL_FALSE;
       vp->fogpidx = 0;
-/*      memset(&vp->translated, 0, sizeof(struct r200_vertex_program) - sizeof(struct gl_vertex_program));*/
+/*      memset(&vp->translated, 0, sizeof(struct r200_vertex_program) - sizeof(struct gl_program));*/
       r200_translate_vertex_program(ctx, vp);
       rmesa->curr_vp_hw = NULL;
       break;

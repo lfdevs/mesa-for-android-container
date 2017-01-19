@@ -24,11 +24,43 @@
 #ifndef VC4_TILING_H
 #define VC4_TILING_H
 
-uint32_t vc4_utile_width(int cpp) ATTRIBUTE_CONST;
-uint32_t vc4_utile_height(int cpp) ATTRIBUTE_CONST;
+
+/** Return the width in pixels of a 64-byte microtile. */
+static inline uint32_t
+vc4_utile_width(int cpp)
+{
+        switch (cpp) {
+        case 1:
+        case 2:
+                return 8;
+        case 4:
+                return 4;
+        case 8:
+                return 2;
+        default:
+                fprintf(stderr, "unknown cpp: %d\n", cpp);
+                abort();
+        }
+}
+
+/** Return the height in pixels of a 64-byte microtile. */
+static inline uint32_t
+vc4_utile_height(int cpp)
+{
+        switch (cpp) {
+        case 1:
+                return 8;
+        case 2:
+        case 4:
+        case 8:
+                return 4;
+        default:
+                fprintf(stderr, "unknown cpp: %d\n", cpp);
+                abort();
+        }
+}
+
 bool vc4_size_is_lt(uint32_t width, uint32_t height, int cpp) ATTRIBUTE_CONST;
-void vc4_load_utile(void *dst, void *src, uint32_t dst_stride, uint32_t cpp);
-void vc4_store_utile(void *dst, void *src, uint32_t src_stride, uint32_t cpp);
 void vc4_load_tiled_image(void *dst, uint32_t dst_stride,
                           void *src, uint32_t src_stride,
                           uint8_t tiling_format, int cpp,

@@ -104,7 +104,7 @@ void
 vec4_vs_visitor::emit_urb_slot(dst_reg reg, int varying)
 {
    reg.type = BRW_REGISTER_TYPE_F;
-   output_reg[varying].type = reg.type;
+   output_reg[varying][0].type = reg.type;
 
    switch (varying) {
    case VARYING_SLOT_COL0:
@@ -115,7 +115,7 @@ vec4_vs_visitor::emit_urb_slot(dst_reg reg, int varying)
        * and we only support GS in core profile.  So, this must be a vertex
        * shader.
        */
-      vec4_instruction *inst = emit_generic_urb_slot(reg, varying);
+      vec4_instruction *inst = emit_generic_urb_slot(reg, varying, 0);
       if (inst && key->clamp_vertex_color)
          inst->saturate = true;
       break;
@@ -150,7 +150,7 @@ vec4_vs_visitor::emit_clip_distances(dst_reg reg, int offset)
         ++i) {
       reg.writemask = 1 << i;
       emit(DP4(reg,
-               src_reg(output_reg[clip_vertex]),
+               src_reg(output_reg[clip_vertex][0]),
                src_reg(this->userplane[i + offset])));
    }
 }
@@ -180,11 +180,15 @@ vec4_vs_visitor::emit_thread_end()
    if (key->nr_userclip_plane_consts > 0) {
       current_annotation = "user clip distances";
 
-      output_reg[VARYING_SLOT_CLIP_DIST0] = dst_reg(this, glsl_type::vec4_type);
-      output_reg[VARYING_SLOT_CLIP_DIST1] = dst_reg(this, glsl_type::vec4_type);
+      output_reg[VARYING_SLOT_CLIP_DIST0][0] =
+         dst_reg(this, glsl_type::vec4_type);
+      output_reg[VARYING_SLOT_CLIP_DIST1][0] =
+         dst_reg(this, glsl_type::vec4_type);
+      output_num_components[VARYING_SLOT_CLIP_DIST0][0] = 4;
+      output_num_components[VARYING_SLOT_CLIP_DIST1][0] = 4;
 
-      emit_clip_distances(output_reg[VARYING_SLOT_CLIP_DIST0], 0);
-      emit_clip_distances(output_reg[VARYING_SLOT_CLIP_DIST1], 4);
+      emit_clip_distances(output_reg[VARYING_SLOT_CLIP_DIST0][0], 0);
+      emit_clip_distances(output_reg[VARYING_SLOT_CLIP_DIST1][0], 4);
    }
 
    /* For VS, we always end the thread by emitting a single vertex.

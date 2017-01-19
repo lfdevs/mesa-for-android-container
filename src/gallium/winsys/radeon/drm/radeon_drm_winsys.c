@@ -623,8 +623,10 @@ static uint64_t radeon_query_value(struct radeon_winsys *rws,
         radeon_get_drm_value(ws->fd, RADEON_INFO_TIMESTAMP, "timestamp",
                              (uint32_t*)&retval);
         return retval;
-    case RADEON_NUM_CS_FLUSHES:
-        return ws->num_cs_flushes;
+    case RADEON_NUM_GFX_IBS:
+        return ws->num_gfx_IBs;
+    case RADEON_NUM_SDMA_IBS:
+        return ws->num_sdma_IBs;
     case RADEON_NUM_BYTES_MOVED:
         radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_BYTES_MOVED,
                              "num-bytes-moved", (uint32_t*)&retval);

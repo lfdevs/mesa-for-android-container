@@ -109,7 +109,7 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
              (depthbuffer_format << 18) |
              ((hiz ? 1 : 0) << 22) |
              ((stencil_mt != NULL && ctx->Stencil._WriteEnabled) << 27) |
-             ((ctx->Depth.Mask != 0) << 28) |
+             (brw_depth_writes_enabled(brw) << 28) |
              (surftype << 29));
 
    /* 3DSTATE_DEPTH_BUFFER dw2 */
@@ -146,13 +146,13 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       ADVANCE_BATCH();
    } else {
       assert(depth_mt);
-      struct intel_miptree_aux_buffer *hiz_buf = depth_mt->hiz_buf;
+      struct intel_miptree_hiz_buffer *hiz_buf = depth_mt->hiz_buf;
 
       BEGIN_BATCH(3);
       OUT_BATCH(GEN7_3DSTATE_HIER_DEPTH_BUFFER << 16 | (3 - 2));
       OUT_BATCH((mocs << 25) |
-                (hiz_buf->pitch - 1));
-      OUT_RELOC(hiz_buf->bo,
+                (hiz_buf->aux_base.pitch - 1));
+      OUT_RELOC(hiz_buf->aux_base.bo,
                 I915_GEM_DOMAIN_RENDER,
                 I915_GEM_DOMAIN_RENDER,
                 0);

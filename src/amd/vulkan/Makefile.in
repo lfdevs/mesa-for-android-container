@@ -207,16 +207,16 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(icdconfdir)" \
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 libvulkan_common_la_LIBADD =
 am__libvulkan_common_la_SOURCES_DIST = radv_entrypoints.c \
-	radv_entrypoints.h radv_timestamp.h radv_cmd_buffer.c \
-	radv_cs.h radv_device.c radv_descriptor_set.c \
-	radv_descriptor_set.h radv_formats.c radv_image.c radv_meta.c \
-	radv_meta.h radv_meta_blit.c radv_meta_blit2d.c \
-	radv_meta_buffer.c radv_meta_bufimage.c radv_meta_clear.c \
-	radv_meta_copy.c radv_meta_decompress.c radv_meta_fast_clear.c \
-	radv_meta_resolve.c radv_meta_resolve_cs.c radv_pass.c \
-	radv_pipeline.c radv_pipeline_cache.c radv_private.h \
-	radv_radeon_winsys.h radv_query.c radv_util.c radv_util.h \
-	radv_wsi.c si_cmd_buffer.c vk_format_table.c vk_format.h \
+	radv_entrypoints.h radv_cmd_buffer.c radv_cs.h radv_device.c \
+	radv_descriptor_set.c radv_descriptor_set.h radv_formats.c \
+	radv_image.c radv_meta.c radv_meta.h radv_meta_blit.c \
+	radv_meta_blit2d.c radv_meta_buffer.c radv_meta_bufimage.c \
+	radv_meta_clear.c radv_meta_copy.c radv_meta_decompress.c \
+	radv_meta_fast_clear.c radv_meta_resolve.c \
+	radv_meta_resolve_cs.c radv_pass.c radv_pipeline.c \
+	radv_pipeline_cache.c radv_private.h radv_radeon_winsys.h \
+	radv_query.c radv_util.c radv_util.h radv_wsi.c \
+	si_cmd_buffer.c vk_format_table.c vk_format.h \
 	winsys/amdgpu/radv_amdgpu_bo.c winsys/amdgpu/radv_amdgpu_bo.h \
 	winsys/amdgpu/radv_amdgpu_cs.c winsys/amdgpu/radv_amdgpu_cs.h \
 	winsys/amdgpu/radv_amdgpu_surface.c \
@@ -364,6 +364,8 @@ AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANDROID_CFLAGS = @ANDROID_CFLAGS@
+ANDROID_LIBS = @ANDROID_LIBS@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -407,10 +409,11 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
-EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
+ETNAVIV_CFLAGS = @ETNAVIV_CFLAGS@
+ETNAVIV_LIBS = @ETNAVIV_LIBS@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -460,9 +463,7 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
-LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
-LIBSHA1_LIBS = @LIBSHA1_LIBS@
+LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
@@ -503,8 +504,6 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -541,8 +540,6 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
-SHA1_CFLAGS = @SHA1_CFLAGS@
-SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
 SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
@@ -551,7 +548,6 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
-TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -567,7 +563,6 @@ VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
 VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
-VG_LIB_DEPS = @VG_LIB_DEPS@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -712,8 +707,7 @@ VULKAN_WSI_X11_FILES := \
 
 VULKAN_GENERATED_FILES := \
 	radv_entrypoints.c \
-	radv_entrypoints.h \
-	radv_timestamp.h
+	radv_entrypoints.h
 
 vulkan_includedir = $(includedir)/vulkan
 vulkan_include_HEADERS = \
@@ -754,6 +748,7 @@ noinst_LTLIBRARIES = libvulkan_common.la
 libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 nodist_EXTRA_libvulkan_radeon_la_SOURCES = dummy.cpp
 libvulkan_radeon_la_SOURCES = $(VULKAN_GEM_FILES)
+vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 BUILT_SOURCES = $(VULKAN_GENERATED_FILES)
 CLEANFILES = $(BUILT_SOURCES) dev_icd.json radeon_icd.@host_cpu@.json
 EXTRA_DIST = \
@@ -1243,19 +1238,13 @@ uninstall-am: uninstall-icdconfDATA uninstall-libLTLIBRARIES \
 .PRECIOUS: Makefile
 
 
-radv_entrypoints.h : radv_entrypoints_gen.py $(vulkan_include_HEADERS)
-	$(AM_V_GEN) cat $(vulkan_include_HEADERS) |\
+radv_entrypoints.h : radv_entrypoints_gen.py $(vulkan_api_xml)
+	$(AM_V_GEN) cat $(vulkan_api_xml) |\
 	$(PYTHON2) $(srcdir)/radv_entrypoints_gen.py header > $@
 
-radv_entrypoints.c : radv_entrypoints_gen.py $(vulkan_include_HEADERS)
-	$(AM_V_GEN) cat $(vulkan_include_HEADERS) |\
+radv_entrypoints.c : radv_entrypoints_gen.py $(vulkan_api_xml)
+	$(AM_V_GEN) cat $(vulkan_api_xml) |\
 	$(PYTHON2) $(srcdir)/radv_entrypoints_gen.py code > $@
-
-.PHONY: radv_timestamp.h
-
-radv_timestamp.h:
-	@echo "Updating radv_timestamp.h"
-	$(AM_V_GEN) echo "#define RADV_TIMESTAMP \"$(TIMESTAMP_CMD)\"" > $@
 
 vk_format_table.c: vk_format_table.py \
 		   vk_format_parse.py \

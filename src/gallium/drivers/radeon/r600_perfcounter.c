@@ -545,7 +545,7 @@ int r600_get_perfcounter_info(struct r600_common_screen *screen,
 	info->query_type = R600_QUERY_FIRST_PERFCOUNTER + index;
 	info->max_value.u64 = 0;
 	info->type = PIPE_DRIVER_QUERY_TYPE_UINT64;
-	info->result_type = PIPE_DRIVER_QUERY_RESULT_TYPE_CUMULATIVE;
+	info->result_type = PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE;
 	info->group_id = base_gid + sub / block->num_selectors;
 	info->flags = PIPE_DRIVER_QUERY_FLAG_BATCH;
 	if (sub > 0 && sub + 1 < block->num_selectors * block->num_groups)

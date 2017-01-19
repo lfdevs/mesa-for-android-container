@@ -44,6 +44,7 @@ git_sha1.h: git_sha1.h.tmp
 
 BUILT_SOURCES = git_sha1.h
 CLEANFILES = $(BUILT_SOURCES)
+EXTRA_DIST =
 
 SUBDIRS = . gtest util mapi/glapi/gen mapi
 
@@ -118,6 +119,7 @@ endif
 if HAVE_VULKAN_COMMON
 SUBDIRS += vulkan/wsi
 endif
+EXTRA_DIST += vulkan/registry/vk.xml
 
 ## Requires the i965 compiler (part of mesa) and wayland-drm
 if HAVE_INTEL_VULKAN
@@ -126,7 +128,6 @@ endif
 
 # Requires wayland-drm
 if HAVE_RADEON_VULKAN
-SUBDIRS += amd/common
 SUBDIRS += amd/vulkan
 endif
 
@@ -134,7 +135,7 @@ if HAVE_GALLIUM
 SUBDIRS += gallium
 endif
 
-EXTRA_DIST = \
+EXTRA_DIST += \
 	getopt hgl SConscript \
 	$(top_srcdir)/include/GL/mesa_glinterop.h
 

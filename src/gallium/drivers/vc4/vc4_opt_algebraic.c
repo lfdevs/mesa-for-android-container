@@ -94,14 +94,17 @@ static void
 replace_with_mov(struct vc4_compile *c, struct qinst *inst, struct qreg arg)
 {
         dump_from(c, inst);
+
+        inst->src[0] = arg;
+        if (qir_has_implicit_tex_uniform(inst))
+                inst->src[1] = inst->src[qir_get_tex_uniform_src(inst)];
+
         if (qir_is_mul(inst))
                 inst->op = QOP_MMOV;
         else if (qir_is_float_input(inst))
                 inst->op = QOP_FMOV;
         else
                 inst->op = QOP_MOV;
-        inst->src[0] = arg;
-        inst->src[1] = c->undef;
         dump_to(c, inst);
 }
 
@@ -172,8 +175,12 @@ qir_opt_algebraic(struct vc4_compile *c)
                         break;
 
                 case QOP_ADD:
-                        if (replace_x_0_with_x(c, inst, 0) ||
-                            replace_x_0_with_x(c, inst, 1)) {
+                        /* Kernel validation requires that we use an actual
+                         * add instruction.
+                         */
+                        if (inst->dst.file != QFILE_TEX_S_DIRECT &&
+                            (replace_x_0_with_x(c, inst, 0) ||
+                             replace_x_0_with_x(c, inst, 1))) {
                                 progress = true;
                                 break;
                         }

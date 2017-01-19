@@ -194,7 +194,13 @@ vec4_instruction::has_source_and_destination_hazard() const
    case TES_OPCODE_ADD_INDIRECT_URB_OFFSET:
       return true;
    default:
-      return false;
+      /* 8-wide compressed DF operations are executed as two 4-wide operations,
+       * so we have a src/dst hazard if the first half of the instruction
+       * overwrites the source of the second half. Prevent this by marking
+       * compressed instructions as having src/dst hazards, so the register
+       * allocator assigns safe register regions for dst and srcs.
+       */
+      return size_written > REG_SIZE;
    }
 }
 
@@ -228,8 +234,8 @@ vec4_instruction::size_read(unsigned arg) const
    case UNIFORM:
       return 4 * type_sz(src[arg].type);
    default:
-      /* XXX - Represent actual execution size and vertical stride. */
-      return 8 * type_sz(src[arg].type);
+      /* XXX - Represent actual vertical stride. */
+      return exec_size * type_sz(src[arg].type);
    }
 }
 
@@ -253,6 +259,12 @@ vec4_instruction::can_do_writemask(const struct gen_device_info *devinfo)
 {
    switch (opcode) {
    case SHADER_OPCODE_GEN4_SCRATCH_READ:
+   case VEC4_OPCODE_FROM_DOUBLE:
+   case VEC4_OPCODE_TO_DOUBLE:
+   case VEC4_OPCODE_PICK_LOW_32BIT:
+   case VEC4_OPCODE_PICK_HIGH_32BIT:
+   case VEC4_OPCODE_SET_LOW_32BIT:
+   case VEC4_OPCODE_SET_HIGH_32BIT:
    case VS_OPCODE_PULL_CONSTANT_LOAD:
    case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
    case VS_OPCODE_SET_SIMD4X2_HEADER_GEN9:
@@ -387,6 +399,7 @@ vec4_visitor::opt_vector_float()
              inst->src[0].file == IMM &&
              inst->predicate == BRW_PREDICATE_NONE &&
              inst->dst.writemask != WRITEMASK_XYZW &&
+             type_sz(inst->src[0].type) < 8 &&
              (inst->src[0].type == inst->dst.type || inst->src[0].d == 0)) {
 
             vf = brw_float_to_vf(inst->src[0].d);
@@ -505,6 +518,16 @@ vec4_visitor::opt_reduce_swizzle()
       case BRW_OPCODE_DP2:
          swizzle = brw_swizzle_for_size(2);
          break;
+
+      case VEC4_OPCODE_TO_DOUBLE:
+      case VEC4_OPCODE_FROM_DOUBLE:
+      case VEC4_OPCODE_PICK_LOW_32BIT:
+      case VEC4_OPCODE_PICK_HIGH_32BIT:
+      case VEC4_OPCODE_SET_LOW_32BIT:
+      case VEC4_OPCODE_SET_HIGH_32BIT:
+         swizzle = brw_swizzle_for_size(4);
+         break;
+
       default:
          swizzle = brw_swizzle_for_mask(inst->dst.writemask);
          break;
@@ -593,13 +616,20 @@ vec4_visitor::pack_uniform_registers()
          if (inst->src[i].file != UNIFORM)
             continue;
 
+         assert(type_sz(inst->src[i].type) % 4 == 0);
+         unsigned channel_size = type_sz(inst->src[i].type) / 4;
+
          int reg = inst->src[i].nr;
          for (int c = 0; c < 4; c++) {
             if (!(readmask & (1 << c)))
                continue;
 
-            chans_used[reg] = MAX2(chans_used[reg],
-                                   BRW_GET_SWZ(inst->src[i].swizzle, c) + 1);
+            unsigned channel = BRW_GET_SWZ(inst->src[i].swizzle, c) + 1;
+            unsigned used = MAX2(chans_used[reg], channel * channel_size);
+            if (used <= 4)
+               chans_used[reg] = used;
+            else
+               chans_used[reg + 1] = used - 4;
          }
       }
 
@@ -636,25 +666,25 @@ vec4_visitor::pack_uniform_registers()
       int dst;
       /* Find the lowest place we can slot this uniform in. */
       for (dst = 0; dst < src; dst++) {
-	 if (chans_used[dst] + size <= 4)
-	    break;
+         if (chans_used[dst] + size <= 4)
+            break;
       }
 
       if (src == dst) {
-	 new_loc[src] = dst;
-	 new_chan[src] = 0;
+         new_loc[src] = dst;
+         new_chan[src] = 0;
       } else {
-	 new_loc[src] = dst;
-	 new_chan[src] = chans_used[dst];
+         new_loc[src] = dst;
+         new_chan[src] = chans_used[dst];
 
-	 /* Move the references to the data */
-	 for (int j = 0; j < size; j++) {
-	    stage_prog_data->param[dst * 4 + new_chan[src] + j] =
-	       stage_prog_data->param[src * 4 + j];
-	 }
+         /* Move the references to the data */
+         for (int j = 0; j < size; j++) {
+            stage_prog_data->param[dst * 4 + new_chan[src] + j] =
+               stage_prog_data->param[src * 4 + j];
+         }
 
-	 chans_used[dst] += size;
-	 chans_used[src] = 0;
+         chans_used[dst] += size;
+         chans_used[src] = 0;
       }
 
       new_uniform_count = MAX2(new_uniform_count, dst + 1);
@@ -667,8 +697,8 @@ vec4_visitor::pack_uniform_registers()
       for (int i = 0 ; i < 3; i++) {
          int src = inst->src[i].nr;
 
-	 if (inst->src[i].file != UNIFORM)
-	    continue;
+         if (inst->src[i].file != UNIFORM)
+            continue;
 
          inst->src[i].nr = new_loc[src];
          inst->src[i].swizzle += BRW_SWIZZLE4(new_chan[src], new_chan[src],
@@ -818,34 +848,34 @@ vec4_visitor::move_push_constants_to_pull_constants()
       pull_constant_loc[i / 4] = -1;
 
       if (i >= max_uniform_components) {
-	 const gl_constant_value **values = &stage_prog_data->param[i];
+         const gl_constant_value **values = &stage_prog_data->param[i];
 
-	 /* Try to find an existing copy of this uniform in the pull
-	  * constants if it was part of an array access already.
-	  */
-	 for (unsigned int j = 0; j < stage_prog_data->nr_pull_params; j += 4) {
-	    int matches;
+         /* Try to find an existing copy of this uniform in the pull
+          * constants if it was part of an array access already.
+          */
+         for (unsigned int j = 0; j < stage_prog_data->nr_pull_params; j += 4) {
+            int matches;
 
-	    for (matches = 0; matches < 4; matches++) {
-	       if (stage_prog_data->pull_param[j + matches] != values[matches])
-		  break;
-	    }
+            for (matches = 0; matches < 4; matches++) {
+               if (stage_prog_data->pull_param[j + matches] != values[matches])
+                  break;
+            }
 
-	    if (matches == 4) {
-	       pull_constant_loc[i / 4] = j / 4;
-	       break;
-	    }
-	 }
+            if (matches == 4) {
+               pull_constant_loc[i / 4] = j / 4;
+               break;
+            }
+         }
 
-	 if (pull_constant_loc[i / 4] == -1) {
-	    assert(stage_prog_data->nr_pull_params % 4 == 0);
-	    pull_constant_loc[i / 4] = stage_prog_data->nr_pull_params / 4;
+         if (pull_constant_loc[i / 4] == -1) {
+            assert(stage_prog_data->nr_pull_params % 4 == 0);
+            pull_constant_loc[i / 4] = stage_prog_data->nr_pull_params / 4;
 
-	    for (int j = 0; j < 4; j++) {
-	       stage_prog_data->pull_param[stage_prog_data->nr_pull_params++] =
+            for (int j = 0; j < 4; j++) {
+               stage_prog_data->pull_param[stage_prog_data->nr_pull_params++] =
                   values[j];
-	    }
-	 }
+            }
+         }
       }
    }
 
@@ -854,21 +884,23 @@ vec4_visitor::move_push_constants_to_pull_constants()
     */
    foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
       for (int i = 0 ; i < 3; i++) {
-	 if (inst->src[i].file != UNIFORM ||
+         if (inst->src[i].file != UNIFORM ||
              pull_constant_loc[inst->src[i].nr] == -1)
-	    continue;
+            continue;
 
          int uniform = inst->src[i].nr;
 
-	 dst_reg temp = dst_reg(this, glsl_type::vec4_type);
+         const glsl_type *temp_type = type_sz(inst->src[i].type) == 8 ?
+            glsl_type::dvec4_type : glsl_type::vec4_type;
+         dst_reg temp = dst_reg(this, temp_type);
 
-	 emit_pull_constant_load(block, inst, temp, inst->src[i],
-				 pull_constant_loc[uniform], src_reg());
+         emit_pull_constant_load(block, inst, temp, inst->src[i],
+                                 pull_constant_loc[uniform], src_reg());
 
-	 inst->src[i].file = temp.file;
+         inst->src[i].file = temp.file;
          inst->src[i].nr = temp.nr;
-	 inst->src[i].offset %= 16;
-	 inst->src[i].reladdr = NULL;
+         inst->src[i].offset %= 16;
+         inst->src[i].reladdr = NULL;
       }
    }
 
@@ -884,16 +916,31 @@ vec4_visitor::is_dep_ctrl_unsafe(const vec4_instruction *inst)
    (reg.type == BRW_REGISTER_TYPE_UD || \
     reg.type == BRW_REGISTER_TYPE_D)
 
-   /* "When source or destination datatype is 64b or operation is integer DWord
+#define IS_64BIT(reg) (reg.file != BAD_FILE && type_sz(reg.type) == 8)
+
+   /* From the Cherryview and Broadwell PRMs:
+    *
+    * "When source or destination datatype is 64b or operation is integer DWord
     * multiply, DepCtrl must not be used."
-    * May apply to future SoCs as well.
+    *
+    * SKL PRMs don't include this restriction, however, gen7 seems to be
+    * affected, at least by the 64b restriction, since DepCtrl with double
+    * precision instructions seems to produce GPU hangs in some cases.
     */
-   if (devinfo->is_cherryview) {
+   if (devinfo->gen == 8 || devinfo->is_broxton) {
       if (inst->opcode == BRW_OPCODE_MUL &&
          IS_DWORD(inst->src[0]) &&
          IS_DWORD(inst->src[1]))
          return true;
    }
+
+   if (devinfo->gen >= 7 && devinfo->gen <= 8) {
+      if (IS_64BIT(inst->dst) || IS_64BIT(inst->src[0]) ||
+          IS_64BIT(inst->src[1]) || IS_64BIT(inst->src[2]))
+      return true;
+   }
+
+#undef IS_64BIT
 #undef IS_DWORD
 
    if (devinfo->gen >= 8) {
@@ -1123,7 +1170,7 @@ vec4_visitor::opt_register_coalesce()
       /* Can't coalesce this GRF if someone else was going to
        * read it later.
        */
-      if (var_range_end(var_from_reg(alloc, dst_reg(inst->src[0])), 4) > ip)
+      if (var_range_end(var_from_reg(alloc, dst_reg(inst->src[0])), 8) > ip)
 	 continue;
 
       /* We need to check interference with the final destination between this
@@ -1174,6 +1221,20 @@ vec4_visitor::opt_register_coalesce()
                   scan_inst->dst.type == scan_inst->src[0].type))
                break;
 
+            /* Only allow coalescing between registers of the same type size.
+             * Otherwise we would need to make the pass aware of the fact that
+             * channel sizes are different for single and double precision.
+             */
+            if (type_sz(inst->src[0].type) != type_sz(scan_inst->src[0].type))
+               break;
+
+            /* Check that scan_inst writes the same amount of data as the
+             * instruction, otherwise coalescing would lead to writing a
+             * different (larger or smaller) region of the destination
+             */
+            if (scan_inst->size_written != inst->size_written)
+               break;
+
             /* If we can't handle the swizzle, bail. */
             if (!scan_inst->can_reswizzle(devinfo, inst->dst.writemask,
                                           inst->src[0].swizzle,
@@ -1181,10 +1242,12 @@ vec4_visitor::opt_register_coalesce()
                break;
             }
 
-            /* This only handles coalescing of a single register starting at
-             * the source offset of the copy instruction.
+            /* This only handles coalescing writes of 8 channels (1 register
+             * for single-precision and 2 registers for double-precision)
+             * starting at the source offset of the copy instruction.
              */
-            if (scan_inst->size_written > REG_SIZE ||
+            if (DIV_ROUND_UP(scan_inst->size_written,
+                             type_sz(scan_inst->dst.type)) > 8 ||
                 scan_inst->dst.offset != inst->src[0].offset)
                break;
 
@@ -1420,7 +1483,8 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
               pred_ctrl_align16[inst->predicate]);
    }
 
-   fprintf(file, "%s", brw_instruction_name(devinfo, inst->opcode));
+   fprintf(file, "%s(%d)", brw_instruction_name(devinfo, inst->opcode),
+           inst->exec_size);
    if (inst->saturate)
       fprintf(file, ".sat");
    if (inst->conditional_mod) {
@@ -1504,7 +1568,7 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
          fprintf(file, "vgrf%d", inst->src[i].nr);
          break;
       case FIXED_GRF:
-         fprintf(file, "g%d", inst->src[i].nr);
+         fprintf(file, "g%d.%d", inst->src[i].nr, inst->src[i].subnr);
          break;
       case ATTR:
          fprintf(file, "attr%d", inst->src[i].nr);
@@ -1516,6 +1580,9 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
          switch (inst->src[i].type) {
          case BRW_REGISTER_TYPE_F:
             fprintf(file, "%fF", inst->src[i].f);
+            break;
+         case BRW_REGISTER_TYPE_DF:
+            fprintf(file, "%fDF", inst->src[i].df);
             break;
          case BRW_REGISTER_TYPE_D:
             fprintf(file, "%dD", inst->src[i].d);
@@ -1591,17 +1658,27 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
    if (inst->force_writemask_all)
       fprintf(file, " NoMask");
 
+   if (inst->exec_size != 8)
+      fprintf(file, " group%d", inst->group);
+
    fprintf(file, "\n");
 }
 
 
 static inline struct brw_reg
-attribute_to_hw_reg(int attr, bool interleaved)
+attribute_to_hw_reg(int attr, brw_reg_type type, bool interleaved)
 {
-   if (interleaved)
-      return stride(brw_vec4_grf(attr / 2, (attr % 2) * 4), 0, 4, 1);
-   else
-      return brw_vec8_grf(attr, 0);
+   struct brw_reg reg;
+
+   unsigned width = REG_SIZE / 2 / MAX2(4, type_sz(type));
+   if (interleaved) {
+      reg = stride(brw_vecn_grf(width, attr / 2, (attr % 2) * 4), 0, width, 1);
+   } else {
+      reg = brw_vecn_grf(width, attr, 0);
+   }
+
+   reg.type = type;
+   return reg;
 }
 
 
@@ -1623,8 +1700,8 @@ vec4_visitor::lower_attributes_to_hw_regs(const int *attribute_map,
 {
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (int i = 0; i < 3; i++) {
-	 if (inst->src[i].file != ATTR)
-	    continue;
+         if (inst->src[i].file != ATTR)
+            continue;
 
          int grf = attribute_map[inst->src[i].nr +
                                  inst->src[i].offset / REG_SIZE];
@@ -1635,13 +1712,13 @@ vec4_visitor::lower_attributes_to_hw_regs(const int *attribute_map,
           */
          assert(grf != 0);
 
-	 struct brw_reg reg = attribute_to_hw_reg(grf, interleaved);
-	 reg.swizzle = inst->src[i].swizzle;
-         reg.type = inst->src[i].type;
-	 if (inst->src[i].abs)
-	    reg = brw_abs(reg);
-	 if (inst->src[i].negate)
-	    reg = negate(reg);
+         struct brw_reg reg =
+            attribute_to_hw_reg(grf, inst->src[i].type, interleaved);
+         reg.swizzle = inst->src[i].swizzle;
+         if (inst->src[i].abs)
+            reg = brw_abs(reg);
+         if (inst->src[i].negate)
+            reg = negate(reg);
 
          inst->src[i] = reg;
       }
@@ -1656,10 +1733,15 @@ vec4_vs_visitor::setup_attributes(int payload_reg)
    memset(attribute_map, 0, sizeof(attribute_map));
 
    nr_attributes = 0;
-   for (int i = 0; i < VERT_ATTRIB_MAX; i++) {
-      if (vs_prog_data->inputs_read & BITFIELD64_BIT(i)) {
-	 attribute_map[i] = payload_reg + nr_attributes;
-	 nr_attributes++;
+   GLbitfield64 vs_inputs = vs_prog_data->inputs_read;
+   while (vs_inputs) {
+      GLuint first = ffsll(vs_inputs) - 1;
+      int needed_slots =
+         (vs_prog_data->double_inputs_read & BITFIELD64_BIT(first)) ? 2 : 1;
+      for (int c = 0; c < needed_slots; c++) {
+         attribute_map[first + c] = payload_reg + nr_attributes;
+         nr_attributes++;
+         vs_inputs &= ~BITFIELD64_BIT(first + c);
       }
    }
 
@@ -1680,7 +1762,7 @@ vec4_vs_visitor::setup_attributes(int payload_reg)
 
    lower_attributes_to_hw_regs(attribute_map, false /* interleaved */);
 
-   return payload_reg + vs_prog_data->nr_attributes;
+   return payload_reg + vs_prog_data->nr_attribute_slots;
 }
 
 int
@@ -1862,31 +1944,39 @@ vec4_visitor::convert_to_hw_regs()
          struct src_reg &src = inst->src[i];
          struct brw_reg reg;
          switch (src.file) {
-         case VGRF:
-            reg = byte_offset(brw_vec8_grf(src.nr, 0), src.offset);
+         case VGRF: {
+            const unsigned type_size = type_sz(src.type);
+            const unsigned width = REG_SIZE / 2 / MAX2(4, type_size);
+            reg = byte_offset(brw_vecn_grf(width, src.nr, 0), src.offset);
             reg.type = src.type;
-            reg.swizzle = src.swizzle;
             reg.abs = src.abs;
             reg.negate = src.negate;
             break;
+         }
 
-         case UNIFORM:
+         case UNIFORM: {
+            const unsigned width = REG_SIZE / 2 / MAX2(4, type_sz(src.type));
             reg = stride(byte_offset(brw_vec4_grf(
                                         prog_data->base.dispatch_grf_start_reg +
                                         src.nr / 2, src.nr % 2 * 4),
                                      src.offset),
-                         0, 4, 1);
+                         0, width, 1);
             reg.type = src.type;
-            reg.swizzle = src.swizzle;
             reg.abs = src.abs;
             reg.negate = src.negate;
 
             /* This should have been moved to pull constants. */
             assert(!src.reladdr);
             break;
+         }
 
-         case ARF:
          case FIXED_GRF:
+            if (type_sz(src.type) == 8) {
+               reg = src.as_brw_reg();
+               break;
+            }
+            /* fallthrough */
+         case ARF:
          case IMM:
             continue;
 
@@ -1900,15 +1990,19 @@ vec4_visitor::convert_to_hw_regs()
             unreachable("not reached");
          }
 
+         apply_logical_swizzle(&reg, inst, i);
          src = reg;
       }
 
       if (inst->is_3src(devinfo)) {
          /* 3-src instructions with scalar sources support arbitrary subnr,
           * but don't actually use swizzles.  Convert swizzle into subnr.
+          * Skip this for double-precision instructions: RepCtrl=1 is not
+          * allowed for them and needs special handling.
           */
          for (int i = 0; i < 3; i++) {
-            if (inst->src[i].vstride == BRW_VERTICAL_STRIDE_0) {
+            if (inst->src[i].vstride == BRW_VERTICAL_STRIDE_0 &&
+                type_sz(inst->src[i].type) < 8) {
                assert(brw_is_single_value_swizzle(inst->src[i].swizzle));
                inst->src[i].subnr += 4 * BRW_GET_SWZ(inst->src[i].swizzle, 0);
             }
@@ -1951,6 +2045,502 @@ vec4_visitor::convert_to_hw_regs()
    }
 }
 
+static bool
+stage_uses_interleaved_attributes(unsigned stage,
+                                  enum shader_dispatch_mode dispatch_mode)
+{
+   switch (stage) {
+   case MESA_SHADER_TESS_EVAL:
+      return true;
+   case MESA_SHADER_GEOMETRY:
+      return dispatch_mode != DISPATCH_MODE_4X2_DUAL_OBJECT;
+   default:
+      return false;
+   }
+}
+
+/**
+ * Get the closest native SIMD width supported by the hardware for instruction
+ * \p inst.  The instruction will be left untouched by
+ * vec4_visitor::lower_simd_width() if the returned value matches the
+ * instruction's original execution size.
+ */
+static unsigned
+get_lowered_simd_width(const struct gen_device_info *devinfo,
+                       enum shader_dispatch_mode dispatch_mode,
+                       unsigned stage, const vec4_instruction *inst)
+{
+   /* Do not split some instructions that require special handling */
+   switch (inst->opcode) {
+   case SHADER_OPCODE_GEN4_SCRATCH_READ:
+   case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
+      return inst->exec_size;
+   default:
+      break;
+   }
+
+   unsigned lowered_width = MIN2(16, inst->exec_size);
+
+   /* We need to split some cases of double-precision instructions that write
+    * 2 registers. We only need to care about this in gen7 because that is the
+    * only hardware that implements fp64 in Align16.
+    */
+   if (devinfo->gen == 7 && inst->size_written > REG_SIZE) {
+      /* Align16 8-wide double-precision SEL does not work well. Verified
+       * empirically.
+       */
+      if (inst->opcode == BRW_OPCODE_SEL && type_sz(inst->dst.type) == 8)
+         lowered_width = MIN2(lowered_width, 4);
+
+      /* HSW PRM, 3D Media GPGPU Engine, Region Alignment Rules for Direct
+       * Register Addressing:
+       *
+       *    "When destination spans two registers, the source MUST span two
+       *     registers."
+       */
+      for (unsigned i = 0; i < 3; i++) {
+         if (inst->src[i].file == BAD_FILE)
+            continue;
+         if (inst->size_read(i) <= REG_SIZE)
+            lowered_width = MIN2(lowered_width, 4);
+
+         /* Interleaved attribute setups use a vertical stride of 0, which
+          * makes them hit the associated instruction decompression bug in gen7.
+          * Split them to prevent this.
+          */
+         if (inst->src[i].file == ATTR &&
+             stage_uses_interleaved_attributes(stage, dispatch_mode))
+            lowered_width = MIN2(lowered_width, 4);
+      }
+   }
+
+   return lowered_width;
+}
+
+static bool
+dst_src_regions_overlap(vec4_instruction *inst)
+{
+   if (inst->size_written == 0)
+      return false;
+
+   unsigned dst_start = inst->dst.offset;
+   unsigned dst_end = dst_start + inst->size_written - 1;
+   for (int i = 0; i < 3; i++) {
+      if (inst->src[i].file == BAD_FILE)
+         continue;
+
+      if (inst->dst.file != inst->src[i].file ||
+          inst->dst.nr != inst->src[i].nr)
+         continue;
+
+      unsigned src_start = inst->src[i].offset;
+      unsigned src_end = src_start + inst->size_read(i) - 1;
+
+      if ((dst_start >= src_start && dst_start <= src_end) ||
+          (dst_end >= src_start && dst_end <= src_end) ||
+          (dst_start <= src_start && dst_end >= src_end)) {
+         return true;
+      }
+   }
+
+   return false;
+}
+
+bool
+vec4_visitor::lower_simd_width()
+{
+   bool progress = false;
+
+   foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
+      const unsigned lowered_width =
+         get_lowered_simd_width(devinfo, prog_data->dispatch_mode, stage, inst);
+      assert(lowered_width <= inst->exec_size);
+      if (lowered_width == inst->exec_size)
+         continue;
+
+      /* We need to deal with source / destination overlaps when splitting.
+       * The hardware supports reading from and writing to the same register
+       * in the same instruction, but we need to be careful that each split
+       * instruction we produce does not corrupt the source of the next.
+       *
+       * The easiest way to handle this is to make the split instructions write
+       * to temporaries if there is an src/dst overlap and then move from the
+       * temporaries to the original destination. We also need to consider
+       * instructions that do partial writes via align1 opcodes, in which case
+       * we need to make sure that the we initialize the temporary with the
+       * value of the instruction's dst.
+       */
+      bool needs_temp = dst_src_regions_overlap(inst);
+      for (unsigned n = 0; n < inst->exec_size / lowered_width; n++)  {
+         unsigned channel_offset = lowered_width * n;
+
+         unsigned size_written = lowered_width * type_sz(inst->dst.type);
+
+         /* Create the split instruction from the original so that we copy all
+          * relevant instruction fields, then set the width and calculate the
+          * new dst/src regions.
+          */
+         vec4_instruction *linst = new(mem_ctx) vec4_instruction(*inst);
+         linst->exec_size = lowered_width;
+         linst->group = channel_offset;
+         linst->size_written = size_written;
+
+         /* Compute split dst region */
+         dst_reg dst;
+         if (needs_temp) {
+            unsigned num_regs = DIV_ROUND_UP(size_written, REG_SIZE);
+            dst = retype(dst_reg(VGRF, alloc.allocate(num_regs)),
+                         inst->dst.type);
+            if (inst->is_align1_partial_write()) {
+               vec4_instruction *copy = MOV(dst, src_reg(inst->dst));
+               copy->exec_size = lowered_width;
+               copy->group = channel_offset;
+               copy->size_written = size_written;
+               inst->insert_before(block, copy);
+            }
+         } else {
+            dst = horiz_offset(inst->dst, channel_offset);
+         }
+         linst->dst = dst;
+
+         /* Compute split source regions */
+         for (int i = 0; i < 3; i++) {
+            if (linst->src[i].file == BAD_FILE)
+               continue;
+
+            if (!is_uniform(linst->src[i]))
+               linst->src[i] = horiz_offset(linst->src[i], channel_offset);
+         }
+
+         inst->insert_before(block, linst);
+
+         /* If we used a temporary to store the result of the split
+          * instruction, copy the result to the original destination
+          */
+         if (needs_temp) {
+            vec4_instruction *mov =
+               MOV(offset(inst->dst, lowered_width, n), src_reg(dst));
+            mov->exec_size = lowered_width;
+            mov->group = channel_offset;
+            mov->size_written = size_written;
+            mov->predicate = inst->predicate;
+            inst->insert_before(block, mov);
+         }
+      }
+
+      inst->remove(block);
+      progress = true;
+   }
+
+   if (progress)
+      invalidate_live_intervals();
+
+   return progress;
+}
+
+static bool
+is_align1_df(vec4_instruction *inst)
+{
+   switch (inst->opcode) {
+   case VEC4_OPCODE_FROM_DOUBLE:
+   case VEC4_OPCODE_TO_DOUBLE:
+   case VEC4_OPCODE_PICK_LOW_32BIT:
+   case VEC4_OPCODE_PICK_HIGH_32BIT:
+   case VEC4_OPCODE_SET_LOW_32BIT:
+   case VEC4_OPCODE_SET_HIGH_32BIT:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static brw_predicate
+scalarize_predicate(brw_predicate predicate, unsigned writemask)
+{
+   if (predicate != BRW_PREDICATE_NORMAL)
+      return predicate;
+
+   switch (writemask) {
+   case WRITEMASK_X:
+      return BRW_PREDICATE_ALIGN16_REPLICATE_X;
+   case WRITEMASK_Y:
+      return BRW_PREDICATE_ALIGN16_REPLICATE_Y;
+   case WRITEMASK_Z:
+      return BRW_PREDICATE_ALIGN16_REPLICATE_Z;
+   case WRITEMASK_W:
+      return BRW_PREDICATE_ALIGN16_REPLICATE_W;
+   default:
+      unreachable("invalid writemask");
+   }
+}
+
+/* Gen7 has a hardware decompression bug that we can exploit to represent
+ * handful of additional swizzles natively.
+ */
+static bool
+is_gen7_supported_64bit_swizzle(vec4_instruction *inst, unsigned arg)
+{
+   switch (inst->src[arg].swizzle) {
+   case BRW_SWIZZLE_XXXX:
+   case BRW_SWIZZLE_YYYY:
+   case BRW_SWIZZLE_ZZZZ:
+   case BRW_SWIZZLE_WWWW:
+   case BRW_SWIZZLE_XYXY:
+   case BRW_SWIZZLE_YXYX:
+   case BRW_SWIZZLE_ZWZW:
+   case BRW_SWIZZLE_WZWZ:
+      return true;
+   default:
+      return false;
+   }
+}
+
+/* 64-bit sources use regions with a width of 2. These 2 elements in each row
+ * can be addressed using 32-bit swizzles (which is what the hardware supports)
+ * but it also means that the swizzle we apply on the first two components of a
+ * dvec4 is coupled with the swizzle we use for the last 2. In other words,
+ * only some specific swizzle combinations can be natively supported.
+ *
+ * FIXME: we can go an step further and implement even more swizzle
+ *        variations using only partial scalarization.
+ *
+ * For more details see:
+ * https://bugs.freedesktop.org/show_bug.cgi?id=92760#c82
+ */
+bool
+vec4_visitor::is_supported_64bit_region(vec4_instruction *inst, unsigned arg)
+{
+   const src_reg &src = inst->src[arg];
+   assert(type_sz(src.type) == 8);
+
+   /* Uniform regions have a vstride=0. Because we use 2-wide rows with
+    * 64-bit regions it means that we cannot access components Z/W, so
+    * return false for any such case. Interleaved attributes will also be
+    * mapped to GRF registers with a vstride of 0, so apply the same
+    * treatment.
+    */
+   if ((is_uniform(src) ||
+        (stage_uses_interleaved_attributes(stage, prog_data->dispatch_mode) &&
+         src.file == ATTR)) &&
+       (brw_mask_for_swizzle(src.swizzle) & 12))
+      return false;
+
+   switch (src.swizzle) {
+   case BRW_SWIZZLE_XYZW:
+   case BRW_SWIZZLE_XXZZ:
+   case BRW_SWIZZLE_YYWW:
+   case BRW_SWIZZLE_YXWZ:
+      return true;
+   default:
+      return devinfo->gen == 7 && is_gen7_supported_64bit_swizzle(inst, arg);
+   }
+}
+
+bool
+vec4_visitor::scalarize_df()
+{
+   bool progress = false;
+
+   foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
+      /* Skip DF instructions that operate in Align1 mode */
+      if (is_align1_df(inst))
+         continue;
+
+      /* Check if this is a double-precision instruction */
+      bool is_double = type_sz(inst->dst.type) == 8;
+      for (int arg = 0; !is_double && arg < 3; arg++) {
+         is_double = inst->src[arg].file != BAD_FILE &&
+                     type_sz(inst->src[arg].type) == 8;
+      }
+
+      if (!is_double)
+         continue;
+
+      /* Skip the lowering for specific regioning scenarios that we can
+       * support natively.
+       */
+      bool skip_lowering = true;
+
+      /* XY and ZW writemasks operate in 32-bit, which means that they don't
+       * have a native 64-bit representation and they should always be split.
+       */
+      if (inst->dst.writemask == WRITEMASK_XY ||
+          inst->dst.writemask == WRITEMASK_ZW) {
+         skip_lowering = false;
+      } else {
+         for (unsigned i = 0; i < 3; i++) {
+            if (inst->src[i].file == BAD_FILE || type_sz(inst->src[i].type) < 8)
+               continue;
+            skip_lowering = skip_lowering && is_supported_64bit_region(inst, i);
+         }
+      }
+
+      if (skip_lowering)
+         continue;
+
+      /* Generate scalar instructions for each enabled channel */
+      for (unsigned chan = 0; chan < 4; chan++) {
+         unsigned chan_mask = 1 << chan;
+         if (!(inst->dst.writemask & chan_mask))
+            continue;
+
+         vec4_instruction *scalar_inst = new(mem_ctx) vec4_instruction(*inst);
+
+         for (unsigned i = 0; i < 3; i++) {
+            unsigned swz = BRW_GET_SWZ(inst->src[i].swizzle, chan);
+            scalar_inst->src[i].swizzle = BRW_SWIZZLE4(swz, swz, swz, swz);
+         }
+
+         scalar_inst->dst.writemask = chan_mask;
+
+         if (inst->predicate != BRW_PREDICATE_NONE) {
+            scalar_inst->predicate =
+               scalarize_predicate(inst->predicate, chan_mask);
+         }
+
+         inst->insert_before(block, scalar_inst);
+      }
+
+      inst->remove(block);
+      progress = true;
+   }
+
+   if (progress)
+      invalidate_live_intervals();
+
+   return progress;
+}
+
+bool
+vec4_visitor::lower_64bit_mad_to_mul_add()
+{
+   bool progress = false;
+
+   foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
+      if (inst->opcode != BRW_OPCODE_MAD)
+         continue;
+
+      if (type_sz(inst->dst.type) != 8)
+         continue;
+
+      dst_reg mul_dst = dst_reg(this, glsl_type::dvec4_type);
+
+      /* Use the copy constructor so we copy all relevant instruction fields
+       * from the original mad into the add and mul instructions
+       */
+      vec4_instruction *mul = new(mem_ctx) vec4_instruction(*inst);
+      mul->opcode = BRW_OPCODE_MUL;
+      mul->dst = mul_dst;
+      mul->src[0] = inst->src[1];
+      mul->src[1] = inst->src[2];
+      mul->src[2].file = BAD_FILE;
+
+      vec4_instruction *add = new(mem_ctx) vec4_instruction(*inst);
+      add->opcode = BRW_OPCODE_ADD;
+      add->src[0] = src_reg(mul_dst);
+      add->src[1] = inst->src[0];
+      add->src[2].file = BAD_FILE;
+
+      inst->insert_before(block, mul);
+      inst->insert_before(block, add);
+      inst->remove(block);
+
+      progress = true;
+   }
+
+   if (progress)
+      invalidate_live_intervals();
+
+   return progress;
+}
+
+/* The align16 hardware can only do 32-bit swizzle channels, so we need to
+ * translate the logical 64-bit swizzle channels that we use in the Vec4 IR
+ * to 32-bit swizzle channels in hardware registers.
+ *
+ * @inst and @arg identify the original vec4 IR source operand we need to
+ * translate the swizzle for and @hw_reg is the hardware register where we
+ * will write the hardware swizzle to use.
+ *
+ * This pass assumes that Align16/DF instructions have been fully scalarized
+ * previously so there is just one 64-bit swizzle channel to deal with for any
+ * given Vec4 IR source.
+ */
+void
+vec4_visitor::apply_logical_swizzle(struct brw_reg *hw_reg,
+                                    vec4_instruction *inst, int arg)
+{
+   src_reg reg = inst->src[arg];
+
+   if (reg.file == BAD_FILE || reg.file == BRW_IMMEDIATE_VALUE)
+      return;
+
+   /* If this is not a 64-bit operand or this is a scalar instruction we don't
+    * need to do anything about the swizzles.
+    */
+   if(type_sz(reg.type) < 8 || is_align1_df(inst)) {
+      hw_reg->swizzle = reg.swizzle;
+      return;
+   }
+
+   /* Take the 64-bit logical swizzle channel and translate it to 32-bit */
+   assert(brw_is_single_value_swizzle(reg.swizzle) ||
+          is_supported_64bit_region(inst, arg));
+
+   if (is_supported_64bit_region(inst, arg) &&
+       !is_gen7_supported_64bit_swizzle(inst, arg)) {
+      /* Supported 64-bit swizzles are those such that their first two
+       * components, when expanded to 32-bit swizzles, match the semantics
+       * of the original 64-bit swizzle with 2-wide row regioning.
+       */
+      unsigned swizzle0 = BRW_GET_SWZ(reg.swizzle, 0);
+      unsigned swizzle1 = BRW_GET_SWZ(reg.swizzle, 1);
+      hw_reg->swizzle = BRW_SWIZZLE4(swizzle0 * 2, swizzle0 * 2 + 1,
+                                     swizzle1 * 2, swizzle1 * 2 + 1);
+   } else {
+      /* If we got here then we have one of the following:
+       *
+       * 1. An unsupported swizzle, which should be single-value thanks to the
+       *    scalarization pass.
+       *
+       * 2. A gen7 supported swizzle. These can be single-value or double-value
+       *    swizzles. If the latter, they are never cross-dvec2 channels. For
+       *    these we always need to activate the gen7 vstride=0 exploit.
+       */
+      unsigned swizzle0 = BRW_GET_SWZ(reg.swizzle, 0);
+      unsigned swizzle1 = BRW_GET_SWZ(reg.swizzle, 1);
+      assert((swizzle0 < 2) == (swizzle1 < 2));
+
+      /* To gain access to Z/W components we need to select the second half
+       * of the register and then use a X/Y swizzle to select Z/W respectively.
+       */
+      if (swizzle0 >= 2) {
+         *hw_reg = suboffset(*hw_reg, 2);
+         swizzle0 -= 2;
+         swizzle1 -= 2;
+      }
+
+      /* All gen7-specific supported swizzles require the vstride=0 exploit */
+      if (devinfo->gen == 7 && is_gen7_supported_64bit_swizzle(inst, arg))
+         hw_reg->vstride = BRW_VERTICAL_STRIDE_0;
+
+      /* Any 64-bit source with an offset at 16B is intended to address the
+       * second half of a register and needs a vertical stride of 0 so we:
+       *
+       * 1. Don't violate register region restrictions.
+       * 2. Activate the gen7 instruction decompresion bug exploit when
+       *    execsize > 4
+       */
+      if (hw_reg->subnr % REG_SIZE == 16) {
+         assert(devinfo->gen == 7);
+         hw_reg->vstride = BRW_VERTICAL_STRIDE_0;
+      }
+
+      hw_reg->swizzle = BRW_SWIZZLE4(swizzle0 * 2, swizzle0 * 2 + 1,
+                                     swizzle1 * 2, swizzle1 * 2 + 1);
+   }
+}
+
 bool
 vec4_visitor::run()
 {
@@ -1988,7 +2578,7 @@ vec4_visitor::run()
       if (unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER) && this_progress) {  \
          char filename[64];                                            \
          snprintf(filename, 64, "%s-%s-%02d-%02d-" #pass,              \
-                  stage_abbrev, nir->info.name, iteration, pass_num);  \
+                  stage_abbrev, nir->info->name, iteration, pass_num); \
                                                                        \
          backend_shader::dump_instructions(filename);                  \
       }                                                                \
@@ -2001,7 +2591,7 @@ vec4_visitor::run()
    if (unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER)) {
       char filename[64];
       snprintf(filename, 64, "%s-%s-00-00-start",
-               stage_abbrev, nir->info.name);
+               stage_abbrev, nir->info->name);
 
       backend_shader::dump_instructions(filename);
    }
@@ -2042,8 +2632,22 @@ vec4_visitor::run()
       OPT(dead_code_eliminate);
    }
 
+   if (OPT(lower_simd_width)) {
+      OPT(opt_copy_propagation);
+      OPT(dead_code_eliminate);
+   }
+
    if (failed)
       return false;
+
+   OPT(lower_64bit_mad_to_mul_add);
+
+   /* Run this before payload setup because tesselation shaders
+    * rely on it to prevent cross dvec2 regioning on DF attributes
+    * that are setup so that XY are on the second half of register and
+    * ZW are in the first half of the next.
+    */
+   OPT(scalarize_df);
 
    setup_payload();
 
@@ -2058,6 +2662,12 @@ vec4_visitor::run()
             continue;
          spill_reg(i);
       }
+
+      /* We want to run this after spilling because 64-bit (un)spills need to
+       * emit code to shuffle 64-bit data for the 32-bit scratch read/write
+       * messages that can produce unsupported 64-bit swizzle regions.
+       */
+      OPT(scalarize_df);
    }
 
    bool allocated_without_spills = reg_allocate();
@@ -2073,6 +2683,12 @@ vec4_visitor::run()
          if (failed)
             return false;
       }
+
+      /* We want to run this after spilling because 64-bit (un)spills need to
+       * emit code to shuffle 64-bit data for the 32-bit scratch read/write
+       * messages that can produce unsupported 64-bit swizzle regions.
+       */
+      OPT(scalarize_df);
    }
 
    opt_schedule_instructions();
@@ -2112,36 +2728,41 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 {
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_VERTEX];
    nir_shader *shader = nir_shader_clone(mem_ctx, src_shader);
-   shader = brw_nir_apply_sampler_key(shader, compiler->devinfo, &key->tex,
-                                      is_scalar);
+   shader = brw_nir_apply_sampler_key(shader, compiler, &key->tex, is_scalar);
    brw_nir_lower_vs_inputs(shader, is_scalar,
                            use_legacy_snorm_formula, key->gl_attrib_wa_flags);
    brw_nir_lower_vue_outputs(shader, is_scalar);
-   shader = brw_postprocess_nir(shader, compiler->devinfo, is_scalar);
+   shader = brw_postprocess_nir(shader, compiler, is_scalar);
 
    const unsigned *assembly = NULL;
 
-   unsigned nr_attributes = _mesa_bitcount_64(prog_data->inputs_read);
+   prog_data->base.clip_distance_mask =
+      ((1 << shader->info->clip_distance_array_size) - 1);
+   prog_data->base.cull_distance_mask =
+      ((1 << shader->info->cull_distance_array_size) - 1) <<
+      shader->info->clip_distance_array_size;
+
+   unsigned nr_attribute_slots = _mesa_bitcount_64(prog_data->inputs_read);
 
    /* gl_VertexID and gl_InstanceID are system values, but arrive via an
     * incoming vertex attribute.  So, add an extra slot.
     */
-   if (shader->info.system_values_read &
+   if (shader->info->system_values_read &
        (BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX) |
         BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE) |
         BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) |
         BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID))) {
-      nr_attributes++;
+      nr_attribute_slots++;
    }
 
    /* gl_DrawID has its very own vec4 */
-   if (shader->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_DRAW_ID)) {
-      nr_attributes++;
+   if (shader->info->system_values_read &
+       BITFIELD64_BIT(SYSTEM_VALUE_DRAW_ID)) {
+      nr_attribute_slots++;
    }
 
-   unsigned nr_attribute_slots =
-      nr_attributes +
-      _mesa_bitcount_64(shader->info.double_inputs_read);
+   unsigned nr_attributes = nr_attribute_slots -
+      DIV_ROUND_UP(_mesa_bitcount_64(shader->info->double_inputs_read), 2);
 
    /* The 3DSTATE_VS documentation lists the lower bound on "Vertex URB Entry
     * Read Length" as 1 in vec4 mode, and 0 in SIMD8 mode.  Empirically, in
@@ -2169,6 +2790,11 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
    else
       prog_data->base.urb_entry_size = DIV_ROUND_UP(vue_entries, 4);
 
+   if (INTEL_DEBUG & DEBUG_VS) {
+      fprintf(stderr, "VS Output ");
+      brw_print_vue_map(stderr, &prog_data->base.vue_map);
+   }
+
    if (is_scalar) {
       prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
 
@@ -2190,8 +2816,9 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       if (INTEL_DEBUG & DEBUG_VS) {
          const char *debug_name =
             ralloc_asprintf(mem_ctx, "%s vertex shader %s",
-                            shader->info.label ? shader->info.label : "unnamed",
-                            shader->info.name);
+                            shader->info->label ? shader->info->label :
+                               "unnamed",
+                            shader->info->name);
 
          g.enable_debug(debug_name);
       }

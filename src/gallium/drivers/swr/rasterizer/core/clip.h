@@ -63,7 +63,7 @@ void Clip(const float *pTriangle, const float *pAttribs, int numAttribs, float *
           int *numVerts, float *pOutAttribs);
 
 INLINE
-void ComputeClipCodes(DRIVER_TYPE type, const API_STATE& state, const simdvector& vertex, simdscalar& clipCodes, simdscalari viewportIndexes)
+void ComputeClipCodes(const API_STATE& state, const simdvector& vertex, simdscalar& clipCodes, simdscalari viewportIndexes)
 {
     clipCodes = _simd_setzero_ps();
 
@@ -90,7 +90,7 @@ void ComputeClipCodes(DRIVER_TYPE type, const API_STATE& state, const simdvector
     {
         // FRUSTUM_NEAR
         // DX clips depth [0..w], GL clips [-w..w]
-        if (type == DX)
+        if (state.rastState.clipHalfZ)
         {
             vRes = _simd_cmplt_ps(vertex.z, _simd_setzero_ps());
         }
@@ -135,7 +135,7 @@ class Clipper
 {
 public:
     Clipper(uint32_t in_workerId, DRAW_CONTEXT* in_pDC) :
-        workerId(in_workerId), driverType(in_pDC->pContext->driverType), pDC(in_pDC), state(GetApiState(in_pDC))
+        workerId(in_workerId), pDC(in_pDC), state(GetApiState(in_pDC))
     {
         static_assert(NumVertsPerPrim >= 1 && NumVertsPerPrim <= 3, "Invalid NumVertsPerPrim");
     }
@@ -144,7 +144,7 @@ public:
     {
         for (uint32_t i = 0; i < NumVertsPerPrim; ++i)
         {
-            ::ComputeClipCodes(this->driverType, this->state, vertex[i], this->clipCodes[i], viewportIndexes);
+            ::ComputeClipCodes(this->state, vertex[i], this->clipCodes[i], viewportIndexes);
         }
     }
 
@@ -388,6 +388,7 @@ public:
             // so that the binner knows to bloat wide points later
             if (pa.binTopology == TOP_POINT_LIST)
                 clipTopology = TOP_POINT_LIST;
+
         }
         else if (NumVertsPerPrim == 2)
         {
@@ -399,7 +400,6 @@ public:
             SWR_ASSERT(0 && "Unexpected points in clipper.");
         }
         
-
         uint32_t* pVertexCount = (uint32_t*)&vNumClippedVerts;
         uint32_t* pPrimitiveId = (uint32_t*)&vPrimId;
         uint32_t* pViewportIdx = (uint32_t*)&vViewportIdx;
@@ -502,8 +502,7 @@ public:
     void ExecuteStage(PA_STATE& pa, simdvector prim[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx)
     {
         SWR_ASSERT(pa.pDC != nullptr);
-
-        SWR_CONTEXT *pContext = pa.pDC->pContext;
+        SWR_CONTEXT* pContext = pa.pDC->pContext;
 
         // set up binner based on PA state
         PFN_PROCESS_PRIMS pfnBinner;
@@ -640,7 +639,7 @@ private:
         case FRUSTUM_BOTTOM:    t = ComputeInterpFactor(_simd_sub_ps(v1[3], v1[1]), _simd_sub_ps(v2[3], v2[1])); break;
         case FRUSTUM_NEAR:      
             // DX Znear plane is 0, GL is -w
-            if (this->driverType == DX)
+            if (this->state.rastState.clipHalfZ)
             {
                 t = ComputeInterpFactor(v1[2], v2[2]);
             }
@@ -708,7 +707,7 @@ private:
         case FRUSTUM_RIGHT:     return _simd_cmple_ps(v[0], v[3]);
         case FRUSTUM_TOP:       return _simd_cmpge_ps(v[1], _simd_mul_ps(v[3], _simd_set1_ps(-1.0f)));
         case FRUSTUM_BOTTOM:    return _simd_cmple_ps(v[1], v[3]);
-        case FRUSTUM_NEAR:      return _simd_cmpge_ps(v[2], this->driverType == DX ? _simd_setzero_ps() : _simd_mul_ps(v[3], _simd_set1_ps(-1.0f)));
+        case FRUSTUM_NEAR:      return _simd_cmpge_ps(v[2], this->state.rastState.clipHalfZ ? _simd_setzero_ps() : _simd_mul_ps(v[3], _simd_set1_ps(-1.0f)));
         case FRUSTUM_FAR:       return _simd_cmple_ps(v[2], v[3]);
         default:
             SWR_ASSERT(false, "invalid clipping plane: %d", ClippingPlane);
@@ -942,7 +941,6 @@ private:
     }
 
     const uint32_t workerId{ 0 };
-    const DRIVER_TYPE driverType{ DX };
     DRAW_CONTEXT* pDC{ nullptr };
     const API_STATE& state;
     simdscalar clipCodes[NumVertsPerPrim];

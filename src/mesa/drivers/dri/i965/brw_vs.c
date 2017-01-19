@@ -84,183 +84,18 @@ brw_vs_outputs_written(struct brw_context *brw, struct brw_vs_prog_key *key,
    return outputs_written;
 }
 
-bool
-brw_codegen_vs_prog(struct brw_context *brw,
-                    struct gl_shader_program *prog,
-                    struct brw_vertex_program *vp,
-                    struct brw_vs_prog_key *key)
-{
-   const struct brw_compiler *compiler = brw->screen->compiler;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   GLuint program_size;
-   const GLuint *program;
-   struct brw_vs_prog_data prog_data;
-   struct brw_stage_prog_data *stage_prog_data = &prog_data.base.base;
-   void *mem_ctx;
-   struct brw_shader *vs = NULL;
-   bool start_busy = false;
-   double start_time = 0;
-
-   if (prog)
-      vs = (struct brw_shader *) prog->_LinkedShaders[MESA_SHADER_VERTEX];
-
-   memset(&prog_data, 0, sizeof(prog_data));
-
-   /* Use ALT floating point mode for ARB programs so that 0^0 == 1. */
-   if (!prog)
-      stage_prog_data->use_alt_mode = true;
-
-   mem_ctx = ralloc_context(NULL);
-
-   brw_assign_common_binding_table_offsets(MESA_SHADER_VERTEX,
-                                           devinfo,
-                                           prog, &vp->program.Base,
-                                           &prog_data.base.base, 0);
-
-   /* Allocate the references to the uniforms that will end up in the
-    * prog_data associated with the compiled program, and which will be freed
-    * by the state cache.
-    */
-   int param_count = vp->program.Base.nir->num_uniforms / 4;
-
-   if (vs)
-      prog_data.base.base.nr_image_params = vs->base.NumImages;
-
-   /* vec4_visitor::setup_uniform_clipplane_values() also uploads user clip
-    * planes as uniforms.
-    */
-   param_count += key->nr_userclip_plane_consts * 4;
-
-   stage_prog_data->param =
-      rzalloc_array(NULL, const gl_constant_value *, param_count);
-   stage_prog_data->pull_param =
-      rzalloc_array(NULL, const gl_constant_value *, param_count);
-   stage_prog_data->image_param =
-      rzalloc_array(NULL, struct brw_image_param,
-                    stage_prog_data->nr_image_params);
-   stage_prog_data->nr_params = param_count;
-
-   if (prog) {
-      brw_nir_setup_glsl_uniforms(vp->program.Base.nir, prog, &vp->program.Base,
-                                  &prog_data.base.base,
-                                  compiler->scalar_stage[MESA_SHADER_VERTEX]);
-   } else {
-      brw_nir_setup_arb_uniforms(vp->program.Base.nir, &vp->program.Base,
-                                 &prog_data.base.base);
-   }
-
-   uint64_t outputs_written =
-      brw_vs_outputs_written(brw, key,
-                             vp->program.Base.nir->info.outputs_written);
-   prog_data.inputs_read = vp->program.Base.nir->info.inputs_read;
-
-   if (key->copy_edgeflag) {
-      prog_data.inputs_read |= VERT_BIT_EDGEFLAG;
-   }
-
-   prog_data.base.cull_distance_mask =
-      ((1 << vp->program.Base.CullDistanceArraySize) - 1) <<
-      vp->program.Base.ClipDistanceArraySize;
-
-   brw_compute_vue_map(devinfo,
-                       &prog_data.base.vue_map, outputs_written,
-                       prog ? prog->SeparateShader ||
-                              prog->_LinkedShaders[MESA_SHADER_TESS_EVAL]
-                            : false);
-
-   if (0) {
-      _mesa_fprint_program_opt(stderr, &vp->program.Base, PROG_PRINT_DEBUG,
-			       true);
-   }
-
-   if (unlikely(brw->perf_debug)) {
-      start_busy = (brw->batch.last_bo &&
-                    drm_intel_bo_busy(brw->batch.last_bo));
-      start_time = get_time();
-   }
-
-   if (unlikely(INTEL_DEBUG & DEBUG_VS)) {
-      brw_dump_ir("vertex", prog, vs ? &vs->base : NULL, &vp->program.Base);
-
-      fprintf(stderr, "VS Output ");
-      brw_print_vue_map(stderr, &prog_data.base.vue_map);
-   }
-
-   int st_index = -1;
-   if (INTEL_DEBUG & DEBUG_SHADER_TIME)
-      st_index = brw_get_shader_time_index(brw, prog, &vp->program.Base, ST_VS);
-
-   /* Emit GEN4 code.
-    */
-   char *error_str;
-   program = brw_compile_vs(compiler, brw, mem_ctx, key,
-                            &prog_data, vp->program.Base.nir,
-                            brw_select_clip_planes(&brw->ctx),
-                            !_mesa_is_gles3(&brw->ctx),
-                            st_index, &program_size, &error_str);
-   if (program == NULL) {
-      if (prog) {
-         prog->LinkStatus = false;
-         ralloc_strcat(&prog->InfoLog, error_str);
-      }
-
-      _mesa_problem(NULL, "Failed to compile vertex shader: %s\n", error_str);
-
-      ralloc_free(mem_ctx);
-      return false;
-   }
-
-   if (unlikely(brw->perf_debug) && vs) {
-      if (vs->compiled_once) {
-         brw_vs_debug_recompile(brw, prog, key);
-      }
-      if (start_busy && !drm_intel_bo_busy(brw->batch.last_bo)) {
-         perf_debug("VS compile took %.03f ms and stalled the GPU\n",
-                    (get_time() - start_time) * 1000);
-      }
-      vs->compiled_once = true;
-   }
-
-   /* Scratch space is used for register spilling */
-   brw_alloc_stage_scratch(brw, &brw->vs.base,
-                           prog_data.base.base.total_scratch,
-                           devinfo->max_vs_threads);
-
-   brw_upload_cache(&brw->cache, BRW_CACHE_VS_PROG,
-		    key, sizeof(struct brw_vs_prog_key),
-		    program, program_size,
-		    &prog_data, sizeof(prog_data),
-		    &brw->vs.base.prog_offset, &brw->vs.base.prog_data);
-   ralloc_free(mem_ctx);
-
-   return true;
-}
-
-void
-brw_vs_debug_recompile(struct brw_context *brw,
-                       struct gl_shader_program *prog,
+static void
+brw_vs_debug_recompile(struct brw_context *brw, struct gl_program *prog,
                        const struct brw_vs_prog_key *key)
 {
-   struct brw_cache_item *c = NULL;
-   const struct brw_vs_prog_key *old_key = NULL;
+   perf_debug("Recompiling vertex shader for program %d\n", prog->Id);
+
    bool found = false;
+   const struct brw_vs_prog_key *old_key =
+      brw_find_previous_compile(&brw->cache, BRW_CACHE_VS_PROG,
+                                key->program_string_id);
 
-   perf_debug("Recompiling vertex shader for program %d\n", prog->Name);
-
-   for (unsigned int i = 0; i < brw->cache.size; i++) {
-      for (c = brw->cache.items[i]; c; c = c->next) {
-         if (c->cache_id == BRW_CACHE_VS_PROG) {
-            old_key = c->key;
-
-            if (old_key->program_string_id == key->program_string_id)
-               break;
-         }
-      }
-      if (c)
-         break;
-   }
-
-   if (!c) {
+   if (!old_key) {
       perf_debug("  Didn't find previous compile in the shader cache for "
                  "debug\n");
       return;
@@ -291,6 +126,143 @@ brw_vs_debug_recompile(struct brw_context *brw,
 }
 
 static bool
+brw_codegen_vs_prog(struct brw_context *brw,
+                    struct brw_program *vp,
+                    struct brw_vs_prog_key *key)
+{
+   const struct brw_compiler *compiler = brw->screen->compiler;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   GLuint program_size;
+   const GLuint *program;
+   struct brw_vs_prog_data prog_data;
+   struct brw_stage_prog_data *stage_prog_data = &prog_data.base.base;
+   void *mem_ctx;
+   bool start_busy = false;
+   double start_time = 0;
+
+   memset(&prog_data, 0, sizeof(prog_data));
+
+   /* Use ALT floating point mode for ARB programs so that 0^0 == 1. */
+   if (vp->program.is_arb_asm)
+      stage_prog_data->use_alt_mode = true;
+
+   mem_ctx = ralloc_context(NULL);
+
+   brw_assign_common_binding_table_offsets(devinfo, &vp->program,
+                                           &prog_data.base.base, 0);
+
+   /* Allocate the references to the uniforms that will end up in the
+    * prog_data associated with the compiled program, and which will be freed
+    * by the state cache.
+    */
+   int param_count = vp->program.nir->num_uniforms / 4;
+
+   prog_data.base.base.nr_image_params = vp->program.info.num_images;
+
+   /* vec4_visitor::setup_uniform_clipplane_values() also uploads user clip
+    * planes as uniforms.
+    */
+   param_count += key->nr_userclip_plane_consts * 4;
+
+   stage_prog_data->param =
+      rzalloc_array(NULL, const gl_constant_value *, param_count);
+   stage_prog_data->pull_param =
+      rzalloc_array(NULL, const gl_constant_value *, param_count);
+   stage_prog_data->image_param =
+      rzalloc_array(NULL, struct brw_image_param,
+                    stage_prog_data->nr_image_params);
+   stage_prog_data->nr_params = param_count;
+
+   if (!vp->program.is_arb_asm) {
+      brw_nir_setup_glsl_uniforms(vp->program.nir, &vp->program,
+                                  &prog_data.base.base,
+                                  compiler->scalar_stage[MESA_SHADER_VERTEX]);
+   } else {
+      brw_nir_setup_arb_uniforms(vp->program.nir, &vp->program,
+                                 &prog_data.base.base);
+   }
+
+   uint64_t outputs_written =
+      brw_vs_outputs_written(brw, key, vp->program.info.outputs_written);
+   prog_data.inputs_read = vp->program.info.inputs_read;
+   prog_data.double_inputs_read = vp->program.info.double_inputs_read;
+
+   if (key->copy_edgeflag) {
+      prog_data.inputs_read |= VERT_BIT_EDGEFLAG;
+   }
+
+   brw_compute_vue_map(devinfo,
+                       &prog_data.base.vue_map, outputs_written,
+                       vp->program.nir->info->separate_shader);
+
+   if (0) {
+      _mesa_fprint_program_opt(stderr, &vp->program, PROG_PRINT_DEBUG, true);
+   }
+
+   if (unlikely(brw->perf_debug)) {
+      start_busy = (brw->batch.last_bo &&
+                    drm_intel_bo_busy(brw->batch.last_bo));
+      start_time = get_time();
+   }
+
+   if (unlikely(INTEL_DEBUG & DEBUG_VS)) {
+      if (vp->program.is_arb_asm)
+         brw_dump_arb_asm("vertex", &vp->program);
+   }
+
+   int st_index = -1;
+   if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
+      st_index = brw_get_shader_time_index(brw, &vp->program, ST_VS,
+                                           !vp->program.is_arb_asm);
+   }
+
+   /* Emit GEN4 code.
+    */
+   char *error_str;
+   program = brw_compile_vs(compiler, brw, mem_ctx, key, &prog_data,
+                            vp->program.nir,
+                            brw_select_clip_planes(&brw->ctx),
+                            !_mesa_is_gles3(&brw->ctx),
+                            st_index, &program_size, &error_str);
+   if (program == NULL) {
+      if (!vp->program.is_arb_asm) {
+         vp->program.sh.data->LinkStatus = false;
+         ralloc_strcat(&vp->program.sh.data->InfoLog, error_str);
+      }
+
+      _mesa_problem(NULL, "Failed to compile vertex shader: %s\n", error_str);
+
+      ralloc_free(mem_ctx);
+      return false;
+   }
+
+   if (unlikely(brw->perf_debug)) {
+      if (vp->compiled_once) {
+         brw_vs_debug_recompile(brw, &vp->program, key);
+      }
+      if (start_busy && !drm_intel_bo_busy(brw->batch.last_bo)) {
+         perf_debug("VS compile took %.03f ms and stalled the GPU\n",
+                    (get_time() - start_time) * 1000);
+      }
+      vp->compiled_once = true;
+   }
+
+   /* Scratch space is used for register spilling */
+   brw_alloc_stage_scratch(brw, &brw->vs.base,
+                           prog_data.base.base.total_scratch,
+                           devinfo->max_vs_threads);
+
+   brw_upload_cache(&brw->cache, BRW_CACHE_VS_PROG,
+		    key, sizeof(struct brw_vs_prog_key),
+		    program, program_size,
+		    &prog_data, sizeof(prog_data),
+		    &brw->vs.base.prog_offset, &brw->vs.base.prog_data);
+   ralloc_free(mem_ctx);
+
+   return true;
+}
+
+static bool
 brw_vs_state_dirty(const struct brw_context *brw)
 {
    return brw_state_dirty(brw,
@@ -310,8 +282,7 @@ brw_vs_populate_key(struct brw_context *brw,
 {
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_VERTEX_PROGRAM */
-   struct brw_vertex_program *vp =
-      (struct brw_vertex_program *)brw->vertex_program;
+   struct brw_program *vp = (struct brw_program *)brw->vertex_program;
    struct gl_program *prog = (struct gl_program *) brw->vertex_program;
 
    memset(key, 0, sizeof(*key));
@@ -322,9 +293,8 @@ brw_vs_populate_key(struct brw_context *brw,
    key->program_string_id = vp->id;
 
    if (ctx->Transform.ClipPlanesEnabled != 0 &&
-       (ctx->API == API_OPENGL_COMPAT ||
-        ctx->API == API_OPENGLES) &&
-       vp->program.Base.ClipDistanceArraySize == 0) {
+       (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGLES) &&
+       vp->program.ClipDistanceArraySize == 0) {
       key->nr_userclip_plane_consts =
          _mesa_logbase2(ctx->Transform.ClipPlanesEnabled) + 1;
    }
@@ -340,7 +310,7 @@ brw_vs_populate_key(struct brw_context *brw,
       }
    }
 
-   if (prog->nir->info.outputs_written &
+   if (prog->nir->info->outputs_written &
        (VARYING_BIT_COL0 | VARYING_BIT_COL1 | VARYING_BIT_BFC0 |
         VARYING_BIT_BFC1)) {
       /* _NEW_LIGHT | _NEW_BUFFERS */
@@ -360,12 +330,9 @@ brw_vs_populate_key(struct brw_context *brw,
 void
 brw_upload_vs_prog(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->ctx;
-   struct gl_shader_program **current = ctx->_Shader->CurrentProgram;
    struct brw_vs_prog_key key;
    /* BRW_NEW_VERTEX_PROGRAM */
-   struct brw_vertex_program *vp =
-      (struct brw_vertex_program *)brw->vertex_program;
+   struct brw_program *vp = (struct brw_program *)brw->vertex_program;
 
    if (!brw_vs_state_dirty(brw))
       return;
@@ -375,17 +342,14 @@ brw_upload_vs_prog(struct brw_context *brw)
    if (!brw_search_cache(&brw->cache, BRW_CACHE_VS_PROG,
 			 &key, sizeof(key),
 			 &brw->vs.base.prog_offset, &brw->vs.base.prog_data)) {
-      bool success = brw_codegen_vs_prog(brw, current[MESA_SHADER_VERTEX],
-                                         vp, &key);
+      bool success = brw_codegen_vs_prog(brw, vp, &key);
       (void) success;
       assert(success);
    }
 }
 
 bool
-brw_vs_precompile(struct gl_context *ctx,
-                  struct gl_shader_program *shader_prog,
-                  struct gl_program *prog)
+brw_vs_precompile(struct gl_context *ctx, struct gl_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_vs_prog_key key;
@@ -393,19 +357,18 @@ brw_vs_precompile(struct gl_context *ctx,
    struct brw_stage_prog_data *old_prog_data = brw->vs.base.prog_data;
    bool success;
 
-   struct gl_vertex_program *vp = (struct gl_vertex_program *) prog;
-   struct brw_vertex_program *bvp = brw_vertex_program(vp);
+   struct brw_program *bvp = brw_program(prog);
 
    memset(&key, 0, sizeof(key));
 
    brw_setup_tex_for_precompile(brw, &key.tex, prog);
    key.program_string_id = bvp->id;
    key.clamp_vertex_color =
-      (prog->nir->info.outputs_written &
+      (prog->nir->info->outputs_written &
        (VARYING_BIT_COL0 | VARYING_BIT_COL1 | VARYING_BIT_BFC0 |
         VARYING_BIT_BFC1));
 
-   success = brw_codegen_vs_prog(brw, shader_prog, bvp, &key);
+   success = brw_codegen_vs_prog(brw, bvp, &key);
 
    brw->vs.base.prog_offset = old_prog_offset;
    brw->vs.base.prog_data = old_prog_data;

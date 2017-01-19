@@ -42,6 +42,7 @@ void StoreHotTileClear(
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
     UINT x,
     UINT y,
+    uint32_t renderTargetArrayIndex,
     const float* pClearColor);
 
 INLINE void
@@ -77,13 +78,14 @@ swr_StoreHotTileClear(HANDLE hPrivateContext,
                       SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
                       UINT x,
                       UINT y,
+                      uint32_t renderTargetArrayIndex,
                       const float* pClearColor)
 {
    // Grab destination surface state from private context
    swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
    SWR_SURFACE_STATE *pDstSurface = &pDC->renderTargets[renderTargetIndex];
 
-   StoreHotTileClear(pDstSurface, renderTargetIndex, x, y, pClearColor);
+   StoreHotTileClear(pDstSurface, renderTargetIndex, x, y, renderTargetArrayIndex, pClearColor);
 }
 
 void InitSimLoadTilesTable();

@@ -676,11 +676,11 @@ dd_context_texture_subdata(struct pipe_context *_pipe,
  */
 
 static void
-dd_context_texture_barrier(struct pipe_context *_pipe)
+dd_context_texture_barrier(struct pipe_context *_pipe, unsigned flags)
 {
    struct pipe_context *pipe = dd_context(_pipe)->pipe;
 
-   pipe->texture_barrier(pipe);
+   pipe->texture_barrier(pipe, flags);
 }
 
 static void

@@ -34,7 +34,7 @@ extern "C" {
 
 struct ra_regs;
 struct nir_shader;
-struct brw_geometry_program;
+struct brw_program;
 union gl_constant_value;
 
 struct brw_compiler {
@@ -397,6 +397,8 @@ struct brw_wm_prog_data {
    bool computed_stencil;
 
    bool early_fragment_tests;
+   bool post_depth_coverage;
+   bool inner_coverage;
    bool dispatch_8;
    bool dispatch_16;
    bool dual_src_blend;
@@ -410,6 +412,9 @@ struct brw_wm_prog_data {
    bool has_side_effects;
    bool pulls_bary;
 
+   bool contains_flat_varying;
+   bool contains_noperspective_varying;
+
    /**
     * Mask of which interpolation modes are required by the fragment shader.
     * Used in hardware setup on gen6+.
@@ -421,6 +426,11 @@ struct brw_wm_prog_data {
     * needed for setting up 3DSTATE_SF/SBE.
     */
    uint32_t flat_inputs;
+
+   /* Mapping of VUE slots to interpolation modes.
+    * Used by the Gen4-5 clip/sf/wm stages.
+    */
+   unsigned char interp_mode[65]; /* BRW_VARYING_SLOT_COUNT */
 
    /**
     * Map from gl_varying_slot to the position within the FS setup data
@@ -575,6 +585,12 @@ void brw_compute_tess_vue_map(struct brw_vue_map *const vue_map,
                               const GLbitfield64 slots_valid,
                               const GLbitfield is_patch);
 
+/* brw_interpolation_map.c */
+void brw_setup_vue_interpolation(struct brw_vue_map *vue_map,
+                                 struct nir_shader *nir,
+                                 struct brw_wm_prog_data *prog_data,
+                                 const struct gen_device_info *devinfo);
+
 enum shader_dispatch_mode {
    DISPATCH_MODE_4X1_SINGLE = 0,
    DISPATCH_MODE_4X2_DUAL_INSTANCE = 1,
@@ -620,6 +636,7 @@ struct brw_vue_prog_data {
    GLuint urb_read_length;
    GLuint total_grf;
 
+   uint32_t clip_distance_mask;
    uint32_t cull_distance_mask;
 
    /* Used for calculating urb partitions.  In the VS, this is the size of the
@@ -635,6 +652,7 @@ struct brw_vs_prog_data {
    struct brw_vue_prog_data base;
 
    GLbitfield64 inputs_read;
+   GLbitfield64 double_inputs_read;
 
    unsigned nr_attributes;
    unsigned nr_attribute_slots;
@@ -699,11 +717,6 @@ struct brw_gs_prog_data
    int static_vertex_count;
 
    int invocations;
-
-   /**
-    * Gen6 transform feedback enabled flag.
-    */
-   bool gen6_xfb_enabled;
 
    /**
     * Gen6: Provoking vertex convention for odd-numbered triangles
@@ -796,9 +809,10 @@ const unsigned *
 brw_compile_tes(const struct brw_compiler *compiler, void *log_data,
                 void *mem_ctx,
                 const struct brw_tes_prog_key *key,
+                const struct brw_vue_map *input_vue_map,
                 struct brw_tes_prog_data *prog_data,
                 const struct nir_shader *shader,
-                struct gl_shader_program *shader_prog,
+                struct gl_program *prog,
                 int shader_time_index,
                 unsigned *final_assembly_size,
                 char **error_str);
@@ -814,7 +828,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
                const struct brw_gs_prog_key *key,
                struct brw_gs_prog_data *prog_data,
                const struct nir_shader *shader,
-               struct gl_shader_program *shader_prog,
+               struct gl_program *prog,
                int shader_time_index,
                unsigned *final_assembly_size,
                char **error_str);
@@ -834,7 +848,7 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
                int shader_time_index8,
                int shader_time_index16,
                bool allow_spilling,
-               bool use_rep_send,
+               bool use_rep_send, struct brw_vue_map *vue_map,
                unsigned *final_assembly_size,
                char **error_str);
 

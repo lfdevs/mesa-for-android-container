@@ -285,7 +285,7 @@ aa_transform_epilog(struct tgsi_transform_context *ctx)
                               TGSI_FILE_OUTPUT, aactx->colorOutput,
                               TGSI_WRITEMASK_W,
                               TGSI_FILE_TEMPORARY, aactx->colorTemp,
-                              TGSI_FILE_TEMPORARY, aactx->texTemp);
+                              TGSI_FILE_TEMPORARY, aactx->texTemp, false);
    }
 }
 

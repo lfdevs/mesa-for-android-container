@@ -288,7 +288,7 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
 
    if ((conf->SurfaceType & type) == 0) {
       /* The config can't be used to create a surface of this type */
-      _eglError(EGL_BAD_CONFIG, func);
+      _eglError(EGL_BAD_MATCH, func);
       return EGL_FALSE;
    }
 
@@ -525,14 +525,51 @@ _eglBindTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
 }
 
 EGLBoolean
-_eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
+_eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
                     EGLint buffer)
 {
-   /* TODO: do basic error checking and return success/fail.
+   /* Just do basic error checking and return success/fail.
     * Drivers must implement the real stuff.
     */
 
-  return EGL_TRUE;
+   EGLint texture_type = EGL_PBUFFER_BIT;
+
+   if (surf == EGL_NO_SURFACE)
+   {
+      _eglError(EGL_BAD_SURFACE, "eglReleaseTexImage");
+      return EGL_FALSE;
+   }
+
+   if (!surf->BoundToTexture)
+   {
+      /* Not an error, simply nothing to do */
+      return EGL_TRUE;
+   }
+
+   if (surf->TextureFormat == EGL_NO_TEXTURE)
+   {
+      _eglError(EGL_BAD_MATCH, "eglReleaseTexImage");
+      return EGL_FALSE;
+   }
+
+   if (buffer != EGL_BACK_BUFFER)
+   {
+      _eglError(EGL_BAD_PARAMETER, "eglReleaseTexImage");
+      return EGL_FALSE;
+   }
+
+   if (dpy->Extensions.NOK_texture_from_pixmap)
+      texture_type |= EGL_PIXMAP_BIT;
+
+   if (!(surf->Type & texture_type))
+   {
+      _eglError(EGL_BAD_SURFACE, "eglReleaseTexImage");
+      return EGL_FALSE;
+   }
+
+   surf->BoundToTexture = EGL_FALSE;
+
+   return EGL_TRUE;
 }
 
 

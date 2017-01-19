@@ -76,10 +76,9 @@ vec4_live_variables::setup_def_use()
 	 /* Set use[] for this instruction */
 	 for (unsigned int i = 0; i < 3; i++) {
 	    if (inst->src[i].file == VGRF) {
-               for (unsigned j = 0; j < regs_read(inst, i); j++) {
+               for (unsigned j = 0; j < DIV_ROUND_UP(inst->size_read(i), 16); j++) {
                   for (int c = 0; c < 4; c++) {
-                     const unsigned v =
-                        var_from_reg(alloc, offset(inst->src[i], j), c);
+                     const unsigned v = var_from_reg(alloc, inst->src[i], c, j);
                      if (!BITSET_TEST(bd->def, v))
                         BITSET_SET(bd->use, v);
                   }
@@ -99,11 +98,10 @@ vec4_live_variables::setup_def_use()
 	  */
 	 if (inst->dst.file == VGRF &&
 	     (!inst->predicate || inst->opcode == BRW_OPCODE_SEL)) {
-            for (unsigned i = 0; i < regs_written(inst); i++) {
+            for (unsigned i = 0; i < DIV_ROUND_UP(inst->size_written, 16); i++) {
                for (int c = 0; c < 4; c++) {
                   if (inst->dst.writemask & (1 << c)) {
-                     const unsigned v =
-                        var_from_reg(alloc, offset(inst->dst, i), c);
+                     const unsigned v = var_from_reg(alloc, inst->dst, c, i);
                      if (!BITSET_TEST(bd->use, v))
                         BITSET_SET(bd->def, v);
                   }
@@ -188,7 +186,7 @@ vec4_live_variables::vec4_live_variables(const simple_allocator &alloc,
 {
    mem_ctx = ralloc_context(NULL);
 
-   num_vars = alloc.total_size * 4;
+   num_vars = alloc.total_size * 8;
    block_data = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
 
    bitset_words = BITSET_WORDS(num_vars);
@@ -238,14 +236,14 @@ vec4_visitor::calculate_live_intervals()
    if (this->live_intervals)
       return;
 
-   int *start = ralloc_array(mem_ctx, int, this->alloc.total_size * 4);
-   int *end = ralloc_array(mem_ctx, int, this->alloc.total_size * 4);
+   int *start = ralloc_array(mem_ctx, int, this->alloc.total_size * 8);
+   int *end = ralloc_array(mem_ctx, int, this->alloc.total_size * 8);
    ralloc_free(this->virtual_grf_start);
    ralloc_free(this->virtual_grf_end);
    this->virtual_grf_start = start;
    this->virtual_grf_end = end;
 
-   for (unsigned i = 0; i < this->alloc.total_size * 4; i++) {
+   for (unsigned i = 0; i < this->alloc.total_size * 8; i++) {
       start[i] = MAX_INSTRUCTION;
       end[i] = -1;
    }
@@ -257,10 +255,9 @@ vec4_visitor::calculate_live_intervals()
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (unsigned int i = 0; i < 3; i++) {
 	 if (inst->src[i].file == VGRF) {
-            for (unsigned j = 0; j < regs_read(inst, i); j++) {
+            for (unsigned j = 0; j < DIV_ROUND_UP(inst->size_read(i), 16); j++) {
                for (int c = 0; c < 4; c++) {
-                  const unsigned v =
-                     var_from_reg(alloc, offset(inst->src[i], j), c);
+                  const unsigned v = var_from_reg(alloc, inst->src[i], c, j);
                   start[v] = MIN2(start[v], ip);
                   end[v] = ip;
                }
@@ -269,11 +266,10 @@ vec4_visitor::calculate_live_intervals()
       }
 
       if (inst->dst.file == VGRF) {
-         for (unsigned i = 0; i < regs_written(inst); i++) {
+         for (unsigned i = 0; i < DIV_ROUND_UP(inst->size_written, 16); i++) {
             for (int c = 0; c < 4; c++) {
                if (inst->dst.writemask & (1 << c)) {
-                  const unsigned v =
-                     var_from_reg(alloc, offset(inst->dst, i), c);
+                  const unsigned v = var_from_reg(alloc, inst->dst, c, i);
                   start[v] = MIN2(start[v], ip);
                   end[v] = ip;
                }
@@ -340,8 +336,8 @@ vec4_visitor::var_range_end(unsigned v, unsigned n) const
 bool
 vec4_visitor::virtual_grf_interferes(int a, int b)
 {
-   return !((var_range_end(4 * alloc.offsets[a], 4 * alloc.sizes[a]) <=
-             var_range_start(4 * alloc.offsets[b], 4 * alloc.sizes[b])) ||
-            (var_range_end(4 * alloc.offsets[b], 4 * alloc.sizes[b]) <=
-             var_range_start(4 * alloc.offsets[a], 4 * alloc.sizes[a])));
+   return !((var_range_end(8 * alloc.offsets[a], 8 * alloc.sizes[a]) <=
+             var_range_start(8 * alloc.offsets[b], 8 * alloc.sizes[b])) ||
+            (var_range_end(8 * alloc.offsets[b], 8 * alloc.sizes[b]) <=
+             var_range_start(8 * alloc.offsets[a], 8 * alloc.sizes[a])));
 }

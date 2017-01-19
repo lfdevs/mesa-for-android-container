@@ -72,7 +72,7 @@ libvdpau_gallium_la_LIBADD += \
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 
-if HAVE_MESA_LLVM
+if HAVE_GALLIUM_LLVM
 libvdpau_gallium_la_LIBADD += $(LLVM_LIBS)
 libvdpau_gallium_la_LDFLAGS += $(LLVM_LDFLAGS)
 endif

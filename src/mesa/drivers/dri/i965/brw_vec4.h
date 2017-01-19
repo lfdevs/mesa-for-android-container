@@ -79,6 +79,11 @@ public:
       return dst_reg(brw_null_reg());
    }
 
+   dst_reg dst_null_df()
+   {
+      return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_DF));
+   }
+
    dst_reg dst_null_d()
    {
       return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
@@ -113,10 +118,9 @@ public:
    /* Regs for vertex results.  Generated at ir_variable visiting time
     * for the ir->location's used.
     */
-   dst_reg output_reg[BRW_VARYING_SLOT_COUNT];
-   dst_reg output_generic_reg[MAX_VARYINGS_INCL_PATCH][4];
-   unsigned output_generic_num_components[MAX_VARYINGS_INCL_PATCH][4];
-   const char *output_reg_annotation[BRW_VARYING_SLOT_COUNT];
+   dst_reg output_reg[VARYING_SLOT_TESS_MAX][4];
+   unsigned output_num_components[VARYING_SLOT_TESS_MAX][4];
+   const char *output_reg_annotation[VARYING_SLOT_TESS_MAX];
    int uniforms;
 
    src_reg shader_start_time;
@@ -156,6 +160,13 @@ public:
    void opt_set_dependency_control();
    void opt_schedule_instructions();
    void convert_to_hw_regs();
+
+   bool is_supported_64bit_region(vec4_instruction *inst, unsigned arg);
+   bool lower_simd_width();
+   bool scalarize_df();
+   bool lower_64bit_mad_to_mul_add();
+   void apply_logical_swizzle(struct brw_reg *hw_reg,
+                              vec4_instruction *inst, int arg);
 
    vec4_instruction *emit(vec4_instruction *inst);
 
@@ -255,7 +266,7 @@ public:
                      const glsl_type *dest_type,
                      src_reg coordinate,
                      int coord_components,
-                     src_reg shadow_comparitor,
+                     src_reg shadow_comparator,
                      src_reg lod, src_reg lod2,
                      src_reg sample_index,
                      uint32_t constant_offset,
@@ -270,8 +281,7 @@ public:
 
    void emit_ndc_computation();
    void emit_psiz_and_flags(dst_reg reg);
-   vec4_instruction *emit_generic_urb_slot(dst_reg reg, int varying);
-   void emit_generic_urb_slot(dst_reg reg, int varying, int component);
+   vec4_instruction *emit_generic_urb_slot(dst_reg reg, int varying, int comp);
    virtual void emit_urb_slot(dst_reg reg, int varying);
 
    void emit_shader_time_begin();
@@ -311,6 +321,18 @@ public:
    bool is_high_sampler(src_reg sampler);
 
    bool optimize_predicate(nir_alu_instr *instr, enum brw_predicate *predicate);
+
+   void emit_conversion_from_double(dst_reg dst, src_reg src, bool saturate,
+                                    brw_reg_type single_type);
+   void emit_conversion_to_double(dst_reg dst, src_reg src, bool saturate,
+                                  brw_reg_type single_type);
+
+   src_reg setup_imm_df(double v);
+
+   vec4_instruction *shuffle_64bit_data(dst_reg dst, src_reg src,
+                                        bool for_write,
+                                        bblock_t *block = NULL,
+                                        vec4_instruction *ref = NULL);
 
    virtual void emit_nir_code();
    virtual void nir_setup_uniforms();

@@ -72,7 +72,7 @@ bool rvid_create_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer,
 	 * non-sub-allocated buffer.
 	 */
 	buffer->res = (struct r600_resource *)
-		pipe_buffer_create(screen, PIPE_BIND_CUSTOM | PIPE_BIND_SHARED,
+		pipe_buffer_create(screen, PIPE_BIND_SHARED,
 				   usage, size);
 
 	return buffer->res != NULL;
@@ -129,8 +129,8 @@ void rvid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffer)
 {
 	struct r600_common_context *rctx = (struct r600_common_context*)context;
 
-	rctx->clear_buffer(context, &buffer->res->b.b, 0, buffer->res->buf->size,
-			   0, R600_COHERENCY_NONE);
+	rctx->dma_clear_buffer(context, &buffer->res->b.b, 0,
+			       buffer->res->buf->size, 0);
 	context->flush(context, NULL, 0);
 }
 
@@ -172,10 +172,10 @@ void rvid_join_surfaces(struct radeon_winsys* ws,
 		surfaces[i]->tile_split = surfaces[best_tiling]->tile_split;
 
 		/* adjust the texture layer offsets */
-		off = align(off, surfaces[i]->bo_alignment);
+		off = align(off, surfaces[i]->surf_alignment);
 		for (j = 0; j < ARRAY_SIZE(surfaces[i]->level); ++j)
 			surfaces[i]->level[j].offset += off;
-		off += surfaces[i]->bo_size;
+		off += surfaces[i]->surf_size;
 	}
 
 	for (i = 0, size = 0, alignment = 0; i < VL_NUM_COMPONENTS; ++i) {

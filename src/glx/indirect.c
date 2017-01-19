@@ -542,8 +542,8 @@ __indirect_glBitmap(GLsizei width, GLsizei height, GLfloat xorig,
             (void) memcpy((void *) (gc->pc + 40), (void *) (&xmove), 4);
             (void) memcpy((void *) (gc->pc + 44), (void *) (&ymove), 4);
             if (compsize > 0) {
-                (*gc->fillImage) (gc, 2, width, height, 1, GL_COLOR_INDEX,
-                                  GL_BITMAP, bitmap, gc->pc + 48, gc->pc + 4);
+                gc->fillImage(gc, 2, width, height, 1, GL_COLOR_INDEX,
+                              GL_BITMAP, bitmap, gc->pc + 48, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_2D,
                               default_pixel_store_2D_size);
@@ -2685,8 +2685,8 @@ __indirect_glPolygonStipple(const GLubyte *mask)
     }
     emit_header(gc->pc, X_GLrop_PolygonStipple, cmdlen);
     if (compsize > 0) {
-        (*gc->fillImage) (gc, 2, 32, 32, 1, GL_COLOR_INDEX, GL_BITMAP, mask,
-                          gc->pc + 24, gc->pc + 4);
+        gc->fillImage(gc, 2, 32, 32, 1, GL_COLOR_INDEX, GL_BITMAP, mask,
+                      gc->pc + 24, gc->pc + 4);
     } else {
         (void) memcpy(gc->pc + 4, default_pixel_store_2D,
                       default_pixel_store_2D_size);
@@ -2835,8 +2835,8 @@ __glx_TexImage_1D2D(unsigned opcode, unsigned dim, GLenum target, GLint level,
             (void) memcpy((void *) (gc->pc + 48), (void *) (&format), 4);
             (void) memcpy((void *) (gc->pc + 52), (void *) (&type), 4);
             if ((compsize > 0) && (pixels != NULL)) {
-                (*gc->fillImage) (gc, dim, width, height, 1, format, type,
-                                  pixels, gc->pc + 56, gc->pc + 4);
+                gc->fillImage(gc, dim, width, height, 1, format, type, pixels,
+                              gc->pc + 56, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_2D,
                               default_pixel_store_2D_size);
@@ -3936,8 +3936,8 @@ __indirect_glDrawPixels(GLsizei width, GLsizei height, GLenum format,
             (void) memcpy((void *) (gc->pc + 32), (void *) (&format), 4);
             (void) memcpy((void *) (gc->pc + 36), (void *) (&type), 4);
             if (compsize > 0) {
-                (*gc->fillImage) (gc, 2, width, height, 1, format, type,
-                                  pixels, gc->pc + 40, gc->pc + 4);
+                gc->fillImage(gc, 2, width, height, 1, format, type, pixels,
+                              gc->pc + 40, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_2D,
                               default_pixel_store_2D_size);
@@ -5611,8 +5611,8 @@ __glx_TexSubImage_1D2D(unsigned opcode, unsigned dim, GLenum target,
             (void) memcpy((void *) (gc->pc + 52), (void *) (&type), 4);
             (void) memset((void *) (gc->pc + 56), 0, 4);
             if (compsize > 0) {
-                (*gc->fillImage) (gc, dim, width, height, 1, format, type,
-                                  pixels, gc->pc + 60, gc->pc + 4);
+                gc->fillImage(gc, dim, width, height, 1, format, type, pixels,
+                              gc->pc + 60, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_2D,
                               default_pixel_store_2D_size);
@@ -5721,8 +5721,8 @@ __indirect_glColorTable(GLenum target, GLenum internalformat, GLsizei width,
             (void) memcpy((void *) (gc->pc + 36), (void *) (&format), 4);
             (void) memcpy((void *) (gc->pc + 40), (void *) (&type), 4);
             if (compsize > 0) {
-                (*gc->fillImage) (gc, 1, width, 1, 1, format, type, table,
-                                  gc->pc + 44, gc->pc + 4);
+                gc->fillImage(gc, 1, width, 1, 1, format, type, table,
+                              gc->pc + 44, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_1D,
                               default_pixel_store_1D_size);
@@ -6077,8 +6077,8 @@ __indirect_glColorSubTable(GLenum target, GLsizei start, GLsizei count,
             (void) memcpy((void *) (gc->pc + 36), (void *) (&format), 4);
             (void) memcpy((void *) (gc->pc + 40), (void *) (&type), 4);
             if (compsize > 0) {
-                (*gc->fillImage) (gc, 1, count, 1, 1, format, type, data,
-                                  gc->pc + 44, gc->pc + 4);
+                gc->fillImage(gc, 1, count, 1, 1, format, type, data,
+                              gc->pc + 44, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_1D,
                               default_pixel_store_1D_size);
@@ -6152,8 +6152,8 @@ __glx_ConvolutionFilter_1D2D(unsigned opcode, unsigned dim, GLenum target,
             (void) memcpy((void *) (gc->pc + 40), (void *) (&format), 4);
             (void) memcpy((void *) (gc->pc + 44), (void *) (&type), 4);
             if (compsize > 0) {
-                (*gc->fillImage) (gc, dim, width, height, 1, format, type,
-                                  image, gc->pc + 48, gc->pc + 4);
+                gc->fillImage(gc, dim, width, height, 1, format, type, image,
+                              gc->pc + 48, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_2D,
                               default_pixel_store_2D_size);
@@ -7123,8 +7123,8 @@ __glx_TexImage_3D4D(unsigned opcode, unsigned dim, GLenum target, GLint level,
             (void) memcpy((void *) (gc->pc + 80),
                           (void *) ((pixels == NULL) ? one : zero), 4);
             if (compsize > 0) {
-                (*gc->fillImage) (gc, dim, width, height, depth, format, type,
-                                  pixels, gc->pc + 84, gc->pc + 4);
+                gc->fillImage(gc, dim, width, height, depth, format, type,
+                              pixels, gc->pc + 84, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_4D,
                               default_pixel_store_4D_size);
@@ -7204,8 +7204,8 @@ __glx_TexSubImage_3D4D(unsigned opcode, unsigned dim, GLenum target,
             (void) memcpy((void *) (gc->pc + 84), (void *) (&type), 4);
             (void) memset((void *) (gc->pc + 88), 0, 4);
             if (compsize > 0) {
-                (*gc->fillImage) (gc, dim, width, height, depth, format, type,
-                                  pixels, gc->pc + 92, gc->pc + 4);
+                gc->fillImage(gc, dim, width, height, depth, format, type,
+                              pixels, gc->pc + 92, gc->pc + 4);
             } else {
                 (void) memcpy(gc->pc + 4, default_pixel_store_4D,
                               default_pixel_store_4D_size);

@@ -246,7 +246,7 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
    priv->quant.nQpB = OMX_VID_ENC_QUANT_B_FRAMES_DEFAULT;
 
    priv->profile_level.eProfile = OMX_VIDEO_AVCProfileBaseline;
-   priv->profile_level.eLevel = OMX_VIDEO_AVCLevel42;
+   priv->profile_level.eLevel = OMX_VIDEO_AVCLevel51;
 
    priv->force_pic_type.IntraRefreshVOP = OMX_FALSE;
    priv->frame_num = 0;

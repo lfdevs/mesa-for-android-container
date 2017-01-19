@@ -42,9 +42,9 @@ namespace {
                                          DIV_ROUND_UP(size * dst_stride, 4));
 
             for (unsigned i = 0; i < size; ++i)
-               bld.MOV(writemask(offset(dst, i * dst_stride / 4),
+               bld.MOV(writemask(offset(dst, 8, i * dst_stride / 4),
                                  1 << (i * dst_stride % 4)),
-                       swizzle(offset(src, i * src_stride / 4),
+                       swizzle(offset(src, 8, i * src_stride / 4),
                                brw_swizzle_for_mask(1 << (i * src_stride % 4))));
 
             return src_reg(dst);
@@ -124,16 +124,16 @@ namespace brw {
             unsigned n = 0;
 
             if (header_sz)
-               bld.exec_all().MOV(offset(payload, n++),
+               bld.exec_all().MOV(offset(payload, 8, n++),
                                   retype(header, BRW_REGISTER_TYPE_UD));
 
             for (unsigned i = 0; i < addr_sz; i++)
-               bld.MOV(offset(payload, n++),
-                       offset(retype(addr, BRW_REGISTER_TYPE_UD), i));
+               bld.MOV(offset(payload, 8, n++),
+                       offset(retype(addr, BRW_REGISTER_TYPE_UD), 8, i));
 
             for (unsigned i = 0; i < src_sz; i++)
-               bld.MOV(offset(payload, n++),
-                       offset(retype(src, BRW_REGISTER_TYPE_UD), i));
+               bld.MOV(offset(payload, 8, n++),
+                       offset(retype(src, BRW_REGISTER_TYPE_UD), 8, i));
 
             /* Reduce the dynamically uniform surface index to a single
              * scalar.

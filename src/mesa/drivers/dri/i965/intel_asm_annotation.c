@@ -45,7 +45,7 @@ dump_assembly(void *assembly, int num_annotations, struct annotation *annotation
             struct bblock_t *predecessor_block = predecessor_link->block;
             fprintf(stderr, " <-B%d", predecessor_block->num);
          }
-         fprintf(stderr, "\n");
+         fprintf(stderr, " (%u cycles)\n", annotation[i].block_start->cycle_count);
       }
 
       if (last_annotation_ir != annotation[i].ir) {

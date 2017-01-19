@@ -33,8 +33,11 @@
 
 #ifndef NOMINMAX
 #define NOMINMAX
-#endif
 #include <windows.h>
+#undef NOMINMAX
+#else
+#include <windows.h>
+#endif
 #include <intrin.h>
 #include <cstdint>
 

@@ -323,6 +323,7 @@ qpu_waddr_ignores_ws(uint32_t waddr)
         case QPU_W_ACC1:
         case QPU_W_ACC2:
         case QPU_W_ACC3:
+        case QPU_W_NOP:
         case QPU_W_TLB_Z:
         case QPU_W_TLB_COLOR_MS:
         case QPU_W_TLB_COLOR_ALL:

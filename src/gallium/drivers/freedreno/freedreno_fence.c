@@ -26,6 +26,8 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#include <libsync.h>
+
 #include "util/u_inlines.h"
 
 #include "freedreno_fence.h"
@@ -36,36 +38,70 @@ struct pipe_fence_handle {
 	struct pipe_reference reference;
 	struct fd_context *ctx;
 	struct fd_screen *screen;
+	int fence_fd;
 	uint32_t timestamp;
 };
 
-void
-fd_screen_fence_ref(struct pipe_screen *pscreen,
+static void fd_fence_destroy(struct pipe_fence_handle *fence)
+{
+	if (fence->fence_fd != -1)
+		close(fence->fence_fd);
+	FREE(fence);
+}
+
+void fd_fence_ref(struct pipe_screen *pscreen,
 		struct pipe_fence_handle **ptr,
 		struct pipe_fence_handle *pfence)
 {
 	if (pipe_reference(&(*ptr)->reference, &pfence->reference))
-		FREE(*ptr);
+		fd_fence_destroy(*ptr);
 
 	*ptr = pfence;
 }
 
-boolean fd_screen_fence_finish(struct pipe_screen *screen,
+boolean fd_fence_finish(struct pipe_screen *pscreen,
 		struct pipe_context *ctx,
 		struct pipe_fence_handle *fence,
 		uint64_t timeout)
 {
+	if (fence->fence_fd != -1) {
+		int ret = sync_wait(fence->fence_fd, timeout / 1000000);
+		return ret == 0;
+	}
+
 	if (fd_pipe_wait_timeout(fence->screen->pipe, fence->timestamp, timeout))
 		return false;
 
 	return true;
 }
 
-struct pipe_fence_handle * fd_fence_create(struct pipe_context *pctx,
-		uint32_t timestamp)
+void fd_create_fence_fd(struct pipe_context *pctx,
+		struct pipe_fence_handle **pfence, int fd)
+{
+	*pfence = fd_fence_create(fd_context(pctx), 0, dup(fd));
+}
+
+void fd_fence_server_sync(struct pipe_context *pctx,
+		struct pipe_fence_handle *fence)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd_batch *batch = ctx->batch;
+
+	if (sync_accumulate("freedreno", &batch->in_fence_fd, fence->fence_fd)) {
+		/* error */
+	}
+}
+
+int fd_fence_get_fd(struct pipe_screen *pscreen,
+		struct pipe_fence_handle *fence)
+{
+	return dup(fence->fence_fd);
+}
+
+struct pipe_fence_handle * fd_fence_create(struct fd_context *ctx,
+		uint32_t timestamp, int fence_fd)
 {
 	struct pipe_fence_handle *fence;
-	struct fd_context *ctx = fd_context(pctx);
 
 	fence = CALLOC_STRUCT(pipe_fence_handle);
 	if (!fence)
@@ -76,6 +112,7 @@ struct pipe_fence_handle * fd_fence_create(struct pipe_context *pctx,
 	fence->ctx = ctx;
 	fence->screen = ctx->screen;
 	fence->timestamp = timestamp;
+	fence->fence_fd = fence_fd;
 
 	return fence;
 }

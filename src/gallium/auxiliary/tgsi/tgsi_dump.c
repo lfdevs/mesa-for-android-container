@@ -360,6 +360,19 @@ iter_declaration(
          UID( decl->Semantic.Index );
          CHR( ']' );
       }
+
+      if (decl->Semantic.StreamX != 0 || decl->Semantic.StreamY != 0 ||
+          decl->Semantic.StreamZ != 0 || decl->Semantic.StreamW != 0) {
+         TXT(", STREAM(");
+         UID(decl->Semantic.StreamX);
+         TXT(", ");
+         UID(decl->Semantic.StreamY);
+         TXT(", ");
+         UID(decl->Semantic.StreamZ);
+         TXT(", ");
+         UID(decl->Semantic.StreamW);
+         CHR(')');
+      }
    }
 
    if (decl->Declaration.File == TGSI_FILE_IMAGE) {

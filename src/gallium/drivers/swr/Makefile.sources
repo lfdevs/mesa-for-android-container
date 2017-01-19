@@ -42,6 +42,8 @@ CXX_SOURCES := \
 	swr_memory.h \
 	swr_fence.h \
 	swr_fence.cpp \
+	swr_fence_work.h \
+	swr_fence_work.cpp \
 	swr_query.h \
 	swr_query.cpp
 

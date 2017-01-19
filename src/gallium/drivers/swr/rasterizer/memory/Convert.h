@@ -724,6 +724,7 @@ INLINE static void ConvertPixelFromFloat(
     case R8G8B8_SINT: ConvertPixelFromFloat<R8G8B8_SINT>(pDst, srcPixel); break;
     case RAW: ConvertPixelFromFloat<RAW>(pDst, srcPixel); break;
     default:
+        SWR_ASSERT(0);
         break;
     }
 }

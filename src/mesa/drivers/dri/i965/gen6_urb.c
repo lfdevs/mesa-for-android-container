@@ -64,17 +64,18 @@ gen6_upload_urb(struct brw_context *brw, unsigned vs_size,
    }
 
    /* Then clamp to the maximum allowed by the hardware */
-   if (nr_vs_entries > devinfo->urb.max_vs_entries)
-      nr_vs_entries = devinfo->urb.max_vs_entries;
+   if (nr_vs_entries > devinfo->urb.max_entries[MESA_SHADER_VERTEX])
+      nr_vs_entries = devinfo->urb.max_entries[MESA_SHADER_VERTEX];
 
-   if (nr_gs_entries > devinfo->urb.max_gs_entries)
-      nr_gs_entries = devinfo->urb.max_gs_entries;
+   if (nr_gs_entries > devinfo->urb.max_entries[MESA_SHADER_GEOMETRY])
+      nr_gs_entries = devinfo->urb.max_entries[MESA_SHADER_GEOMETRY];
 
    /* Finally, both must be a multiple of 4 (see 3DSTATE_URB in the PRM). */
    brw->urb.nr_vs_entries = ROUND_DOWN_TO(nr_vs_entries, 4);
    brw->urb.nr_gs_entries = ROUND_DOWN_TO(nr_gs_entries, 4);
 
-   assert(brw->urb.nr_vs_entries >= devinfo->urb.min_vs_entries);
+   assert(brw->urb.nr_vs_entries >=
+          devinfo->urb.min_entries[MESA_SHADER_VERTEX]);
    assert(brw->urb.nr_vs_entries % 4 == 0);
    assert(brw->urb.nr_gs_entries % 4 == 0);
    assert(vs_size <= 5);

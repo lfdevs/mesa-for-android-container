@@ -38,7 +38,7 @@ get_storage(struct gl_shader_program *prog, const char *name)
 {
    unsigned id;
    if (prog->UniformHash->get(id, name))
-      return &prog->UniformStorage[id];
+      return &prog->data->UniformStorage[id];
 
    assert(!"No uniform storage found!");
    return NULL;
@@ -134,16 +134,18 @@ set_opaque_binding(void *mem_ctx, gl_shader_program *prog,
                 storage->opaque[sh].active) {
                for (unsigned i = 0; i < elements; i++) {
                   const unsigned index = storage->opaque[sh].index + i;
-                  shader->SamplerUnits[index] = storage->storage[i].i;
+                  shader->Program->SamplerUnits[index] =
+                     storage->storage[i].i;
                }
 
             } else if (storage->type->base_type == GLSL_TYPE_IMAGE &&
                     storage->opaque[sh].active) {
                for (unsigned i = 0; i < elements; i++) {
                   const unsigned index = storage->opaque[sh].index + i;
-                  if (index >= ARRAY_SIZE(shader->ImageUnits))
+                  if (index >= ARRAY_SIZE(shader->Program->sh.ImageUnits))
                      break;
-                  shader->ImageUnits[index] = storage->storage[i].i;
+                  shader->Program->sh.ImageUnits[index] =
+                     storage->storage[i].i;
                }
             }
          }
@@ -155,10 +157,11 @@ void
 set_block_binding(gl_shader_program *prog, const char *block_name,
                   unsigned mode, int binding)
 {
-   unsigned num_blocks = mode == ir_var_uniform ? prog->NumUniformBlocks :
-      prog->NumShaderStorageBlocks;
+   unsigned num_blocks = mode == ir_var_uniform ?
+      prog->data->NumUniformBlocks :
+      prog->data->NumShaderStorageBlocks;
    struct gl_uniform_block *blks = mode == ir_var_uniform ?
-      prog->UniformBlocks : prog->ShaderStorageBlocks;
+      prog->data->UniformBlocks : prog->data->ShaderStorageBlocks;
 
    for (unsigned i = 0; i < num_blocks; i++) {
       if (!strcmp(blks[i].Name, block_name)) {
@@ -240,7 +243,7 @@ set_uniform_initializer(void *mem_ctx, gl_shader_program *prog,
             if (shader && storage->opaque[sh].active) {
                unsigned index = storage->opaque[sh].index;
 
-               shader->SamplerUnits[index] = storage->storage[0].i;
+               shader->Program->SamplerUnits[index] = storage->storage[0].i;
             }
          }
       }

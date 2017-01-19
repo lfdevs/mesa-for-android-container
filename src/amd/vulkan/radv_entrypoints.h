@@ -2,25 +2,25 @@
 
 struct radv_dispatch_table {
    union {
-      void *entrypoints[169];
+      void *entrypoints[187];
       struct {
          PFN_vkCreateInstance CreateInstance;
          PFN_vkDestroyInstance DestroyInstance;
          PFN_vkEnumeratePhysicalDevices EnumeratePhysicalDevices;
-         PFN_vkGetPhysicalDeviceFeatures GetPhysicalDeviceFeatures;
-         PFN_vkGetPhysicalDeviceFormatProperties GetPhysicalDeviceFormatProperties;
-         PFN_vkGetPhysicalDeviceImageFormatProperties GetPhysicalDeviceImageFormatProperties;
+         PFN_vkGetDeviceProcAddr GetDeviceProcAddr;
+         PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
          PFN_vkGetPhysicalDeviceProperties GetPhysicalDeviceProperties;
          PFN_vkGetPhysicalDeviceQueueFamilyProperties GetPhysicalDeviceQueueFamilyProperties;
          PFN_vkGetPhysicalDeviceMemoryProperties GetPhysicalDeviceMemoryProperties;
-         PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
-         PFN_vkGetDeviceProcAddr GetDeviceProcAddr;
+         PFN_vkGetPhysicalDeviceFeatures GetPhysicalDeviceFeatures;
+         PFN_vkGetPhysicalDeviceFormatProperties GetPhysicalDeviceFormatProperties;
+         PFN_vkGetPhysicalDeviceImageFormatProperties GetPhysicalDeviceImageFormatProperties;
          PFN_vkCreateDevice CreateDevice;
          PFN_vkDestroyDevice DestroyDevice;
-         PFN_vkEnumerateInstanceExtensionProperties EnumerateInstanceExtensionProperties;
-         PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties;
          PFN_vkEnumerateInstanceLayerProperties EnumerateInstanceLayerProperties;
+         PFN_vkEnumerateInstanceExtensionProperties EnumerateInstanceExtensionProperties;
          PFN_vkEnumerateDeviceLayerProperties EnumerateDeviceLayerProperties;
+         PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties;
          PFN_vkGetDeviceQueue GetDeviceQueue;
          PFN_vkQueueSubmit QueueSubmit;
          PFN_vkQueueWaitIdle QueueWaitIdle;
@@ -32,10 +32,10 @@ struct radv_dispatch_table {
          PFN_vkFlushMappedMemoryRanges FlushMappedMemoryRanges;
          PFN_vkInvalidateMappedMemoryRanges InvalidateMappedMemoryRanges;
          PFN_vkGetDeviceMemoryCommitment GetDeviceMemoryCommitment;
-         PFN_vkBindBufferMemory BindBufferMemory;
-         PFN_vkBindImageMemory BindImageMemory;
          PFN_vkGetBufferMemoryRequirements GetBufferMemoryRequirements;
+         PFN_vkBindBufferMemory BindBufferMemory;
          PFN_vkGetImageMemoryRequirements GetImageMemoryRequirements;
+         PFN_vkBindImageMemory BindImageMemory;
          PFN_vkGetImageSparseMemoryRequirements GetImageSparseMemoryRequirements;
          PFN_vkGetPhysicalDeviceSparseImageFormatProperties GetPhysicalDeviceSparseImageFormatProperties;
          PFN_vkQueueBindSparse QueueBindSparse;
@@ -141,6 +141,29 @@ struct radv_dispatch_table {
          PFN_vkCmdNextSubpass CmdNextSubpass;
          PFN_vkCmdEndRenderPass CmdEndRenderPass;
          PFN_vkCmdExecuteCommands CmdExecuteCommands;
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+         PFN_vkCreateAndroidSurfaceKHR CreateAndroidSurfaceKHR;
+#else
+         void *CreateAndroidSurfaceKHR;
+#endif
+         PFN_vkGetPhysicalDeviceDisplayPropertiesKHR GetPhysicalDeviceDisplayPropertiesKHR;
+         PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR GetPhysicalDeviceDisplayPlanePropertiesKHR;
+         PFN_vkGetDisplayPlaneSupportedDisplaysKHR GetDisplayPlaneSupportedDisplaysKHR;
+         PFN_vkGetDisplayModePropertiesKHR GetDisplayModePropertiesKHR;
+         PFN_vkCreateDisplayModeKHR CreateDisplayModeKHR;
+         PFN_vkGetDisplayPlaneCapabilitiesKHR GetDisplayPlaneCapabilitiesKHR;
+         PFN_vkCreateDisplayPlaneSurfaceKHR CreateDisplayPlaneSurfaceKHR;
+         PFN_vkCreateSharedSwapchainsKHR CreateSharedSwapchainsKHR;
+#ifdef VK_USE_PLATFORM_MIR_KHR
+         PFN_vkCreateMirSurfaceKHR CreateMirSurfaceKHR;
+#else
+         void *CreateMirSurfaceKHR;
+#endif
+#ifdef VK_USE_PLATFORM_MIR_KHR
+         PFN_vkGetPhysicalDeviceMirPresentationSupportKHR GetPhysicalDeviceMirPresentationSupportKHR;
+#else
+         void *GetPhysicalDeviceMirPresentationSupportKHR;
+#endif
          PFN_vkDestroySurfaceKHR DestroySurfaceKHR;
          PFN_vkGetPhysicalDeviceSurfaceSupportKHR GetPhysicalDeviceSurfaceSupportKHR;
          PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR GetPhysicalDeviceSurfaceCapabilitiesKHR;
@@ -151,14 +174,26 @@ struct radv_dispatch_table {
          PFN_vkGetSwapchainImagesKHR GetSwapchainImagesKHR;
          PFN_vkAcquireNextImageKHR AcquireNextImageKHR;
          PFN_vkQueuePresentKHR QueuePresentKHR;
-         PFN_vkGetPhysicalDeviceDisplayPropertiesKHR GetPhysicalDeviceDisplayPropertiesKHR;
-         PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR GetPhysicalDeviceDisplayPlanePropertiesKHR;
-         PFN_vkGetDisplayPlaneSupportedDisplaysKHR GetDisplayPlaneSupportedDisplaysKHR;
-         PFN_vkGetDisplayModePropertiesKHR GetDisplayModePropertiesKHR;
-         PFN_vkCreateDisplayModeKHR CreateDisplayModeKHR;
-         PFN_vkGetDisplayPlaneCapabilitiesKHR GetDisplayPlaneCapabilitiesKHR;
-         PFN_vkCreateDisplayPlaneSurfaceKHR CreateDisplayPlaneSurfaceKHR;
-         PFN_vkCreateSharedSwapchainsKHR CreateSharedSwapchainsKHR;
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+         PFN_vkCreateWaylandSurfaceKHR CreateWaylandSurfaceKHR;
+#else
+         void *CreateWaylandSurfaceKHR;
+#endif
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+         PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR GetPhysicalDeviceWaylandPresentationSupportKHR;
+#else
+         void *GetPhysicalDeviceWaylandPresentationSupportKHR;
+#endif
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+         PFN_vkCreateWin32SurfaceKHR CreateWin32SurfaceKHR;
+#else
+         void *CreateWin32SurfaceKHR;
+#endif
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+         PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR GetPhysicalDeviceWin32PresentationSupportKHR;
+#else
+         void *GetPhysicalDeviceWin32PresentationSupportKHR;
+#endif
 #ifdef VK_USE_PLATFORM_XLIB_KHR
          PFN_vkCreateXlibSurfaceKHR CreateXlibSurfaceKHR;
 #else
@@ -179,44 +214,31 @@ struct radv_dispatch_table {
 #else
          void *GetPhysicalDeviceXcbPresentationSupportKHR;
 #endif
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-         PFN_vkCreateWaylandSurfaceKHR CreateWaylandSurfaceKHR;
-#else
-         void *CreateWaylandSurfaceKHR;
-#endif
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-         PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR GetPhysicalDeviceWaylandPresentationSupportKHR;
-#else
-         void *GetPhysicalDeviceWaylandPresentationSupportKHR;
-#endif
-#ifdef VK_USE_PLATFORM_MIR_KHR
-         PFN_vkCreateMirSurfaceKHR CreateMirSurfaceKHR;
-#else
-         void *CreateMirSurfaceKHR;
-#endif
-#ifdef VK_USE_PLATFORM_MIR_KHR
-         PFN_vkGetPhysicalDeviceMirPresentationSupportKHR GetPhysicalDeviceMirPresentationSupportKHR;
-#else
-         void *GetPhysicalDeviceMirPresentationSupportKHR;
-#endif
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-         PFN_vkCreateAndroidSurfaceKHR CreateAndroidSurfaceKHR;
-#else
-         void *CreateAndroidSurfaceKHR;
-#endif
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-         PFN_vkCreateWin32SurfaceKHR CreateWin32SurfaceKHR;
-#else
-         void *CreateWin32SurfaceKHR;
-#endif
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-         PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR GetPhysicalDeviceWin32PresentationSupportKHR;
-#else
-         void *GetPhysicalDeviceWin32PresentationSupportKHR;
-#endif
          PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallbackEXT;
          PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallbackEXT;
          PFN_vkDebugReportMessageEXT DebugReportMessageEXT;
+         PFN_vkDebugMarkerSetObjectNameEXT DebugMarkerSetObjectNameEXT;
+         PFN_vkDebugMarkerSetObjectTagEXT DebugMarkerSetObjectTagEXT;
+         PFN_vkCmdDebugMarkerBeginEXT CmdDebugMarkerBeginEXT;
+         PFN_vkCmdDebugMarkerEndEXT CmdDebugMarkerEndEXT;
+         PFN_vkCmdDebugMarkerInsertEXT CmdDebugMarkerInsertEXT;
+         PFN_vkGetPhysicalDeviceExternalImageFormatPropertiesNV GetPhysicalDeviceExternalImageFormatPropertiesNV;
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+         PFN_vkGetMemoryWin32HandleNV GetMemoryWin32HandleNV;
+#else
+         void *GetMemoryWin32HandleNV;
+#endif
+         PFN_vkCmdDrawIndirectCountAMD CmdDrawIndirectCountAMD;
+         PFN_vkCmdDrawIndexedIndirectCountAMD CmdDrawIndexedIndirectCountAMD;
+         PFN_vkCmdProcessCommandsNVX CmdProcessCommandsNVX;
+         PFN_vkCmdReserveSpaceForCommandsNVX CmdReserveSpaceForCommandsNVX;
+         PFN_vkCreateIndirectCommandsLayoutNVX CreateIndirectCommandsLayoutNVX;
+         PFN_vkDestroyIndirectCommandsLayoutNVX DestroyIndirectCommandsLayoutNVX;
+         PFN_vkCreateObjectTableNVX CreateObjectTableNVX;
+         PFN_vkDestroyObjectTableNVX DestroyObjectTableNVX;
+         PFN_vkRegisterObjectsNVX RegisterObjectsNVX;
+         PFN_vkUnregisterObjectsNVX UnregisterObjectsNVX;
+         PFN_vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX GetPhysicalDeviceGeneratedCommandsPropertiesNVX;
       };
 
    };
@@ -226,20 +248,20 @@ struct radv_dispatch_table {
 VkResult radv_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance);
 void radv_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator);
 VkResult radv_EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices);
-void radv_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures);
-void radv_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties);
-VkResult radv_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties);
+PFN_vkVoidFunction radv_GetDeviceProcAddr(VkDevice device, const char* pName);
+PFN_vkVoidFunction radv_GetInstanceProcAddr(VkInstance instance, const char* pName);
 void radv_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties);
 void radv_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties);
 void radv_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties);
-PFN_vkVoidFunction radv_GetInstanceProcAddr(VkInstance instance, const char* pName);
-PFN_vkVoidFunction radv_GetDeviceProcAddr(VkDevice device, const char* pName);
+void radv_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures);
+void radv_GetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties);
+VkResult radv_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties);
 VkResult radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice);
 void radv_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator);
-VkResult radv_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties);
-VkResult radv_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties);
 VkResult radv_EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties);
+VkResult radv_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties);
 VkResult radv_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties);
+VkResult radv_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties);
 void radv_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue);
 VkResult radv_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence);
 VkResult radv_QueueWaitIdle(VkQueue queue);
@@ -251,10 +273,10 @@ void radv_UnmapMemory(VkDevice device, VkDeviceMemory memory);
 VkResult radv_FlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges);
 VkResult radv_InvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges);
 void radv_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes);
-VkResult radv_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
-VkResult radv_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset);
 void radv_GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements);
+VkResult radv_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
 void radv_GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements);
+VkResult radv_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset);
 void radv_GetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements);
 void radv_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties);
 VkResult radv_QueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence);
@@ -340,7 +362,7 @@ void radv_CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageL
 void radv_CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter);
 void radv_CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions);
 void radv_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions);
-void radv_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const uint32_t* pData);
+void radv_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData);
 void radv_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data);
 void radv_CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges);
 void radv_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges);
@@ -360,6 +382,23 @@ void radv_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBe
 void radv_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents);
 void radv_CmdEndRenderPass(VkCommandBuffer commandBuffer);
 void radv_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers);
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VkResult radv_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+VkResult radv_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties);
+VkResult radv_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties);
+VkResult radv_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays);
+VkResult radv_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties);
+VkResult radv_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode);
+VkResult radv_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities);
+VkResult radv_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
+VkResult radv_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains);
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkResult radv_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
+#endif // VK_USE_PLATFORM_MIR_KHR
+#ifdef VK_USE_PLATFORM_MIR_KHR
+VkBool32 radv_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection);
+#endif // VK_USE_PLATFORM_MIR_KHR
 void radv_DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator);
 VkResult radv_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported);
 VkResult radv_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities);
@@ -370,14 +409,18 @@ void radv_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const V
 VkResult radv_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages);
 VkResult radv_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex);
 VkResult radv_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo);
-VkResult radv_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties);
-VkResult radv_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties);
-VkResult radv_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays);
-VkResult radv_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties);
-VkResult radv_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR*pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode);
-VkResult radv_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities);
-VkResult radv_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
-VkResult radv_CreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount, const VkSwapchainCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains);
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkResult radv_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VkBool32 radv_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display);
+#endif // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult radv_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkBool32 radv_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex);
+#endif // VK_USE_PLATFORM_WIN32_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 VkResult radv_CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
 #endif // VK_USE_PLATFORM_XLIB_KHR
@@ -390,27 +433,26 @@ VkResult radv_CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateI
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VkBool32 radv_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id);
 #endif // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkResult radv_CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-VkBool32 radv_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, struct wl_display* display);
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkResult radv_CreateMirSurfaceKHR(VkInstance instance, const VkMirSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_MIR_KHR
-VkBool32 radv_GetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, MirConnection* connection);
-#endif // VK_USE_PLATFORM_MIR_KHR
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-VkResult radv_CreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkResult radv_CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
-#endif // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-VkBool32 radv_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex);
-#endif // VK_USE_PLATFORM_WIN32_KHR
 VkResult radv_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback);
 void radv_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator);
 void radv_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage);
+VkResult radv_DebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo);
+VkResult radv_DebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo);
+void radv_CmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo);
+void radv_CmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer);
+void radv_CmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo);
+VkResult radv_GetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties);
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+VkResult radv_GetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, HANDLE* pHandle);
+#endif // VK_USE_PLATFORM_WIN32_KHR
+void radv_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride);
+void radv_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride);
+void radv_CmdProcessCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdProcessCommandsInfoNVX* pProcessCommandsInfo);
+void radv_CmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer, const VkCmdReserveSpaceForCommandsInfoNVX* pReserveSpaceInfo);
+VkResult radv_CreateIndirectCommandsLayoutNVX(VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutNVX* pIndirectCommandsLayout);
+void radv_DestroyIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout, const VkAllocationCallbacks* pAllocator);
+VkResult radv_CreateObjectTableNVX(VkDevice device, const VkObjectTableCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkObjectTableNVX* pObjectTable);
+void radv_DestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable, const VkAllocationCallbacks* pAllocator);
+VkResult radv_RegisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectTableEntryNVX* const*    ppObjectTableEntries, const uint32_t* pObjectIndices);
+VkResult radv_UnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32_t objectCount, const VkObjectEntryTypeNVX* pObjectEntryTypes, const uint32_t* pObjectIndices);
+void radv_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits);

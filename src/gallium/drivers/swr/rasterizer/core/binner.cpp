@@ -34,6 +34,9 @@
 #include "rdtsc_core.h"
 #include "tilemgr.h"
 
+// Function Prototype
+void BinPostSetupLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], simdscalar vRecipW[2], uint32_t primMask, simdscalari primID, simdscalari viewportIdx);
+
 //////////////////////////////////////////////////////////////////////////
 /// @brief Offsets added to post-viewport vertex positions based on
 /// raster state.
@@ -380,7 +383,7 @@ PFN_PROCESS_ATTRIBUTES GetProcessAttributesFunc(uint32_t NumVerts, bool IsSwizzl
 /// @param clipDistMask - mask of enabled clip distances
 /// @param pUserClipBuffer - buffer to store results
 template<uint32_t NumVerts>
-void ProcessUserClipDist(PA_STATE& pa, uint32_t primIndex, uint8_t clipDistMask, float* pUserClipBuffer)
+void ProcessUserClipDist(PA_STATE& pa, uint32_t primIndex, uint8_t clipDistMask, float *pRecipW, float* pUserClipBuffer)
 {
     DWORD clipDist;
     while (_BitScanForward(&clipDist, clipDistMask))
@@ -404,11 +407,12 @@ void ProcessUserClipDist(PA_STATE& pa, uint32_t primIndex, uint8_t clipDistMask,
 
         // setup plane equations for barycentric interpolation in the backend
         float baryCoeff[NumVerts];
+        float last = vertClipDist[NumVerts - 1] * pRecipW[NumVerts - 1];
         for (uint32_t e = 0; e < NumVerts - 1; ++e)
         {
-            baryCoeff[e] = vertClipDist[e] - vertClipDist[NumVerts - 1];
+            baryCoeff[e] = vertClipDist[e] * pRecipW[e] - last;
         }
-        baryCoeff[NumVerts - 1] = vertClipDist[NumVerts - 1];
+        baryCoeff[NumVerts - 1] = last;
 
         for (uint32_t e = 0; e < NumVerts; ++e)
         {
@@ -446,27 +450,6 @@ void BinTriangles(
     const SWR_FRONTEND_STATE& feState = state.frontendState;
     const SWR_GS_STATE& gsState = state.gsState;
     MacroTileMgr *pTileMgr = pDC->pTileMgr;
-
-    // Simple non-conformant wireframe mode, useful for debugging
-    if (rastState.fillMode == SWR_FILLMODE_WIREFRAME)
-    {
-        // construct 3 SIMD lines out of the triangle and call the line binner for each SIMD
-        simdvector line[2];
-        line[0] = tri[0];
-        line[1] = tri[1];
-        BinLines(pDC, pa, workerId, line, triMask, primID, viewportIdx);
-
-        line[0] = tri[1];
-        line[1] = tri[2];
-        BinLines(pDC, pa, workerId, line, triMask, primID, viewportIdx);
-
-        line[0] = tri[2];
-        line[1] = tri[0];
-        BinLines(pDC, pa, workerId, line, triMask, primID, viewportIdx);
-
-        AR_END(FEBinTriangles, 1);
-        return;
-    }
 
     simdscalar vRecipW0 = _simd_set1_ps(1.0f);
     simdscalar vRecipW1 = _simd_set1_ps(1.0f);
@@ -540,27 +523,28 @@ void BinTriangles(
 
     uint32_t origTriMask = triMask;
     // don't cull degenerate triangles if we're conservatively rasterizing
-    if (!CT::IsConservativeT::value)
+    if (rastState.fillMode == SWR_FILLMODE_SOLID && !CT::IsConservativeT::value)
     {
         triMask &= ~cullZeroAreaMask;
     }
 
     // determine front winding tris
     // CW  +det
-    // CCW det <= 0; 0 area triangles are marked as backfacing, which is required behavior for conservative rast
-    maskLo = _simd_movemask_pd(_simd_castsi_pd(_simd_cmpgt_epi64(vDet[0], _simd_setzero_si())));
-    maskHi = _simd_movemask_pd(_simd_castsi_pd(_simd_cmpgt_epi64(vDet[1], _simd_setzero_si())));
-    int cwTriMask = maskLo | (maskHi << (KNOB_SIMD_WIDTH / 2));
-
+    // CCW det < 0;
+    // 0 area triangles are marked as backfacing regardless of winding order,
+    // which is required behavior for conservative rast and wireframe rendering
     uint32_t frontWindingTris;
     if (rastState.frontWinding == SWR_FRONTWINDING_CW)
     {
-        frontWindingTris = cwTriMask;
+        maskLo = _simd_movemask_pd(_simd_castsi_pd(_simd_cmpgt_epi64(vDet[0], _simd_setzero_si())));
+        maskHi = _simd_movemask_pd(_simd_castsi_pd(_simd_cmpgt_epi64(vDet[1], _simd_setzero_si())));
     }
     else
     {
-        frontWindingTris = ~cwTriMask;
+        maskLo = _simd_movemask_pd(_simd_castsi_pd(_simd_cmpgt_epi64(_simd_setzero_si(), vDet[0])));
+        maskHi = _simd_movemask_pd(_simd_castsi_pd(_simd_cmpgt_epi64(_simd_setzero_si(), vDet[1])));
     }
+    frontWindingTris = maskLo | (maskHi << (KNOB_SIMD_WIDTH / 2));
 
     // cull
     uint32_t cullTris;
@@ -579,6 +563,34 @@ void BinTriangles(
     if (origTriMask ^ triMask)
     {
         RDTSC_EVENT(FECullZeroAreaAndBackface, _mm_popcnt_u32(origTriMask ^ triMask), 0);
+    }
+
+    // Simple non-conformant wireframe mode, useful for debugging
+    if (rastState.fillMode == SWR_FILLMODE_WIREFRAME)
+    {
+        // construct 3 SIMD lines out of the triangle and call the line binner for each SIMD
+        simdvector line[2];
+        simdscalar recipW[2];
+        line[0] = tri[0];
+        line[1] = tri[1];
+        recipW[0] = vRecipW0;
+        recipW[1] = vRecipW1;
+        BinPostSetupLines(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx);
+
+        line[0] = tri[1];
+        line[1] = tri[2];
+        recipW[0] = vRecipW1;
+        recipW[1] = vRecipW2;
+        BinPostSetupLines(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx);
+
+        line[0] = tri[2];
+        line[1] = tri[0];
+        recipW[0] = vRecipW2;
+        recipW[1] = vRecipW0;
+        BinPostSetupLines(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx);
+
+        AR_END(FEBinTriangles, 1);
+        return;
     }
 
     /// Note: these variable initializations must stay above any 'goto endBenTriangles'
@@ -761,6 +773,8 @@ void BinTriangles(
         _simd_store_si((simdscalari*)aRTAI, _simd_setzero_si());
     }
 
+endBinTriangles:
+
     // scan remaining valid triangles and bin each separately
     while (_BitScanForward(&triIndex, triMask))
     {
@@ -821,7 +835,7 @@ void BinTriangles(
         {
             uint32_t numClipDist = _mm_popcnt_u32(rastState.clipDistanceMask);
             desc.pUserClipBuffer = (float*)pArena->Alloc(numClipDist * 3 * sizeof(float));
-            ProcessUserClipDist<3>(pa, triIndex, rastState.clipDistanceMask, desc.pUserClipBuffer);
+            ProcessUserClipDist<3>(pa, triIndex, rastState.clipDistanceMask, &desc.pTriBuffer[12], desc.pUserClipBuffer);
         }
 
         for (uint32_t y = aMTTop[triIndex]; y <= aMTBottom[triIndex]; ++y)
@@ -839,7 +853,6 @@ void BinTriangles(
                      triMask &= ~(1 << triIndex);
     }
 
-endBinTriangles:
     AR_END(FEBinTriangles, 1);
 }
 
@@ -859,6 +872,7 @@ PFN_PROCESS_PRIMS GetBinTrianglesFunc(bool IsConservative)
 {
     return TemplateArgUnroller<FEBinTrianglesChooser>::GetFunc(IsConservative);
 }
+
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Bin SIMD points to the backend.  Only supports point size of 1
@@ -1171,8 +1185,15 @@ void BinPoints(
             if (rastState.clipDistanceMask)
             {
                 uint32_t numClipDist = _mm_popcnt_u32(rastState.clipDistanceMask);
-                desc.pUserClipBuffer = (float*)pArena->Alloc(numClipDist * 2 * sizeof(float));
-                ProcessUserClipDist<2>(pa, primIndex, rastState.clipDistanceMask, desc.pUserClipBuffer);
+                desc.pUserClipBuffer = (float*)pArena->Alloc(numClipDist * 3 * sizeof(float));
+                float dists[8];
+                float one = 1.0f;
+                ProcessUserClipDist<1>(pa, primIndex, rastState.clipDistanceMask, &one, dists);
+                for (uint32_t i = 0; i < numClipDist; i++) {
+                    desc.pUserClipBuffer[3*i + 0] = 0.0f;
+                    desc.pUserClipBuffer[3*i + 1] = 0.0f;
+                    desc.pUserClipBuffer[3*i + 2] = dists[i];
+                }
             }
 
             MacroTileMgr *pTileMgr = pDC->pTileMgr;
@@ -1204,11 +1225,12 @@ void BinPoints(
 /// @param tri - Contains line position data for SIMDs worth of points.
 /// @param primID - Primitive ID for each line.
 /// @param viewportIdx - Viewport Array Index for each line.
-void BinLines(
+void BinPostSetupLines(
     DRAW_CONTEXT *pDC,
     PA_STATE& pa,
     uint32_t workerId,
     simdvector prim[],
+    simdscalar recipW[],
     uint32_t primMask,
     simdscalari primID,
     simdscalari viewportIdx)
@@ -1226,42 +1248,8 @@ void BinLines(
     PFN_PROCESS_ATTRIBUTES pfnProcessAttribs = GetProcessAttributesFunc(2,
         state.backendState.swizzleEnable, state.backendState.constantInterpolationMask);
 
-    simdscalar vRecipW0 = _simd_set1_ps(1.0f);
-    simdscalar vRecipW1 = _simd_set1_ps(1.0f);
-
-    if (!feState.vpTransformDisable)
-    {
-        // perspective divide
-        vRecipW0 = _simd_div_ps(_simd_set1_ps(1.0f), prim[0].w);
-        vRecipW1 = _simd_div_ps(_simd_set1_ps(1.0f), prim[1].w);
-
-        prim[0].v[0] = _simd_mul_ps(prim[0].v[0], vRecipW0);
-        prim[1].v[0] = _simd_mul_ps(prim[1].v[0], vRecipW1);
-
-        prim[0].v[1] = _simd_mul_ps(prim[0].v[1], vRecipW0);
-        prim[1].v[1] = _simd_mul_ps(prim[1].v[1], vRecipW1);
-
-        prim[0].v[2] = _simd_mul_ps(prim[0].v[2], vRecipW0);
-        prim[1].v[2] = _simd_mul_ps(prim[1].v[2], vRecipW1);
-
-        // viewport transform to screen coords
-        if (state.gsState.emitsViewportArrayIndex)
-        {
-            viewportTransform<2>(prim, state.vpMatrices, viewportIdx);
-        }
-        else
-        {
-            viewportTransform<2>(prim, state.vpMatrices);
-        }
-    }
-
-    // adjust for pixel center location
-    simdscalar offset = g_pixelOffsets[rastState.pixelLocation];
-    prim[0].x = _simd_add_ps(prim[0].x, offset);
-    prim[0].y = _simd_add_ps(prim[0].y, offset);
-
-    prim[1].x = _simd_add_ps(prim[1].x, offset);
-    prim[1].y = _simd_add_ps(prim[1].y, offset);
+    simdscalar& vRecipW0 = recipW[0];
+    simdscalar& vRecipW1 = recipW[1];
 
     // convert to fixed point
     simdscalari vXi[2], vYi[2];
@@ -1416,7 +1404,7 @@ void BinLines(
         {
             uint32_t numClipDist = _mm_popcnt_u32(rastState.clipDistanceMask);
             desc.pUserClipBuffer = (float*)pArena->Alloc(numClipDist * 2 * sizeof(float));
-            ProcessUserClipDist<2>(pa, primIndex, rastState.clipDistanceMask, desc.pUserClipBuffer);
+            ProcessUserClipDist<2>(pa, primIndex, rastState.clipDistanceMask, &desc.pTriBuffer[12], desc.pUserClipBuffer);
         }
 
         MacroTileMgr *pTileMgr = pDC->pTileMgr;
@@ -1439,4 +1427,79 @@ void BinLines(
 endBinLines:
 
     AR_END(FEBinLines, 1);
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Bin SIMD lines to the backend.
+/// @param pDC - pointer to draw context.
+/// @param pa - The primitive assembly object.
+/// @param workerId - thread's worker id. Even thread has a unique id.
+/// @param tri - Contains line position data for SIMDs worth of points.
+/// @param primID - Primitive ID for each line.
+/// @param viewportIdx - Viewport Array Index for each line.
+void BinLines(
+    DRAW_CONTEXT *pDC,
+    PA_STATE& pa,
+    uint32_t workerId,
+    simdvector prim[],
+    uint32_t primMask,
+    simdscalari primID,
+    simdscalari viewportIdx)
+{
+    SWR_CONTEXT *pContext = pDC->pContext;
+
+    const API_STATE& state = GetApiState(pDC);
+    const SWR_RASTSTATE& rastState = state.rastState;
+    const SWR_FRONTEND_STATE& feState = state.frontendState;
+    const SWR_GS_STATE& gsState = state.gsState;
+
+    // Select attribute processor
+    PFN_PROCESS_ATTRIBUTES pfnProcessAttribs = GetProcessAttributesFunc(2,
+        state.backendState.swizzleEnable, state.backendState.constantInterpolationMask);
+
+    simdscalar vRecipW[2] = { _simd_set1_ps(1.0f), _simd_set1_ps(1.0f) };
+
+    if (!feState.vpTransformDisable)
+    {
+        // perspective divide
+        vRecipW[0] = _simd_div_ps(_simd_set1_ps(1.0f), prim[0].w);
+        vRecipW[1] = _simd_div_ps(_simd_set1_ps(1.0f), prim[1].w);
+
+        prim[0].v[0] = _simd_mul_ps(prim[0].v[0], vRecipW[0]);
+        prim[1].v[0] = _simd_mul_ps(prim[1].v[0], vRecipW[1]);
+
+        prim[0].v[1] = _simd_mul_ps(prim[0].v[1], vRecipW[0]);
+        prim[1].v[1] = _simd_mul_ps(prim[1].v[1], vRecipW[1]);
+
+        prim[0].v[2] = _simd_mul_ps(prim[0].v[2], vRecipW[0]);
+        prim[1].v[2] = _simd_mul_ps(prim[1].v[2], vRecipW[1]);
+
+        // viewport transform to screen coords
+        if (state.gsState.emitsViewportArrayIndex)
+        {
+            viewportTransform<2>(prim, state.vpMatrices, viewportIdx);
+        }
+        else
+        {
+            viewportTransform<2>(prim, state.vpMatrices);
+        }
+    }
+
+    // adjust for pixel center location
+    simdscalar offset = g_pixelOffsets[rastState.pixelLocation];
+    prim[0].x = _simd_add_ps(prim[0].x, offset);
+    prim[0].y = _simd_add_ps(prim[0].y, offset);
+
+    prim[1].x = _simd_add_ps(prim[1].x, offset);
+    prim[1].y = _simd_add_ps(prim[1].y, offset);
+
+    BinPostSetupLines(
+        pDC,
+        pa,
+        workerId,
+        prim,
+        vRecipW,
+        primMask,
+        primID,
+        viewportIdx);
 }

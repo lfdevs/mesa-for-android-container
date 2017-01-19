@@ -146,6 +146,8 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
    assert(!sbuf->user);
 
    if (!sbuf->handle) {
+      boolean validated;
+
       sbuf->key.flags = 0;
 
       sbuf->key.format = SVGA3D_BUFFER;
@@ -187,7 +189,8 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
                sbuf->b.b.width0);
 
       sbuf->handle = svga_screen_surface_create(ss, sbuf->b.b.bind,
-                                                sbuf->b.b.usage, &sbuf->key);
+                                                sbuf->b.b.usage,
+                                                &validated, &sbuf->key);
       if (!sbuf->handle)
          return PIPE_ERROR_OUT_OF_MEMORY;
 

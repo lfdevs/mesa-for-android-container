@@ -1,5 +1,4 @@
 
-#include "util/u_format.h"
 #include "util/u_viewport.h"
 
 #include "nv50/nv50_context.h"
@@ -348,25 +347,6 @@ nv50_validate_derived_2(struct nv50_context *nv50)
 }
 
 static void
-nv50_validate_derived_3(struct nv50_context *nv50)
-{
-   struct nouveau_pushbuf *push = nv50->base.pushbuf;
-   struct pipe_framebuffer_state *fb = &nv50->framebuffer;
-   uint32_t ms = 0;
-
-   if ((!fb->nr_cbufs || !fb->cbufs[0] ||
-        !util_format_is_pure_integer(fb->cbufs[0]->format)) && nv50->blend) {
-      if (nv50->blend->pipe.alpha_to_coverage)
-         ms |= NV50_3D_MULTISAMPLE_CTRL_ALPHA_TO_COVERAGE;
-      if (nv50->blend->pipe.alpha_to_one)
-         ms |= NV50_3D_MULTISAMPLE_CTRL_ALPHA_TO_ONE;
-   }
-
-   BEGIN_NV04(push, NV50_3D(MULTISAMPLE_CTRL), 1);
-   PUSH_DATA (push, ms);
-}
-
-static void
 nv50_validate_clip(struct nv50_context *nv50)
 {
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
@@ -535,7 +515,6 @@ validate_list_3d[] = {
     { nv50_validate_derived_rs,    NV50_NEW_3D_FRAGPROG | NV50_NEW_3D_RASTERIZER |
                                    NV50_NEW_3D_VERTPROG | NV50_NEW_3D_GMTYPROG },
     { nv50_validate_derived_2,     NV50_NEW_3D_ZSA | NV50_NEW_3D_FRAMEBUFFER },
-    { nv50_validate_derived_3,     NV50_NEW_3D_BLEND | NV50_NEW_3D_FRAMEBUFFER },
     { nv50_validate_clip,          NV50_NEW_3D_CLIP | NV50_NEW_3D_RASTERIZER |
                                    NV50_NEW_3D_VERTPROG | NV50_NEW_3D_GMTYPROG },
     { nv50_constbufs_validate,     NV50_NEW_3D_CONSTBUF },

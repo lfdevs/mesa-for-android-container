@@ -31,14 +31,22 @@
 
 #include "pipe/p_context.h"
 
-void fd_screen_fence_ref(struct pipe_screen *pscreen,
+void fd_fence_ref(struct pipe_screen *pscreen,
 		struct pipe_fence_handle **ptr,
 		struct pipe_fence_handle *pfence);
-boolean fd_screen_fence_finish(struct pipe_screen *screen,
+boolean fd_fence_finish(struct pipe_screen *screen,
 		struct pipe_context *ctx,
 		struct pipe_fence_handle *pfence,
 		uint64_t timeout);
-struct pipe_fence_handle * fd_fence_create(struct pipe_context *pctx,
-		uint32_t timestamp);
+void fd_create_fence_fd(struct pipe_context *pctx,
+		struct pipe_fence_handle **pfence, int fd);
+void fd_fence_server_sync(struct pipe_context *pctx,
+		struct pipe_fence_handle *fence);
+int fd_fence_get_fd(struct pipe_screen *pscreen,
+		struct pipe_fence_handle *pfence);
+
+struct fd_context;
+struct pipe_fence_handle * fd_fence_create(struct fd_context *ctx,
+		uint32_t timestamp, int fence_fd);
 
 #endif /* FREEDRENO_FENCE_H_ */

@@ -418,12 +418,12 @@ radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable,
 			}
 		}
 
-		buffers = (*screen->dri2.loader->getBuffersWithFormat)(drawable,
-								&drawable->w,
-								&drawable->h,
-								attachments, i / 2,
-								&count,
-								drawable->loaderPrivate);
+		buffers = screen->dri2.loader->getBuffersWithFormat(drawable,
+								    &drawable->w,
+								    &drawable->h,
+								    attachments, i / 2,
+								    &count,
+								    drawable->loaderPrivate);
 	} else if (screen->dri2.loader) {
 		i = 0;
 		if (draw->color_rb[0])
@@ -437,12 +437,12 @@ radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable,
 				attachments[i++] = __DRI_BUFFER_STENCIL;
 		}
 
-		buffers = (*screen->dri2.loader->getBuffers)(drawable,
-								 &drawable->w,
-								 &drawable->h,
-								 attachments, i,
-								 &count,
-								 drawable->loaderPrivate);
+		buffers = screen->dri2.loader->getBuffers(drawable,
+							  &drawable->w,
+							  &drawable->h,
+							  attachments, i,
+							  &count,
+							  drawable->loaderPrivate);
 	}
 
 	if (buffers == NULL)

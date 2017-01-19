@@ -58,7 +58,7 @@ NineVertexBuffer9_dtor( struct NineVertexBuffer9 *This );
 /*** Nine private ***/
 
 struct pipe_resource *
-NineVertexBuffer9_GetResource( struct NineVertexBuffer9 *This );
+NineVertexBuffer9_GetResource( struct NineVertexBuffer9 *This, unsigned *offset );
 
 /*** Direct3D public ***/
 

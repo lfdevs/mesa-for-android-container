@@ -85,11 +85,13 @@ struct radeon_info {
 	uint32_t                    gart_page_size;
 	uint64_t                    gart_size;
 	uint64_t                    vram_size;
+	uint64_t                    visible_vram_size;
 	bool                        has_dedicated_vram;
 	bool                     has_virtual_memory;
 	bool                        gfx_ib_pad_with_type2;
-	bool                     has_sdma;
 	bool                     has_uvd;
+	uint32_t                    sdma_rings;
+	uint32_t                    compute_rings;
 	uint32_t                    vce_fw_version;
 	uint32_t                    vce_harvest_config;
 	uint32_t                    clock_crystal_freq;
@@ -251,6 +253,7 @@ struct radeon_bo_metadata {
 
 struct radeon_winsys_bo;
 struct radeon_winsys_fence;
+struct radeon_winsys_sem;
 
 struct radeon_winsys {
 	void (*destroy)(struct radeon_winsys *ws);
@@ -284,7 +287,8 @@ struct radeon_winsys {
 	struct radeon_winsys_ctx *(*ctx_create)(struct radeon_winsys *ws);
 	void (*ctx_destroy)(struct radeon_winsys_ctx *ctx);
 
-	bool (*ctx_wait_idle)(struct radeon_winsys_ctx *ctx);
+	bool (*ctx_wait_idle)(struct radeon_winsys_ctx *ctx,
+	                      enum ring_type ring_type, int ring_index);
 
 	struct radeon_winsys_cs *(*cs_create)(struct radeon_winsys *ws,
 					      enum ring_type ring_type);
@@ -298,8 +302,13 @@ struct radeon_winsys {
 	void (*cs_grow)(struct radeon_winsys_cs * cs, size_t min_size);
 
 	int (*cs_submit)(struct radeon_winsys_ctx *ctx,
+			 int queue_index,
 			 struct radeon_winsys_cs **cs_array,
 			 unsigned cs_count,
+			 struct radeon_winsys_sem **wait_sem,
+			 unsigned wait_sem_count,
+			 struct radeon_winsys_sem **signal_sem,
+			 unsigned signal_sem_count,
 			 bool can_patch,
 			 struct radeon_winsys_fence *fence);
 
@@ -309,6 +318,8 @@ struct radeon_winsys {
 
 	void (*cs_execute_secondary)(struct radeon_winsys_cs *parent,
 				    struct radeon_winsys_cs *child);
+
+	void (*cs_dump)(struct radeon_winsys_cs *cs, FILE* file, uint32_t trace_id);
 
 	int (*surface_init)(struct radeon_winsys *ws,
 			    struct radeon_surf *surf);
@@ -322,6 +333,10 @@ struct radeon_winsys {
 			   struct radeon_winsys_fence *fence,
 			   bool absolute,
 			   uint64_t timeout);
+
+	struct radeon_winsys_sem *(*create_sem)(struct radeon_winsys *ws);
+	void (*destroy_sem)(struct radeon_winsys_sem *sem);
+
 };
 
 static inline void radeon_emit(struct radeon_winsys_cs *cs, uint32_t value)

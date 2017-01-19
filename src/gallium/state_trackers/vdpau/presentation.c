@@ -231,33 +231,25 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
    vscreen = pq->device->vscreen;
 
    pipe_mutex_lock(pq->device->mutex);
+   if (vscreen->set_back_texture_from_output)
+      vscreen->set_back_texture_from_output(vscreen, surf->surface->texture, clip_width, clip_height);
    tex = vscreen->texture_from_drawable(vscreen, (void *)pq->drawable);
    if (!tex) {
       pipe_mutex_unlock(pq->device->mutex);
       return VDP_STATUS_INVALID_HANDLE;
    }
 
-   dirty_area = vscreen->get_dirty_area(vscreen);
+   if (!vscreen->set_back_texture_from_output) {
+      dirty_area = vscreen->get_dirty_area(vscreen);
 
-   memset(&surf_templ, 0, sizeof(surf_templ));
-   surf_templ.format = tex->format;
-   surf_draw = pipe->create_surface(pipe, tex, &surf_templ);
+      memset(&surf_templ, 0, sizeof(surf_templ));
+      surf_templ.format = tex->format;
+      surf_draw = pipe->create_surface(pipe, tex, &surf_templ);
 
-   dst_clip.x0 = 0;
-   dst_clip.y0 = 0;
-   dst_clip.x1 = clip_width ? clip_width : surf_draw->width;
-   dst_clip.y1 = clip_height ? clip_height : surf_draw->height;
-
-   if (pq->device->delayed_rendering.surface == surface &&
-       dst_clip.x1 == surf_draw->width && dst_clip.y1 == surf_draw->height) {
-
-      // TODO: we correctly support the clipping here, but not the pq background color in the clipped area....
-      cstate = pq->device->delayed_rendering.cstate;
-      vl_compositor_set_dst_clip(cstate, &dst_clip);
-      vlVdpResolveDelayedRendering(pq->device, surf_draw, dirty_area);
-
-   } else {
-      vlVdpResolveDelayedRendering(pq->device, NULL, NULL);
+      dst_clip.x0 = 0;
+      dst_clip.y0 = 0;
+      dst_clip.x1 = clip_width ? clip_width : surf_draw->width;
+      dst_clip.y1 = clip_height ? clip_height : surf_draw->height;
 
       src_rect.x0 = 0;
       src_rect.y0 = 0;
@@ -297,8 +289,10 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
       framenum++;
    }
 
-   pipe_resource_reference(&tex, NULL);
-   pipe_surface_reference(&surf_draw, NULL);
+   if (!vscreen->set_back_texture_from_output) {
+      pipe_resource_reference(&tex, NULL);
+      pipe_surface_reference(&surf_draw, NULL);
+   }
    pipe_mutex_unlock(pq->device->mutex);
 
    return VDP_STATUS_OK;

@@ -225,7 +225,8 @@ am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 common_libintel_common_la_LIBADD =
-am__objects_2 = common/gen_device_info.lo common/gen_l3_config.lo
+am__objects_2 = common/gen_device_info.lo common/gen_l3_config.lo \
+	common/gen_urb_config.lo
 am_common_libintel_common_la_OBJECTS = $(am__objects_2)
 common_libintel_common_la_OBJECTS =  \
 	$(am_common_libintel_common_la_OBJECTS)
@@ -592,6 +593,8 @@ AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANDROID_CFLAGS = @ANDROID_CFLAGS@
+ANDROID_LIBS = @ANDROID_LIBS@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -635,10 +638,11 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
-EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
+ETNAVIV_CFLAGS = @ETNAVIV_CFLAGS@
+ETNAVIV_LIBS = @ETNAVIV_LIBS@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -688,9 +692,7 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
-LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
-LIBSHA1_LIBS = @LIBSHA1_LIBS@
+LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
@@ -731,8 +733,6 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -769,8 +769,6 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
-SHA1_CFLAGS = @SHA1_CFLAGS@
-SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
 SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
@@ -779,7 +777,6 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
-TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -795,7 +792,6 @@ VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
 VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
-VG_LIB_DEPS = @VG_LIB_DEPS@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -900,6 +896,7 @@ COMMON_FILES = \
 	common/gen_device_info.h \
 	common/gen_l3_config.c \
 	common/gen_l3_config.h \
+	common/gen_urb_config.c \
 	common/gen_sample_positions.h
 
 GENXML_GENERATED_FILES = \
@@ -1103,6 +1100,8 @@ common/gen_device_info.lo: common/$(am__dirstamp) \
 	common/$(DEPDIR)/$(am__dirstamp)
 common/gen_l3_config.lo: common/$(am__dirstamp) \
 	common/$(DEPDIR)/$(am__dirstamp)
+common/gen_urb_config.lo: common/$(am__dirstamp) \
+	common/$(DEPDIR)/$(am__dirstamp)
 
 common/libintel_common.la: $(common_libintel_common_la_OBJECTS) $(common_libintel_common_la_DEPENDENCIES) $(EXTRA_common_libintel_common_la_DEPENDENCIES) common/$(am__dirstamp)
 	$(AM_V_CCLD)$(LINK)  $(common_libintel_common_la_OBJECTS) $(common_libintel_common_la_LIBADD) $(LIBS)
@@ -1206,6 +1205,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@blorp/$(DEPDIR)/blorp_clear.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/gen_device_info.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/gen_l3_config.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/gen_urb_config.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_format.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/isl_format_layout.Plo@am__quote@
@@ -1733,7 +1733,7 @@ $(GENXML_GENERATED_FILES): genxml/gen_pack_header.py
 
 .xml_pack.h:
 	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/genxml/gen_pack_header.py $< > $@
+	$(PYTHON_GEN) $(srcdir)/genxml/gen_pack_header.py $< > $@ || ($(RM) $@; false)
 
 # xxd generates variable names based on the path of the input file. We
 # prefer to generate our own name here, so it doesn't vary from

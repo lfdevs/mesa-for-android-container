@@ -76,6 +76,7 @@ vc4_emit_state(struct pipe_context *pctx)
                           VC4_DIRTY_ZSA |
                           VC4_DIRTY_COMPILED_FS)) {
                 uint8_t ez_enable_mask_out = ~0;
+                uint8_t rasosm_mask_out = ~0;
 
                 /* HW-2905: If the RCL ends up doing a full-res load when
                  * multisampling, then early Z tracking may end up with values
@@ -89,10 +90,20 @@ vc4_emit_state(struct pipe_context *pctx)
                 if (job->msaa || vc4->prog.fs->disable_early_z)
                         ez_enable_mask_out &= ~VC4_CONFIG_BITS_EARLY_Z;
 
+                /* Don't set the rasterizer to oversample if we're doing our
+                 * binning and load/stores in single-sample mode.  This is for
+                 * the samples == 1 case, where vc4 doesn't do any
+                 * multisampling behavior.
+                 */
+                if (!job->msaa) {
+                        rasosm_mask_out &=
+                                ~VC4_CONFIG_BITS_RASTERIZER_OVERSAMPLE_4X;
+                }
+
                 cl_u8(&bcl, VC4_PACKET_CONFIGURATION_BITS);
                 cl_u8(&bcl,
-                      vc4->rasterizer->config_bits[0] |
-                      vc4->zsa->config_bits[0]);
+                      (vc4->rasterizer->config_bits[0] |
+                       vc4->zsa->config_bits[0]) & rasosm_mask_out);
                 cl_u8(&bcl,
                       vc4->rasterizer->config_bits[1] |
                       vc4->zsa->config_bits[1]);

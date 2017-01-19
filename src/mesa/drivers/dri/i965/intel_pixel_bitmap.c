@@ -256,7 +256,7 @@ do_blit_bitmap( struct gl_context *ctx,
    /* The blitter has no idea about fast color clears, so we need to resolve
     * the miptree before we do anything.
     */
-   intel_miptree_resolve_color(brw, irb->mt, 0);
+   intel_miptree_all_slices_resolve_color(brw, irb->mt, 0);
 
    /* Chop it all into chunks that can be digested by hardware: */
    for (py = 0; py < height; py += DY) {

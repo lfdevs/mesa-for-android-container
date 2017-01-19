@@ -46,7 +46,6 @@ vec4_instruction::vec4_instruction(enum opcode opcode, const dst_reg &dst,
    this->predicate = BRW_PREDICATE_NONE;
    this->predicate_inverse = false;
    this->target = 0;
-   this->size_written = (dst.file == BAD_FILE ? 0 : REG_SIZE);
    this->shadow_compare = false;
    this->ir = NULL;
    this->urb_write_flags = BRW_URB_WRITE_NO_FLAGS;
@@ -55,6 +54,10 @@ vec4_instruction::vec4_instruction(enum opcode opcode, const dst_reg &dst,
    this->mlen = 0;
    this->base_mrf = 0;
    this->offset = 0;
+   this->exec_size = 8;
+   this->group = 0;
+   this->size_written = (dst.file == BAD_FILE ?
+                         0 : this->exec_size * type_sz(dst.type));
    this->annotation = NULL;
 }
 
@@ -781,7 +784,7 @@ vec4_visitor::emit_pull_constant_load_reg(dst_reg dst,
       else
          emit(pull);
 
-      dst_reg index_reg = retype(offset(dst_reg(header), 1),
+      dst_reg index_reg = retype(byte_offset(dst_reg(header), REG_SIZE),
                                  offset_reg.type);
       pull = MOV(writemask(index_reg, WRITEMASK_X), offset_reg);
 
@@ -901,7 +904,7 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
                            const glsl_type *dest_type,
                            src_reg coordinate,
                            int coord_components,
-                           src_reg shadow_comparitor,
+                           src_reg shadow_comparator,
                            src_reg lod, src_reg lod2,
                            src_reg sample_index,
                            uint32_t constant_offset,
@@ -971,7 +974,7 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
    inst->base_mrf = 2;
    inst->mlen = inst->header_size;
    inst->dst.writemask = WRITEMASK_XYZW;
-   inst->shadow_compare = shadow_comparitor.file != BAD_FILE;
+   inst->shadow_compare = shadow_comparator.file != BAD_FILE;
 
    inst->src[1] = surface_reg;
    inst->src[2] = sampler_reg;
@@ -999,11 +1002,11 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
          emit(MOV(dst_reg(MRF, param_base, coordinate.type, zero_mask),
                   brw_imm_d(0)));
       }
-      /* Load the shadow comparitor */
-      if (shadow_comparitor.file != BAD_FILE && op != ir_txd && (op != ir_tg4 || offset_value.file == BAD_FILE)) {
-	 emit(MOV(dst_reg(MRF, param_base + 1, shadow_comparitor.type,
+      /* Load the shadow comparator */
+      if (shadow_comparator.file != BAD_FILE && op != ir_txd && (op != ir_tg4 || offset_value.file == BAD_FILE)) {
+	 emit(MOV(dst_reg(MRF, param_base + 1, shadow_comparator.type,
 			  WRITEMASK_X),
-		  shadow_comparitor));
+		  shadow_comparator));
 	 inst->mlen++;
       }
 
@@ -1012,7 +1015,7 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
 	 int mrf, writemask;
 	 if (devinfo->gen >= 5) {
 	    mrf = param_base + 1;
-	    if (shadow_comparitor.file != BAD_FILE) {
+	    if (shadow_comparator.file != BAD_FILE) {
 	       writemask = WRITEMASK_Y;
 	       /* mlen already incremented */
 	    } else {
@@ -1058,17 +1061,17 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
 	    emit(MOV(dst_reg(MRF, param_base + 1, type, WRITEMASK_YW), lod2));
 	    inst->mlen++;
 
-	    if (dest_type->vector_elements == 3 || shadow_comparitor.file != BAD_FILE) {
+	    if (dest_type->vector_elements == 3 || shadow_comparator.file != BAD_FILE) {
 	       lod.swizzle = BRW_SWIZZLE_ZZZZ;
 	       lod2.swizzle = BRW_SWIZZLE_ZZZZ;
 	       emit(MOV(dst_reg(MRF, param_base + 2, type, WRITEMASK_X), lod));
 	       emit(MOV(dst_reg(MRF, param_base + 2, type, WRITEMASK_Y), lod2));
 	       inst->mlen++;
 
-               if (shadow_comparitor.file != BAD_FILE) {
+               if (shadow_comparator.file != BAD_FILE) {
                   emit(MOV(dst_reg(MRF, param_base + 2,
-                                   shadow_comparitor.type, WRITEMASK_Z),
-                           shadow_comparitor));
+                                   shadow_comparator.type, WRITEMASK_Z),
+                           shadow_comparator));
                }
 	    }
 	 } else /* devinfo->gen == 4 */ {
@@ -1077,9 +1080,9 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
 	    inst->mlen += 2;
 	 }
       } else if (op == ir_tg4 && offset_value.file != BAD_FILE) {
-         if (shadow_comparitor.file != BAD_FILE) {
-            emit(MOV(dst_reg(MRF, param_base, shadow_comparitor.type, WRITEMASK_W),
-                     shadow_comparitor));
+         if (shadow_comparator.file != BAD_FILE) {
+            emit(MOV(dst_reg(MRF, param_base, shadow_comparator.type, WRITEMASK_W),
+                     shadow_comparator));
          }
 
          emit(MOV(dst_reg(MRF, param_base + 1, glsl_type::ivec2_type, WRITEMASK_XY),
@@ -1154,15 +1157,16 @@ vec4_visitor::gs_end_primitive()
 void
 vec4_visitor::emit_ndc_computation()
 {
-   if (output_reg[VARYING_SLOT_POS].file == BAD_FILE)
+   if (output_reg[VARYING_SLOT_POS][0].file == BAD_FILE)
       return;
 
    /* Get the position */
-   src_reg pos = src_reg(output_reg[VARYING_SLOT_POS]);
+   src_reg pos = src_reg(output_reg[VARYING_SLOT_POS][0]);
 
    /* Build ndc coords, which are (x/w, y/w, z/w, 1/w) */
    dst_reg ndc = dst_reg(this, glsl_type::vec4_type);
-   output_reg[BRW_VARYING_SLOT_NDC] = ndc;
+   output_reg[BRW_VARYING_SLOT_NDC][0] = ndc;
+   output_num_components[BRW_VARYING_SLOT_NDC][0] = 4;
 
    current_annotation = "NDC";
    dst_reg ndc_w = ndc;
@@ -1182,7 +1186,7 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
 {
    if (devinfo->gen < 6 &&
        ((prog_data->vue_map.slots_valid & VARYING_BIT_PSIZ) ||
-        output_reg[VARYING_SLOT_CLIP_DIST0].file != BAD_FILE ||
+        output_reg[VARYING_SLOT_CLIP_DIST0][0].file != BAD_FILE ||
         devinfo->has_negative_rhw_bug)) {
       dst_reg header1 = dst_reg(this, glsl_type::uvec4_type);
       dst_reg header1_w = header1;
@@ -1191,23 +1195,23 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
       emit(MOV(header1, brw_imm_ud(0u)));
 
       if (prog_data->vue_map.slots_valid & VARYING_BIT_PSIZ) {
-	 src_reg psiz = src_reg(output_reg[VARYING_SLOT_PSIZ]);
+	 src_reg psiz = src_reg(output_reg[VARYING_SLOT_PSIZ][0]);
 
 	 current_annotation = "Point size";
 	 emit(MUL(header1_w, psiz, brw_imm_f((float)(1 << 11))));
 	 emit(AND(header1_w, src_reg(header1_w), brw_imm_d(0x7ff << 8)));
       }
 
-      if (output_reg[VARYING_SLOT_CLIP_DIST0].file != BAD_FILE) {
+      if (output_reg[VARYING_SLOT_CLIP_DIST0][0].file != BAD_FILE) {
          current_annotation = "Clipping flags";
          dst_reg flags0 = dst_reg(this, glsl_type::uint_type);
          dst_reg flags1 = dst_reg(this, glsl_type::uint_type);
 
-         emit(CMP(dst_null_f(), src_reg(output_reg[VARYING_SLOT_CLIP_DIST0]), brw_imm_f(0.0f), BRW_CONDITIONAL_L));
+         emit(CMP(dst_null_f(), src_reg(output_reg[VARYING_SLOT_CLIP_DIST0][0]), brw_imm_f(0.0f), BRW_CONDITIONAL_L));
          emit(VS_OPCODE_UNPACK_FLAGS_SIMD4X2, flags0, brw_imm_d(0));
          emit(OR(header1_w, src_reg(header1_w), src_reg(flags0)));
 
-         emit(CMP(dst_null_f(), src_reg(output_reg[VARYING_SLOT_CLIP_DIST1]), brw_imm_f(0.0f), BRW_CONDITIONAL_L));
+         emit(CMP(dst_null_f(), src_reg(output_reg[VARYING_SLOT_CLIP_DIST1][0]), brw_imm_f(0.0f), BRW_CONDITIONAL_L));
          emit(VS_OPCODE_UNPACK_FLAGS_SIMD4X2, flags1, brw_imm_d(0));
          emit(SHL(flags1, src_reg(flags1), brw_imm_d(4)));
          emit(OR(header1_w, src_reg(header1_w), src_reg(flags1)));
@@ -1223,15 +1227,15 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
        * clipped against all fixed planes.
        */
       if (devinfo->has_negative_rhw_bug &&
-          output_reg[BRW_VARYING_SLOT_NDC].file != BAD_FILE) {
-         src_reg ndc_w = src_reg(output_reg[BRW_VARYING_SLOT_NDC]);
+          output_reg[BRW_VARYING_SLOT_NDC][0].file != BAD_FILE) {
+         src_reg ndc_w = src_reg(output_reg[BRW_VARYING_SLOT_NDC][0]);
          ndc_w.swizzle = BRW_SWIZZLE_WWWW;
          emit(CMP(dst_null_f(), ndc_w, brw_imm_f(0.0f), BRW_CONDITIONAL_L));
          vec4_instruction *inst;
          inst = emit(OR(header1_w, src_reg(header1_w), brw_imm_ud(1u << 6)));
          inst->predicate = BRW_PREDICATE_NORMAL;
-         output_reg[BRW_VARYING_SLOT_NDC].type = BRW_REGISTER_TYPE_F;
-         inst = emit(MOV(output_reg[BRW_VARYING_SLOT_NDC], brw_imm_f(0.0f)));
+         output_reg[BRW_VARYING_SLOT_NDC][0].type = BRW_REGISTER_TYPE_F;
+         inst = emit(MOV(output_reg[BRW_VARYING_SLOT_NDC][0], brw_imm_f(0.0f)));
          inst->predicate = BRW_PREDICATE_NORMAL;
       }
 
@@ -1243,7 +1247,7 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
       if (prog_data->vue_map.slots_valid & VARYING_BIT_PSIZ) {
          dst_reg reg_w = reg;
          reg_w.writemask = WRITEMASK_W;
-         src_reg reg_as_src = src_reg(output_reg[VARYING_SLOT_PSIZ]);
+         src_reg reg_as_src = src_reg(output_reg[VARYING_SLOT_PSIZ][0]);
          reg_as_src.type = reg_w.type;
          reg_as_src.swizzle = brw_swizzle_for_size(1);
          emit(MOV(reg_w, reg_as_src));
@@ -1252,58 +1256,45 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
          dst_reg reg_y = reg;
          reg_y.writemask = WRITEMASK_Y;
          reg_y.type = BRW_REGISTER_TYPE_D;
-         output_reg[VARYING_SLOT_LAYER].type = reg_y.type;
-         emit(MOV(reg_y, src_reg(output_reg[VARYING_SLOT_LAYER])));
+         output_reg[VARYING_SLOT_LAYER][0].type = reg_y.type;
+         emit(MOV(reg_y, src_reg(output_reg[VARYING_SLOT_LAYER][0])));
       }
       if (prog_data->vue_map.slots_valid & VARYING_BIT_VIEWPORT) {
          dst_reg reg_z = reg;
          reg_z.writemask = WRITEMASK_Z;
          reg_z.type = BRW_REGISTER_TYPE_D;
-         output_reg[VARYING_SLOT_VIEWPORT].type = reg_z.type;
-         emit(MOV(reg_z, src_reg(output_reg[VARYING_SLOT_VIEWPORT])));
+         output_reg[VARYING_SLOT_VIEWPORT][0].type = reg_z.type;
+         emit(MOV(reg_z, src_reg(output_reg[VARYING_SLOT_VIEWPORT][0])));
       }
    }
 }
 
 vec4_instruction *
-vec4_visitor::emit_generic_urb_slot(dst_reg reg, int varying)
-{
-   assert(varying < VARYING_SLOT_MAX);
-   assert(output_reg[varying].type == reg.type);
-   current_annotation = output_reg_annotation[varying];
-   if (output_reg[varying].file != BAD_FILE) {
-      return emit(MOV(reg, src_reg(output_reg[varying])));
-   } else
-      return NULL;
-}
-
-void
 vec4_visitor::emit_generic_urb_slot(dst_reg reg, int varying, int component)
 {
    assert(varying < VARYING_SLOT_MAX);
-   assert(varying >= VARYING_SLOT_VAR0);
-   varying = varying - VARYING_SLOT_VAR0;
 
-   unsigned num_comps = output_generic_num_components[varying][component];
+   unsigned num_comps = output_num_components[varying][component];
    if (num_comps == 0)
-      return;
+      return NULL;
 
-   assert(output_generic_reg[varying][component].type == reg.type);
+   assert(output_reg[varying][component].type == reg.type);
    current_annotation = output_reg_annotation[varying];
-   if (output_generic_reg[varying][component].file != BAD_FILE) {
-      src_reg src = src_reg(output_generic_reg[varying][component]);
+   if (output_reg[varying][component].file != BAD_FILE) {
+      src_reg src = src_reg(output_reg[varying][component]);
       src.swizzle = BRW_SWZ_COMP_OUTPUT(component);
       reg.writemask =
          brw_writemask_for_component_packing(num_comps, component);
-      emit(MOV(reg, src));
+      return emit(MOV(reg, src));
    }
+   return NULL;
 }
 
 void
 vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
 {
    reg.type = BRW_REGISTER_TYPE_F;
-   output_reg[varying].type = reg.type;
+   output_reg[varying][0].type = reg.type;
 
    switch (varying) {
    case VARYING_SLOT_PSIZ:
@@ -1315,13 +1306,13 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
    }
    case BRW_VARYING_SLOT_NDC:
       current_annotation = "NDC";
-      if (output_reg[BRW_VARYING_SLOT_NDC].file != BAD_FILE)
-         emit(MOV(reg, src_reg(output_reg[BRW_VARYING_SLOT_NDC])));
+      if (output_reg[BRW_VARYING_SLOT_NDC][0].file != BAD_FILE)
+         emit(MOV(reg, src_reg(output_reg[BRW_VARYING_SLOT_NDC][0])));
       break;
    case VARYING_SLOT_POS:
       current_annotation = "gl_Position";
-      if (output_reg[VARYING_SLOT_POS].file != BAD_FILE)
-         emit(MOV(reg, src_reg(output_reg[VARYING_SLOT_POS])));
+      if (output_reg[VARYING_SLOT_POS][0].file != BAD_FILE)
+         emit(MOV(reg, src_reg(output_reg[VARYING_SLOT_POS][0])));
       break;
    case VARYING_SLOT_EDGE:
       /* This is present when doing unfilled polygons.  We're supposed to copy
@@ -1338,12 +1329,8 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
       /* No need to write to this slot */
       break;
    default:
-      if (varying >= VARYING_SLOT_VAR0) {
-         for (int i = 0; i < 4; i++) {
-            emit_generic_urb_slot(reg, varying, i);
-         }
-      } else {
-         emit_generic_urb_slot(reg, varying);
+      for (int i = 0; i < 4; i++) {
+         emit_generic_urb_slot(reg, varying, i);
       }
       break;
    }
@@ -1456,13 +1443,23 @@ vec4_visitor::get_scratch_offset(bblock_t *block, vec4_instruction *inst,
       message_header_scale *= 16;
 
    if (reladdr) {
+      /* A vec4 is 16 bytes and a dvec4 is 32 bytes so for doubles we have
+       * to multiply the reladdr by 2. Notice that the reg_offset part
+       * is in units of 16 bytes and is used to select the low/high 16-byte
+       * chunk of a full dvec4, so we don't want to multiply that part.
+       */
       src_reg index = src_reg(this, glsl_type::int_type);
-
-      emit_before(block, inst, ADD(dst_reg(index), *reladdr,
-                                   brw_imm_d(reg_offset)));
-      emit_before(block, inst, MUL(dst_reg(index), index,
-                                   brw_imm_d(message_header_scale)));
-
+      if (type_sz(inst->dst.type) < 8) {
+         emit_before(block, inst, ADD(dst_reg(index), *reladdr,
+                                      brw_imm_d(reg_offset)));
+         emit_before(block, inst, MUL(dst_reg(index), index,
+                                      brw_imm_d(message_header_scale)));
+      } else {
+         emit_before(block, inst, MUL(dst_reg(index), *reladdr,
+                                      brw_imm_d(message_header_scale * 2)));
+         emit_before(block, inst, ADD(dst_reg(index), index,
+                                      brw_imm_d(reg_offset * message_header_scale)));
+      }
       return index;
    } else {
       return brw_imm_d(reg_offset * message_header_scale);
@@ -1485,7 +1482,18 @@ vec4_visitor::emit_scratch_read(bblock_t *block, vec4_instruction *inst,
    src_reg index = get_scratch_offset(block, inst, orig_src.reladdr,
                                       reg_offset);
 
-   emit_before(block, inst, SCRATCH_READ(temp, index));
+   if (type_sz(orig_src.type) < 8) {
+      emit_before(block, inst, SCRATCH_READ(temp, index));
+   } else {
+      dst_reg shuffled = dst_reg(this, glsl_type::dvec4_type);
+      dst_reg shuffled_float = retype(shuffled, BRW_REGISTER_TYPE_F);
+      emit_before(block, inst, SCRATCH_READ(shuffled_float, index));
+      index = get_scratch_offset(block, inst, orig_src.reladdr, reg_offset + 1);
+      vec4_instruction *last_read =
+         SCRATCH_READ(byte_offset(shuffled_float, REG_SIZE), index);
+      emit_before(block, inst, last_read);
+      shuffle_64bit_data(temp, src_reg(shuffled), false, block, last_read);
+   }
 }
 
 /**
@@ -1510,17 +1518,63 @@ vec4_visitor::emit_scratch_write(bblock_t *block, vec4_instruction *inst,
     * weren't initialized, it will confuse live interval analysis, which will
     * make spilling fail to make progress.
     */
-   const src_reg temp = swizzle(retype(src_reg(this, glsl_type::vec4_type),
+   bool is_64bit = type_sz(inst->dst.type) == 8;
+   const glsl_type *alloc_type =
+      is_64bit ? glsl_type::dvec4_type : glsl_type::vec4_type;
+   const src_reg temp = swizzle(retype(src_reg(this, alloc_type),
                                        inst->dst.type),
                                 brw_swizzle_for_mask(inst->dst.writemask));
-   dst_reg dst = dst_reg(brw_writemask(brw_vec8_grf(0, 0),
-				       inst->dst.writemask));
-   vec4_instruction *write = SCRATCH_WRITE(dst, temp, index);
-   if (inst->opcode != BRW_OPCODE_SEL)
-      write->predicate = inst->predicate;
-   write->ir = inst->ir;
-   write->annotation = inst->annotation;
-   inst->insert_after(block, write);
+
+   if (!is_64bit) {
+      dst_reg dst = dst_reg(brw_writemask(brw_vec8_grf(0, 0),
+				          inst->dst.writemask));
+      vec4_instruction *write = SCRATCH_WRITE(dst, temp, index);
+      if (inst->opcode != BRW_OPCODE_SEL)
+         write->predicate = inst->predicate;
+      write->ir = inst->ir;
+      write->annotation = inst->annotation;
+      inst->insert_after(block, write);
+   } else {
+      dst_reg shuffled = dst_reg(this, alloc_type);
+      vec4_instruction *last =
+         shuffle_64bit_data(shuffled, temp, true, block, inst);
+      src_reg shuffled_float = src_reg(retype(shuffled, BRW_REGISTER_TYPE_F));
+
+      uint8_t mask = 0;
+      if (inst->dst.writemask & WRITEMASK_X)
+         mask |= WRITEMASK_XY;
+      if (inst->dst.writemask & WRITEMASK_Y)
+         mask |= WRITEMASK_ZW;
+      if (mask) {
+         dst_reg dst = dst_reg(brw_writemask(brw_vec8_grf(0, 0), mask));
+
+         vec4_instruction *write = SCRATCH_WRITE(dst, shuffled_float, index);
+         if (inst->opcode != BRW_OPCODE_SEL)
+            write->predicate = inst->predicate;
+         write->ir = inst->ir;
+         write->annotation = inst->annotation;
+         last->insert_after(block, write);
+      }
+
+      mask = 0;
+      if (inst->dst.writemask & WRITEMASK_Z)
+         mask |= WRITEMASK_XY;
+      if (inst->dst.writemask & WRITEMASK_W)
+         mask |= WRITEMASK_ZW;
+      if (mask) {
+         dst_reg dst = dst_reg(brw_writemask(brw_vec8_grf(0, 0), mask));
+
+         src_reg index = get_scratch_offset(block, inst, inst->dst.reladdr,
+                                            reg_offset + 1);
+         vec4_instruction *write =
+            SCRATCH_WRITE(dst, byte_offset(shuffled_float, REG_SIZE), index);
+         if (inst->opcode != BRW_OPCODE_SEL)
+            write->predicate = inst->predicate;
+         write->ir = inst->ir;
+         write->annotation = inst->annotation;
+         last->insert_after(block, write);
+      }
+   }
 
    inst->dst.file = temp.file;
    inst->dst.nr = temp.nr;
@@ -1551,7 +1605,8 @@ vec4_visitor::emit_resolve_reladdr(int scratch_loc[], bblock_t *block,
 
    /* Now handle scratch access on src */
    if (src.file == VGRF && scratch_loc[src.nr] != -1) {
-      dst_reg temp = dst_reg(this, glsl_type::vec4_type);
+      dst_reg temp = dst_reg(this, type_sz(src.type) == 8 ?
+         glsl_type::dvec4_type : glsl_type::vec4_type);
       emit_scratch_read(block, inst, temp, src, scratch_loc[src.nr]);
       src.nr = temp.nr;
       src.offset %= REG_SIZE;
@@ -1647,33 +1702,57 @@ vec4_visitor::move_grf_array_access_to_scratch()
  */
 void
 vec4_visitor::emit_pull_constant_load(bblock_t *block, vec4_instruction *inst,
-				      dst_reg temp, src_reg orig_src,
+                                      dst_reg temp, src_reg orig_src,
                                       int base_offset, src_reg indirect)
 {
    assert(orig_src.offset % 16 == 0);
-   int reg_offset = base_offset + orig_src.offset / 16;
    const unsigned index = prog_data->base.binding_table.pull_constants_start;
 
-   src_reg offset;
-   if (indirect.file != BAD_FILE) {
-      offset = src_reg(this, glsl_type::uint_type);
-
-      emit_before(block, inst, ADD(dst_reg(offset), indirect,
-                                   brw_imm_ud(reg_offset * 16)));
-   } else if (devinfo->gen >= 8) {
-      /* Store the offset in a GRF so we can send-from-GRF. */
-      offset = src_reg(this, glsl_type::uint_type);
-      emit_before(block, inst, MOV(dst_reg(offset), brw_imm_ud(reg_offset * 16)));
-   } else {
-      offset = brw_imm_d(reg_offset * 16);
+   /* For 64bit loads we need to emit two 32-bit load messages and we also
+    * we need to shuffle the 32-bit data result into proper 64-bit data. To do
+    * that we emit the 32-bit loads into a temporary and we shuffle the result
+    * into the original destination.
+    */
+   dst_reg orig_temp = temp;
+   bool is_64bit = type_sz(orig_src.type) == 8;
+   if (is_64bit) {
+      assert(type_sz(temp.type) == 8);
+      dst_reg temp_df = dst_reg(this, glsl_type::dvec4_type);
+      temp = retype(temp_df, BRW_REGISTER_TYPE_F);
    }
 
-   emit_pull_constant_load_reg(temp,
-                               brw_imm_ud(index),
-                               offset,
-                               block, inst);
+   src_reg src = orig_src;
+   for (int i = 0; i < (is_64bit ? 2 : 1); i++) {
+      int reg_offset = base_offset + src.offset / 16;
+
+      src_reg offset;
+      if (indirect.file != BAD_FILE) {
+         offset = src_reg(this, glsl_type::uint_type);
+         emit_before(block, inst, ADD(dst_reg(offset), indirect,
+                                      brw_imm_ud(reg_offset * 16)));
+      } else if (devinfo->gen >= 8) {
+         /* Store the offset in a GRF so we can send-from-GRF. */
+         offset = src_reg(this, glsl_type::uint_type);
+         emit_before(block, inst, MOV(dst_reg(offset),
+                                      brw_imm_ud(reg_offset * 16)));
+      } else {
+         offset = brw_imm_d(reg_offset * 16);
+      }
+
+      emit_pull_constant_load_reg(byte_offset(temp, i * REG_SIZE),
+                                  brw_imm_ud(index),
+                                  offset,
+                                  block, inst);
+
+      src = byte_offset(src, 16);
+   }
 
    brw_mark_surface_used(&prog_data->base, index);
+
+   if (is_64bit) {
+      temp = retype(temp, BRW_REGISTER_TYPE_DF);
+      shuffle_64bit_data(orig_temp, src_reg(temp), false, block, inst);
+   }
 }
 
 /**
@@ -1795,8 +1874,7 @@ vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,
    this->current_annotation = NULL;
    memset(this->output_reg_annotation, 0, sizeof(this->output_reg_annotation));
 
-   memset(this->output_generic_num_components, 0,
-          sizeof(this->output_generic_num_components));
+   memset(this->output_num_components, 0, sizeof(this->output_num_components));
 
    this->virtual_grf_start = NULL;
    this->virtual_grf_end = NULL;

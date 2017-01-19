@@ -43,11 +43,24 @@
 #include "volumetexture9.h"
 
 #include "d3d9.h"
+#include "nine_lock.h"
 
 #include "os/os_thread.h"
 
 /* Global mutex as described by MSDN */
 pipe_static_mutex(d3dlock_global);
+
+void
+NineLockGlobalMutex()
+{
+    pipe_mutex_lock(d3dlock_global);
+}
+
+void
+NineUnlockGlobalMutex()
+{
+    pipe_mutex_unlock(d3dlock_global);
+}
 
 static HRESULT NINE_WINAPI
 LockAuthenticatedChannel9_GetCertificateSize( struct NineAuthenticatedChannel9 *This,
@@ -114,7 +127,7 @@ LockAuthenticatedChannel9_Configure( struct NineAuthenticatedChannel9 *This,
 IDirect3DAuthenticatedChannel9Vtbl LockAuthenticatedChannel9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)LockAuthenticatedChannel9_GetCertificateSize,
     (void *)LockAuthenticatedChannel9_GetCertificate,
     (void *)LockAuthenticatedChannel9_NegotiateKeyExchange,
@@ -398,7 +411,7 @@ LockCryptoSession9_GetEncryptionBltKey( struct NineCryptoSession9 *This,
 IDirect3DCryptoSession9Vtbl LockCryptoSession9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)LockCryptoSession9_GetCertificateSize,
     (void *)LockCryptoSession9_GetCertificate,
     (void *)LockCryptoSession9_NegotiateKeyExchange,
@@ -481,7 +494,7 @@ LockCubeTexture9_AddDirtyRect( struct NineCubeTexture9 *This,
 IDirect3DCubeTexture9Vtbl LockCubeTexture9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
     (void *)LockUnknown_SetPrivateData,
     (void *)LockUnknown_GetPrivateData,
@@ -1943,7 +1956,7 @@ LockDevice9_CreateQuery( struct NineDevice9 *This,
 IDirect3DDevice9Vtbl LockDevice9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)LockDevice9_TestCooperativeLevel,
     (void *)LockDevice9_GetAvailableTextureMem,
     (void *)LockDevice9_EvictManagedResources,
@@ -2270,7 +2283,7 @@ LockDevice9Ex_GetDisplayModeEx( struct NineDevice9Ex *This,
 IDirect3DDevice9ExVtbl LockDevice9Ex_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)LockDevice9_TestCooperativeLevel,
     (void *)LockDevice9_GetAvailableTextureMem,
     (void *)LockDevice9_EvictManagedResources,
@@ -2447,7 +2460,7 @@ LockDevice9Video_CreateCryptoSession( struct NineDevice9Video *This,
 IDirect3DDevice9VideoVtbl LockDevice9Video_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)LockDevice9Video_GetContentProtectionCaps,
     (void *)LockDevice9Video_CreateAuthenticatedChannel,
     (void *)LockDevice9Video_CreateCryptoSession
@@ -2493,7 +2506,7 @@ LockIndexBuffer9_GetDesc( struct NineIndexBuffer9 *This,
 IDirect3DIndexBuffer9Vtbl LockIndexBuffer9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
     (void *)LockUnknown_SetPrivateData,
     (void *)LockUnknown_GetPrivateData,
@@ -2535,7 +2548,7 @@ LockPixelShader9_GetFunction( struct NinePixelShader9 *This,
 IDirect3DPixelShader9Vtbl LockPixelShader9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice,
     (void *)LockPixelShader9_GetFunction
 };
@@ -2604,7 +2617,7 @@ LockQuery9_GetData( struct NineQuery9 *This,
 IDirect3DQuery9Vtbl LockQuery9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of Query9 iface */
     (void *)NineQuery9_GetType, /* immutable */
     (void *)NineQuery9_GetDataSize, /* immutable */
@@ -2648,7 +2661,7 @@ LockStateBlock9_Apply( struct NineStateBlock9 *This )
 IDirect3DStateBlock9Vtbl LockStateBlock9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of StateBlock9 iface */
     (void *)LockStateBlock9_Capture,
     (void *)LockStateBlock9_Apply
@@ -2727,7 +2740,7 @@ LockSurface9_ReleaseDC( struct NineSurface9 *This,
 IDirect3DSurface9Vtbl LockSurface9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
     (void *)LockUnknown_SetPrivateData,
     (void *)LockUnknown_GetPrivateData,
@@ -2832,7 +2845,7 @@ LockSwapChain9_GetPresentParameters( struct NineSwapChain9 *This,
 IDirect3DSwapChain9Vtbl LockSwapChain9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)LockSwapChain9_Present,
     (void *)LockSwapChain9_GetFrontBufferData,
     (void *)LockSwapChain9_GetBackBuffer,
@@ -2879,7 +2892,7 @@ LockSwapChain9Ex_GetDisplayModeEx( struct NineSwapChain9Ex *This,
 IDirect3DSwapChain9ExVtbl LockSwapChain9Ex_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)LockSwapChain9_Present,
     (void *)LockSwapChain9_GetFrontBufferData,
     (void *)LockSwapChain9_GetBackBuffer,
@@ -2959,7 +2972,7 @@ LockTexture9_AddDirtyRect( struct NineTexture9 *This,
 IDirect3DTexture9Vtbl LockTexture9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
     (void *)LockUnknown_SetPrivateData,
     (void *)LockUnknown_GetPrivateData,
@@ -3021,7 +3034,7 @@ LockVertexBuffer9_GetDesc( struct NineVertexBuffer9 *This,
 IDirect3DVertexBuffer9Vtbl LockVertexBuffer9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
     (void *)LockUnknown_SetPrivateData,
     (void *)LockUnknown_GetPrivateData,
@@ -3063,7 +3076,7 @@ LockVertexDeclaration9_GetDeclaration( struct NineVertexDeclaration9 *This,
 IDirect3DVertexDeclaration9Vtbl LockVertexDeclaration9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of VertexDecl9 iface */
     (void *)LockVertexDeclaration9_GetDeclaration
 };
@@ -3096,7 +3109,7 @@ LockVertexShader9_GetFunction( struct NineVertexShader9 *This,
 IDirect3DVertexShader9Vtbl LockVertexShader9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice,
     (void *)LockVertexShader9_GetFunction
 };
@@ -3165,7 +3178,7 @@ LockVolume9_UnlockBox( struct NineVolume9 *This )
 IDirect3DVolume9Vtbl LockVolume9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of Volume9 iface */
     (void *)NineUnknown_SetPrivateData,
     (void *)NineUnknown_GetPrivateData,
@@ -3243,7 +3256,7 @@ LockVolumeTexture9_AddDirtyBox( struct NineVolumeTexture9 *This,
 IDirect3DVolumeTexture9Vtbl LockVolumeTexture9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
-    (void *)NineUnknown_Release,
+    (void *)NineUnknown_ReleaseWithDtorLock,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
     (void *)LockUnknown_SetPrivateData,
     (void *)LockUnknown_GetPrivateData,

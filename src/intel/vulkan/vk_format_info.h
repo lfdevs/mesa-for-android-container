@@ -65,4 +65,11 @@ vk_format_is_depth_or_stencil(VkFormat format)
    return aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 }
 
+static inline bool
+vk_format_has_depth(VkFormat format)
+{
+   const VkImageAspectFlags aspects = vk_format_aspects(format);
+   return aspects & VK_IMAGE_ASPECT_DEPTH_BIT;
+}
+
 #endif /* VK_FORMAT_INFO_H */

@@ -351,11 +351,6 @@ typedef struct
    struct vl_compositor compositor;
    struct pipe_sampler_view *dummy_sv;
    pipe_mutex mutex;
-
-   struct {
-      struct vl_compositor_state *cstate;
-      VdpOutputSurface surface;
-   } delayed_rendering;
 } vlVdpDevice;
 
 typedef struct
@@ -457,10 +452,6 @@ boolean vlGetFuncFTAB(VdpFuncId function_id, void **func);
 VdpDeviceCreateX11 vdp_imp_device_create_x11;
 
 void vlVdpDefaultSamplerViewTemplate(struct pipe_sampler_view *templ, struct pipe_resource *res);
-
-/* Delayed rendering funtionality */
-void vlVdpResolveDelayedRendering(vlVdpDevice *dev, struct pipe_surface *surface, struct u_rect *dirty_area);
-void vlVdpSave4DelayedRendering(vlVdpDevice *dev, VdpOutputSurface surface, struct vl_compositor_state *cstate);
 
 /* Internal function pointers */
 VdpGetErrorString vlVdpGetErrorString;

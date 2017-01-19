@@ -215,6 +215,12 @@ isl_gen6_filter_tiling(const struct isl_device *dev,
       *flags &= ~ISL_TILING_W_BIT;
    }
 
+   /* From the SKL+ PRMs, RENDER_SURFACE_STATE:TileMode,
+    *    If Surface Format is ASTC*, this field must be TILEMODE_YMAJOR.
+    */
+   if (isl_format_get_layout(info->format)->txc == ISL_TXC_ASTC)
+      *flags &= ISL_TILING_Y0_BIT;
+
    /* MCS buffers are always Y-tiled */
    if (isl_format_get_layout(info->format)->txc == ISL_TXC_MCS)
       *flags &= ISL_TILING_Y0_BIT;

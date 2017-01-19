@@ -151,6 +151,13 @@ try_constant_propagate(const struct gen_device_info *devinfo,
    if (value.file != IMM)
       return false;
 
+   /* 64-bit types can't be used except for one-source instructions, which
+    * higher levels should have constant folded away, so there's no point in
+    * propagating immediates here.
+    */
+   if (type_sz(value.type) == 8 || type_sz(inst->src[arg].type) == 8)
+      return false;
+
    if (value.type == BRW_REGISTER_TYPE_VF) {
       /* The result of bit-casting the component values of a vector float
        * cannot in general be represented as an immediate.
@@ -283,6 +290,22 @@ try_constant_propagate(const struct gen_device_info *devinfo,
 }
 
 static bool
+is_align1_opcode(unsigned opcode)
+{
+   switch (opcode) {
+   case VEC4_OPCODE_FROM_DOUBLE:
+   case VEC4_OPCODE_TO_DOUBLE:
+   case VEC4_OPCODE_PICK_LOW_32BIT:
+   case VEC4_OPCODE_PICK_HIGH_32BIT:
+   case VEC4_OPCODE_SET_LOW_32BIT:
+   case VEC4_OPCODE_SET_HIGH_32BIT:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static bool
 try_copy_propagate(const struct gen_device_info *devinfo,
                    vec4_instruction *inst, int arg,
                    const copy_entry *entry, int attributes_per_reg)
@@ -301,10 +324,38 @@ try_copy_propagate(const struct gen_device_info *devinfo,
        value.file != ATTR)
       return false;
 
+   /* In gen < 8 instructions that write 2 registers also need to read 2
+    * registers. Make sure we don't break that restriction by copy
+    * propagating from a uniform.
+    */
+   if (devinfo->gen < 8 && inst->size_written > REG_SIZE && is_uniform(value))
+      return false;
+
+   /* There is a regioning restriction such that if execsize == width
+    * and hstride != 0 then the vstride can't be 0. When we split instrutions
+    * that take a single-precision source (like F->DF conversions) we end up
+    * with a 4-wide source on an instruction with an execution size of 4.
+    * If we then copy-propagate the source from a uniform we also end up with a
+    * vstride of 0 and we violate the restriction.
+    */
+   if (inst->exec_size == 4 && value.file == UNIFORM &&
+       type_sz(value.type) == 4)
+      return false;
+
+   /* If the type of the copy value is different from the type of the
+    * instruction then the swizzles and writemasks involved don't have the same
+    * meaning and simply replacing the source would produce different semantics.
+    */
+   if (type_sz(value.type) != type_sz(inst->src[arg].type))
+      return false;
+
    if (devinfo->gen >= 8 && (value.negate || value.abs) &&
        is_logic_op(inst->opcode)) {
       return false;
    }
+
+   if (inst->src[arg].offset % REG_SIZE || value.offset % REG_SIZE)
+      return false;
 
    bool has_source_modifiers = value.negate || value.abs;
 
@@ -326,6 +377,14 @@ try_copy_propagate(const struct gen_device_info *devinfo,
 
    unsigned composed_swizzle = brw_compose_swizzle(inst->src[arg].swizzle,
                                                    value.swizzle);
+
+   /* Instructions that operate on vectors in ALIGN1 mode will ignore swizzles
+    * so copy-propagation won't be safe if the composed swizzle is anything
+    * other than the identity.
+    */
+   if (is_align1_opcode(inst->opcode) && composed_swizzle != BRW_SWIZZLE_XYZW)
+      return false;
+
    if (inst->is_3src(devinfo) &&
        (value.file == UNIFORM ||
         (value.file == ATTR && attributes_per_reg != 1)) &&

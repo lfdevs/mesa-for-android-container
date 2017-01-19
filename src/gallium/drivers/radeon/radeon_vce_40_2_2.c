@@ -94,9 +94,9 @@ static void create(struct rvce_encoder *enc)
 	RVCE_CS(0x00000000); // encPicStructRestriction
 	RVCE_CS(enc->base.width); // encImageWidth
 	RVCE_CS(enc->base.height); // encImageHeight
-	RVCE_CS(enc->luma->level[0].pitch_bytes); // encRefPicLumaPitch
-	RVCE_CS(enc->chroma->level[0].pitch_bytes); // encRefPicChromaPitch
-	RVCE_CS(align(enc->luma->npix_y, 16) / 8); // encRefYHeightInQw
+	RVCE_CS(enc->luma->level[0].nblk_x * enc->luma->bpe); // encRefPicLumaPitch
+	RVCE_CS(enc->chroma->level[0].nblk_x * enc->chroma->bpe); // encRefPicChromaPitch
+	RVCE_CS(align(enc->luma->level[0].nblk_y, 16) / 8); // encRefYHeightInQw
 	RVCE_CS(0x00000000); // encRefPic(Addr|Array)Mode, encPicStructRestriction, disableRDO
 	RVCE_END();
 }
@@ -323,9 +323,9 @@ static void encode(struct rvce_encoder *enc)
 		  enc->luma->level[0].offset); // inputPictureLumaAddressHi/Lo
 	RVCE_READ(enc->handle, RADEON_DOMAIN_VRAM,
 		  enc->chroma->level[0].offset); // inputPictureChromaAddressHi/Lo
-	RVCE_CS(align(enc->luma->npix_y, 16)); // encInputFrameYPitch
-	RVCE_CS(enc->luma->level[0].pitch_bytes); // encInputPicLumaPitch
-	RVCE_CS(enc->chroma->level[0].pitch_bytes); // encInputPicChromaPitch
+	RVCE_CS(align(enc->luma->level[0].nblk_y, 16)); // encInputFrameYPitch
+	RVCE_CS(enc->luma->level[0].nblk_x * enc->luma->bpe); // encInputPicLumaPitch
+	RVCE_CS(enc->chroma->level[0].nblk_x * enc->chroma->bpe); // encInputPicChromaPitch
 	RVCE_CS(0x00000000); // encInputPic(Addr|Array)Mode
 	RVCE_CS(0x00000000); // encInputPicTileConfig
 	RVCE_CS(enc->pic.picture_type); // encPicType

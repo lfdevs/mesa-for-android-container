@@ -168,8 +168,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
             offset = intel_miptree_get_aligned_offset(
                         hiz_mt,
                         hiz_mt->level[lod].level_x,
-                        hiz_mt->level[lod].level_y,
-                        false);
+                        hiz_mt->level[lod].level_y);
          }
 
 	 BEGIN_BATCH(3);
@@ -204,8 +203,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
                offset = intel_miptree_get_aligned_offset(
                            stencil_mt,
                            stencil_mt->level[lod].level_x,
-                           stencil_mt->level[lod].level_y,
-                           false);
+                           stencil_mt->level[lod].level_y);
             }
          }
 

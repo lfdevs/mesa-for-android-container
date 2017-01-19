@@ -426,7 +426,7 @@ static void radeon_print_state_atom(radeonContextPtr radeon, struct radeon_state
 	if (!radeon_is_debug_enabled(RADEON_STATE, RADEON_VERBOSE) )
 		return;
 
-	dwords = (*state->check) (&radeon->glCtx, state);
+	dwords = state->check(&radeon->glCtx, state);
 
 	fprintf(stderr, "  emit %s %d/%d\n", state->name, dwords, state->cmd_size);
 
@@ -491,13 +491,13 @@ static inline void radeon_emit_atom(radeonContextPtr radeon, struct radeon_state
 	BATCH_LOCALS(radeon);
 	int dwords;
 
-	dwords = (*atom->check) (&radeon->glCtx, atom);
+	dwords = atom->check(&radeon->glCtx, atom);
 	if (dwords) {
 
 		radeon_print_state_atom(radeon, atom);
 
 		if (atom->emit) {
-			(*atom->emit)(&radeon->glCtx, atom);
+			atom->emit(&radeon->glCtx, atom);
 		} else {
 			BEGIN_BATCH(dwords);
 			OUT_BATCH_TABLE(atom->cmd, dwords);
@@ -591,7 +591,7 @@ flush_front:
 			 */
 			radeon->front_buffer_dirty = GL_FALSE;
 
-			(*screen->dri2.loader->flushFrontBuffer)(drawable, drawable->loaderPrivate);
+			screen->dri2.loader->flushFrontBuffer(drawable, drawable->loaderPrivate);
 		}
 	}
 }

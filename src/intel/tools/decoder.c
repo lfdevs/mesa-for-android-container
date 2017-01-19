@@ -52,6 +52,8 @@ struct gen_spec {
    struct gen_group *structs[256];
    int nregisters;
    struct gen_group *registers[256];
+   int nenums;
+   struct gen_enum *enums[256];
 };
 
 struct location {
@@ -66,9 +68,13 @@ struct parser_context {
    const char *platform;
 
    struct gen_group *group;
+   struct gen_enum *enoom;
 
    int nfields;
    struct gen_field *fields[128];
+
+   int nvalues;
+   struct gen_value *values[256];
 
    struct gen_spec *spec;
 };
@@ -101,6 +107,16 @@ gen_spec_find_register(struct gen_spec *spec, uint32_t offset)
    for (int i = 0; i < spec->nregisters; i++)
       if (spec->registers[i]->register_offset == offset)
          return spec->registers[i];
+
+   return NULL;
+}
+
+struct gen_enum *
+gen_spec_find_enum(struct gen_spec *spec, const char *name)
+{
+   for (int i = 0; i < spec->nenums; i++)
+      if (strcmp(spec->enums[i]->name, name) == 0)
+         return spec->enums[i];
 
    return NULL;
 }
@@ -167,6 +183,20 @@ create_group(struct parser_context *ctx, const char *name, const char **atts)
    group->group_count = 0;
 
    return group;
+}
+
+static struct gen_enum *
+create_enum(struct parser_context *ctx, const char *name, const char **atts)
+{
+   struct gen_enum *e;
+
+   e = xzalloc(sizeof(*e));
+   if (name)
+      e->name = xstrdup(name);
+
+   e->nvalues = 0;
+
+   return e;
 }
 
 static void
@@ -248,6 +278,7 @@ string_to_type(struct parser_context *ctx, const char *s)
 {
    int i, f;
    struct gen_group *g;
+   struct gen_enum *e;
 
    if (strcmp(s, "int") == 0)
       return (struct gen_type) { .kind = GEN_TYPE_INT };
@@ -267,6 +298,8 @@ string_to_type(struct parser_context *ctx, const char *s)
       return (struct gen_type) { .kind = GEN_TYPE_SFIXED, .i = i, .f = f };
    else if (g = gen_spec_find_struct(ctx->spec, s), g != NULL)
       return (struct gen_type) { .kind = GEN_TYPE_STRUCT, .gen_struct = g };
+   else if (e = gen_spec_find_enum(ctx->spec, s), e != NULL)
+      return (struct gen_type) { .kind = GEN_TYPE_ENUM, .gen_enum = e };
    else if (strcmp(s, "mbo") == 0)
       return (struct gen_type) { .kind = GEN_TYPE_MBO };
    else
@@ -301,6 +334,21 @@ create_field(struct parser_context *ctx, const char **atts)
    }
 
    return field;
+}
+
+static struct gen_value *
+create_value(struct parser_context *ctx, const char **atts)
+{
+   struct gen_value *value = xzalloc(sizeof(*value));
+
+   for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "name") == 0)
+         value->name = xstrdup(atts[i + 1]);
+      else if (strcmp(atts[i], "value") == 0)
+         value->value = strtoul(atts[i + 1], NULL, 0);
+   }
+
+   return value;
 }
 
 static void
@@ -351,7 +399,9 @@ start_element(void *data, const char *element_name, const char **atts)
             ctx->group->group_count--;
       } while (ctx->group->group_count > 0);
    } else if (strcmp(element_name, "enum") == 0) {
+      ctx->enoom = create_enum(ctx, name, atts);
    } else if (strcmp(element_name, "value") == 0) {
+      ctx->values[ctx->nvalues++] = create_value(ctx, atts);
    }
 }
 
@@ -359,6 +409,7 @@ static void
 end_element(void *data, const char *name)
 {
    struct parser_context *ctx = data;
+   struct gen_spec *spec = ctx->spec;
 
    if (strcmp(name, "instruction") == 0 ||
       strcmp(name, "struct") == 0 ||
@@ -383,7 +434,6 @@ end_element(void *data, const char *name)
          }
       }
 
-      struct gen_spec *spec = ctx->spec;
       if (strcmp(name, "instruction") == 0)
          spec->commands[spec->ncommands++] = group;
       else if (strcmp(name, "struct") == 0)
@@ -393,6 +443,23 @@ end_element(void *data, const char *name)
    } else if (strcmp(name, "group") == 0) {
       ctx->group->group_offset = 0;
       ctx->group->group_count = 0;
+   } else if (strcmp(name, "field") == 0) {
+      assert(ctx->nfields > 0);
+      struct gen_field *field = ctx->fields[ctx->nfields - 1];
+      size_t size = ctx->nvalues * sizeof(ctx->values[0]);
+      field->inline_enum.values = xzalloc(size);
+      field->inline_enum.nvalues = ctx->nvalues;
+      memcpy(field->inline_enum.values, ctx->values, size);
+      ctx->nvalues = 0;
+   } else if (strcmp(name, "enum") == 0) {
+      struct gen_enum *e = ctx->enoom;
+      size_t size = ctx->nvalues * sizeof(ctx->values[0]);
+      e->values = xzalloc(size);
+      e->nvalues = ctx->nvalues;
+      memcpy(e->values, ctx->values, size);
+      ctx->nvalues = 0;
+      ctx->enoom = NULL;
+      spec->enums[spec->nenums++] = e;
    }
 }
 
@@ -508,6 +575,7 @@ gen_spec_load_from_path(const struct gen_device_info *devinfo,
    XML_SetUserData(ctx.parser, &ctx);
    if (ctx.parser == NULL) {
       fprintf(stderr, "failed to create parser\n");
+      fclose(input);
       free(filename);
       return NULL;
    }
@@ -594,11 +662,26 @@ gen_group_get_length(struct gen_group *group, const uint32_t *p)
 
 void
 gen_field_iterator_init(struct gen_field_iterator *iter,
-                        struct gen_group *group, const uint32_t *p)
+                        struct gen_group *group,
+                        const uint32_t *p,
+                        bool print_colors)
 {
    iter->group = group;
    iter->p = p;
    iter->i = 0;
+   iter->print_colors = print_colors;
+}
+
+static void
+gen_enum_write_value(char *str, size_t max_length,
+                      struct gen_enum *e, uint64_t value)
+{
+   for (int i = 0; i < e->nvalues; i++) {
+      if (e->values[i]->value == value) {
+         strncpy(str, e->values[i]->name, max_length);
+         return;
+      }
+   }
 }
 
 bool
@@ -622,20 +705,33 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
    else
       v.qw = iter->p[index];
 
+   iter->description[0] = '\0';
+
    switch (f->type.kind) {
    case GEN_TYPE_UNKNOWN:
-   case GEN_TYPE_INT:
+   case GEN_TYPE_INT: {
+      uint64_t value = field(v.qw, f->start, f->end);
       snprintf(iter->value, sizeof(iter->value),
-               "%"PRId64, field(v.qw, f->start, f->end));
+               "%"PRId64, value);
+      gen_enum_write_value(iter->description, sizeof(iter->description),
+                           &f->inline_enum, value);
       break;
-   case GEN_TYPE_UINT:
+   }
+   case GEN_TYPE_UINT: {
+      uint64_t value = field(v.qw, f->start, f->end);
       snprintf(iter->value, sizeof(iter->value),
-               "%"PRIu64, field(v.qw, f->start, f->end));
+               "%"PRIu64, value);
+      gen_enum_write_value(iter->description, sizeof(iter->description),
+                            &f->inline_enum, value);
       break;
-   case GEN_TYPE_BOOL:
+   }
+   case GEN_TYPE_BOOL: {
+      const char *true_string =
+         iter->print_colors ? "\e[0;35mtrue\e[0m" : "true";
       snprintf(iter->value, sizeof(iter->value),
-               "%s", field(v.qw, f->start, f->end) ? "true" : "false");
+               "%s", field(v.qw, f->start, f->end) ? true_string : "false");
       break;
+   }
    case GEN_TYPE_FLOAT:
       snprintf(iter->value, sizeof(iter->value), "%f", v.f);
       break;
@@ -658,6 +754,14 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
       break;
    case GEN_TYPE_MBO:
        break;
+   case GEN_TYPE_ENUM: {
+      uint64_t value = field(v.qw, f->start, f->end);
+      snprintf(iter->value, sizeof(iter->value),
+               "%"PRId64, value);
+      gen_enum_write_value(iter->description, sizeof(iter->description),
+                           f->type.gen_enum, value);
+      break;
+   }
    }
 
    return true;

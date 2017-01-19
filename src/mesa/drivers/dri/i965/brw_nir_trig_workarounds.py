@@ -23,9 +23,10 @@
 
 import nir_algebraic
 
-# The SIN and COS instructions on Intel hardware can produce values
-# slightly outside of the [-1.0, 1.0] range for a small set of values.
-# Obviously, this can break everyone's expectations about trig functions.
+# Prior to Kaby Lake, The SIN and COS instructions on Intel hardware can
+# produce values slightly outside of the [-1.0, 1.0] range for a small set of
+# values.  Obviously, this can break everyone's expectations about trig
+# functions.  This appears to be fixed in Kaby Lake.
 #
 # According to an internal presentation, the COS instruction can produce
 # a value up to 1.000027 for inputs in the range (0.08296, 0.09888).  One

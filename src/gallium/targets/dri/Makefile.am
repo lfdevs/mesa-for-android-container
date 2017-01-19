@@ -91,6 +91,9 @@ include $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/virgl/Automake.inc
 
+include $(top_srcdir)/src/gallium/drivers/etnaviv/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/imx/Automake.inc
+
 include $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/swr/Automake.inc
@@ -112,7 +115,7 @@ gallium_dri_la_LIBADD += \
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 
-if HAVE_MESA_LLVM
+if HAVE_GALLIUM_LLVM
 gallium_dri_la_LIBADD += $(LLVM_LIBS)
 gallium_dri_la_LDFLAGS += $(LLVM_LDFLAGS)
 endif

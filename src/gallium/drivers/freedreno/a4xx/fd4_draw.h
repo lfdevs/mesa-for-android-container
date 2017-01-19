@@ -87,7 +87,6 @@ fd4_draw(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	fd_reset_wfi(batch);
 }
 
-
 static inline enum a4xx_index_size
 fd4_size2indextype(unsigned index_size)
 {
@@ -100,6 +99,7 @@ fd4_size2indextype(unsigned index_size)
 	assert(0);
 	return INDEX4_SIZE_32_BIT;
 }
+
 static inline void
 fd4_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 		enum pc_di_primtype primtype,

@@ -1260,6 +1260,17 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          i->op = OP_EXTBF;
          i->setSrc(0, src->getSrc(0));
          i->setSrc(1, new_ImmediateValue(prog, ext));
+      } else if (src->op == OP_SHL &&
+                 src->src(1).getImmediate(imm1) &&
+                 i->src(t).mod == Modifier(0) &&
+                 util_is_power_of_two(~imm0.reg.data.u32 + 1) &&
+                 util_last_bit(~imm0.reg.data.u32) <= imm1.reg.data.u32) {
+         i->op = OP_MOV;
+         i->setSrc(s, NULL);
+         if (t) {
+            i->setSrc(0, i->getSrc(t));
+            i->setSrc(t, NULL);
+         }
       }
    }
       break;
@@ -2968,6 +2979,7 @@ FlatteningPass::visit(BasicBlock *bb)
          insn = insn->prev;
          if (insn && !insn->getPredicate() &&
              !insn->asFlow() &&
+             insn->op != OP_DISCARD &&
              insn->op != OP_TEXBAR &&
              !isTextureOp(insn->op) && // probably just nve4
              !isSurfaceOp(insn->op) && // not confirmed
@@ -3322,7 +3334,7 @@ LocalCSE::visit(BasicBlock *bb)
       for (ir = bb->getFirst(); ir; ir = ir->next)
          ir->serial = serial++;
 
-      for (ir = bb->getEntry(); ir; ir = next) {
+      for (ir = bb->getFirst(); ir; ir = next) {
          int s;
          Value *src = NULL;
 

@@ -239,7 +239,10 @@ tgsi_default_declaration_semantic( void )
 
    ds.Name = TGSI_SEMANTIC_POSITION;
    ds.Index = 0;
-   ds.Padding = 0;
+   ds.StreamX = 0;
+   ds.StreamY = 0;
+   ds.StreamZ = 0;
+   ds.StreamW = 0;
 
    return ds;
 }
@@ -248,6 +251,10 @@ static struct tgsi_declaration_semantic
 tgsi_build_declaration_semantic(
    unsigned semantic_name,
    unsigned semantic_index,
+   unsigned streamx,
+   unsigned streamy,
+   unsigned streamz,
+   unsigned streamw,
    struct tgsi_declaration *declaration,
    struct tgsi_header *header )
 {
@@ -258,7 +265,10 @@ tgsi_build_declaration_semantic(
 
    ds.Name = semantic_name;
    ds.Index = semantic_index;
-   ds.Padding = 0;
+   ds.StreamX = streamx;
+   ds.StreamY = streamy;
+   ds.StreamZ = streamz;
+   ds.StreamW = streamw;
 
    declaration_grow( declaration, header );
 
@@ -461,6 +471,10 @@ tgsi_build_full_declaration(
       *ds = tgsi_build_declaration_semantic(
          full_decl->Semantic.Name,
          full_decl->Semantic.Index,
+         full_decl->Semantic.StreamX,
+         full_decl->Semantic.StreamY,
+         full_decl->Semantic.StreamZ,
+         full_decl->Semantic.StreamW,
          declaration,
          header );
    }

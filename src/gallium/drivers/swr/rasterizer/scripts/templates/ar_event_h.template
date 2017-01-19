@@ -51,7 +51,10 @@ namespace ArchRast
     //////////////////////////////////////////////////////////////////////////
     struct Event
     {
-        virtual void accept(EventHandler* pHandler) = 0;
+        Event() {}
+        virtual ~Event() {}
+
+        virtual void Accept(EventHandler* pHandler) = 0;
     };
 % for name in protos['event_names']:
 
@@ -86,16 +89,17 @@ namespace ArchRast
             ${field_types[i]} ${field_names[i]},
             % endif
             % if i == len(field_names)-1:
-            ${field_types[i]} ${field_names[i]})
+            ${field_types[i]} ${field_names[i]}
             % endif
         % endfor
+        )
         {
         % for i in range(len(field_names)):
             data.${field_names[i]} = ${field_names[i]};
         % endfor
         }
 
-        virtual void accept(EventHandler* pHandler);
+        virtual void Accept(EventHandler* pHandler);
     };
 % endfor
 }

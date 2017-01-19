@@ -66,8 +66,6 @@ NineIndexBuffer9_dtor( struct NineIndexBuffer9 *This );
 const struct pipe_index_buffer *
 NineIndexBuffer9_GetBuffer( struct NineIndexBuffer9 *This );
 
-struct pipe_resource *
-NineIndexBuffer9_GetResource( struct NineIndexBuffer9 *This );
 /*** Direct3D public ***/
 
 HRESULT NINE_WINAPI

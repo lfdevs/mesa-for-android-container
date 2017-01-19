@@ -1,0 +1,217 @@
+Import('*')
+
+from sys import executable as python_cmd
+import os.path
+import distutils.version
+
+if not env['swr']:
+    Return()
+
+if not env['llvm']:
+    print 'warning: LLVM disabled: not building swr'
+    env['swr'] = False
+    Return()
+
+if env['LLVM_VERSION'] < distutils.version.LooseVersion('3.9'):
+    print "warning: swr requires LLVM >= 3.9: not building swr"
+    env['swr'] = False
+    Return()
+
+if env['platform'] != 'windows':
+    print "warning: swr scons build only supports windows: not building swr"
+    env['swr'] = False
+    Return()
+
+env.MSVC2013Compat()
+
+env = env.Clone()
+
+# construct llvm include dir
+if env['platform'] == 'windows':
+    # on windows there is no llvm-config, so LLVM is defined
+    llvm_includedir = os.path.join(os.environ['LLVM'], 'include')
+else:
+    llvm_config = os.environ.get('LLVM_CONFIG', 'llvm-config')
+    llvm_includedir = env.backtick('%s --includedir' % llvm_config).rstrip()
+    print "llvm include dir %s" % llvm_includedir
+
+# the loader is included in the mesa lib itself
+# All the remaining files are in loadable modules
+loadersource = env.ParseSourceList('Makefile.sources', [
+    'LOADER_SOURCES'
+])
+
+env.Append(CPPDEFINES = [
+    '__STDC_CONSTANT_MACROS',
+    '__STDC_LIMIT_MACROS'
+    ])
+
+if not env['msvc'] :
+    env.Append(CCFLAGS = [
+        '-std=c++11',
+    ])
+
+swrroot = '#src/gallium/drivers/swr/'
+
+env.CodeGenerate(
+    target = 'rasterizer/scripts/gen_knobs.cpp',
+    script = swrroot + 'rasterizer/scripts/gen_knobs.py',
+    source = 'rasterizer/scripts/templates/knobs.template',
+    command = python_cmd + ' $SCRIPT --input $SOURCE --output $TARGET --gen_cpp'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/scripts/gen_knobs.h',
+    script = swrroot + 'rasterizer/scripts/gen_knobs.py',
+    source = 'rasterizer/scripts/templates/knobs.template',
+    command = python_cmd + ' $SCRIPT --input $SOURCE --output $TARGET --gen_h'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/jitter/state_llvm.h',
+    script = swrroot + 'rasterizer/jitter/scripts/gen_llvm_types.py',
+    source = 'rasterizer/core/state.h',
+    command = python_cmd + ' $SCRIPT --input $SOURCE --output $TARGET'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/jitter/builder_gen.h',
+    script = swrroot + 'rasterizer/jitter/scripts/gen_llvm_ir_macros.py',
+    source = os.path.join(llvm_includedir, 'llvm/IR/IRBuilder.h'),
+    command = python_cmd + ' $SCRIPT --input $SOURCE --output $TARGET --gen_h'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/jitter/builder_gen.cpp',
+    script = swrroot + 'rasterizer/jitter/scripts/gen_llvm_ir_macros.py',
+    source = os.path.join(llvm_includedir, 'llvm/IR/IRBuilder.h'),
+    command = python_cmd + ' $SCRIPT --input $SOURCE --output $TARGET --gen_cpp'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/jitter/builder_x86.h',
+    script = swrroot + 'rasterizer/jitter/scripts/gen_llvm_ir_macros.py',
+    source = '',
+    command = python_cmd + ' $SCRIPT --output $TARGET --gen_x86_h'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/jitter/builder_x86.cpp',
+    script = swrroot + 'rasterizer/jitter/scripts/gen_llvm_ir_macros.py',
+    source = '',
+    command = python_cmd + ' $SCRIPT --output $TARGET --gen_x86_cpp'
+)
+
+env.CodeGenerate(
+    target = 'swr_context_llvm.h',
+    script = swrroot + 'rasterizer/jitter/scripts/gen_llvm_types.py',
+    source = 'swr_context.h',
+    command = python_cmd + ' $SCRIPT --input $SOURCE --output $TARGET'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/archrast/gen_ar_event.h',
+    script = swrroot + 'rasterizer/scripts/gen_archrast.py',
+    source = 'rasterizer/archrast/events.proto',
+    command = python_cmd + ' $SCRIPT --proto $SOURCE --output $TARGET --gen_event_h'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/archrast/gen_ar_event.cpp',
+    script = swrroot + 'rasterizer/scripts/gen_archrast.py',
+    source = 'rasterizer/archrast/events.proto',
+    command = python_cmd + ' $SCRIPT --proto $SOURCE --output $TARGET --gen_event_cpp'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/archrast/gen_ar_eventhandler.h',
+    script = swrroot + 'rasterizer/scripts/gen_archrast.py',
+    source = 'rasterizer/archrast/events.proto',
+    command = python_cmd + ' $SCRIPT --proto $SOURCE --output $TARGET --gen_eventhandler_h'
+)
+
+env.CodeGenerate(
+    target = 'rasterizer/archrast/gen_ar_eventhandlerfile.h',
+    script = swrroot + 'rasterizer/scripts/gen_archrast.py',
+    source = 'rasterizer/archrast/events.proto',
+    command = python_cmd + ' $SCRIPT --proto $SOURCE --output $TARGET --gen_eventhandlerfile_h'
+)
+
+# Auto-generated .cpp files (that need to generate object files)
+built_sources = [
+    'rasterizer/scripts/gen_knobs.cpp',
+    'rasterizer/jitter/builder_gen.cpp',
+    'rasterizer/jitter/builder_x86.cpp',
+    'rasterizer/archrast/gen_ar_event.cpp',
+    ]
+
+source = built_sources
+source += env.ParseSourceList(swrroot + 'Makefile.sources', [
+    'CXX_SOURCES',
+    'ARCHRAST_CXX_SOURCES',
+    'COMMON_CXX_SOURCES',
+    'CORE_CXX_SOURCES',
+    'JITTER_CXX_SOURCES',
+    'MEMORY_CXX_SOURCES'
+])
+
+env.Prepend(LIBS = [ mesautil, mesa, gallium ])
+
+env.Prepend(CPPPATH = [
+    '.',
+    'rasterizer',
+    'rasterizer/scripts',
+    'rasterizer/core',
+    'rasterizer/jitter',
+    'rasterizer/archrast',
+    ])
+
+# AVX lib
+envavx = env.Clone()
+
+envavx.Append(CPPDEFINES = ['KNOB_ARCH=KNOB_ARCH_AVX'])
+if env['platform'] == 'windows':
+    envavx.Append(CCFLAGS = ['/arch:AVX'])
+else:
+    envavx.Append(CCFLAGS = ['-mavx'])
+
+swrAVX = envavx.SharedLibrary(
+    target = 'swrAVX',
+    source = source,
+    OBJPREFIX = 'avx_'
+    )
+env.Alias('swrAVX', swrAVX)
+
+# AVX2 lib
+envavx2 = env.Clone()
+
+envavx2.Append(CPPDEFINES = ['KNOB_ARCH=KNOB_ARCH_AVX2'])
+if env['platform'] == 'windows':
+    envavx2.Append(CCFLAGS = ['/arch:AVX2'])
+else:
+    envavx2.Append(CCFLAGS = ['-mavx2'])
+
+swrAVX2 = envavx2.SharedLibrary(
+    target = 'swrAVX2',
+    source = source,
+    OBJPREFIX = 'avx2_'
+    )
+env.Alias('swrAVX2', swrAVX2)
+
+
+# main SWR lib
+swr = env.ConvenienceLibrary(
+    target = 'swr',
+    source = loadersource,
+    )
+
+
+# treat arch libs as dependencies, even though they are not linked
+# into swr, so we don't have to build them separately
+Depends(swr, ['swrAVX', 'swrAVX2'])
+
+env.Alias('swr', swr)
+
+env.Prepend(LIBS = [swr])
+
+Export('swr')

@@ -30,7 +30,6 @@ static void
 gen8_upload_ds_state(struct brw_context *brw)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   struct gl_context *ctx = &brw->ctx;
    const struct brw_stage_state *stage_state = &brw->tes.base;
    /* BRW_NEW_TESS_PROGRAMS */
    bool active = brw->tess_eval_program;
@@ -72,10 +71,7 @@ gen8_upload_ds_state(struct brw_context *brw)
                  GEN7_DS_SIMD8_DISPATCH_ENABLE : 0) |
                 (tes_prog_data->domain == BRW_TESS_DOMAIN_TRI ?
                  GEN7_DS_COMPUTE_W_COORDINATE_ENABLE : 0));
-      /* _NEW_TRANSFORM */
-      OUT_BATCH(SET_FIELD(ctx->Transform.ClipPlanesEnabled,
-                          GEN8_DS_USER_CLIP_DISTANCE) |
-                SET_FIELD(vue_prog_data->cull_distance_mask,
+      OUT_BATCH(SET_FIELD(vue_prog_data->cull_distance_mask,
                           GEN8_DS_USER_CULL_DISTANCE));
 
 
@@ -110,7 +106,7 @@ gen8_upload_ds_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_ds_state = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM,
+      .mesa  = 0,
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_BLORP |
                BRW_NEW_TESS_PROGRAMS |

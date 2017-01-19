@@ -149,6 +149,18 @@ HOTTILE* HotTileMgr::GetHotTile(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, uint32
             default: SWR_ASSERT(false, "Unknown attachment: %d", attachment); format = KNOB_COLOR_HOT_TILE_FORMAT; break;
             }
 
+            if (hotTile.state == HOTTILE_CLEAR)
+            {
+                if (attachment == SWR_ATTACHMENT_STENCIL)
+                    ClearStencilHotTile(&hotTile);
+                else if (attachment == SWR_ATTACHMENT_DEPTH)
+                    ClearDepthHotTile(&hotTile);
+                else
+                    ClearColorHotTile(&hotTile);
+
+                hotTile.state = HOTTILE_DIRTY;
+            }
+
             if (hotTile.state == HOTTILE_DIRTY)
             {
                 pContext->pfnStoreTile(GetPrivateState(pDC), format, attachment,

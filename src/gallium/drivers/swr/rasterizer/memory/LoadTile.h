@@ -347,6 +347,7 @@ static INLINE void InitLoadTileDepthTable(PFN_LOAD_TILES(&table)[NUM_SWR_FORMATS
     memset(table, 0, sizeof(table));
 
    table[R32_FLOAT]                       = LoadMacroTile<TilingTraits<TTileMode, 32>, R32_FLOAT, R32_FLOAT>::Load;
+   table[R32_FLOAT_X8X24_TYPELESS]        = LoadMacroTile<TilingTraits<TTileMode, 64>, R32_FLOAT_X8X24_TYPELESS, R32_FLOAT>::Load;
    table[R24_UNORM_X8_TYPELESS]           = LoadMacroTile<TilingTraits<TTileMode, 32>, R24_UNORM_X8_TYPELESS, R32_FLOAT>::Load;
    table[R16_UNORM]                       = LoadMacroTile<TilingTraits<TTileMode, 16>, R16_UNORM, R32_FLOAT>::Load;
 }

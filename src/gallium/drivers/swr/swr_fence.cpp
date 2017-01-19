@@ -38,9 +38,12 @@
  * to SwrSync call.
  */
 static void
-swr_sync_cb(uint64_t userData, uint64_t userData2, uint64_t userData3)
+swr_fence_cb(uint64_t userData, uint64_t userData2, uint64_t userData3)
 {
    struct swr_fence *fence = (struct swr_fence *)userData;
+
+   /* Complete all work attached to the fence */
+   swr_fence_do_work(fence);
 
    /* Correct value is in SwrSync data, and not the fence write field. */
    fence->read = userData2;
@@ -56,7 +59,7 @@ swr_fence_submit(struct swr_context *ctx, struct pipe_fence_handle *fh)
 
    fence->write++;
    fence->pending = TRUE;
-   SwrSync(ctx->swrContext, swr_sync_cb, (uint64_t)fence, fence->write, 0);
+   SwrSync(ctx->swrContext, swr_fence_cb, (uint64_t)fence, fence->write, 0);
 }
 
 /*
@@ -72,6 +75,7 @@ swr_fence_create()
 
    pipe_reference_init(&fence->reference, 1);
    fence->id = fence_id++;
+   fence->work.tail = &fence->work.head;
 
    return (struct pipe_fence_handle *)fence;
 }
@@ -80,6 +84,8 @@ swr_fence_create()
 static void
 swr_fence_destroy(struct swr_fence *fence)
 {
+   /* Complete any work left if fence was not submitted */
+   swr_fence_do_work(fence);
    FREE(fence);
 }
 
@@ -101,8 +107,10 @@ swr_fence_reference(struct pipe_screen *screen,
       old = NULL;
    }
 
-   if (pipe_reference(&old->reference, &fence->reference))
+   if (pipe_reference(&old->reference, &fence->reference)) {
+      swr_fence_finish(screen, NULL, (struct pipe_fence_handle *) old, 0);
       swr_fence_destroy(old);
+   }
 }
 
 

@@ -267,6 +267,8 @@ class Field(object):
             type = 'uint32_t'
         elif self.type in self.parser.structs:
             type = 'struct ' + self.parser.gen_prefix(safe_name(self.type))
+        elif self.type in self.parser.enums:
+            type = 'enum ' + self.parser.gen_prefix(safe_name(self.type))
         elif self.type == 'mbo':
             return
         else:
@@ -426,6 +428,9 @@ class Group(object):
                 elif field.type == "uint":
                     s = "__gen_uint(values->%s, %d, %d)" % \
                         (name, field.start - dword_start, field.end - dword_start)
+                elif field.type in self.parser.enums:
+                    s = "__gen_uint(values->%s, %d, %d)" % \
+                        (name, field.start - dword_start, field.end - dword_start)
                 elif field.type == "int":
                     s = "__gen_sint(values->%s, %d, %d)" % \
                         (name, field.start - dword_start, field.end - dword_start)
@@ -484,6 +489,7 @@ class Parser(object):
 
         self.instruction = None
         self.structs = {}
+        self.enums = {}
         self.registers = {}
 
     def gen_prefix(self, name):
@@ -530,6 +536,7 @@ class Parser(object):
         elif name == "enum":
             self.values = []
             self.enum = safe_name(attrs["name"])
+            self.enums[attrs["name"]] = 1
             if "prefix" in attrs:
                 self.prefix = safe_name(attrs["prefix"])
             else:
@@ -626,14 +633,14 @@ class Parser(object):
         self.emit_pack_function(self.struct, self.group)
 
     def emit_enum(self):
-        print('/* enum %s */' % self.gen_prefix(self.enum))
+        print('enum %s {' % self.gen_prefix(self.enum))
         for value in self.values:
             if self.prefix:
                 name = self.prefix + "_" + value.name
             else:
                 name = value.name
-            print('#define %-36s %6d' % (name.upper(), value.value))
-        print('')
+            print('   %-36s = %6d,' % (name.upper(), value.value))
+        print('};\n')
 
     def parse(self, filename):
         file = open(filename, "rb")

@@ -2,31 +2,15 @@ Intel Vulkan ToDo
 =================
 
 Missing Features:
- - FP64
- - Tessellation
- - Cull and Clip Distance
- - Image Gather Extended
  - Storage Image Without Format
  - Investigate CTS failures on HSW
  - Pipeline statistics queries
  - Sparse memory
- - Per-sample-dispatch, minSampleShading
-
-Code sharing with GL:
- - Add surface capability introspection to ISL (pull the surface format
-   table from brw_surface_formats.c)
- - Generalize blorp to use ISL and be sharable between the two drivers
 
 Performance:
- - Multi-{sampled/gen8,LOD,subpass} HiZ
- - Fast color clears (after HiZ?)
+ - Multi-{sampled/gen8,LOD} HiZ
  - Compressed multisample support
- - Renderbuffer compression (SKL+)
  - Pushing pieces of UBOs?
  - Enable guardband clipping
- - Remove alloc in renderpass begin to renderpass create
  - pma stall workaround
  - Use soft-pin to avoid relocations
-
-Cleanups:
- - Deduplicate gen7 and gen8

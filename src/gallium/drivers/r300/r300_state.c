@@ -2068,7 +2068,7 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
     }
 }
 
-static void r300_texture_barrier(struct pipe_context *pipe)
+static void r300_texture_barrier(struct pipe_context *pipe, unsigned flags)
 {
     struct r300_context *r300 = r300_context(pipe);
 

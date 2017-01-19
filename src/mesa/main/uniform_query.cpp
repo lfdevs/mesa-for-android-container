@@ -179,10 +179,10 @@ validate_uniform_parameters(struct gl_context *ctx,
 
    /* Check that the given location is in bounds of uniform remap table.
     * Unlinked programs will have NumUniformRemapTable == 0, so we can take
-    * the shProg->LinkStatus check out of the main path.
+    * the shProg->data->LinkStatus check out of the main path.
     */
    if (unlikely(location >= (GLint) shProg->NumUniformRemapTable)) {
-      if (!shProg->LinkStatus)
+      if (!shProg->data->LinkStatus)
          _mesa_error(ctx, GL_INVALID_OPERATION, "%s(program not linked)",
                      caller);
       else
@@ -193,7 +193,7 @@ validate_uniform_parameters(struct gl_context *ctx,
    }
 
    if (location == -1) {
-      if (!shProg->LinkStatus)
+      if (!shProg->data->LinkStatus)
          _mesa_error(ctx, GL_INVALID_OPERATION, "%s(program not linked)",
                      caller);
 
@@ -859,32 +859,18 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
       for (int i = 0; i < MESA_SHADER_STAGES; i++) {
 	 struct gl_linked_shader *const sh = shProg->_LinkedShaders[i];
 
-	 /* If the shader stage doesn't use the sampler uniform, skip this.
-	  */
-	 if (sh == NULL || !uni->opaque[i].active)
+	 /* If the shader stage doesn't use the sampler uniform, skip this. */
+	 if (!uni->opaque[i].active)
 	    continue;
 
+         bool changed = false;
          for (int j = 0; j < count; j++) {
-            sh->SamplerUnits[uni->opaque[i].index + offset + j] =
-               ((unsigned *) values)[j];
+            unsigned unit = uni->opaque[i].index + offset + j;
+            if (sh->Program->SamplerUnits[unit] != ((unsigned *) values)[j]) {
+               sh->Program->SamplerUnits[unit] = ((unsigned *) values)[j];
+               changed = true;
+            }
          }
-
-	 struct gl_program *const prog = sh->Program;
-
-	 assert(sizeof(prog->SamplerUnits) == sizeof(sh->SamplerUnits));
-
-	 /* Determine if any of the samplers used by this shader stage have
-	  * been modified.
-	  */
-	 bool changed = false;
-	 GLbitfield mask = sh->active_samplers;
-	 while (mask) {
-	    const int j = u_bit_scan(&mask);
-	    if (prog->SamplerUnits[j] != sh->SamplerUnits[j]) {
-	       changed = true;
-	       break;
-	    }
-	 }
 
 	 if (changed) {
 	    if (!flushed) {
@@ -892,6 +878,7 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
 	       flushed = true;
 	    }
 
+            struct gl_program *const prog = sh->Program;
 	    _mesa_update_shader_textures_used(shProg, prog);
             if (ctx->Driver.SamplerUniformChange)
 	       ctx->Driver.SamplerUniformChange(ctx, prog->Target, prog);
@@ -908,7 +895,7 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
             struct gl_linked_shader *sh = shProg->_LinkedShaders[i];
 
             for (int j = 0; j < count; j++)
-               sh->ImageUnits[uni->opaque[i].index + offset + j] =
+               sh->Program->sh.ImageUnits[uni->opaque[i].index + offset + j] =
                   ((GLint *) values)[j];
          }
       }
@@ -1068,7 +1055,7 @@ _mesa_sampler_uniforms_are_valid(const struct gl_shader_program *shProg,
 				 char *errMsg, size_t errMsgLength)
 {
    /* Shader does not have samplers. */
-   if (shProg->NumUniformStorage == 0)
+   if (shProg->data->NumUniformStorage == 0)
       return true;
 
    if (!shProg->SamplersValidated) {
@@ -1119,8 +1106,8 @@ _mesa_sampler_uniforms_pipeline_are_valid(struct gl_pipeline_object *pipeline)
       mask = shader->Program->SamplersUsed;
       while (mask) {
          const int s = u_bit_scan(&mask);
-         GLuint unit = shader->SamplerUnits[s];
-         GLuint tgt = shader->SamplerTargets[s];
+         GLuint unit = shader->Program->SamplerUnits[s];
+         GLuint tgt = shader->Program->sh.SamplerTargets[s];
 
          /* FIXME: Samplers are initialized to 0 and Mesa doesn't do a
           * great job of eliminating unused uniforms currently so for now
@@ -1141,7 +1128,7 @@ _mesa_sampler_uniforms_pipeline_are_valid(struct gl_pipeline_object *pipeline)
          TexturesUsed[unit] |= (1 << tgt);
       }
 
-      active_samplers += shader->num_samplers;
+      active_samplers += shader->Program->info.num_textures;
    }
 
    if (active_samplers > MAX_COMBINED_TEXTURE_IMAGE_UNITS) {

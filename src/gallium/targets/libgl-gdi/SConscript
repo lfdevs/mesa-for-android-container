@@ -30,6 +30,10 @@ if env['llvm']:
     env.Append(CPPDEFINES = 'HAVE_LLVMPIPE')
     drivers += [llvmpipe]
 
+    if env['swr']:
+        env.Append(CPPDEFINES = 'HAVE_SWR')
+        drivers += [swr]
+
 if env['gcc'] and env['machine'] != 'x86_64':
     # DEF parser in certain versions of MinGW is busted, as does not behave as
     # MSVC.  mingw-w64 works fine.

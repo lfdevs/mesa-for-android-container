@@ -45,14 +45,14 @@ qir_opt_small_immediates(struct vc4_compile *c)
                  * elsewhere).
                  */
                 bool uses_small_imm = false;
-                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                for (int i = 0; i < qir_get_nsrc(inst); i++) {
                         if (inst->src[i].file == QFILE_SMALL_IMM)
                                 uses_small_imm = true;
                 }
                 if (uses_small_imm)
                         continue;
 
-                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                for (int i = 0; i < qir_get_nsrc(inst); i++) {
                         struct qreg src = qir_follow_movs(c, inst->src[i]);
 
                         if (src.file != QFILE_UNIF ||
@@ -62,11 +62,8 @@ qir_opt_small_immediates(struct vc4_compile *c)
                                 continue;
                         }
 
-                        if (i == 1 &&
-                            (inst->op == QOP_TEX_S ||
-                             inst->op == QOP_TEX_T ||
-                             inst->op == QOP_TEX_R ||
-                             inst->op == QOP_TEX_B)) {
+                        if (qir_is_tex(inst) &&
+                            i == qir_get_tex_uniform_src(inst)) {
                                 /* No turning the implicit uniform read into
                                  * an immediate.
                                  */

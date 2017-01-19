@@ -78,23 +78,35 @@ protected:
    void *mem_ctx;
 };
 
+/* Returns the variable index for the k-th dword of the c-th component of
+ * register reg.
+ */
 inline unsigned
 var_from_reg(const simple_allocator &alloc, const src_reg &reg,
-             unsigned c = 0)
+             unsigned c = 0, unsigned k = 0)
 {
-   assert(reg.file == VGRF && reg.nr < alloc.count &&
-          reg.offset / REG_SIZE < alloc.sizes[reg.nr] && c < 4);
-   return (4 * (alloc.offsets[reg.nr] + reg.offset / REG_SIZE) +
-           BRW_GET_SWZ(reg.swizzle, c));
+   assert(reg.file == VGRF && reg.nr < alloc.count && c < 4);
+   const unsigned csize = DIV_ROUND_UP(type_sz(reg.type), 4);
+   unsigned result =
+      8 * (alloc.offsets[reg.nr] + reg.offset / REG_SIZE) +
+      (BRW_GET_SWZ(reg.swizzle, c) + k / csize * 4) * csize + k % csize;
+   /* Do not exceed the limit for this register */
+   assert(result < 8 * (alloc.offsets[reg.nr] + alloc.sizes[reg.nr]));
+   return result;
 }
 
 inline unsigned
 var_from_reg(const simple_allocator &alloc, const dst_reg &reg,
-             unsigned c = 0)
+             unsigned c = 0, unsigned k = 0)
 {
-   assert(reg.file == VGRF && reg.nr < alloc.count &&
-          reg.offset / REG_SIZE < alloc.sizes[reg.nr] && c < 4);
-   return 4 * (alloc.offsets[reg.nr] + reg.offset / REG_SIZE) + c;
+   assert(reg.file == VGRF && reg.nr < alloc.count && c < 4);
+   const unsigned csize = DIV_ROUND_UP(type_sz(reg.type), 4);
+   unsigned result =
+      8 * (alloc.offsets[reg.nr] + reg.offset / REG_SIZE) +
+      (c + k / csize * 4) * csize + k % csize;
+   /* Do not exceed the limit for this register */
+   assert(result < 8 * (alloc.offsets[reg.nr] + alloc.sizes[reg.nr]));
+   return result;
 }
 
 } /* namespace brw */

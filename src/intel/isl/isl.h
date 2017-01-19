@@ -671,6 +671,17 @@ struct isl_device {
    const struct gen_device_info *info;
    bool use_separate_stencil;
    bool has_bit6_swizzling;
+
+   /**
+    * Describes the layout of a RENDER_SURFACE_STATE structure for the
+    * current gen.
+    */
+   struct {
+      uint8_t size;
+      uint8_t align;
+      uint8_t addr_offset;
+      uint8_t aux_addr_offset;
+   } ss;
 };
 
 struct isl_extent2d {

@@ -265,6 +265,16 @@ struct pipe_screen {
                            uint64_t timeout);
 
    /**
+    * For fences created with PIPE_FLUSH_FENCE_FD (exported fd) or
+    * by create_fence_fd() (imported fd), return the native fence fd
+    * associated with the fence.  This may return -1 for fences
+    * created with PIPE_FLUSH_DEFERRED if the fence command has not
+    * been flushed yet.
+    */
+   int (*fence_get_fd)(struct pipe_screen *screen,
+                       struct pipe_fence_handle *fence);
+
+   /**
     * Returns a driver-specific query.
     *
     * If \p info is NULL, the number of available queries is returned.

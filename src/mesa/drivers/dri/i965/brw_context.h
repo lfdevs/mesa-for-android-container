@@ -178,7 +178,7 @@ enum brw_cache_id {
 };
 
 enum brw_state_id {
-   /* brw_cache_ids must come first - see brw_state_cache.c */
+   /* brw_cache_ids must come first - see brw_program_cache.c */
    BRW_STATE_URB_FENCE = BRW_MAX_CACHE,
    BRW_STATE_FRAGMENT_PROGRAM,
    BRW_STATE_GEOMETRY_PROGRAM,
@@ -211,7 +211,6 @@ enum brw_state_id {
    BRW_STATE_ATOMIC_BUFFER,
    BRW_STATE_IMAGE_UNITS,
    BRW_STATE_META_IN_PROGRESS,
-   BRW_STATE_INTERPOLATION_MAP,
    BRW_STATE_PUSH_CONSTANT_ALLOCATION,
    BRW_STATE_NUM_SAMPLES,
    BRW_STATE_TEXTURE_BUFFER,
@@ -227,6 +226,7 @@ enum brw_state_id {
    BRW_STATE_CC_STATE,
    BRW_STATE_BLORP,
    BRW_STATE_VIEWPORT_COUNT,
+   BRW_STATE_CONSERVATIVE_RASTERIZATION,
    BRW_NUM_STATE_BITS
 };
 
@@ -253,8 +253,8 @@ enum brw_state_id {
 #define BRW_NEW_FS_PROG_DATA            (1ull << BRW_CACHE_FS_PROG)
 /* XXX: The BRW_NEW_BLORP_BLIT_PROG_DATA dirty bit is unused (as BLORP doesn't
  * use the normal state upload paths), but the cache is still used.  To avoid
- * polluting the brw_state_cache code with special cases, we retain the dirty
- * bit for now.  It should eventually be removed.
+ * polluting the brw_program_cache code with special cases, we retain the
+ * dirty bit for now.  It should eventually be removed.
  */
 #define BRW_NEW_BLORP_BLIT_PROG_DATA    (1ull << BRW_CACHE_BLORP_PROG)
 #define BRW_NEW_SF_PROG_DATA            (1ull << BRW_CACHE_SF_PROG)
@@ -303,7 +303,6 @@ enum brw_state_id {
 #define BRW_NEW_ATOMIC_BUFFER           (1ull << BRW_STATE_ATOMIC_BUFFER)
 #define BRW_NEW_IMAGE_UNITS             (1ull << BRW_STATE_IMAGE_UNITS)
 #define BRW_NEW_META_IN_PROGRESS        (1ull << BRW_STATE_META_IN_PROGRESS)
-#define BRW_NEW_INTERPOLATION_MAP       (1ull << BRW_STATE_INTERPOLATION_MAP)
 #define BRW_NEW_PUSH_CONSTANT_ALLOCATION (1ull << BRW_STATE_PUSH_CONSTANT_ALLOCATION)
 #define BRW_NEW_NUM_SAMPLES             (1ull << BRW_STATE_NUM_SAMPLES)
 #define BRW_NEW_TEXTURE_BUFFER          (1ull << BRW_STATE_TEXTURE_BUFFER)
@@ -318,6 +317,7 @@ enum brw_state_id {
 #define BRW_NEW_URB_SIZE                (1ull << BRW_STATE_URB_SIZE)
 #define BRW_NEW_CC_STATE                (1ull << BRW_STATE_CC_STATE)
 #define BRW_NEW_BLORP                   (1ull << BRW_STATE_BLORP)
+#define BRW_NEW_CONSERVATIVE_RASTERIZATION (1ull << BRW_STATE_CONSERVATIVE_RASTERIZATION)
 
 struct brw_state_flags {
    /** State update flags signalled by mesa internals */
@@ -328,53 +328,15 @@ struct brw_state_flags {
    uint64_t brw;
 };
 
-/** Subclass of Mesa vertex program */
-struct brw_vertex_program {
-   struct gl_vertex_program program;
+
+/** Subclass of Mesa program */
+struct brw_program {
+   struct gl_program program;
    GLuint id;
-};
-
-
-/** Subclass of Mesa tessellation control program */
-struct brw_tess_ctrl_program {
-   struct gl_tess_ctrl_program program;
-   unsigned id;  /**< serial no. to identify tess ctrl progs, never re-used */
-};
-
-
-/** Subclass of Mesa tessellation evaluation program */
-struct brw_tess_eval_program {
-   struct gl_tess_eval_program program;
-   unsigned id;  /**< serial no. to identify tess eval progs, never re-used */
-};
-
-
-/** Subclass of Mesa geometry program */
-struct brw_geometry_program {
-   struct gl_geometry_program program;
-   unsigned id;  /**< serial no. to identify geom progs, never re-used */
-};
-
-
-/** Subclass of Mesa fragment program */
-struct brw_fragment_program {
-   struct gl_fragment_program program;
-   GLuint id;  /**< serial no. to identify frag progs, never re-used */
-};
-
-
-/** Subclass of Mesa compute program */
-struct brw_compute_program {
-   struct gl_compute_program program;
-   unsigned id;  /**< serial no. to identify compute progs, never re-used */
-};
-
-
-struct brw_shader {
-   struct gl_linked_shader base;
 
    bool compiled_once;
 };
+
 
 /**
  * Bitmask indicating which fragment shader inputs represent varyings (and
@@ -383,32 +345,6 @@ struct brw_shader {
 #define BRW_FS_VARYING_INPUT_MASK \
    (BITFIELD64_RANGE(0, VARYING_SLOT_MAX) & \
     ~VARYING_BIT_POS & ~VARYING_BIT_FACE)
-
-
-/*
- * Mapping of VUE map slots to interpolation modes.
- */
-struct interpolation_mode_map {
-   unsigned char mode[BRW_VARYING_SLOT_COUNT];
-};
-
-static inline bool brw_any_flat_varyings(struct interpolation_mode_map *map)
-{
-   for (int i = 0; i < BRW_VARYING_SLOT_COUNT; i++)
-      if (map->mode[i] == INTERP_MODE_FLAT)
-         return true;
-
-   return false;
-}
-
-static inline bool brw_any_noperspective_varyings(struct interpolation_mode_map *map)
-{
-   for (int i = 0; i < BRW_VARYING_SLOT_COUNT; i++)
-      if (map->mode[i] == INTERP_MODE_NOPERSPECTIVE)
-         return true;
-
-   return false;
-}
 
 
 struct brw_sf_prog_data {
@@ -517,25 +453,6 @@ struct brw_ff_gs_prog_data {
  */
 #define SHADER_TIME_STRIDE 64
 
-struct brw_cache_item {
-   /**
-    * Effectively part of the key, cache_id identifies what kind of state
-    * buffer is involved, and also which dirty flag should set.
-    */
-   enum brw_cache_id cache_id;
-   /** 32-bit hash of the key data */
-   GLuint hash;
-   GLuint key_size;		/* for variable-sized keys */
-   GLuint aux_size;
-   const void *key;
-
-   uint32_t offset;
-   uint32_t size;
-
-   struct brw_cache_item *next;
-};
-
-
 struct brw_cache {
    struct brw_context *brw;
 
@@ -580,10 +497,10 @@ struct brw_vertex_buffer {
    GLuint step_rate;
 };
 struct brw_vertex_element {
-   const struct gl_client_array *glarray;
+   const struct gl_vertex_array *glarray;
 
    int buffer;
-
+   bool is_dual_slot;
    /** Offset of the first element within the buffer object */
    unsigned int offset;
 };
@@ -881,11 +798,6 @@ struct brw_context
    bool use_resource_streamer;
 
    /**
-    * Whether LRI can be used to write register values from the batch buffer.
-    */
-   bool can_do_pipelined_register_writes;
-
-   /**
     * Some versions of Gen hardware don't do centroid interpolation correctly
     * on unlit pixels, causing incorrect values for derivatives near triangle
     * edges.  Enabling this flag causes the fragment shader to use
@@ -1006,12 +918,12 @@ struct brw_context
 
    /* Active vertex program:
     */
-   const struct gl_vertex_program *vertex_program;
-   const struct gl_geometry_program *geometry_program;
-   const struct gl_tess_ctrl_program *tess_ctrl_program;
-   const struct gl_tess_eval_program *tess_eval_program;
-   const struct gl_fragment_program *fragment_program;
-   const struct gl_compute_program *compute_program;
+   const struct gl_program *vertex_program;
+   const struct gl_program *geometry_program;
+   const struct gl_program *tess_ctrl_program;
+   const struct gl_program *tess_eval_program;
+   const struct gl_program *fragment_program;
+   const struct gl_program *compute_program;
 
    /**
     * Number of samples in ctx->DrawBuffer, updated by BRW_NEW_NUM_SAMPLES so
@@ -1220,43 +1132,6 @@ struct brw_context
       bool supported;
    } predicate;
 
-   struct {
-      /** A map from pipeline statistics counter IDs to MMIO addresses. */
-      const int *statistics_registers;
-
-      /** The number of active monitors using OA counters. */
-      unsigned oa_users;
-
-      /**
-       * A buffer object storing OA counter snapshots taken at the start and
-       * end of each batch (creating "bookends" around the batch).
-       */
-      drm_intel_bo *bookend_bo;
-
-      /** The number of snapshots written to bookend_bo. */
-      int bookend_snapshots;
-
-      /**
-       * An array of monitors whose results haven't yet been assembled based on
-       * the data in buffer objects.
-       *
-       * These may be active, or have already ended.  However, the results
-       * have not been requested.
-       */
-      struct brw_perf_monitor_object **unresolved;
-      int unresolved_elements;
-      int unresolved_array_size;
-
-      /**
-       * Mapping from a uint32_t offset within an OA snapshot to the ID of
-       * the counter which MI_REPORT_PERF_COUNT stores there.
-       */
-      const int *oa_snapshot_layout;
-
-      /** Number of 32-bit entries in a hardware counter snapshot. */
-      int entries_per_oa_snapshot;
-   } perfmon;
-
    int num_atoms[BRW_NUM_PIPELINES];
    const struct brw_tracked_state render_atoms[76];
    const struct brw_tracked_state compute_atoms[11];
@@ -1272,11 +1147,6 @@ struct brw_context
 
    uint32_t render_target_format[MESA_FORMAT_COUNT];
    bool format_supported_as_render_target[MESA_FORMAT_COUNT];
-
-   /* Interpolation modes, one byte per vue slot.
-    * Used Gen4/5 by the clip|sf|wm stages. Ignored on Gen6+.
-    */
-   struct interpolation_mode_map interpolation_mode;
 
    /* PrimitiveRestart */
    struct {
@@ -1332,11 +1202,6 @@ struct brw_context
    __DRIcontext *driContext;
    struct intel_screen *screen;
 };
-
-/*======================================================================
- * brw_vtbl.c
- */
-void brwInitVtbl( struct brw_context *brw );
 
 /* brw_clear.c */
 extern void intelInitClearFuncs(struct dd_function_table *functions);
@@ -1484,9 +1349,9 @@ void brw_alloc_stage_scratch(struct brw_context *brw,
                              unsigned thread_count);
 void brw_init_shader_time(struct brw_context *brw);
 int brw_get_shader_time_index(struct brw_context *brw,
-                              struct gl_shader_program *shader_prog,
                               struct gl_program *prog,
-                              enum shader_time_shader_type type);
+                              enum shader_time_shader_type type,
+                              bool is_glsl_sh);
 void brw_collect_and_report_shader_time(struct brw_context *brw);
 void brw_destroy_shader_time(struct brw_context *brw);
 
@@ -1514,7 +1379,7 @@ gl_clip_plane *brw_select_clip_planes(struct gl_context *ctx);
 
 /* brw_draw_upload.c */
 unsigned brw_get_vertex_surface_type(struct brw_context *brw,
-                                     const struct gl_client_array *glarray);
+                                     const struct gl_vertex_array *glarray);
 
 static inline unsigned
 brw_get_index_type(GLenum type)
@@ -1558,16 +1423,15 @@ brw_update_sol_surface(struct brw_context *brw,
                        struct gl_buffer_object *buffer_obj,
                        uint32_t *out_offset, unsigned num_vector_components,
                        unsigned stride_dwords, unsigned offset_dwords);
-void brw_upload_ubo_surfaces(struct brw_context *brw,
-			     struct gl_linked_shader *shader,
+void brw_upload_ubo_surfaces(struct brw_context *brw, struct gl_program *prog,
                              struct brw_stage_state *stage_state,
                              struct brw_stage_prog_data *prog_data);
 void brw_upload_abo_surfaces(struct brw_context *brw,
-                             struct gl_linked_shader *shader,
+                             const struct gl_program *prog,
                              struct brw_stage_state *stage_state,
                              struct brw_stage_prog_data *prog_data);
 void brw_upload_image_surfaces(struct brw_context *brw,
-                               struct gl_linked_shader *shader,
+                               const struct gl_program *prog,
                                struct brw_stage_state *stage_state,
                                struct brw_stage_prog_data *prog_data);
 
@@ -1575,12 +1439,6 @@ void brw_upload_image_surfaces(struct brw_context *brw,
 bool brw_render_target_supported(struct brw_context *brw,
                                  struct gl_renderbuffer *rb);
 uint32_t brw_depth_format(struct brw_context *brw, mesa_format format);
-
-/* brw_performance_monitor.c */
-void brw_init_performance_monitors(struct brw_context *brw);
-void brw_dump_perf_monitors(struct brw_context *brw);
-void brw_perf_monitor_new_batch(struct brw_context *brw);
-void brw_perf_monitor_finish_batch(struct brw_context *brw);
 
 /* intel_buffer_objects.c */
 int brw_bo_map(struct brw_context *brw, drm_intel_bo *bo, int write_enable,
@@ -1717,52 +1575,16 @@ brw_context( struct gl_context *ctx )
    return (struct brw_context *)ctx;
 }
 
-static inline struct brw_vertex_program *
-brw_vertex_program(struct gl_vertex_program *p)
+static inline struct brw_program *
+brw_program(struct gl_program *p)
 {
-   return (struct brw_vertex_program *) p;
+   return (struct brw_program *) p;
 }
 
-static inline const struct brw_vertex_program *
-brw_vertex_program_const(const struct gl_vertex_program *p)
+static inline const struct brw_program *
+brw_program_const(const struct gl_program *p)
 {
-   return (const struct brw_vertex_program *) p;
-}
-
-static inline struct brw_tess_ctrl_program *
-brw_tess_ctrl_program(struct gl_tess_ctrl_program *p)
-{
-   return (struct brw_tess_ctrl_program *) p;
-}
-
-static inline struct brw_tess_eval_program *
-brw_tess_eval_program(struct gl_tess_eval_program *p)
-{
-   return (struct brw_tess_eval_program *) p;
-}
-
-static inline struct brw_geometry_program *
-brw_geometry_program(struct gl_geometry_program *p)
-{
-   return (struct brw_geometry_program *) p;
-}
-
-static inline struct brw_fragment_program *
-brw_fragment_program(struct gl_fragment_program *p)
-{
-   return (struct brw_fragment_program *) p;
-}
-
-static inline const struct brw_fragment_program *
-brw_fragment_program_const(const struct gl_fragment_program *p)
-{
-   return (const struct brw_fragment_program *) p;
-}
-
-static inline struct brw_compute_program *
-brw_compute_program(struct gl_compute_program *p)
-{
-   return (struct brw_compute_program *) p;
+   return (const struct brw_program *) p;
 }
 
 /**
@@ -1795,11 +1617,29 @@ brw_program_reloc(struct brw_context *brw, uint32_t state_offset,
 }
 
 bool brw_do_cubemap_normalize(struct exec_list *instructions);
-bool brw_lower_texture_gradients(struct brw_context *brw,
-                                 struct exec_list *instructions);
 
 extern const char * const conditional_modifier[16];
 extern const char *const pred_ctrl_align16[16];
+
+static inline bool
+brw_depth_writes_enabled(const struct brw_context *brw)
+{
+   const struct gl_context *ctx = &brw->ctx;
+
+   /* We consider depth writes disabled if the depth function is GL_EQUAL,
+    * because it would just overwrite the existing depth value with itself.
+    *
+    * These bonus depth writes not only use bandwidth, but they also can
+    * prevent early depth processing.  For example, if the pixel shader
+    * discards, the hardware must invoke the to determine whether or not
+    * to do the depth write.  If writes are disabled, we may still be able
+    * to do the depth test before the shader, and skip the shader execution.
+    *
+    * The Broadwell 3DSTATE_WM_DEPTH_STENCIL documentation also contains
+    * a programming note saying to disable depth writes for EQUAL.
+    */
+   return ctx->Depth.Test && ctx->Depth.Mask && ctx->Depth.Func != GL_EQUAL;
+}
 
 void
 brw_emit_depthbuffer(struct brw_context *brw);

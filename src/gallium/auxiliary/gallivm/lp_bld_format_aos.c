@@ -38,6 +38,7 @@
 #include "util/u_math.h"
 #include "util/u_pointer.h"
 #include "util/u_string.h"
+#include "util/u_cpu_detect.h"
 
 #include "lp_bld_arit.h"
 #include "lp_bld_init.h"
@@ -49,7 +50,10 @@
 #include "lp_bld_gather.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_format.h"
+#include "lp_bld_pack.h"
 #include "lp_bld_intr.h"
+#include "lp_bld_logic.h"
+#include "lp_bld_bitarit.h"
 
 
 /**
@@ -137,6 +141,73 @@ format_matches_type(const struct util_format_description *desc,
    return TRUE;
 }
 
+/*
+ * Do rounding when converting small unorm values to larger ones.
+ * Not quite 100% accurate, as it's done by appending MSBs, but
+ * should be good enough.
+ */
+
+static inline LLVMValueRef
+scale_bits_up(struct gallivm_state *gallivm,
+              int src_bits,
+              int dst_bits,
+              LLVMValueRef src,
+              struct lp_type src_type)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef result = src;
+
+   if (src_bits == 1 && dst_bits > 1) {
+      /*
+       * Useful for a1 - we'd need quite some repeated copies otherwise.
+       */
+      struct lp_build_context bld;
+      LLVMValueRef dst_mask;
+      lp_build_context_init(&bld, gallivm, src_type);
+      dst_mask = lp_build_const_int_vec(gallivm, src_type,
+                                        (1 << dst_bits) - 1),
+      result = lp_build_cmp(&bld, PIPE_FUNC_EQUAL, src,
+                            lp_build_const_int_vec(gallivm, src_type, 0));
+      result = lp_build_andnot(&bld, dst_mask, result);
+   }
+   else if (dst_bits > src_bits) {
+      /* Scale up bits */
+      int db = dst_bits - src_bits;
+
+      /* Shift left by difference in bits */
+      result = LLVMBuildShl(builder,
+                            src,
+                            lp_build_const_int_vec(gallivm, src_type, db),
+                            "");
+
+      if (db <= src_bits) {
+         /* Enough bits in src to fill the remainder */
+         LLVMValueRef lower = LLVMBuildLShr(builder,
+                                            src,
+                                            lp_build_const_int_vec(gallivm, src_type,
+                                                                   src_bits - db),
+                                            "");
+
+         result = LLVMBuildOr(builder, result, lower, "");
+      } else if (db > src_bits) {
+         /* Need to repeatedly copy src bits to fill remainder in dst */
+         unsigned n;
+
+         for (n = src_bits; n < dst_bits; n *= 2) {
+            LLVMValueRef shuv = lp_build_const_int_vec(gallivm, src_type, n);
+
+            result = LLVMBuildOr(builder,
+                                 result,
+                                 LLVMBuildLShr(builder, result, shuv, ""),
+                                 "");
+         }
+      }
+   } else {
+      assert (dst_bits == src_bits);
+   }
+
+   return result;
+}
 
 /**
  * Unpack a single pixel into its XYZW components.
@@ -156,6 +227,7 @@ lp_build_unpack_arith_rgba_aos(struct gallivm_state *gallivm,
    LLVMValueRef shifts[4];
    LLVMValueRef masks[4];
    LLVMValueRef scales[4];
+   LLVMTypeRef vec32_type;
 
    boolean normalized;
    boolean needs_uitofp;
@@ -171,19 +243,17 @@ lp_build_unpack_arith_rgba_aos(struct gallivm_state *gallivm,
     * matches floating point size */
    assert (LLVMTypeOf(packed) == LLVMInt32TypeInContext(gallivm->context));
 
+   vec32_type = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), 4);
+
    /* Broadcast the packed value to all four channels
     * before: packed = BGRA
     * after: packed = {BGRA, BGRA, BGRA, BGRA}
     */
-   packed = LLVMBuildInsertElement(builder,
-                                   LLVMGetUndef(LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), 4)),
-                                   packed,
+   packed = LLVMBuildInsertElement(builder, LLVMGetUndef(vec32_type), packed,
                                    LLVMConstNull(LLVMInt32TypeInContext(gallivm->context)),
                                    "");
-   packed = LLVMBuildShuffleVector(builder,
-                                   packed,
-                                   LLVMGetUndef(LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), 4)),
-                                   LLVMConstNull(LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), 4)),
+   packed = LLVMBuildShuffleVector(builder, packed, LLVMGetUndef(vec32_type),
+                                   LLVMConstNull(vec32_type),
                                    "");
 
    /* Initialize vector constants */
@@ -224,8 +294,40 @@ lp_build_unpack_arith_rgba_aos(struct gallivm_state *gallivm,
    /* Ex: convert packed = {XYZW, XYZW, XYZW, XYZW}
     * into masked = {X, Y, Z, W}
     */
-   shifted = LLVMBuildLShr(builder, packed, LLVMConstVector(shifts, 4), "");
-   masked = LLVMBuildAnd(builder, shifted, LLVMConstVector(masks, 4), "");
+   if (desc->block.bits < 32 && normalized) {
+      /*
+       * Note: we cannot do the shift below on x86 natively until AVX2.
+       *
+       * Old llvm versions will resort to scalar extract/shift insert,
+       * which is definitely terrible, new versions will just do
+       * several vector shifts and shuffle/blend results together.
+       * We could turn this into a variable left shift plus a constant
+       * right shift, and llvm would then turn the variable left shift
+       * into a mul for us (albeit without sse41 the mul needs emulation
+       * too...). However, since we're going to do a float mul
+       * anyway, we just adjust that mul instead (plus the mask), skipping
+       * the shift completely.
+       * We could also use a extra mul when the format isn't normalized and
+       * we don't have AVX2 support, but don't bother for now. Unfortunately,
+       * this strategy doesn't work for 32bit formats (such as rgb10a2 or even
+       * rgba8 if it ends up here), as that would require UIToFP, albeit that
+       * would be fixable with easy 16bit shuffle (unless there's channels
+       * crossing 16bit boundaries).
+       */
+      for (i = 0; i < 4; ++i) {
+         if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
+            unsigned bits = desc->channel[i].size;
+            unsigned shift = desc->channel[i].shift;
+            unsigned long long mask = ((1ULL << bits) - 1) << shift;
+            scales[i] = lp_build_const_float(gallivm, 1.0 / mask);
+            masks[i] = lp_build_const_int32(gallivm, mask);
+         }
+      }
+      masked = LLVMBuildAnd(builder, packed, LLVMConstVector(masks, 4), "");
+   } else {
+      shifted = LLVMBuildLShr(builder, packed, LLVMConstVector(shifts, 4), "");
+      masked = LLVMBuildAnd(builder, shifted, LLVMConstVector(masks, 4), "");
+   }
 
    if (!needs_uitofp) {
       /* UIToFP can't be expressed in SSE2 */
@@ -234,8 +336,10 @@ lp_build_unpack_arith_rgba_aos(struct gallivm_state *gallivm,
       casted = LLVMBuildUIToFP(builder, masked, LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), 4), "");
    }
 
-   /* At this point 'casted' may be a vector of floats such as
-    * {255.0, 255.0, 255.0, 255.0}.  Next, if the pixel values are normalized
+   /*
+    * At this point 'casted' may be a vector of floats such as
+    * {255.0, 255.0, 255.0, 255.0}. (Normalized values may be multiplied
+    * by powers of two). Next, if the pixel values are normalized
     * we'll scale this to {1.0, 1.0, 1.0, 1.0}.
     */
 
@@ -391,9 +495,11 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
 
    if (format_matches_type(format_desc, type) &&
        format_desc->block.bits <= type.width * 4 &&
+       /* XXX this shouldn't be needed */
        util_is_power_of_two(format_desc->block.bits)) {
       LLVMValueRef packed;
       LLVMTypeRef dst_vec_type = lp_build_vec_type(gallivm, type);
+      struct lp_type fetch_type;
       unsigned vec_len = type.width * type.length;
 
       /*
@@ -401,8 +507,9 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
        * scaling or converting.
        */
 
+      fetch_type = lp_type_uint(type.width*4);
       packed = lp_build_gather(gallivm, type.length/4,
-                               format_desc->block.bits, type.width*4,
+                               format_desc->block.bits, fetch_type,
                                aligned, base_ptr, offset, TRUE);
 
       assert(format_desc->block.bits <= vec_len);
@@ -410,6 +517,86 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
 
       packed = LLVMBuildBitCast(gallivm->builder, packed, dst_vec_type, "");
       return lp_build_format_swizzle_aos(format_desc, &bld, packed);
+   }
+
+   /*
+    * Bit arithmetic for converting small_unorm to unorm8.
+    *
+    * This misses some opportunities for optimizations (like skipping mask
+    * for the highest channel for instance, or doing bit scaling in parallel
+    * for channels with the same bit width) but it should be passable for
+    * all arithmetic formats.
+    */
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_PLAIN &&
+       format_desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB &&
+       util_format_fits_8unorm(format_desc) &&
+       type.width == 8 && type.norm == 1 && type.sign == 0 &&
+       type.fixed == 0 && type.floating == 0) {
+      LLVMValueRef packed, res, chans[4], rgba[4];
+      LLVMTypeRef dst_vec_type, conv_vec_type;
+      struct lp_type fetch_type, conv_type;
+      struct lp_build_context bld_conv;
+      unsigned j;
+
+      fetch_type = lp_type_uint(type.width*4);
+      conv_type = lp_type_int_vec(type.width*4, type.width * type.length);
+      dst_vec_type = lp_build_vec_type(gallivm, type);
+      conv_vec_type = lp_build_vec_type(gallivm, conv_type);
+      lp_build_context_init(&bld_conv, gallivm, conv_type);
+
+      packed = lp_build_gather(gallivm, type.length/4,
+                               format_desc->block.bits, fetch_type,
+                               aligned, base_ptr, offset, TRUE);
+
+      assert(format_desc->block.bits * type.length / 4 <=
+             type.width * type.length);
+
+      packed = LLVMBuildBitCast(gallivm->builder, packed, conv_vec_type, "");
+
+      for (j = 0; j < format_desc->nr_channels; ++j) {
+         unsigned mask = 0;
+         unsigned sa = format_desc->channel[j].shift;
+
+         mask = (1 << format_desc->channel[j].size) - 1;
+
+         /* Extract bits from source */
+         chans[j] = LLVMBuildLShr(builder, packed,
+                                  lp_build_const_int_vec(gallivm, conv_type, sa),
+                                  "");
+
+         chans[j] = LLVMBuildAnd(builder, chans[j],
+                                 lp_build_const_int_vec(gallivm, conv_type, mask),
+                                 "");
+
+         /* Scale bits */
+         if (type.norm) {
+            chans[j] = scale_bits_up(gallivm, format_desc->channel[j].size,
+                                     type.width, chans[j], conv_type);
+         }
+      }
+      /*
+       * This is a hacked lp_build_format_swizzle_soa() since we need a
+       * normalized 1 but only 8 bits in a 32bit vector...
+       */
+      for (j = 0; j < 4; ++j) {
+         enum pipe_swizzle swizzle = format_desc->swizzle[j];
+         if (swizzle == PIPE_SWIZZLE_1) {
+            rgba[j] = lp_build_const_int_vec(gallivm, conv_type, (1 << type.width) - 1);
+         } else {
+            rgba[j] = lp_build_swizzle_soa_channel(&bld_conv, chans, swizzle);
+         }
+         if (j == 0) {
+            res = rgba[j];
+         } else {
+            rgba[j] = LLVMBuildShl(builder, rgba[j],
+                                   lp_build_const_int_vec(gallivm, conv_type,
+                                                          j * type.width), "");
+            res = LLVMBuildOr(builder, res, rgba[j], "");
+         }
+      }
+      res = LLVMBuildBitCast(gallivm->builder, res, dst_vec_type, "");
+
+      return res;
    }
 
    /*
@@ -421,6 +608,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
         format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) &&
        format_desc->block.width == 1 &&
        format_desc->block.height == 1 &&
+       /* XXX this shouldn't be needed */
        util_is_power_of_two(format_desc->block.bits) &&
        format_desc->block.bits <= 32 &&
        format_desc->is_bitmask &&
@@ -430,8 +618,15 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
        !format_desc->channel[0].pure_integer) {
 
       LLVMValueRef tmps[LP_MAX_VECTOR_LENGTH/4];
-      LLVMValueRef res;
-      unsigned k;
+      LLVMValueRef res[LP_MAX_VECTOR_WIDTH / 128];
+      struct lp_type conv_type;
+      unsigned k, num_conv_src, num_conv_dst;
+
+      /*
+       * Note this path is generally terrible for fetching multiple pixels.
+       * We should make sure we cannot hit this code path for anything but
+       * single pixels.
+       */
 
       /*
        * Unpack a pixel at a time into a <4 x float> RGBA vector
@@ -461,12 +656,38 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
                       __FUNCTION__, format_desc->short_name);
       }
 
-      lp_build_conv(gallivm,
-                    lp_float32_vec4_type(),
-                    type,
-                    tmps, num_pixels, &res, 1);
+      conv_type = lp_float32_vec4_type();
+      num_conv_src = num_pixels;
+      num_conv_dst = 1;
 
-      return lp_build_format_swizzle_aos(format_desc, &bld, res);
+      if (num_pixels % 8 == 0) {
+         lp_build_concat_n(gallivm, lp_float32_vec4_type(),
+                           tmps, num_pixels, tmps, num_pixels / 2);
+         conv_type.length *= num_pixels / 4;
+         num_conv_src = 4 * num_pixels / 8;
+         if (type.width == 8 && type.floating == 0 && type.fixed == 0) {
+            /*
+             * FIXME: The fast float->unorm path (which is basically
+             * skipping the MIN/MAX which are extremely pointless in any
+             * case) requires that there's 2 destinations...
+             * In any case, we really should make sure we don't hit this
+             * code with multiple pixels for unorm8 dst types, it's
+             * completely hopeless even if we do hit the right conversion.
+             */
+            type.length /= num_pixels / 4;
+            num_conv_dst = num_pixels / 4;
+         }
+      }
+
+      lp_build_conv(gallivm, conv_type, type,
+                    tmps, num_conv_src, res, num_conv_dst);
+
+      if (num_pixels % 8 == 0 &&
+          (type.width == 8 && type.floating == 0 && type.fixed == 0)) {
+         lp_build_concat_n(gallivm, type, res, num_conv_dst, res, 1);
+      }
+
+      return lp_build_format_swizzle_aos(format_desc, &bld, res[0]);
    }
 
    /* If all channels are of same type and we are not using half-floats */

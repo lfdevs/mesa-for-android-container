@@ -82,16 +82,6 @@ struct PackTraits<8, false>
         __m256 result = _mm256_setzero_ps();
         __m128 vLo = _mm_castpd_ps(_mm_load_sd((double*)pSrc));
         return _mm256_insertf128_ps(result, vLo, 0);
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalar result = _simd_setzero_ps();
-
-        __m128 src = _mm_load_ps(reinterpret_cast<const float*>(pSrc));
-
-        result.lo = _mm256_insertf128_ps(result.lo, src, 0);
-
-        return result;
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -102,10 +92,6 @@ struct PackTraits<8, false>
         // store simd bytes
 #if KNOB_SIMD_WIDTH == 8
         _mm_storel_pd((double*)pDst, _mm_castps_pd(_mm256_castps256_ps128(src)));
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        _mm_store_ps(reinterpret_cast<float*>(pDst), _mm256_castps256_ps128(src.lo));
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -126,18 +112,6 @@ struct PackTraits<8, false>
 #elif KNOB_ARCH>=KNOB_ARCH_AVX2
         return _mm256_castsi256_ps(_mm256_cvtepu8_epi32(_mm_castps_si128(_mm256_castps256_ps128(in))));
 #endif
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalari result;
-
-        __m128i src = _mm_castps_si128(_mm256_castps256_ps128(in.lo));
-
-        result.lo = _mm256_cvtepu8_epi32(src);
-
-        result.hi = _mm256_cvtepu8_epi32(_mm_srli_si128(src, 8));
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -150,20 +124,6 @@ struct PackTraits<8, false>
         __m128i res16 = _mm_packus_epi32(_mm256_castsi256_si128(src), _mm256_extractf128_si256(src, 1));
         __m128i res8 = _mm_packus_epi16(res16, _mm_undefined_si128());
         return _mm256_castsi256_ps(_mm256_castsi128_si256(res8));
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalari result = _simd_setzero_si();
-
-        __m128i templo = _mm_packus_epi32(_mm256_castsi256_si128(_mm256_castps_si256(in.lo)), _mm256_extractf128_si256(_mm256_castps_si256(in.lo), 1));
-
-        __m128i temphi = _mm_packus_epi32(_mm256_castsi256_si128(_mm256_castps_si256(in.hi)), _mm256_extractf128_si256(_mm256_castps_si256(in.hi), 1));
-
-        __m128i temp = _mm_packus_epi16(templo, temphi);
-
-        result.lo = _mm256_insertf128_si256(result.lo, temp, 0);
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -191,12 +151,7 @@ struct PackTraits<8, false>
 
     static simd16scalar unpack(simd16scalar &in)
     {
-        simd16scalari result = _simd16_setzero_si();
-
-        __m128i src = _mm_castps_si128(_mm256_castps256_ps128(_simd16_extract_ps(in, 0)));
-
-        result = _simd16_insert_si(result, _simd_cvtepu8_epi32(src), 0);
-        result = _simd16_insert_si(result, _simd_cvtepu8_epi32(_mm_srli_si128(src, 8)), 1);
+        simd16scalari result = _simd16_cvtepu8_epi32(_mm_castps_si128(_mm256_castps256_ps128(_simd16_extract_ps(in, 0))));
 
         return _simd16_castsi_ps(result);
     }
@@ -204,15 +159,23 @@ struct PackTraits<8, false>
     static simd16scalar pack(simd16scalar &in)
     {
         simd16scalari result = _simd16_setzero_si();
-        simdscalari resultlo = _simd_setzero_si();
 
-        __m128i templo = _mm_packus_epi32(_mm256_castsi256_si128(_mm256_castps_si256(_simd16_extract_ps(in, 0))), _mm256_extractf128_si256(_mm256_castps_si256(_simd16_extract_ps(in, 0)), 1));
-        __m128i temphi = _mm_packus_epi32(_mm256_castsi256_si128(_mm256_castps_si256(_simd16_extract_ps(in, 1))), _mm256_extractf128_si256(_mm256_castps_si256(_simd16_extract_ps(in, 1)), 1));
+        simdscalari inlo = _simd_castps_si(_simd16_extract_ps(in, 0));          // r0 r1 r2 r3 r4 r5 r6 r7 (32b)
+        simdscalari inhi = _simd_castps_si(_simd16_extract_ps(in, 1));          // r8 r9 rA rB rC rD rE rF
 
-        __m128i temp = _mm_packus_epi16(templo, temphi);
+        simdscalari permlo = _simd_permute2f128_si(inlo, inhi, 0x20);           // r0 r1 r2 r3 r8 r9 rA rB (32b)
+        simdscalari permhi = _simd_permute2f128_si(inlo, inhi, 0x31);           // r4 r5 r6 r7 rC rD rE rF (32b)
 
-        resultlo = _mm256_inserti128_si256(resultlo, temp, 0);
-        result = _simd16_insert_si(result, resultlo, 0);
+        simdscalari pack = _simd_packus_epi32(permlo, permhi);                  // r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 rA rB rC rD rE rF (16b)
+
+        const simdscalari zero = _simd_setzero_si();
+
+        permlo = _simd_permute2f128_si(pack, zero, 0x20);   // (2, 0)           // r0 r1 r2 r3 r4 r5 r6 r7 00 00 00 00 00 00 00 00 (16b)
+        permhi = _simd_permute2f128_si(pack, zero, 0x31);   // (3, 1)           // r8 r9 rA rB rC rD rE rF 00 00 00 00 00 00 00 00 (16b)
+
+        pack = _simd_packus_epi16(permlo, permhi);                              // r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 rA rB rC rD rE rF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 (8b)
+
+        result = _simd16_insert_si(result, pack, 0);
 
         return _simd16_castsi_ps(result);
     }
@@ -233,16 +196,6 @@ struct PackTraits<8, true>
         __m256 result = _mm256_setzero_ps();
         __m128 vLo = _mm_castpd_ps(_mm_load_sd((double*)pSrc));
         return _mm256_insertf128_ps(result, vLo, 0);
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalar result = _simd_setzero_ps();
-
-        __m128 src = _mm_load_ps(reinterpret_cast<const float*>(pSrc));
-
-        result.lo = _mm256_insertf128_ps(result.lo, src, 0);
-
-        return result;
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -253,10 +206,6 @@ struct PackTraits<8, true>
         // store simd bytes
 #if KNOB_SIMD_WIDTH == 8
         _mm_storel_pd((double*)pDst, _mm_castps_pd(_mm256_castps256_ps128(src)));
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        _mm_store_ps(reinterpret_cast<float*>(pDst), _mm256_castps256_ps128(src.lo));
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -278,18 +227,6 @@ struct PackTraits<8, true>
 #elif KNOB_ARCH>=KNOB_ARCH_AVX2
         return _mm256_castsi256_ps(_mm256_cvtepi8_epi32(_mm_castps_si128(_mm256_castps256_ps128(in))));
 #endif
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalari result;
-
-        __m128i src = _mm_castps_si128(_mm256_castps256_ps128(in.lo));
-
-        result.lo = _mm256_cvtepu8_epi32(src);
-
-        result.hi = _mm256_cvtepu8_epi32(_mm_srli_si128(src, 8));
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -302,20 +239,6 @@ struct PackTraits<8, true>
         __m128i res16 = _mm_packs_epi32(_mm256_castsi256_si128(src), _mm256_extractf128_si256(src, 1));
         __m128i res8 = _mm_packs_epi16(res16, _mm_undefined_si128());
         return _mm256_castsi256_ps(_mm256_castsi128_si256(res8));
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalari result = _simd_setzero_si();
-
-        __m128i templo = _mm_packs_epi32(_mm256_castsi256_si128(_mm256_castps_si256(in.lo)), _mm256_extractf128_si256(_mm256_castps_si256(in.lo), 1));
-
-        __m128i temphi = _mm_packs_epi32(_mm256_castsi256_si128(_mm256_castps_si256(in.hi)), _mm256_extractf128_si256(_mm256_castps_si256(in.hi), 1));
-
-        __m128i temp = _mm_packs_epi16(templo, temphi);
-
-        result.lo = _mm256_insertf128_si256(result.lo, temp, 0);
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -343,12 +266,7 @@ struct PackTraits<8, true>
 
     static simd16scalar unpack(simd16scalar &in)
     {
-        simd16scalari result = _simd16_setzero_si();
-
-        __m128i src = _mm_castps_si128(_mm256_castps256_ps128(_simd16_extract_ps(in, 0)));
-
-        result = _simd16_insert_si(result, _simd_cvtepu8_epi32(src), 0);
-        result = _simd16_insert_si(result, _simd_cvtepu8_epi32(_mm_srli_si128(src, 8)), 1);
+        simd16scalari result = _simd16_cvtepu8_epi32(_mm_castps_si128(_mm256_castps256_ps128(_simd16_extract_ps(in, 0))));
 
         return _simd16_castsi_ps(result);
     }
@@ -356,15 +274,23 @@ struct PackTraits<8, true>
     static simd16scalar pack(simd16scalar &in)
     {
         simd16scalari result = _simd16_setzero_si();
-        simdscalari resultlo = _simd_setzero_si();
 
-        __m128i templo = _mm_packs_epi32(_mm256_castsi256_si128(_mm256_castps_si256(_simd16_extract_ps(in, 0))), _mm256_extractf128_si256(_mm256_castps_si256(_simd16_extract_ps(in, 0)), 1));
-        __m128i temphi = _mm_packs_epi32(_mm256_castsi256_si128(_mm256_castps_si256(_simd16_extract_ps(in, 1))), _mm256_extractf128_si256(_mm256_castps_si256(_simd16_extract_ps(in, 1)), 1));
+        simdscalari inlo = _simd_castps_si(_simd16_extract_ps(in, 0));          // r0 r1 r2 r3 r4 r5 r6 r7 (32b)
+        simdscalari inhi = _simd_castps_si(_simd16_extract_ps(in, 1));          // r8 r9 rA rB rC rD rE rF
 
-        __m128i temp = _mm_packs_epi16(templo, temphi);
+        simdscalari permlo = _simd_permute2f128_si(inlo, inhi, 0x20);           // r0 r1 r2 r3 r8 r9 rA rB (32b)
+        simdscalari permhi = _simd_permute2f128_si(inlo, inhi, 0x31);           // r4 r5 r6 r7 rC rD rE rF (32b)
 
-        resultlo = _mm256_inserti128_si256(resultlo, temp, 0);
-        result = _simd16_insert_si(result, resultlo, 0);
+        simdscalari pack = _simd_packs_epi32(permlo, permhi);                   // r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 rA rB rC rD rE rF (16b)
+
+        const simdscalari zero = _simd_setzero_si();
+
+        permlo = _simd_permute2f128_si(pack, zero, 0x20);   // (2, 0)           // r0 r1 r2 r3 r4 r5 r6 r7 00 00 00 00 00 00 00 00 (16b)
+        permhi = _simd_permute2f128_si(pack, zero, 0x31);   // (3, 1)           // r8 r9 rA rB rC rD rE rF 00 00 00 00 00 00 00 00 (16b)
+
+        pack = _simd_packs_epi16(permlo, permhi);                               // r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 rA rB rC rD rE rF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 (8b)
+
+        result = _simd16_insert_si(result, pack, 0);
 
         return _simd16_castsi_ps(result);
     }
@@ -385,16 +311,6 @@ struct PackTraits<16, false>
         __m256 result = _mm256_setzero_ps();
         __m128 vLo = _mm_load_ps((const float*)pSrc);
         return _mm256_insertf128_ps(result, vLo, 0);
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalar result;
-
-        result.lo = _mm256_load_ps(reinterpret_cast<const float*>(pSrc));
-
-        result.hi = _mm256_undefined_ps();
-
-        return result;
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -405,10 +321,6 @@ struct PackTraits<16, false>
 #if KNOB_SIMD_WIDTH == 8
         // store 16B (2B * 8)
         _mm_store_ps((float*)pDst, _mm256_castps256_ps128(src));
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        _mm256_store_ps(reinterpret_cast<float*>(pDst), src.lo);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -429,16 +341,6 @@ struct PackTraits<16, false>
 #elif KNOB_ARCH>=KNOB_ARCH_AVX2
         return _mm256_castsi256_ps(_mm256_cvtepu16_epi32(_mm_castps_si128(_mm256_castps256_ps128(in))));
 #endif
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalari result;
-
-        result.lo = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_castps_si256(in.lo), 0));
-
-        result.hi = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_castps_si256(in.lo), 1));
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -450,21 +352,6 @@ struct PackTraits<16, false>
         simdscalari src = _simd_castps_si(in);
         __m256i res = _mm256_castsi128_si256(_mm_packus_epi32(_mm256_castsi256_si128(src), _mm256_extractf128_si256(src, 1)));
         return _mm256_castsi256_ps(res);
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalari result;
-
-        __m256i inlo = _mm256_castps_si256(in.lo);
-        __m256i inhi = _mm256_castps_si256(in.hi);
-
-        __m256i templo = _mm256_permute2x128_si256(inlo, inhi, 0x20);
-        __m256i temphi = _mm256_permute2x128_si256(inlo, inhi, 0x31);
-
-        result.lo = _mm256_packus_epi32(templo, temphi);
-        result.hi = _mm256_undefined_si256();
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -489,25 +376,19 @@ struct PackTraits<16, false>
 
     static simd16scalar unpack(simd16scalar &in)
     {
-        simd16scalari result = _simd16_setzero_si();
-
-        result = _simd16_insert_si(result, _simd_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_castps_si256(_simd16_extract_ps(in, 0)), 0)), 0);
-        result = _simd16_insert_si(result, _simd_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_castps_si256(_simd16_extract_ps(in, 0)), 1)), 1);
+        simd16scalari result = _simd16_cvtepu16_epi32(_simd_castps_si(_simd16_extract_ps(in, 0)));
 
         return _simd16_castsi_ps(result);
     }
 
     static simd16scalar pack(simd16scalar &in)
     {
-        simd16scalari result = _simd16_setzero_si();
+        const simd16scalari zero = _simd16_setzero_si();
 
-        simdscalari inlo = _simd_castps_si(_simd16_extract_ps(in, 0));
-        simdscalari inhi = _simd_castps_si(_simd16_extract_ps(in, 1));
+        simd16scalari permlo = _simd16_permute2f128_si(_simd16_castps_si(in), zero, 0x08);  // (0, 0, 2, 0) // r0 r1 r2 r3 r8 r9 rA rB 00 00 00 00 00 00 00 00 (32b)
+        simd16scalari permhi = _simd16_permute2f128_si(_simd16_castps_si(in), zero, 0x0D);  // (0, 0, 3, 1) // r4 r5 r6 r7 rC rD rE rF 00 00 00 00 00 00 00 00
 
-        simdscalari templo = _simd_permute2f128_si(inlo, inhi, 0x20);
-        simdscalari temphi = _simd_permute2f128_si(inlo, inhi, 0x31);
-
-        result = _simd16_insert_si(result, _simd_packus_epi32(templo, temphi), 0);
+        simd16scalari result = _simd16_packus_epi32(permlo, permhi);    // r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 rA rB rC rD rE rF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 (16b)
 
         return _simd16_castsi_ps(result);
     }
@@ -528,16 +409,6 @@ struct PackTraits<16, true>
         __m256 result = _mm256_setzero_ps();
         __m128 vLo = _mm_load_ps((const float*)pSrc);
         return _mm256_insertf128_ps(result, vLo, 0);
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalar result;
-
-        result.lo = _mm256_load_ps(reinterpret_cast<const float*>(pSrc));
-
-        result.hi = _mm256_undefined_ps();
-
-        return result;
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -548,10 +419,6 @@ struct PackTraits<16, true>
 #if KNOB_SIMD_WIDTH == 8
         // store 16B (2B * 8)
         _mm_store_ps((float*)pDst, _mm256_castps256_ps128(src));
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        _mm256_store_ps(reinterpret_cast<float*>(pDst), src.lo);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -573,16 +440,6 @@ struct PackTraits<16, true>
 #elif KNOB_ARCH>=KNOB_ARCH_AVX2
         return _mm256_castsi256_ps(_mm256_cvtepi16_epi32(_mm_castps_si128(_mm256_castps256_ps128(in))));
 #endif
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalari result;
-
-        result.lo = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_castps_si256(in.lo), 0));
-
-        result.hi = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_castps_si256(in.lo), 1));
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -594,21 +451,6 @@ struct PackTraits<16, true>
         simdscalari src = _simd_castps_si(in);
         __m256i res = _mm256_castsi128_si256(_mm_packs_epi32(_mm256_castsi256_si128(src), _mm256_extractf128_si256(src, 1)));
         return _mm256_castsi256_ps(res);
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        simdscalari result;
-
-        __m256i inlo = _mm256_castps_si256(in.lo);
-        __m256i inhi = _mm256_castps_si256(in.hi);
-
-        __m256i templo = _mm256_permute2x128_si256(inlo, inhi, 0x20);
-        __m256i temphi = _mm256_permute2x128_si256(inlo, inhi, 0x31);
-
-        result.lo = _mm256_packs_epi32(templo, temphi);
-        result.hi = _mm256_undefined_si256();
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -633,25 +475,19 @@ struct PackTraits<16, true>
 
     static simd16scalar unpack(simd16scalar &in)
     {
-        simd16scalari result = _simd16_setzero_si();
-
-        result = _simd16_insert_si(result, _simd_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_castps_si256(_simd16_extract_ps(in, 0)), 0)), 0);
-        result = _simd16_insert_si(result, _simd_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_castps_si256(_simd16_extract_ps(in, 0)), 1)), 1);
+        simd16scalari result = _simd16_cvtepu16_epi32(_simd_castps_si(_simd16_extract_ps(in, 0)));
 
         return _simd16_castsi_ps(result);
     }
 
     static simd16scalar pack(simd16scalar &in)
     {
-        simd16scalari result = _simd16_setzero_si();
+        const simd16scalari zero = _simd16_setzero_si();
 
-        simdscalari inlo = _simd_castps_si(_simd16_extract_ps(in, 0));
-        simdscalari inhi = _simd_castps_si(_simd16_extract_ps(in, 1));
+        simd16scalari permlo = _simd16_permute2f128_si(_simd16_castps_si(in), zero, 0x08);  // (0, 0, 2, 0) // r0 r1 r2 r3 r8 r9 rA rB 00 00 00 00 00 00 00 00 (32b)
+        simd16scalari permhi = _simd16_permute2f128_si(_simd16_castps_si(in), zero, 0x0D);  // (0, 0, 3, 1) // r4 r5 r6 r7 rC rD rE rF 00 00 00 00 00 00 00 00
 
-        simdscalari templo = _simd_permute2f128_si(inlo, inhi, 0x20);
-        simdscalari temphi = _simd_permute2f128_si(inlo, inhi, 0x31);
-
-        result = _simd16_insert_si(result, _simd_packus_epi32(templo, temphi), 0);
+        simd16scalari result = _simd16_packs_epi32(permlo, permhi);     // r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 rA rB rC rD rE rF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 (16b)
 
         return _simd16_castsi_ps(result);
     }
@@ -1193,20 +1029,6 @@ template<> struct TypeTraits<SWR_TYPE_FLOAT, 16> : PackTraits<16>
 #else
         return _mm256_castsi256_ps(_mm256_castsi128_si256(_mm256_cvtps_ph(in, _MM_FROUND_TRUNC)));
 #endif
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-simdscalari result;
-
-        __m128i templo = _mm256_cvtps_ph(in.lo, _MM_FROUND_TRUNC);
-        __m128i temphi = _mm256_cvtps_ph(in.hi, _MM_FROUND_TRUNC);
-
-        result.lo = _mm256_castsi128_si256(templo);
-        result.lo = _mm256_insertf128_si256(result.lo, temphi, 1);
-
-        result.hi = _mm256_undefined_si256();
-
-        return _simd_castsi_ps(result);
-#endif
 #else
 #error Unsupported vector width
 #endif
@@ -1229,16 +1051,16 @@ simdscalari result;
         simdscalar simdlo = pack(_simd16_extract_ps(in, 0));
         simdscalar simdhi = pack(_simd16_extract_ps(in, 1));
 
-        __m128i templo = _mm256_extractf128_si256(_simd_castps_si(simdlo), 0);
-        __m128i temphi = _mm256_extractf128_si256(_simd_castps_si(simdhi), 0);
+        __m128i templo = _simd_extractf128_si(_simd_castps_si(simdlo), 0);
+        __m128i temphi = _simd_extractf128_si(_simd_castps_si(simdhi), 0);
 
 #else
         __m128i templo = _mm256_cvtps_ph(_simd16_extract_ps(in, 0), _MM_FROUND_TRUNC);
         __m128i temphi = _mm256_cvtps_ph(_simd16_extract_ps(in, 1), _MM_FROUND_TRUNC);
 
 #endif
-        resultlo = _mm256_insertf128_si256(resultlo, templo, 0);
-        resultlo = _mm256_insertf128_si256(resultlo, temphi, 1);
+        resultlo = _simd_insertf128_si(resultlo, templo, 0);
+        resultlo = _simd_insertf128_si(resultlo, temphi, 1);
 
         result = _simd16_insert_si(result, resultlo, 0);
 
@@ -1274,23 +1096,6 @@ template<> struct TypeTraits<SWR_TYPE_FLOAT, 32> : PackTraits<32>
 
         in = _mm256_insertf128_ps(in, srcLo, 0);
         in = _mm256_insertf128_ps(in, srcHi, 1);
-#endif
-#elif KNOB_SIMD_WIDTH == 16
-#if ENABLE_AVX512_EMULATION
-        __m128 inlo0 = _mm256_extractf128_ps(in.lo, 0);
-        __m128 inlo1 = _mm256_extractf128_ps(in.lo, 1);
-        __m128 inhi0 = _mm256_extractf128_ps(in.hi, 0);
-        __m128 inhi1 = _mm256_extractf128_ps(in.hi, 1);
-
-        inlo0 = ConvertFloatToSRGB2(inlo0);
-        inlo1 = ConvertFloatToSRGB2(inlo1);
-        inhi0 = ConvertFloatToSRGB2(inhi0);
-        inhi1 = ConvertFloatToSRGB2(inhi1);
-
-        in.lo = _mm256_insertf128_ps(in.lo, inlo0, 0);
-        in.lo = _mm256_insertf128_ps(in.lo, inlo1, 1);
-        in.hi = _mm256_insertf128_ps(in.hi, inhi0, 0);
-        in.hi = _mm256_insertf128_ps(in.hi, inhi1, 1);
 #endif
 #else
 #error Unsupported vector width

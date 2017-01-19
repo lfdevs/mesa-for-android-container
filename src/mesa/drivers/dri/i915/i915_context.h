@@ -140,7 +140,7 @@ enum {
  */
 struct i915_fragment_program
 {
-   struct gl_fragment_program FragProg;
+   struct gl_program FragProg;
 
    bool translated;
    bool params_uptodate;

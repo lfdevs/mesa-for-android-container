@@ -28,6 +28,7 @@ C_SOURCES := \
 	vc4_opt_peephole_sf.c \
 	vc4_opt_small_immediates.c \
 	vc4_opt_vpm.c \
+	vc4_opt_coalesce_ff_writes.c \
 	vc4_program.c \
 	vc4_qir.c \
 	vc4_qir_emit_uniform_stream_resets.c \

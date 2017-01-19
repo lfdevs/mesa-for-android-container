@@ -104,6 +104,13 @@ bool SwrAssert(
     const char* pFmtString = nullptr,
     ...);
 
+void SwrTrace(
+    const char* pFileName,
+    uint32_t    lineNum,
+    const char* function,
+    const char* pFmtString,
+    ...);
+
 #define _SWR_ASSERT(chkDebugger, e, ...) {\
     bool expFailed = !(e);\
     if (expFailed) {\
@@ -113,9 +120,13 @@ bool SwrAssert(
     }\
 }
 
+#define _SWR_TRACE(_fmtstr, ...) \
+    SwrTrace(__FILE__, __LINE__, __FUNCTION__, _fmtstr, ##__VA_ARGS__);
+
 #if SWR_ENABLE_ASSERTS
 #define SWR_ASSERT(e, ...)              _SWR_ASSERT(true, e, ##__VA_ARGS__)
 #define SWR_ASSUME_ASSERT(e, ...)       SWR_ASSERT(e, ##__VA_ARGS__)
+#define SWR_TRACE(_fmtstr, ...)         _SWR_TRACE(_fmtstr, ##__VA_ARGS__)
 
 #if defined(assert)
 #undef assert
@@ -127,6 +138,7 @@ bool SwrAssert(
 #if SWR_ENABLE_REL_ASSERTS
 #define SWR_REL_ASSERT(e, ...)          _SWR_ASSERT(false, e, ##__VA_ARGS__)
 #define SWR_REL_ASSUME_ASSERT(e, ...)   SWR_REL_ASSERT(e, ##__VA_ARGS__)
+#define SWR_REL_TRACE(_fmtstr, ...)     _SWR_TRACE(_fmtstr, ##__VA_ARGS__)
 #endif
 
 #endif // C++
@@ -136,11 +148,13 @@ bool SwrAssert(
 #if !SWR_ENABLE_ASSERTS
 #define SWR_ASSERT(e, ...)              (void)(0)
 #define SWR_ASSUME_ASSERT(e, ...)       SWR_ASSUME(e, ##__VA_ARGS__)
+#define SWR_TRACE(_fmtstr, ...)         (void)(0)
 #endif
 
 #if !SWR_ENABLE_REL_ASSERTS
 #define SWR_REL_ASSERT(e, ...)          (void)(0)
 #define SWR_REL_ASSUME_ASSERT(e, ...)   SWR_ASSUME(e, ##__VA_ARGS__)
+#define SWR_REL_TRACE(_fmtstr, ...)     (void)(0)
 #endif
 
 #define SWR_NOT_IMPL SWR_ASSERT(0, "%s not implemented", __FUNCTION__)

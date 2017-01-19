@@ -963,16 +963,48 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
    if (stencil[0].enabled) {
 
       if (face) {
-         LLVMValueRef zero = lp_build_const_int32(gallivm, 0);
+         if (0) {
+            /*
+             * XXX: the scalar expansion below produces atrocious code
+             * (basically producing a 64bit scalar value, then moving the 2
+             * 32bit pieces separately to simd, plus 4 shuffles, which is
+             * seriously lame). But the scalar-simd transitions are always
+             * tricky, so no big surprise there.
+             * This here would be way better, however llvm has some serious
+             * trouble later using it in the select, probably because it will
+             * recognize the expression as constant and move the simd value
+             * away (out of the loop) - and then it will suddenly try
+             * constructing i1 high-bit masks out of it later...
+             * (Try piglit stencil-twoside.)
+             * Note this is NOT due to using SExt/Trunc, it fails exactly the
+             * same even when using native compare/select.
+             * I cannot reproduce this problem when using stand-alone compiler
+             * though, suggesting some problem with optimization passes...
+             * (With stand-alone compilation, the construction of this mask
+             * value, no matter if the easy 3 instruction here or the complex
+             * 16+ one below, never gets separated from where it's used.)
+             * The scalar code still has the same problem, but the generated
+             * code looks a bit better at least for some reason, even if
+             * mostly by luck (the fundamental issue clearly is the same).
+             */
+            front_facing = lp_build_broadcast(gallivm, s_bld.vec_type, face);
+            /* front_facing = face != 0 ? ~0 : 0 */
+            front_facing = lp_build_compare(gallivm, s_bld.type,
+                                            PIPE_FUNC_NOTEQUAL,
+                                            front_facing, s_bld.zero);
+         } else {
+            LLVMValueRef zero = lp_build_const_int32(gallivm, 0);
 
-         /* front_facing = face != 0 ? ~0 : 0 */
-         front_facing = LLVMBuildICmp(builder, LLVMIntNE, face, zero, "");
-         front_facing = LLVMBuildSExt(builder, front_facing,
-                                      LLVMIntTypeInContext(gallivm->context,
-                                             s_bld.type.length*s_bld.type.width),
-                                      "");
-         front_facing = LLVMBuildBitCast(builder, front_facing,
-                                         s_bld.int_vec_type, "");
+            /* front_facing = face != 0 ? ~0 : 0 */
+            front_facing = LLVMBuildICmp(builder, LLVMIntNE, face, zero, "");
+            front_facing = LLVMBuildSExt(builder, front_facing,
+                                         LLVMIntTypeInContext(gallivm->context,
+                                                s_bld.type.length*s_bld.type.width),
+                                         "");
+            front_facing = LLVMBuildBitCast(builder, front_facing,
+                                            s_bld.int_vec_type, "");
+
+         }
       }
 
       s_pass_mask = lp_build_stencil_test(&s_bld, stencil,

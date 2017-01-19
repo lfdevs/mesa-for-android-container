@@ -94,7 +94,6 @@ vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target)
    vlVaDriver *drv;
    vlVaContext *context;
    vlVaSurface *surf;
-   void *pbuff;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -125,12 +124,16 @@ vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target)
 
    if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
       int frame_diff;
-      if (context->desc.h264enc.frame_num_cnt > surf->frame_num_cnt)
+      if (context->desc.h264enc.frame_num_cnt >= surf->frame_num_cnt)
          frame_diff = context->desc.h264enc.frame_num_cnt - surf->frame_num_cnt;
       else
          frame_diff = 0xFFFFFFFF - surf->frame_num_cnt + 1 + context->desc.h264enc.frame_num_cnt;
-      if (frame_diff < 2)
+      if ((frame_diff == 0) &&
+          (surf->force_flushed == false) &&
+          (context->desc.h264enc.frame_num_cnt % 2 != 0)) {
          context->decoder->flush(context->decoder);
+         context->first_single_submitted = true;
+      }
       context->decoder->get_feedback(context->decoder, surf->feedback, &(surf->coded_buf->coded_size));
       surf->feedback = NULL;
    }

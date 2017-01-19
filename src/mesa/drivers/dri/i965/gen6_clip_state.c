@@ -153,6 +153,15 @@ upload_clip_state(struct brw_context *brw)
    /* _NEW_TRANSFORM */
    dw2 |= (ctx->Transform.ClipPlanesEnabled <<
            GEN6_USER_CLIP_CLIP_DISTANCES_SHIFT);
+
+   /* Have the hardware use the user clip distance clip test enable bitmask
+    * specified here in 3DSTATE_CLIP rather than the one in 3DSTATE_VS/DS/GS.
+    * We already listen to _NEW_TRANSFORM here, but the other atoms don't
+    * need to other than this.
+    */
+   if (brw->gen >= 8)
+      dw1 |= GEN8_CLIP_FORCE_USER_CLIP_DISTANCE_BITMASK;
+
    if (ctx->Transform.ClipDepthMode == GL_ZERO_TO_ONE)
       dw2 |= GEN6_CLIP_API_D3D;
    else

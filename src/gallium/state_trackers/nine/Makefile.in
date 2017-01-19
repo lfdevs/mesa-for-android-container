@@ -89,10 +89,13 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_LIBDRM_TRUE@am__append_1 = \
+@HAVE_LIBDRM_TRUE@	$(LIBDRM_LIBS)
+
+@HAVE_DRISW_TRUE@am__append_2 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@HAVE_DRISW_KMS_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@am__append_3 = \
 @HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
 @HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
 
@@ -119,12 +122,12 @@ libninetracker_la_LIBADD =
 am__objects_1 = adapter9.lo authenticatedchannel9.lo basetexture9.lo \
 	buffer9.lo cryptosession9.lo cubetexture9.lo device9.lo \
 	device9ex.lo device9video.lo guid.lo indexbuffer9.lo \
-	iunknown.lo nine_debug.lo nine_dump.lo \
+	iunknown.lo nine_buffer_upload.lo nine_debug.lo nine_dump.lo \
 	nineexoverlayextension.lo nine_ff.lo nine_helpers.lo \
-	nine_lock.lo nine_pipe.lo nine_quirk.lo nine_shader.lo \
-	nine_state.lo pixelshader9.lo query9.lo resource9.lo \
-	stateblock9.lo surface9.lo swapchain9.lo swapchain9ex.lo \
-	texture9.lo threadpool.lo vertexbuffer9.lo \
+	nine_lock.lo nine_pipe.lo nine_quirk.lo nine_queue.lo \
+	nine_shader.lo nine_state.lo pixelshader9.lo query9.lo \
+	resource9.lo stateblock9.lo surface9.lo swapchain9.lo \
+	swapchain9ex.lo texture9.lo threadpool.lo vertexbuffer9.lo \
 	vertexdeclaration9.lo vertexshader9.lo volume9.lo \
 	volumetexture9.lo
 am_libninetracker_la_OBJECTS = $(am__objects_1)
@@ -202,6 +205,8 @@ AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANDROID_CFLAGS = @ANDROID_CFLAGS@
+ANDROID_LIBS = @ANDROID_LIBS@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -245,10 +250,11 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
-EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
+ETNAVIV_CFLAGS = @ETNAVIV_CFLAGS@
+ETNAVIV_LIBS = @ETNAVIV_LIBS@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -298,9 +304,7 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
-LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
-LIBSHA1_LIBS = @LIBSHA1_LIBS@
+LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
@@ -341,8 +345,6 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -379,8 +381,6 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
-SHA1_CFLAGS = @SHA1_CFLAGS@
-SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
 SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
@@ -389,7 +389,6 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
-TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -405,7 +404,6 @@ VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
 VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
-VG_LIB_DEPS = @VG_LIB_DEPS@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -522,6 +520,9 @@ C_SOURCES := \
 	indexbuffer9.h \
 	iunknown.c \
 	iunknown.h \
+	nine_buffer_upload.c \
+	nine_buffer_upload.h \
+	nine_csmt_helper.h \
 	nine_debug.c \
 	nine_debug.h \
 	nine_defines.h \
@@ -542,6 +543,8 @@ C_SOURCES := \
 	nine_pipe.h \
 	nine_quirk.c \
 	nine_quirk.h \
+	nine_queue.c \
+	nine_queue.h \
 	nine_shader.c \
 	nine_shader.h \
 	nine_state.c \
@@ -622,12 +625,8 @@ GALLIUM_TARGET_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_COMMON_LIB_DEPS = \
-	-lm \
-	$(CLOCK_LIB) \
-	$(PTHREAD_LIBS) \
-	$(DLOPEN_LIBS)
-
+GALLIUM_COMMON_LIB_DEPS = -lm $(LIBSENSORS_LIBS) $(CLOCK_LIB) \
+	$(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
@@ -639,7 +638,7 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_1) $(am__append_2)
+	$(am__append_2) $(am__append_3)
 AM_CFLAGS = \
 	-I$(top_srcdir)/include/D3D9 \
 	$(GALLIUM_CFLAGS) \
@@ -715,12 +714,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/guid.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/indexbuffer9.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iunknown.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_buffer_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_ff.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_helpers.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_lock.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_pipe.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_quirk.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nine_state.Plo@am__quote@

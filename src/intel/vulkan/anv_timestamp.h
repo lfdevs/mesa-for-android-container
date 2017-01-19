@@ -1,1 +1,0 @@
-#define ANV_TIMESTAMP "1483631584"

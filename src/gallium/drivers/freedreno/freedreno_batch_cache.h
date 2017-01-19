@@ -62,7 +62,7 @@ struct fd_batch_cache {
 void fd_bc_init(struct fd_batch_cache *cache);
 void fd_bc_fini(struct fd_batch_cache *cache);
 
-uint32_t fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx);
+void fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx);
 
 void fd_bc_invalidate_context(struct fd_context *ctx);
 void fd_bc_invalidate_batch(struct fd_batch *batch, bool destroy);

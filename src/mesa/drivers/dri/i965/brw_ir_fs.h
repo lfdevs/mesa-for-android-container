@@ -367,22 +367,6 @@ public:
 
    uint8_t sources; /**< Number of fs_reg sources. */
 
-   /**
-    * Execution size of the instruction.  This is used by the generator to
-    * generate the correct binary for the given fs_inst.  Current valid
-    * values are 1, 8, 16.
-    */
-   uint8_t exec_size;
-
-   /**
-    * Channel group from the hardware execution and predication mask that
-    * should be applied to the instruction.  The subset of channel enable
-    * signals (calculated from the EU control flow and predication state)
-    * given by [group, group + exec_size) will be used to mask GRF writes and
-    * any other side effects of the instruction.
-    */
-   uint8_t group;
-
    bool eot:1;
    bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
 };

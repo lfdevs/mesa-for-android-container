@@ -52,7 +52,7 @@ nir_builder_init_simple_shader(nir_builder *build, void *mem_ctx,
                                gl_shader_stage stage,
                                const nir_shader_compiler_options *options)
 {
-   build->shader = nir_shader_create(mem_ctx, stage, options);
+   build->shader = nir_shader_create(mem_ctx, stage, options, NULL);
    nir_function *func = nir_function_create(build->shader, "main");
    build->exact = false;
    build->impl = nir_function_impl_create(func);
@@ -66,6 +66,13 @@ nir_builder_instr_insert(nir_builder *build, nir_instr *instr)
 
    /* Move the cursor forward. */
    build->cursor = nir_after_instr(instr);
+}
+
+static inline nir_instr *
+nir_builder_last_instr(nir_builder *build)
+{
+   assert(build->cursor.option == nir_cursor_after_instr);
+   return build->cursor.instr;
 }
 
 static inline void
@@ -411,6 +418,22 @@ nir_load_var(nir_builder *build, nir_variable *var)
    return &load->dest.ssa;
 }
 
+static inline nir_ssa_def *
+nir_load_deref_var(nir_builder *build, nir_deref_var *deref)
+{
+   const struct glsl_type *type = nir_deref_tail(&deref->deref)->type;
+   const unsigned num_components = glsl_get_vector_elements(type);
+
+   nir_intrinsic_instr *load =
+      nir_intrinsic_instr_create(build->shader, nir_intrinsic_load_var);
+   load->num_components = num_components;
+   load->variables[0] = nir_deref_var_clone(deref, load);
+   nir_ssa_dest_init(&load->instr, &load->dest, num_components,
+                     glsl_get_bit_size(type), NULL);
+   nir_builder_instr_insert(build, &load->instr);
+   return &load->dest.ssa;
+}
+
 static inline void
 nir_store_var(nir_builder *build, nir_variable *var, nir_ssa_def *value,
               unsigned writemask)
@@ -437,7 +460,7 @@ nir_store_deref_var(nir_builder *build, nir_deref_var *deref,
       nir_intrinsic_instr_create(build->shader, nir_intrinsic_store_var);
    store->num_components = num_components;
    store->const_index[0] = writemask & ((1 << num_components) - 1);
-   store->variables[0] = nir_deref_as_var(nir_copy_deref(store, &deref->deref));
+   store->variables[0] = nir_deref_var_clone(deref, store);
    store->src[0] = nir_src_for_ssa(value);
    nir_builder_instr_insert(build, &store->instr);
 }
@@ -450,8 +473,8 @@ nir_copy_deref_var(nir_builder *build, nir_deref_var *dest, nir_deref_var *src)
 
    nir_intrinsic_instr *copy =
       nir_intrinsic_instr_create(build->shader, nir_intrinsic_copy_var);
-   copy->variables[0] = nir_deref_as_var(nir_copy_deref(copy, &dest->deref));
-   copy->variables[1] = nir_deref_as_var(nir_copy_deref(copy, &src->deref));
+   copy->variables[0] = nir_deref_var_clone(dest, copy);
+   copy->variables[1] = nir_deref_var_clone(src, copy);
    nir_builder_instr_insert(build, &copy->instr);
 }
 

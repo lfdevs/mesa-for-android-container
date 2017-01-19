@@ -142,7 +142,7 @@ vl_compositor_init_state(struct vl_compositor_state *state, struct pipe_context 
 /**
  * set yuv -> rgba conversion matrix
  */
-void
+bool
 vl_compositor_set_csc_matrix(struct vl_compositor_state *settings,
                              const vl_csc_matrix *matrix,
                              float luma_min, float luma_max);

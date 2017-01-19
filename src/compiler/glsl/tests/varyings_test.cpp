@@ -83,6 +83,7 @@ link_varyings::link_varyings()
       glsl_type::get_interface_instance(f,
                                         ARRAY_SIZE(f),
                                         GLSL_INTERFACE_PACKING_STD140,
+                                        false,
                                         "simple_interface");
 }
 

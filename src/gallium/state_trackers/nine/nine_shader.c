@@ -1082,8 +1082,8 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
            if (tx->shift_wpos) {
                /* TODO: do this only once */
                struct ureg_dst wpos = tx_scratch(tx);
-               ureg_SUB(ureg, wpos, tx->regs.vPos,
-                        ureg_imm4f(ureg, 0.5f, 0.5f, 0.0f, 0.0f));
+               ureg_ADD(ureg, wpos, tx->regs.vPos,
+                        ureg_imm4f(ureg, -0.5f, -0.5f, 0.0f, 0.0f));
                src = ureg_src(wpos);
            } else {
                src = tx->regs.vPos;
@@ -1161,12 +1161,12 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         break;
     case NINED3DSPSM_BIAS:
         tmp = tx_scratch(tx);
-        ureg_SUB(ureg, tmp, src, ureg_imm1f(ureg, 0.5f));
+        ureg_ADD(ureg, tmp, src, ureg_imm1f(ureg, -0.5f));
         src = ureg_src(tmp);
         break;
     case NINED3DSPSM_BIASNEG:
         tmp = tx_scratch(tx);
-        ureg_SUB(ureg, tmp, ureg_imm1f(ureg, 0.5f), src);
+        ureg_ADD(ureg, tmp, ureg_imm1f(ureg, 0.5f), ureg_negate(src));
         src = ureg_src(tmp);
         break;
     case NINED3DSPSM_NOT:
@@ -1179,7 +1179,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         /* fall through */
     case NINED3DSPSM_COMP:
         tmp = tx_scratch(tx);
-        ureg_SUB(ureg, tmp, ureg_imm1f(ureg, 1.0f), src);
+        ureg_ADD(ureg, tmp, ureg_imm1f(ureg, 1.0f), ureg_negate(src));
         src = ureg_src(tmp);
         break;
     case NINED3DSPSM_DZ:
@@ -1572,6 +1572,34 @@ d3dsio_to_string( unsigned opcode )
 
 static HRESULT
 NineTranslateInstruction_Generic(struct shader_translator *);
+
+DECL_SPECIAL(NOP)
+{
+    /* Nothing to do. NOP was used to avoid hangs
+     * with very old d3d drivers. */
+    return D3D_OK;
+}
+
+DECL_SPECIAL(SUB)
+{
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
+    struct ureg_src src0 = tx_src_param(tx, &tx->insn.src[0]);
+    struct ureg_src src1 = tx_src_param(tx, &tx->insn.src[1]);
+
+    ureg_ADD(ureg, dst, src0, ureg_negate(src1));
+    return D3D_OK;
+}
+
+DECL_SPECIAL(ABS)
+{
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
+    struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]);
+
+    ureg_MOV(ureg, dst, ureg_abs(src));
+    return D3D_OK;
+}
 
 DECL_SPECIAL(M4x4)
 {
@@ -2524,7 +2552,7 @@ DECL_SPECIAL(TEXM3x3SPEC)
     ureg_MUL(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_X), ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_X), ureg_imm1f(ureg, 2.0f));
     ureg_MUL(ureg, tmp, ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_X), ureg_src(dst));
     /* at this step tmp.xyz = 2 * (N.E / N.N) * N */
-    ureg_SUB(ureg, tmp, ureg_src(tmp), E);
+    ureg_ADD(ureg, tmp, ureg_src(tmp), ureg_negate(E));
     ureg_TEX(ureg, dst, ps1x_sampler_type(tx->info, m + 2), ureg_src(tmp), sample);
 
     return D3D_OK;
@@ -2663,7 +2691,7 @@ DECL_SPECIAL(TEXM3x3)
         ureg_MUL(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_X), ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_X), ureg_imm1f(ureg, 2.0f));
         ureg_MUL(ureg, tmp, ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_X), ureg_src(dst));
         /* at this step tmp.xyz = 2 * (N.E / N.N) * N */
-        ureg_SUB(ureg, tmp, ureg_src(tmp), ureg_src(E));
+        ureg_ADD(ureg, tmp, ureg_src(tmp), ureg_negate(ureg_src(E)));
         ureg_TEX(ureg, dst, ps1x_sampler_type(tx->info, m + 2), ureg_src(tmp), sample);
         break;
     default:
@@ -2863,10 +2891,10 @@ DECL_SPECIAL(COMMENT)
 
 struct sm1_op_info inst_table[] =
 {
-    _OPI(NOP, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 0, 0, NULL), /* 0 */
+    _OPI(NOP, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 0, 0, SPECIAL(NOP)), /* 0 */
     _OPI(MOV, MOV, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, NULL),
     _OPI(ADD, ADD, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 2 */
-    _OPI(SUB, SUB, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 3 */
+    _OPI(SUB, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, SPECIAL(SUB)), /* 3 */
     _OPI(MAD, MAD, V(0,0), V(3,0), V(0,0), V(3,0), 1, 3, NULL), /* 4 */
     _OPI(MUL, MUL, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 5 */
     _OPI(RCP, RCP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, NULL), /* 6 */
@@ -2902,7 +2930,7 @@ struct sm1_op_info inst_table[] =
     _OPI(POW, POW, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, SPECIAL(POW)),
     _OPI(CRS, XPD, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* XXX: .w */
     _OPI(SGN, SSG, V(2,0), V(3,0), V(0,0), V(0,0), 1, 3, SPECIAL(SGN)), /* ignore src1,2 */
-    _OPI(ABS, ABS, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, NULL),
+    _OPI(ABS, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, SPECIAL(ABS)),
     _OPI(NRM, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, SPECIAL(NRM)), /* NRM doesn't fit */
 
     _OPI(SINCOS, SCS, V(2,0), V(2,1), V(2,0), V(2,1), 1, 3, SPECIAL(SINCOS)),
@@ -3426,7 +3454,7 @@ shader_add_ps_fog_stage(struct shader_translator *tx, struct ureg_src src_col)
     if (tx->info->fog_mode == D3DFOG_LINEAR) {
         fog_end = NINE_CONSTANT_SRC_SWIZZLE(33, X);
         fog_coeff = NINE_CONSTANT_SRC_SWIZZLE(33, Y);
-        ureg_SUB(ureg, fog_factor, fog_end, depth);
+        ureg_ADD(ureg, fog_factor, fog_end, ureg_negate(depth));
         ureg_MUL(ureg, ureg_saturate(fog_factor), tx_src_scalar(fog_factor), fog_coeff);
     } else if (tx->info->fog_mode == D3DFOG_EXP) {
         fog_density = NINE_CONSTANT_SRC_SWIZZLE(33, X);
@@ -3457,13 +3485,12 @@ shader_add_ps_fog_stage(struct shader_translator *tx, struct ureg_src src_col)
       screen, info->type, PIPE_SHADER_CAP_##n)
 
 HRESULT
-nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
+nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info, struct pipe_context *pipe)
 {
     struct shader_translator *tx;
     HRESULT hr = D3D_OK;
     const unsigned processor = info->type;
     struct pipe_screen *screen = info->process_vertices ? device->screen_sw : device->screen;
-    struct pipe_context *pipe = info->process_vertices ? device->pipe_sw : device->pipe;
 
     user_assert(processor != ~0, D3DERR_INVALIDCALL);
 

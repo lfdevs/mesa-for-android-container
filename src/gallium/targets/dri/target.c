@@ -162,3 +162,22 @@ PUBLIC const __DRIextension **__driDriverGetExtensions_i965(void)
 }
 #endif
 #endif
+
+#if defined(GALLIUM_ETNAVIV)
+
+const __DRIextension **__driDriverGetExtensions_imx_drm(void);
+
+PUBLIC const __DRIextension **__driDriverGetExtensions_imx_drm(void)
+{
+   globalDriverAPI = &galliumdrm_driver_api;
+   return galliumdrm_driver_extensions;
+}
+
+const __DRIextension **__driDriverGetExtensions_etnaviv(void);
+
+PUBLIC const __DRIextension **__driDriverGetExtensions_etnaviv(void)
+{
+   globalDriverAPI = &galliumdrm_driver_api;
+   return galliumdrm_driver_extensions;
+}
+#endif

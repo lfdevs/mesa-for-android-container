@@ -24,6 +24,8 @@
 #ifndef SWR_CONTEXT_H
 #define SWR_CONTEXT_H
 
+#include "common/os.h"
+
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "util/u_blitter.h"

@@ -1067,11 +1067,9 @@ cleanup:
 void amdgpu_cs_sync_flush(struct radeon_winsys_cs *rcs)
 {
    struct amdgpu_cs *cs = amdgpu_cs(rcs);
-   struct amdgpu_winsys *ws = cs->ctx->ws;
 
    /* Wait for any pending ioctl of this CS to complete. */
-   if (util_queue_is_initialized(&ws->cs_queue))
-      util_queue_job_wait(&cs->flush_completed);
+   util_queue_job_wait(&cs->flush_completed);
 }
 
 static int amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
@@ -1157,7 +1155,14 @@ static int amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
       if (fence)
          amdgpu_fence_reference(fence, cur->fence);
 
-      /* Prepare buffers. */
+      amdgpu_cs_sync_flush(rcs);
+
+      /* Prepare buffers.
+       *
+       * This fence must be held until the submission is queued to ensure
+       * that the order of fence dependency updates matches the order of
+       * submissions.
+       */
       pipe_mutex_lock(ws->bo_fence_lock);
       amdgpu_add_fence_dependencies(cs);
 
@@ -1174,22 +1179,20 @@ static int amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
          p_atomic_inc(&bo->num_active_ioctls);
          amdgpu_add_fence(bo, cur->fence);
       }
-      pipe_mutex_unlock(ws->bo_fence_lock);
-
-      amdgpu_cs_sync_flush(rcs);
 
       /* Swap command streams. "cst" is going to be submitted. */
       cs->csc = cs->cst;
       cs->cst = cur;
 
       /* Submit. */
-      if ((flags & RADEON_FLUSH_ASYNC) &&
-          util_queue_is_initialized(&ws->cs_queue)) {
-         util_queue_add_job(&ws->cs_queue, cs, &cs->flush_completed,
-                            amdgpu_cs_submit_ib, NULL);
-      } else {
-         amdgpu_cs_submit_ib(cs, 0);
-         error_code = cs->cst->error_code;
+      util_queue_add_job(&ws->cs_queue, cs, &cs->flush_completed,
+                         amdgpu_cs_submit_ib, NULL);
+      /* The submission has been queued, unlock the fence now. */
+      pipe_mutex_unlock(ws->bo_fence_lock);
+
+      if (!(flags & RADEON_FLUSH_ASYNC)) {
+         amdgpu_cs_sync_flush(rcs);
+         error_code = cur->error_code;
       }
    } else {
       amdgpu_cs_context_cleanup(cs->csc);
@@ -1204,7 +1207,11 @@ static int amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
    cs->main.base.used_gart = 0;
    cs->main.base.used_vram = 0;
 
-   ws->num_cs_flushes++;
+   if (cs->ring_type == RING_GFX)
+      ws->num_gfx_IBs++;
+   else if (cs->ring_type == RING_DMA)
+      ws->num_sdma_IBs++;
+
    return error_code;
 }
 

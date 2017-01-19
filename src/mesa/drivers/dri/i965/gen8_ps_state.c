@@ -32,6 +32,7 @@ void
 gen8_upload_ps_extra(struct brw_context *brw,
                      const struct brw_wm_prog_data *prog_data)
 {
+   struct gl_context *ctx = &brw->ctx;
    uint32_t dw1 = 0;
 
    dw1 |= GEN8_PSX_PIXEL_SHADER_VALID;
@@ -52,11 +53,19 @@ gen8_upload_ps_extra(struct brw_context *brw,
    if (prog_data->persample_dispatch)
       dw1 |= GEN8_PSX_SHADER_IS_PER_SAMPLE;
 
+   /* _NEW_MULTISAMPLE | BRW_NEW_CONSERVATIVE_RASTERIZATION */
    if (prog_data->uses_sample_mask) {
-      if (brw->gen >= 9)
-         dw1 |= BRW_PSICMS_INNER << GEN9_PSX_SHADER_NORMAL_COVERAGE_MASK_SHIFT;
-      else
+      if (brw->gen >= 9) {
+         if (prog_data->post_depth_coverage)
+            dw1 |= BRW_PCICMS_DEPTH << GEN9_PSX_SHADER_NORMAL_COVERAGE_MASK_SHIFT;
+         else if (prog_data->inner_coverage && ctx->IntelConservativeRasterization)
+            dw1 |= BRW_PSICMS_INNER << GEN9_PSX_SHADER_NORMAL_COVERAGE_MASK_SHIFT;
+         else
+            dw1 |= BRW_PSICMS_NORMAL << GEN9_PSX_SHADER_NORMAL_COVERAGE_MASK_SHIFT;
+      }
+      else {
          dw1 |= GEN8_PSX_SHADER_USES_INPUT_COVERAGE_MASK;
+      }
    }
 
    if (prog_data->uses_omask)
@@ -122,7 +131,8 @@ const struct brw_tracked_state gen8_ps_extra = {
       .brw   = BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
                BRW_NEW_FRAGMENT_PROGRAM |
-               BRW_NEW_FS_PROG_DATA,
+               BRW_NEW_FS_PROG_DATA |
+               BRW_NEW_CONSERVATIVE_RASTERIZATION,
    },
    .emit = upload_ps_extra,
 };

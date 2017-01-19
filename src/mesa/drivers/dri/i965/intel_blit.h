@@ -58,6 +58,15 @@ bool intel_miptree_blit(struct brw_context *brw,
                         uint32_t width, uint32_t height,
                         GLenum logicop);
 
+bool intel_miptree_copy(struct brw_context *brw,
+                        struct intel_mipmap_tree *src_mt,
+                        int src_level, int src_slice,
+                        uint32_t src_x, uint32_t src_y,
+                        struct intel_mipmap_tree *dst_mt,
+                        int dst_level, int dst_slice,
+                        uint32_t dst_x, uint32_t dst_y,
+                        uint32_t src_width, uint32_t src_height);
+
 bool
 intelEmitImmediateColorExpandBlit(struct brw_context *brw,
 				  GLuint cpp,

@@ -2209,3 +2209,34 @@ svga_format_is_uncompressed_snorm(SVGA3dSurfaceFormat format)
       return false;
    }
 }
+
+
+bool
+svga_format_is_typeless(SVGA3dSurfaceFormat format)
+{
+   switch (format) {
+   case SVGA3D_R32G32B32A32_TYPELESS:
+   case SVGA3D_R32G32B32_TYPELESS:
+   case SVGA3D_R16G16B16A16_TYPELESS:
+   case SVGA3D_R32G32_TYPELESS:
+   case SVGA3D_R32G8X24_TYPELESS:
+   case SVGA3D_R10G10B10A2_TYPELESS:
+   case SVGA3D_R8G8B8A8_TYPELESS:
+   case SVGA3D_R16G16_TYPELESS:
+   case SVGA3D_R32_TYPELESS:
+   case SVGA3D_R24G8_TYPELESS:
+   case SVGA3D_R8G8_TYPELESS:
+   case SVGA3D_R16_TYPELESS:
+   case SVGA3D_R8_TYPELESS:
+   case SVGA3D_BC1_TYPELESS:
+   case SVGA3D_BC2_TYPELESS:
+   case SVGA3D_BC3_TYPELESS:
+   case SVGA3D_BC4_TYPELESS:
+   case SVGA3D_BC5_TYPELESS:
+   case SVGA3D_B8G8R8A8_TYPELESS:
+   case SVGA3D_B8G8R8X8_TYPELESS:
+      return true;
+   default:
+      return false;
+   }
+}

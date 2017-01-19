@@ -49,6 +49,8 @@ def parse_event_fields(lines, idx, event_dict):
     field_types = []
     end_of_event = False
 
+    num_fields = 0
+
     # record all fields in event definition.
     # note: we don't check if there's a leading brace.
     while not end_of_event and idx < len(lines):
@@ -60,11 +62,14 @@ def parse_event_fields(lines, idx, event_dict):
         if field:
             field_types.append(field.group(2))
             field_names.append(field.group(4))
+            num_fields += 1
 
         end_of_event = re.match(r"(\s*)};", line)
 
     event_dict['field_types'] = field_types
     event_dict['field_names'] = field_names
+    event_dict['num_fields'] = num_fields
+
     return idx
 
 def parse_enums(lines, idx, event_dict):

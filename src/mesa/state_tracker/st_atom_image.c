@@ -45,20 +45,21 @@
 #include "st_format.h"
 
 static void
-st_bind_images(struct st_context *st, struct gl_linked_shader *shader,
-              enum pipe_shader_type shader_type)
+st_bind_images(struct st_context *st, struct gl_program *prog,
+               enum pipe_shader_type shader_type)
 {
    unsigned i;
    struct pipe_image_view images[MAX_IMAGE_UNIFORMS];
    struct gl_program_constants *c;
 
-   if (!shader || !st->pipe->set_shader_images)
+   if (!prog || !st->pipe->set_shader_images)
       return;
 
-   c = &st->ctx->Const.Program[shader->Stage];
+   c = &st->ctx->Const.Program[prog->info.stage];
 
-   for (i = 0; i < shader->NumImages; i++) {
-      struct gl_image_unit *u = &st->ctx->ImageUnits[shader->ImageUnits[i]];
+   for (i = 0; i < prog->info.num_images; i++) {
+      struct gl_image_unit *u =
+         &st->ctx->ImageUnits[prog->sh.ImageUnits[i]];
       struct st_texture_object *stObj = st_texture_object(u->TexObj);
       struct pipe_image_view *img = &images[i];
 
@@ -117,15 +118,13 @@ st_bind_images(struct st_context *st, struct gl_linked_shader *shader,
          }
       }
    }
-   cso_set_shader_images(st->cso_context, shader_type, 0, shader->NumImages,
-                         images);
+   cso_set_shader_images(st->cso_context, shader_type, 0,
+                         prog->info.num_images, images);
    /* clear out any stale shader images */
-   if (shader->NumImages < c->MaxImageUniforms)
+   if (prog->info.num_images < c->MaxImageUniforms)
       cso_set_shader_images(
-            st->cso_context, shader_type,
-            shader->NumImages,
-            c->MaxImageUniforms - shader->NumImages,
-            NULL);
+            st->cso_context, shader_type, prog->info.num_images,
+            c->MaxImageUniforms - prog->info.num_images, NULL);
 }
 
 static void bind_vs_images(struct st_context *st)
@@ -133,10 +132,10 @@ static void bind_vs_images(struct st_context *st)
    struct gl_shader_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
 
-   if (!prog)
+   if (!prog || !prog->_LinkedShaders[MESA_SHADER_VERTEX])
       return;
 
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_VERTEX], PIPE_SHADER_VERTEX);
+   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_VERTEX]->Program, PIPE_SHADER_VERTEX);
 }
 
 const struct st_tracked_state st_bind_vs_images = {
@@ -148,10 +147,10 @@ static void bind_fs_images(struct st_context *st)
    struct gl_shader_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT];
 
-   if (!prog)
+   if (!prog || !prog->_LinkedShaders[MESA_SHADER_FRAGMENT])
       return;
 
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_FRAGMENT], PIPE_SHADER_FRAGMENT);
+   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program, PIPE_SHADER_FRAGMENT);
 }
 
 const struct st_tracked_state st_bind_fs_images = {
@@ -163,10 +162,10 @@ static void bind_gs_images(struct st_context *st)
    struct gl_shader_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY];
 
-   if (!prog)
+   if (!prog || !prog->_LinkedShaders[MESA_SHADER_GEOMETRY])
       return;
 
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_GEOMETRY], PIPE_SHADER_GEOMETRY);
+   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_GEOMETRY]->Program, PIPE_SHADER_GEOMETRY);
 }
 
 const struct st_tracked_state st_bind_gs_images = {
@@ -178,10 +177,10 @@ static void bind_tcs_images(struct st_context *st)
    struct gl_shader_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_TESS_CTRL];
 
-   if (!prog)
+   if (!prog || !prog->_LinkedShaders[MESA_SHADER_TESS_CTRL])
       return;
 
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_TESS_CTRL], PIPE_SHADER_TESS_CTRL);
+   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_TESS_CTRL]->Program, PIPE_SHADER_TESS_CTRL);
 }
 
 const struct st_tracked_state st_bind_tcs_images = {
@@ -193,10 +192,10 @@ static void bind_tes_images(struct st_context *st)
    struct gl_shader_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_TESS_EVAL];
 
-   if (!prog)
+   if (!prog || !prog->_LinkedShaders[MESA_SHADER_TESS_EVAL])
       return;
 
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_TESS_EVAL], PIPE_SHADER_TESS_EVAL);
+   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_TESS_EVAL]->Program, PIPE_SHADER_TESS_EVAL);
 }
 
 const struct st_tracked_state st_bind_tes_images = {
@@ -208,10 +207,10 @@ static void bind_cs_images(struct st_context *st)
    struct gl_shader_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE];
 
-   if (!prog)
+   if (!prog || !prog->_LinkedShaders[MESA_SHADER_COMPUTE])
       return;
 
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_COMPUTE], PIPE_SHADER_COMPUTE);
+   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_COMPUTE]->Program, PIPE_SHADER_COMPUTE);
 }
 
 const struct st_tracked_state st_bind_cs_images = {

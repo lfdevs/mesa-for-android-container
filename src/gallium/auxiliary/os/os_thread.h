@@ -97,6 +97,17 @@ static inline void pipe_thread_setname( const char *name )
 }
 
 
+static inline int pipe_thread_is_self( pipe_thread thread )
+{
+#if defined(HAVE_PTHREAD)
+#  if defined(__GNU_LIBRARY__) && defined(__GLIBC__) && defined(__GLIBC_MINOR__) && \
+      (__GLIBC__ >= 3 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 12))
+   return pthread_equal(pthread_self(), thread);
+#  endif
+#endif
+   return 0;
+}
+
 /* pipe_mutex
  */
 typedef mtx_t pipe_mutex;

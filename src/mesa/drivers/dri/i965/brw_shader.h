@@ -133,6 +133,22 @@ struct backend_instruction {
    const char *annotation;
    /** @} */
 
+   /**
+    * Execution size of the instruction.  This is used by the generator to
+    * generate the correct binary for the given instruction.  Current valid
+    * values are 1, 4, 8, 16, 32.
+    */
+   uint8_t exec_size;
+
+   /**
+    * Channel group from the hardware execution and predication mask that
+    * should be applied to the instruction.  The subset of channel enable
+    * signals (calculated from the EU control flow and predication state)
+    * given by [group, group + exec_size) will be used to mask GRF writes and
+    * any other side effects of the instruction.
+    */
+   uint8_t group;
+
    uint32_t offset; /**< spill/unspill offset or texture offset bitfield */
    uint8_t mlen; /**< SEND message length */
    int8_t base_mrf; /**< First MRF in the SEND message, if mlen is nonzero. */
@@ -201,7 +217,6 @@ public:
    bool debug_enabled;
    const char *stage_name;
    const char *stage_abbrev;
-   bool is_passthrough_shader;
 
    brw::simple_allocator alloc;
 
@@ -215,7 +230,9 @@ public:
    virtual void invalidate_live_intervals() = 0;
 };
 
-uint32_t brw_texture_offset(int *offsets, unsigned num_components);
+bool brw_texture_offset(int *offsets,
+                        unsigned num_components,
+                        uint32_t *offset_bits);
 
 void brw_setup_image_uniform_values(gl_shader_stage stage,
                                     struct brw_stage_prog_data *stage_prog_data,
@@ -254,38 +271,24 @@ struct brw_gs_compile
 };
 
 uint32_t
-brw_assign_common_binding_table_offsets(gl_shader_stage stage,
-                                        const struct gen_device_info *devinfo,
-                                        const struct gl_shader_program *shader_prog,
+brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
                                         const struct gl_program *prog,
                                         struct brw_stage_prog_data *stage_prog_data,
                                         uint32_t next_binding_table_offset);
 
-bool brw_vs_precompile(struct gl_context *ctx,
-                       struct gl_shader_program *shader_prog,
-                       struct gl_program *prog);
+bool brw_vs_precompile(struct gl_context *ctx, struct gl_program *prog);
 bool brw_tcs_precompile(struct gl_context *ctx,
                         struct gl_shader_program *shader_prog,
                         struct gl_program *prog);
 bool brw_tes_precompile(struct gl_context *ctx,
                         struct gl_shader_program *shader_prog,
                         struct gl_program *prog);
-bool brw_gs_precompile(struct gl_context *ctx,
-                       struct gl_shader_program *shader_prog,
-                       struct gl_program *prog);
-bool brw_fs_precompile(struct gl_context *ctx,
-                       struct gl_shader_program *shader_prog,
-                       struct gl_program *prog);
-bool brw_cs_precompile(struct gl_context *ctx,
-                       struct gl_shader_program *shader_prog,
-                       struct gl_program *prog);
+bool brw_gs_precompile(struct gl_context *ctx, struct gl_program *prog);
+bool brw_fs_precompile(struct gl_context *ctx, struct gl_program *prog);
+bool brw_cs_precompile(struct gl_context *ctx, struct gl_program *prog);
 
 GLboolean brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog);
 struct gl_linked_shader *brw_new_shader(gl_shader_stage stage);
-
-unsigned tesslevel_outer_components(GLenum tes_primitive_mode);
-unsigned tesslevel_inner_components(GLenum tes_primitive_mode);
-unsigned writemask_for_backwards_vector(unsigned mask);
 
 unsigned get_atomic_counter_op(nir_intrinsic_op op);
 

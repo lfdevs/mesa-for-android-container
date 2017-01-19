@@ -58,6 +58,10 @@ _reads_reg(uint64_t inst, uint32_t r, bool ignore_a, bool ignore_b)
         if (QPU_GET_FIELD(inst, QPU_SIG) == QPU_SIG_BRANCH)
                 return false;
 
+        /* Load immediates don't read any registers. */
+        if (QPU_GET_FIELD(inst, QPU_SIG) == QPU_SIG_LOAD_IMM)
+                return false;
+
         for (int i = 0; i < ARRAY_SIZE(src_regs); i++) {
                 if (!ignore_a &&
                     src_regs[i].mux == QPU_MUX_A &&
@@ -109,6 +113,7 @@ void
 vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
 {
         bool scoreboard_locked = false;
+        bool threaded = false;
 
         /* We don't want to do validation in release builds, but we want to
          * keep compiling the validation code to make sure it doesn't get
@@ -120,10 +125,16 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
 
         for (int i = 0; i < num_inst; i++) {
                 uint64_t inst = insts[i];
+                uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
 
-                if (QPU_GET_FIELD(inst, QPU_SIG) != QPU_SIG_PROG_END) {
+                if (sig != QPU_SIG_PROG_END) {
                         if (qpu_inst_is_tlb(inst))
                                 scoreboard_locked = true;
+
+                        if (sig == QPU_SIG_THREAD_SWITCH ||
+                            sig == QPU_SIG_LAST_THREAD_SWITCH) {
+                                threaded = true;
+                        }
 
                         continue;
                 }
@@ -358,5 +369,99 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
                 if (waddr_add == QPU_W_UNIFORMS_ADDRESS ||
                     waddr_mul == QPU_W_UNIFORMS_ADDRESS)
                         last_unif_pointer_update = i;
+        }
+
+        if (threaded) {
+                bool last_thrsw_found = false;
+                bool scoreboard_locked = false;
+                int tex_samples_outstanding = 0;
+                int last_tex_samples_outstanding = 0;
+                int thrsw_ip = -1;
+
+                for (int i = 0; i < num_inst; i++) {
+                        uint64_t inst = insts[i];
+                        uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
+
+                        if (i == thrsw_ip) {
+                                /* In order to get texture results back in the
+                                 * correct order, before a new thrsw we have
+                                 * to read all the texture results from before
+                                 * the previous thrsw.
+                                 *
+                                 * FIXME: Is collecting the remaining results
+                                 * during the delay slots OK, or should we do
+                                 * this at THRSW signal time?
+                                 */
+                                if (last_tex_samples_outstanding != 0) {
+                                        fail_instr(inst, "THRSW with texture "
+                                                   "results from the previous "
+                                                   "THRSW still in the FIFO.");
+                                }
+
+                                last_tex_samples_outstanding =
+                                        tex_samples_outstanding;
+                                tex_samples_outstanding = 0;
+                        }
+
+                        if (qpu_inst_is_tlb(inst))
+                                scoreboard_locked = true;
+
+                        switch (sig) {
+                        case QPU_SIG_THREAD_SWITCH:
+                        case QPU_SIG_LAST_THREAD_SWITCH:
+                                /* No thread switching with the scoreboard
+                                 * locked.  Doing so means we may deadlock
+                                 * when the other thread tries to lock
+                                 * scoreboard.
+                                 */
+                                if (scoreboard_locked) {
+                                        fail_instr(inst, "THRSW with the "
+                                                   "scoreboard locked.");
+                                }
+
+                                /* No thread switching after lthrsw, since
+                                 * lthrsw means that we get delayed until the
+                                 * other shader is ready for us to terminate.
+                                 */
+                                if (last_thrsw_found) {
+                                        fail_instr(inst, "THRSW after a "
+                                                   "previous LTHRSW");
+                                }
+
+                                if (sig == QPU_SIG_LAST_THREAD_SWITCH)
+                                        last_thrsw_found = true;
+
+                                /* No THRSW while we already have a THRSW
+                                 * queued.
+                                 */
+                                if (i < thrsw_ip) {
+                                        fail_instr(inst,
+                                                   "THRSW with a THRSW queued.");
+                                }
+
+                                thrsw_ip = i + 3;
+                                break;
+
+                        case QPU_SIG_LOAD_TMU0:
+                        case QPU_SIG_LOAD_TMU1:
+                                if (last_tex_samples_outstanding == 0) {
+                                        fail_instr(inst, "TMU load with nothing "
+                                                   "in the results fifo from "
+                                                   "the previous THRSW.");
+                                }
+
+                                last_tex_samples_outstanding--;
+                                break;
+                        }
+
+                        uint32_t waddr_add = QPU_GET_FIELD(inst, QPU_WADDR_ADD);
+                        uint32_t waddr_mul = QPU_GET_FIELD(inst, QPU_WADDR_MUL);
+                        if (waddr_add == QPU_W_TMU0_S ||
+                            waddr_add == QPU_W_TMU1_S ||
+                            waddr_mul == QPU_W_TMU0_S ||
+                            waddr_mul == QPU_W_TMU1_S) {
+                                tex_samples_outstanding++;
+                        }
+                }
         }
 }

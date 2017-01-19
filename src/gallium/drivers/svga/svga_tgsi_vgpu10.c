@@ -3456,28 +3456,6 @@ emit_puint_to_sscaled(struct svga_shader_emitter_v10 *emit,
 
 
 /**
- * Emit code for TGSI_OPCODE_ABS instruction.
- */
-static boolean
-emit_abs(struct svga_shader_emitter_v10 *emit,
-         const struct tgsi_full_instruction *inst)
-{
-   /* dst = ABS(s0):
-    *   dst = abs(s0)
-    * Translates into:
-    *   MOV dst, abs(s0)
-    */
-   struct tgsi_full_src_register abs_src0 = absolute_src(&inst->Src[0]);
-
-   /* MOV dst, abs(s0) */
-   emit_instruction_op1(emit, VGPU10_OPCODE_MOV, &inst->Dst[0],
-                        &abs_src0, inst->Instruction.Saturate);
-
-   return TRUE;
-}
-
-
-/**
  * Emit code for TGSI_OPCODE_ARL or TGSI_OPCODE_UARL instruction.
  */
 static boolean
@@ -4737,29 +4715,6 @@ emit_issg(struct svga_shader_emitter_v10 *emit,
 
 
 /**
- * Emit code for TGSI_OPCODE_SUB instruction.
- */
-static boolean
-emit_sub(struct svga_shader_emitter_v10 *emit,
-         const struct tgsi_full_instruction *inst)
-{
-   /* dst = SUB(s0, s1):
-    *   dst = s0 - s1
-    * Translates into:
-    *   ADD dst, s0, neg(s1)
-    */
-   struct tgsi_full_src_register neg_src1 = negate_src(&inst->Src[1]);
-
-   /* ADD dst, s0, neg(s1) */
-   emit_instruction_op2(emit, VGPU10_OPCODE_ADD, &inst->Dst[0],
-                        &inst->Src[0], &neg_src1,
-                        inst->Instruction.Saturate);
-
-   return TRUE;
-}
-
-
-/**
  * Emit a comparison instruction.  The dest register will get
  * 0 or ~0 values depending on the outcome of comparing src0 to src1.
  */
@@ -5756,8 +5711,6 @@ emit_vgpu10_instruction(struct svga_shader_emitter_v10 *emit,
       return emit_vertex(emit, inst);
    case TGSI_OPCODE_ENDPRIM:
       return emit_endprim(emit, inst);
-   case TGSI_OPCODE_ABS:
-      return emit_abs(emit, inst);
    case TGSI_OPCODE_IABS:
       return emit_iabs(emit, inst);
    case TGSI_OPCODE_ARL:
@@ -5825,8 +5778,6 @@ emit_vgpu10_instruction(struct svga_shader_emitter_v10 *emit,
       return emit_ssg(emit, inst);
    case TGSI_OPCODE_ISSG:
       return emit_issg(emit, inst);
-   case TGSI_OPCODE_SUB:
-      return emit_sub(emit, inst);
    case TGSI_OPCODE_TEX:
       return emit_tex(emit, inst);
    case TGSI_OPCODE_TXP:

@@ -68,7 +68,7 @@ lib@OSMESA_LIB@_la_LIBADD = \
 	$(OSMESA_LIB_DEPS) \
 	$(CLOCK_LIB)
 
-if HAVE_MESA_LLVM
+if HAVE_GALLIUM_LLVM
 AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
 lib@OSMESA_LIB@_la_LDFLAGS += $(LLVM_LDFLAGS)
 lib@OSMESA_LIB@_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)

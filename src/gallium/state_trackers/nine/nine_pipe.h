@@ -42,8 +42,6 @@ void nine_convert_rasterizer_state(struct NineDevice9 *, struct pipe_rasterizer_
 void nine_convert_blend_state(struct pipe_blend_state *, const DWORD *);
 void nine_convert_sampler_state(struct cso_context *, int idx, const DWORD *);
 
-void nine_pipe_context_clear(struct NineDevice9 *);
-
 #define is_ATI1_ATI2(format) (format == PIPE_FORMAT_RGTC1_UNORM || format == PIPE_FORMAT_RGTC2_UNORM)
 
 static inline void

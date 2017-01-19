@@ -1,4 +1,1 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
-workaround-binutils-mips-844357.diff
-vl-zscan-fix-Fix-trivial-sign-compare-warnings.diff
-r600-sb-Fix-loop-optimization-related-hangs-on-eg.diff

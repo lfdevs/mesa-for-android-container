@@ -33,7 +33,13 @@
 #include "isl.h"
 
 #define isl_finishme(format, ...) \
-   __isl_finishme(__FILE__, __LINE__, format, ##__VA_ARGS__)
+   do { \
+      static bool reported = false; \
+      if (!reported) { \
+         __isl_finishme(__FILE__, __LINE__, format, ##__VA_ARGS__); \
+         reported = true; \
+      } \
+   } while (0)
 
 void PRINTFLIKE(3, 4) UNUSED
 __isl_finishme(const char *file, int line, const char *fmt, ...);

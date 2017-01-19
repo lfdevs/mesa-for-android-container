@@ -90,8 +90,7 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    }
 
    /* Update derived state, pass draw info to update function */
-   if (ctx->dirty)
-      swr_update_derived(pipe, info);
+   swr_update_derived(pipe, info);
 
    swr_update_draw_context(ctx);
 
@@ -260,7 +259,9 @@ swr_store_render_target(struct pipe_context *pipe,
    if (renderTarget->pBaseAddress) {
       swr_update_draw_context(ctx);
       SWR_RECT full_rect =
-         {0, 0, (int32_t)renderTarget->width, (int32_t)renderTarget->height};
+         {0, 0,
+          (int32_t)u_minify(renderTarget->width, renderTarget->lod),
+          (int32_t)u_minify(renderTarget->height, renderTarget->lod)};
       SwrStoreTiles(ctx->swrContext,
                     1 << attachment,
                     post_tile_state,
@@ -282,7 +283,9 @@ swr_store_dirty_resource(struct pipe_context *pipe,
       swr_draw_context *pDC = &ctx->swrDC;
       SWR_SURFACE_STATE *renderTargets = pDC->renderTargets;
       for (uint32_t i = 0; i < SWR_NUM_ATTACHMENTS; i++)
-         if (renderTargets[i].pBaseAddress == spr->swr.pBaseAddress) {
+         if (renderTargets[i].pBaseAddress == spr->swr.pBaseAddress ||
+             (spr->secondary.pBaseAddress &&
+              renderTargets[i].pBaseAddress == spr->secondary.pBaseAddress)) {
             swr_store_render_target(pipe, i, post_tile_state);
 
             /* Mesa thinks depth/stencil are fused, so we'll never get an

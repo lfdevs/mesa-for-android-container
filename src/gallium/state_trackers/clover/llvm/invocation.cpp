@@ -98,8 +98,9 @@ namespace {
                             const std::vector<std::string> &opts,
                             std::string &r_log) {
       std::unique_ptr<clang::CompilerInstance> c { new clang::CompilerInstance };
+      clang::TextDiagnosticBuffer *diag_buffer = new clang::TextDiagnosticBuffer;
       clang::DiagnosticsEngine diag { new clang::DiagnosticIDs,
-            new clang::DiagnosticOptions, new clang::TextDiagnosticBuffer };
+            new clang::DiagnosticOptions, diag_buffer };
 
       // Parse the compiler options.  A file name should be present at the end
       // and must have the .cl extension in order for the CompilerInvocation
@@ -109,6 +110,10 @@ namespace {
 
       if (!clang::CompilerInvocation::CreateFromArgs(
              c->getInvocation(), copts.data(), copts.data() + copts.size(), diag))
+         throw invalid_build_options_error();
+
+      diag_buffer->FlushDiagnostics(diag);
+      if (diag.hasErrorOccurred())
          throw invalid_build_options_error();
 
       c->getTargetOpts().CPU = target.cpu;
@@ -211,7 +216,7 @@ clover::llvm::compile_program(const std::string &source,
    if (has_flag(debug::llvm))
       debug::log(".ll", print_module_bitcode(*mod));
 
-   return build_module_library(*mod);
+   return build_module_library(*mod, module::section::text_intermediate);
 }
 
 namespace {
@@ -280,7 +285,7 @@ clover::llvm::link_program(const std::vector<module> &modules,
       debug::log(".ll", print_module_bitcode(*mod));
 
    if (create_library) {
-      return build_module_library(*mod);
+      return build_module_library(*mod, module::section::text_library);
 
    } else if (ir == PIPE_SHADER_IR_LLVM) {
       return build_module_bitcode(*mod, *c);

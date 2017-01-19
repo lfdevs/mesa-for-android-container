@@ -280,8 +280,7 @@ gen7_upload_cs_push_constants(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->cs.base;
 
    /* BRW_NEW_COMPUTE_PROGRAM */
-   const struct brw_compute_program *cp =
-      (struct brw_compute_program *) brw->compute_program;
+   const struct brw_program *cp = (struct brw_program *) brw->compute_program;
 
    if (cp) {
       /* BRW_NEW_CS_PROG_DATA */
@@ -289,7 +288,7 @@ gen7_upload_cs_push_constants(struct brw_context *brw)
          brw_cs_prog_data(brw->cs.base.prog_data);
 
       _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_COMPUTE);
-      brw_upload_cs_push_constants(brw, &cp->program.Base, cs_prog_data,
+      brw_upload_cs_push_constants(brw, &cp->program, cs_prog_data,
                                    stage_state, AUB_TRACE_WM_CONSTANTS);
    }
 }
@@ -316,15 +315,14 @@ brw_upload_cs_pull_constants(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->cs.base;
 
    /* BRW_NEW_COMPUTE_PROGRAM */
-   struct brw_compute_program *cp =
-      (struct brw_compute_program *) brw->compute_program;
+   struct brw_program *cp = (struct brw_program *) brw->compute_program;
 
    /* BRW_NEW_CS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->cs.base.prog_data;
 
    _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_COMPUTE);
    /* _NEW_PROGRAM_CONSTANTS */
-   brw_upload_pull_constants(brw, BRW_NEW_SURFACES, &cp->program.Base,
+   brw_upload_pull_constants(brw, BRW_NEW_SURFACES, &cp->program,
                              stage_state, prog_data);
 }
 

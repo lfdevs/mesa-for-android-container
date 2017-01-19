@@ -16,6 +16,13 @@ public:
    virtual uint32_t getBuiltinOffset(int) const;
 
    virtual bool isOpSupported(operation, DataType) const;
+   virtual bool isReuseSupported(const Instruction *) const;
+
+   virtual bool isBarrierRequired(const Instruction *) const;
+
+   virtual bool canDualIssue(const Instruction *, const Instruction *) const;
+   virtual int getLatency(const Instruction *) const;
+   virtual int getReadLatency(const Instruction *) const;
 };
 
 } // namespace nv50_ir

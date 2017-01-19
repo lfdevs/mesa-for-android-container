@@ -129,6 +129,19 @@ private:
 
 } /* end of anonymous namespace */
 
+static void
+nir_remap_attributes(nir_shader *shader)
+{
+   nir_foreach_variable(var, &shader->inputs) {
+      var->data.location += _mesa_bitcount_64(shader->info->double_inputs_read &
+                                              BITFIELD64_MASK(var->data.location));
+   }
+
+   /* Once the remap is done, reset double_inputs_read, so later it will have
+    * which location/slots are doubles */
+   shader->info->double_inputs_read = 0;
+}
+
 nir_shader *
 glsl_to_nir(const struct gl_shader_program *shader_prog,
             gl_shader_stage stage,
@@ -136,71 +149,30 @@ glsl_to_nir(const struct gl_shader_program *shader_prog,
 {
    struct gl_linked_shader *sh = shader_prog->_LinkedShaders[stage];
 
-   nir_shader *shader = nir_shader_create(NULL, stage, options);
+   nir_shader *shader = nir_shader_create(NULL, stage, options,
+                                          &sh->Program->info);
 
    nir_visitor v1(shader);
    nir_function_visitor v2(&v1);
    v2.run(sh->ir);
    visit_exec_list(sh->ir, &v1);
 
-   shader->info.name = ralloc_asprintf(shader, "GLSL%d", shader_prog->Name);
+   nir_lower_constant_initializers(shader, (nir_variable_mode)~0);
+
+   /* Remap the locations to slots so those requiring two slots will occupy
+    * two locations. For instance, if we have in the IR code a dvec3 attr0 in
+    * location 0 and vec4 attr1 in location 1, in NIR attr0 will use
+    * locations/slots 0 and 1, and attr1 will use location/slot 2 */
+   if (shader->stage == MESA_SHADER_VERTEX)
+      nir_remap_attributes(shader);
+
+   shader->info->name = ralloc_asprintf(shader, "GLSL%d", shader_prog->Name);
    if (shader_prog->Label)
-      shader->info.label = ralloc_strdup(shader, shader_prog->Label);
-   shader->info.num_textures = util_last_bit(sh->Program->SamplersUsed);
-   shader->info.num_ubos = sh->NumUniformBlocks;
-   shader->info.num_abos = shader_prog->NumAtomicBuffers;
-   shader->info.num_ssbos = sh->NumShaderStorageBlocks;
-   shader->info.num_images = sh->NumImages;
-   shader->info.inputs_read = sh->Program->InputsRead;
-   shader->info.double_inputs_read = sh->Program->DoubleInputsRead;
-   shader->info.outputs_written = sh->Program->OutputsWritten;
-   shader->info.outputs_read = sh->Program->OutputsRead;
-   shader->info.patch_inputs_read = sh->Program->PatchInputsRead;
-   shader->info.patch_outputs_written = sh->Program->PatchOutputsWritten;
-   shader->info.system_values_read = sh->Program->SystemValuesRead;
-   shader->info.uses_texture_gather = sh->Program->UsesGather;
-   shader->info.uses_clip_distance_out =
-      sh->Program->ClipDistanceArraySize != 0;
-   shader->info.separate_shader = shader_prog->SeparateShader;
-   shader->info.has_transform_feedback_varyings =
+      shader->info->label = ralloc_strdup(shader, shader_prog->Label);
+   shader->info->clip_distance_array_size = sh->Program->ClipDistanceArraySize;
+   shader->info->cull_distance_array_size = sh->Program->CullDistanceArraySize;
+   shader->info->has_transform_feedback_varyings =
       shader_prog->TransformFeedback.NumVarying > 0;
-
-   switch (stage) {
-   case MESA_SHADER_TESS_CTRL:
-      shader->info.tcs.vertices_out = sh->info.TessCtrl.VerticesOut;
-      break;
-
-   case MESA_SHADER_GEOMETRY:
-      shader->info.gs.vertices_in = shader_prog->Geom.VerticesIn;
-      shader->info.gs.output_primitive = sh->info.Geom.OutputType;
-      shader->info.gs.vertices_out = sh->info.Geom.VerticesOut;
-      shader->info.gs.invocations = sh->info.Geom.Invocations;
-      shader->info.gs.uses_end_primitive = shader_prog->Geom.UsesEndPrimitive;
-      shader->info.gs.uses_streams = shader_prog->Geom.UsesStreams;
-      break;
-
-   case MESA_SHADER_FRAGMENT: {
-      struct gl_fragment_program *fp =
-         (struct gl_fragment_program *)sh->Program;
-
-      shader->info.fs.uses_discard = fp->UsesKill;
-      shader->info.fs.uses_sample_qualifier = fp->IsSample != 0;
-      shader->info.fs.early_fragment_tests = sh->info.EarlyFragmentTests;
-      shader->info.fs.depth_layout = fp->FragDepthLayout;
-      break;
-   }
-
-   case MESA_SHADER_COMPUTE: {
-      struct gl_compute_program *cp = (struct gl_compute_program *)sh->Program;
-      shader->info.cs.local_size[0] = cp->LocalSize[0];
-      shader->info.cs.local_size[1] = cp->LocalSize[1];
-      shader->info.cs.local_size[2] = cp->LocalSize[2];
-      break;
-   }
-
-   default:
-      break; /* No stage-specific info */
-   }
 
    return shader;
 }
@@ -244,34 +216,51 @@ constant_copy(ir_constant *ir, void *mem_ctx)
 
    nir_constant *ret = ralloc(mem_ctx, nir_constant);
 
-   unsigned total_elems = ir->type->components();
+   const unsigned rows = ir->type->vector_elements;
+   const unsigned cols = ir->type->matrix_columns;
    unsigned i;
 
    ret->num_elements = 0;
    switch (ir->type->base_type) {
    case GLSL_TYPE_UINT:
-      for (i = 0; i < total_elems; i++)
-         ret->value.u[i] = ir->value.u[i];
+      /* Only float base types can be matrices. */
+      assert(cols == 1);
+
+      for (unsigned r = 0; r < rows; r++)
+         ret->values[0].u32[r] = ir->value.u[r];
+
       break;
 
    case GLSL_TYPE_INT:
-      for (i = 0; i < total_elems; i++)
-         ret->value.i[i] = ir->value.i[i];
+      /* Only float base types can be matrices. */
+      assert(cols == 1);
+
+      for (unsigned r = 0; r < rows; r++)
+         ret->values[0].i32[r] = ir->value.i[r];
+
       break;
 
    case GLSL_TYPE_FLOAT:
-      for (i = 0; i < total_elems; i++)
-         ret->value.f[i] = ir->value.f[i];
+      for (unsigned c = 0; c < cols; c++) {
+         for (unsigned r = 0; r < rows; r++)
+            ret->values[c].f32[r] = ir->value.f[c * rows + r];
+      }
       break;
 
    case GLSL_TYPE_DOUBLE:
-      for (i = 0; i < total_elems; i++)
-         ret->value.d[i] = ir->value.d[i];
+      for (unsigned c = 0; c < cols; c++) {
+         for (unsigned r = 0; r < rows; r++)
+            ret->values[c].f64[r] = ir->value.d[c * rows + r];
+      }
       break;
 
    case GLSL_TYPE_BOOL:
-      for (i = 0; i < total_elems; i++)
-         ret->value.b[i] = ir->value.b[i];
+      /* Only float base types can be matrices. */
+      assert(cols == 1);
+
+      for (unsigned r = 0; r < rows; r++)
+         ret->values[0].u32[r] = ir->value.b[r] ? NIR_TRUE : NIR_FALSE;
+
       break;
 
    case GLSL_TYPE_STRUCT:
@@ -315,6 +304,7 @@ nir_visitor::visit(ir_variable *ir)
    var->data.patch = ir->data.patch;
    var->data.invariant = ir->data.invariant;
    var->data.location = ir->data.location;
+   var->data.compact = false;
 
    switch(ir->data.mode) {
    case ir_var_auto:
@@ -345,11 +335,30 @@ nir_visitor::visit(ir_variable *ir)
          var->data.mode = nir_var_system_value;
       } else {
          var->data.mode = nir_var_shader_in;
+
+         if (shader->stage == MESA_SHADER_TESS_EVAL &&
+             (ir->data.location == VARYING_SLOT_TESS_LEVEL_INNER ||
+              ir->data.location == VARYING_SLOT_TESS_LEVEL_OUTER)) {
+            var->data.compact = ir->type->without_array()->is_scalar();
+         }
+      }
+
+      /* Mark all the locations that require two slots */
+      if (glsl_type_is_dual_slot(glsl_without_array(var->type))) {
+         for (uint i = 0; i < glsl_count_attribute_slots(var->type, true); i++) {
+            uint64_t bitfield = BITFIELD64_BIT(var->data.location + i);
+            shader->info->double_inputs_read |= bitfield;
+         }
       }
       break;
 
    case ir_var_shader_out:
       var->data.mode = nir_var_shader_out;
+      if (shader->stage == MESA_SHADER_TESS_CTRL &&
+          (ir->data.location == VARYING_SLOT_TESS_LEVEL_INNER ||
+           ir->data.location == VARYING_SLOT_TESS_LEVEL_OUTER)) {
+         var->data.compact = ir->type->without_array()->is_scalar();
+      }
       break;
 
    case ir_var_uniform:
@@ -371,10 +380,6 @@ nir_visitor::visit(ir_variable *ir)
    var->data.interpolation = ir->data.interpolation;
    var->data.origin_upper_left = ir->data.origin_upper_left;
    var->data.pixel_center_integer = ir->data.pixel_center_integer;
-   var->data.explicit_location = ir->data.explicit_location;
-   var->data.explicit_index = ir->data.explicit_index;
-   var->data.explicit_binding = ir->data.explicit_binding;
-   var->data.has_initializer = ir->data.has_initializer;
    var->data.location_frac = ir->data.location_frac;
 
    switch (ir->data.depth_layout) {
@@ -406,7 +411,6 @@ nir_visitor::visit(ir_variable *ir)
    var->data.image._volatile = ir->data.image_volatile;
    var->data.image.restrict_flag = ir->data.image_restrict;
    var->data.image.format = ir->data.image_format;
-   var->data.max_array_access = ir->data.max_array_access;
    var->data.fb_fetch_output = ir->data.fb_fetch_output;
 
    var->num_state_slots = ir->get_num_state_slots();
@@ -1210,8 +1214,7 @@ nir_visitor::visit(ir_assignment *ir)
       nir_intrinsic_instr_create(this->shader, nir_intrinsic_store_var);
    store->num_components = ir->lhs->type->vector_elements;
    nir_intrinsic_set_write_mask(store, ir->write_mask);
-   nir_deref *store_deref = nir_copy_deref(store, &lhs_deref->deref);
-   store->variables[0] = nir_deref_as_var(store_deref);
+   store->variables[0] = nir_deref_var_clone(lhs_deref, store);
    store->src[0] = nir_src_for_ssa(src);
 
    if (ir->condition) {
@@ -1929,7 +1932,7 @@ nir_visitor::visit(ir_texture *ir)
 
    if (ir->projector != NULL)
       num_srcs++;
-   if (ir->shadow_comparitor != NULL)
+   if (ir->shadow_comparator != NULL)
       num_srcs++;
    if (ir->offset != NULL)
       num_srcs++;
@@ -1977,10 +1980,10 @@ nir_visitor::visit(ir_texture *ir)
       src_number++;
    }
 
-   if (ir->shadow_comparitor != NULL) {
+   if (ir->shadow_comparator != NULL) {
       instr->src[src_number].src =
-         nir_src_for_ssa(evaluate_rvalue(ir->shadow_comparitor));
-      instr->src[src_number].src_type = nir_tex_src_comparitor;
+         nir_src_for_ssa(evaluate_rvalue(ir->shadow_comparator));
+      instr->src[src_number].src_type = nir_tex_src_comparator;
       src_number++;
    }
 

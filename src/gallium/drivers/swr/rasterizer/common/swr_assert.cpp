@@ -25,6 +25,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <assert.h>
+#include <algorithm>
+#include <mutex>
 
 #if SWR_ENABLE_ASSERTS || SWR_ENABLE_REL_ASSERTS
 
@@ -111,6 +113,66 @@ void ResetTextColor(FILE* stream)
 #endif
 }
 
+static std::mutex g_stderrMutex;
+
+void SwrTrace(
+    const char* pFileName,
+    uint32_t    lineNum,
+    const char* function,
+    const char* pFmtString,
+    ...)
+{
+    std::lock_guard<std::mutex> l(g_stderrMutex);
+
+    SetTextColor(stderr, TEXT_CYAN, TEXT_NORMAL);
+
+    fprintf(stderr, "%s(%d): TRACE in %s:\n", pFileName, lineNum, function);
+
+    if (pFmtString)
+    {
+        SetTextColor(stderr, TEXT_PURPLE, TEXT_INTENSITY);
+        fprintf(stderr, "\t");
+        va_list args;
+        va_start(args, pFmtString);
+        vfprintf(stderr, pFmtString, args);
+        va_end(args);
+        fprintf(stderr, "\n");
+    }
+    ResetTextColor(stderr);
+    fflush(stderr);
+
+#if defined(_WIN32)
+    static const int MAX_MESSAGE_LEN = 2048;
+    char msgBuf[MAX_MESSAGE_LEN];
+
+    sprintf_s(msgBuf, "%s(%d): TRACE in %s\n", pFileName, lineNum, function);
+    msgBuf[MAX_MESSAGE_LEN - 2] = '\n';
+    msgBuf[MAX_MESSAGE_LEN - 1] = 0;
+    OutputDebugStringA(msgBuf);
+
+    int offset = 0;
+
+    if (pFmtString)
+    {
+        va_list args;
+        va_start(args, pFmtString);
+        offset = _vsnprintf_s(
+            msgBuf,
+            sizeof(msgBuf),
+            sizeof(msgBuf),
+            pFmtString,
+            args);
+        va_end(args);
+
+        if (offset < 0) { return; }
+
+        OutputDebugStringA("\t");
+        OutputDebugStringA(msgBuf);
+        OutputDebugStringA("\n");
+    }
+#endif // _WIN32
+}
+
 bool SwrAssert(
     bool        chkDebugger,
     bool&       enabled,
@@ -121,29 +183,33 @@ bool SwrAssert(
     const char* pFmtString /* = nullptr */,
     ...)
 {
-    SetTextColor(stderr, TEXT_CYAN, TEXT_NORMAL);
-
-    fprintf(stderr, "%s(%d): ", pFileName, lineNum);
-
-    SetTextColor(stderr, TEXT_RED, TEXT_INTENSITY);
-
-    fprintf(stderr, "ASSERT: %s\n", pExpression);
-
-    SetTextColor(stderr, TEXT_CYAN, TEXT_INTENSITY);
-    fprintf(stderr, "\t%s\n", pFunction);
-
-    if (pFmtString)
     {
-        SetTextColor(stderr, TEXT_YELLOW, TEXT_INTENSITY);
-        fprintf(stderr, "\t");
-        va_list args;
-        va_start(args, pFmtString);
-        vfprintf(stderr, pFmtString, args);
-        va_end(args);
-        fprintf(stderr, "\n");
+        std::lock_guard<std::mutex> l(g_stderrMutex);
+
+        SetTextColor(stderr, TEXT_CYAN, TEXT_NORMAL);
+
+        fprintf(stderr, "%s(%d): ", pFileName, lineNum);
+
+        SetTextColor(stderr, TEXT_RED, TEXT_INTENSITY);
+
+        fprintf(stderr, "ASSERT: %s\n", pExpression);
+
+        SetTextColor(stderr, TEXT_CYAN, TEXT_INTENSITY);
+        fprintf(stderr, "\t%s\n", pFunction);
+
+        if (pFmtString)
+        {
+            SetTextColor(stderr, TEXT_YELLOW, TEXT_INTENSITY);
+            fprintf(stderr, "\t");
+            va_list args;
+            va_start(args, pFmtString);
+            vfprintf(stderr, pFmtString, args);
+            va_end(args);
+            fprintf(stderr, "\n");
+        }
+        ResetTextColor(stderr);
+        fflush(stderr);
     }
-    ResetTextColor(stderr);
-    fflush(stderr);
 
 #if defined(_WIN32)
     static const int MAX_MESSAGE_LEN = 2048;

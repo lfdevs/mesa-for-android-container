@@ -178,9 +178,6 @@ handlePictureParameterBuffer(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *
 
       if (!context->decoder)
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
-
-      context->decoder->begin_frame(context->decoder, context->target,
-         &context->desc.base);
    }
 
    return vaStatus;
@@ -310,6 +307,9 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
    buffers[num_buffers] = buf->data;
    sizes[num_buffers] = buf->size;
    ++num_buffers;
+
+   context->decoder->begin_frame(context->decoder, context->target,
+      &context->desc.base);
    context->decoder->decode_bitstream(context->decoder, context->target, &context->desc.base,
       num_buffers, (const void * const*)buffers, sizes);
 }
@@ -351,7 +351,11 @@ handleVAEncSequenceParameterBufferType(vlVaDriver *drv, vlVaContext *context, vl
       if (!context->decoder)
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
    }
-   context->desc.h264enc.gop_size = h264->intra_idr_period;
+
+   context->gop_coeff = ((1024 + h264->intra_idr_period - 1) / h264->intra_idr_period + 1) / 2 * 2;
+   if (context->gop_coeff > VL_VA_ENC_GOP_COEFF)
+      context->gop_coeff = VL_VA_ENC_GOP_COEFF;
+   context->desc.h264enc.gop_size = h264->intra_idr_period * context->gop_coeff;
    context->desc.h264enc.rate_ctrl.frame_rate_num = h264->time_scale / 2;
    context->desc.h264enc.rate_ctrl.frame_rate_den = 1;
    return VA_STATUS_SUCCESS;
@@ -391,10 +395,10 @@ handleVAEncPictureParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlV
    context->desc.h264enc.not_referenced = false;
    context->desc.h264enc.is_idr = (h264->pic_fields.bits.idr_pic_flag == 1);
    context->desc.h264enc.pic_order_cnt = h264->CurrPic.TopFieldOrderCnt;
-   if (context->desc.h264enc.is_idr)
-      context->desc.h264enc.i_remain = 1;
-   else
-      context->desc.h264enc.i_remain = 0;
+   if (context->desc.h264enc.gop_cnt == 0)
+      context->desc.h264enc.i_remain = context->gop_coeff;
+   else if (context->desc.h264enc.frame_num == 1)
+      context->desc.h264enc.i_remain--;
 
    context->desc.h264enc.p_remain = context->desc.h264enc.gop_size - context->desc.h264enc.gop_cnt - context->desc.h264enc.i_remain;
 
@@ -413,7 +417,6 @@ handleVAEncPictureParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlV
    context->desc.h264enc.quant_i_frames = h264->pic_init_qp;
    context->desc.h264enc.quant_b_frames = h264->pic_init_qp;
    context->desc.h264enc.quant_p_frames = h264->pic_init_qp;
-   context->desc.h264enc.frame_num_cnt++;
    context->desc.h264enc.gop_cnt++;
    if (context->desc.h264enc.gop_cnt == context->desc.h264enc.gop_size)
       context->desc.h264enc.gop_cnt = 0;
@@ -569,18 +572,35 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
    if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
       coded_buf = context->coded_buf;
       getEncParamPreset(context);
+      context->desc.h264enc.frame_num_cnt++;
       context->decoder->begin_frame(context->decoder, context->target, &context->desc.base);
       context->decoder->encode_bitstream(context->decoder, context->target,
                                          coded_buf->derived_surface.resource, &feedback);
-      surf->frame_num_cnt = context->desc.h264enc.frame_num_cnt;
       surf->feedback = feedback;
       surf->coded_buf = coded_buf;
    }
 
    context->decoder->end_frame(context->decoder, context->target, &context->desc.base);
-   if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE &&
-       context->desc.h264enc.p_remain == 1)
-      context->decoder->flush(context->decoder);
+   if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
+      int idr_period = context->desc.h264enc.gop_size / context->gop_coeff;
+      int p_remain_in_idr = idr_period - context->desc.h264enc.frame_num;
+      surf->frame_num_cnt = context->desc.h264enc.frame_num_cnt;
+      surf->force_flushed = false;
+      if (context->first_single_submitted) {
+         context->decoder->flush(context->decoder);
+         context->first_single_submitted = false;
+         surf->force_flushed = true;
+      }
+      if (p_remain_in_idr == 1) {
+         if ((context->desc.h264enc.frame_num_cnt % 2) != 0) {
+            context->decoder->flush(context->decoder);
+            context->first_single_submitted = true;
+         }
+         else
+            context->first_single_submitted = false;
+         surf->force_flushed = true;
+      }
+   }
    pipe_mutex_unlock(drv->mutex);
    return VA_STATUS_SUCCESS;
 }

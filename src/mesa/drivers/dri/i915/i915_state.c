@@ -650,7 +650,7 @@ i915_update_sprite_point_enable(struct gl_context *ctx)
    /* _NEW_PROGRAM */
    struct i915_fragment_program *p =
       (struct i915_fragment_program *) ctx->FragmentProgram._Current;
-   const GLbitfield64 inputsRead = p->FragProg.Base.InputsRead;
+   const GLbitfield64 inputsRead = p->FragProg.info.inputs_read;
    struct i915_context *i915 = i915_context(ctx);
    GLuint s4 = i915->state.Ctx[I915_CTXREG_LIS4] & ~S4_VFMT_MASK;
    GLuint coord_replace_bits = 0x0;

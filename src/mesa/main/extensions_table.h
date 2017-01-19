@@ -93,6 +93,7 @@ EXT(ARB_pipeline_statistics_query           , ARB_pipeline_statistics_query     
 EXT(ARB_pixel_buffer_object                 , EXT_pixel_buffer_object                , GLL, GLC,  x ,  x , 2004)
 EXT(ARB_point_parameters                    , EXT_point_parameters                   , GLL,  x ,  x ,  x , 1997)
 EXT(ARB_point_sprite                        , ARB_point_sprite                       , GLL, GLC,  x ,  x , 2003)
+EXT(ARB_post_depth_coverage                 , ARB_post_depth_coverage                ,  x , GLC,  x ,  x,  2015)
 EXT(ARB_program_interface_query             , dummy_true                             , GLL, GLC,  x ,  x , 2012)
 EXT(ARB_provoking_vertex                    , EXT_provoking_vertex                   , GLL, GLC,  x ,  x , 2009)
 EXT(ARB_query_buffer_object                 , ARB_query_buffer_object                , GLL, GLC,  x ,  x , 2013)
@@ -231,6 +232,7 @@ EXT(EXT_primitive_bounding_box              , OES_primitive_bounding_box        
 EXT(EXT_provoking_vertex                    , EXT_provoking_vertex                   , GLL, GLC,  x ,  x , 2009)
 EXT(EXT_read_format_bgra                    , dummy_true                             ,  x ,  x , ES1, ES2, 2009)
 EXT(EXT_rescale_normal                      , dummy_true                             , GLL,  x ,  x ,  x , 1997)
+EXT(EXT_robustness                          , KHR_robustness                         ,  x,   x,   x , ES2, 2011)
 EXT(EXT_secondary_color                     , dummy_true                             , GLL,  x ,  x ,  x , 1999)
 EXT(EXT_separate_shader_objects             , dummy_true                             ,  x ,  x ,  x , ES2, 2013)
 EXT(EXT_separate_specular_color             , dummy_true                             , GLL,  x ,  x ,  x , 1997)
@@ -288,6 +290,7 @@ EXT(IBM_texture_mirrored_repeat             , dummy_true                        
 
 EXT(INGR_blend_func_separate                , EXT_blend_func_separate                , GLL,  x ,  x ,  x , 1999)
 
+EXT(INTEL_conservative_rasterization        , INTEL_conservative_rasterization       ,  x , GLC,  x ,  31, 2013)
 EXT(INTEL_performance_query                 , INTEL_performance_query                , GLL, GLC,  x , ES2, 2013)
 
 EXT(KHR_blend_equation_advanced             , KHR_blend_equation_advanced            , GLL, GLC,  x , ES2, 2014)
@@ -314,6 +317,7 @@ EXT(NV_depth_clamp                          , ARB_depth_clamp                   
 EXT(NV_draw_buffers                         , dummy_true                             ,  x ,  x ,  x , ES2, 2011)
 EXT(NV_fbo_color_attachments                , dummy_true                             ,  x ,  x ,  x , ES2, 2010)
 EXT(NV_fog_distance                         , NV_fog_distance                        , GLL,  x ,  x ,  x , 2001)
+EXT(NV_image_formats                        , ARB_shader_image_load_store            ,  x ,  x ,  x ,  31, 2014)
 EXT(NV_light_max_exponent                   , dummy_true                             , GLL,  x ,  x ,  x , 1999)
 EXT(NV_packed_depth_stencil                 , dummy_true                             , GLL, GLC,  x ,  x , 2000)
 EXT(NV_point_sprite                         , NV_point_sprite                        , GLL, GLC,  x ,  x , 2001)
@@ -391,6 +395,7 @@ EXT(OES_texture_npot                        , ARB_texture_non_power_of_two      
 EXT(OES_texture_stencil8                    , ARB_texture_stencil8                   ,  x ,  x ,  x ,  30, 2014)
 EXT(OES_texture_storage_multisample_2d_array, ARB_texture_multisample                ,  x ,  x ,  x ,  31, 2014)
 EXT(OES_vertex_array_object                 , dummy_true                             ,  x ,  x , ES1, ES2, 2010)
+EXT(OES_vertex_half_float                   , ARB_half_float_vertex                  ,  x ,  x ,  x , ES2, 2005)
 EXT(OES_viewport_array                      , OES_viewport_array                     ,  x ,  x ,  x ,  31, 2010)
 
 EXT(S3_s3tc                                 , ANGLE_texture_compression_dxt          , GLL, GLC,  x ,  x , 1999)

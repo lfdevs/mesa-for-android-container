@@ -239,10 +239,10 @@ radial_gradient(struct ureg_program *ureg,
     ureg_MUL(ureg, temp0,
 	     ureg_scalar(const0124, TGSI_SWIZZLE_W), ureg_src(temp2));
     ureg_MUL(ureg, temp3, ureg_src(temp1), ureg_src(temp1));
-    ureg_SUB(ureg, temp2, ureg_src(temp3), ureg_src(temp0));
+    ureg_ADD(ureg, temp2, ureg_src(temp3), ureg_negate(ureg_src(temp0)));
     ureg_RSQ(ureg, temp2, ureg_abs(ureg_src(temp2)));
     ureg_RCP(ureg, temp2, ureg_src(temp2));
-    ureg_SUB(ureg, temp1, ureg_src(temp2), ureg_src(temp1));
+    ureg_ADD(ureg, temp1, ureg_src(temp2), ureg_negate(ureg_src(temp1)));
     ureg_ADD(ureg, temp0,
 	     ureg_scalar(coords, TGSI_SWIZZLE_Z),
 	     ureg_scalar(coords, TGSI_SWIZZLE_Z));

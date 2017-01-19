@@ -67,6 +67,26 @@ fd_pipe2index(enum pipe_format format)
 	}
 }
 
+/* we need to special case a bit the depth/stencil restore, because we are
+ * using the texture sampler to blit into the depth/stencil buffer, *not*
+ * into a color buffer.  Otherwise fdN_tex_swiz() will do the wrong thing,
+ * as it is assuming that you are sampling into normal render target..
+ */
+enum pipe_format
+fd_gmem_restore_format(enum pipe_format format)
+{
+	switch (format) {
+	case PIPE_FORMAT_Z24X8_UNORM:
+	case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+		return PIPE_FORMAT_R8G8B8A8_UNORM;
+	case PIPE_FORMAT_Z16_UNORM:
+		return PIPE_FORMAT_R8G8_UNORM;
+	case PIPE_FORMAT_S8_UINT:
+		return PIPE_FORMAT_R8_UNORM;
+	default:
+		return format;
+	}
+}
 
 enum adreno_rb_blend_factor
 fd_blend_factor(unsigned factor)

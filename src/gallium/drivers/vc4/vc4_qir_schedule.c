@@ -187,7 +187,7 @@ calculate_deps(struct schedule_setup_state *state, struct schedule_node *n)
          * ignore uniforms accesses, because qir_reorder_uniforms() happens
          * after this.
          */
-        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+        for (int i = 0; i < qir_get_nsrc(inst); i++) {
                 switch (inst->src[i].file) {
                 case QFILE_TEMP:
                         add_dep(dir,
@@ -212,21 +212,33 @@ calculate_deps(struct schedule_setup_state *state, struct schedule_node *n)
                 add_dep(dir, state->last_vary_read, n);
                 break;
 
-        case QOP_TEX_S:
-        case QOP_TEX_T:
-        case QOP_TEX_R:
-        case QOP_TEX_B:
-        case QOP_TEX_DIRECT:
-                /* Texturing setup gets scheduled in order, because
-                 * the uniforms referenced by them have to land in a
-                 * specific order.
-                 */
-                add_write_dep(dir, &state->last_tex_coord, n);
-                break;
-
         case QOP_TEX_RESULT:
                 /* Results have to be fetched in order. */
                 add_write_dep(dir, &state->last_tex_result, n);
+                break;
+
+        case QOP_THRSW:
+                /* After a new THRSW, one must collect all texture samples
+                 * queued since the previous THRSW/program start.  For now, we
+                 * have one THRSW in between each texture setup and its
+                 * results collection as our input, and we just make sure that
+                 * that ordering is maintained.
+                 */
+                add_write_dep(dir, &state->last_tex_coord, n);
+                add_write_dep(dir, &state->last_tex_result, n);
+
+                /* accumulators and flags are lost across thread switches. */
+                add_write_dep(dir, &state->last_sf, n);
+
+                /* Setup, like the varyings, will need to be drained before we
+                 * thread switch.
+                 */
+                add_write_dep(dir, &state->last_vary_read, n);
+
+                /* The TLB-locking operations have to stay after the last
+                 * thread switch.
+                 */
+                add_write_dep(dir, &state->last_tlb, n);
                 break;
 
         case QOP_TLB_COLOR_READ:
@@ -252,6 +264,18 @@ calculate_deps(struct schedule_setup_state *state, struct schedule_node *n)
         case QFILE_TLB_Z_WRITE:
         case QFILE_TLB_STENCIL_SETUP:
                 add_write_dep(dir, &state->last_tlb, n);
+                break;
+
+        case QFILE_TEX_S_DIRECT:
+        case QFILE_TEX_S:
+        case QFILE_TEX_T:
+        case QFILE_TEX_R:
+        case QFILE_TEX_B:
+                /* Texturing setup gets scheduled in order, because
+                 * the uniforms referenced by them have to land in a
+                 * specific order.
+                 */
+                add_write_dep(dir, &state->last_tex_coord, n);
                 break;
 
         default:
@@ -281,7 +305,7 @@ calculate_forward_deps(struct vc4_compile *c, void *mem_ctx,
 
                 calculate_deps(&state, n);
 
-                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                for (int i = 0; i < qir_get_nsrc(inst); i++) {
                         switch (inst->src[i].file) {
                         case QFILE_UNIF:
                                 add_dep(state.dir, state.last_uniforms_reset, n);
@@ -291,26 +315,59 @@ calculate_forward_deps(struct vc4_compile *c, void *mem_ctx,
                         }
                 }
 
-                switch (inst->op) {
-                case QOP_TEX_S:
-                case QOP_TEX_T:
-                case QOP_TEX_R:
-                case QOP_TEX_B:
-                case QOP_TEX_DIRECT:
-                        /* If the texture coordinate fifo is full,
-                         * block this on the last QOP_TEX_RESULT.
+                switch (inst->dst.file) {
+                case QFILE_TEX_S_DIRECT:
+                case QFILE_TEX_S:
+                case QFILE_TEX_T:
+                case QFILE_TEX_R:
+                case QFILE_TEX_B:
+                        /* From the VC4 spec:
+                         *
+                         *     "The TFREQ input FIFO holds two full lots of s,
+                         *      t, r, b data, plus associated setup data, per
+                         *      QPU, that is, there are eight data slots. For
+                         *      each texture request, slots are only consumed
+                         *      for the components of s, t, r, and b actually
+                         *      written. Thus the FIFO can hold four requests
+                         *      of just (s, t) data, or eight requests of just
+                         *      s data (for direct addressed data lookups).
+                         *
+                         *      Note that there is one FIFO per QPU, and the
+                         *      FIFO has no concept of threads - that is,
+                         *      multi-threaded shaders must be careful to use
+                         *      only 1/2 the FIFO depth before reading
+                         *      back. Multi-threaded programs must also
+                         *      therefore always thread switch on texture
+                         *      fetch as the other thread may have data
+                         *      waiting in the FIFO."
+                         *
+                         * If the texture coordinate fifo is full, block this
+                         * on the last QOP_TEX_RESULT.
                          */
-                        if (state.tfreq_count == 8) {
+                        if (state.tfreq_count == (c->fs_threaded ? 4 : 8)) {
                                 block_until_tex_result(&state, n);
                         }
 
-                        /* If the texture result fifo is full, block
-                         * adding any more to it until the last
-                         * QOP_TEX_RESULT.
+                        /* From the VC4 spec:
+                         *
+                         *     "Since the maximum number of texture requests
+                         *      in the input (TFREQ) FIFO is four lots of (s,
+                         *      t) data, the output (TFRCV) FIFO is sized to
+                         *      holds four lots of max-size color data per
+                         *      QPU. For non-float color, reads are packed
+                         *      RGBA8888 data (one read per pixel). For 16-bit
+                         *      float color, two reads are necessary per
+                         *      pixel, with reads packed as RG1616 then
+                         *      BA1616. So per QPU there are eight color slots
+                         *      in the TFRCV FIFO."
+                         *
+                         * If the texture result fifo is full, block adding
+                         * any more to it until the last QOP_TEX_RESULT.
                          */
-                        if (inst->op == QOP_TEX_S ||
-                            inst->op == QOP_TEX_DIRECT) {
-                                if (state.tfrcv_count == 4)
+                        if (inst->dst.file == QFILE_TEX_S ||
+                            inst->dst.file == QFILE_TEX_S_DIRECT) {
+                                if (state.tfrcv_count ==
+                                    (c->fs_threaded ? 2 : 4))
                                         block_until_tex_result(&state, n);
                                 state.tfrcv_count++;
                         }
@@ -319,6 +376,11 @@ calculate_forward_deps(struct vc4_compile *c, void *mem_ctx,
                         state.tfreq_count++;
                         break;
 
+                default:
+                        break;
+                }
+
+                switch (inst->op) {
                 case QOP_TEX_RESULT:
                         /* Results have to be fetched after the
                          * coordinate setup.  Note that we're assuming
@@ -341,7 +403,6 @@ calculate_forward_deps(struct vc4_compile *c, void *mem_ctx,
                         break;
 
                 default:
-                        assert(!qir_is_tex(inst));
                         break;
                 }
         }
@@ -372,7 +433,7 @@ get_register_pressure_cost(struct schedule_state *state, struct qinst *inst)
             state->temp_writes[inst->dst.index] == 1)
                 cost--;
 
-        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+        for (int i = 0; i < qir_get_nsrc(inst); i++) {
                 if (inst->src[i].file == QFILE_TEMP &&
                     !BITSET_TEST(state->temp_live, inst->src[i].index)) {
                         cost++;
@@ -503,10 +564,32 @@ dump_state(struct vc4_compile *c, struct schedule_state *state)
 static uint32_t
 latency_between(struct schedule_node *before, struct schedule_node *after)
 {
-        if ((before->inst->op == QOP_TEX_S ||
-             before->inst->op == QOP_TEX_DIRECT) &&
+        if ((before->inst->dst.file == QFILE_TEX_S ||
+             before->inst->dst.file == QFILE_TEX_S_DIRECT) &&
             after->inst->op == QOP_TEX_RESULT)
                 return 100;
+
+        switch (before->inst->op) {
+        case QOP_RCP:
+        case QOP_RSQ:
+        case QOP_EXP2:
+        case QOP_LOG2:
+                for (int i = 0; i < qir_get_nsrc(after->inst); i++) {
+                        if (after->inst->src[i].file ==
+                            before->inst->dst.file &&
+                            after->inst->src[i].index ==
+                            before->inst->dst.index) {
+                                /* There are two QPU delay slots before we can
+                                 * read a math result, which could be up to 4
+                                 * QIR instructions if they packed well.
+                                 */
+                                return 4;
+                        }
+                }
+                break;
+        default:
+                break;
+        }
 
         return 1;
 }
@@ -532,7 +615,7 @@ compute_delay(struct schedule_node *n)
                                 compute_delay(n->children[i]);
                         n->delay = MAX2(n->delay,
                                         n->children[i]->delay +
-                                        latency_between(n, n->children[i]));
+                                        latency_between(n->children[i], n));
                 }
         }
 }
@@ -583,15 +666,15 @@ schedule_instructions(struct vc4_compile *c,
 
                         child->unblocked_time = MAX2(child->unblocked_time,
                                                      state->time +
-                                                     latency_between(chosen,
-                                                                     child));
+                                                     latency_between(child,
+                                                                     chosen));
                         child->parent_count--;
                         if (child->parent_count == 0)
                                 list_add(&child->link, &state->worklist);
                 }
 
                 /* Update our tracking of register pressure. */
-                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                for (int i = 0; i < qir_get_nsrc(inst); i++) {
                         if (inst->src[i].file == QFILE_TEMP)
                                 BITSET_SET(state->temp_live, inst->src[i].index);
                 }

@@ -119,6 +119,7 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR: /* XXX: yes? */
    case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+   case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
    case PIPE_CAP_MIN_TEXEL_OFFSET:
    case PIPE_CAP_MAX_TEXEL_OFFSET:
    case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
@@ -202,6 +203,10 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
    case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
+   case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
+   case PIPE_CAP_NATIVE_FENCE_FD:
+   case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
+   case PIPE_CAP_TGSI_FS_FBFETCH:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -299,6 +304,7 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+      case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
          return 0;
       default:
          debug_printf("unknown vertex shader param %d\n", param);
@@ -347,6 +353,7 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+      case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
          return 0;
       default:
          debug_printf("unknown fragment shader param %d\n", param);
@@ -728,6 +735,6 @@ nv30_screen_create(struct nouveau_device *dev)
 
    nouveau_pushbuf_kick(push, push->channel);
 
-   nouveau_fence_new(&screen->base, &screen->base.fence.current, false);
+   nouveau_fence_new(&screen->base, &screen->base.fence.current);
    return &screen->base;
 }

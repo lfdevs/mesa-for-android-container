@@ -86,10 +86,11 @@ endif
 
 if HAVE_EGL_PLATFORM_ANDROID
 AM_CFLAGS += -DHAVE_ANDROID_PLATFORM
+AM_CFLAGS += $(ANDROID_CFLAGS)
+libEGL_la_LIBADD += $(ANDROID_LIBS)
 dri2_backend_FILES += drivers/dri2/platform_android.c
 endif
 
-if HAVE_EGL_DRIVER_DRI2
 AM_CFLAGS += \
 	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/egl/drivers/dri2 \
@@ -107,7 +108,6 @@ libEGL_la_SOURCES += \
 
 libEGL_la_LIBADD += $(top_builddir)/src/loader/libloader.la
 libEGL_la_LIBADD += $(DLOPEN_LIBS) $(LIBDRM_LIBS) $(CLOCK_LIB)
-endif
 
 include $(top_srcdir)/install-lib-links.mk
 

@@ -214,7 +214,7 @@ brw_upload_constant_buffer(struct brw_context *brw)
 
    /* fragment shader constants */
    if (brw->curbe.wm_size) {
-      _mesa_load_state_parameters(ctx, brw->fragment_program->Base.Parameters);
+      _mesa_load_state_parameters(ctx, brw->fragment_program->Parameters);
 
       /* BRW_NEW_CURBE_OFFSETS */
       GLuint offset = brw->curbe.wm_start * 16;
@@ -256,7 +256,7 @@ brw_upload_constant_buffer(struct brw_context *brw)
 
    /* vertex shader constants */
    if (brw->curbe.vs_size) {
-      _mesa_load_state_parameters(ctx, brw->vertex_program->Base.Parameters);
+      _mesa_load_state_parameters(ctx, brw->vertex_program->Parameters);
 
       GLuint offset = brw->curbe.vs_start * 16;
 
@@ -325,8 +325,7 @@ emit:
     * BRW_NEW_FRAGMENT_PROGRAM
     */
    if (brw->gen == 4 && !brw->is_g4x &&
-       (brw->fragment_program->Base.nir->info.inputs_read &
-        (1 << VARYING_SLOT_POS))) {
+       (brw->fragment_program->info.inputs_read & (1 << VARYING_SLOT_POS))) {
       BEGIN_BATCH(2);
       OUT_BATCH(_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP << 16 | (2 - 2));
       OUT_BATCH(0);

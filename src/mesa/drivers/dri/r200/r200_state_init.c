@@ -271,8 +271,8 @@ TCL_OR_VP_CHECK( tcl_or_vp, GL_TRUE, 0 )
 TCL_OR_VP_CHECK( tcl_or_vp_add2, GL_TRUE, 2 )
 VP_CHECK( tcl_vp, GL_TRUE, 0 )
 VP_CHECK( tcl_vp_add4, GL_TRUE, 4 )
-VP_CHECK( tcl_vp_size_add4, ctx->VertexProgram.Current->Base.NumNativeInstructions > 64, 4 )
-VP_CHECK( tcl_vpp_size_add4, ctx->VertexProgram.Current->Base.NumNativeParameters > 96, 4 )
+VP_CHECK( tcl_vp_size_add4, ctx->VertexProgram.Current->arb.NumNativeInstructions > 64, 4 )
+VP_CHECK( tcl_vpp_size_add4, ctx->VertexProgram.Current->arb.NumNativeParameters > 96, 4 )
 
 #define OUT_VEC(hdr, data) do {			\
     drm_radeon_cmd_header_t h;					\

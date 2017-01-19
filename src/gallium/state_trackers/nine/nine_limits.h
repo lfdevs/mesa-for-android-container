@@ -208,4 +208,40 @@ nine_fix_render_state_value(D3DRENDERSTATETYPE State,
     return Value;
 }
 
+struct nine_limits
+{
+    unsigned min;
+    unsigned max;
+};
+
+#define __VALUE_SAMP(o, m, M) \
+    [D3DSAMP_##o] = {m, M}
+
+static const struct nine_limits
+sampler_state_limits_table[D3DRS_BLENDOPALPHA + 1] = {
+    __VALUE_SAMP(ADDRESSU, 1, 5),
+    __VALUE_SAMP(ADDRESSV, 1, 5),
+    __VALUE_SAMP(ADDRESSW, 1, 5),
+    __VALUE_SAMP(BORDERCOLOR, 0, 0xFFFFFFFF),
+    __VALUE_SAMP(MAGFILTER, 0, 8), /* 4-5 should be forbidden */
+    __VALUE_SAMP(MINFILTER, 0, 8), /* same */
+    __VALUE_SAMP(MIPFILTER, 0, 8), /* same */
+    __VALUE_SAMP(MIPMAPLODBIAS, 0, 0xFFFFFFFF),
+    __VALUE_SAMP(MAXMIPLEVEL, 0, 0xFFFFFFFF),
+    __VALUE_SAMP(MAXANISOTROPY, 1, 0xFFFFFFFF), /* Max value should be pCaps->MaxAnisotropy */
+    __VALUE_SAMP(SRGBTEXTURE, 0, 1),
+    __VALUE_SAMP(ELEMENTINDEX, 0, 0xFFFFFFFF),
+    __VALUE_SAMP(DMAPOFFSET, 0, 0xFFFFFFFF)
+};
+
+static BOOL inline
+nine_check_sampler_state_value(D3DSAMPLERSTATETYPE State,
+                               DWORD Value)
+{
+    struct nine_limits limit;
+
+    limit = sampler_state_limits_table[State];
+    return (limit.min <= Value && Value <= limit.max);
+}
+
 #endif /* _NINE_HELPERS_H_ */

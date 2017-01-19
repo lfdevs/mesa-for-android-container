@@ -124,7 +124,7 @@ fd_bc_fini(struct fd_batch_cache *cache)
 	_mesa_hash_table_destroy(cache->ht, NULL);
 }
 
-uint32_t
+void
 fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx)
 {
 	struct hash_entry *entry;
@@ -150,8 +150,6 @@ fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx)
 		fd_batch_sync(last_batch);
 		fd_batch_reference(&last_batch, NULL);
 	}
-
-	return ctx->last_fence;
 }
 
 void

@@ -97,6 +97,14 @@ event End
     uint32_t count;
 };
 
+event ThreadStartApiEvent
+{
+};
+
+event ThreadStartWorkerEvent
+{
+};
+
 event DrawInstancedEvent
 {
     uint32_t drawId;
@@ -161,4 +169,259 @@ event BackendStatsEvent
     uint64_t PsInvocations;
     uint64_t CsInvocations;
 
+};
+
+event EarlyDepthStencilInfoSingleSample
+{
+	uint64_t depthPassMask;
+	uint64_t stencilPassMask;
+	uint64_t coverageMask;
+};
+
+event EarlyDepthStencilInfoSampleRate
+{
+	uint64_t depthPassMask;
+	uint64_t stencilPassMask;
+	uint64_t coverageMask;
+};
+
+event EarlyDepthStencilInfoNullPS
+{
+	uint64_t depthPassMask;
+	uint64_t stencilPassMask;
+	uint64_t coverageMask;
+};
+
+event LateDepthStencilInfoSingleSample
+{
+	uint64_t depthPassMask;
+	uint64_t stencilPassMask;
+	uint64_t coverageMask;
+};
+
+event LateDepthStencilInfoSampleRate
+{
+	uint64_t depthPassMask;
+	uint64_t stencilPassMask;
+	uint64_t coverageMask;
+};
+
+event LateDepthStencilInfoNullPS
+{
+	uint64_t depthPassMask;
+	uint64_t stencilPassMask;
+	uint64_t coverageMask;
+};
+
+event EarlyDepthInfoPixelRate
+{
+	uint64_t depthPassCount;
+	uint64_t activeLanes;
+};
+
+
+event LateDepthInfoPixelRate
+{
+	uint64_t depthPassCount;
+	uint64_t activeLanes;
+};
+
+
+event BackendDrawEndEvent
+{
+	uint32_t drawId;
+};
+
+event FrontendDrawEndEvent
+{
+	uint32_t drawId;
+};
+
+event EarlyZSingleSample
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};	
+
+event LateZSingleSample
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event EarlyStencilSingleSample
+{
+	uint32_t drawId; 
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount; 
+};
+
+event LateStencilSingleSample
+{
+	uint32_t drawId; 
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event EarlyZSampleRate
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};	
+
+event LateZSampleRate
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event EarlyStencilSampleRate
+{
+	uint32_t drawId; 
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount; 
+};
+
+event LateStencilSampleRate
+{
+	uint32_t drawId; 
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event EarlyZNullPS
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event EarlyStencilNullPS
+{
+	uint32_t drawId; 
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount; 
+};
+
+event EarlyZPixelRate
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event LateZPixelRate
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+
+event EarlyOmZ
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event EarlyOmStencil
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event LateOmZ
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event LateOmStencil
+{
+	uint32_t drawId;
+	uint64_t passCount;
+	uint64_t failCount;
+	uint64_t testCount;
+};
+
+event GSPrimInfo
+{
+	uint64_t inputPrimCount;
+	uint64_t primGeneratedCount;
+	uint64_t vertsInput;
+};
+
+event GSInputPrims
+{
+	uint32_t drawId;
+	uint64_t inputPrimCount;
+};
+
+event GSPrimsGen
+{
+	uint32_t drawId;
+	uint64_t primGeneratedCount;
+};
+
+event GSVertsInput
+{
+	uint32_t drawId;
+	uint64_t vertsInput;
+};
+
+event ClipVertexCount
+{
+	uint64_t vertsPerPrim;
+	uint64_t primMask;
+};
+
+//REMOVE AND REPLACE
+event FlushVertClip
+{
+	uint32_t drawId;
+};
+
+event VertsClipped
+{
+	uint32_t drawId;
+	uint64_t clipCount;
+};
+
+event TessPrimCount
+{
+	uint64_t primCount;
+};
+
+//REMOVE AND REPLACE
+event TessPrimFlush
+{
+	uint32_t drawId;
+};
+
+event TessPrims
+{
+	uint32_t drawId;
+	uint64_t primCount;
 };

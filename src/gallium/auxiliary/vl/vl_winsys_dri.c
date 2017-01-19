@@ -46,7 +46,7 @@
 #include "state_tracker/drm_driver.h"
 
 #include "util/u_memory.h"
-#include "util/u_hash.h"
+#include "util/crc32.h"
 #include "util/u_hash_table.h"
 #include "util/u_inlines.h"
 
@@ -326,6 +326,7 @@ vl_dri2_screen_create(Display *display, int screen)
    xcb_dri2_authenticate_cookie_t authenticate_cookie;
    xcb_dri2_authenticate_reply_t *authenticate = NULL;
    xcb_screen_iterator_t s;
+   xcb_screen_t *xcb_screen;
    xcb_generic_error_t *error = NULL;
    char *device_name;
    int fd, device_name_length;
@@ -357,6 +358,9 @@ vl_dri2_screen_create(Display *display, int screen)
       goto free_query;
 
    s = xcb_setup_roots_iterator(xcb_get_setup(scrn->conn));
+   xcb_screen = get_xcb_screen(s, screen);
+   if (!xcb_screen)
+      goto free_query;
 
    driverType = XCB_DRI2_DRIVER_TYPE_DRI;
 #ifdef DRI2DriverPrimeShift
@@ -374,7 +378,7 @@ vl_dri2_screen_create(Display *display, int screen)
 #endif
 
    connect_cookie = xcb_dri2_connect_unchecked(scrn->conn,
-                                               get_xcb_screen(s, screen)->root,
+                                               xcb_screen->root,
                                                driverType);
    connect = xcb_dri2_connect_reply(scrn->conn, connect_cookie, NULL);
    if (connect == NULL ||
@@ -396,7 +400,7 @@ vl_dri2_screen_create(Display *display, int screen)
       goto close_fd;
 
    authenticate_cookie = xcb_dri2_authenticate_unchecked(scrn->conn,
-                                                         get_xcb_screen(s, screen)->root,
+                                                         xcb_screen->root,
                                                          magic);
    authenticate = xcb_dri2_authenticate_reply(scrn->conn, authenticate_cookie, NULL);
 

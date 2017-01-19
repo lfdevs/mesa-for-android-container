@@ -340,11 +340,18 @@ struct __DRI2throttleExtensionRec {
  */
 
 #define __DRI2_FENCE "DRI2_Fence"
-#define __DRI2_FENCE_VERSION 1
+#define __DRI2_FENCE_VERSION 2
 
 #define __DRI2_FENCE_TIMEOUT_INFINITE     0xffffffffffffffffllu
 
 #define __DRI2_FENCE_FLAG_FLUSH_COMMANDS  (1 << 0)
+
+/**
+ * \name Capabilities that might be returned by __DRI2fenceExtensionRec::get_capabilities
+ */
+/*@{*/
+#define __DRI_FENCE_CAP_NATIVE_FD 1
+/*@}*/
 
 struct __DRI2fenceExtensionRec {
    __DRIextension base;
@@ -390,6 +397,41 @@ struct __DRI2fenceExtensionRec {
     *                sense with this function (right now there are none)
     */
    void (*server_wait_sync)(__DRIcontext *ctx, void *fence, unsigned flags);
+
+   /**
+    * Query for general capabilities of the driver that concern fences.
+    * Returns a bitmask of __DRI_FENCE_CAP_x
+    *
+    * \since 2
+    */
+   unsigned (*get_capabilities)(__DRIscreen *screen);
+
+   /**
+    * Create an fd (file descriptor) associated fence.  If the fence fd
+    * is -1, this behaves similarly to create_fence() except that when
+    * rendering is flushed the driver creates a fence fd.  Otherwise,
+    * the driver wraps an existing fence fd.
+    *
+    * This is used to implement the EGL_ANDROID_native_fence_sync extension.
+    *
+    * \since 2
+    *
+    * \param ctx     the context associated with the fence
+    * \param fd      the fence fd or -1
+    */
+   void *(*create_fence_fd)(__DRIcontext *ctx, int fd);
+
+   /**
+    * For fences created with create_fence_fd(), after rendering is flushed,
+    * this retrieves the native fence fd.  Caller takes ownership of the
+    * fd and will close() it when it is no longer needed.
+    *
+    * \since 2
+    *
+    * \param screen  the screen associated with the fence
+    * \param fence   the fence
+    */
+   int (*get_fence_fd)(__DRIscreen *screen, void *fence);
 };
 
 
@@ -1121,6 +1163,7 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FORMAT_XRGB2101010  0x1009
 #define __DRI_IMAGE_FORMAT_ARGB2101010  0x100a
 #define __DRI_IMAGE_FORMAT_SARGB8       0x100b
+#define __DRI_IMAGE_FORMAT_ARGB1555     0x100c
 
 #define __DRI_IMAGE_USE_SHARE		0x0001
 #define __DRI_IMAGE_USE_SCANOUT		0x0002
@@ -1148,6 +1191,7 @@ struct __DRIdri2ExtensionRec {
 
 #define __DRI_IMAGE_FOURCC_R8		0x20203852
 #define __DRI_IMAGE_FOURCC_GR88		0x38385247
+#define __DRI_IMAGE_FOURCC_ARGB1555	0x35315241
 #define __DRI_IMAGE_FOURCC_RGB565	0x36314752
 #define __DRI_IMAGE_FOURCC_ARGB8888	0x34325241
 #define __DRI_IMAGE_FOURCC_XRGB8888	0x34325258

@@ -51,11 +51,11 @@ static void
 brw_nir_lower_uniforms(nir_shader *nir, bool is_scalar)
 {
    if (is_scalar) {
-      nir_assign_var_locations(&nir->uniforms, &nir->num_uniforms, 0,
+      nir_assign_var_locations(&nir->uniforms, &nir->num_uniforms,
                                type_size_scalar_bytes);
       nir_lower_io(nir, nir_var_uniform, type_size_scalar_bytes, 0);
    } else {
-      nir_assign_var_locations(&nir->uniforms, &nir->num_uniforms, 0,
+      nir_assign_var_locations(&nir->uniforms, &nir->num_uniforms,
                                type_size_vec4_bytes);
       nir_lower_io(nir, nir_var_uniform, type_size_vec4_bytes, 0);
    }
@@ -64,7 +64,7 @@ brw_nir_lower_uniforms(nir_shader *nir, bool is_scalar)
 nir_shader *
 brw_create_nir(struct brw_context *brw,
                const struct gl_shader_program *shader_prog,
-               const struct gl_program *prog,
+               struct gl_program *prog,
                gl_shader_stage stage,
                bool is_scalar)
 {
@@ -78,11 +78,13 @@ brw_create_nir(struct brw_context *brw,
    if (shader_prog) {
       nir = glsl_to_nir(shader_prog, stage, options);
       nir_remove_dead_variables(nir, nir_var_shader_in | nir_var_shader_out);
+      nir_lower_returns(nir);
+      nir_validate_shader(nir);
       NIR_PASS_V(nir, nir_lower_io_to_temporaries,
                  nir_shader_get_entrypoint(nir), true, false);
    } else {
       nir = prog_to_nir(prog, options);
-      NIR_PASS_V(nir, nir_convert_to_ssa); /* turn registers into SSA */
+      NIR_PASS_V(nir, nir_lower_regs_to_ssa); /* turn registers into SSA */
    }
    nir_validate_shader(nir);
 
@@ -105,6 +107,17 @@ brw_create_nir(struct brw_context *brw,
    NIR_PASS(progress, nir, nir_lower_system_values);
    NIR_PASS_V(nir, brw_nir_lower_uniforms, is_scalar);
 
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+   /* nir_shader may have been cloned so make sure shader_info is in sync */
+   if (nir->info != &prog->info) {
+      const char *name = prog->info.name;
+      const char *label = prog->info.label;
+      prog->info = *nir->info;
+      prog->info.name = name;
+      prog->info.label = label;
+   }
+
    if (shader_prog) {
       NIR_PASS_V(nir, nir_lower_samplers, shader_prog);
       NIR_PASS_V(nir, nir_lower_atomics, shader_prog);
@@ -123,77 +136,37 @@ get_new_program_id(struct intel_screen *screen)
    return id;
 }
 
-static struct gl_program *brwNewProgram( struct gl_context *ctx,
-				      GLenum target,
-				      GLuint id )
+static struct gl_program *brwNewProgram(struct gl_context *ctx, GLenum target,
+                                        GLuint id, bool is_arb_asm)
 {
    struct brw_context *brw = brw_context(ctx);
 
    switch (target) {
-   case GL_VERTEX_PROGRAM_ARB: {
-      struct brw_vertex_program *prog = CALLOC_STRUCT(brw_vertex_program);
+   case GL_VERTEX_PROGRAM_ARB:
+   case GL_TESS_CONTROL_PROGRAM_NV:
+   case GL_TESS_EVALUATION_PROGRAM_NV:
+   case GL_GEOMETRY_PROGRAM_NV:
+   case GL_COMPUTE_PROGRAM_NV: {
+      struct brw_program *prog = rzalloc(NULL, struct brw_program);
       if (prog) {
 	 prog->id = get_new_program_id(brw->screen);
 
-	 return _mesa_init_gl_program(&prog->program.Base, target, id);
+         return _mesa_init_gl_program(&prog->program, target, id, is_arb_asm);
       }
       else
 	 return NULL;
    }
 
    case GL_FRAGMENT_PROGRAM_ARB: {
-      struct brw_fragment_program *prog = CALLOC_STRUCT(brw_fragment_program);
+      struct brw_program *prog = rzalloc(NULL, struct brw_program);
+
       if (prog) {
 	 prog->id = get_new_program_id(brw->screen);
 
-	 return _mesa_init_gl_program(&prog->program.Base, target, id);
+         return _mesa_init_gl_program(&prog->program, target, id, is_arb_asm);
       }
       else
 	 return NULL;
-   }
-
-   case GL_GEOMETRY_PROGRAM_NV: {
-      struct brw_geometry_program *prog = CALLOC_STRUCT(brw_geometry_program);
-      if (prog) {
-         prog->id = get_new_program_id(brw->screen);
-
-         return _mesa_init_gl_program(&prog->program.Base, target, id);
-      } else {
-         return NULL;
-      }
-   }
-
-   case GL_TESS_CONTROL_PROGRAM_NV: {
-      struct brw_tess_ctrl_program *prog = CALLOC_STRUCT(brw_tess_ctrl_program);
-      if (prog) {
-         prog->id = get_new_program_id(brw->screen);
-
-         return _mesa_init_gl_program(&prog->program.Base, target, id);
-      } else {
-         return NULL;
-      }
-   }
-
-   case GL_TESS_EVALUATION_PROGRAM_NV: {
-      struct brw_tess_eval_program *prog = CALLOC_STRUCT(brw_tess_eval_program);
-      if (prog) {
-         prog->id = get_new_program_id(brw->screen);
-
-         return _mesa_init_gl_program(&prog->program.Base, target, id);
-      } else {
-         return NULL;
-      }
-   }
-
-   case GL_COMPUTE_PROGRAM_NV: {
-      struct brw_compute_program *prog = CALLOC_STRUCT(brw_compute_program);
-      if (prog) {
-         prog->id = get_new_program_id(brw->screen);
-
-         return _mesa_init_gl_program(&prog->program.Base, target, id);
-      } else {
-         return NULL;
-      }
    }
 
    default:
@@ -213,15 +186,16 @@ brwProgramStringNotify(struct gl_context *ctx,
 		       GLenum target,
 		       struct gl_program *prog)
 {
+   assert(target == GL_VERTEX_PROGRAM_ARB || !prog->arb.IsPositionInvariant);
+
    struct brw_context *brw = brw_context(ctx);
    const struct brw_compiler *compiler = brw->screen->compiler;
 
    switch (target) {
    case GL_FRAGMENT_PROGRAM_ARB: {
-      struct gl_fragment_program *fprog = (struct gl_fragment_program *) prog;
-      struct brw_fragment_program *newFP = brw_fragment_program(fprog);
-      const struct brw_fragment_program *curFP =
-         brw_fragment_program_const(brw->fragment_program);
+      struct brw_program *newFP = brw_program(prog);
+      const struct brw_program *curFP =
+         brw_program_const(brw->fragment_program);
 
       if (newFP == curFP)
 	 brw->ctx.NewDriverState |= BRW_NEW_FRAGMENT_PROGRAM;
@@ -231,18 +205,17 @@ brwProgramStringNotify(struct gl_context *ctx,
 
       prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_FRAGMENT, true);
 
-      brw_fs_precompile(ctx, NULL, prog);
+      brw_fs_precompile(ctx, prog);
       break;
    }
    case GL_VERTEX_PROGRAM_ARB: {
-      struct gl_vertex_program *vprog = (struct gl_vertex_program *) prog;
-      struct brw_vertex_program *newVP = brw_vertex_program(vprog);
-      const struct brw_vertex_program *curVP =
-         brw_vertex_program_const(brw->vertex_program);
+      struct brw_program *newVP = brw_program(prog);
+      const struct brw_program *curVP =
+         brw_program_const(brw->vertex_program);
 
       if (newVP == curVP)
 	 brw->ctx.NewDriverState |= BRW_NEW_VERTEX_PROGRAM;
-      if (newVP->program.IsPositionInvariant) {
+      if (newVP->program.arb.IsPositionInvariant) {
 	 _mesa_insert_mvp_code(ctx, &newVP->program);
       }
       newVP->id = get_new_program_id(brw->screen);
@@ -256,7 +229,7 @@ brwProgramStringNotify(struct gl_context *ctx,
       prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_VERTEX,
                                  compiler->scalar_stage[MESA_SHADER_VERTEX]);
 
-      brw_vs_precompile(ctx, NULL, prog);
+      brw_vs_precompile(ctx, prog);
       break;
    }
    default:
@@ -394,7 +367,6 @@ void brwInitFragProgFuncs( struct dd_function_table *functions )
    functions->DeleteProgram = brwDeleteProgram;
    functions->ProgramStringNotify = brwProgramStringNotify;
 
-   functions->NewShader = brw_new_shader;
    functions->LinkShader = brw_link_shader;
 
    functions->MemoryBarrier = brw_memory_barrier;
@@ -625,29 +597,25 @@ brw_collect_and_report_shader_time(struct brw_context *brw)
  * change their lifetimes compared to normal operation.
  */
 int
-brw_get_shader_time_index(struct brw_context *brw,
-                          struct gl_shader_program *shader_prog,
-                          struct gl_program *prog,
-                          enum shader_time_shader_type type)
+brw_get_shader_time_index(struct brw_context *brw, struct gl_program *prog,
+                          enum shader_time_shader_type type, bool is_glsl_sh)
 {
    int shader_time_index = brw->shader_time.num_entries++;
    assert(shader_time_index < brw->shader_time.max_entries);
    brw->shader_time.types[shader_time_index] = type;
 
-   int id = shader_prog ? shader_prog->Name : prog->Id;
    const char *name;
-   if (id == 0) {
+   if (prog->Id == 0) {
       name = "ff";
-   } else if (!shader_prog) {
-      name = "prog";
-   } else if (shader_prog->Label) {
-      name = ralloc_strdup(brw->shader_time.names, shader_prog->Label);
+   } else if (is_glsl_sh) {
+      name = prog->info.label ?
+         ralloc_strdup(brw->shader_time.names, prog->info.label) : "glsl";
    } else {
-      name = "glsl";
+      name = "prog";
    }
 
    brw->shader_time.names[shader_time_index] = name;
-   brw->shader_time.ids[shader_time_index] = id;
+   brw->shader_time.ids[shader_time_index] = prog->Id;
 
    return shader_time_index;
 }
@@ -670,22 +638,11 @@ brw_stage_prog_data_free(const void *p)
 }
 
 void
-brw_dump_ir(const char *stage, struct gl_shader_program *shader_prog,
-            struct gl_linked_shader *shader, struct gl_program *prog)
+brw_dump_arb_asm(const char *stage, struct gl_program *prog)
 {
-   if (shader_prog) {
-      if (shader->ir) {
-         fprintf(stderr,
-                 "GLSL IR for native %s shader %d:\n",
-                 stage, shader_prog->Name);
-         _mesa_print_ir(stderr, shader->ir, NULL);
-         fprintf(stderr, "\n\n");
-      }
-   } else {
-      fprintf(stderr, "ARB_%s_program %d ir for native %s shader\n",
-              stage, prog->Id, stage);
-      _mesa_print_program(prog);
-   }
+   fprintf(stderr, "ARB_%s_program %d ir for native %s shader\n",
+           stage, prog->Id, stage);
+   _mesa_print_program(prog);
 }
 
 void

@@ -52,8 +52,9 @@ namespace brw {
       /**
        * Construct a vec4_builder that inserts instructions into \p shader.
        */
-      vec4_builder(backend_shader *shader) :
+      vec4_builder(backend_shader *shader, unsigned dispatch_width = 8) :
          shader(shader), block(NULL), cursor(NULL),
+         _dispatch_width(dispatch_width), _group(0),
          force_writemask_all(false),
          annotation()
       {
@@ -67,6 +68,7 @@ namespace brw {
        */
       vec4_builder(backend_shader *shader, bblock_t *block, instruction *inst) :
          shader(shader), block(block), cursor(inst),
+         _dispatch_width(inst->exec_size), _group(inst->group),
          force_writemask_all(inst->force_writemask_all)
       {
          annotation.str = inst->annotation;
@@ -96,6 +98,25 @@ namespace brw {
       at_end() const
       {
          return at(NULL, (exec_node *)&shader->instructions.tail_sentinel);
+      }
+
+      /**
+       * Construct a builder specifying the default SIMD width and group of
+       * channel enable signals, inheriting other code generation parameters
+       * from this.
+       *
+       * \p n gives the default SIMD width, \p i gives the slot group used for
+       * predication and control flow masking in multiples of \p n channels.
+       */
+      vec4_builder
+      group(unsigned n, unsigned i) const
+      {
+         assert(force_writemask_all ||
+                (n <= dispatch_width() && i < dispatch_width() / n));
+         vec4_builder bld = *this;
+         bld._dispatch_width = n;
+         bld._group += i * n;
+         return bld;
       }
 
       /**
@@ -130,7 +151,16 @@ namespace brw {
       unsigned
       dispatch_width() const
       {
-         return 8;
+         return _dispatch_width;
+      }
+
+      /**
+       * Get the channel group in use.
+       */
+      unsigned
+      group() const
+      {
+         return _group;
       }
 
       /**
@@ -281,7 +311,10 @@ namespace brw {
       instruction *
       emit(instruction *inst) const
       {
+         inst->exec_size = dispatch_width();
+         inst->group = group();
          inst->force_writemask_all = force_writemask_all;
+         inst->size_written = inst->exec_size * type_sz(inst->dst.type);
          inst->annotation = annotation.str;
          inst->ir = annotation.ir;
 
@@ -587,6 +620,8 @@ namespace brw {
       bblock_t *block;
       exec_node *cursor;
 
+      unsigned _dispatch_width;
+      unsigned _group;
       bool force_writemask_all;
 
       /** Debug annotation info. */

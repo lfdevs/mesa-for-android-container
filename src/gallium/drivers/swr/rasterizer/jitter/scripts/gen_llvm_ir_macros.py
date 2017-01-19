@@ -84,6 +84,7 @@ inst_aliases = {
 }
 
 intrinsics = [
+        ["VGATHERPD", "x86_avx2_gather_d_pd_256", ["src", "pBase", "indices", "mask", "scale"]],
         ["VGATHERPS", "x86_avx2_gather_d_ps_256", ["src", "pBase", "indices", "mask", "scale"]],
         ["VGATHERDD", "x86_avx2_gather_d_d_256", ["src", "pBase", "indices", "mask", "scale"]],
         ["VSQRTPS", "x86_avx_sqrt_ps_256", ["a"]],
@@ -101,6 +102,7 @@ intrinsics = [
         ["VPSHUFB", "x86_avx2_pshuf_b", ["a", "b"]],
         ["VPERMD", "x86_avx2_permd", ["a", "idx"]],
         ["VPERMPS", "x86_avx2_permps", ["idx", "a"]],
+        ["VCVTPD2PS", "x86_avx_cvt_pd2_ps_256", ["a"]],
         ["VCVTPH2PS", "x86_vcvtph2ps_256", ["a"]],
         ["VCVTPS2PH", "x86_vcvtps2ph_256", ["a", "round"]],
         ["VHSUBPS", "x86_avx_hsub_ps_256", ["a", "b"]],

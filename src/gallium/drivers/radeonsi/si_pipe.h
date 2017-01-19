@@ -70,10 +70,6 @@
 					      SI_CONTEXT_FLUSH_AND_INV_DB | \
 					      SI_CONTEXT_FLUSH_AND_INV_DB_META)
 
-#define SI_ENCODE_TRACE_POINT(id)	(0xcafe0000 | ((id) & 0xffff))
-#define SI_IS_TRACE_POINT(x)		(((x) & 0xcafe0000) == 0xcafe0000)
-#define SI_GET_TRACE_POINT_ID(x)	((x) & 0xffff)
-
 #define SI_MAX_BORDER_COLORS	4096
 
 struct si_compute;
@@ -96,6 +92,7 @@ struct si_screen {
 	struct si_shader_part		*vs_prologs;
 	struct si_shader_part		*vs_epilogs;
 	struct si_shader_part		*tcs_epilogs;
+	struct si_shader_part		*gs_prologs;
 	struct si_shader_part		*ps_prologs;
 	struct si_shader_part		*ps_epilogs;
 
@@ -136,7 +133,12 @@ struct si_sampler_view {
 	bool is_stencil_sampler;
 };
 
+#define SI_SAMPLER_STATE_MAGIC 0x34f1c35a
+
 struct si_sampler_state {
+#ifdef DEBUG
+	unsigned			magic;
+#endif
 	uint32_t			val[4];
 };
 
@@ -166,6 +168,7 @@ struct si_framebuffer {
 	unsigned			nr_samples;
 	unsigned			log_samples;
 	unsigned			compressed_cb_mask;
+	unsigned			colorbuf_enabled_4bit;
 	unsigned			spi_shader_col_format;
 	unsigned			spi_shader_col_format_alpha;
 	unsigned			spi_shader_col_format_blend;
@@ -265,6 +268,8 @@ struct si_context {
 	struct si_descriptors		vertex_buffers;
 	struct si_descriptors		descriptors[SI_NUM_DESCS];
 	unsigned			descriptors_dirty;
+	unsigned			shader_pointers_dirty;
+	unsigned			compressed_tex_shader_mask;
 	struct si_buffer_resources	rw_buffers;
 	struct si_buffer_resources	const_buffers[SI_NUM_SHADERS];
 	struct si_buffer_resources	shader_buffers[SI_NUM_SHADERS];
@@ -284,6 +289,7 @@ struct si_context {
 
 	/* Vertex and index buffers. */
 	bool				vertex_buffers_dirty;
+	bool				vertex_buffer_pointer_dirty;
 	struct pipe_index_buffer	index_buffer;
 	struct pipe_vertex_buffer	vertex_buffer[SI_NUM_VERTEX_BUFFERS];
 
@@ -319,7 +325,7 @@ struct si_context {
 	unsigned		last_sc_line_stipple;
 	int			last_vtx_reuse_depth;
 	int			current_rast_prim; /* primitive type after TES, GS */
-	unsigned		last_gsvs_itemsize;
+	bool			gs_tri_strip_adj_fix;
 
 	/* Scratch buffer */
 	struct r600_resource	*scratch_buffer;
@@ -334,6 +340,7 @@ struct si_context {
 	struct si_shader_selector *last_tcs;
 	int			last_num_tcs_input_cp;
 	int			last_tes_sh_base;
+	unsigned		last_num_patches;
 
 	/* Debug state. */
 	bool			is_debug;
@@ -364,9 +371,23 @@ void si_resource_copy_region(struct pipe_context *ctx,
 			     const struct pipe_box *src_box);
 
 /* si_cp_dma.c */
+#define SI_CPDMA_SKIP_CHECK_CS_SPACE	(1 << 0) /* don't call need_cs_space */
+#define SI_CPDMA_SKIP_SYNC_AFTER	(1 << 1) /* don't wait for DMA after the copy */
+#define SI_CPDMA_SKIP_SYNC_BEFORE	(1 << 2) /* don't wait for DMA before the copy (RAW hazards) */
+#define SI_CPDMA_SKIP_GFX_SYNC		(1 << 3) /* don't flush caches and don't wait for PS/CS */
+#define SI_CPDMA_SKIP_BO_LIST_UPDATE	(1 << 4) /* don't update the BO list */
+#define SI_CPDMA_SKIP_ALL (SI_CPDMA_SKIP_CHECK_CS_SPACE | \
+			   SI_CPDMA_SKIP_SYNC_AFTER | \
+			   SI_CPDMA_SKIP_SYNC_BEFORE | \
+			   SI_CPDMA_SKIP_GFX_SYNC | \
+			   SI_CPDMA_SKIP_BO_LIST_UPDATE)
+
 void si_copy_buffer(struct si_context *sctx,
 		    struct pipe_resource *dst, struct pipe_resource *src,
-		    uint64_t dst_offset, uint64_t src_offset, unsigned size);
+		    uint64_t dst_offset, uint64_t src_offset, unsigned size,
+		    unsigned user_flags);
+void cik_prefetch_TC_L2_async(struct si_context *sctx, struct pipe_resource *buf,
+			      uint64_t offset, unsigned size);
 void si_init_cp_dma_functions(struct si_context *sctx);
 
 /* si_debug.c */
@@ -400,15 +421,6 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 /*
  * common helpers
  */
-
-static inline struct r600_resource *
-si_resource_create_custom(struct pipe_screen *screen,
-			  unsigned usage, unsigned size)
-{
-	assert(size);
-	return r600_resource(pipe_buffer_create(screen,
-		PIPE_BIND_CUSTOM, usage, size));
-}
 
 static inline void
 si_invalidate_draw_sh_constants(struct si_context *sctx)
@@ -459,7 +471,7 @@ static inline struct tgsi_shader_info *si_get_vs_info(struct si_context *sctx)
 static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 {
 	if (sctx->gs_shader.current)
-		return sctx->gs_shader.current->gs_copy_shader;
+		return sctx->gs_shader.cso->gs_copy_shader;
 	else if (sctx->tes_shader.current)
 		return sctx->tes_shader.current;
 	else
@@ -469,9 +481,9 @@ static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 static inline bool si_vs_exports_prim_id(struct si_shader *shader)
 {
 	if (shader->selector->type == PIPE_SHADER_VERTEX)
-		return shader->key.vs.epilog.export_prim_id;
+		return shader->key.part.vs.epilog.export_prim_id;
 	else if (shader->selector->type == PIPE_SHADER_TESS_EVAL)
-		return shader->key.tes.epilog.export_prim_id;
+		return shader->key.part.tes.epilog.export_prim_id;
 	else
 		return false;
 }

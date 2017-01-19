@@ -636,7 +636,7 @@ nv50_draw_elements(struct nv50_context *nv50, bool shorten,
          BEGIN_NV04(push, NV50_3D(VERTEX_BEGIN_GL), 1);
          PUSH_DATA (push, prim);
 
-         nouveau_pushbuf_space(push, 8, 0, 1);
+         nouveau_pushbuf_space(push, 16, 0, 1);
          PUSH_REFN(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
 
          switch (index_size) {
@@ -702,6 +702,7 @@ nv50_draw_elements(struct nv50_context *nv50, bool shorten,
          prim |= NV50_3D_VERTEX_BEGIN_GL_INSTANCE_NEXT;
       }
    }
+   NOUVEAU_DRV_STAT(&nv50->screen->base, draw_calls_indexed, 1);
 }
 
 static void

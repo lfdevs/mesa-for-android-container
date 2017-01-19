@@ -186,8 +186,8 @@ create_frag_shader(struct vl_bicubic_filter *filter, unsigned video_width,
     * t = frac(temp)
     * vtex = floor(i_vtex)/i_size
     */
-   ureg_SUB(shader, ureg_writemask(t_array[21], TGSI_WRITEMASK_XY),
-            i_vtex, half_pixel);
+   ureg_ADD(shader, ureg_writemask(t_array[21], TGSI_WRITEMASK_XY),
+            i_vtex, ureg_negate(half_pixel));
    ureg_MUL(shader, ureg_writemask(t_array[22], TGSI_WRITEMASK_XY),
             ureg_src(t_array[21]), ureg_imm2f(shader, video_width, video_height));
    ureg_FRC(shader, ureg_writemask(t, TGSI_WRITEMASK_XY),

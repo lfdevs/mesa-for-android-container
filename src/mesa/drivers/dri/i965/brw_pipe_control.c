@@ -351,6 +351,7 @@ brw_emit_mi_flush(struct brw_context *brw)
       int flags = PIPE_CONTROL_NO_WRITE | PIPE_CONTROL_RENDER_TARGET_FLUSH;
       if (brw->gen >= 6) {
          flags |= PIPE_CONTROL_INSTRUCTION_INVALIDATE |
+                  PIPE_CONTROL_CONST_CACHE_INVALIDATE |
                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
                   PIPE_CONTROL_VF_CACHE_INVALIDATE |
                   PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |

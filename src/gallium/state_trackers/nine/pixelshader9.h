@@ -65,7 +65,7 @@ NinePixelShader9( void *data )
 
 static inline BOOL
 NinePixelShader9_UpdateKey( struct NinePixelShader9 *ps,
-                            struct nine_state *state )
+                            struct nine_context *context )
 {
     uint16_t samplers_shadow;
     uint32_t samplers_ps1_types;
@@ -80,25 +80,25 @@ NinePixelShader9_UpdateKey( struct NinePixelShader9 *ps,
         while (m) {
             int s = ffs(m) - 1;
             m &= ~(1 << s);
-            samplers_ps1_types |= (state->texture[s] ? state->texture[s]->pstype : 1) << (s * 2);
+            samplers_ps1_types |= (context->texture[s].enabled ? context->texture[s].pstype : 1) << (s * 2);
         }
         key = samplers_ps1_types;
     } else {
-        samplers_shadow = (uint16_t)((state->samplers_shadow & NINE_PS_SAMPLERS_MASK) >> NINE_SAMPLER_PS(0));
+        samplers_shadow = (uint16_t)((context->samplers_shadow & NINE_PS_SAMPLERS_MASK) >> NINE_SAMPLER_PS(0));
         key = samplers_shadow & ps->sampler_mask;
     }
 
     if (ps->byte_code.version < 0x30) {
-        key |= ((uint64_t)state->rs[D3DRS_FOGENABLE]) << 32;
-        key |= ((uint64_t)state->rs[D3DRS_FOGTABLEMODE]) << 33;
+        key |= ((uint64_t)context->rs[D3DRS_FOGENABLE]) << 32;
+        key |= ((uint64_t)context->rs[D3DRS_FOGTABLEMODE]) << 33;
     }
 
     /* centroid interpolation automatically used for color ps inputs */
-    if (state->rt[0]->desc.MultiSampleType > 1)
+    if (context->rt[0]->base.info.nr_samples)
         key |= ((uint64_t)1) << 34;
 
     if (unlikely(ps->byte_code.version < 0x14)) {
-        projected = nine_ff_get_projected_key(state);
+        projected = nine_ff_get_projected_key(context);
         key |= ((uint64_t) projected) << 48;
     }
 

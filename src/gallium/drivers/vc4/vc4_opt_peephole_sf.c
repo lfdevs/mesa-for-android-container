@@ -62,7 +62,7 @@ inst_srcs_updated(struct qinst *inst, struct qinst *writer)
          */
         switch (writer->dst.file) {
         case QFILE_TEMP:
-                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                for (int i = 0; i < qir_get_nsrc(inst); i++) {
                         if (inst->src[i].file == QFILE_TEMP &&
                             inst->src[i].index == writer->dst.index) {
                                 return true;
@@ -95,7 +95,7 @@ inst_result_equals(struct qinst *a, struct qinst *b)
                 return false;
         }
 
-        for (int i = 0; i < qir_get_op_nsrc(a->op); i++) {
+        for (int i = 0; i < qir_get_nsrc(a); i++) {
                 if (!qir_reg_equals(a->src[i], b->src[i]) ||
                     src_file_varies_on_reread(a->src[i]) ||
                     src_file_varies_on_reread(b->src[i])) {

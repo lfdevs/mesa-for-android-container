@@ -722,7 +722,6 @@ CodeEmitterGK110::emitUADD(const Instruction *i)
    }
 }
 
-// TODO: shl-add
 void
 CodeEmitterGK110::emitIMAD(const Instruction *i)
 {

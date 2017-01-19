@@ -172,7 +172,7 @@ This tool is useful for:
 </ul>
 
 <p>
-After building Mesa, the compiler can be found at src/glsl/glsl_compiler
+After building Mesa, the compiler can be found at src/compiler/glsl/glsl_compiler
 </p>
 
 <p>
@@ -180,7 +180,7 @@ Here's an example of using the compiler to compile a vertex shader and
 emit GL_ARB_vertex_program-style instructions:
 </p>
 <pre>
-    src/glsl/glsl_compiler --dump-ast myshader.vert
+    src/compiler/glsl/glsl_compiler --version XXX --dump-ast myshader.vert
 </pre>
 
 Options include
@@ -188,7 +188,11 @@ Options include
 <li><b>--dump-ast</b> - dump GPU code
 <li><b>--dump-hir</b> - dump high-level IR code
 <li><b>--dump-lir</b> - dump low-level IR code
-<li><b>--link</b> - ???
+<li><b>--dump-builder</b> - dump GLSL IR code
+<li><b>--link</b> - link shaders
+<li><b>--just-log</b> - display only shader / linker info if exist,
+without any header or separator
+<li><b>--version</b> - [Mandatory] define the GLSL version to use
 </ul>
 
 
@@ -196,7 +200,7 @@ Options include
 
 <p>
 The source code for Mesa's shading language compiler is in the
-<code>src/glsl/</code> directory.
+<code>src/compiler/glsl/</code> directory.
 </p>
 
 <p>

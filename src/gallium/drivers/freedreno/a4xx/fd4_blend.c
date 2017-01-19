@@ -35,7 +35,7 @@
 #include "fd4_context.h"
 #include "fd4_format.h"
 
-static enum a4xx_rb_blend_opcode
+static enum a3xx_rb_blend_opcode
 blend_func(unsigned func)
 {
 	switch (func) {

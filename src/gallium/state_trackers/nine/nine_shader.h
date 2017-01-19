@@ -114,7 +114,9 @@ nine_info_mark_const_b_used(struct nine_shader_info *info, int idx)
 }
 
 HRESULT
-nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *);
+nine_translate_shader(struct NineDevice9 *device,
+                      struct nine_shader_info *,
+                      struct pipe_context *);
 
 
 struct nine_shader_variant

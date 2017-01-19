@@ -28,20 +28,26 @@
 #include "sid.h"
 #include "si_pipe.h"
 
-static void cik_sdma_do_copy_buffer(struct si_context *ctx,
-				    struct pipe_resource *dst,
-				    struct pipe_resource *src,
-				    uint64_t dst_offset,
-				    uint64_t src_offset,
-				    uint64_t size)
+static void cik_sdma_copy_buffer(struct si_context *ctx,
+				 struct pipe_resource *dst,
+				 struct pipe_resource *src,
+				 uint64_t dst_offset,
+				 uint64_t src_offset,
+				 uint64_t size)
 {
 	struct radeon_winsys_cs *cs = ctx->b.dma.cs;
 	unsigned i, ncopy, csize;
-	struct r600_resource *rdst = (struct r600_resource*)dst;
-	struct r600_resource *rsrc = (struct r600_resource*)src;
+	struct r600_resource *rdst = r600_resource(dst);
+	struct r600_resource *rsrc = r600_resource(src);
 
-	dst_offset += r600_resource(dst)->gpu_address;
-	src_offset += r600_resource(src)->gpu_address;
+	/* Mark the buffer range of destination as valid (initialized),
+	 * so that transfer_map knows it should wait for the GPU when mapping
+	 * that range. */
+	util_range_add(&rdst->valid_buffer_range, dst_offset,
+		       dst_offset + size);
+
+	dst_offset += rdst->gpu_address;
+	src_offset += rsrc->gpu_address;
 
 	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
 	r600_need_dma_space(&ctx->b, ncopy * 7, rdst, rsrc);
@@ -63,23 +69,44 @@ static void cik_sdma_do_copy_buffer(struct si_context *ctx,
 	}
 }
 
-static void cik_sdma_copy_buffer(struct si_context *ctx,
-				 struct pipe_resource *dst,
-				 struct pipe_resource *src,
-				 uint64_t dst_offset,
-				 uint64_t src_offset,
-				 uint64_t size)
+static void cik_sdma_clear_buffer(struct pipe_context *ctx,
+				  struct pipe_resource *dst,
+				  uint64_t offset,
+				  uint64_t size,
+				  unsigned clear_value)
 {
-	struct r600_resource *rdst = (struct r600_resource*)dst;
+	struct si_context *sctx = (struct si_context *)ctx;
+	struct radeon_winsys_cs *cs = sctx->b.dma.cs;
+	unsigned i, ncopy, csize;
+	struct r600_resource *rdst = r600_resource(dst);
+
+	if (!cs || offset % 4 != 0 || size % 4 != 0) {
+		ctx->clear_buffer(ctx, dst, offset, size, &clear_value, 4);
+		return;
+	}
 
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&rdst->valid_buffer_range, dst_offset,
-		       dst_offset + size);
+	util_range_add(&rdst->valid_buffer_range, offset, offset + size);
 
-	cik_sdma_do_copy_buffer(ctx, dst, src, dst_offset, src_offset, size);
-	r600_dma_emit_wait_idle(&ctx->b);
+	offset += rdst->gpu_address;
+
+	/* the same maximum size as for copying */
+	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
+	r600_need_dma_space(&sctx->b, ncopy * 5, rdst, NULL);
+
+	for (i = 0; i < ncopy; i++) {
+		csize = MIN2(size, CIK_SDMA_COPY_MAX_SIZE);
+		radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_PACKET_CONSTANT_FILL, 0,
+						0x8000 /* dword copy */));
+		radeon_emit(cs, offset);
+		radeon_emit(cs, offset >> 32);
+		radeon_emit(cs, clear_value);
+		radeon_emit(cs, csize);
+		offset += csize;
+		size -= csize;
+	}
 }
 
 static unsigned minify_as_blocks(unsigned width, unsigned level, unsigned blk_w)
@@ -134,8 +161,8 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	unsigned src_tile_mode = info->si_tile_mode_array[src_tile_index];
 	unsigned dst_micro_mode = G_009910_MICRO_TILE_MODE_NEW(dst_tile_mode);
 	unsigned src_micro_mode = G_009910_MICRO_TILE_MODE_NEW(src_tile_mode);
-	unsigned dst_pitch = rdst->surface.level[dst_level].pitch_bytes / bpp;
-	unsigned src_pitch = rsrc->surface.level[src_level].pitch_bytes / bpp;
+	unsigned dst_pitch = rdst->surface.level[dst_level].nblk_x;
+	unsigned src_pitch = rsrc->surface.level[src_level].nblk_x;
 	uint64_t dst_slice_pitch = rdst->surface.level[dst_level].slice_size / bpp;
 	uint64_t src_slice_pitch = rsrc->surface.level[src_level].slice_size / bpp;
 	unsigned dst_width = minify_as_blocks(rdst->resource.b.b.width0,
@@ -161,10 +188,6 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	assert(rsrc->surface.level[src_level].offset +
 	       src_slice_pitch * bpp * (srcz + src_box->depth) <=
 	       rsrc->resource.buf->size);
-
-	/* Test CIK with radeon and amdgpu before enabling this. */
-	if (sctx->b.chip_class == CIK)
-		return false;
 
 	if (!r600_prepare_for_dma_blit(&sctx->b, rdst, dst_level, dstx, dsty,
 					dstz, rsrc, src_level, src_box))
@@ -226,8 +249,6 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 			radeon_emit(cs, (copy_width - 1) | ((copy_height - 1) << 16));
 			radeon_emit(cs, (copy_depth - 1));
 		}
-
-		r600_dma_emit_wait_idle(&sctx->b);
 		return true;
 	}
 
@@ -346,7 +367,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 					      (tiled_x + copy_width) % granularity;
 
 		if (start_linear_address < 0 ||
-		    end_linear_address > linear->surface.bo_size)
+		    end_linear_address > linear->surface.surf_size)
 			return false;
 
 		/* Check requirements. */
@@ -392,8 +413,6 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 				radeon_emit(cs, (copy_width_aligned - 1) | ((copy_height - 1) << 16));
 				radeon_emit(cs, (copy_depth - 1));
 			}
-
-			r600_dma_emit_wait_idle(&sctx->b);
 			return true;
 		}
 	}
@@ -490,8 +509,6 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 						((copy_height_aligned - 8) << 16));
 				radeon_emit(cs, (copy_depth - 1));
 			}
-
-			r600_dma_emit_wait_idle(&sctx->b);
 			return true;
 		}
 	}
@@ -517,12 +534,6 @@ static void cik_sdma_copy(struct pipe_context *ctx,
 		return;
 	}
 
-	/* Carrizo SDMA texture copying is very broken for some users.
-	 * https://bugs.freedesktop.org/show_bug.cgi?id=97029
-	 */
-	if (sctx->b.family == CHIP_CARRIZO)
-		goto fallback;
-
 	if (cik_sdma_copy_texture(sctx, dst, dst_level, dstx, dsty, dstz,
 				  src, src_level, src_box))
 		return;
@@ -535,4 +546,5 @@ fallback:
 void cik_init_sdma_functions(struct si_context *sctx)
 {
 	sctx->b.dma_copy = cik_sdma_copy;
+	sctx->b.dma_clear_buffer = cik_sdma_clear_buffer;
 }

@@ -39,8 +39,11 @@ namespace ArchRast
     class EventHandler
     {
     public:
+        EventHandler() {}
+        virtual ~EventHandler() {}
+
 % for name in protos['event_names']:
-        virtual void handle(${name}& event) {}
+        virtual void Handle(${name} event) {}
 % endfor
     };
 }

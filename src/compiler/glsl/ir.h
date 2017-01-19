@@ -599,7 +599,8 @@ public:
 
    inline bool is_name_ralloced() const
    {
-      return this->name != ir_variable::tmp_name;
+      return this->name != ir_variable::tmp_name &&
+             this->name != this->name_storage;
    }
 
    /**
@@ -624,6 +625,16 @@ public:
     */
    const char *name;
 
+private:
+   /**
+    * If the name length fits into name_storage, it's used, otherwise
+    * the name is ralloc'd. shader-db mining showed that 70% of variables
+    * fit here. This is a win over ralloc where only ralloc_header has
+    * 20 bytes on 64-bit (28 bytes with DEBUG), and we can also skip malloc.
+    */
+   char name_storage[16];
+
+public:
    struct ir_variable_data {
 
       /**
@@ -906,6 +917,9 @@ public:
 
       /**
        * Vertex stream output identifier.
+       *
+       * For packed outputs, bit 31 is set and bits [2*i+1,2*i] indicate the
+       * stream of the i-th component.
        */
       unsigned stream;
 
@@ -1460,6 +1474,7 @@ public:
 #include "ir_expression_operation.h"
 
 extern const char *const ir_expression_operation_strings[ir_last_opcode + 1];
+extern const char *const ir_expression_operation_enum_strings[ir_last_opcode + 1];
 
 class ir_expression : public ir_rvalue {
 public:
@@ -1772,7 +1787,7 @@ enum ir_texture_opcode {
  *
  *                                    Texel offset (0 or an expression)
  *                                    | Projection divisor
- *                                    | |  Shadow comparitor
+ *                                    | |  Shadow comparator
  *                                    | |  |
  *                                    v v  v
  * (tex <type> <sampler> <coordinate> 0 1 ( ))
@@ -1793,7 +1808,7 @@ public:
    ir_texture(enum ir_texture_opcode op)
       : ir_rvalue(ir_type_texture),
         op(op), sampler(NULL), coordinate(NULL), projector(NULL),
-        shadow_comparitor(NULL), offset(NULL)
+        shadow_comparator(NULL), offset(NULL)
    {
       memset(&lod_info, 0, sizeof(lod_info));
    }
@@ -1848,7 +1863,7 @@ public:
     * If there is no shadow comparison, this will be \c NULL.  For the
     * \c ir_txf opcode, this *must* be \c NULL.
     */
-   ir_rvalue *shadow_comparitor;
+   ir_rvalue *shadow_comparator;
 
    /** Texel offset. */
    ir_rvalue *offset;

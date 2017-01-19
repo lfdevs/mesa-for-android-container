@@ -37,10 +37,10 @@ descriptor=[
   [ "STENCIL_FUNC", "LOC_CUSTOM, TYPE_ENUM, NO_OFFSET, NO_EXTRA" ],
   [ "STENCIL_PASS_DEPTH_FAIL", "LOC_CUSTOM, TYPE_ENUM, NO_OFFSET, NO_EXTRA" ],
   [ "STENCIL_PASS_DEPTH_PASS", "LOC_CUSTOM, TYPE_ENUM, NO_OFFSET, NO_EXTRA" ],
-  [ "STENCIL_REF", "LOC_CUSTOM, TYPE_INT, NO_OFFSET, NO_EXTRA" ],
+  [ "STENCIL_REF", "LOC_CUSTOM, TYPE_UINT, NO_OFFSET, NO_EXTRA" ],
   [ "STENCIL_TEST", "CONTEXT_BOOL(Stencil.Enabled), NO_EXTRA" ],
-  [ "STENCIL_VALUE_MASK", "LOC_CUSTOM, TYPE_INT, NO_OFFSET, NO_EXTRA" ],
-  [ "STENCIL_WRITEMASK", "LOC_CUSTOM, TYPE_INT, NO_OFFSET, NO_EXTRA" ],
+  [ "STENCIL_VALUE_MASK", "LOC_CUSTOM, TYPE_UINT, NO_OFFSET, NO_EXTRA" ],
+  [ "STENCIL_WRITEMASK", "LOC_CUSTOM, TYPE_UINT, NO_OFFSET, NO_EXTRA" ],
   [ "SUBPIXEL_BITS", "CONTEXT_INT(Const.SubPixelBits), NO_EXTRA" ],
   [ "TEXTURE_BINDING_2D", "LOC_CUSTOM, TYPE_INT, TEXTURE_2D_INDEX, NO_EXTRA" ],
   [ "UNPACK_ALIGNMENT", "CONTEXT_INT(Unpack.Alignment), NO_EXTRA" ],
@@ -236,9 +236,9 @@ descriptor=[
   [ "SAMPLE_ALPHA_TO_ONE_ARB", "CONTEXT_BOOL(Multisample.SampleAlphaToOne), NO_EXTRA" ],
 
 # GL_ARB_vertex_buffer_object
-  [ "VERTEX_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, VertexBinding[VERT_ATTRIB_POS].BufferObj), NO_EXTRA" ],
-  [ "NORMAL_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, VertexBinding[VERT_ATTRIB_NORMAL].BufferObj), NO_EXTRA" ],
-  [ "COLOR_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, VertexBinding[VERT_ATTRIB_COLOR0].BufferObj), NO_EXTRA" ],
+  [ "VERTEX_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, BufferBinding[VERT_ATTRIB_POS].BufferObj), NO_EXTRA" ],
+  [ "NORMAL_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, BufferBinding[VERT_ATTRIB_NORMAL].BufferObj), NO_EXTRA" ],
+  [ "COLOR_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, BufferBinding[VERT_ATTRIB_COLOR0].BufferObj), NO_EXTRA" ],
   [ "TEXTURE_COORD_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, NO_OFFSET, NO_EXTRA" ],
 
 # GL_OES_point_sprite
@@ -297,9 +297,9 @@ descriptor=[
 
 # OpenGL 2.0
   [ "STENCIL_BACK_FUNC", "CONTEXT_ENUM(Stencil.Function[1]), NO_EXTRA" ],
-  [ "STENCIL_BACK_VALUE_MASK", "CONTEXT_INT(Stencil.ValueMask[1]), NO_EXTRA" ],
-  [ "STENCIL_BACK_WRITEMASK", "CONTEXT_INT(Stencil.WriteMask[1]), NO_EXTRA" ],
-  [ "STENCIL_BACK_REF", "LOC_CUSTOM, TYPE_INT, NO_OFFSET, NO_EXTRA" ],
+  [ "STENCIL_BACK_VALUE_MASK", "CONTEXT_UINT(Stencil.ValueMask[1]), NO_EXTRA" ],
+  [ "STENCIL_BACK_WRITEMASK", "CONTEXT_UINT(Stencil.WriteMask[1]), NO_EXTRA" ],
+  [ "STENCIL_BACK_REF", "LOC_CUSTOM, TYPE_UINT, NO_OFFSET, NO_EXTRA" ],
   [ "STENCIL_BACK_FAIL", "CONTEXT_ENUM(Stencil.FailFunc[1]), NO_EXTRA" ],
   [ "STENCIL_BACK_PASS_DEPTH_FAIL", "CONTEXT_ENUM(Stencil.ZFailFunc[1]), NO_EXTRA" ],
   [ "STENCIL_BACK_PASS_DEPTH_PASS", "CONTEXT_ENUM(Stencil.ZPassFunc[1]), NO_EXTRA" ],
@@ -343,6 +343,7 @@ descriptor=[
   [ "BLEND_ADVANCED_COHERENT_KHR", "CONTEXT_BOOL(Color.BlendCoherent), extra_KHR_blend_equation_advanced_coherent" ],
 
 # GL_ARB_robustness / GL_KHR_robustness
+  [ "CONTEXT_ROBUST_ACCESS", "CONTEXT_ENUM(Const.RobustAccess), extra_KHR_robustness" ],
   [ "RESET_NOTIFICATION_STRATEGY_ARB", "CONTEXT_ENUM(Const.ResetStrategy), extra_KHR_robustness_or_GL" ],
 ]},
 
@@ -619,6 +620,9 @@ descriptor=[
   [ "VIEWPORT_SUBPIXEL_BITS", "CONTEXT_INT(Const.ViewportSubpixelBits), extra_ARB_viewport_array_or_oes_viewport_array" ],
   [ "VIEWPORT_BOUNDS_RANGE", "CONTEXT_FLOAT2(Const.ViewportBounds), extra_ARB_viewport_array_or_oes_viewport_array" ],
   [ "VIEWPORT_INDEX_PROVOKING_VERTEX", "CONTEXT_ENUM(Const.LayerAndVPIndexProvokingVertex), extra_ARB_viewport_array_or_oes_viewport_array" ],
+
+# INTEL_conservative_rasterization
+  [ "CONSERVATIVE_RASTERIZATION_INTEL", "CONTEXT_BOOL(IntelConservativeRasterization), extra_INTEL_conservative_rasterization" ],
 ]},
 
 { "apis": ["GL_CORE", "GLES32"], "params": [
@@ -833,10 +837,10 @@ descriptor=[
   [ "PRIMITIVE_RESTART_INDEX_NV", "CONTEXT_INT(Array.RestartIndex), extra_NV_primitive_restart" ],
 
 # GL_ARB_vertex_buffer_object
-  [ "INDEX_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, VertexBinding[VERT_ATTRIB_COLOR_INDEX].BufferObj), NO_EXTRA" ],
-  [ "EDGE_FLAG_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, VertexBinding[VERT_ATTRIB_EDGEFLAG].BufferObj), NO_EXTRA" ],
-  [ "SECONDARY_COLOR_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, VertexBinding[VERT_ATTRIB_COLOR1].BufferObj), NO_EXTRA" ],
-  [ "FOG_COORDINATE_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, VertexBinding[VERT_ATTRIB_FOG].BufferObj), NO_EXTRA" ],
+  [ "INDEX_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, BufferBinding[VERT_ATTRIB_COLOR_INDEX].BufferObj), NO_EXTRA" ],
+  [ "EDGE_FLAG_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, BufferBinding[VERT_ATTRIB_EDGEFLAG].BufferObj), NO_EXTRA" ],
+  [ "SECONDARY_COLOR_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, BufferBinding[VERT_ATTRIB_COLOR1].BufferObj), NO_EXTRA" ],
+  [ "FOG_COORDINATE_ARRAY_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, offsetof(struct gl_vertex_array_object, BufferBinding[VERT_ATTRIB_FOG].BufferObj), NO_EXTRA" ],
 
 # GL_ARB_vertex_program
 # == GL_VERTEX_PROGRAM_NV

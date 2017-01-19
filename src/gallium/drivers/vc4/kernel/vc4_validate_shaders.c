@@ -84,6 +84,14 @@ struct vc4_shader_validation_state {
 	 * basic blocks.
 	 */
 	bool needs_uniform_address_for_loop;
+
+	/* Set when we find an instruction which violates the criterion for a
+	 * threaded shader. These are:
+	 * 	- only write the lower half of the register space
+	 * 	- last thread switch signaled at the end
+	 * So track the usage of the thread switches and the register usage.
+	 */
+	bool all_registers_used;
 };
 
 static uint32_t
@@ -117,6 +125,12 @@ raddr_add_a_to_live_reg_index(uint64_t inst)
 		return 64 + add_a;
 	else
 		return ~0;
+}
+
+static bool live_reg_is_upper_half(uint32_t lri)
+{
+	return	(lri >=16 && lri < 32) ||
+		(lri >=32 + 16 && lri < 32 + 32);
 }
 
 static bool
@@ -385,6 +399,9 @@ check_reg_write(struct vc4_validated_shader_info *validated_shader,
 		} else {
 			validation_state->live_immediates[lri] = ~0;
 		}
+
+		if (live_reg_is_upper_half(lri))
+			validation_state->all_registers_used = true;
 	}
 
 	switch (waddr) {
@@ -593,6 +610,11 @@ check_instruction_reads(struct vc4_validated_shader_info *validated_shader,
 		}
 	}
 
+	if ((raddr_a >= 16 && raddr_a < 32) ||
+	    (raddr_b >= 16 && raddr_b < 32 && sig != QPU_SIG_SMALL_IMM)) {
+		validation_state->all_registers_used = true;
+	}
+
 	return true;
 }
 
@@ -603,9 +625,7 @@ static bool
 vc4_validate_branches(struct vc4_shader_validation_state *validation_state)
 {
 	uint32_t max_branch_target = 0;
-	bool found_shader_end = false;
 	int ip;
-	int shader_end_ip = 0;
 	int last_branch = -2;
 
 	for (ip = 0; ip < validation_state->max_ip; ip++) {
@@ -616,8 +636,13 @@ vc4_validate_branches(struct vc4_shader_validation_state *validation_state)
 		uint32_t branch_target_ip;
 
 		if (sig == QPU_SIG_PROG_END) {
-			shader_end_ip = ip;
-			found_shader_end = true;
+			/* There are two delay slots after program end is
+			 * signaled that are still executed, then we're
+			 * finished.  validation_state->max_ip is the
+			 * instruction after the last valid instruction in the
+			 * program.
+			 */
+			validation_state->max_ip = ip + 3;
 			continue;
 		}
 
@@ -671,15 +696,9 @@ vc4_validate_branches(struct vc4_shader_validation_state *validation_state)
 		}
 		set_bit(after_delay_ip, validation_state->branch_targets);
 		max_branch_target = max(max_branch_target, after_delay_ip);
-
-		/* There are two delay slots after program end is signaled
-		 * that are still executed, then we're finished.
-		 */
-		if (found_shader_end && ip == shader_end_ip + 2)
-			break;
 	}
 
-	if (max_branch_target > shader_end_ip) {
+	if (max_branch_target > validation_state->max_ip - 3) {
 		DRM_ERROR("Branch landed after QPU_SIG_PROG_END");
 		return false;
 	}
@@ -751,6 +770,7 @@ vc4_validate_shader(struct drm_gem_cma_object *shader_obj)
 {
 	bool found_shader_end = false;
 	int shader_end_ip = 0;
+	uint32_t last_thread_switch_ip = -3;
 	uint32_t ip;
 	struct vc4_validated_shader_info *validated_shader = NULL;
 	struct vc4_shader_validation_state validation_state;
@@ -783,6 +803,16 @@ vc4_validate_shader(struct drm_gem_cma_object *shader_obj)
 		if (!vc4_handle_branch_target(&validation_state))
 			goto fail;
 
+		if (ip == last_thread_switch_ip + 3) {
+			/* Reset r0-r3 live clamp data */
+			int i;
+			for (i = 64; i < LIVE_REG_COUNT; i++) {
+				validation_state.live_min_clamp_offsets[i] = ~0;
+				validation_state.live_max_clamp_regs[i] = false;
+				validation_state.live_immediates[i] = ~0;
+			}
+		}
+
 		switch (sig) {
 		case QPU_SIG_NONE:
 		case QPU_SIG_WAIT_FOR_SCOREBOARD:
@@ -792,6 +822,8 @@ vc4_validate_shader(struct drm_gem_cma_object *shader_obj)
 		case QPU_SIG_LOAD_TMU1:
 		case QPU_SIG_PROG_END:
 		case QPU_SIG_SMALL_IMM:
+		case QPU_SIG_THREAD_SWITCH:
+		case QPU_SIG_LAST_THREAD_SWITCH:
 			if (!check_instruction_writes(validated_shader,
 						      &validation_state)) {
 				DRM_ERROR("Bad write at ip %d\n", ip);
@@ -805,6 +837,18 @@ vc4_validate_shader(struct drm_gem_cma_object *shader_obj)
 			if (sig == QPU_SIG_PROG_END) {
 				found_shader_end = true;
 				shader_end_ip = ip;
+			}
+
+			if (sig == QPU_SIG_THREAD_SWITCH ||
+			    sig == QPU_SIG_LAST_THREAD_SWITCH) {
+				validated_shader->is_threaded = true;
+
+				if (ip < last_thread_switch_ip + 3) {
+					DRM_ERROR("Thread switch too soon after "
+						  "last switch at ip %d\n", ip);
+					goto fail;
+				}
+				last_thread_switch_ip = ip;
 			}
 
 			break;
@@ -821,6 +865,13 @@ vc4_validate_shader(struct drm_gem_cma_object *shader_obj)
 			if (!check_branch(inst, validated_shader,
 					  &validation_state, ip))
 				goto fail;
+
+			if (ip < last_thread_switch_ip + 3) {
+				DRM_ERROR("Branch in thread switch at ip %d",
+					  ip);
+				goto fail;
+			}
+
 			break;
 		default:
 			DRM_ERROR("Unsupported QPU signal %d at "
@@ -839,6 +890,14 @@ vc4_validate_shader(struct drm_gem_cma_object *shader_obj)
 		DRM_ERROR("shader failed to terminate before "
 			  "shader BO end at %zd\n",
 			  shader_obj->base.size);
+		goto fail;
+	}
+
+	/* Might corrupt other thread */
+	if (validated_shader->is_threaded &&
+	    validation_state.all_registers_used) {
+		DRM_ERROR("Shader uses threading, but uses the upper "
+			  "half of the registers, too\n");
 		goto fail;
 	}
 

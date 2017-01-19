@@ -308,11 +308,10 @@ void st_init_limits(struct pipe_screen *screen,
 
       options->LowerCombinedClipCullDistance = true;
       options->LowerBufferInterfaceBlocks = true;
-
-      if (sh == PIPE_SHADER_COMPUTE)
-         options->LowerShaderSharedVariables = true;
    }
 
+   c->GLSLOptimizeConservatively =
+      screen->get_param(screen, PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY);
    c->LowerTessLevel = true;
    c->LowerCsDerivedVariables = true;
    c->PrimitiveRestartForPatches =
@@ -615,7 +614,9 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_texture_view),                 PIPE_CAP_SAMPLER_VIEW_TARGET              },
       { o(ARB_timer_query),                  PIPE_CAP_QUERY_TIMESTAMP                  },
       { o(ARB_transform_feedback2),          PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME       },
-      { o(ARB_transform_feedback3),          PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME       },
+      { o(ARB_transform_feedback3),          PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS },
+
+      { o(KHR_blend_equation_advanced),      PIPE_CAP_TGSI_FS_FBFETCH                  },
 
       { o(EXT_blend_equation_separate),      PIPE_CAP_BLEND_EQUATION_SEPARATE          },
       { o(EXT_depth_bounds_test),            PIPE_CAP_DEPTH_BOUNDS_TEST                },

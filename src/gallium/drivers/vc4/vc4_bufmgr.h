@@ -39,11 +39,6 @@ struct vc4_bo {
         uint32_t handle;
         uint32_t size;
 
-#ifdef USE_VC4_SIMULATOR
-        void *simulator_winsys_map;
-        uint32_t simulator_winsys_stride;
-#endif
-
         /** Entry in the linked list of buffers freed, by age. */
         struct list_head time_list;
         /** Entry in the per-page-count linked list of buffers freed (by age). */

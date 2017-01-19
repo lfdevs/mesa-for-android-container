@@ -296,7 +296,7 @@ lower_immed(struct ir3_cp_ctx *ctx, struct ir3_register *reg, unsigned new_flags
 	new_flags &= ~IR3_REG_IMMED;
 	new_flags |= IR3_REG_CONST;
 	reg->flags = new_flags;
-	reg->num = i + (4 * ctx->so->first_immediate);
+	reg->num = i + (4 * ctx->so->constbase.immediate);
 
 	return reg;
 }

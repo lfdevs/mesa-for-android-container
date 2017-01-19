@@ -4,6 +4,7 @@ TARGET_DRIVERS += radeonsi
 TARGET_CPPFLAGS += -DGALLIUM_RADEONSI
 TARGET_LIB_DEPS += \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
+	$(top_builddir)/src/amd/common/libamd_common.la \
 	$(RADEON_LIBS) \
 	$(LIBDRM_LIBS) \
 	$(AMDGPU_LIBS)

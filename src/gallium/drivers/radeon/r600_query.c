@@ -65,7 +65,8 @@ static enum radeon_value_id winsys_id_from_type(unsigned type)
 	case R600_QUERY_MAPPED_VRAM: return RADEON_MAPPED_VRAM;
 	case R600_QUERY_MAPPED_GTT: return RADEON_MAPPED_GTT;
 	case R600_QUERY_BUFFER_WAIT_TIME: return RADEON_BUFFER_WAIT_TIME_NS;
-	case R600_QUERY_NUM_CTX_FLUSHES: return RADEON_NUM_CS_FLUSHES;
+	case R600_QUERY_NUM_GFX_IBS: return RADEON_NUM_GFX_IBS;
+	case R600_QUERY_NUM_SDMA_IBS: return RADEON_NUM_SDMA_IBS;
 	case R600_QUERY_NUM_BYTES_MOVED: return RADEON_NUM_BYTES_MOVED;
 	case R600_QUERY_NUM_EVICTIONS: return RADEON_NUM_EVICTIONS;
 	case R600_QUERY_VRAM_USAGE: return RADEON_VRAM_USAGE;
@@ -101,6 +102,9 @@ static bool r600_query_sw_begin(struct r600_common_context *rctx,
 	case R600_QUERY_DMA_CALLS:
 		query->begin_result = rctx->num_dma_calls;
 		break;
+	case R600_QUERY_CP_DMA_CALLS:
+		query->begin_result = rctx->num_cp_dma_calls;
+		break;
 	case R600_QUERY_NUM_VS_FLUSHES:
 		query->begin_result = rctx->num_vs_flushes;
 		break;
@@ -109,6 +113,15 @@ static bool r600_query_sw_begin(struct r600_common_context *rctx,
 		break;
 	case R600_QUERY_NUM_CS_FLUSHES:
 		query->begin_result = rctx->num_cs_flushes;
+		break;
+	case R600_QUERY_NUM_FB_CACHE_FLUSHES:
+		query->begin_result = rctx->num_fb_cache_flushes;
+		break;
+	case R600_QUERY_NUM_L2_INVALIDATES:
+		query->begin_result = rctx->num_L2_invalidates;
+		break;
+	case R600_QUERY_NUM_L2_WRITEBACKS:
+		query->begin_result = rctx->num_L2_writebacks;
 		break;
 	case R600_QUERY_REQUESTED_VRAM:
 	case R600_QUERY_REQUESTED_GTT:
@@ -123,7 +136,8 @@ static bool r600_query_sw_begin(struct r600_common_context *rctx,
 		query->begin_result = 0;
 		break;
 	case R600_QUERY_BUFFER_WAIT_TIME:
-	case R600_QUERY_NUM_CTX_FLUSHES:
+	case R600_QUERY_NUM_GFX_IBS:
+	case R600_QUERY_NUM_SDMA_IBS:
 	case R600_QUERY_NUM_BYTES_MOVED:
 	case R600_QUERY_NUM_EVICTIONS: {
 		enum radeon_value_id ws_id = winsys_id_from_type(query->b.type);
@@ -131,13 +145,20 @@ static bool r600_query_sw_begin(struct r600_common_context *rctx,
 		break;
 	}
 	case R600_QUERY_GPU_LOAD:
-		query->begin_result = r600_gpu_load_begin(rctx->screen);
+		query->begin_result = r600_begin_counter_gui(rctx->screen);
+		break;
+	case R600_QUERY_GPU_SHADERS_BUSY:
+		query->begin_result = r600_begin_counter_spi(rctx->screen);
 		break;
 	case R600_QUERY_NUM_COMPILATIONS:
 		query->begin_result = p_atomic_read(&rctx->screen->num_compilations);
 		break;
 	case R600_QUERY_NUM_SHADERS_CREATED:
 		query->begin_result = p_atomic_read(&rctx->screen->num_shaders_created);
+		break;
+	case R600_QUERY_NUM_SHADER_CACHE_HITS:
+		query->begin_result =
+			p_atomic_read(&rctx->screen->num_shader_cache_hits);
 		break;
 	case R600_QUERY_GPIN_ASIC_ID:
 	case R600_QUERY_GPIN_NUM_SIMD:
@@ -178,6 +199,9 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 	case R600_QUERY_DMA_CALLS:
 		query->end_result = rctx->num_dma_calls;
 		break;
+	case R600_QUERY_CP_DMA_CALLS:
+		query->end_result = rctx->num_cp_dma_calls;
+		break;
 	case R600_QUERY_NUM_VS_FLUSHES:
 		query->end_result = rctx->num_vs_flushes;
 		break;
@@ -186,6 +210,15 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 		break;
 	case R600_QUERY_NUM_CS_FLUSHES:
 		query->end_result = rctx->num_cs_flushes;
+		break;
+	case R600_QUERY_NUM_FB_CACHE_FLUSHES:
+		query->end_result = rctx->num_fb_cache_flushes;
+		break;
+	case R600_QUERY_NUM_L2_INVALIDATES:
+		query->end_result = rctx->num_L2_invalidates;
+		break;
+	case R600_QUERY_NUM_L2_WRITEBACKS:
+		query->end_result = rctx->num_L2_writebacks;
 		break;
 	case R600_QUERY_REQUESTED_VRAM:
 	case R600_QUERY_REQUESTED_GTT:
@@ -197,7 +230,8 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 	case R600_QUERY_CURRENT_GPU_SCLK:
 	case R600_QUERY_CURRENT_GPU_MCLK:
 	case R600_QUERY_BUFFER_WAIT_TIME:
-	case R600_QUERY_NUM_CTX_FLUSHES:
+	case R600_QUERY_NUM_GFX_IBS:
+	case R600_QUERY_NUM_SDMA_IBS:
 	case R600_QUERY_NUM_BYTES_MOVED:
 	case R600_QUERY_NUM_EVICTIONS: {
 		enum radeon_value_id ws_id = winsys_id_from_type(query->b.type);
@@ -205,8 +239,13 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 		break;
 	}
 	case R600_QUERY_GPU_LOAD:
-		query->end_result = r600_gpu_load_end(rctx->screen,
-						      query->begin_result);
+		query->end_result = r600_end_counter_gui(rctx->screen,
+							 query->begin_result);
+		query->begin_result = 0;
+		break;
+	case R600_QUERY_GPU_SHADERS_BUSY:
+		query->end_result = r600_end_counter_spi(rctx->screen,
+							 query->begin_result);
 		query->begin_result = 0;
 		break;
 	case R600_QUERY_NUM_COMPILATIONS:
@@ -217,6 +256,10 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 		break;
 	case R600_QUERY_BACK_BUFFER_PS_DRAW_RATIO:
 		query->end_result = rctx->last_tex_ps_draw_ratio;
+		break;
+	case R600_QUERY_NUM_SHADER_CACHE_HITS:
+		query->end_result =
+			p_atomic_read(&rctx->screen->num_shader_cache_hits);
 		break;
 	case R600_QUERY_GPIN_ASIC_ID:
 	case R600_QUERY_GPIN_NUM_SIMD:
@@ -338,7 +381,7 @@ static struct r600_resource *r600_new_query_buffer(struct r600_common_context *c
 	 * usage pattern.
 	 */
 	struct r600_resource *buf = (struct r600_resource*)
-		pipe_buffer_create(ctx->b.screen, PIPE_BIND_CUSTOM,
+		pipe_buffer_create(ctx->b.screen, 0,
 				   PIPE_USAGE_STAGING, buf_size);
 	if (!buf)
 		return NULL;
@@ -557,12 +600,8 @@ static void r600_query_hw_do_emit_start(struct r600_common_context *ctx,
 		radeon_emit(cs, (va >> 32) & 0xFFFF);
 		break;
 	case PIPE_QUERY_TIME_ELAPSED:
-		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE_EOP, 4, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_BOTTOM_OF_PIPE_TS) | EVENT_INDEX(5));
-		radeon_emit(cs, va);
-		radeon_emit(cs, (3 << 29) | ((va >> 32) & 0xFFFF));
-		radeon_emit(cs, 0);
-		radeon_emit(cs, 0);
+		r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS,
+					 0, 3, NULL, va, 0, 0);
 		break;
 	case PIPE_QUERY_PIPELINE_STATISTICS:
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
@@ -643,13 +682,8 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 		va += 8;
 		/* fall through */
 	case PIPE_QUERY_TIMESTAMP:
-		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE_EOP, 4, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_BOTTOM_OF_PIPE_TS) | EVENT_INDEX(5));
-		radeon_emit(cs, va);
-		radeon_emit(cs, (3 << 29) | ((va >> 32) & 0xFFFF));
-		radeon_emit(cs, 0);
-		radeon_emit(cs, 0);
-
+		r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS,
+					 0, 3, NULL, va, 0, 0);
 		fence_va = va + 8;
 		break;
 	case PIPE_QUERY_PIPELINE_STATISTICS: {
@@ -671,7 +705,8 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 			RADEON_PRIO_QUERY);
 
 	if (fence_va)
-		r600_gfx_write_fence(ctx, query->buffer.buf, fence_va, 0, 0x80000000);
+		r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS, 0, 1,
+					 query->buffer.buf, fence_va, 0, 0x80000000);
 }
 
 static void r600_query_hw_emit_stop(struct r600_common_context *ctx,
@@ -1588,7 +1623,7 @@ void r600_query_init_backend_mask(struct r600_common_context *ctx)
 
 	/* create buffer for event data */
 	buffer = (struct r600_resource*)
-		pipe_buffer_create(ctx->b.screen, PIPE_BIND_CUSTOM,
+		pipe_buffer_create(ctx->b.screen, 0,
 				   PIPE_USAGE_STAGING, ctx->max_db*16);
 	if (!buffer)
 		goto err;
@@ -1649,20 +1684,26 @@ err:
 static struct pipe_driver_query_info r600_driver_query_list[] = {
 	X("num-compilations",		NUM_COMPILATIONS,	UINT64, CUMULATIVE),
 	X("num-shaders-created",	NUM_SHADERS_CREATED,	UINT64, CUMULATIVE),
+	X("num-shader-cache-hits",	NUM_SHADER_CACHE_HITS,	UINT64, CUMULATIVE),
 	X("draw-calls",			DRAW_CALLS,		UINT64, AVERAGE),
 	X("spill-draw-calls",		SPILL_DRAW_CALLS,	UINT64, AVERAGE),
 	X("compute-calls",		COMPUTE_CALLS,		UINT64, AVERAGE),
 	X("spill-compute-calls",	SPILL_COMPUTE_CALLS,	UINT64, AVERAGE),
 	X("dma-calls",			DMA_CALLS,		UINT64, AVERAGE),
+	X("cp-dma-calls",		CP_DMA_CALLS,		UINT64, AVERAGE),
 	X("num-vs-flushes",		NUM_VS_FLUSHES,		UINT64, AVERAGE),
 	X("num-ps-flushes",		NUM_PS_FLUSHES,		UINT64, AVERAGE),
 	X("num-cs-flushes",		NUM_CS_FLUSHES,		UINT64, AVERAGE),
+	X("num-fb-cache-flushes",	NUM_FB_CACHE_FLUSHES,	UINT64, AVERAGE),
+	X("num-L2-invalidates",		NUM_L2_INVALIDATES,	UINT64, AVERAGE),
+	X("num-L2-writebacks",		NUM_L2_WRITEBACKS,	UINT64, AVERAGE),
 	X("requested-VRAM",		REQUESTED_VRAM,		BYTES, AVERAGE),
 	X("requested-GTT",		REQUESTED_GTT,		BYTES, AVERAGE),
 	X("mapped-VRAM",		MAPPED_VRAM,		BYTES, AVERAGE),
 	X("mapped-GTT",			MAPPED_GTT,		BYTES, AVERAGE),
 	X("buffer-wait-time",		BUFFER_WAIT_TIME,	MICROSECONDS, CUMULATIVE),
-	X("num-ctx-flushes",		NUM_CTX_FLUSHES,	UINT64, AVERAGE),
+	X("num-GFX-IBs",		NUM_GFX_IBS,		UINT64, AVERAGE),
+	X("num-SDMA-IBs",		NUM_SDMA_IBS,		UINT64, AVERAGE),
 	X("num-bytes-moved",		NUM_BYTES_MOVED,	BYTES, CUMULATIVE),
 	X("num-evictions",		NUM_EVICTIONS,		UINT64, CUMULATIVE),
 	X("VRAM-usage",			VRAM_USAGE,		BYTES, AVERAGE),
@@ -1683,6 +1724,7 @@ static struct pipe_driver_query_info r600_driver_query_list[] = {
 	/* The following queries must be at the end of the list because their
 	 * availability is adjusted dynamically based on the DRM version. */
 	X("GPU-load",			GPU_LOAD,		UINT64, AVERAGE),
+	X("GPU-shaders-busy",		GPU_SHADERS_BUSY,	UINT64, AVERAGE),
 	X("temperature",		GPU_TEMPERATURE,	UINT64, AVERAGE),
 	X("shader-clock",		CURRENT_GPU_SCLK,	HZ, AVERAGE),
 	X("memory-clock",		CURRENT_GPU_MCLK,	HZ, AVERAGE),
@@ -1699,7 +1741,7 @@ static unsigned r600_get_num_queries(struct r600_common_screen *rscreen)
 	else if (rscreen->info.drm_major == 3)
 		return ARRAY_SIZE(r600_driver_query_list) - 3;
 	else
-		return ARRAY_SIZE(r600_driver_query_list) - 4;
+		return ARRAY_SIZE(r600_driver_query_list) - 5;
 }
 
 static int r600_get_driver_query_info(struct pipe_screen *screen,

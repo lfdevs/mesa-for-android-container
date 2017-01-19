@@ -338,6 +338,7 @@ namespace SwrJit
         members.push_back( Type::getInt32Ty(ctx) );    // yOffset
         members.push_back( ArrayType::get(ArrayType::get(Type::getInt32Ty(ctx), 15), 2) );    // lodOffsets
         members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );    // pAuxBaseAddress
+        members.push_back( Type::getInt32Ty(ctx) );    // auxMode
         members.push_back( Type::getInt8Ty(ctx) );    // bInterleavedSamples
 
         return StructType::get(ctx, members, false);
@@ -365,7 +366,8 @@ namespace SwrJit
     static const uint32_t SWR_SURFACE_STATE_yOffset = 19;
     static const uint32_t SWR_SURFACE_STATE_lodOffsets = 20;
     static const uint32_t SWR_SURFACE_STATE_pAuxBaseAddress = 21;
-    static const uint32_t SWR_SURFACE_STATE_bInterleavedSamples = 22;
+    static const uint32_t SWR_SURFACE_STATE_auxMode = 22;
+    static const uint32_t SWR_SURFACE_STATE_bInterleavedSamples = 23;
 
     //////////////////////////////////////////////////////////////////////////
     /// Generate LLVM type information for SWR_VERTEX_BUFFER_STATE
@@ -735,6 +737,7 @@ namespace SwrJit
         members.push_back( Type::getInt32Ty(ctx) );    // frontWinding
         members.push_back( Type::getInt32Ty(ctx) );    // scissorEnable
         members.push_back( Type::getInt32Ty(ctx) );    // depthClipEnable
+        members.push_back( Type::getInt32Ty(ctx) );    // clipHalfZ
         members.push_back( Type::getInt32Ty(ctx) );    // pointParam
         members.push_back( Type::getInt32Ty(ctx) );    // pointSpriteEnable
         members.push_back( Type::getInt32Ty(ctx) );    // pointSpriteTopOrigin
@@ -765,27 +768,28 @@ namespace SwrJit
     static const uint32_t SWR_RASTSTATE_frontWinding = 2;
     static const uint32_t SWR_RASTSTATE_scissorEnable = 3;
     static const uint32_t SWR_RASTSTATE_depthClipEnable = 4;
-    static const uint32_t SWR_RASTSTATE_pointParam = 5;
-    static const uint32_t SWR_RASTSTATE_pointSpriteEnable = 6;
-    static const uint32_t SWR_RASTSTATE_pointSpriteTopOrigin = 7;
-    static const uint32_t SWR_RASTSTATE_msaaRastEnable = 8;
-    static const uint32_t SWR_RASTSTATE_forcedSampleCount = 9;
-    static const uint32_t SWR_RASTSTATE_pixelOffset = 10;
-    static const uint32_t SWR_RASTSTATE_depthBiasPreAdjusted = 11;
-    static const uint32_t SWR_RASTSTATE_conservativeRast = 12;
-    static const uint32_t SWR_RASTSTATE_pointSize = 13;
-    static const uint32_t SWR_RASTSTATE_lineWidth = 14;
-    static const uint32_t SWR_RASTSTATE_depthBias = 15;
-    static const uint32_t SWR_RASTSTATE_slopeScaledDepthBias = 16;
-    static const uint32_t SWR_RASTSTATE_depthBiasClamp = 17;
-    static const uint32_t SWR_RASTSTATE_depthFormat = 18;
-    static const uint32_t SWR_RASTSTATE_rastMode = 19;
-    static const uint32_t SWR_RASTSTATE_sampleCount = 20;
-    static const uint32_t SWR_RASTSTATE_pixelLocation = 21;
-    static const uint32_t SWR_RASTSTATE_iSamplePos = 22;
-    static const uint32_t SWR_RASTSTATE_samplePattern = 23;
-    static const uint32_t SWR_RASTSTATE_cullDistanceMask = 24;
-    static const uint32_t SWR_RASTSTATE_clipDistanceMask = 25;
+    static const uint32_t SWR_RASTSTATE_clipHalfZ = 5;
+    static const uint32_t SWR_RASTSTATE_pointParam = 6;
+    static const uint32_t SWR_RASTSTATE_pointSpriteEnable = 7;
+    static const uint32_t SWR_RASTSTATE_pointSpriteTopOrigin = 8;
+    static const uint32_t SWR_RASTSTATE_msaaRastEnable = 9;
+    static const uint32_t SWR_RASTSTATE_forcedSampleCount = 10;
+    static const uint32_t SWR_RASTSTATE_pixelOffset = 11;
+    static const uint32_t SWR_RASTSTATE_depthBiasPreAdjusted = 12;
+    static const uint32_t SWR_RASTSTATE_conservativeRast = 13;
+    static const uint32_t SWR_RASTSTATE_pointSize = 14;
+    static const uint32_t SWR_RASTSTATE_lineWidth = 15;
+    static const uint32_t SWR_RASTSTATE_depthBias = 16;
+    static const uint32_t SWR_RASTSTATE_slopeScaledDepthBias = 17;
+    static const uint32_t SWR_RASTSTATE_depthBiasClamp = 18;
+    static const uint32_t SWR_RASTSTATE_depthFormat = 19;
+    static const uint32_t SWR_RASTSTATE_rastMode = 20;
+    static const uint32_t SWR_RASTSTATE_sampleCount = 21;
+    static const uint32_t SWR_RASTSTATE_pixelLocation = 22;
+    static const uint32_t SWR_RASTSTATE_iSamplePos = 23;
+    static const uint32_t SWR_RASTSTATE_samplePattern = 24;
+    static const uint32_t SWR_RASTSTATE_cullDistanceMask = 25;
+    static const uint32_t SWR_RASTSTATE_clipDistanceMask = 26;
 
     //////////////////////////////////////////////////////////////////////////
     /// Generate LLVM type information for SWR_ATTRIB_SWIZZLE

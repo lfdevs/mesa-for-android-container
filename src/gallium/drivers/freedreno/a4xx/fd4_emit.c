@@ -54,7 +54,7 @@ static const enum adreno_state_block sb[] = {
  * prsc or dwords: buffer containing constant values
  * sizedwords:     size of const value buffer
  */
-void
+static void
 fd4_emit_const(struct fd_ringbuffer *ring, enum shader_t type,
 		uint32_t regid, uint32_t offset, uint32_t sizedwords,
 		const uint32_t *dwords, struct pipe_resource *prsc)
@@ -96,16 +96,16 @@ static void
 fd4_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 		uint32_t regid, uint32_t num, struct pipe_resource **prscs, uint32_t *offsets)
 {
+	uint32_t anum = align(num, 4);
 	uint32_t i;
 
 	debug_assert((regid % 4) == 0);
-	debug_assert((num % 4) == 0);
 
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + num);
+	OUT_PKT3(ring, CP_LOAD_STATE, 2 + anum);
 	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(regid/4) |
 			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
 			CP_LOAD_STATE_0_STATE_BLOCK(sb[type]) |
-			CP_LOAD_STATE_0_NUM_UNIT(num/4));
+			CP_LOAD_STATE_0_NUM_UNIT(anum/4));
 	OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
 			CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
 
@@ -120,6 +120,9 @@ fd4_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 			OUT_RING(ring, 0xbad00000 | (i << 16));
 		}
 	}
+
+	for (; i < anum; i++)
+		OUT_RING(ring, 0xffffffff);
 }
 
 static void
@@ -291,14 +294,14 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 	for (i = 0; i < nr_bufs; i++) {
 		if (bufs[i]) {
 			struct fd_resource *rsc = fd_resource(bufs[i]->texture);
-			enum pipe_format format = fd4_gmem_restore_format(bufs[i]->format);
+			enum pipe_format format = fd_gmem_restore_format(bufs[i]->format);
 
 			/* The restore blit_zs shader expects stencil in sampler 0,
 			 * and depth in sampler 1
 			 */
 			if (rsc->stencil && (i == 0)) {
 				rsc = rsc->stencil;
-				format = fd4_gmem_restore_format(rsc->base.b.format);
+				format = fd_gmem_restore_format(rsc->base.b.format);
 			}
 
 			/* note: PIPE_BUFFER disallowed for surfaces */
@@ -874,10 +877,10 @@ fd4_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 
 	/* we don't use this yet.. probably best to disable.. */
 	OUT_PKT3(ring, CP_SET_DRAW_STATE, 2);
-	OUT_RING(ring, CP_SET_DRAW_STATE_0_COUNT(0) |
-			CP_SET_DRAW_STATE_0_DISABLE_ALL_GROUPS |
-			CP_SET_DRAW_STATE_0_GROUP_ID(0));
-	OUT_RING(ring, CP_SET_DRAW_STATE_1_ADDR(0));
+	OUT_RING(ring, CP_SET_DRAW_STATE__0_COUNT(0) |
+			CP_SET_DRAW_STATE__0_DISABLE_ALL_GROUPS |
+			CP_SET_DRAW_STATE__0_GROUP_ID(0));
+	OUT_RING(ring, CP_SET_DRAW_STATE__1_ADDR_LO(0));
 
 	OUT_PKT0(ring, REG_A4XX_SP_VS_PVT_MEM_PARAM, 2);
 	OUT_RING(ring, 0x08000001);                  /* SP_VS_PVT_MEM_PARAM */

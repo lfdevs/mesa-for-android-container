@@ -691,7 +691,10 @@ static int radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
     cs->base.used_vram = 0;
     cs->base.used_gart = 0;
 
-    cs->ws->num_cs_flushes++;
+    if (cs->ring_type == RING_GFX)
+        cs->ws->num_gfx_IBs++;
+    else if (cs->ring_type == RING_DMA)
+        cs->ws->num_sdma_IBs++;
     return 0;
 }
 

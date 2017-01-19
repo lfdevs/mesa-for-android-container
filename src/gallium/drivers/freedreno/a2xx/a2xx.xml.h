@@ -8,16 +8,17 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    398 bytes, from 2015-09-24 17:25:31)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    431 bytes, from 2016-04-26 17:56:44)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2016-02-10 17:07:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32901 bytes, from 2015-05-20 20:03:14)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  11518 bytes, from 2016-02-10 21:03:25)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  16185 bytes, from 2016-03-05 03:08:05)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83967 bytes, from 2016-02-10 17:07:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 110685 bytes, from 2016-04-25 17:56:43)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32907 bytes, from 2016-11-26 23:01:08)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  12025 bytes, from 2016-11-26 23:01:08)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  23277 bytes, from 2016-12-24 05:01:47)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2016-11-26 23:01:08)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 110757 bytes, from 2016-12-26 17:51:07)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          (  99436 bytes, from 2017-01-10 16:36:25)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2015-09-24 17:30:00)
 
-Copyright (C) 2013-2015 by the following authors:
+Copyright (C) 2013-2016 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
 - Ilia Mirkin <imirkin@alum.mit.edu> (imirkin)
 
@@ -206,12 +207,12 @@ enum a2xx_rb_copy_sample_select {
 };
 
 enum a2xx_rb_blend_opcode {
-	BLEND_DST_PLUS_SRC = 0,
-	BLEND_SRC_MINUS_DST = 1,
-	BLEND_MIN_DST_SRC = 2,
-	BLEND_MAX_DST_SRC = 3,
-	BLEND_DST_MINUS_SRC = 4,
-	BLEND_DST_PLUS_SRC_BIAS = 5,
+	BLEND2_DST_PLUS_SRC = 0,
+	BLEND2_SRC_MINUS_DST = 1,
+	BLEND2_MIN_DST_SRC = 2,
+	BLEND2_MAX_DST_SRC = 3,
+	BLEND2_DST_MINUS_SRC = 4,
+	BLEND2_DST_PLUS_SRC_BIAS = 5,
 };
 
 enum adreno_mmu_clnt_beh {
@@ -444,12 +445,14 @@ static inline uint32_t A2XX_MH_ARBITER_CONFIG_IN_FLIGHT_LIMIT(uint32_t val)
 #define A2XX_A220_VSC_BIN_SIZE_WIDTH__SHIFT			0
 static inline uint32_t A2XX_A220_VSC_BIN_SIZE_WIDTH(uint32_t val)
 {
+	assert(!(val & 0x1f));
 	return ((val >> 5) << A2XX_A220_VSC_BIN_SIZE_WIDTH__SHIFT) & A2XX_A220_VSC_BIN_SIZE_WIDTH__MASK;
 }
 #define A2XX_A220_VSC_BIN_SIZE_HEIGHT__MASK			0x000003e0
 #define A2XX_A220_VSC_BIN_SIZE_HEIGHT__SHIFT			5
 static inline uint32_t A2XX_A220_VSC_BIN_SIZE_HEIGHT(uint32_t val)
 {
+	assert(!(val & 0x1f));
 	return ((val >> 5) << A2XX_A220_VSC_BIN_SIZE_HEIGHT__SHIFT) & A2XX_A220_VSC_BIN_SIZE_HEIGHT__MASK;
 }
 
@@ -620,6 +623,7 @@ static inline uint32_t A2XX_RB_COLOR_INFO_SWAP(uint32_t val)
 #define A2XX_RB_COLOR_INFO_BASE__SHIFT				12
 static inline uint32_t A2XX_RB_COLOR_INFO_BASE(uint32_t val)
 {
+	assert(!(val & 0x3ff));
 	return ((val >> 10) << A2XX_RB_COLOR_INFO_BASE__SHIFT) & A2XX_RB_COLOR_INFO_BASE__MASK;
 }
 
@@ -634,6 +638,7 @@ static inline uint32_t A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(enum adreno_rb_depth_form
 #define A2XX_RB_DEPTH_INFO_DEPTH_BASE__SHIFT			12
 static inline uint32_t A2XX_RB_DEPTH_INFO_DEPTH_BASE(uint32_t val)
 {
+	assert(!(val & 0x3ff));
 	return ((val >> 10) << A2XX_RB_DEPTH_INFO_DEPTH_BASE__SHIFT) & A2XX_RB_DEPTH_INFO_DEPTH_BASE__MASK;
 }
 
@@ -1431,6 +1436,7 @@ static inline uint32_t A2XX_RB_COPY_CONTROL_CLEAR_MASK(uint32_t val)
 #define A2XX_RB_COPY_DEST_PITCH__SHIFT				0
 static inline uint32_t A2XX_RB_COPY_DEST_PITCH(uint32_t val)
 {
+	assert(!(val & 0x1f));
 	return ((val >> 5) << A2XX_RB_COPY_DEST_PITCH__SHIFT) & A2XX_RB_COPY_DEST_PITCH__MASK;
 }
 
@@ -1538,6 +1544,7 @@ static inline uint32_t A2XX_SQ_TEX_0_CLAMP_Z(enum sq_tex_clamp val)
 #define A2XX_SQ_TEX_0_PITCH__SHIFT				22
 static inline uint32_t A2XX_SQ_TEX_0_PITCH(uint32_t val)
 {
+	assert(!(val & 0x1f));
 	return ((val >> 5) << A2XX_SQ_TEX_0_PITCH__SHIFT) & A2XX_SQ_TEX_0_PITCH__MASK;
 }
 

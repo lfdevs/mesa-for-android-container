@@ -294,6 +294,7 @@ svga_reemit_tss_bindings(struct svga_context *svga)
 
 struct svga_tracked_state svga_hw_tss_binding = {
    "texture binding emit",
+   SVGA_NEW_FRAME_BUFFER |
    SVGA_NEW_TEXTURE_BINDING |
    SVGA_NEW_STIPPLE |
    SVGA_NEW_SAMPLER,

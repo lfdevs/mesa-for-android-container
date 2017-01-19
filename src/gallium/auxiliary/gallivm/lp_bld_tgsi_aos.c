@@ -521,7 +521,7 @@ lp_emit_instruction_aos(
    case TGSI_OPCODE_RSQ:
    /* TGSI_OPCODE_RECIPSQRT */
       src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
-      tmp0 = lp_build_emit_llvm_unary(&bld->bld_base, TGSI_OPCODE_ABS, src0);
+      tmp0 = lp_build_abs(&bld->bld_base.base, src0);
       dst0 = lp_build_rsqrt(&bld->bld_base.base, tmp0);
       break;
 
@@ -589,12 +589,6 @@ lp_emit_instruction_aos(
       src2 = lp_build_emit_fetch(&bld->bld_base, inst, 2, LP_CHAN_ALL);
       tmp0 = lp_build_mul(&bld->bld_base.base, src0, src1);
       dst0 = lp_build_add(&bld->bld_base.base, tmp0, src2);
-      break;
-
-   case TGSI_OPCODE_SUB:
-      src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
-      src1 = lp_build_emit_fetch(&bld->bld_base, inst, 1, LP_CHAN_ALL);
-      dst0 = lp_build_sub(&bld->bld_base.base, src0, src1);
       break;
 
    case TGSI_OPCODE_LRP:

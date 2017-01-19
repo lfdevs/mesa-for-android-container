@@ -148,6 +148,7 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 16;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+   case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
       return vscreen->caps.caps.v1.bset.streamout_pause_resume;
    case PIPE_CAP_START_INSTANCE:
       return vscreen->caps.caps.v1.bset.start_instance;
@@ -249,6 +250,9 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
    case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
    case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
+   case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
+   case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
+   case PIPE_CAP_TGSI_FS_FBFETCH:
       return 0;
    case PIPE_CAP_VENDOR_ID:
       return 0x1af4;
@@ -258,6 +262,8 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_UMA:
    case PIPE_CAP_VIDEO_MEMORY:
+      return 0;
+   case PIPE_CAP_NATIVE_FENCE_FD:
       return 0;
    }
    /* should only get here on unhandled cases */
@@ -311,6 +317,7 @@ virgl_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_sh
          return 32;
       case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
          return 4096 * sizeof(float[4]);
+      case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
       default:
          return 0;
       }

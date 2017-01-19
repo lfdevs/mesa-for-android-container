@@ -46,7 +46,7 @@ qir_reorder_uniforms(struct vc4_compile *c)
         qir_for_each_inst_inorder(inst, c) {
                 uint32_t new = ~0;
 
-                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                for (int i = 0; i < qir_get_nsrc(inst); i++) {
                         if (inst->src[i].file != QFILE_UNIF)
                                 continue;
 

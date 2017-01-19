@@ -23,6 +23,7 @@
 
 /* A collection of unit tests for blob.c */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -49,7 +50,10 @@ static void
 expect_equal(uint64_t expected, uint64_t actual, const char *test)
 {
    if (actual != expected) {
-      fprintf (stderr, "Error: Test '%s' failed: Expected=%ld, Actual=%ld\n",
+      fprintf(stderr,
+              "Error: Test '%s' failed: "
+              "Expected=%" PRIu64 ", "
+              "Actual=%" PRIu64 "\n",
                test, expected, actual);
       error = true;
    }
@@ -59,7 +63,9 @@ static void
 expect_unequal(uint64_t expected, uint64_t actual, const char *test)
 {
    if (actual == expected) {
-      fprintf (stderr, "Error: Test '%s' failed: Result=%ld, but expected something different.\n",
+      fprintf(stderr,
+              "Error: Test '%s' failed: Result=%" PRIu64 ", "
+              "but expected something different.\n",
                test, actual);
       error = true;
    }

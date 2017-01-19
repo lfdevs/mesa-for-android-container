@@ -24,6 +24,7 @@
 #ifndef CLOVER_LLVM_UTIL_HPP
 #define CLOVER_LLVM_UTIL_HPP
 
+#include "core/error.hpp"
 #include "util/u_debug.h"
 
 #include <vector>
@@ -42,11 +43,42 @@ namespace clover {
       inline std::vector<std::string>
       tokenize(const std::string &s) {
          std::vector<std::string> ss;
-         std::istringstream iss(s);
-         std::string t;
+         std::ostringstream oss;
 
-         while (getline(iss, t, ' '))
-            ss.push_back(t);
+         // OpenCL programs can pass a quoted argument, most frequently the
+         // include path. This is useful so that path containing spaces is
+         // treated as a single argument instead of being split by the spaces.
+         // Additionally, the argument should also be unquoted before being
+         // passed to the compiler. We avoid using std::string::replace here to
+         // remove quotes, as the single and double quote characters can be a
+         // part of the file name.
+         bool escape_next = false;
+         bool in_quote_double = false;
+         bool in_quote_single = false;
+
+         for (auto c : s) {
+            if (escape_next) {
+               oss.put(c);
+               escape_next = false;
+            } else if (c == '\\') {
+               escape_next = true;
+            } else if (c == '"' && !in_quote_single) {
+               in_quote_double = !in_quote_double;
+            } else if (c == '\'' && !in_quote_double) {
+               in_quote_single = !in_quote_single;
+            } else if (c != ' ' || in_quote_single || in_quote_double) {
+               oss.put(c);
+            } else if (oss.tellp() > 0) {
+               ss.emplace_back(oss.str());
+               oss.str("");
+            }
+         }
+
+         if (oss.tellp() > 0)
+            ss.emplace_back(oss.str());
+
+         if (in_quote_double || in_quote_single)
+            throw invalid_build_options_error();
 
          return ss;
       }

@@ -120,6 +120,33 @@ a4xx_SOURCES := \
 	a4xx/fd4_zsa.c \
 	a4xx/fd4_zsa.h
 
+a5xx_SOURCES := \
+	a5xx/a5xx.xml.h \
+	a5xx/fd5_blend.c \
+	a5xx/fd5_blend.h \
+	a5xx/fd5_context.c \
+	a5xx/fd5_context.h \
+	a5xx/fd5_draw.c \
+	a5xx/fd5_draw.h \
+	a5xx/fd5_emit.c \
+	a5xx/fd5_emit.h \
+	a5xx/fd5_format.c \
+	a5xx/fd5_format.h \
+	a5xx/fd5_gmem.c \
+	a5xx/fd5_gmem.h \
+	a5xx/fd5_program.c \
+	a5xx/fd5_program.h \
+	a5xx/fd5_query.c \
+	a5xx/fd5_query.h \
+	a5xx/fd5_rasterizer.c \
+	a5xx/fd5_rasterizer.h \
+	a5xx/fd5_screen.c \
+	a5xx/fd5_screen.h \
+	a5xx/fd5_texture.c \
+	a5xx/fd5_texture.h \
+	a5xx/fd5_zsa.c \
+	a5xx/fd5_zsa.h
+
 ir3_SOURCES := \
 	ir3/disasm-a3xx.c \
 	ir3/instr-a3xx.h \

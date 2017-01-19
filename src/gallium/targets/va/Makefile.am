@@ -62,7 +62,7 @@ gallium_drv_video_la_LIBADD += \
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 
-if HAVE_MESA_LLVM
+if HAVE_GALLIUM_LLVM
 gallium_drv_video_la_LIBADD += $(LLVM_LIBS)
 gallium_drv_video_la_LDFLAGS += $(LLVM_LDFLAGS)
 endif

@@ -30,7 +30,7 @@
 #include "tgsi/tgsi_dump.h"
 #include "gallivm/lp_bld_init.h"
 #include "gallivm/lp_bld_tgsi.h"
-#include "util/u_hash.h"
+#include "util/crc32.h"
 #include "api.h"
 #include "swr_tex_sample.h"
 #include "swr_shader.h"
@@ -72,6 +72,8 @@ struct swr_vertex_element_state {
    FETCH_COMPILE_STATE fsState;
    PFN_FETCH_FUNC fsFunc;
    uint32_t stream_pitch[PIPE_MAX_ATTRIBS];
+   uint32_t min_instance_div[PIPE_MAX_ATTRIBS];
+   uint32_t instanced_bufs;
 };
 
 struct swr_blend_state {
@@ -106,7 +108,7 @@ swr_convert_logic_op(const UINT op)
    case PIPE_LOGICOP_NOR:
       return LOGICOP_NOR;
    case PIPE_LOGICOP_AND_INVERTED:
-      return LOGICOP_CLEAR;
+      return LOGICOP_AND_INVERTED;
    case PIPE_LOGICOP_COPY_INVERTED:
       return LOGICOP_COPY_INVERTED;
    case PIPE_LOGICOP_AND_REVERSE:

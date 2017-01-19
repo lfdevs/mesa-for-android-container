@@ -549,9 +549,6 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    }
 
    switch (finst->Instruction.Opcode) {
-   case TGSI_OPCODE_ABS:
-      nvfx_vp_emit(vpc, arith(sat, VEC, MOV, dst, mask, abs(src[0]), none, none));
-      break;
    case TGSI_OPCODE_ADD:
       nvfx_vp_emit(vpc, arith(sat, VEC, ADD, dst, mask, src[0], none, src[1]));
       break;
@@ -674,9 +671,6 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
       break;
    case TGSI_OPCODE_SSG:
       nvfx_vp_emit(vpc, arith(sat, VEC, SSG, dst, mask, src[0], none, none));
-      break;
-   case TGSI_OPCODE_SUB:
-      nvfx_vp_emit(vpc, arith(sat, VEC, ADD, dst, mask, src[0], none, neg(src[1])));
       break;
    case TGSI_OPCODE_TRUNC:
       tmp = nvfx_src(temp(vpc));

@@ -161,10 +161,9 @@ driGetDriverExtensions(void *handle, const char *driver_name)
 {
    const __DRIextension **extensions = NULL;
    const __DRIextension **(*get_extensions)(void);
-   char *get_extensions_name;
+   char *get_extensions_name = loader_get_extensions_name(driver_name);
 
-   if (asprintf(&get_extensions_name, "%s_%s",
-                __DRI_DRIVER_GET_EXTENSIONS, driver_name) != -1) {
+   if (get_extensions_name) {
       get_extensions = dlsym(handle, get_extensions_name);
       if (get_extensions) {
          free(get_extensions_name);

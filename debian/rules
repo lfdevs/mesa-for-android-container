@@ -26,7 +26,7 @@ include debian/not-installed
 DRI_DRIVERS =
 GALLIUM_DRIVERS =
 VULKAN_DRIVERS =
-EGL_DISPLAYS = x11
+EGL_PLATFORMS = x11
 
 confflags_DRI3 = --disable-dri3
 
@@ -54,7 +54,7 @@ else
 	confflags_GALLIUM += --enable-xa
 
 # Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
-	EGL_DISPLAYS += wayland
+	EGL_PLATFORMS += wayland
     ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
 	DRI_DRIVERS += nouveau
     endif
@@ -63,7 +63,7 @@ else
     endif
   endif
 
-	EGL_DISPLAYS += drm
+	EGL_PLATFORMS += drm
 
   # Build intel drivers on archs where libdrm-intel is installed
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32))
@@ -110,7 +110,7 @@ ifneq (,$(filter $(DEB_HOST_ARCH), x32))
 	confflags += --disable-asm
 endif
 
-confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
+confflags_EGL = --with-egl-platforms="$(EGL_PLATFORMS)"
 confflags_GLES = --enable-gles1 --enable-gles2
 confflags_GALLIUM += --with-gallium-drivers="$(GALLIUM_DRIVERS)"
 

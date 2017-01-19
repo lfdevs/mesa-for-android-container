@@ -90,7 +90,6 @@ static const struct brw_tracked_state *gen4_atoms[] =
    &brw_polygon_stipple_offset,
 
    &brw_line_stipple,
-   &brw_aa_line_parameters,
 
    &brw_psp_urb_cbs,
 
@@ -160,7 +159,6 @@ static const struct brw_tracked_state *gen6_atoms[] =
    &brw_polygon_stipple_offset,
 
    &brw_line_stipple,
-   &brw_aa_line_parameters,
 
    &brw_drawing_rect,
 
@@ -251,7 +249,6 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &brw_polygon_stipple_offset,
 
    &brw_line_stipple,
-   &brw_aa_line_parameters,
 
    &brw_drawing_rect,
 
@@ -335,7 +332,6 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &brw_gs_samplers,
    &gen8_multisample_state,
 
-   &gen8_disable_stages,
    &gen8_vs_state,
    &gen8_hs_state,
    &gen7_te_state,
@@ -360,7 +356,6 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &brw_polygon_stipple_offset,
 
    &brw_line_stipple,
-   &brw_aa_line_parameters,
 
    &brw_drawing_rect,
 
@@ -415,6 +410,19 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
 
    if (brw->gen >= 8) {
       gen8_emit_3dstate_sample_pattern(brw);
+
+      BEGIN_BATCH(5);
+      OUT_BATCH(_3DSTATE_WM_HZ_OP << 16 | (5 - 2));
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
+
+      BEGIN_BATCH(2);
+      OUT_BATCH(_3DSTATE_WM_CHROMAKEY << 16 | (2 - 2));
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
    }
 }
 
@@ -521,6 +529,7 @@ void brw_init_state( struct brw_context *brw )
    ctx->DriverFlags.NewAtomicBuffer = BRW_NEW_ATOMIC_BUFFER;
    ctx->DriverFlags.NewImageUnits = BRW_NEW_IMAGE_UNITS;
    ctx->DriverFlags.NewDefaultTessLevels = BRW_NEW_DEFAULT_TESS_LEVELS;
+   ctx->DriverFlags.NewIntelConservativeRasterization = BRW_NEW_CONSERVATIVE_RASTERIZATION;
 }
 
 
@@ -640,7 +649,6 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_ATOMIC_BUFFER),
    DEFINE_BIT(BRW_NEW_IMAGE_UNITS),
    DEFINE_BIT(BRW_NEW_META_IN_PROGRESS),
-   DEFINE_BIT(BRW_NEW_INTERPOLATION_MAP),
    DEFINE_BIT(BRW_NEW_PUSH_CONSTANT_ALLOCATION),
    DEFINE_BIT(BRW_NEW_NUM_SAMPLES),
    DEFINE_BIT(BRW_NEW_TEXTURE_BUFFER),
@@ -656,6 +664,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_CC_STATE),
    DEFINE_BIT(BRW_NEW_BLORP),
    DEFINE_BIT(BRW_NEW_VIEWPORT_COUNT),
+   DEFINE_BIT(BRW_NEW_CONSERVATIVE_RASTERIZATION),
    {0, 0, 0}
 };
 
@@ -734,13 +743,12 @@ brw_upload_programs(struct brw_context *brw,
             ctx->Const.MaxViewports : 1;
       }
 
+      brw_upload_wm_prog(brw);
+
       if (brw->gen < 6) {
-         brw_setup_vue_interpolation(brw);
          brw_upload_clip_prog(brw);
          brw_upload_sf_prog(brw);
       }
-
-      brw_upload_wm_prog(brw);
    } else if (pipeline == BRW_COMPUTE_PIPELINE) {
       brw_upload_cs_prog(brw);
    }

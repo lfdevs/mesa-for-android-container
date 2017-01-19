@@ -184,19 +184,33 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *dpy,
             break;
          }
 
-         /* The EGL_KHR_create_context_spec says:
-          *
-          *     "If the EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR bit is set in
-          *     EGL_CONTEXT_FLAGS_KHR, then a context supporting <robust buffer
-          *     access> will be created. Robust buffer access is defined in the
-          *     GL_ARB_robustness extension specification, and the resulting
-          *     context must also support either the GL_ARB_robustness
-          *     extension, or a version of OpenGL incorporating equivalent
-          *     functionality. This bit is supported for OpenGL contexts.
-          */
          if ((val & EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR) &&
-             (api != EGL_OPENGL_API ||
-              !dpy->Extensions.EXT_create_context_robustness)) {
+             api != EGL_OPENGL_API) {
+            /* The EGL_KHR_create_context spec says:
+             *
+             *   10) Which error should be generated if robust buffer access
+             *       or reset notifications are requested under OpenGL ES?
+             *
+             *       As per Issue 6, this extension does not support creating
+             *       robust contexts for OpenGL ES. This is only supported via
+             *       the EGL_EXT_create_context_robustness extension.
+             *
+             *       Attempting to use this extension to create robust OpenGL
+             *       ES context will generate an EGL_BAD_ATTRIBUTE error. This
+             *       specific error is generated because this extension does
+             *       not define the EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR
+             *       and EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_KHR
+             *       bits for OpenGL ES contexts. Thus, use of these bits fall
+             *       under condition described by: "If an attribute is
+             *       specified that is not meaningful for the client API
+             *       type.." in the above specification.
+             *
+             * The spec requires that we emit the error even if the display
+             * supports EGL_EXT_create_context_robustness. To create a robust
+             * GLES context, the *attribute*
+             * EGL_CONTEXT_OPENGL_ROBUST_ACCESS_EXT must be used, not the
+             * *flag* EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR.
+             */
             err = EGL_BAD_ATTRIBUTE;
             break;
          }

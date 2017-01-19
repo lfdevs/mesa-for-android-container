@@ -63,6 +63,7 @@ namespace clover {
                const std::string &log = {}) : binary(m), opts(opts), log(log) {}
 
          cl_build_status status() const;
+         cl_program_binary_type binary_type() const;
 
          module binary;
          std::string opts;

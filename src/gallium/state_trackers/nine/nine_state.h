@@ -42,12 +42,14 @@
 #define NINED3DRS_MULTISAMPLE  (D3DRS_BLENDOPALPHA + 4)
 
 #define D3DRS_LAST       D3DRS_BLENDOPALPHA
+#define D3DSAMP_LAST     D3DSAMP_DMAPOFFSET
 #define NINED3DRS_LAST   NINED3DRS_MULTISAMPLE /* 214 */
 #define NINED3DSAMP_LAST NINED3DSAMP_CUBETEX /* 16 */
 #define NINED3DTSS_LAST  D3DTSS_CONSTANT
 #define NINED3DTS_LAST   D3DTS_WORLDMATRIX(255)
 
 #define D3DRS_COUNT       (D3DRS_LAST + 1)
+#define D3DSAMP_COUNT     (D3DSAMP_LAST + 1)
 #define NINED3DRS_COUNT   (NINED3DRS_LAST + 1)
 #define NINED3DSAMP_COUNT (NINED3DSAMP_LAST + 1)
 #define NINED3DTSS_COUNT  (NINED3DTSS_LAST + 1)
@@ -114,6 +116,10 @@
     ((nconstf)        * 4 * sizeof(float) + \
      NINE_MAX_CONST_I * 4 * sizeof(int))
 
+#define VS_CONST_F_SIZE(device) (device->may_swvp ? (NINE_MAX_CONST_F_SWVP * sizeof(float[4])) : (NINE_MAX_CONST_F * sizeof(float[4])))
+#define VS_CONST_I_SIZE(device) (device->may_swvp ? (NINE_MAX_CONST_I_SWVP * sizeof(int[4])) : (NINE_MAX_CONST_I * sizeof(int[4])))
+#define VS_CONST_B_SIZE(device) (device->may_swvp ? (NINE_MAX_CONST_B_SWVP * sizeof(BOOL)) : (NINE_MAX_CONST_B * sizeof(BOOL)))
+
 
 #define NINE_MAX_TEXTURE_STAGES 8
 
@@ -131,6 +137,28 @@
 #define NINE_PS_SAMPLERS_MASK 0x00ffff
 #define NINE_VS_SAMPLERS_MASK 0x1e0000
 
+struct nine_ff_state {
+    struct {
+        uint32_t tex_stage[NINE_MAX_TEXTURE_STAGES][(NINED3DTSS_COUNT + 31) / 32]; /* stateblocks only */
+        uint32_t transform[(NINED3DTS_COUNT + 31) / 32];
+    } changed;
+
+    D3DMATRIX *transform; /* access only via nine_state_access_transform */
+    unsigned num_transforms;
+
+    /* XXX: Do state blocks just change the set of active lights or do we
+     * have to store which lights have been disabled, too ?
+     */
+    D3DLIGHT9 *light;
+    uint16_t active_light[NINE_MAX_LIGHTS_ACTIVE]; /* 8 */
+    unsigned num_lights;
+    unsigned num_lights_active;
+
+    D3DMATERIAL9 material;
+
+    DWORD tex_stage[NINE_MAX_TEXTURE_STAGES][NINED3DTSS_COUNT];
+};
+
 struct nine_state
 {
     struct {
@@ -147,7 +175,7 @@ struct nine_state
         struct nine_range *vs_const_b;
         uint16_t ps_const_b; /* NINE_MAX_CONST_B == 16 */
         uint8_t ucp;
-    } changed;
+    } changed; /* stateblocks only */
 
     struct NineSurface9 *rt[NINE_MAX_SIMULTANEOUS_RENDERTARGETS];
     struct NineSurface9 *ds;
@@ -162,75 +190,121 @@ struct nine_state
      */
     struct NineVertexShader9 *vs;
     float *vs_const_f;
+    int   *vs_const_i;
+    BOOL  *vs_const_b;
+    float *vs_lconstf_temp; /* ProcessVertices */
+
+    struct NinePixelShader9 *ps;
+    float *ps_const_f;
+    int    ps_const_i[NINE_MAX_CONST_I][4];
+    BOOL   ps_const_b[NINE_MAX_CONST_B];
+
+    struct NineVertexDeclaration9 *vdecl;
+
+    struct NineIndexBuffer9   *idxbuf;
+    struct NineVertexBuffer9  *stream[PIPE_MAX_ATTRIBS];
+    struct pipe_vertex_buffer  vtxbuf[PIPE_MAX_ATTRIBS]; /* vtxbuf.buffer unused */
+    UINT stream_freq[PIPE_MAX_ATTRIBS];
+
+    struct pipe_clip_state clip;
+
+    DWORD rs_advertised[NINED3DRS_COUNT]; /* the ones apps get with GetRenderState */
+
+    struct NineBaseTexture9 *texture[NINE_MAX_SAMPLERS]; /* PS, DMAP, VS */
+
+    DWORD samp_advertised[NINE_MAX_SAMPLERS][D3DSAMP_COUNT];
+
+    struct nine_ff_state ff;
+};
+
+struct nine_context {
+    struct {
+        uint32_t group;
+        uint16_t sampler[NINE_MAX_SAMPLERS];
+        uint32_t vtxbuf;
+        BOOL vs_const_f;
+        BOOL vs_const_i;
+        BOOL vs_const_b;
+        BOOL ps_const_f;
+        BOOL ps_const_i;
+        BOOL ps_const_b;
+        BOOL ucp;
+    } changed;
+
+    uint32_t bumpmap_vars[6 * NINE_MAX_TEXTURE_STAGES];
+
+    struct NineSurface9 *rt[NINE_MAX_SIMULTANEOUS_RENDERTARGETS];
+    struct NineSurface9 *ds;
+
+    struct {
+        void *vs;
+        void *ps;
+    } cso_shader;
+
+    struct pipe_context *pipe;
+    struct cso_context *cso;
+
+    uint8_t rt_mask;
+
+    D3DVIEWPORT9 viewport;
+
+    struct pipe_scissor_state scissor;
+
+    struct NineVertexShader9 *vs;
+    BOOL programmable_vs;
+    float *vs_const_f;
     float *vs_const_f_swvp;
     int   *vs_const_i;
     BOOL  *vs_const_b;
     float *vs_lconstf_temp;
-    BOOL programmable_vs;
 
     struct NinePixelShader9 *ps;
     float *ps_const_f;
     int    ps_const_i[NINE_MAX_CONST_I][4];
     BOOL   ps_const_b[NINE_MAX_CONST_B];
     float *ps_lconstf_temp;
-    uint32_t bumpmap_vars[6 * NINE_MAX_TEXTURE_STAGES];
-
-    struct {
-        void *vs;
-        void *ps;
-    } cso;
 
     struct NineVertexDeclaration9 *vdecl;
 
-    struct NineIndexBuffer9   *idxbuf;
-    struct NineVertexBuffer9  *stream[PIPE_MAX_ATTRIBS];
-    struct pipe_vertex_buffer  vtxbuf[PIPE_MAX_ATTRIBS];
+    struct pipe_vertex_buffer vtxbuf[PIPE_MAX_ATTRIBS];
     UINT stream_freq[PIPE_MAX_ATTRIBS];
     uint32_t stream_instancedata_mask; /* derived from stream_freq */
     uint32_t stream_usage_mask; /* derived from VS and vdecl */
 
+    struct pipe_index_buffer idxbuf;
+
     struct pipe_clip_state clip;
-    struct pipe_framebuffer_state fb;
-    uint8_t rt_mask;
 
     DWORD rs[NINED3DRS_COUNT];
-    DWORD rs_advertised[NINED3DRS_COUNT]; /* the ones apps get with GetRenderState */
 
-    struct NineBaseTexture9 *texture[NINE_MAX_SAMPLERS]; /* PS, DMAP, VS */
+    struct {
+        BOOL enabled;
+        BOOL shadow;
+        DWORD lod;
+        D3DRESOURCETYPE type;
+        struct pipe_resource *resource;
+        struct pipe_sampler_view *view[2];
+        uint8_t pstype;
+    } texture[NINE_MAX_SAMPLERS];
 
     DWORD samp[NINE_MAX_SAMPLERS][NINED3DSAMP_COUNT];
+
     uint32_t samplers_shadow;
+
     uint8_t bound_samplers_mask_vs;
     uint16_t bound_samplers_mask_ps;
 
     int dummy_vbo_bound_at; /* -1 = not bound , >= 0 = bound index */
     boolean vbo_bound_done;
 
-    struct {
-        struct {
-            uint32_t group;
-            uint32_t tex_stage[NINE_MAX_TEXTURE_STAGES][(NINED3DTSS_COUNT + 31) / 32];
-            uint32_t transform[(NINED3DTS_COUNT + 31) / 32];
-        } changed;
+    struct nine_ff_state ff;
 
-        D3DMATRIX *transform; /* access only via nine_state_access_transform */
-        unsigned num_transforms;
-
-        /* XXX: Do state blocks just change the set of active lights or do we
-         * have to store which lights have been disabled, too ?
-         */
-        D3DLIGHT9 *light;
-        uint16_t active_light[NINE_MAX_LIGHTS_ACTIVE]; /* 8 */
-        unsigned num_lights;
-        unsigned num_lights_active;
-
-        D3DMATERIAL9 material;
-
-        DWORD tex_stage[NINE_MAX_TEXTURE_STAGES][NINED3DTSS_COUNT];
-    } ff;
+    /* software vertex processing */
+    boolean swvp;
 
     uint32_t commit;
     struct {
+        struct pipe_framebuffer_state fb;
         struct pipe_depth_stencil_alpha_state dsa;
         struct pipe_rasterizer_state rast;
         struct pipe_blend_state blend;
@@ -242,12 +316,16 @@ struct nine_state
         struct pipe_constant_buffer cb_ps;
         struct pipe_constant_buffer cb_vs_ff;
         struct pipe_constant_buffer cb_ps_ff;
-    } pipe;
+    } pipe_data;
+};
 
-    /* sw */
+struct nine_state_sw_internal {
     struct pipe_transfer *transfers_so[4];
 };
 
+struct nine_clipplane {
+    float plane[4];
+};
 /* map D3DRS -> NINE_STATE_x
  */
 extern const uint32_t nine_render_state_group[NINED3DRS_COUNT];
@@ -259,13 +337,262 @@ extern const uint32_t nine_render_states_vertex[(NINED3DRS_COUNT + 31) / 32];
 
 struct NineDevice9;
 
-void nine_update_state_framebuffer_clear(struct NineDevice9 *);
-boolean nine_update_state(struct NineDevice9 *);
+/* Internal multithreading: When enabled, the nine_context functions
+ * will append work to a worker thread when possible. Only the worker
+ * thread can access struct nine_context. */
+
+void
+nine_context_set_render_state(struct NineDevice9 *device,
+                              D3DRENDERSTATETYPE State,
+                              DWORD Value);
+
+void
+nine_context_set_texture(struct NineDevice9 *device,
+                         DWORD Stage,
+                         struct NineBaseTexture9 *tex);
+
+void
+nine_context_set_sampler_state(struct NineDevice9 *device,
+                               DWORD Sampler,
+                               D3DSAMPLERSTATETYPE Type,
+                               DWORD Value);
+
+void
+nine_context_set_stream_source(struct NineDevice9 *device,
+                               UINT StreamNumber,
+                               struct NineVertexBuffer9 *pVBuf9,
+                               UINT OffsetInBytes,
+                               UINT Stride);
+
+void
+nine_context_set_stream_source_freq(struct NineDevice9 *device,
+                                    UINT StreamNumber,
+                                    UINT Setting);
+
+void
+nine_context_set_indices(struct NineDevice9 *device,
+                         struct NineIndexBuffer9 *idxbuf);
+
+void
+nine_context_set_vertex_declaration(struct NineDevice9 *device,
+                                    struct NineVertexDeclaration9 *vdecl);
+
+void
+nine_context_set_vertex_shader(struct NineDevice9 *device,
+                               struct NineVertexShader9 *pShader);
+
+void
+nine_context_set_vertex_shader_constant_f(struct NineDevice9 *device,
+                                          UINT StartRegister,
+                                          const float *pConstantData,
+                                          const unsigned pConstantData_size,
+                                          UINT Vector4fCount);
+
+void
+nine_context_set_vertex_shader_constant_i(struct NineDevice9 *device,
+                                          UINT StartRegister,
+                                          const int *pConstantData,
+                                          const unsigned pConstantData_size,
+                                          UINT Vector4iCount);
+
+void
+nine_context_set_vertex_shader_constant_b(struct NineDevice9 *device,
+                                          UINT StartRegister,
+                                          const BOOL *pConstantData,
+                                          const unsigned pConstantData_size,
+                                          UINT BoolCount);
+
+void
+nine_context_set_pixel_shader(struct NineDevice9 *device,
+                              struct NinePixelShader9* ps);
+
+void
+nine_context_set_pixel_shader_constant_f(struct NineDevice9 *device,
+                                        UINT StartRegister,
+                                        const float *pConstantData,
+                                        const unsigned pConstantData_size,
+                                        UINT Vector4fCount);
+
+void
+nine_context_set_pixel_shader_constant_i(struct NineDevice9 *device,
+                                         UINT StartRegister,
+                                         const int *pConstantData,
+                                         const unsigned pConstantData_size,
+                                         UINT Vector4iCount);
+
+void
+nine_context_set_pixel_shader_constant_b(struct NineDevice9 *device,
+                                         UINT StartRegister,
+                                         const BOOL *pConstantData,
+                                         const unsigned pConstantData_size,
+                                         UINT BoolCount);
+
+void
+nine_context_set_viewport(struct NineDevice9 *device,
+                          const D3DVIEWPORT9 *viewport);
+
+void
+nine_context_set_scissor(struct NineDevice9 *device,
+                         const struct pipe_scissor_state *scissor);
+
+void
+nine_context_set_transform(struct NineDevice9 *device,
+                           D3DTRANSFORMSTATETYPE State,
+                           const D3DMATRIX *pMatrix);
+
+void
+nine_context_set_material(struct NineDevice9 *device,
+                          const D3DMATERIAL9 *pMaterial);
+
+void
+nine_context_set_light(struct NineDevice9 *device,
+                       DWORD Index,
+                       const D3DLIGHT9 *pLight);
+
+void
+nine_context_light_enable(struct NineDevice9 *device,
+                          DWORD Index,
+                          BOOL Enable);
+
+void
+nine_context_set_texture_stage_state(struct NineDevice9 *device,
+                                     DWORD Stage,
+                                     D3DTEXTURESTAGESTATETYPE Type,
+                                     DWORD Value);
+
+void
+nine_context_set_render_target(struct NineDevice9 *device,
+                               DWORD RenderTargetIndex,
+                               struct NineSurface9 *rt);
+
+void
+nine_context_set_depth_stencil(struct NineDevice9 *device,
+                               struct NineSurface9 *ds);
+
+void
+nine_context_set_clip_plane(struct NineDevice9 *device,
+                            DWORD Index,
+                            const struct nine_clipplane *pPlane);
+
+void
+nine_context_set_swvp(struct NineDevice9 *device,
+                      boolean swvp);
+
+void
+nine_context_apply_stateblock(struct NineDevice9 *device,
+                              const struct nine_state *src);
+
+void
+nine_context_clear_fb(struct NineDevice9 *device, DWORD Count,
+                      const D3DRECT *pRects, DWORD Flags,
+                      D3DCOLOR Color, float Z, DWORD Stencil);
+
+void
+nine_context_draw_primitive(struct NineDevice9 *device,
+                            D3DPRIMITIVETYPE PrimitiveType,
+                            UINT StartVertex,
+                            UINT PrimitiveCount);
+
+void
+nine_context_draw_indexed_primitive(struct NineDevice9 *device,
+                                    D3DPRIMITIVETYPE PrimitiveType,
+                                    INT BaseVertexIndex,
+                                    UINT MinVertexIndex,
+                                    UINT NumVertices,
+                                    UINT StartIndex,
+                                    UINT PrimitiveCount);
+
+void
+nine_context_draw_primitive_from_vtxbuf(struct NineDevice9 *device,
+                                        D3DPRIMITIVETYPE PrimitiveType,
+                                        UINT PrimitiveCount,
+                                        struct pipe_vertex_buffer *vtxbuf);
+
+void
+nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf(struct NineDevice9 *device,
+                                                       D3DPRIMITIVETYPE PrimitiveType,
+                                                       UINT MinVertexIndex,
+                                                       UINT NumVertices,
+                                                       UINT PrimitiveCount,
+                                                       struct pipe_vertex_buffer *vbuf,
+                                                       struct pipe_index_buffer *ibuf);
+
+void
+nine_context_resource_copy_region(struct NineDevice9 *device,
+                                  struct NineUnknown *dst,
+                                  struct NineUnknown *src,
+                                  struct pipe_resource* dst_res,
+                                  unsigned dst_level,
+                                  const struct pipe_box *dst_box,
+                                  struct pipe_resource* src_res,
+                                  unsigned src_level,
+                                  const struct pipe_box *src_box);
+
+void
+nine_context_blit(struct NineDevice9 *device,
+                  struct NineUnknown *dst,
+                  struct NineUnknown *src,
+                  struct pipe_blit_info *blit);
+
+void
+nine_context_clear_render_target(struct NineDevice9 *device,
+                                 struct NineSurface9 *surface,
+                                 D3DCOLOR color,
+                                 UINT x,
+                                 UINT y,
+                                 UINT width,
+                                 UINT height);
+
+void
+nine_context_gen_mipmap(struct NineDevice9 *device,
+                        struct NineUnknown *dst,
+                        struct pipe_resource *res,
+                        UINT base_level, UINT last_level,
+                        UINT first_layer, UINT last_layer,
+                        UINT filter);
+
+void
+nine_context_range_upload(struct NineDevice9 *device,
+                          unsigned *counter,
+                          struct pipe_resource *res,
+                          unsigned offset,
+                          unsigned size,
+                          const void *data);
+
+void
+nine_context_box_upload(struct NineDevice9 *device,
+                        unsigned *counter,
+                        struct NineUnknown *dst,
+                        struct pipe_resource *res,
+                        unsigned level,
+                        const struct pipe_box *dst_box,
+                        enum pipe_format src_format,
+                        const void *src, unsigned src_stride,
+                        unsigned src_layer_stride,
+                        const struct pipe_box *src_box);
+
+struct pipe_query *
+nine_context_create_query(struct NineDevice9 *device, unsigned query_type);
+
+void
+nine_context_destroy_query(struct NineDevice9 *device, struct pipe_query *query);
+
+void
+nine_context_begin_query(struct NineDevice9 *device, unsigned *counter, struct pipe_query *query);
+
+void
+nine_context_end_query(struct NineDevice9 *device, unsigned *counter, struct pipe_query *query);
+
+boolean
+nine_context_get_query_result(struct NineDevice9 *device, struct pipe_query *query,
+                              unsigned *counter, boolean flush, boolean wait,
+                              union pipe_query_result *result);
 
 void nine_state_restore_non_cso(struct NineDevice9 *device);
 void nine_state_set_defaults(struct NineDevice9 *, const D3DCAPS9 *,
                              boolean is_reset);
 void nine_state_clear(struct nine_state *, const boolean device);
+void nine_context_clear(struct NineDevice9 *);
 
 void nine_state_init_sw(struct NineDevice9 *device);
 void nine_state_prepare_draw_sw(struct NineDevice9 *device,
@@ -280,9 +607,50 @@ void nine_state_destroy_sw(struct NineDevice9 *device);
  * Therefore, do not modify if you set alloc to FALSE !
  */
 D3DMATRIX *
-nine_state_access_transform(struct nine_state *, D3DTRANSFORMSTATETYPE,
+nine_state_access_transform(struct nine_ff_state *, D3DTRANSFORMSTATETYPE,
                             boolean alloc);
 
+HRESULT
+nine_state_set_light(struct nine_ff_state *, DWORD, const D3DLIGHT9 *);
+
+HRESULT
+nine_state_light_enable(struct nine_ff_state *, uint32_t *,
+                        DWORD, BOOL);
+
 const char *nine_d3drs_to_string(DWORD State);
+
+/* CSMT functions */
+struct csmt_context;
+
+struct csmt_context *
+nine_csmt_create( struct NineDevice9 *This );
+
+void
+nine_csmt_destroy( struct NineDevice9 *This, struct csmt_context *ctx );
+
+void
+nine_csmt_process( struct NineDevice9 *This );
+
+
+/* Get the pipe_context (should not be called from the worker thread).
+ * All the work in the worker thread is finished before returning. */
+struct pipe_context *
+nine_context_get_pipe( struct NineDevice9 *device );
+
+/* Can be called from all threads */
+struct pipe_context *
+nine_context_get_pipe_multithread( struct NineDevice9 *device );
+
+
+/* Get the pipe_context (should not be called from the worker thread).
+ * All the work in the worker thread is paused before returning.
+ * It is neccessary to release in order to restart the thread.
+ * This is intended for use of the nine_context pipe_context that don't
+ * need the worker thread to finish all queued job. */
+struct pipe_context *
+nine_context_get_pipe_acquire( struct NineDevice9 *device );
+
+void
+nine_context_get_pipe_release( struct NineDevice9 *device );
 
 #endif /* _NINE_STATE_H_ */

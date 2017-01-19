@@ -124,7 +124,9 @@ class dce_cleanup : public vpass {
 public:
 
 	dce_cleanup(shader &s) : vpass(s),
-		remove_unused(s.dce_flags & DF_REMOVE_UNUSED) {}
+		remove_unused(s.dce_flags & DF_REMOVE_UNUSED), nodes_changed(false) {}
+
+	virtual int run();
 
 	virtual bool visit(node &n, bool enter);
 	virtual bool visit(alu_group_node &n, bool enter);
@@ -140,6 +142,8 @@ private:
 	void cleanup_dst(node &n);
 	bool cleanup_dst_vec(vvec &vv);
 
+	// Did we alter/remove nodes during a single pass?
+	bool nodes_changed;
 };
 
 

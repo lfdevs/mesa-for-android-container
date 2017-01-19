@@ -62,6 +62,9 @@ static enum { COLOR_AUTO, COLOR_ALWAYS, COLOR_NEVER } option_color;
 
 /* state */
 
+uint16_t pci_id = 0;
+char *input_file = NULL, *xml_path = NULL;
+struct gen_spec *spec;
 struct gen_disasm *disasm;
 
 uint64_t gtt_size, gtt_end;
@@ -111,7 +114,12 @@ print_iterator_values(struct gen_field_iterator *iter, int *idx)
 {
     char *token = NULL;
     if (strstr(iter->value, "struct") == NULL) {
-        printf("    %s: %s\n", iter->name, iter->value);
+       if (strlen(iter->description) > 0) {
+          printf("    %s: %s (%s)\n",
+                 iter->name, iter->value, iter->description);
+       } else {
+          printf("    %s: %s\n", iter->name, iter->value);
+       }
     } else {
         token = strtok(iter->value, " ");
         if (token != NULL) {
@@ -139,7 +147,8 @@ decode_structure(struct gen_spec *spec, struct gen_group *strct,
    else
       offset = 0;
 
-   gen_field_iterator_init(&iter, strct, p);
+   gen_field_iterator_init(&iter, strct, p,
+                           option_color == COLOR_ALWAYS);
    while (gen_field_iterator_next(&iter)) {
       idx = 0;
       print_dword_val(&iter, offset, &dword_num);
@@ -227,36 +236,64 @@ handle_3dstate_index_buffer(struct gen_spec *spec, uint32_t *p)
 }
 
 static inline uint64_t
-get_qword(uint32_t *p)
+get_address(struct gen_spec *spec, uint32_t *p)
 {
-   return ((uint64_t) p[1] << 32) | p[0];
+   /* Addresses are always guaranteed to be page-aligned and sometimes
+    * hardware packets have extra stuff stuffed in the bottom 12 bits.
+    */
+   uint64_t addr = p[0] & ~0xfffu;
+
+   if (gen_spec_get_gen(spec) >= gen_make_gen(8,0)) {
+      /* On Broadwell and above, we have 48-bit addresses which consume two
+       * dwords.  Some packets require that these get stored in a "canonical
+       * form" which means that bit 47 is sign-extended through the upper
+       * bits. In order to correctly handle those aub dumps, we need to mask
+       * off the top 16 bits.
+       */
+      addr |= ((uint64_t)p[1] & 0xffff) << 32;
+   }
+
+   return addr;
+}
+
+static inline uint64_t
+get_offset(uint32_t *p, uint32_t start, uint32_t end)
+{
+   assert(start <= end);
+   assert(end < 64);
+
+   uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
+
+   uint64_t offset = p[0];
+   if (end >= 32)
+      offset |= (uint64_t) p[1] << 32;
+
+   return offset & mask;
 }
 
 static void
 handle_state_base_address(struct gen_spec *spec, uint32_t *p)
 {
-   uint64_t mask = ~((1 << 12) - 1);
-
    if (gen_spec_get_gen(spec) >= gen_make_gen(8,0)) {
       if (p[1] & 1)
-         general_state_base = get_qword(&p[1]) & mask;
+         general_state_base = get_address(spec, &p[1]);
       if (p[4] & 1)
-         surface_state_base = get_qword(&p[4]) & mask;
+         surface_state_base = get_address(spec, &p[4]);
       if (p[6] & 1)
-         dynamic_state_base = get_qword(&p[6]) & mask;
+         dynamic_state_base = get_address(spec, &p[6]);
       if (p[10] & 1)
-         instruction_base = get_qword(&p[10]) & mask;
+         instruction_base = get_address(spec, &p[10]);
       if (p[15] & 1)
-         instruction_bound = p[15] & mask;
+         instruction_bound = p[15] & 0xfff;
    } else {
       if (p[2] & 1)
-         surface_state_base = p[2] & mask;
+         surface_state_base = get_address(spec, &p[2]);
       if (p[3] & 1)
-         dynamic_state_base = p[3] & mask;
+         dynamic_state_base = get_address(spec, &p[3]);
       if (p[5] & 1)
-         instruction_base = p[5] & mask;
+         instruction_base = get_address(spec, &p[5]);
       if (p[9] & 1)
-         instruction_bound = p[9] & mask;
+         instruction_bound = get_address(spec, &p[9]);
    }
 }
 
@@ -393,10 +430,10 @@ handle_3dstate_vs(struct gen_spec *spec, uint32_t *p)
    int vs_enable;
 
    if (gen_spec_get_gen(spec) >= gen_make_gen(8, 0)) {
-      start = get_qword(&p[1]);
+      start = get_offset(&p[1], 6, 63);
       vs_enable = p[7] & 1;
    } else {
-      start = p[1];
+      start = get_offset(&p[1], 6, 31);
       vs_enable = p[5] & 1;
    }
 
@@ -417,9 +454,9 @@ handle_3dstate_hs(struct gen_spec *spec, uint32_t *p)
    int hs_enable;
 
    if (gen_spec_get_gen(spec) >= gen_make_gen(8, 0)) {
-      start = get_qword(&p[4]);
+      start = get_offset(&p[3], 6, 63);
    } else {
-      start = p[4];
+      start = get_offset(&p[3], 6, 31);
    }
 
    hs_enable = p[2] & 0x80000000;
@@ -755,7 +792,8 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
          struct gen_field_iterator iter;
          char *token = NULL;
          int idx = 0, dword_num = 0;
-         gen_field_iterator_init(&iter, inst, p);
+         gen_field_iterator_init(&iter, inst, p,
+                                 option_color == COLOR_ALWAYS);
          while (gen_field_iterator_next(&iter)) {
             idx = 0;
             print_dword_val(&iter, offset, &dword_num);
@@ -777,13 +815,27 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
       }
 
       if ((p[0] & 0xffff0000) == AUB_MI_BATCH_BUFFER_START) {
-         uint64_t start;
-         if (gen_spec_get_gen(spec) >= gen_make_gen(8,0))
-            start = get_qword(&p[1]);
-         else
-            start = p[1];
+         uint64_t start = get_address(spec, &p[1]);
 
-         parse_commands(spec, gtt + start, 1 << 20, engine);
+         if (p[0] & (1 << 22)) {
+            /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" set acts
+             * like a subroutine call.  Commands that come afterwards get
+             * processed once the 2nd level batch buffer returns with
+             * MI_BATCH_BUFFER_END.
+             */
+            parse_commands(spec, gtt + start, gtt_end - start, engine);
+         } else {
+            /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" unset acts
+             * like a goto.  Nothing after it will ever get processed.  In
+             * order to prevent the recursion from growing, we just reset the
+             * loop and continue;
+             */
+            p = gtt + start;
+            /* We don't know where secondaries end so use the GTT end */
+            end = gtt + gtt_end;
+            length = 0;
+            continue;
+         }
       } else if ((p[0] & 0xffff0000) == AUB_MI_BATCH_BUFFER_END) {
          break;
       }
@@ -794,7 +846,7 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
 #define GEN_ENGINE_BLITTER 2
 
 static void
-handle_trace_block(struct gen_spec *spec, uint32_t *p)
+handle_trace_block(uint32_t *p)
 {
    int operation = p[1] & AUB_TRACE_OPERATION_MASK;
    int type = p[1] & AUB_TRACE_TYPE_MASK;
@@ -837,6 +889,56 @@ handle_trace_block(struct gen_spec *spec, uint32_t *p)
       gtt_end = 0;
       break;
    }
+}
+
+static void
+handle_trace_header(uint32_t *p)
+{
+   /* The intel_aubdump tool from IGT is kind enough to put a PCI-ID= tag in
+    * the AUB header comment.  If the user hasn't specified a hardware
+    * generation, try to use the one from the AUB file.
+    */
+   uint32_t *end = p + (p[0] & 0xffff) + 2;
+   int aub_pci_id = 0;
+   if (end > &p[12] && p[12] > 0)
+      sscanf((char *)&p[13], "PCI-ID=%i", &aub_pci_id);
+
+   if (pci_id == 0)
+      pci_id = aub_pci_id;
+
+   struct gen_device_info devinfo;
+   if (!gen_get_device_info(pci_id, &devinfo)) {
+      fprintf(stderr, "can't find device information: pci_id=0x%x\n", pci_id);
+      exit(EXIT_FAILURE);
+   }
+
+   if (xml_path == NULL)
+      spec = gen_spec_load(&devinfo);
+   else
+      spec = gen_spec_load_from_path(&devinfo, xml_path);
+   disasm = gen_disasm_create(pci_id);
+
+   if (spec == NULL || disasm == NULL)
+      exit(EXIT_FAILURE);
+
+   printf("%sAubinator: Intel AUB file decoder.%-80s%s\n",
+          GREEN_HEADER, "", NORMAL);
+
+   if (input_file)
+      printf("File name:        %s\n", input_file);
+
+   if (aub_pci_id)
+      printf("PCI ID:           0x%x\n", aub_pci_id);
+
+   char app_name[33];
+   strncpy(app_name, (char *)&p[2], 32);
+   app_name[32] = 0;
+   printf("Application name: %s\n", app_name);
+
+   printf("Decoding as:      %s\n", gen_get_device_name(pci_id));
+
+   /* Throw in a new line before the first batch */
+   printf("\n");
 }
 
 struct aub_file {
@@ -941,12 +1043,12 @@ enum {
 };
 
 static int
-aub_file_decode_batch(struct aub_file *file, struct gen_spec *spec)
+aub_file_decode_batch(struct aub_file *file)
 {
    uint32_t *p, h, device, data_type, *new_cursor;
-   int header_length, payload_size, bias;
+   int header_length, bias;
 
-   if (file->end - file->cursor < 12)
+   if (file->end - file->cursor < 1)
       return AUB_ITEM_DECODE_NEED_MORE_DATA;
 
    p = file->cursor;
@@ -967,28 +1069,22 @@ aub_file_decode_batch(struct aub_file *file, struct gen_spec *spec)
       return AUB_ITEM_DECODE_FAILED;
    }
 
-   payload_size = 0;
-   switch (h & 0xffff0000) {
-   case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_HEADER):
-      payload_size = p[12];
-      break;
-   case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_BLOCK):
-      payload_size = p[4];
-      handle_trace_block(spec, p);
-      break;
-   default:
-      break;
+   new_cursor = p + header_length + bias;
+   if ((h & 0xffff0000) == MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_BLOCK)) {
+      if (file->end - file->cursor < 4)
+         return AUB_ITEM_DECODE_NEED_MORE_DATA;
+      new_cursor += p[4] / 4;
    }
 
-   new_cursor = p + header_length + bias + payload_size / 4;
    if (new_cursor > file->end)
       return AUB_ITEM_DECODE_NEED_MORE_DATA;
 
    switch (h & 0xffff0000) {
    case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_HEADER):
+      handle_trace_header(p);
       break;
    case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_BLOCK):
-      handle_trace_block(spec, p);
+      handle_trace_block(p);
       break;
    case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_BMP):
       break;
@@ -1117,12 +1213,9 @@ print_help(const char *progname, FILE *file)
 
 int main(int argc, char *argv[])
 {
-   struct gen_spec *spec;
    struct aub_file *file;
    int c, i;
    bool help = false, pager = true;
-   char *input_file = NULL, *xml_path = NULL;
-   char gen_val[24];
    const struct {
       const char *name;
       int pci_id;
@@ -1135,7 +1228,7 @@ int main(int argc, char *argv[])
       { "skl", 0x1912 }, /* Intel(R) HD Graphics 530 (Skylake GT2) */
       { "kbl", 0x591D }, /* Intel(R) Kabylake GT2 */
       { "bxt", 0x0A84 }  /* Intel(R) HD Graphics (Broxton) */
-   }, *gen = NULL;
+   };
    const struct option aubinator_opts[] = {
       { "help",       no_argument,       (int *) &help,                 true },
       { "no-pager",   no_argument,       (int *) &pager,                false },
@@ -1146,13 +1239,22 @@ int main(int argc, char *argv[])
       { "xml",        required_argument, NULL,                          'x' },
       { NULL,         0,                 NULL,                          0 }
    };
-   struct gen_device_info devinfo;
 
    i = 0;
    while ((c = getopt_long(argc, argv, "", aubinator_opts, &i)) != -1) {
       switch (c) {
       case 'g':
-         snprintf(gen_val, sizeof(gen_val), "%s", optarg);
+         for (i = 0; i < ARRAY_SIZE(gens); i++) {
+            if (!strcmp(optarg, gens[i].name)) {
+               pci_id = gens[i].pci_id;
+               break;
+            }
+         }
+         if (i == ARRAY_SIZE(gens)) {
+            fprintf(stderr, "can't parse gen: '%s', expected ivb, byt, hsw, "
+                                   "bdw, chv, skl, kbl or bxt\n", optarg);
+            exit(EXIT_FAILURE);
+         }
          break;
       case 'c':
          if (optarg == NULL || strcmp(optarg, "always") == 0)
@@ -1182,26 +1284,6 @@ int main(int argc, char *argv[])
    if (optind < argc)
       input_file = argv[optind];
 
-   for (i = 0; i < ARRAY_SIZE(gens); i++) {
-      if (!strcmp(gen_val, gens[i].name)) {
-         gen = &gens[i];
-         break;
-      }
-   }
-
-   if (gen == NULL) {
-      fprintf(stderr, "can't parse gen: %s, expected ivb, byt, hsw, "
-                             "bdw, chv, skl, kbl or bxt\n", gen_val);
-      exit(EXIT_FAILURE);
-   }
-
-   if (!gen_get_device_info(gen->pci_id, &devinfo)) {
-      fprintf(stderr, "can't find device information: pci_id=0x%x name=%s\n",
-              gen->pci_id, gen->name);
-      exit(EXIT_FAILURE);
-   }
-
-
    /* Do this before we redirect stdout to pager. */
    if (option_color == COLOR_AUTO)
       option_color = isatty(1) ? COLOR_ALWAYS : COLOR_NEVER;
@@ -1209,22 +1291,13 @@ int main(int argc, char *argv[])
    if (isatty(1) && pager)
       setup_pager();
 
-   if (xml_path == NULL)
-      spec = gen_spec_load(&devinfo);
-   else
-      spec = gen_spec_load_from_path(&devinfo, xml_path);
-   disasm = gen_disasm_create(gen->pci_id);
-
-   if (spec == NULL || disasm == NULL)
-      exit(EXIT_FAILURE);
-
    if (input_file == NULL)
       file = aub_file_stdin();
    else
       file = aub_file_open(input_file);
 
    /* mmap a terabyte for our gtt space. */
-   gtt_size = 1ul << 40;
+   gtt_size = 1ull << 40;
    gtt = mmap(NULL, gtt_size, PROT_READ | PROT_WRITE,
               MAP_PRIVATE | MAP_ANONYMOUS |  MAP_NORESERVE, -1, 0);
    if (gtt == MAP_FAILED) {
@@ -1233,7 +1306,7 @@ int main(int argc, char *argv[])
    }
 
    while (aub_file_more_stuff(file)) {
-      switch (aub_file_decode_batch(file, spec)) {
+      switch (aub_file_decode_batch(file)) {
       case AUB_ITEM_DECODE_OK:
          break;
       case AUB_ITEM_DECODE_NEED_MORE_DATA:

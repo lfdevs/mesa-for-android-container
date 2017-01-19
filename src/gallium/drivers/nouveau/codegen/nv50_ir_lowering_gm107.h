@@ -21,6 +21,7 @@ private:
    virtual bool visit(Instruction *);
 
    void handlePFETCH(Instruction *);
+   void handleLOAD(Instruction *);
 };
 
 } // namespace nv50_ir

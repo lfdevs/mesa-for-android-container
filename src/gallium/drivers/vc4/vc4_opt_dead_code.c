@@ -54,7 +54,7 @@ dce(struct vc4_compile *c, struct qinst *inst)
 static bool
 has_nonremovable_reads(struct vc4_compile *c, struct qinst *inst)
 {
-        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+        for (int i = 0; i < qir_get_nsrc(inst); i++) {
                 if (inst->src[i].file == QFILE_VPM) {
                         uint32_t attr = inst->src[i].index / 4;
                         uint32_t offset = (inst->src[i].index % 4) * 4;
@@ -88,7 +88,7 @@ qir_opt_dead_code(struct vc4_compile *c)
         bool *used = calloc(c->num_temps, sizeof(bool));
 
         qir_for_each_inst_inorder(inst, c) {
-                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                for (int i = 0; i < qir_get_nsrc(inst); i++) {
                         if (inst->src[i].file == QFILE_TEMP)
                                 used[inst->src[i].index] = true;
                 }
@@ -129,7 +129,7 @@ qir_opt_dead_code(struct vc4_compile *c)
                                 continue;
                         }
 
-                        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                        for (int i = 0; i < qir_get_nsrc(inst); i++) {
                                 if (inst->src[i].file != QFILE_VPM)
                                         continue;
                                 uint32_t attr = inst->src[i].index / 4;

@@ -48,7 +48,8 @@ batch_init(struct fd_batch *batch)
 	 * we don't need to grow the ringbuffer.  Performance is likely to
 	 * suffer, but there is no good alternative.
 	 */
-	if (fd_device_version(ctx->screen->dev) < FD_VERSION_UNLIMITED_CMDS) {
+	if ((fd_device_version(ctx->screen->dev) < FD_VERSION_UNLIMITED_CMDS) ||
+			(fd_mesa_debug & FD_DBG_NOGROW)){
 		size = 0x100000;
 	}
 
@@ -59,6 +60,8 @@ batch_init(struct fd_batch *batch)
 	fd_ringbuffer_set_parent(batch->gmem, NULL);
 	fd_ringbuffer_set_parent(batch->draw, batch->gmem);
 	fd_ringbuffer_set_parent(batch->binning, batch->gmem);
+
+	batch->in_fence_fd = -1;
 
 	batch->cleared = batch->partial_cleared = 0;
 	batch->restore = batch->resolve = 0;
@@ -108,6 +111,9 @@ static void
 batch_fini(struct fd_batch *batch)
 {
 	pipe_resource_reference(&batch->query_buf, NULL);
+
+	if (batch->in_fence_fd != -1)
+		close(batch->in_fence_fd);
 
 	fd_ringbuffer_del(batch->draw);
 	fd_ringbuffer_del(batch->binning);
@@ -234,7 +240,6 @@ batch_flush_func(void *job, int id)
 
 	fd_gmem_render_tiles(batch);
 	batch_reset_resources(batch);
-	batch->ctx->last_fence = fd_ringbuffer_timestamp(batch->gmem);
 }
 
 static void
@@ -275,7 +280,6 @@ batch_flush(struct fd_batch *batch)
 	} else {
 		fd_gmem_render_tiles(batch);
 		batch_reset_resources(batch);
-		batch->ctx->last_fence = fd_ringbuffer_timestamp(batch->gmem);
 	}
 
 	debug_assert(batch->reference.count > 0);
@@ -402,4 +406,19 @@ fd_batch_check_size(struct fd_batch *batch)
 	if (((ring->cur - ring->start) > (ring->size/4 - 0x1000)) ||
 			(fd_mesa_debug & FD_DBG_FLUSH))
 		fd_batch_flush(batch, true);
+}
+
+/* emit a WAIT_FOR_IDLE only if needed, ie. if there has not already
+ * been one since last draw:
+ */
+void
+fd_wfi(struct fd_batch *batch, struct fd_ringbuffer *ring)
+{
+	if (batch->needs_wfi) {
+		if (batch->ctx->screen->gpu_id >= 500)
+			OUT_WFI5(ring);
+		else
+			OUT_WFI(ring);
+		batch->needs_wfi = false;
+	}
 }

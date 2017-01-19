@@ -32,8 +32,7 @@ struct nouveau_fence {
 void nouveau_fence_emit(struct nouveau_fence *);
 void nouveau_fence_del(struct nouveau_fence *);
 
-bool nouveau_fence_new(struct nouveau_screen *, struct nouveau_fence **,
-                       bool emit);
+bool nouveau_fence_new(struct nouveau_screen *, struct nouveau_fence **);
 bool nouveau_fence_work(struct nouveau_fence *, void (*)(void *), void *);
 void nouveau_fence_update(struct nouveau_screen *, bool flushed);
 void nouveau_fence_next(struct nouveau_screen *);

@@ -600,7 +600,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                                D3DPMISCCAPS_BLENDOP |
                                D3DPIPECAP(INDEP_BLEND_ENABLE, D3DPMISCCAPS_INDEPENDENTWRITEMASKS) |
                                D3DPMISCCAPS_PERSTAGECONSTANT |
-                               /*D3DPMISCCAPS_POSTBLENDSRGBCONVERT |*/ /* TODO */
+                               /*D3DPMISCCAPS_POSTBLENDSRGBCONVERT |*/ /* TODO: advertise if Ex and dx10 able card */
                                D3DPMISCCAPS_FOGANDSPECULARALPHA | /* Note: documentation of the flag is wrong */
                                D3DPIPECAP(BLEND_EQUATION_SEPARATE, D3DPMISCCAPS_SEPARATEALPHABLEND) |
                                D3DPIPECAP(MIXED_COLORBUFFER_FORMATS, D3DPMISCCAPS_MRTINDEPENDENTBITDEPTHS) |

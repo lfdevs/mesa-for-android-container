@@ -116,8 +116,9 @@ static bool
 do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 {
 	struct amdgpu_buffer_size_alignments alignment_info = {};
-	struct amdgpu_heap_info vram, gtt;
+	struct amdgpu_heap_info vram, visible_vram, gtt;
 	struct drm_amdgpu_info_hw_ip dma = {};
+	struct drm_amdgpu_info_hw_ip compute = {};
 	drmDevicePtr devinfo;
 	int r;
 	int i, j;
@@ -152,6 +153,13 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 		goto fail;
 	}
 
+	r = amdgpu_query_heap_info(ws->dev, AMDGPU_GEM_DOMAIN_VRAM,
+	                           AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED, &visible_vram);
+	if (r) {
+		fprintf(stderr, "amdgpu: amdgpu_query_heap_info(visible_vram) failed.\n");
+		goto fail;
+	}
+
 	r = amdgpu_query_heap_info(ws->dev, AMDGPU_GEM_DOMAIN_GTT, 0, &gtt);
 	if (r) {
 		fprintf(stderr, "amdgpu: amdgpu_query_heap_info(gtt) failed.\n");
@@ -161,6 +169,12 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 	r = amdgpu_query_hw_ip_info(ws->dev, AMDGPU_HW_IP_DMA, 0, &dma);
 	if (r) {
 		fprintf(stderr, "amdgpu: amdgpu_query_hw_ip_info(dma) failed.\n");
+		goto fail;
+	}
+
+	r = amdgpu_query_hw_ip_info(ws->dev, AMDGPU_HW_IP_COMPUTE, 0, &compute);
+	if (r) {
+		fprintf(stderr, "amdgpu: amdgpu_query_hw_ip_info(compute) failed.\n");
 		goto fail;
 	}
 	ws->info.pci_id = ws->amdinfo.asic_id; /* TODO: is this correct? */
@@ -266,10 +280,15 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 		fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
 		goto fail;
 	}
+
+	assert(util_is_power_of_two(dma.available_rings + 1));
+	assert(util_is_power_of_two(compute.available_rings + 1));
+
 	/* Set hardware information. */
 	ws->info.name = get_chip_name(ws->info.family);
 	ws->info.gart_size = gtt.heap_size;
 	ws->info.vram_size = vram.heap_size;
+	ws->info.visible_vram_size = visible_vram.heap_size;
 	/* convert the shader clock from KHz to MHz */
 	ws->info.max_shader_clock = ws->amdinfo.max_engine_clk / 1000;
 	ws->info.max_se = ws->amdinfo.num_shader_engines;
@@ -282,7 +301,10 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 	ws->info.num_tile_pipes = radv_cik_get_num_tile_pipes(&ws->amdinfo);
 	ws->info.pipe_interleave_bytes = 256 << ((ws->amdinfo.gb_addr_cfg >> 4) & 0x7);
 	ws->info.has_virtual_memory = TRUE;
-	ws->info.has_sdma = dma.available_rings != 0;
+	ws->info.sdma_rings = MIN2(util_bitcount(dma.available_rings),
+	                           MAX_RINGS_PER_TYPE);
+	ws->info.compute_rings = MIN2(util_bitcount(compute.available_rings),
+	                              MAX_RINGS_PER_TYPE);
 
 	/* Get the number of good compute units. */
 	ws->info.num_good_compute_units = 0;

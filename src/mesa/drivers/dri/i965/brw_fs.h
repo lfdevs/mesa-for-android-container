@@ -190,8 +190,6 @@ public:
    bool opt_zero_samples();
 
    void emit_nir_code();
-   void nir_setup_single_output_varying(fs_reg *reg, const glsl_type *type,
-                                        unsigned *location);
    void nir_setup_outputs();
    void nir_setup_uniforms();
    void nir_emit_system_values();
@@ -423,7 +421,7 @@ private:
    void generate_uniform_pull_constant_load_gen7(fs_inst *inst,
                                                  struct brw_reg dst,
                                                  struct brw_reg surf_index,
-                                                 struct brw_reg offset);
+                                                 struct brw_reg payload);
    void generate_varying_pull_constant_load_gen4(fs_inst *inst,
                                                  struct brw_reg dst,
                                                  struct brw_reg index);
@@ -444,9 +442,6 @@ private:
                                struct brw_reg src0,
                                struct brw_reg src1);
 
-   void generate_set_simd4x2_offset(fs_inst *inst,
-                                    struct brw_reg dst,
-                                    struct brw_reg offset);
    void generate_discard_jump(fs_inst *inst);
 
    void generate_pack_half_2x16_split(fs_inst *inst,

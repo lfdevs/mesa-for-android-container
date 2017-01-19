@@ -34,6 +34,7 @@
 
 #include "freedreno_gmem.h"
 #include "freedreno_context.h"
+#include "freedreno_fence.h"
 #include "freedreno_resource.h"
 #include "freedreno_query_hw.h"
 #include "freedreno_util.h"
@@ -69,7 +70,7 @@
 
 static uint32_t bin_width(struct fd_screen *screen)
 {
-	if (is_a4xx(screen))
+	if (is_a4xx(screen) || is_a5xx(screen))
 		return 1024;
 	if (is_a3xx(screen))
 		return 992;
@@ -109,7 +110,9 @@ calculate_tiles(struct fd_batch *batch)
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct pipe_scissor_state *scissor = &batch->max_scissor;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
-	uint32_t gmem_size = ctx->screen->gmemsize_bytes;
+	const uint32_t gmem_alignw = ctx->screen->gmem_alignw;
+	const uint32_t gmem_alignh = ctx->screen->gmem_alignh;
+	const uint32_t gmem_size = ctx->screen->gmemsize_bytes;
 	uint32_t minx, miny, width, height;
 	uint32_t nbins_x = 1, nbins_y = 1;
 	uint32_t bin_w, bin_h;
@@ -146,21 +149,22 @@ calculate_tiles(struct fd_batch *batch)
 		width = pfb->width;
 		height = pfb->height;
 	} else {
-		minx = scissor->minx & ~31; /* round down to multiple of 32 */
-		miny = scissor->miny & ~31;
+		/* round down to multiple of alignment: */
+		minx = scissor->minx & ~(gmem_alignw - 1);
+		miny = scissor->miny & ~(gmem_alignh - 1);
 		width = scissor->maxx - minx;
 		height = scissor->maxy - miny;
 	}
 
-	bin_w = align(width, 32);
-	bin_h = align(height, 32);
+	bin_w = align(width, gmem_alignw);
+	bin_h = align(height, gmem_alignh);
 
 	/* first, find a bin width that satisfies the maximum width
 	 * restrictions:
 	 */
 	while (bin_w > max_width) {
 		nbins_x++;
-		bin_w = align(width / nbins_x, 32);
+		bin_w = align(width / nbins_x, gmem_alignw);
 	}
 
 	if (fd_mesa_debug & FD_DBG_MSGS) {
@@ -177,10 +181,10 @@ calculate_tiles(struct fd_batch *batch)
 	while (total_size(cbuf_cpp, zsbuf_cpp, bin_w, bin_h, gmem) > gmem_size) {
 		if (bin_w > bin_h) {
 			nbins_x++;
-			bin_w = align(width / nbins_x, 32);
+			bin_w = align(width / nbins_x, gmem_alignw);
 		} else {
 			nbins_y++;
-			bin_h = align(height / nbins_y, 32);
+			bin_h = align(height / nbins_y, gmem_alignh);
 		}
 	}
 
@@ -337,6 +341,9 @@ render_tiles(struct fd_batch *batch)
 		/* emit gmem2mem to transfer tile back to system memory: */
 		ctx->emit_tile_gmem2mem(batch, tile);
 	}
+
+	if (ctx->emit_tile_fini)
+		ctx->emit_tile_fini(batch);
 }
 
 static void
@@ -351,6 +358,23 @@ render_sysmem(struct fd_batch *batch)
 	/* emit IB to drawcmds: */
 	ctx->emit_ib(batch->gmem, batch->draw);
 	fd_reset_wfi(batch);
+
+	if (ctx->emit_sysmem_fini)
+		ctx->emit_sysmem_fini(batch);
+}
+
+static void
+flush_ring(struct fd_batch *batch)
+{
+	struct fd_context *ctx = batch->ctx;
+	int out_fence_fd = -1;
+
+	fd_ringbuffer_flush2(batch->gmem, batch->in_fence_fd,
+			batch->needs_out_fence_fd ? &out_fence_fd : NULL);
+
+	fd_fence_ref(&ctx->screen->base, &ctx->last_fence, NULL);
+	ctx->last_fence = fd_fence_create(ctx,
+			fd_ringbuffer_timestamp(batch->gmem), out_fence_fd);
 }
 
 void
@@ -393,7 +417,22 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 		ctx->stats.batch_gmem++;
 	}
 
-	fd_ringbuffer_flush(batch->gmem);
+	flush_ring(batch);
+}
+
+/* special case for when we need to create a fence but have no rendering
+ * to flush.. just emit a no-op string-marker packet.
+ */
+void
+fd_gmem_render_noop(struct fd_batch *batch)
+{
+	struct fd_context *ctx = batch->ctx;
+	struct pipe_context *pctx = &ctx->base;
+
+	pctx->emit_string_marker(pctx, "noop", 4);
+	/* emit IB to drawcmds (which contain the string marker): */
+	ctx->emit_ib(batch->gmem, batch->draw);
+	flush_ring(batch);
 }
 
 /* tile needs restore if it isn't completely contained within the

@@ -40,13 +40,13 @@
  */
 void * ir3_alloc(struct ir3 *shader, int sz)
 {
-	return ralloc_size(shader, sz);
+	return rzalloc_size(shader, sz); /* TODO: don't use rzalloc */
 }
 
 struct ir3 * ir3_create(struct ir3_compiler *compiler,
 		unsigned nin, unsigned nout)
 {
-	struct ir3 *shader = ralloc(compiler, struct ir3);
+	struct ir3 *shader = rzalloc(compiler, struct ir3);
 
 	shader->compiler = compiler;
 	shader->ninputs = nin;
@@ -129,7 +129,9 @@ static int emit_cat0(struct ir3_instruction *instr, void *ptr,
 {
 	instr_cat0_t *cat0 = ptr;
 
-	if (info->gpu_id >= 400) {
+	if (info->gpu_id >= 500) {
+		cat0->a5xx.immed = instr->cat0.immed;
+	} else if (info->gpu_id >= 400) {
 		cat0->a4xx.immed = instr->cat0.immed;
 	} else {
 		cat0->a3xx.immed = instr->cat0.immed;

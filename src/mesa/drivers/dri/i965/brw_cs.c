@@ -36,7 +36,6 @@
 
 static void
 assign_cs_binding_table_offsets(const struct gen_device_info *devinfo,
-                                const struct gl_shader_program *shader_prog,
                                 const struct gl_program *prog,
                                 struct brw_cs_prog_data *prog_data)
 {
@@ -46,15 +45,13 @@ assign_cs_binding_table_offsets(const struct gen_device_info *devinfo,
    prog_data->binding_table.work_groups_start = next_binding_table_offset;
    next_binding_table_offset++;
 
-   brw_assign_common_binding_table_offsets(MESA_SHADER_COMPUTE, devinfo,
-                                           shader_prog, prog, &prog_data->base,
+   brw_assign_common_binding_table_offsets(devinfo, prog, &prog_data->base,
                                            next_binding_table_offset);
 }
 
 static bool
 brw_codegen_cs_prog(struct brw_context *brw,
-                    struct gl_shader_program *prog,
-                    struct brw_compute_program *cp,
+                    struct brw_program *cp,
                     struct brw_cs_prog_key *key)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
@@ -66,33 +63,28 @@ brw_codegen_cs_prog(struct brw_context *brw,
    bool start_busy = false;
    double start_time = 0;
 
-   struct brw_shader *cs =
-      (struct brw_shader *) prog->_LinkedShaders[MESA_SHADER_COMPUTE];
-   assert (cs);
-
    memset(&prog_data, 0, sizeof(prog_data));
 
-   if (prog->Comp.SharedSize > 64 * 1024) {
-      prog->LinkStatus = false;
+   if (cp->program.info.cs.shared_size > 64 * 1024) {
+      cp->program.sh.data->LinkStatus = false;
       const char *error_str =
          "Compute shader used more than 64KB of shared variables";
-      ralloc_strcat(&prog->InfoLog, error_str);
+      ralloc_strcat(&cp->program.sh.data->InfoLog, error_str);
       _mesa_problem(NULL, "Failed to link compute shader: %s\n", error_str);
 
       ralloc_free(mem_ctx);
       return false;
    } else {
-      prog_data.base.total_shared = prog->Comp.SharedSize;
+      prog_data.base.total_shared = cp->program.info.cs.shared_size;
    }
 
-   assign_cs_binding_table_offsets(devinfo, prog,
-                                   &cp->program.Base, &prog_data);
+   assign_cs_binding_table_offsets(devinfo, &cp->program, &prog_data);
 
    /* Allocate the references to the uniforms that will end up in the
     * prog_data associated with the compiled program, and which will be freed
     * by the state cache.
     */
-   int param_count = cp->program.Base.nir->num_uniforms / 4;
+   int param_count = cp->program.nir->num_uniforms / 4;
 
    /* The backend also sometimes add a param for the thread local id. */
    prog_data.thread_local_id_index = param_count++;
@@ -104,12 +96,13 @@ brw_codegen_cs_prog(struct brw_context *brw,
    prog_data.base.pull_param =
       rzalloc_array(NULL, const gl_constant_value *, param_count);
    prog_data.base.image_param =
-      rzalloc_array(NULL, struct brw_image_param, cs->base.NumImages);
+      rzalloc_array(NULL, struct brw_image_param,
+                    cp->program.info.num_images);
    prog_data.base.nr_params = param_count;
-   prog_data.base.nr_image_params = cs->base.NumImages;
+   prog_data.base.nr_image_params = cp->program.info.num_images;
 
-   brw_nir_setup_glsl_uniforms(cp->program.Base.nir, prog, &cp->program.Base,
-                               &prog_data.base, true);
+   brw_nir_setup_glsl_uniforms(cp->program.nir, &cp->program,&prog_data.base,
+                               true);
 
    if (unlikely(brw->perf_debug)) {
       start_busy = (brw->batch.last_bo &&
@@ -117,31 +110,28 @@ brw_codegen_cs_prog(struct brw_context *brw,
       start_time = get_time();
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_CS))
-      brw_dump_ir("compute", prog, &cs->base, &cp->program.Base);
-
    int st_index = -1;
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
-      st_index = brw_get_shader_time_index(brw, prog, &cp->program.Base, ST_CS);
+      st_index = brw_get_shader_time_index(brw, &cp->program, ST_CS, true);
 
    char *error_str;
-   program = brw_compile_cs(brw->screen->compiler, brw, mem_ctx,
-                            key, &prog_data, cp->program.Base.nir,
-                            st_index, &program_size, &error_str);
+   program = brw_compile_cs(brw->screen->compiler, brw, mem_ctx, key,
+                            &prog_data, cp->program.nir, st_index,
+                            &program_size, &error_str);
    if (program == NULL) {
-      prog->LinkStatus = false;
-      ralloc_strcat(&prog->InfoLog, error_str);
+      cp->program.sh.data->LinkStatus = false;
+      ralloc_strcat(&cp->program.sh.data->InfoLog, error_str);
       _mesa_problem(NULL, "Failed to compile compute shader: %s\n", error_str);
 
       ralloc_free(mem_ctx);
       return false;
    }
 
-   if (unlikely(brw->perf_debug) && cs) {
-      if (cs->compiled_once) {
+   if (unlikely(brw->perf_debug)) {
+      if (cp->compiled_once) {
          _mesa_problem(&brw->ctx, "CS programs shouldn't need recompiles");
       }
-      cs->compiled_once = true;
+      cp->compiled_once = true;
 
       if (start_busy && !drm_intel_bo_busy(brw->batch.last_bo)) {
          perf_debug("CS compile took %.03f ms and stalled the GPU\n",
@@ -173,9 +163,6 @@ brw_codegen_cs_prog(struct brw_context *brw,
                            prog_data.base.total_scratch,
                            scratch_ids_per_subslice * subslices);
 
-   if (unlikely(INTEL_DEBUG & DEBUG_CS))
-      fprintf(stderr, "\n");
-
    brw_upload_cache(&brw->cache, BRW_CACHE_CS_PROG,
                     key, sizeof(*key),
                     program, program_size,
@@ -192,8 +179,7 @@ brw_cs_populate_key(struct brw_context *brw, struct brw_cs_prog_key *key)
 {
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_COMPUTE_PROGRAM */
-   const struct brw_compute_program *cp =
-      (struct brw_compute_program *) brw->compute_program;
+   const struct brw_program *cp = (struct brw_program *) brw->compute_program;
    const struct gl_program *prog = (struct gl_program *) cp;
 
    memset(key, 0, sizeof(*key));
@@ -211,8 +197,7 @@ brw_upload_cs_prog(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    struct brw_cs_prog_key key;
-   struct brw_compute_program *cp = (struct brw_compute_program *)
-      brw->compute_program;
+   struct brw_program *cp = (struct brw_program *) brw->compute_program;
 
    if (!cp)
       return;
@@ -221,7 +206,7 @@ brw_upload_cs_prog(struct brw_context *brw)
       return;
 
    brw->cs.base.sampler_count =
-      util_last_bit(ctx->ComputeProgram._Current->Base.SamplersUsed);
+      util_last_bit(ctx->ComputeProgram._Current->SamplersUsed);
 
    brw_cs_populate_key(brw, &key);
 
@@ -229,10 +214,7 @@ brw_upload_cs_prog(struct brw_context *brw)
                          &key, sizeof(key),
                          &brw->cs.base.prog_offset,
                          &brw->cs.base.prog_data)) {
-      bool success =
-         brw_codegen_cs_prog(brw,
-                             ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE],
-                             cp, &key);
+      bool success = brw_codegen_cs_prog(brw, cp, &key);
       (void) success;
       assert(success);
    }
@@ -240,15 +222,12 @@ brw_upload_cs_prog(struct brw_context *brw)
 
 
 bool
-brw_cs_precompile(struct gl_context *ctx,
-                  struct gl_shader_program *shader_prog,
-                  struct gl_program *prog)
+brw_cs_precompile(struct gl_context *ctx, struct gl_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_cs_prog_key key;
 
-   struct gl_compute_program *cp = (struct gl_compute_program *) prog;
-   struct brw_compute_program *bcp = brw_compute_program(cp);
+   struct brw_program *bcp = brw_program(prog);
 
    memset(&key, 0, sizeof(key));
    key.program_string_id = bcp->id;
@@ -258,7 +237,7 @@ brw_cs_precompile(struct gl_context *ctx,
    uint32_t old_prog_offset = brw->cs.base.prog_offset;
    struct brw_stage_prog_data *old_prog_data = brw->cs.base.prog_data;
 
-   bool success = brw_codegen_cs_prog(brw, shader_prog, bcp, &key);
+   bool success = brw_codegen_cs_prog(brw, bcp, &key);
 
    brw->cs.base.prog_offset = old_prog_offset;
    brw->cs.base.prog_data = old_prog_data;

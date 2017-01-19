@@ -297,15 +297,18 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
 
          pipe_mutex_lock(drv->mutex);
          drv->pipe->flush(drv->pipe, NULL, 0);
-         pipe_mutex_unlock(drv->mutex);
 
          memset(&whandle, 0, sizeof(whandle));
          whandle.type = DRM_API_HANDLE_TYPE_FD;
 
          if (!screen->resource_get_handle(screen, drv->pipe,
                                           buf->derived_surface.resource,
-                                          &whandle, PIPE_HANDLE_USAGE_READ_WRITE))
+                                          &whandle, PIPE_HANDLE_USAGE_READ_WRITE)) {
+            pipe_mutex_unlock(drv->mutex);
             return VA_STATUS_ERROR_INVALID_BUFFER;
+         }
+
+         pipe_mutex_unlock(drv->mutex);
 
          buf_info->handle = (intptr_t)whandle.handle;
          break;

@@ -800,7 +800,7 @@ fs_visitor::opt_copy_propagation_local(void *copy_prop_ctx, bblock_t *block,
             const unsigned size_written = effective_width *
                                           type_sz(inst->src[i].type);
             if (inst->src[i].file == VGRF) {
-               acp_entry *entry = ralloc(copy_prop_ctx, acp_entry);
+               acp_entry *entry = rzalloc(copy_prop_ctx, acp_entry);
                entry->dst = byte_offset(inst->dst, offset);
                entry->src = inst->src[i];
                entry->size_written = size_written;

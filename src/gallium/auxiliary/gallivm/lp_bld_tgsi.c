@@ -360,7 +360,7 @@ lp_build_emit_fetch(
       case TGSI_TYPE_DOUBLE:
       case TGSI_TYPE_UNTYPED:
           /* modifiers on movs assume data is float */
-         res = lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_ABS, res);
+         res = lp_build_abs(&bld_base->base, res);
          break;
       case TGSI_TYPE_UNSIGNED:
       case TGSI_TYPE_SIGNED:

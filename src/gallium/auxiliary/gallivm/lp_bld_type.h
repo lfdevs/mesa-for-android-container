@@ -41,6 +41,10 @@
 #include "pipe/p_compiler.h"
 #include "gallivm/lp_bld.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Native SIMD architecture width available at runtime.
  *
@@ -449,5 +453,8 @@ lp_build_context_init(struct lp_build_context *bld,
 unsigned
 lp_build_count_ir_module(LLVMModuleRef module);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !LP_BLD_TYPE_H */

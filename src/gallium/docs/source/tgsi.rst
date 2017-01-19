@@ -1583,48 +1583,43 @@ These opcodes are used for bit-level manipulation of integers.
 
 .. opcode:: IBFE - Signed Bitfield Extract
 
-  See SM5 instruction of the same name. Extracts a set of bits from the input,
-  and sign-extends them if the high bit of the extracted window is set.
+  Like GLSL bitfieldExtract. Extracts a set of bits from the input, and
+  sign-extends them if the high bit of the extracted window is set.
 
   Pseudocode::
 
     def ibfe(value, offset, bits):
-      offset = offset & 0x1f
-      bits = bits & 0x1f
+      if offset < 0 or bits < 0 or offset + bits > 32:
+        return undefined
       if bits == 0: return 0
       # Note: >> sign-extends
-      if width + offset < 32:
-        return (value << (32 - offset - bits)) >> (32 - bits)
-      else:
-        return value >> offset
+      return (value << (32 - offset - bits)) >> (32 - bits)
 
 .. opcode:: UBFE - Unsigned Bitfield Extract
 
-  See SM5 instruction of the same name. Extracts a set of bits from the input,
-  without any sign-extension.
+  Like GLSL bitfieldExtract. Extracts a set of bits from the input, without
+  any sign-extension.
 
   Pseudocode::
 
     def ubfe(value, offset, bits):
-      offset = offset & 0x1f
-      bits = bits & 0x1f
+      if offset < 0 or bits < 0 or offset + bits > 32:
+        return undefined
       if bits == 0: return 0
       # Note: >> does not sign-extend
-      if width + offset < 32:
-        return (value << (32 - offset - bits)) >> (32 - bits)
-      else:
-        return value >> offset
+      return (value << (32 - offset - bits)) >> (32 - bits)
 
 .. opcode:: BFI - Bitfield Insert
 
-  See SM5 instruction of the same name. Replaces a bit region of 'base' with
-  the low bits of 'insert'.
+  Like GLSL bitfieldInsert. Replaces a bit region of 'base' with the low bits
+  of 'insert'.
 
   Pseudocode::
 
     def bfi(base, insert, offset, bits):
-      offset = offset & 0x1f
-      bits = bits & 0x1f
+      if offset < 0 or bits < 0 or offset + bits > 32:
+        return undefined
+      # << defined such that mask == ~0 when bits == 32, offset == 0
       mask = ((1 << bits) - 1) << offset
       return ((insert << offset) & mask) | (base & ~mask)
 
@@ -2008,6 +2003,15 @@ Perform a * b + c with no intermediate rounding step.
   dst.xy = src0.xy \times src1.xy + src2.xy
 
   dst.zw = src0.zw \times src1.zw + src2.zw
+
+
+.. opcode:: DDIV - Divide
+
+.. math::
+
+  dst.xy = \frac{src0.xy}{src1.xy}
+
+  dst.zw = \frac{src0.zw}{src1.zw}
 
 
 .. opcode:: DRCP - Reciprocal
@@ -2565,6 +2569,19 @@ Resource Access Opcodes
   image resources, .xyz will contain the width/height/layers of the
   image, while .w will contain the number of samples for multi-sampled
   images.
+
+.. opcode:: FBFETCH - Load data from framebuffer
+
+  Syntax: ``FBFETCH dst, output``
+
+  Example: ``FBFETCH TEMP[0], OUT[0]``
+
+  This is only valid on ``COLOR`` semantic outputs. Returns the color
+  of the current position in the framebuffer from before this fragment
+  shader invocation. May return the same value from multiple calls for
+  a particular output within a single invocation. Note that result may
+  be undefined if a fragment is drawn multiple times without a blend
+  barrier in between.
 
 
 .. _threadsyncopcodes:

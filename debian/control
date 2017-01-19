@@ -8,12 +8,11 @@ Build-Depends:
  debhelper (>= 10),
  quilt (>= 0.40),
  pkg-config,
- libdrm-dev (>= 2.4.69) [!hurd-any],
+ libdrm-dev (>= 2.4.74) [!hurd-any],
  libx11-dev,
  x11proto-gl-dev (>= 1.4.14),
  libxxf86vm-dev,
  libexpat1-dev,
- libgcrypt20-dev [amd64 i386 arm64 armhf ppc64el x32],
  libsensors4-dev [!hurd-any],
  libxfixes-dev,
  libxdamage-dev,
@@ -43,7 +42,7 @@ Build-Depends:
  bison,
  llvm-3.9-dev (>= 1:3.9.1) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
  libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
- libwayland-dev (>= 1.2.0) [linux-any],
+ libwayland-dev (>= 1.11.0) [linux-any],
  libclang-3.9-dev (>= 1:3.9.1) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
  libclc-dev (>= 0.2.0+git20160907) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
 Vcs-Git: https://anonscm.debian.org/git/pkg-xorg/lib/mesa.git
@@ -136,7 +135,7 @@ Architecture: any
 Depends:
  libegl1-mesa (= ${binary:Version}),
  libwayland-egl1-mesa (= ${binary:Version}) [linux-any],
- libdrm-dev (>= 2.4.69) [!hurd-any],
+ libdrm-dev (>= 2.4.74) [!hurd-any],
  x11proto-dri2-dev (>= 2.6),
  x11proto-gl-dev (>= 1.4.14),
  libx11-dev,
@@ -151,7 +150,7 @@ Depends:
  libxcb-sync-dev,
  libxshmfence-dev,
  libx11-xcb-dev,
- libwayland-dev (>= 1.2.0) [linux-any],
+ libwayland-dev (>= 1.11.0) [linux-any],
  ${misc:Depends},
 Multi-Arch: same
 Description: free implementation of the EGL API -- development files
@@ -340,7 +339,7 @@ Architecture: any
 Depends:
  mesa-common-dev (= ${binary:Version}),
  libgl1-mesa-glx (= ${binary:Version}),
- libdrm-dev (>= 2.4.69) [!hurd-any],
+ libdrm-dev (>= 2.4.74) [!hurd-any],
  libx11-dev,
  libx11-xcb-dev,
  libxcb-dri3-dev,

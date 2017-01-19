@@ -46,7 +46,7 @@ build_nir_vs(void)
 	nir_variable *v_position;
 
 	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, "meta_fast_clear_vs");
+	b.shader->info->name = ralloc_strdup(b.shader, "meta_fast_clear_vs");
 
 	a_position = nir_variable_create(b.shader, nir_var_shader_in, vec4,
 					 "a_position");
@@ -68,7 +68,7 @@ build_nir_fs(void)
 	nir_builder b;
 
 	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
-	b.shader->info.name = ralloc_asprintf(b.shader,
+	b.shader->info->name = ralloc_asprintf(b.shader,
 					      "meta_fast_clear_noop_fs");
 
 	return b.shader;
@@ -419,6 +419,7 @@ radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 	VkDevice device_h = radv_device_to_handle(cmd_buffer->device);
 	VkCommandBuffer cmd_buffer_h = radv_cmd_buffer_to_handle(cmd_buffer);
 
+	assert(cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL);
 	radv_meta_save_pass(&saved_pass_state, cmd_buffer);
 	radv_meta_save_graphics_reset_vport_scissor(&saved_state, cmd_buffer);
 

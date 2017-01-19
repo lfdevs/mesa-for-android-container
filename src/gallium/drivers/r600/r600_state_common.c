@@ -91,7 +91,7 @@ void r600_emit_alphatest_state(struct r600_context *rctx, struct r600_atom *atom
 	radeon_set_context_reg(cs, R_028438_SX_ALPHA_REF, alpha_ref);
 }
 
-static void r600_texture_barrier(struct pipe_context *ctx)
+static void r600_texture_barrier(struct pipe_context *ctx, unsigned flags)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 
@@ -1326,14 +1326,14 @@ static void update_gs_block_state(struct r600_context *rctx, unsigned enable)
 		if (enable && !rctx->gs_rings.esgs_ring.buffer) {
 			unsigned size = 0x1C000;
 			rctx->gs_rings.esgs_ring.buffer =
-					pipe_buffer_create(rctx->b.b.screen, PIPE_BIND_CUSTOM,
+					pipe_buffer_create(rctx->b.b.screen, 0,
 							PIPE_USAGE_DEFAULT, size);
 			rctx->gs_rings.esgs_ring.buffer_size = size;
 
 			size = 0x4000000;
 
 			rctx->gs_rings.gsvs_ring.buffer =
-					pipe_buffer_create(rctx->b.b.screen, PIPE_BIND_CUSTOM,
+					pipe_buffer_create(rctx->b.b.screen, 0,
 							PIPE_USAGE_DEFAULT, size);
 			rctx->gs_rings.gsvs_ring.buffer_size = size;
 		}

@@ -71,7 +71,7 @@ AM_LDFLAGS += \
 	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/pipe-loader/pipe.sym
 endif
 
-if HAVE_MESA_LLVM
+if HAVE_GALLIUM_LLVM
 PIPE_LIBS += $(LLVM_LIBS)
 AM_LDFLAGS += $(LLVM_LDFLAGS)
 endif
@@ -158,6 +158,7 @@ pipe_radeonsi_la_LIBADD = \
 	$(top_builddir)/src/gallium/winsys/amdgpu/drm/libamdgpuwinsys.la \
 	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
+	$(top_builddir)/src/amd/common/libamd_common.la \
 	$(LIBDRM_LIBS) \
 	$(RADEON_LIBS) \
 	$(AMDGPU_LIBS)

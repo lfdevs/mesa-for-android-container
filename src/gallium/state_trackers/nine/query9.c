@@ -21,6 +21,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "device9.h"
+#include "nine_state.h"
 #include "query9.h"
 #include "nine_helpers.h"
 #include "pipe/p_screen.h"
@@ -93,8 +94,8 @@ NineQuery9_ctor( struct NineQuery9 *This,
                  struct NineUnknownParams *pParams,
                  D3DQUERYTYPE Type )
 {
-    struct pipe_context *pipe = pParams->device->pipe;
-    const unsigned ptype = d3dquerytype_to_pipe_query(pParams->device->screen, Type);
+    struct NineDevice9 *device = pParams->device;
+    const unsigned ptype = d3dquerytype_to_pipe_query(device->screen, Type);
     HRESULT hr;
 
     DBG("This=%p pParams=%p Type=%d\n", This, pParams, Type);
@@ -109,7 +110,7 @@ NineQuery9_ctor( struct NineQuery9 *This,
     user_assert(ptype != ~0, D3DERR_INVALIDCALL);
 
     if (ptype < PIPE_QUERY_TYPES) {
-        This->pq = pipe->create_query(pipe, ptype, 0);
+        This->pq = nine_context_create_query(device, ptype);
         if (!This->pq)
             return E_OUTOFMEMORY;
     } else {
@@ -132,14 +133,14 @@ NineQuery9_ctor( struct NineQuery9 *This,
 void
 NineQuery9_dtor( struct NineQuery9 *This )
 {
-    struct pipe_context *pipe = This->base.device->pipe;
+    struct NineDevice9 *device = This->base.device;
 
     DBG("This=%p\n", This);
 
     if (This->pq) {
         if (This->state == NINE_QUERY_STATE_RUNNING)
-            pipe->end_query(pipe, This->pq);
-        pipe->destroy_query(pipe, This->pq);
+            nine_context_end_query(device, &This->counter, This->pq);
+        nine_context_destroy_query(device, This->pq);
     }
 
     NineUnknown_dtor(&This->base);
@@ -161,7 +162,7 @@ HRESULT NINE_WINAPI
 NineQuery9_Issue( struct NineQuery9 *This,
                   DWORD dwIssueFlags )
 {
-    struct pipe_context *pipe = This->base.device->pipe;
+    struct NineDevice9 *device = This->base.device;
 
     DBG("This=%p dwIssueFlags=%d\n", This, dwIssueFlags);
 
@@ -175,17 +176,16 @@ NineQuery9_Issue( struct NineQuery9 *This,
         return D3D_OK;
 
     if (dwIssueFlags == D3DISSUE_BEGIN) {
-        if (This->state == NINE_QUERY_STATE_RUNNING) {
-        pipe->end_query(pipe, This->pq);
-        }
-        pipe->begin_query(pipe, This->pq);
+        if (This->state == NINE_QUERY_STATE_RUNNING)
+            nine_context_end_query(device, &This->counter, This->pq);
+        nine_context_begin_query(device, &This->counter, This->pq);
         This->state = NINE_QUERY_STATE_RUNNING;
     } else {
         if (This->state != NINE_QUERY_STATE_RUNNING &&
             This->type != D3DQUERYTYPE_EVENT &&
             This->type != D3DQUERYTYPE_TIMESTAMP)
-            pipe->begin_query(pipe, This->pq);
-        pipe->end_query(pipe, This->pq);
+            nine_context_begin_query(device, &This->counter, This->pq);
+        nine_context_end_query(device, &This->counter, This->pq);
         This->state = NINE_QUERY_STATE_ENDED;
     }
     return D3D_OK;
@@ -205,7 +205,7 @@ NineQuery9_GetData( struct NineQuery9 *This,
                     DWORD dwSize,
                     DWORD dwGetDataFlags )
 {
-    struct pipe_context *pipe = This->base.device->pipe;
+    struct NineDevice9 *device = This->base.device;
     boolean ok, wait_query_result = FALSE;
     union pipe_query_result presult;
     union nine_query_result nresult;
@@ -240,7 +240,9 @@ NineQuery9_GetData( struct NineQuery9 *This,
     /* Note: We ignore dwGetDataFlags, because get_query_result will
      * flush automatically if needed */
 
-    ok = pipe->get_query_result(pipe, This->pq, wait_query_result, &presult);
+    ok = nine_context_get_query_result(device, This->pq, &This->counter,
+                                       !!(dwGetDataFlags & D3DGETDATA_FLUSH),
+                                       wait_query_result, &presult);
 
     if (!ok) return S_FALSE;
 

@@ -151,8 +151,8 @@ create_frag_shader_weave(struct ureg_program *shader, struct ureg_dst fragment)
     */
    for (i = 0; i < 2; ++i) {
       ureg_MOV(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_X), i_tc[i]);
-      ureg_SUB(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_YZ),
-               i_tc[i], ureg_imm1f(shader, 0.5f));
+      ureg_ADD(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_YZ),
+               i_tc[i], ureg_imm1f(shader, -0.5f));
       ureg_ROUND(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_YZ), ureg_src(t_tc[i]));
       ureg_MOV(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_W),
                ureg_imm1f(shader, i ? 1.0f : 0.0f));
@@ -919,7 +919,7 @@ vl_compositor_cleanup(struct vl_compositor *c)
    cleanup_pipe_state(c);
 }
 
-void
+bool
 vl_compositor_set_csc_matrix(struct vl_compositor_state *s,
                              vl_csc_matrix const *matrix,
                              float luma_min, float luma_max)
@@ -932,6 +932,9 @@ vl_compositor_set_csc_matrix(struct vl_compositor_state *s,
                                PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_RANGE,
                                &buf_transfer);
 
+   if (!ptr)
+      return false;
+
    memcpy(ptr, matrix, sizeof(vl_csc_matrix));
 
    ptr += sizeof(vl_csc_matrix)/sizeof(float);
@@ -939,6 +942,8 @@ vl_compositor_set_csc_matrix(struct vl_compositor_state *s,
    ptr[1] = luma_max;
 
    pipe_buffer_unmap(s->pipe, buf_transfer);
+
+   return true;
 }
 
 void
@@ -1246,10 +1251,14 @@ vl_compositor_init_state(struct vl_compositor_state *s, struct pipe_context *pip
       sizeof(csc_matrix) + 2*sizeof(float)
    );
 
+   if (!s->csc_matrix)
+      return false;
+
    vl_compositor_clear_layers(s);
 
    vl_csc_get_matrix(VL_CSC_COLOR_STANDARD_IDENTITY, NULL, true, &csc_matrix);
-   vl_compositor_set_csc_matrix(s, (const vl_csc_matrix *)&csc_matrix, 1.0f, 0.0f);
+   if (!vl_compositor_set_csc_matrix(s, (const vl_csc_matrix *)&csc_matrix, 1.0f, 0.0f))
+      return false;
 
    return true;
 }

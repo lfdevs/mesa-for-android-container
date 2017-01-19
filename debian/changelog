@@ -1,3 +1,19 @@
+mesa (17.0.0~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * Bump libdrm-dev build-dep to 2.4.74 per configure.ac.
+  * Bump libwayland-dev build-dep to 1.11.0 per configure.ac.
+  * Remove libgcrypt20-dev build-dep per configure.ac.
+  * Update watch url.
+  * Drop vl-zscan-fix-Fix-trivial-sign-compare-warnings.diff and r600-
+    sb-Fix-loop-optimization-related-hangs-on-eg.diff, upstream.
+  * Drop workaround-binutils-mips-844357.diff, binutils regression has
+    been fixed.
+  * Rename EGL_DISPLAYS to EGL_PLATFORMS.
+  * Update extend-diff-ignore.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 19 Jan 2017 18:39:06 +0100
+
 mesa (13.0.3-1) unstable; urgency=medium
 
   [ Timo Aaltonen ]

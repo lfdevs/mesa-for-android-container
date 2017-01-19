@@ -777,6 +777,10 @@ namespace clover {
    void *
    GetExtensionFunctionAddress(const char *p_name);
 
+   void *
+   GetExtensionFunctionAddressForPlatform(cl_platform_id d_platform,
+                                          const char *p_name);
+
    cl_int
    IcdGetPlatformIDsKHR(cl_uint num_entries, cl_platform_id *rd_platforms,
                         cl_uint *rnum_platforms);

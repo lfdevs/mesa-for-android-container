@@ -141,6 +141,7 @@ void
 blorp_params_init(struct blorp_params *params)
 {
    memset(params, 0, sizeof(*params));
+   params->num_samples = 1;
    params->num_draw_buffers = 1;
    params->num_layers = 1;
 }
@@ -152,16 +153,6 @@ brw_blorp_init_wm_prog_key(struct brw_wm_prog_key *wm_key)
    wm_key->nr_color_regions = 1;
    for (int i = 0; i < MAX_SAMPLERS; i++)
       wm_key->tex.swizzles[i] = SWIZZLE_XYZW;
-}
-
-static int
-nir_uniform_type_size(const struct glsl_type *type)
-{
-   /* Only very basic types are allowed */
-   assert(glsl_type_is_vector_or_scalar(type));
-   assert(glsl_get_bit_size(type) == 32);
-
-   return glsl_get_vector_elements(type) * 4;
 }
 
 const unsigned *
@@ -179,6 +170,7 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
 
    memset(wm_prog_data, 0, sizeof(*wm_prog_data));
 
+   assert(exec_list_is_empty(&nir->uniforms));
    wm_prog_data->base.nr_params = 0;
    wm_prog_data->base.param = NULL;
 
@@ -190,23 +182,41 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
    nir_remove_dead_variables(nir, nir_var_shader_in);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-   /* Uniforms are required to be lowered before going into compile_fs.  For
-    * BLORP, we'll assume that whoever builds the shader sets the location
-    * they want so we just need to lower them and figure out how many we have
-    * in total.
-    */
-   nir->num_uniforms = 0;
-   nir_foreach_variable(var, &nir->uniforms) {
-      var->data.driver_location = var->data.location;
-      unsigned end = var->data.location + nir_uniform_type_size(var->type);
-      nir->num_uniforms = MAX2(nir->num_uniforms, end);
-   }
-   nir_lower_io(nir, nir_var_uniform, nir_uniform_type_size, 0);
+   const unsigned *program =
+      brw_compile_fs(compiler, blorp->driver_ctx, mem_ctx, wm_key,
+                     wm_prog_data, nir, NULL, -1, -1, false, use_repclear,
+                     NULL, program_size, NULL);
+
+   return program;
+}
+
+const unsigned *
+blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
+                 struct nir_shader *nir,
+                 struct brw_vs_prog_data *vs_prog_data,
+                 unsigned *program_size)
+{
+   const struct brw_compiler *compiler = blorp->compiler;
+
+   nir->options =
+      compiler->glsl_compiler_options[MESA_SHADER_VERTEX].NirOptions;
+
+   nir = brw_preprocess_nir(compiler, nir);
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+   vs_prog_data->inputs_read = nir->info->inputs_read;
+
+   brw_compute_vue_map(compiler->devinfo,
+                       &vs_prog_data->base.vue_map,
+                       nir->info->outputs_written,
+                       nir->info->separate_shader);
+
+   struct brw_vs_prog_key vs_key = { 0, };
 
    const unsigned *program =
-      brw_compile_fs(compiler, blorp->driver_ctx, mem_ctx,
-                     wm_key, wm_prog_data, nir,
-                     NULL, -1, -1, false, use_repclear, program_size, NULL);
+      brw_compile_vs(compiler, blorp->driver_ctx, mem_ctx,
+                     &vs_key, vs_prog_data, nir,
+                     NULL, false, -1, program_size, NULL);
 
    return program;
 }
@@ -265,6 +275,7 @@ blorp_gen6_hiz_op(struct blorp_batch *batch,
    params.dst.surf.samples = params.depth.surf.samples;
    params.dst.surf.logical_level0_px = params.depth.surf.logical_level0_px;
    params.depth_format = isl_format_get_depth_format(surf->surf->format, false);
+   params.num_samples = params.depth.surf.samples;
 
    batch->blorp->exec(batch, &params);
 }

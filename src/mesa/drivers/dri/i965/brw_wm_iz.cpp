@@ -143,7 +143,7 @@ void fs_visitor::setup_fs_payload_gen4()
    }
 
    prog_data->uses_src_depth =
-      (nir->info.inputs_read & (1 << VARYING_SLOT_POS)) != 0;
+      (nir->info->inputs_read & (1 << VARYING_SLOT_POS)) != 0;
    if (wm_iz_table[lookup].sd_present || prog_data->uses_src_depth ||
        kill_stats_promoted_workaround) {
       payload.source_depth_reg = reg;

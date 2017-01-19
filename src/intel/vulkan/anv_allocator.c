@@ -24,7 +24,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <values.h>
+#include <limits.h>
 #include <assert.h>
 #include <linux/futex.h>
 #include <linux/memfd.h>
@@ -841,6 +841,7 @@ anv_bo_pool_alloc(struct anv_bo_pool *pool, struct anv_bo *bo, uint32_t size)
    if (anv_ptr_free_list_pop(&pool->free_list[bucket], &next_free_void)) {
       struct bo_pool_bo_link *next_free = next_free_void;
       *bo = VG_NOACCESS_READ(&next_free->bo);
+      assert(bo->gem_handle);
       assert(bo->map == next_free);
       assert(size <= bo->size);
 

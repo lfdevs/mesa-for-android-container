@@ -33,6 +33,7 @@
 //////////////////////////////////////////////////////////////////////////
 /// Auto-generated x86 intrinsics
 //////////////////////////////////////////////////////////////////////////
+Value *VGATHERPD(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale);
 Value *VGATHERPS(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale);
 Value *VGATHERDD(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale);
 Value *VSQRTPS(Value* a);
@@ -50,6 +51,7 @@ Value *VMASKSTOREPS(Value* src, Value* mask, Value* val);
 Value *VPSHUFB(Value* a, Value* b);
 Value *VPERMD(Value* a, Value* idx);
 Value *VPERMPS(Value* idx, Value* a);
+Value *VCVTPD2PS(Value* a);
 Value *VCVTPH2PS(Value* a);
 Value *VCVTPS2PH(Value* a, Value* round);
 Value *VHSUBPS(Value* a, Value* b);

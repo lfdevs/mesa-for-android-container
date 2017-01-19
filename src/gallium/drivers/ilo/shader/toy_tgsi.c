@@ -50,7 +50,6 @@ static const struct {
    [TGSI_OPCODE_MAX]          = { GEN6_OPCODE_SEL,                 1, 2 },
    /* a later pass will move src[2] to accumulator */
    [TGSI_OPCODE_MAD]          = { GEN6_OPCODE_MAC,                 1, 3 },
-   [TGSI_OPCODE_SUB]          = { GEN6_OPCODE_ADD,                 1, 2 },
    [TGSI_OPCODE_SQRT]         = { TOY_OPCODE_SQRT,                1, 1 },
    [TGSI_OPCODE_FRC]          = { GEN6_OPCODE_FRC,                 1, 1 },
    [TGSI_OPCODE_FLR]          = { GEN6_OPCODE_RNDD,                1, 1 },
@@ -58,7 +57,6 @@ static const struct {
    [TGSI_OPCODE_EX2]          = { TOY_OPCODE_EXP,                 1, 1 },
    [TGSI_OPCODE_LG2]          = { TOY_OPCODE_LOG,                 1, 1 },
    [TGSI_OPCODE_POW]          = { TOY_OPCODE_POW,                 1, 2 },
-   [TGSI_OPCODE_ABS]          = { GEN6_OPCODE_MOV,                 1, 1 },
    [TGSI_OPCODE_DPH]          = { GEN6_OPCODE_DPH,                 1, 2 },
    [TGSI_OPCODE_COS]          = { TOY_OPCODE_COS,                 1, 1 },
    [TGSI_OPCODE_KILL]         = { TOY_OPCODE_KIL,                 0, 0 },
@@ -145,10 +143,6 @@ aos_simple(struct toy_compiler *tc,
    case TGSI_OPCODE_UMAX:
       cond_modifier = GEN6_COND_GE;
       break;
-   case TGSI_OPCODE_SUB:
-      src[1] = tsrc_negate(src[1]);
-      break;
-   case TGSI_OPCODE_ABS:
    case TGSI_OPCODE_IABS:
       src[0] = tsrc_absolute(src[0]);
       break;
@@ -778,7 +772,6 @@ static const toy_tgsi_translate aos_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_SLT]          = aos_set_on_cond,
    [TGSI_OPCODE_SGE]          = aos_set_on_cond,
    [TGSI_OPCODE_MAD]          = aos_simple,
-   [TGSI_OPCODE_SUB]          = aos_simple,
    [TGSI_OPCODE_LRP]          = aos_LRP,
    [TGSI_OPCODE_SQRT]         = aos_simple,
    [TGSI_OPCODE_DP2A]         = aos_DP2A,
@@ -790,7 +783,6 @@ static const toy_tgsi_translate aos_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_LG2]          = aos_simple,
    [TGSI_OPCODE_POW]          = aos_simple,
    [TGSI_OPCODE_XPD]          = aos_XPD,
-   [TGSI_OPCODE_ABS]          = aos_simple,
    [TGSI_OPCODE_DPH]          = aos_simple,
    [TGSI_OPCODE_COS]          = aos_simple,
    [TGSI_OPCODE_DDX]          = aos_unsupported,
@@ -1321,7 +1313,6 @@ static const toy_tgsi_translate soa_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_SLT]          = soa_per_channel,
    [TGSI_OPCODE_SGE]          = soa_per_channel,
    [TGSI_OPCODE_MAD]          = soa_per_channel,
-   [TGSI_OPCODE_SUB]          = soa_per_channel,
    [TGSI_OPCODE_LRP]          = soa_per_channel,
    [TGSI_OPCODE_SQRT]         = soa_scalar_replicate,
    [TGSI_OPCODE_DP2A]         = soa_dot_product,
@@ -1333,7 +1324,6 @@ static const toy_tgsi_translate soa_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_LG2]          = soa_scalar_replicate,
    [TGSI_OPCODE_POW]          = soa_scalar_replicate,
    [TGSI_OPCODE_XPD]          = soa_XPD,
-   [TGSI_OPCODE_ABS]          = soa_per_channel,
    [TGSI_OPCODE_DPH]          = soa_dot_product,
    [TGSI_OPCODE_COS]          = soa_scalar_replicate,
    [TGSI_OPCODE_DDX]          = soa_partial_derivative,

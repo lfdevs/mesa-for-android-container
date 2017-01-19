@@ -431,7 +431,7 @@ nv30_transfer_rect_sifm(XFER_ARGS)
       si_arg |= NV03_SIFM_FORMAT_FILTER_BILINEAR;
    }
 
-   if (nouveau_pushbuf_space(push, 32, 6, 0) ||
+   if (nouveau_pushbuf_space(push, 64, 6, 0) ||
        nouveau_pushbuf_refn (push, refs, 2))
       return;
 
@@ -516,7 +516,7 @@ nv30_transfer_rect_m2mf(XFER_ARGS)
    while (h) {
       unsigned lines = (h > 2047) ? 2047 : h;
 
-      if (nouveau_pushbuf_space(push, 13, 2, 0) ||
+      if (nouveau_pushbuf_space(push, 32, 2, 0) ||
           nouveau_pushbuf_refn (push, refs, 2))
          return;
 
@@ -708,7 +708,7 @@ nv30_transfer_copy_data(struct nouveau_context *nv,
       lines  = (pages > 2047) ? 2047 : pages;
       pages -= lines;
 
-      if (nouveau_pushbuf_space(push, 13, 2, 0) ||
+      if (nouveau_pushbuf_space(push, 32, 2, 0) ||
           nouveau_pushbuf_refn (push, refs, 2))
          return;
 
@@ -732,7 +732,7 @@ nv30_transfer_copy_data(struct nouveau_context *nv,
    }
 
    if (size) {
-      if (nouveau_pushbuf_space(push, 13, 2, 0) ||
+      if (nouveau_pushbuf_space(push, 32, 2, 0) ||
           nouveau_pushbuf_refn (push, refs, 2))
          return;
 

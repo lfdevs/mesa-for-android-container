@@ -615,6 +615,9 @@ vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
                  VC4_SET_FIELD(prsc->height0 & 2047, VC4_TEX_P1_HEIGHT) |
                  VC4_SET_FIELD(prsc->width0 & 2047, VC4_TEX_P1_WIDTH));
 
+        if (prsc->format == PIPE_FORMAT_ETC1_RGB8)
+                so->texture_p1 |= VC4_TEX_P1_ETCFLIP_MASK;
+
         return &so->base;
 }
 

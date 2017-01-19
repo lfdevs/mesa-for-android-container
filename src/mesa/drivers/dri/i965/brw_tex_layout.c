@@ -610,8 +610,7 @@ brw_miptree_choose_tiling(struct brw_context *brw,
    if (minimum_pitch < 64)
       return I915_TILING_NONE;
 
-   if (ALIGN(minimum_pitch, 512) >= 32768 ||
-       mt->total_width >= 32768 || mt->total_height >= 32768) {
+   if (ALIGN(minimum_pitch, 512) >= 32768) {
       perf_debug("%dx%d miptree too large to blit, falling back to untiled",
                  mt->total_width, mt->total_height);
       return I915_TILING_NONE;

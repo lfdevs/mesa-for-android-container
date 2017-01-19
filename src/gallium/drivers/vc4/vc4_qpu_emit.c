@@ -157,7 +157,7 @@ setup_for_vpm_read(struct vc4_compile *c, struct qblock *block)
  * address.
  *
  * In that case, we need to move one to a temporary that can be used in the
- * instruction, instead.  We reserve ra31/rb31 for this purpose.
+ * instruction, instead.  We reserve ra14/rb14 for this purpose.
  */
 static void
 fixup_raddr_conflict(struct qblock *block,
@@ -183,9 +183,9 @@ fixup_raddr_conflict(struct qblock *block,
                  * in case of unpacks.
                  */
                 if (qir_is_float_input(inst))
-                        queue(block, qpu_a_FMAX(qpu_rb(31), *src0, *src0));
+                        queue(block, qpu_a_FMAX(qpu_rb(14), *src0, *src0));
                 else
-                        queue(block, qpu_a_MOV(qpu_rb(31), *src0));
+                        queue(block, qpu_a_MOV(qpu_rb(14), *src0));
 
                 /* If we had an unpack on this A-file source, we need to put
                  * it into this MOV, not into the later move from regfile B.
@@ -194,10 +194,10 @@ fixup_raddr_conflict(struct qblock *block,
                         *last_inst(block) |= *unpack;
                         *unpack = 0;
                 }
-                *src0 = qpu_rb(31);
+                *src0 = qpu_rb(14);
         } else {
-                queue(block, qpu_a_MOV(qpu_ra(31), *src0));
-                *src0 = qpu_ra(31);
+                queue(block, qpu_a_MOV(qpu_ra(14), *src0));
+                *src0 = qpu_ra(14);
         }
 }
 
@@ -288,8 +288,8 @@ vc4_generate_code_block(struct vc4_compile *c,
                 };
 
                 uint64_t unpack = 0;
-                struct qpu_reg src[4];
-                for (int i = 0; i < qir_get_op_nsrc(qinst->op); i++) {
+                struct qpu_reg src[ARRAY_SIZE(qinst->src)];
+                for (int i = 0; i < qir_get_nsrc(qinst); i++) {
                         int index = qinst->src[i].index;
                         switch (qinst->src[i].file) {
                         case QFILE_NULL:
@@ -347,6 +347,11 @@ vc4_generate_code_block(struct vc4_compile *c,
                         case QFILE_TLB_COLOR_WRITE_MS:
                         case QFILE_TLB_Z_WRITE:
                         case QFILE_TLB_STENCIL_SETUP:
+                        case QFILE_TEX_S:
+                        case QFILE_TEX_S_DIRECT:
+                        case QFILE_TEX_T:
+                        case QFILE_TEX_R:
+                        case QFILE_TEX_B:
                                 unreachable("bad qir src file");
                         }
                 }
@@ -377,6 +382,23 @@ vc4_generate_code_block(struct vc4_compile *c,
 
                 case QFILE_TLB_STENCIL_SETUP:
                         dst = qpu_ra(QPU_W_TLB_STENCIL_SETUP);
+                        break;
+
+                case QFILE_TEX_S:
+                case QFILE_TEX_S_DIRECT:
+                        dst = qpu_rb(QPU_W_TMU0_S);
+                        break;
+
+                case QFILE_TEX_T:
+                        dst = qpu_rb(QPU_W_TMU0_T);
+                        break;
+
+                case QFILE_TEX_R:
+                        dst = qpu_rb(QPU_W_TMU0_R);
+                        break;
+
+                case QFILE_TEX_B:
+                        dst = qpu_rb(QPU_W_TMU0_B);
                         break;
 
                 case QFILE_VARY:
@@ -477,27 +499,19 @@ vc4_generate_code_block(struct vc4_compile *c,
                         queue(block, qpu_a_FADD(dst, src[0], qpu_r5()) | unpack);
                         break;
 
-                case QOP_TEX_S:
-                case QOP_TEX_T:
-                case QOP_TEX_R:
-                case QOP_TEX_B:
-                        queue(block, qpu_a_MOV(qpu_rb(QPU_W_TMU0_S +
-                                                      (qinst->op - QOP_TEX_S)),
-                                               src[0]) | unpack);
-                        break;
-
-                case QOP_TEX_DIRECT:
-                        fixup_raddr_conflict(block, dst, &src[0], &src[1],
-                                             qinst, &unpack);
-                        queue(block, qpu_a_ADD(qpu_rb(QPU_W_TMU0_S),
-                                               src[0], src[1]) | unpack);
-                        break;
 
                 case QOP_TEX_RESULT:
                         queue(block, qpu_NOP());
                         *last_inst(block) = qpu_set_sig(*last_inst(block),
                                                         QPU_SIG_LOAD_TMU0);
                         handle_r4_qpu_write(block, qinst, dst);
+                        break;
+
+                case QOP_THRSW:
+                        queue(block, qpu_NOP());
+                        *last_inst(block) = qpu_set_sig(*last_inst(block),
+                                                        QPU_SIG_THREAD_SWITCH);
+                        c->last_thrsw = last_inst(block);
                         break;
 
                 case QOP_BRANCH:
@@ -531,7 +545,7 @@ vc4_generate_code_block(struct vc4_compile *c,
                          * argument slot as well so that we don't take up
                          * another raddr just to get unused data.
                          */
-                        if (qir_get_op_nsrc(qinst->op) == 1)
+                        if (qir_get_non_sideband_nsrc(qinst) == 1)
                                 src[1] = src[0];
 
                         fixup_raddr_conflict(block, dst, &src[0], &src[1],
@@ -584,6 +598,23 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
 
         qir_for_each_block(block, c)
                 vc4_generate_code_block(c, block, temp_registers);
+
+        /* Switch the last SIG_THRSW instruction to SIG_LAST_THRSW.
+         *
+         * LAST_THRSW is a new signal in BCM2708B0 (including Raspberry Pi)
+         * that ensures that a later thread doesn't try to lock the scoreboard
+         * and terminate before an earlier-spawned thread on the same QPU, by
+         * delaying switching back to the later shader until earlier has
+         * finished.  Otherwise, if the earlier thread was hitting the same
+         * quad, the scoreboard would deadlock.
+         */
+        if (c->last_thrsw) {
+                assert(QPU_GET_FIELD(*c->last_thrsw, QPU_SIG) ==
+                       QPU_SIG_THREAD_SWITCH);
+                *c->last_thrsw = ((*c->last_thrsw & ~QPU_SIG_MASK) |
+                                  QPU_SET_FIELD(QPU_SIG_LAST_THREAD_SWITCH,
+                                                QPU_SIG));
+        }
 
         uint32_t cycles = qpu_schedule_instructions(c);
         uint32_t inst_count_at_schedule_time = c->qpu_inst_count;

@@ -296,6 +296,9 @@ typedef struct PACKED {
 			int32_t  immed    : 20;
 			uint32_t dummy1   : 12;
 		} a4xx;
+		struct PACKED {
+			uint32_t immed    : 32;
+		} a5xx;
 	};
 
 	/* dword1: */

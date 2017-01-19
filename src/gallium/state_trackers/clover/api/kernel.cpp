@@ -215,7 +215,10 @@ namespace {
             }, kern.args()))
          throw error(CL_INVALID_KERNEL_ARGS);
 
-      if (!count(q.device(), kern.program().devices()))
+      // If the command queue's device is not associated to the program, we get
+      // a module, with no sections, which will also fail the following test.
+      auto &m = kern.program().build(q.device()).binary;
+      if (!any_of(type_equals(module::section::text_executable), m.secs))
          throw error(CL_INVALID_PROGRAM_EXECUTABLE);
    }
 

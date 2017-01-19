@@ -261,31 +261,18 @@ enum {
 
 
 
-typedef int
+typedef boolean
 (*draw_jit_vert_func)(struct draw_jit_context *context,
                       struct vertex_header *io,
                       const struct draw_vertex_buffer vbuffers[PIPE_MAX_ATTRIBS],
-                      unsigned start,
                       unsigned count,
+                      unsigned start_or_maxelt,
                       unsigned stride,
                       struct pipe_vertex_buffer *vertex_buffers,
                       unsigned instance_id,
                       unsigned vertex_id_offset,
-                      unsigned start_instance);
-
-
-typedef int
-(*draw_jit_vert_func_elts)(struct draw_jit_context *context,
-                           struct vertex_header *io,
-                           const struct draw_vertex_buffer vbuffers[PIPE_MAX_ATTRIBS],
-                           const unsigned *fetch_elts,
-                           unsigned fetch_max_elt,
-                           unsigned fetch_count,
-                           unsigned stride,
-                           struct pipe_vertex_buffer *vertex_buffers,
-                           unsigned instance_id,
-                           unsigned vertex_id_offset,
-                           unsigned start_instance);
+                      unsigned start_instance,
+                      const unsigned *fetch_elts);
 
 
 typedef int
@@ -393,9 +380,7 @@ struct draw_llvm_variant
    LLVMTypeRef vertex_header_ptr_type;
 
    LLVMValueRef function;
-   LLVMValueRef function_elts;
    draw_jit_vert_func jit_func;
-   draw_jit_vert_func_elts jit_func_elts;
 
    struct llvm_vertex_shader *shader;
 

@@ -165,8 +165,9 @@ swr_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    /* Initialize Results */
    memset(&pq->result, 0, sizeof(pq->result));
    switch (pq->type) {
+   case PIPE_QUERY_GPU_FINISHED:
    case PIPE_QUERY_TIMESTAMP:
-      /* nothing to do */
+      /* nothing to do, but don't want the default */
       break;
    case PIPE_QUERY_TIME_ELAPSED:
       pq->result.timestamp_start = swr_get_timestamp(pipe->screen);
@@ -177,12 +178,14 @@ swr_begin_query(struct pipe_context *pipe, struct pipe_query *q)
       swr_update_draw_context(ctx, &pq->result);
 
       /* Only change stat collection if there are no active queries */
-      if (ctx->active_queries == 0)
-         SwrEnableStats(ctx->swrContext, TRUE);
+      if (ctx->active_queries == 0) {
+         SwrEnableStatsFE(ctx->swrContext, TRUE);
+         SwrEnableStatsBE(ctx->swrContext, TRUE);
+      }
+      ctx->active_queries++;
       break;
    }
 
-   ctx->active_queries++;
 
    return true;
 }
@@ -193,11 +196,10 @@ swr_end_query(struct pipe_context *pipe, struct pipe_query *q)
    struct swr_context *ctx = swr_context(pipe);
    struct swr_query *pq = swr_query(q);
 
-   assert(ctx->active_queries
-          && "swr_end_query, there are no active queries!");
-   ctx->active_queries--;
-
    switch (pq->type) {
+   case PIPE_QUERY_GPU_FINISHED:
+      /* nothing to do, but don't want the default */
+      break;
    case PIPE_QUERY_TIMESTAMP:
    case PIPE_QUERY_TIME_ELAPSED:
       pq->result.timestamp_end = swr_get_timestamp(pipe->screen);
@@ -212,8 +214,11 @@ swr_end_query(struct pipe_context *pipe, struct pipe_query *q)
       swr_fence_submit(ctx, pq->fence);
 
       /* Only change stat collection if there are no active queries */
-      if (ctx->active_queries == 0)
-         SwrEnableStats(ctx->swrContext, FALSE);
+      ctx->active_queries--;
+      if (ctx->active_queries == 0) {
+         SwrEnableStatsFE(ctx->swrContext, FALSE);
+         SwrEnableStatsBE(ctx->swrContext, FALSE);
+      }
 
       break;
    }

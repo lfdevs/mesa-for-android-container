@@ -11,6 +11,7 @@ COMMON_FILES = \
 	common/gen_device_info.h \
 	common/gen_l3_config.c \
 	common/gen_l3_config.h \
+	common/gen_urb_config.c \
 	common/gen_sample_positions.h
 
 GENXML_GENERATED_FILES = \

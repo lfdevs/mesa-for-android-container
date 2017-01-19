@@ -82,7 +82,7 @@ vlVdpOutputSurfaceCreate(VdpDevice device,
    res_tmpl.depth0 = 1;
    res_tmpl.array_size = 1;
    res_tmpl.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET |
-                   PIPE_BIND_SHARED;
+                   PIPE_BIND_SHARED | PIPE_BIND_SCANOUT;
    res_tmpl.usage = PIPE_USAGE_DEFAULT;
 
    pipe_mutex_lock(dev->mutex);
@@ -111,7 +111,9 @@ vlVdpOutputSurfaceCreate(VdpDevice device,
 
    pipe_resource_reference(&res, NULL);
 
-   vl_compositor_init_state(&vlsurface->cstate, pipe);
+   if (!vl_compositor_init_state(&vlsurface->cstate, pipe))
+      goto err_resource;
+
    vl_compositor_reset_dirty_area(&vlsurface->dirty_area);
    pipe_mutex_unlock(dev->mutex);
 
@@ -144,7 +146,6 @@ vlVdpOutputSurfaceDestroy(VdpOutputSurface surface)
    pipe = vlsurface->device->context;
 
    pipe_mutex_lock(vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
 
    pipe_surface_reference(&vlsurface->surface, NULL);
    pipe_sampler_view_reference(&vlsurface->sampler_view, NULL);
@@ -209,7 +210,6 @@ vlVdpOutputSurfaceGetBitsNative(VdpOutputSurface surface,
        return VDP_STATUS_INVALID_POINTER;
 
    pipe_mutex_lock(vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
 
    res = vlsurface->sampler_view->texture;
    box = RectToPipeBox(source_rect, res);
@@ -254,7 +254,6 @@ vlVdpOutputSurfacePutBitsNative(VdpOutputSurface surface,
        return VDP_STATUS_INVALID_POINTER;
 
    pipe_mutex_lock(vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
 
    dst_box = RectToPipeBox(destination_rect, vlsurface->sampler_view->texture);
    pipe->texture_subdata(pipe, vlsurface->sampler_view->texture, 0,
@@ -332,7 +331,6 @@ vlVdpOutputSurfacePutBitsIndexed(VdpOutputSurface surface,
    res_tmpl.bind = PIPE_BIND_SAMPLER_VIEW;
 
    pipe_mutex_lock(vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
 
    if (!CheckSurfaceParams(context->screen, &res_tmpl))
       goto error_resource;
@@ -450,7 +448,6 @@ vlVdpOutputSurfacePutBitsYCbCr(VdpOutputSurface surface,
        return VDP_STATUS_INVALID_POINTER;
 
    pipe_mutex_lock(vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
    memset(&vtmpl, 0, sizeof(vtmpl));
    vtmpl.buffer_format = format;
    vtmpl.chroma_format = FormatYCBCRToPipeChroma(source_ycbcr_format);
@@ -492,9 +489,11 @@ vlVdpOutputSurfacePutBitsYCbCr(VdpOutputSurface surface,
    if (!csc_matrix) {
       vl_csc_matrix csc;
       vl_csc_get_matrix(VL_CSC_COLOR_STANDARD_BT_601, NULL, 1, &csc);
-      vl_compositor_set_csc_matrix(cstate, (const vl_csc_matrix*)&csc, 1.0f, 0.0f);
+      if (!vl_compositor_set_csc_matrix(cstate, (const vl_csc_matrix*)&csc, 1.0f, 0.0f))
+         goto err_csc_matrix;
    } else {
-      vl_compositor_set_csc_matrix(cstate, csc_matrix, 1.0f, 0.0f);
+      if (!vl_compositor_set_csc_matrix(cstate, csc_matrix, 1.0f, 0.0f))
+         goto err_csc_matrix;
    }
 
    vl_compositor_clear_layers(cstate);
@@ -506,6 +505,10 @@ vlVdpOutputSurfacePutBitsYCbCr(VdpOutputSurface surface,
    pipe_mutex_unlock(vlsurface->device->mutex);
 
    return VDP_STATUS_OK;
+err_csc_matrix:
+   vbuffer->destroy(vbuffer);
+   pipe_mutex_unlock(vlsurface->device->mutex);
+   return VDP_STATUS_ERROR;
 }
 
 static unsigned
@@ -663,7 +666,6 @@ vlVdpOutputSurfaceRenderOutputSurface(VdpOutputSurface destination_surface,
    }
 
    pipe_mutex_lock(dst_vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(dst_vlsurface->device, NULL, NULL);
 
    context = dst_vlsurface->device->context;
    compositor = &dst_vlsurface->device->compositor;
@@ -738,7 +740,6 @@ vlVdpOutputSurfaceRenderBitmapSurface(VdpOutputSurface destination_surface,
    cstate = &dst_vlsurface->cstate;
 
    pipe_mutex_lock(dst_vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(dst_vlsurface->device, NULL, NULL);
 
    blend = BlenderToPipe(context, blend_state);
 
@@ -766,7 +767,6 @@ struct pipe_resource *vlVdpOutputSurfaceGallium(VdpOutputSurface surface)
       return NULL;
 
    pipe_mutex_lock(vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
    vlsurface->device->context->flush(vlsurface->device->context, NULL, 0);
    pipe_mutex_unlock(vlsurface->device->mutex);
 
@@ -788,9 +788,7 @@ VdpStatus vlVdpOutputSurfaceDMABuf(VdpOutputSurface surface,
       return VDP_STATUS_INVALID_HANDLE;
 
    pipe_mutex_lock(vlsurface->device->mutex);
-   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
    vlsurface->device->context->flush(vlsurface->device->context, NULL, 0);
-   pipe_mutex_unlock(vlsurface->device->mutex);
 
    memset(&whandle, 0, sizeof(struct winsys_handle));
    whandle.type = DRM_API_HANDLE_TYPE_FD;
@@ -798,8 +796,12 @@ VdpStatus vlVdpOutputSurfaceDMABuf(VdpOutputSurface surface,
    pscreen = vlsurface->surface->texture->screen;
    if (!pscreen->resource_get_handle(pscreen, vlsurface->device->context,
                                      vlsurface->surface->texture, &whandle,
-				     PIPE_HANDLE_USAGE_READ_WRITE))
+                                     PIPE_HANDLE_USAGE_READ_WRITE)) {
+      pipe_mutex_unlock(vlsurface->device->mutex);
       return VDP_STATUS_NO_IMPLEMENTATION;
+   }
+
+   pipe_mutex_unlock(vlsurface->device->mutex);
 
    result->handle = whandle.handle;
    result->width = vlsurface->surface->width;

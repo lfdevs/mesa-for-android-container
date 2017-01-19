@@ -578,7 +578,8 @@ texture_barrier
 %%%%%%%%%%%%%%%
 
 This function flushes all pending writes to the currently-set surfaces and
-invalidates all read caches of the currently-set samplers.
+invalidates all read caches of the currently-set samplers. This can be used
+for both regular textures as well as for framebuffers read via FBFETCH.
 
 
 
@@ -707,3 +708,26 @@ notifications are single-shot, i.e. subsequent calls to
   since the last call or since the last notification by callback.
 * ``set_device_reset_callback`` sets a callback which will be called when
   a device reset is detected. The callback is only called synchronously.
+
+Using several contexts
+----------------------
+
+Several contexts from the same screen can be used at the same time. Objects
+created on one context cannot be used in another context, but the objects
+created by the screen methods can be used by all contexts.
+
+Transfers
+^^^^^^^^^
+A transfer on one context is not expected to synchronize properly with
+rendering on other contexts, thus only areas not yet used for rendering should
+be locked.
+
+A flush is required after transfer_unmap to expect other contexts to see the
+uploaded data, unless:
+
+* Using persistent mapping. Associated with coherent mapping, unmapping the
+  resource is also not required to use it in other contexts. Without coherent
+  mapping, memory_barrier(PIPE_BARRIER_MAPPED_BUFFER) should be called on the
+  context that has mapped the resource. No flush is required.
+
+* Mapping the resource with PIPE_TRANSFER_MAP_DIRECTLY.

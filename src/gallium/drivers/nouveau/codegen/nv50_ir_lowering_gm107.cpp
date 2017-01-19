@@ -61,12 +61,28 @@ GM107LegalizeSSA::handlePFETCH(Instruction *i)
    i->setSrc(1, NULL);
 }
 
+void
+GM107LegalizeSSA::handleLOAD(Instruction *i)
+{
+   if (i->src(0).getFile() != FILE_MEMORY_CONST)
+      return;
+   if (i->src(0).isIndirect(0))
+      return;
+   if (typeSizeof(i->dType) != 4)
+      return;
+
+   i->op = OP_MOV;
+}
+
 bool
 GM107LegalizeSSA::visit(Instruction *i)
 {
    switch (i->op) {
    case OP_PFETCH:
       handlePFETCH(i);
+      break;
+   case OP_LOAD:
+      handleLOAD(i);
       break;
    default:
       break;

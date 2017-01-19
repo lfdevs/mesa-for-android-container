@@ -35,8 +35,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __R200_IOCTL_H__
 #define __R200_IOCTL_H__
 
-#include "util/simple_list.h"
-
 #include "radeon_bo_gem.h"
 #include "radeon_cs_gem.h"
 

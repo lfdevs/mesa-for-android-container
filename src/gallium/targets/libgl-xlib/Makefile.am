@@ -75,7 +75,7 @@ lib@GL_LIB@_la_LIBADD = \
 	$(GL_LIB_DEPS) \
 	$(CLOCK_LIB)
 
-if HAVE_MESA_LLVM
+if HAVE_GALLIUM_LLVM
 lib@GL_LIB@_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
 AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
 lib@GL_LIB@_la_LDFLAGS += $(LLVM_LDFLAGS)

@@ -26,6 +26,7 @@
 
 #include "nine_helpers.h"
 #include "nine_pdata.h"
+#include "nine_lock.h"
 
 #define DBG_CHANNEL DBG_UNKNOWN
 
@@ -78,6 +79,8 @@ NineUnknown_QueryInterface( struct NineUnknown *This,
     DBG("This=%p riid=%p id=%s ppvObject=%p\n",
         This, riid, riid ? GUID_sprintf(guid_str, riid) : "", ppvObject);
 
+    (void)guid_str;
+
     if (!ppvObject) return E_POINTER;
 
     do {
@@ -108,9 +111,6 @@ NineUnknown_AddRef( struct NineUnknown *This )
     if (r == 1) {
         if (This->device)
             NineUnknown_AddRef(NineUnknown(This->device));
-        /* This shouldn't be necessary:
-        if (This->container)
-            NineUnknown_Bind(NineUnknown(This->container)); */
     }
     return r;
 }
@@ -128,11 +128,34 @@ NineUnknown_Release( struct NineUnknown *This )
             if (NineUnknown_Release(NineUnknown(This->device)) == 0)
                 return r; /* everything's gone */
         }
-        if (This->container) {
-            /* NineUnknown_Unbind(NineUnknown(This->container)); */
-        } else
-        if (This->bind == 0) {
+        /* Containers (here with !forward) take care of item destruction */
+        if (!This->container && This->bind == 0) {
             This->dtor(This);
+        }
+    }
+    return r;
+}
+
+/* No need to lock the mutex protecting nine (when D3DCREATE_MULTITHREADED)
+ * for AddRef and Release, except for dtor as some of the dtors require it. */
+ULONG NINE_WINAPI
+NineUnknown_ReleaseWithDtorLock( struct NineUnknown *This )
+{
+    if (This->forward)
+        return NineUnknown_ReleaseWithDtorLock(This->container);
+
+    ULONG r = p_atomic_dec_return(&This->refs);
+
+    if (r == 0) {
+        if (This->device) {
+            if (NineUnknown_ReleaseWithDtorLock(NineUnknown(This->device)) == 0)
+                return r; /* everything's gone */
+        }
+        /* Containers (here with !forward) take care of item destruction */
+        if (!This->container && This->bind == 0) {
+            NineLockGlobalMutex();
+            This->dtor(This);
+            NineUnlockGlobalMutex();
         }
     }
     return r;
@@ -163,6 +186,8 @@ NineUnknown_SetPrivateData( struct NineUnknown *This,
 
     DBG("This=%p GUID=%s pData=%p SizeOfData=%u Flags=%x\n",
         This, GUID_sprintf(guid_str, refguid), pData, SizeOfData, Flags);
+
+    (void)guid_str;
 
     if (Flags & D3DSPD_IUNKNOWN)
         user_assert(SizeOfData == sizeof(IUnknown *), D3DERR_INVALIDCALL);
@@ -213,6 +238,8 @@ NineUnknown_GetPrivateData( struct NineUnknown *This,
     DBG("This=%p GUID=%s pData=%p pSizeOfData=%p\n",
         This, GUID_sprintf(guid_str, refguid), pData, pSizeOfData);
 
+    (void)guid_str;
+
     header = util_hash_table_get(This->pdata, refguid);
     if (!header) { return D3DERR_NOTFOUND; }
 
@@ -242,6 +269,8 @@ NineUnknown_FreePrivateData( struct NineUnknown *This,
     char guid_str[64];
 
     DBG("This=%p GUID=%s\n", This, GUID_sprintf(guid_str, refguid));
+
+    (void)guid_str;
 
     header = util_hash_table_get(This->pdata, refguid);
     if (!header)

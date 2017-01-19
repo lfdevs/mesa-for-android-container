@@ -60,7 +60,8 @@ void cmod_propagation_test::SetUp()
    compiler->devinfo = devinfo;
 
    prog_data = ralloc(NULL, struct brw_wm_prog_data);
-   nir_shader *shader = nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL);
+   nir_shader *shader =
+      nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL, NULL);
 
    v = new cmod_propagation_fs_visitor(compiler, prog_data, shader);
 

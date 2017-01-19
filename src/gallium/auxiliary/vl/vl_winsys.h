@@ -59,6 +59,11 @@ struct vl_screen
    void *
    (*get_private)(struct vl_screen *vscreen);
 
+   void
+   (*set_back_texture_from_output)(struct vl_screen *vscreen,
+                                   struct pipe_resource *buffer,
+                                   uint32_t width, uint32_t height);
+
    struct pipe_screen *pscreen;
    struct pipe_loader_device *dev;
 };

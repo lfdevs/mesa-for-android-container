@@ -43,7 +43,7 @@ nv50_flush(struct pipe_context *pipe,
 }
 
 static void
-nv50_texture_barrier(struct pipe_context *pipe)
+nv50_texture_barrier(struct pipe_context *pipe, unsigned flags)
 {
    struct nouveau_pushbuf *push = nv50_context(pipe)->base.pushbuf;
 

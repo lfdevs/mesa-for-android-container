@@ -603,7 +603,7 @@ ilo_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 }
 
 static void
-ilo_texture_barrier(struct pipe_context *pipe)
+ilo_texture_barrier(struct pipe_context *pipe, unsigned flags)
 {
    struct ilo_context *ilo = ilo_context(pipe);
 

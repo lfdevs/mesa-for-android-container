@@ -220,17 +220,33 @@ void value::add_use(node* n, use_kind kind, int arg) {
 	dump::dump_op(n);
 	sblog << "     kind " << kind << "    arg " << arg << "\n";
 	}
-	uses = new use_info(n, kind, arg, uses);
+	uses.push_back(new use_info(n, kind, arg));
+}
+
+struct use_node_comp {
+	explicit use_node_comp(const node *n) : n(n) {}
+	bool operator() (const use_info *u) {
+		return u->op->hash() == n->hash();
+	}
+
+	private:
+		const node *n;
+};
+
+void value::remove_use(const node *n) {
+	uselist::iterator it =
+		std::find_if(uses.begin(), uses.end(), use_node_comp(n));
+
+	if (it != uses.end())
+	{
+		// TODO assert((*it)->kind == kind) ?
+		// TODO assert((*it)->arg == arg) ?
+		uses.erase(it);
+	}
 }
 
 unsigned value::use_count() {
-	use_info *u = uses;
-	unsigned c = 0;
-	while (u) {
-		++c;
-		u = u->next;
-	}
-	return c;
+	return uses.size();
 }
 
 bool value::is_global() {
@@ -274,13 +290,7 @@ bool value::is_prealloc() {
 }
 
 void value::delete_uses() {
-	use_info *u, *c = uses;
-	while (c) {
-		u = c->next;
-		delete c;
-		c = u;
-	}
-	uses = NULL;
+	uses.erase(uses.begin(), uses.end());
 }
 
 void ra_constraint::update_values() {
@@ -468,7 +478,7 @@ bool r600_sb::sb_value_set::add_vec(vvec& vv) {
 bool r600_sb::sb_value_set::contains(value* v) {
 	unsigned b = v->uid - 1;
 	if (b < bs.size())
-		return bs.get(v->uid - 1);
+		return bs.get(b);
 	else
 		return false;
 }

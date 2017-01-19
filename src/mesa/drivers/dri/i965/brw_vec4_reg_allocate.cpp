@@ -369,14 +369,27 @@ can_use_scratch_for_source(const vec4_instruction *inst, unsigned i,
    return prev_inst_read_scratch_reg;
 }
 
+static inline unsigned
+spill_cost_for_type(enum brw_reg_type type)
+{
+   /* Spilling of a 64-bit register involves emitting 2 32-bit scratch
+    * messages plus the 64b/32b shuffling code.
+    */
+   return type_sz(type) == 8 ? 2.25f : 1.0f;
+}
+
 void
 vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
 {
    float loop_scale = 1.0;
 
+   unsigned *reg_type_size = (unsigned *)
+      ralloc_size(NULL, this->alloc.count * sizeof(unsigned));
+
    for (unsigned i = 0; i < this->alloc.count; i++) {
       spill_costs[i] = 0.0;
-      no_spill[i] = alloc.sizes[i] != 1;
+      no_spill[i] = alloc.sizes[i] != 1 && alloc.sizes[i] != 2;
+      reg_type_size[i] = 0;
    }
 
    /* Calculate costs for spilling nodes.  Call it a cost of 1 per
@@ -385,23 +398,74 @@ vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
     */
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (unsigned int i = 0; i < 3; i++) {
-         if (inst->src[i].file == VGRF) {
+         if (inst->src[i].file == VGRF && !no_spill[inst->src[i].nr]) {
             /* We will only unspill src[i] it it wasn't unspilled for the
              * previous instruction, in which case we'll just reuse the scratch
              * reg for this instruction.
              */
             if (!can_use_scratch_for_source(inst, i, inst->src[i].nr)) {
-               spill_costs[inst->src[i].nr] += loop_scale;
+               spill_costs[inst->src[i].nr] +=
+                  loop_scale * spill_cost_for_type(inst->src[i].type);
                if (inst->src[i].reladdr ||
-                   inst->src[i].offset % REG_SIZE != 0)
+                   inst->src[i].offset >= REG_SIZE)
+                  no_spill[inst->src[i].nr] = true;
+
+               /* We don't support unspills of partial DF reads.
+                *
+                * Our 64-bit unspills are implemented with two 32-bit scratch
+                * messages, each one reading that for both SIMD4x2 threads that
+                * we need to shuffle into correct 64-bit data. Ensure that we
+                * are reading data for both threads.
+                */
+               if (type_sz(inst->src[i].type) == 8 && inst->exec_size != 8)
                   no_spill[inst->src[i].nr] = true;
             }
+
+            /* We can't spill registers that mix 32-bit and 64-bit access (that
+             * contain 64-bit data that is operated on via 32-bit instructions)
+             */
+            unsigned type_size = type_sz(inst->src[i].type);
+            if (reg_type_size[inst->src[i].nr] == 0)
+               reg_type_size[inst->src[i].nr] = type_size;
+            else if (reg_type_size[inst->src[i].nr] != type_size)
+               no_spill[inst->src[i].nr] = true;
          }
       }
 
-      if (inst->dst.file == VGRF) {
-         spill_costs[inst->dst.nr] += loop_scale;
-         if (inst->dst.reladdr || inst->dst.offset % REG_SIZE != 0)
+      if (inst->dst.file == VGRF && !no_spill[inst->dst.nr]) {
+         spill_costs[inst->dst.nr] +=
+            loop_scale * spill_cost_for_type(inst->dst.type);
+         if (inst->dst.reladdr || inst->dst.offset >= REG_SIZE)
+            no_spill[inst->dst.nr] = true;
+
+         /* We don't support spills of partial DF writes.
+          *
+          * Our 64-bit spills are implemented with two 32-bit scratch messages,
+          * each one writing that for both SIMD4x2 threads. Ensure that we
+          * are writing data for both threads.
+          */
+         if (type_sz(inst->dst.type) == 8 && inst->exec_size != 8)
+            no_spill[inst->dst.nr] = true;
+
+         /* FROM_DOUBLE opcodes are setup so that they use a dst register
+          * with a size of 2 even if they only produce a single-precison
+          * result (this is so that the opcode can use the larger register to
+          * produce a 64-bit aligned intermediary result as required by the
+          * hardware during the conversion process). This creates a problem for
+          * spilling though, because when we attempt to emit a spill for the
+          * dst we see a 32-bit destination and emit a scratch write that
+          * allocates a single spill register.
+          */
+         if (inst->opcode == VEC4_OPCODE_FROM_DOUBLE)
+            no_spill[inst->dst.nr] = true;
+
+         /* We can't spill registers that mix 32-bit and 64-bit access (that
+          * contain 64-bit data that is operated on via 32-bit instructions)
+          */
+         unsigned type_size = type_sz(inst->dst.type);
+         if (reg_type_size[inst->dst.nr] == 0)
+            reg_type_size[inst->dst.nr] = type_size;
+         else if (reg_type_size[inst->dst.nr] != type_size)
             no_spill[inst->dst.nr] = true;
       }
 
@@ -429,6 +493,8 @@ vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
          break;
       }
    }
+
+   ralloc_free(reg_type_size);
 }
 
 int
@@ -450,8 +516,9 @@ vec4_visitor::choose_spill_reg(struct ra_graph *g)
 void
 vec4_visitor::spill_reg(int spill_reg_nr)
 {
-   assert(alloc.sizes[spill_reg_nr] == 1);
-   unsigned int spill_offset = last_scratch++;
+   assert(alloc.sizes[spill_reg_nr] == 1 || alloc.sizes[spill_reg_nr] == 2);
+   unsigned int spill_offset = last_scratch;
+   last_scratch += alloc.sizes[spill_reg_nr];
 
    /* Generate spill/unspill instructions for the objects being spilled. */
    int scratch_reg = -1;
@@ -465,12 +532,14 @@ vec4_visitor::spill_reg(int spill_reg_nr)
                 * for consecutive instructions that read different channels of
                 * the same vec4.
                 */
-               scratch_reg = alloc.allocate(1);
+               scratch_reg = alloc.allocate(alloc.sizes[spill_reg_nr]);
                src_reg temp = inst->src[i];
                temp.nr = scratch_reg;
+               temp.offset = 0;
                temp.swizzle = BRW_SWIZZLE_XYZW;
                emit_scratch_read(block, inst,
                                  dst_reg(temp), inst->src[i], spill_offset);
+               temp.offset = inst->src[i].offset;
             }
             assert(scratch_reg != -1);
             inst->src[i].nr = scratch_reg;

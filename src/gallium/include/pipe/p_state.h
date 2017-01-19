@@ -195,6 +195,18 @@ struct pipe_clip_state
    float ucp[PIPE_MAX_CLIP_PLANES][4];
 };
 
+/**
+ * A single output for vertex transform feedback.
+ */
+struct pipe_stream_output
+{
+   unsigned register_index:8;  /**< 0 to PIPE_MAX_SHADER_OUTPUTS */
+   unsigned start_component:2; /** 0 to 3 */
+   unsigned num_components:3;  /** 1 to 4 */
+   unsigned output_buffer:3;   /**< 0 to PIPE_MAX_SO_BUFFERS */
+   unsigned dst_offset:16;     /**< offset into the buffer in dwords */
+   unsigned stream:2;          /**< 0 to 3 */
+};
 
 /**
  * Stream output for vertex transform feedback.
@@ -209,14 +221,7 @@ struct pipe_stream_output_info
     * Array of stream outputs, in the order they are to be written in.
     * Selected components are tightly packed into the output buffer.
     */
-   struct {
-      unsigned register_index:8;  /**< 0 to PIPE_MAX_SHADER_OUTPUTS */
-      unsigned start_component:2; /** 0 to 3 */
-      unsigned num_components:3;  /** 1 to 4 */
-      unsigned output_buffer:3;   /**< 0 to PIPE_MAX_SO_BUFFERS */
-      unsigned dst_offset:16;     /**< offset into the buffer in dwords */
-      unsigned stream:2;          /**< 0 to 3 */
-   } output[PIPE_MAX_SO_OUTPUTS];
+   struct pipe_stream_output output[PIPE_MAX_SO_OUTPUTS];
 };
 
 /**
@@ -364,13 +369,13 @@ struct pipe_sampler_state
    unsigned wrap_s:3;            /**< PIPE_TEX_WRAP_x */
    unsigned wrap_t:3;            /**< PIPE_TEX_WRAP_x */
    unsigned wrap_r:3;            /**< PIPE_TEX_WRAP_x */
-   unsigned min_img_filter:2;    /**< PIPE_TEX_FILTER_x */
+   unsigned min_img_filter:1;    /**< PIPE_TEX_FILTER_x */
    unsigned min_mip_filter:2;    /**< PIPE_TEX_MIPFILTER_x */
-   unsigned mag_img_filter:2;    /**< PIPE_TEX_FILTER_x */
+   unsigned mag_img_filter:1;    /**< PIPE_TEX_FILTER_x */
    unsigned compare_mode:1;      /**< PIPE_TEX_COMPARE_x */
    unsigned compare_func:3;      /**< PIPE_FUNC_x */
    unsigned normalized_coords:1; /**< Are coords normalized to [0,1]? */
-   unsigned max_anisotropy:6;
+   unsigned max_anisotropy:5;
    unsigned seamless_cube_map:1;
    float lod_bias;               /**< LOD/lambda bias */
    float min_lod, max_lod;       /**< LOD clamp range, after bias */

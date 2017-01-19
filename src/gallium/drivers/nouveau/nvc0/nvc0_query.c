@@ -205,7 +205,7 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
 
    if (screen->base.drm->version >= 0x01000101) {
       if (screen->compute) {
-         if (screen->base.class_3d <= NVF0_3D_CLASS) {
+         if (screen->base.class_3d <= GM200_3D_CLASS) {
             count += 2;
          }
       }
@@ -218,22 +218,20 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
       if (screen->compute) {
          info->name = "MP counters";
 
-         /* Because we can't expose the number of hardware counters needed for
-          * each different query, we don't want to allow more than one active
-          * query simultaneously to avoid failure when the maximum number of
-          * counters is reached. Note that these groups of GPU counters are
-          * currently only used by AMD_performance_monitor.
-          */
-         info->max_active_queries = 1;
+         /* Expose the maximum number of hardware counters available, although
+          * some queries use more than one counter. Expect failures in that
+          * case but as performance counters are for developers, this should
+          * not have a real impact. */
+         info->max_active_queries = 8;
          info->num_queries = nvc0_hw_sm_get_num_queries(screen);
          return 1;
       }
    } else
    if (id == NVC0_HW_METRIC_QUERY_GROUP) {
       if (screen->compute) {
-          if (screen->base.class_3d <= NVF0_3D_CLASS) {
+          if (screen->base.class_3d <= GM200_3D_CLASS) {
             info->name = "Performance metrics";
-            info->max_active_queries = 1;
+            info->max_active_queries = 4; /* A metric uses at least 2 queries */
             info->num_queries = nvc0_hw_metric_get_num_queries(screen);
             return 1;
          }

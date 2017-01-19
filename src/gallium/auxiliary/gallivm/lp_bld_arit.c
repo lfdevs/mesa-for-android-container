@@ -1091,6 +1091,180 @@ lp_build_mul(struct lp_build_context *bld,
    return res;
 }
 
+/*
+ * Widening mul, valid for 32x32 bit -> 64bit only.
+ * Result is low 32bits, high bits returned in res_hi.
+ *
+ * Emits code that is meant to be compiled for the host CPU.
+ */
+LLVMValueRef
+lp_build_mul_32_lohi_cpu(struct lp_build_context *bld,
+                         LLVMValueRef a,
+                         LLVMValueRef b,
+                         LLVMValueRef *res_hi)
+{
+   struct gallivm_state *gallivm = bld->gallivm;
+   LLVMBuilderRef builder = gallivm->builder;
+
+   assert(bld->type.width == 32);
+   assert(bld->type.floating == 0);
+   assert(bld->type.fixed == 0);
+   assert(bld->type.norm == 0);
+
+   /*
+    * XXX: for some reason, with zext/zext/mul/trunc the code llvm produces
+    * for x86 simd is atrocious (even if the high bits weren't required),
+    * trying to handle real 64bit inputs (which of course can't happen due
+    * to using 64bit umul with 32bit numbers zero-extended to 64bit, but
+    * apparently llvm does not recognize this widening mul). This includes 6
+    * (instead of 2) pmuludq plus extra adds and shifts
+    * The same story applies to signed mul, albeit fixing this requires sse41.
+    * https://llvm.org/bugs/show_bug.cgi?id=30845
+    * So, whip up our own code, albeit only for length 4 and 8 (which
+    * should be good enough)...
+    */
+   if ((bld->type.length == 4 || bld->type.length == 8) &&
+       ((util_cpu_caps.has_sse2 && (bld->type.sign == 0)) ||
+        util_cpu_caps.has_sse4_1)) {
+      const char *intrinsic = NULL;
+      LLVMValueRef aeven, aodd, beven, bodd, muleven, mulodd;
+      LLVMValueRef shuf[LP_MAX_VECTOR_WIDTH / 32], shuf_vec;
+      struct lp_type type_wide = lp_wider_type(bld->type);
+      LLVMTypeRef wider_type = lp_build_vec_type(gallivm, type_wide);
+      unsigned i;
+      for (i = 0; i < bld->type.length; i += 2) {
+         shuf[i] = lp_build_const_int32(gallivm, i+1);
+         shuf[i+1] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+      }
+      shuf_vec = LLVMConstVector(shuf, bld->type.length);
+      aeven = a;
+      beven = b;
+      aodd = LLVMBuildShuffleVector(builder, aeven, bld->undef, shuf_vec, "");
+      bodd = LLVMBuildShuffleVector(builder, beven, bld->undef, shuf_vec, "");
+
+      if (util_cpu_caps.has_avx2 && bld->type.length == 8) {
+         if (bld->type.sign) {
+            intrinsic = "llvm.x86.avx2.pmul.dq";
+         } else {
+            intrinsic = "llvm.x86.avx2.pmulu.dq";
+         }
+         muleven = lp_build_intrinsic_binary(builder, intrinsic,
+                                             wider_type, aeven, beven);
+         mulodd = lp_build_intrinsic_binary(builder, intrinsic,
+                                            wider_type, aodd, bodd);
+      }
+      else {
+         /* for consistent naming look elsewhere... */
+         if (bld->type.sign) {
+            intrinsic = "llvm.x86.sse41.pmuldq";
+         } else {
+            intrinsic = "llvm.x86.sse2.pmulu.dq";
+         }
+         /*
+          * XXX If we only have AVX but not AVX2 this is a pain.
+          * lp_build_intrinsic_binary_anylength() can't handle it
+          * (due to src and dst type not being identical).
+          */
+         if (bld->type.length == 8) {
+            LLVMValueRef aevenlo, aevenhi, bevenlo, bevenhi;
+            LLVMValueRef aoddlo, aoddhi, boddlo, boddhi;
+            LLVMValueRef muleven2[2], mulodd2[2];
+            struct lp_type type_wide_half = type_wide;
+            LLVMTypeRef wtype_half;
+            type_wide_half.length = 2;
+            wtype_half = lp_build_vec_type(gallivm, type_wide_half);
+            aevenlo = lp_build_extract_range(gallivm, aeven, 0, 4);
+            aevenhi = lp_build_extract_range(gallivm, aeven, 4, 4);
+            bevenlo = lp_build_extract_range(gallivm, beven, 0, 4);
+            bevenhi = lp_build_extract_range(gallivm, beven, 4, 4);
+            aoddlo = lp_build_extract_range(gallivm, aodd, 0, 4);
+            aoddhi = lp_build_extract_range(gallivm, aodd, 4, 4);
+            boddlo = lp_build_extract_range(gallivm, bodd, 0, 4);
+            boddhi = lp_build_extract_range(gallivm, bodd, 4, 4);
+            muleven2[0] = lp_build_intrinsic_binary(builder, intrinsic,
+                                                    wtype_half, aevenlo, bevenlo);
+            mulodd2[0] = lp_build_intrinsic_binary(builder, intrinsic,
+                                                   wtype_half, aoddlo, boddlo);
+            muleven2[1] = lp_build_intrinsic_binary(builder, intrinsic,
+                                                    wtype_half, aevenhi, bevenhi);
+            mulodd2[1] = lp_build_intrinsic_binary(builder, intrinsic,
+                                                   wtype_half, aoddhi, boddhi);
+            muleven = lp_build_concat(gallivm, muleven2, type_wide_half, 2);
+            mulodd = lp_build_concat(gallivm, mulodd2, type_wide_half, 2);
+
+         }
+         else {
+            muleven = lp_build_intrinsic_binary(builder, intrinsic,
+                                                wider_type, aeven, beven);
+            mulodd = lp_build_intrinsic_binary(builder, intrinsic,
+                                               wider_type, aodd, bodd);
+         }
+      }
+      muleven = LLVMBuildBitCast(builder, muleven, bld->vec_type, "");
+      mulodd = LLVMBuildBitCast(builder, mulodd, bld->vec_type, "");
+
+      for (i = 0; i < bld->type.length; i += 2) {
+         shuf[i] = lp_build_const_int32(gallivm, i + 1);
+         shuf[i+1] = lp_build_const_int32(gallivm, i + 1 + bld->type.length);
+      }
+      shuf_vec = LLVMConstVector(shuf, bld->type.length);
+      *res_hi = LLVMBuildShuffleVector(builder, muleven, mulodd, shuf_vec, "");
+
+      for (i = 0; i < bld->type.length; i += 2) {
+         shuf[i] = lp_build_const_int32(gallivm, i);
+         shuf[i+1] = lp_build_const_int32(gallivm, i + bld->type.length);
+      }
+      shuf_vec = LLVMConstVector(shuf, bld->type.length);
+      return LLVMBuildShuffleVector(builder, muleven, mulodd, shuf_vec, "");
+   }
+   else {
+      return lp_build_mul_32_lohi(bld, a, b, res_hi);
+   }
+}
+
+
+/*
+ * Widening mul, valid for 32x32 bit -> 64bit only.
+ * Result is low 32bits, high bits returned in res_hi.
+ *
+ * Emits generic code.
+ */
+LLVMValueRef
+lp_build_mul_32_lohi(struct lp_build_context *bld,
+                     LLVMValueRef a,
+                     LLVMValueRef b,
+                     LLVMValueRef *res_hi)
+{
+   struct gallivm_state *gallivm = bld->gallivm;
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef tmp, shift, res_lo;
+   struct lp_type type_tmp;
+   LLVMTypeRef wide_type, narrow_type;
+
+   type_tmp = bld->type;
+   narrow_type = lp_build_vec_type(gallivm, type_tmp);
+   type_tmp.width *= 2;
+   wide_type = lp_build_vec_type(gallivm, type_tmp);
+   shift = lp_build_const_vec(gallivm, type_tmp, 32);
+
+   if (bld->type.sign) {
+      a = LLVMBuildSExt(builder, a, wide_type, "");
+      b = LLVMBuildSExt(builder, b, wide_type, "");
+   } else {
+      a = LLVMBuildZExt(builder, a, wide_type, "");
+      b = LLVMBuildZExt(builder, b, wide_type, "");
+   }
+   tmp = LLVMBuildMul(builder, a, b, "");
+
+   res_lo = LLVMBuildTrunc(builder, tmp, narrow_type, "");
+
+   /* Since we truncate anyway, LShr and AShr are equivalent. */
+   tmp = LLVMBuildLShr(builder, tmp, shift, "");
+   *res_hi = LLVMBuildTrunc(builder, tmp, narrow_type, "");
+
+   return res_lo;
+}
+
 
 /* a * b + c */
 LLVMValueRef

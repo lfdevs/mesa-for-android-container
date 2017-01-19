@@ -283,6 +283,20 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
                 if (usage & PIPE_TRANSFER_MAP_DIRECTLY)
                         return NULL;
 
+                if (format == PIPE_FORMAT_ETC1_RGB8) {
+                        /* ETC1 is arranged as 64-bit blocks, where each block
+                         * is 4x4 pixels.  Texture tiling operates on the
+                         * 64-bit block the way it would an uncompressed
+                         * pixels.
+                         */
+                        assert(!(ptrans->box.x & 3));
+                        assert(!(ptrans->box.y & 3));
+                        ptrans->box.x >>= 2;
+                        ptrans->box.y >>= 2;
+                        ptrans->box.width = (ptrans->box.width + 3) >> 2;
+                        ptrans->box.height = (ptrans->box.height + 3) >> 2;
+                }
+
                 /* We need to align the box to utile boundaries, since that's
                  * what load/store operates on.  This may cause us to need to
                  * read out the original contents in that border area.  Right
@@ -387,6 +401,11 @@ vc4_setup_slices(struct vc4_resource *rsc)
         struct pipe_resource *prsc = &rsc->base.b;
         uint32_t width = prsc->width0;
         uint32_t height = prsc->height0;
+        if (prsc->format == PIPE_FORMAT_ETC1_RGB8) {
+                width = (width + 3) >> 2;
+                height = (height + 3) >> 2;
+        }
+
         uint32_t pot_width = util_next_power_of_two(width);
         uint32_t pot_height = util_next_power_of_two(height);
         uint32_t offset = 0;

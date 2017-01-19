@@ -1200,23 +1200,19 @@ builtin_builder::create_builtins()
                 _##NAME(fp64, glsl_type::dvec4_type),  \
                 NULL);
 
-#define FIUD(NAME)                                                 \
+#define FIUD_VEC(NAME)                                            \
    add_function(#NAME,                                            \
-                _##NAME(always_available, glsl_type::float_type), \
                 _##NAME(always_available, glsl_type::vec2_type),  \
                 _##NAME(always_available, glsl_type::vec3_type),  \
                 _##NAME(always_available, glsl_type::vec4_type),  \
                                                                   \
-                _##NAME(always_available, glsl_type::int_type),   \
                 _##NAME(always_available, glsl_type::ivec2_type), \
                 _##NAME(always_available, glsl_type::ivec3_type), \
                 _##NAME(always_available, glsl_type::ivec4_type), \
                                                                   \
-                _##NAME(v130, glsl_type::uint_type),              \
                 _##NAME(v130, glsl_type::uvec2_type),             \
                 _##NAME(v130, glsl_type::uvec3_type),             \
                 _##NAME(v130, glsl_type::uvec4_type),             \
-                _##NAME(fp64, glsl_type::double_type), \
                 _##NAME(fp64, glsl_type::dvec2_type),  \
                 _##NAME(fp64, glsl_type::dvec3_type),  \
                 _##NAME(fp64, glsl_type::dvec4_type),  \
@@ -1235,29 +1231,24 @@ builtin_builder::create_builtins()
                 _##NAME(glsl_type::uvec4_type), \
                 NULL);
 
-#define FIUBD(NAME)                                                \
+#define FIUBD_VEC(NAME)                                           \
    add_function(#NAME,                                            \
-                _##NAME(always_available, glsl_type::float_type), \
                 _##NAME(always_available, glsl_type::vec2_type),  \
                 _##NAME(always_available, glsl_type::vec3_type),  \
                 _##NAME(always_available, glsl_type::vec4_type),  \
                                                                   \
-                _##NAME(always_available, glsl_type::int_type),   \
                 _##NAME(always_available, glsl_type::ivec2_type), \
                 _##NAME(always_available, glsl_type::ivec3_type), \
                 _##NAME(always_available, glsl_type::ivec4_type), \
                                                                   \
-                _##NAME(v130, glsl_type::uint_type),              \
                 _##NAME(v130, glsl_type::uvec2_type),             \
                 _##NAME(v130, glsl_type::uvec3_type),             \
                 _##NAME(v130, glsl_type::uvec4_type),             \
                                                                   \
-                _##NAME(always_available, glsl_type::bool_type),  \
                 _##NAME(always_available, glsl_type::bvec2_type), \
                 _##NAME(always_available, glsl_type::bvec3_type), \
                 _##NAME(always_available, glsl_type::bvec4_type), \
                                                                   \
-                _##NAME(fp64, glsl_type::double_type),  \
                 _##NAME(fp64, glsl_type::dvec2_type), \
                 _##NAME(fp64, glsl_type::dvec3_type), \
                 _##NAME(fp64, glsl_type::dvec4_type), \
@@ -1573,12 +1564,12 @@ builtin_builder::create_builtins()
                 _transpose(fp64, glsl_type::dmat4x2_type),
                 _transpose(fp64, glsl_type::dmat4x3_type),
                 NULL);
-   FIUD(lessThan)
-   FIUD(lessThanEqual)
-   FIUD(greaterThan)
-   FIUD(greaterThanEqual)
-   FIUBD(notEqual)
-   FIUBD(equal)
+   FIUD_VEC(lessThan)
+   FIUD_VEC(lessThanEqual)
+   FIUD_VEC(greaterThan)
+   FIUD_VEC(greaterThanEqual)
+   FIUBD_VEC(notEqual)
+   FIUBD_VEC(equal)
 
    add_function("any",
                 _any(glsl_type::bvec2_type),
@@ -1697,7 +1688,7 @@ builtin_builder::create_builtins()
                 _texture(ir_tex, v130, glsl_type::float_type, glsl_type::sampler1DArrayShadow_type, glsl_type::vec3_type),
                 _texture(ir_tex, v130, glsl_type::float_type, glsl_type::sampler2DArrayShadow_type, glsl_type::vec4_type),
                 /* samplerCubeArrayShadow is special; it has an extra parameter
-                 * for the shadow comparitor since there is no vec5 type.
+                 * for the shadow comparator since there is no vec5 type.
                  */
                 _textureCubeArrayShadow(),
 
@@ -2993,8 +2984,8 @@ builtin_builder::create_builtins()
 
 #undef F
 #undef FI
-#undef FIUD
-#undef FIUBD
+#undef FIUD_VEC
+#undef FIUBD_VEC
 #undef FIU2_MIXED
 }
 
@@ -3563,17 +3554,19 @@ builtin_builder::_tanh(const glsl_type *type)
    ir_variable *x = in_var(type, "x");
    MAKE_SIG(type, v130, 1, x);
 
-   /* Clamp x to [-10, +10] to avoid precision problems.
-    * When x > 10, e^(-x) is so small relative to e^x that it gets flushed to
-    * zero in the computation e^x + e^(-x). The same happens in the other
-    * direction when x < -10.
+   /* tanh(x) := (0.5 * (e^x - e^(-x))) / (0.5 * (e^x + e^(-x)))
+    *
+    * With a little algebra this reduces to (e^2x - 1) / (e^2x + 1)
+    *
+    * Clamp x to (-inf, +10] to avoid precision problems.  When x > 10, e^2x
+    * is so much larger than 1.0 that 1.0 gets flushed to zero in the
+    * computation e^2x +/- 1 so it can be ignored.
     */
    ir_variable *t = body.make_temp(type, "tmp");
-   body.emit(assign(t, min2(max2(x, imm(-10.0f)), imm(10.0f))));
+   body.emit(assign(t, min2(x, imm(10.0f))));
 
-   /* (e^x - e^(-x)) / (e^x + e^(-x)) */
-   body.emit(ret(div(sub(exp(t), exp(neg(t))),
-                     add(exp(t), exp(neg(t))))));
+   body.emit(ret(div(sub(exp(mul(t, imm(2.0f))), imm(1.0f)),
+                     add(exp(mul(t, imm(2.0f))), imm(1.0f)))));
 
    return sig;
 }
@@ -4657,7 +4650,7 @@ builtin_builder::_texture(ir_texture_opcode opcode,
    if (coord_size == coord_type->vector_elements) {
       tex->coordinate = var_ref(P);
    } else {
-      /* The incoming coordinate also has the projector or shadow comparitor,
+      /* The incoming coordinate also has the projector or shadow comparator,
        * so we need to swizzle those away.
        */
       tex->coordinate = swizzle_for_size(P, coord_size);
@@ -4674,12 +4667,12 @@ builtin_builder::_texture(ir_texture_opcode opcode,
           */
          ir_variable *refz = in_var(glsl_type::float_type, "refz");
          sig->parameters.push_tail(refz);
-         tex->shadow_comparitor = var_ref(refz);
+         tex->shadow_comparator = var_ref(refz);
       } else {
-         /* The shadow comparitor is normally in the Z component, but a few types
+         /* The shadow comparator is normally in the Z component, but a few types
           * have sufficiently large coordinates that it's in W.
           */
-         tex->shadow_comparitor = swizzle(P, MAX2(coord_size, SWIZZLE_Z), 1);
+         tex->shadow_comparator = swizzle(P, MAX2(coord_size, SWIZZLE_Z), 1);
       }
    }
 
@@ -4752,7 +4745,7 @@ builtin_builder::_textureCubeArrayShadow()
    tex->set_sampler(var_ref(s), glsl_type::float_type);
 
    tex->coordinate = var_ref(P);
-   tex->shadow_comparitor = var_ref(compare);
+   tex->shadow_comparator = var_ref(compare);
 
    body.emit(ret(tex));
 

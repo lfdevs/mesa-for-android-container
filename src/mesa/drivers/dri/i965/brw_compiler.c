@@ -55,6 +55,7 @@ static const struct nir_shader_compiler_options scalar_nir_options = {
    .lower_unpack_snorm_4x8 = true,
    .lower_unpack_unorm_2x16 = true,
    .lower_unpack_unorm_4x8 = true,
+   .max_unroll_iterations = 32,
 };
 
 static const struct nir_shader_compiler_options vector_nir_options = {
@@ -75,6 +76,7 @@ static const struct nir_shader_compiler_options vector_nir_options = {
    .lower_unpack_unorm_2x16 = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
+   .max_unroll_iterations = 32,
 };
 
 static const struct nir_shader_compiler_options vector_nir_options_gen6 = {
@@ -92,6 +94,7 @@ static const struct nir_shader_compiler_options vector_nir_options_gen6 = {
    .lower_unpack_unorm_2x16 = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
+   .max_unroll_iterations = 32,
 };
 
 struct brw_compiler *
@@ -119,24 +122,18 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
 
    /* We want the GLSL compiler to emit code that uses condition codes */
    for (int i = 0; i < MESA_SHADER_STAGES; i++) {
-      compiler->glsl_compiler_options[i].MaxUnrollIterations = 32;
+      compiler->glsl_compiler_options[i].MaxUnrollIterations = 0;
       compiler->glsl_compiler_options[i].MaxIfDepth =
          devinfo->gen < 6 ? 16 : UINT_MAX;
 
-      compiler->glsl_compiler_options[i].EmitNoMainReturn = true;
       compiler->glsl_compiler_options[i].EmitNoIndirectInput = true;
       compiler->glsl_compiler_options[i].EmitNoIndirectUniform = false;
-      compiler->glsl_compiler_options[i].LowerCombinedClipCullDistance = true;
 
       bool is_scalar = compiler->scalar_stage[i];
 
       compiler->glsl_compiler_options[i].EmitNoIndirectOutput = is_scalar;
       compiler->glsl_compiler_options[i].EmitNoIndirectTemp = is_scalar;
       compiler->glsl_compiler_options[i].OptimizeForAOS = !is_scalar;
-
-      /* !ARB_gpu_shader5 */
-      if (devinfo->gen < 7)
-         compiler->glsl_compiler_options[i].EmitNoIndirectSampler = true;
 
       if (is_scalar) {
          compiler->glsl_compiler_options[i].NirOptions = &scalar_nir_options;
@@ -155,9 +152,6 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
 
    if (compiler->scalar_stage[MESA_SHADER_GEOMETRY])
       compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].EmitNoIndirectInput = false;
-
-   compiler->glsl_compiler_options[MESA_SHADER_COMPUTE]
-      .LowerShaderSharedVariables = true;
 
    return compiler;
 }

@@ -491,13 +491,15 @@ lp_build_fetch_subsampled_rgba_aos(struct gallivm_state *gallivm,
 {
    LLVMValueRef packed;
    LLVMValueRef rgba;
+   struct lp_type fetch_type;
 
    assert(format_desc->layout == UTIL_FORMAT_LAYOUT_SUBSAMPLED);
    assert(format_desc->block.bits == 32);
    assert(format_desc->block.width == 2);
    assert(format_desc->block.height == 1);
 
-   packed = lp_build_gather(gallivm, n, 32, 32, TRUE, base_ptr, offset, FALSE);
+   fetch_type = lp_type_uint(32);
+   packed = lp_build_gather(gallivm, n, 32, fetch_type, TRUE, base_ptr, offset, FALSE);
 
    (void)j;
 

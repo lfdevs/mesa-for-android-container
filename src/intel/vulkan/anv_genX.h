@@ -57,19 +57,14 @@ void genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer);
 
 void
 genX(emit_urb_setup)(struct anv_device *device, struct anv_batch *batch,
+                     const struct gen_l3_config *l3_config,
                      VkShaderStageFlags active_stages,
-                     unsigned vs_entry_size, unsigned gs_entry_size,
-                     const struct gen_l3_config *l3_config);
+                     const unsigned entry_size[4]);
 
-void genX(cmd_buffer_emit_hz_op)(struct anv_cmd_buffer *cmd_buffer,
-                               enum blorp_hiz_op op);
-
-VkResult
-genX(graphics_pipeline_create)(VkDevice _device,
-                               struct anv_pipeline_cache *cache,
-                               const VkGraphicsPipelineCreateInfo *pCreateInfo,
-                               const VkAllocationCallbacks *alloc,
-                               VkPipeline *pPipeline);
+void genX(cmd_buffer_gpu_memcpy)(struct anv_cmd_buffer *cmd_buffer,
+                                 struct anv_bo *dst, uint32_t dst_offset,
+                                 struct anv_bo *src, uint32_t src_offset,
+                                 uint32_t size);
 
 void genX(blorp_exec)(struct blorp_batch *batch,
                       const struct blorp_params *params);

@@ -718,62 +718,6 @@ static void dump_binding_table(struct brw_context *brw, uint32_t offset,
 }
 
 static void
-dump_prog_cache(struct brw_context *brw)
-{
-   struct brw_cache *cache = &brw->cache;
-   unsigned int b;
-
-   drm_intel_bo_map(brw->cache.bo, false);
-
-   for (b = 0; b < cache->size; b++) {
-      struct brw_cache_item *item;
-
-      for (item = cache->items[b]; item; item = item->next) {
-	 const char *name;
-
-	 switch (item->cache_id) {
-	 case BRW_CACHE_VS_PROG:
-	    name = "VS kernel";
-	    break;
-         case BRW_CACHE_TCS_PROG:
-            name = "TCS kernel";
-            break;
-         case BRW_CACHE_TES_PROG:
-            name = "TES kernel";
-            break;
-	 case BRW_CACHE_FF_GS_PROG:
-	    name = "Fixed-function GS kernel";
-	    break;
-         case BRW_CACHE_GS_PROG:
-            name = "GS kernel";
-            break;
-	 case BRW_CACHE_CLIP_PROG:
-	    name = "CLIP kernel";
-	    break;
-	 case BRW_CACHE_SF_PROG:
-	    name = "SF kernel";
-	    break;
-	 case BRW_CACHE_FS_PROG:
-	    name = "FS kernel";
-	    break;
-         case BRW_CACHE_CS_PROG:
-            name = "CS kernel";
-            break;
-	 default:
-	    name = "unknown";
-	    break;
-	 }
-
-         fprintf(stderr, "%s:\n", name);
-         brw_disassemble(&brw->screen->devinfo, brw->cache.bo->virtual,
-                         item->offset, item->size, stderr);
-      }
-   }
-
-   drm_intel_bo_unmap(brw->cache.bo);
-}
-
-static void
 dump_state_batch(struct brw_context *brw)
 {
    int i;
@@ -880,5 +824,5 @@ void brw_debug_batch(struct brw_context *brw)
    drm_intel_bo_unmap(brw->batch.bo);
 
    if (0)
-      dump_prog_cache(brw);
+      brw_print_program_cache(brw);
 }

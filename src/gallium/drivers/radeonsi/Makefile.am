@@ -25,19 +25,11 @@ include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
+	-I$(top_builddir)/src/amd/common \
 	-I$(top_srcdir)/src/amd/common \
 	$(RADEON_CFLAGS) \
 	$(LLVM_CFLAGS)
 
 noinst_LTLIBRARIES = libradeonsi.la
 
-libradeonsi_la_SOURCES = $(C_SOURCES) $(GENERATED_SOURCES)
-
-sid_tables.h: $(srcdir)/sid_tables.py $(top_srcdir)/src/amd/common/sid.h
-	$(AM_V_GEN) $(PYTHON2) $(srcdir)/sid_tables.py $(top_srcdir)/src/amd/common/sid.h > $@
-
-EXTRA_DIST = \
-	sid_tables.py
-
-BUILT_SOURCES =\
-	sid_tables.h
+libradeonsi_la_SOURCES = $(C_SOURCES)

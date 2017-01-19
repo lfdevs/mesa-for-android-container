@@ -1457,6 +1457,18 @@ struct dri2_fence {
    void *cl_event;
 };
 
+static unsigned dri2_fence_get_caps(__DRIscreen *_screen)
+{
+   struct dri_screen *driscreen = dri_screen(_screen);
+   struct pipe_screen *screen = driscreen->base.screen;
+   unsigned caps = 0;
+
+   if (screen->get_param(screen, PIPE_CAP_NATIVE_FENCE_FD))
+      caps |= __DRI_FENCE_CAP_NATIVE_FD;
+
+   return caps;
+}
+
 static void *
 dri2_create_fence(__DRIcontext *_ctx)
 {
@@ -1475,6 +1487,39 @@ dri2_create_fence(__DRIcontext *_ctx)
 
    fence->driscreen = dri_screen(_ctx->driScreenPriv);
    return fence;
+}
+
+static void *
+dri2_create_fence_fd(__DRIcontext *_ctx, int fd)
+{
+   struct pipe_context *ctx = dri_context(_ctx)->st->pipe;
+   struct dri2_fence *fence = CALLOC_STRUCT(dri2_fence);
+
+   if (fd == -1) {
+      /* exporting driver created fence, flush: */
+      ctx->flush(ctx, &fence->pipe_fence,
+                 PIPE_FLUSH_DEFERRED | PIPE_FLUSH_FENCE_FD);
+   } else {
+      /* importing a foreign fence fd: */
+      ctx->create_fence_fd(ctx, &fence->pipe_fence, fd);
+   }
+   if (!fence->pipe_fence) {
+      FREE(fence);
+      return NULL;
+   }
+
+   fence->driscreen = dri_screen(_ctx->driScreenPriv);
+   return fence;
+}
+
+static int
+dri2_get_fence_fd(__DRIscreen *_screen, void *_fence)
+{
+   struct dri_screen *driscreen = dri_screen(_screen);
+   struct pipe_screen *screen = driscreen->base.screen;
+   struct dri2_fence *fence = (struct dri2_fence*)_fence;
+
+   return screen->fence_get_fd(screen, fence->pipe_fence);
 }
 
 static void *
@@ -1548,17 +1593,24 @@ dri2_client_wait_sync(__DRIcontext *_ctx, void *_fence, unsigned flags,
 static void
 dri2_server_wait_sync(__DRIcontext *_ctx, void *_fence, unsigned flags)
 {
-   /* AFAIK, no driver currently supports parallel context execution. */
+   struct pipe_context *ctx = dri_context(_ctx)->st->pipe;
+   struct dri2_fence *fence = (struct dri2_fence*)_fence;
+
+   if (ctx->fence_server_sync)
+      ctx->fence_server_sync(ctx, fence->pipe_fence);
 }
 
 static __DRI2fenceExtension dri2FenceExtension = {
-   .base = { __DRI2_FENCE, 1 },
+   .base = { __DRI2_FENCE, 2 },
 
    .create_fence = dri2_create_fence,
    .get_fence_from_cl_event = dri2_get_fence_from_cl_event,
    .destroy_fence = dri2_destroy_fence,
    .client_wait_sync = dri2_client_wait_sync,
-   .server_wait_sync = dri2_server_wait_sync
+   .server_wait_sync = dri2_server_wait_sync,
+   .get_capabilities = dri2_fence_get_caps,
+   .create_fence_fd = dri2_create_fence_fd,
+   .get_fence_fd = dri2_get_fence_fd,
 };
 
 static const __DRIrobustnessExtension dri2Robustness = {

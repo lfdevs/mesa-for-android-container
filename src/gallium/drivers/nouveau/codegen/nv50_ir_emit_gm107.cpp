@@ -24,6 +24,8 @@
 
 #include "codegen/nv50_ir_target_gm107.h"
 
+//#define GM107_DEBUG_SCHED_DATA
+
 namespace nv50_ir {
 
 class CodeEmitterGM107 : public CodeEmitter
@@ -180,6 +182,7 @@ private:
    void emitIPA();
    void emitATOM();
    void emitATOMS();
+   void emitRED();
    void emitCCTL();
 
    void emitPIXLD();
@@ -2496,6 +2499,29 @@ CodeEmitterGM107::emitATOMS()
 }
 
 void
+CodeEmitterGM107::emitRED()
+{
+   unsigned dType;
+
+   switch (insn->dType) {
+   case TYPE_U32: dType = 0; break;
+   case TYPE_S32: dType = 1; break;
+   case TYPE_U64: dType = 2; break;
+   case TYPE_F32: dType = 3; break;
+   case TYPE_B128: dType = 4; break;
+   case TYPE_S64: dType = 5; break;
+   default: assert(!"unexpected dType"); dType = 0; break;
+   }
+
+   emitInsn (0xebf80000);
+   emitField(0x30, 1, insn->src(0).getIndirect(0)->getSize() == 8);
+   emitField(0x17, 3, insn->subOp);
+   emitField(0x14, 3, dType);
+   emitADDR (0x08, 0x1c, 20, 0, insn->src(0));
+   emitGPR  (0x00, insn->src(1));
+}
+
+void
 CodeEmitterGM107::emitCCTL()
 {
    unsigned width;
@@ -3237,7 +3263,10 @@ CodeEmitterGM107::emitInstruction(Instruction *i)
       if (insn->src(0).getFile() == FILE_MEMORY_SHARED)
          emitATOMS();
       else
-         emitATOM();
+         if (!insn->defExists(0) && insn->subOp < NV50_IR_SUBOP_ATOM_CAS)
+            emitRED();
+         else
+            emitATOM();
       break;
    case OP_CCTL:
       emitCCTL();
@@ -3347,20 +3376,781 @@ CodeEmitterGM107::getMinEncodingSize(const Instruction *i) const
 class SchedDataCalculatorGM107 : public Pass
 {
 public:
-   SchedDataCalculatorGM107(const Target *targ) : targ(targ) {}
+   SchedDataCalculatorGM107(const TargetGM107 *targ) : targ(targ) {}
+
 private:
-   const Target *targ;
-   bool visit(BasicBlock *bb);
+   struct RegScores
+   {
+      struct ScoreData {
+         int r[256];
+         int p[8];
+         int c;
+      } rd, wr;
+      int base;
+
+      void rebase(const int base)
+      {
+         const int delta = this->base - base;
+         if (!delta)
+            return;
+         this->base = 0;
+
+         for (int i = 0; i < 256; ++i) {
+            rd.r[i] += delta;
+            wr.r[i] += delta;
+         }
+         for (int i = 0; i < 8; ++i) {
+            rd.p[i] += delta;
+            wr.p[i] += delta;
+         }
+         rd.c += delta;
+         wr.c += delta;
+      }
+      void wipe()
+      {
+         memset(&rd, 0, sizeof(rd));
+         memset(&wr, 0, sizeof(wr));
+      }
+      int getLatest(const ScoreData& d) const
+      {
+         int max = 0;
+         for (int i = 0; i < 256; ++i)
+            if (d.r[i] > max)
+               max = d.r[i];
+         for (int i = 0; i < 8; ++i)
+            if (d.p[i] > max)
+               max = d.p[i];
+         if (d.c > max)
+            max = d.c;
+         return max;
+      }
+      inline int getLatestRd() const
+      {
+         return getLatest(rd);
+      }
+      inline int getLatestWr() const
+      {
+         return getLatest(wr);
+      }
+      inline int getLatest() const
+      {
+         return MAX2(getLatestRd(), getLatestWr());
+      }
+      void setMax(const RegScores *that)
+      {
+         for (int i = 0; i < 256; ++i) {
+            rd.r[i] = MAX2(rd.r[i], that->rd.r[i]);
+            wr.r[i] = MAX2(wr.r[i], that->wr.r[i]);
+         }
+         for (int i = 0; i < 8; ++i) {
+            rd.p[i] = MAX2(rd.p[i], that->rd.p[i]);
+            wr.p[i] = MAX2(wr.p[i], that->wr.p[i]);
+         }
+         rd.c = MAX2(rd.c, that->rd.c);
+         wr.c = MAX2(wr.c, that->wr.c);
+      }
+      void print(int cycle)
+      {
+         for (int i = 0; i < 256; ++i) {
+            if (rd.r[i] > cycle)
+               INFO("rd $r%i @ %i\n", i, rd.r[i]);
+            if (wr.r[i] > cycle)
+               INFO("wr $r%i @ %i\n", i, wr.r[i]);
+         }
+         for (int i = 0; i < 8; ++i) {
+            if (rd.p[i] > cycle)
+               INFO("rd $p%i @ %i\n", i, rd.p[i]);
+            if (wr.p[i] > cycle)
+               INFO("wr $p%i @ %i\n", i, wr.p[i]);
+         }
+         if (rd.c > cycle)
+            INFO("rd $c @ %i\n", rd.c);
+         if (wr.c > cycle)
+            INFO("wr $c @ %i\n", wr.c);
+      }
+   };
+
+   RegScores *score; // for current BB
+   std::vector<RegScores> scoreBoards;
+
+   const TargetGM107 *targ;
+   bool visit(Function *);
+   bool visit(BasicBlock *);
+
+   void commitInsn(const Instruction *, int);
+   int calcDelay(const Instruction *, int) const;
+   void setDelay(Instruction *, int, const Instruction *);
+   void recordWr(const Value *, int, int);
+   void checkRd(const Value *, int, int&) const;
+
+   inline void emitYield(Instruction *);
+   inline void emitStall(Instruction *, uint8_t);
+   inline void emitReuse(Instruction *, uint8_t);
+   inline void emitWrDepBar(Instruction *, uint8_t);
+   inline void emitRdDepBar(Instruction *, uint8_t);
+   inline void emitWtDepBar(Instruction *, uint8_t);
+
+   inline int getStall(const Instruction *) const;
+   inline int getWrDepBar(const Instruction *) const;
+   inline int getRdDepBar(const Instruction *) const;
+   inline int getWtDepBar(const Instruction *) const;
+
+   void setReuseFlag(Instruction *);
+
+   inline void printSchedInfo(int, const Instruction *) const;
+
+   struct LiveBarUse {
+      LiveBarUse(Instruction *insn, Instruction *usei)
+         : insn(insn), usei(usei) { }
+      Instruction *insn;
+      Instruction *usei;
+   };
+
+   struct LiveBarDef {
+      LiveBarDef(Instruction *insn, Instruction *defi)
+         : insn(insn), defi(defi) { }
+      Instruction *insn;
+      Instruction *defi;
+   };
+
+   bool insertBarriers(BasicBlock *);
+
+   Instruction *findFirstUse(const Instruction *) const;
+   Instruction *findFirstDef(const Instruction *) const;
+
+   bool needRdDepBar(const Instruction *) const;
+   bool needWrDepBar(const Instruction *) const;
 };
+
+inline void
+SchedDataCalculatorGM107::emitStall(Instruction *insn, uint8_t cnt)
+{
+   assert(cnt < 16);
+   insn->sched |= cnt;
+}
+
+inline void
+SchedDataCalculatorGM107::emitYield(Instruction *insn)
+{
+   insn->sched |= 1 << 4;
+}
+
+inline void
+SchedDataCalculatorGM107::emitWrDepBar(Instruction *insn, uint8_t id)
+{
+   assert(id < 6);
+   if ((insn->sched & 0xe0) == 0xe0)
+      insn->sched ^= 0xe0;
+   insn->sched |= id << 5;
+}
+
+inline void
+SchedDataCalculatorGM107::emitRdDepBar(Instruction *insn, uint8_t id)
+{
+   assert(id < 6);
+   if ((insn->sched & 0x700) == 0x700)
+      insn->sched ^= 0x700;
+   insn->sched |= id << 8;
+}
+
+inline void
+SchedDataCalculatorGM107::emitWtDepBar(Instruction *insn, uint8_t id)
+{
+   assert(id < 6);
+   insn->sched |= 1 << (11 + id);
+}
+
+inline void
+SchedDataCalculatorGM107::emitReuse(Instruction *insn, uint8_t id)
+{
+   assert(id < 4);
+   insn->sched |= 1 << (17 + id);
+}
+
+inline void
+SchedDataCalculatorGM107::printSchedInfo(int cycle,
+                                         const Instruction *insn) const
+{
+   uint8_t st, yl, wr, rd, wt, ru;
+
+   st = (insn->sched & 0x00000f) >> 0;
+   yl = (insn->sched & 0x000010) >> 4;
+   wr = (insn->sched & 0x0000e0) >> 5;
+   rd = (insn->sched & 0x000700) >> 8;
+   wt = (insn->sched & 0x01f800) >> 11;
+   ru = (insn->sched & 0x1e0000) >> 17;
+
+   INFO("cycle %i, (st 0x%x, yl 0x%x, wr 0x%x, rd 0x%x, wt 0x%x, ru 0x%x)\n",
+        cycle, st, yl, wr, rd, wt, ru);
+}
+
+inline int
+SchedDataCalculatorGM107::getStall(const Instruction *insn) const
+{
+   return insn->sched & 0xf;
+}
+
+inline int
+SchedDataCalculatorGM107::getWrDepBar(const Instruction *insn) const
+{
+   return (insn->sched & 0x0000e0) >> 5;
+}
+
+inline int
+SchedDataCalculatorGM107::getRdDepBar(const Instruction *insn) const
+{
+   return (insn->sched & 0x000700) >> 8;
+}
+
+inline int
+SchedDataCalculatorGM107::getWtDepBar(const Instruction *insn) const
+{
+   return (insn->sched & 0x01f800) >> 11;
+}
+
+// Emit the reuse flag which allows to make use of the new memory hierarchy
+// introduced since Maxwell, the operand reuse cache.
+//
+// It allows to reduce bank conflicts by caching operands. Each time you issue
+// an instruction, that flag can tell the hw which operands are going to be
+// re-used by the next instruction. Note that the next instruction has to use
+// the same GPR id in the same operand slot.
+void
+SchedDataCalculatorGM107::setReuseFlag(Instruction *insn)
+{
+   Instruction *next = insn->next;
+   BitSet defs(255, 1);
+
+   if (!targ->isReuseSupported(insn))
+      return;
+
+   for (int d = 0; insn->defExists(d); ++d) {
+      const Value *def = insn->def(d).rep();
+      if (insn->def(d).getFile() != FILE_GPR)
+         continue;
+      if (typeSizeof(insn->dType) != 4 || def->reg.data.id == 255)
+         continue;
+      defs.set(def->reg.data.id);
+   }
+
+   for (int s = 0; insn->srcExists(s); s++) {
+      const Value *src = insn->src(s).rep();
+      if (insn->src(s).getFile() != FILE_GPR)
+         continue;
+      if (typeSizeof(insn->sType) != 4 || src->reg.data.id == 255)
+         continue;
+      if (defs.test(src->reg.data.id))
+         continue;
+      if (!next->srcExists(s) || next->src(s).getFile() != FILE_GPR)
+         continue;
+      if (src->reg.data.id != next->getSrc(s)->reg.data.id)
+         continue;
+      assert(s < 4);
+      emitReuse(insn, s);
+   }
+}
+
+void
+SchedDataCalculatorGM107::recordWr(const Value *v, int cycle, int ready)
+{
+   int a = v->reg.data.id, b;
+
+   switch (v->reg.file) {
+   case FILE_GPR:
+      b = a + v->reg.size / 4;
+      for (int r = a; r < b; ++r)
+         score->rd.r[r] = ready;
+      break;
+   case FILE_PREDICATE:
+      // To immediately use a predicate set by any instructions, the minimum
+      // number of stall counts is 13.
+      score->rd.p[a] = cycle + 13;
+      break;
+   case FILE_FLAGS:
+      score->rd.c = ready;
+      break;
+   default:
+      break;
+   }
+}
+
+void
+SchedDataCalculatorGM107::checkRd(const Value *v, int cycle, int &delay) const
+{
+   int a = v->reg.data.id, b;
+   int ready = cycle;
+
+   switch (v->reg.file) {
+   case FILE_GPR:
+      b = a + v->reg.size / 4;
+      for (int r = a; r < b; ++r)
+         ready = MAX2(ready, score->rd.r[r]);
+      break;
+   case FILE_PREDICATE:
+      ready = MAX2(ready, score->rd.p[a]);
+      break;
+   case FILE_FLAGS:
+      ready = MAX2(ready, score->rd.c);
+      break;
+   default:
+      break;
+   }
+   if (cycle < ready)
+      delay = MAX2(delay, ready - cycle);
+}
+
+void
+SchedDataCalculatorGM107::commitInsn(const Instruction *insn, int cycle)
+{
+   const int ready = cycle + targ->getLatency(insn);
+
+   for (int d = 0; insn->defExists(d); ++d)
+      recordWr(insn->getDef(d), cycle, ready);
+
+#ifdef GM107_DEBUG_SCHED_DATA
+   score->print(cycle);
+#endif
+}
+
+#define GM107_MIN_ISSUE_DELAY 0x1
+#define GM107_MAX_ISSUE_DELAY 0xf
+
+int
+SchedDataCalculatorGM107::calcDelay(const Instruction *insn, int cycle) const
+{
+   int delay = 0, ready = cycle;
+
+   for (int s = 0; insn->srcExists(s); ++s)
+      checkRd(insn->getSrc(s), cycle, delay);
+
+   // TODO: make use of getReadLatency()!
+
+   return MAX2(delay, ready - cycle);
+}
+
+void
+SchedDataCalculatorGM107::setDelay(Instruction *insn, int delay,
+                                   const Instruction *next)
+{
+   const OpClass cl = targ->getOpClass(insn->op);
+   int wr, rd;
+
+   if (insn->op == OP_EXIT ||
+       insn->op == OP_BAR ||
+       insn->op == OP_MEMBAR) {
+      delay = GM107_MAX_ISSUE_DELAY;
+   } else
+   if (insn->op == OP_QUADON ||
+       insn->op == OP_QUADPOP) {
+      delay = 0xd;
+   } else
+   if (cl == OPCLASS_FLOW || insn->join) {
+      delay = 0xd;
+   }
+
+   if (!next || !targ->canDualIssue(insn, next)) {
+      delay = CLAMP(delay, GM107_MIN_ISSUE_DELAY, GM107_MAX_ISSUE_DELAY);
+   } else {
+      delay = 0x0; // dual-issue
+   }
+
+   wr = getWrDepBar(insn);
+   rd = getRdDepBar(insn);
+
+   if (delay == GM107_MIN_ISSUE_DELAY && (wr & rd) != 7) {
+      // Barriers take one additional clock cycle to become active on top of
+      // the clock consumed by the instruction producing it.
+      if (!next || insn->bb != next->bb) {
+         delay = 0x2;
+      } else {
+         int wt = getWtDepBar(next);
+         if ((wt & (1 << wr)) | (wt & (1 << rd)))
+            delay = 0x2;
+      }
+   }
+
+   emitStall(insn, delay);
+}
+
+
+// Return true when the given instruction needs to emit a read dependency
+// barrier (for WaR hazards) because it doesn't operate at a fixed latency, and
+// setting the maximum number of stall counts is not enough.
+bool
+SchedDataCalculatorGM107::needRdDepBar(const Instruction *insn) const
+{
+   BitSet srcs(255, 1), defs(255, 1);
+   int a, b;
+
+   if (!targ->isBarrierRequired(insn))
+      return false;
+
+   // Do not emit a read dependency barrier when the instruction doesn't use
+   // any GPR (like st s[0x4] 0x0) as input because it's unnecessary.
+   for (int s = 0; insn->srcExists(s); ++s) {
+      const Value *src = insn->src(s).rep();
+      if (insn->src(s).getFile() != FILE_GPR)
+         continue;
+      if (src->reg.data.id == 255)
+         continue;
+
+      a = src->reg.data.id;
+      b = a + src->reg.size / 4;
+      for (int r = a; r < b; ++r)
+         srcs.set(r);
+   }
+
+   if (!srcs.popCount())
+      return false;
+
+   // Do not emit a read dependency barrier when the output GPRs are equal to
+   // the input GPRs (like rcp $r0 $r0) because a write dependency barrier will
+   // be produced and WaR hazards are prevented.
+   for (int d = 0; insn->defExists(d); ++d) {
+      const Value *def = insn->def(d).rep();
+      if (insn->def(d).getFile() != FILE_GPR)
+         continue;
+      if (def->reg.data.id == 255)
+         continue;
+
+      a = def->reg.data.id;
+      b = a + def->reg.size / 4;
+      for (int r = a; r < b; ++r)
+         defs.set(r);
+   }
+
+   srcs.andNot(defs);
+   if (!srcs.popCount())
+      return false;
+
+   return true;
+}
+
+// Return true when the given instruction needs to emit a write dependency
+// barrier (for RaW hazards) because it doesn't operate at a fixed latency, and
+// setting the maximum number of stall counts is not enough. This is only legal
+// if the instruction output something.
+bool
+SchedDataCalculatorGM107::needWrDepBar(const Instruction *insn) const
+{
+   if (!targ->isBarrierRequired(insn))
+      return false;
+
+   for (int d = 0; insn->defExists(d); ++d) {
+      if (insn->def(d).getFile() == FILE_GPR ||
+          insn->def(d).getFile() == FILE_PREDICATE)
+         return true;
+   }
+   return false;
+}
+
+// Find the next instruction inside the same basic block which uses the output
+// of the given instruction in order to avoid RaW hazards.
+Instruction *
+SchedDataCalculatorGM107::findFirstUse(const Instruction *bari) const
+{
+   Instruction *insn, *next;
+   int minGPR, maxGPR;
+
+   if (!bari->defExists(0))
+      return NULL;
+
+   minGPR = bari->def(0).rep()->reg.data.id;
+   maxGPR = minGPR + bari->def(0).rep()->reg.size / 4 - 1;
+
+   for (insn = bari->next; insn != NULL; insn = next) {
+      next = insn->next;
+
+      for (int s = 0; insn->srcExists(s); ++s) {
+         const Value *src = insn->src(s).rep();
+         if (bari->def(0).getFile() == FILE_GPR) {
+            if (insn->src(s).getFile() != FILE_GPR ||
+                src->reg.data.id + src->reg.size / 4 - 1 < minGPR ||
+                src->reg.data.id > maxGPR)
+               continue;
+            return insn;
+         } else
+         if (bari->def(0).getFile() == FILE_PREDICATE) {
+            if (insn->src(s).getFile() != FILE_PREDICATE ||
+                src->reg.data.id != minGPR)
+               continue;
+            return insn;
+         }
+      }
+   }
+   return NULL;
+}
+
+// Find the next instruction inside the same basic block which overwrites, at
+// least, one source of the given instruction in order to avoid WaR hazards.
+Instruction *
+SchedDataCalculatorGM107::findFirstDef(const Instruction *bari) const
+{
+   Instruction *insn, *next;
+   int minGPR, maxGPR;
+
+   for (insn = bari->next; insn != NULL; insn = next) {
+      next = insn->next;
+
+      for (int d = 0; insn->defExists(d); ++d) {
+         const Value *def = insn->def(d).rep();
+         if (insn->def(d).getFile() != FILE_GPR)
+            continue;
+
+         minGPR = def->reg.data.id;
+         maxGPR = minGPR + def->reg.size / 4 - 1;
+
+         for (int s = 0; bari->srcExists(s); ++s) {
+            const Value *src = bari->src(s).rep();
+            if (bari->src(s).getFile() != FILE_GPR ||
+                src->reg.data.id + src->reg.size / 4 - 1 < minGPR ||
+                src->reg.data.id > maxGPR)
+               continue;
+            return insn;
+         }
+      }
+   }
+   return NULL;
+}
+
+// Dependency barriers:
+// This pass is a bit ugly and could probably be improved by performing a
+// better allocation.
+//
+// The main idea is to avoid WaR and RaW hazards by emitting read/write
+// dependency barriers using the control codes.
+bool
+SchedDataCalculatorGM107::insertBarriers(BasicBlock *bb)
+{
+   std::list<LiveBarUse> live_uses;
+   std::list<LiveBarDef> live_defs;
+   Instruction *insn, *next;
+   BitSet bars(6, 1);
+   int bar_id;
+
+   for (insn = bb->getEntry(); insn != NULL; insn = next) {
+      Instruction *usei = NULL, *defi = NULL;
+      bool need_wr_bar, need_rd_bar;
+
+      next = insn->next;
+
+      // Expire old barrier uses.
+      for (std::list<LiveBarUse>::iterator it = live_uses.begin();
+           it != live_uses.end();) {
+         if (insn->serial >= it->usei->serial) {
+            int wr = getWrDepBar(it->insn);
+            emitWtDepBar(insn, wr);
+            bars.clr(wr); // free barrier
+            it = live_uses.erase(it);
+            continue;
+         }
+         ++it;
+      }
+
+      // Expire old barrier defs.
+      for (std::list<LiveBarDef>::iterator it = live_defs.begin();
+           it != live_defs.end();) {
+         if (insn->serial >= it->defi->serial) {
+            int rd = getRdDepBar(it->insn);
+            emitWtDepBar(insn, rd);
+            bars.clr(rd); // free barrier
+            it = live_defs.erase(it);
+            continue;
+         }
+         ++it;
+      }
+
+      need_wr_bar = needWrDepBar(insn);
+      need_rd_bar = needRdDepBar(insn);
+
+      if (need_wr_bar) {
+         // When the instruction requires to emit a write dependency barrier
+         // (all which write something at a variable latency), find the next
+         // instruction which reads the outputs.
+         usei = findFirstUse(insn);
+
+         // Allocate and emit a new barrier.
+         bar_id = bars.findFreeRange(1);
+         if (bar_id == -1)
+            bar_id = 5;
+         bars.set(bar_id);
+         emitWrDepBar(insn, bar_id);
+         if (usei)
+            live_uses.push_back(LiveBarUse(insn, usei));
+      }
+
+      if (need_rd_bar) {
+         // When the instruction requires to emit a read dependency barrier
+         // (all which read something at a variable latency), find the next
+         // instruction which will write the inputs.
+         defi = findFirstDef(insn);
+
+         if (usei && defi && usei->serial <= defi->serial)
+            continue;
+
+         // Allocate and emit a new barrier.
+         bar_id = bars.findFreeRange(1);
+         if (bar_id == -1)
+            bar_id = 5;
+         bars.set(bar_id);
+         emitRdDepBar(insn, bar_id);
+         if (defi)
+            live_defs.push_back(LiveBarDef(insn, defi));
+      }
+   }
+
+   // Remove unnecessary barrier waits.
+   BitSet alive_bars(6, 1);
+   for (insn = bb->getEntry(); insn != NULL; insn = next) {
+      int wr, rd, wt;
+
+      next = insn->next;
+
+      wr = getWrDepBar(insn);
+      rd = getRdDepBar(insn);
+      wt = getWtDepBar(insn);
+
+      for (int idx = 0; idx < 6; ++idx) {
+         if (!(wt & (1 << idx)))
+            continue;
+         if (!alive_bars.test(idx)) {
+            insn->sched &= ~(1 << (11  + idx));
+         } else {
+            alive_bars.clr(idx);
+         }
+      }
+
+      if (wr < 6)
+         alive_bars.set(wr);
+      if (rd < 6)
+         alive_bars.set(rd);
+   }
+
+   return true;
+}
+
+bool
+SchedDataCalculatorGM107::visit(Function *func)
+{
+   ArrayList insns;
+
+   func->orderInstructions(insns);
+
+   scoreBoards.resize(func->cfg.getSize());
+   for (size_t i = 0; i < scoreBoards.size(); ++i)
+      scoreBoards[i].wipe();
+   return true;
+}
 
 bool
 SchedDataCalculatorGM107::visit(BasicBlock *bb)
 {
+   Instruction *insn, *next = NULL;
+   int cycle = 0;
+
    for (Instruction *insn = bb->getEntry(); insn; insn = insn->next) {
       /*XXX*/
       insn->sched = 0x7e0;
    }
 
+   if (!debug_get_bool_option("NV50_PROG_SCHED", true))
+      return true;
+
+   // Insert read/write dependency barriers for instructions which don't
+   // operate at a fixed latency.
+   insertBarriers(bb);
+
+   score = &scoreBoards.at(bb->getId());
+
+   for (Graph::EdgeIterator ei = bb->cfg.incident(); !ei.end(); ei.next()) {
+      // back branches will wait until all target dependencies are satisfied
+      if (ei.getType() == Graph::Edge::BACK) // sched would be uninitialized
+         continue;
+      BasicBlock *in = BasicBlock::get(ei.getNode());
+      score->setMax(&scoreBoards.at(in->getId()));
+   }
+
+#ifdef GM107_DEBUG_SCHED_DATA
+   INFO("=== BB:%i initial scores\n", bb->getId());
+   score->print(cycle);
+#endif
+
+   // Because barriers are allocated locally (intra-BB), we have to make sure
+   // that all produced barriers have been consumed before entering inside a
+   // new basic block. The best way is to do a global allocation pre RA but
+   // it's really more difficult, especially because of the phi nodes. Anyways,
+   // it seems like that waiting on a barrier which has already been consumed
+   // doesn't add any additional cost, it's just not elegant!
+   Instruction *start = bb->getEntry();
+   if (start && bb->cfg.incidentCount() > 0) {
+      for (int b = 0; b < 6; b++)
+         emitWtDepBar(start, b);
+   }
+
+   for (insn = bb->getEntry(); insn && insn->next; insn = insn->next) {
+      next = insn->next;
+
+      commitInsn(insn, cycle);
+      int delay = calcDelay(next, cycle);
+      setDelay(insn, delay, next);
+      cycle += getStall(insn);
+
+      setReuseFlag(insn);
+
+      // XXX: The yield flag seems to destroy a bunch of things when it is
+      // set on every instruction, need investigation.
+      //emitYield(insn);
+
+#ifdef GM107_DEBUG_SCHED_DATA
+      printSchedInfo(cycle, insn);
+      insn->print();
+      next->print();
+#endif
+   }
+
+   if (!insn)
+      return true;
+   commitInsn(insn, cycle);
+
+   int bbDelay = -1;
+
+#ifdef GM107_DEBUG_SCHED_DATA
+   fprintf(stderr, "last instruction is : ");
+   insn->print();
+   fprintf(stderr, "cycle=%d\n", cycle);
+#endif
+
+   for (Graph::EdgeIterator ei = bb->cfg.outgoing(); !ei.end(); ei.next()) {
+      BasicBlock *out = BasicBlock::get(ei.getNode());
+
+      if (ei.getType() != Graph::Edge::BACK) {
+         // Only test the first instruction of the outgoing block.
+         next = out->getEntry();
+         if (next) {
+            bbDelay = MAX2(bbDelay, calcDelay(next, cycle));
+         } else {
+            // When the outgoing BB is empty, make sure to set the number of
+            // stall counts needed by the instruction because we don't know the
+            // next instruction.
+            bbDelay = MAX2(bbDelay, targ->getLatency(insn));
+         }
+      } else {
+         // Wait until all dependencies are satisfied.
+         const int regsFree = score->getLatest();
+         next = out->getFirst();
+         for (int c = cycle; next && c < regsFree; next = next->next) {
+            bbDelay = MAX2(bbDelay, calcDelay(next, c));
+            c += getStall(next);
+         }
+         next = NULL;
+      }
+   }
+   if (bb->cfg.outgoingCount() != 1)
+      next = NULL;
+   setDelay(insn, bbDelay, next);
+   cycle += getStall(insn);
+
+   score->rebase(cycle); // common base for initializing out blocks' scores
    return true;
 }
 
@@ -3371,7 +4161,7 @@ SchedDataCalculatorGM107::visit(BasicBlock *bb)
 void
 CodeEmitterGM107::prepareEmission(Function *func)
 {
-   SchedDataCalculatorGM107 sched(targ);
+   SchedDataCalculatorGM107 sched(targGM107);
    CodeEmitter::prepareEmission(func);
    sched.run(func, true, true);
 }

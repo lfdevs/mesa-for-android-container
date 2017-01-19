@@ -56,6 +56,7 @@
 #endif
 
 #include "egl_dri2.h"
+#include "loader/loader.h"
 #include "util/u_atomic.h"
 
 /* The kernel header drm_fourcc.h defines the DRM formats below.  We duplicate
@@ -514,8 +515,8 @@ dri2_open_driver(_EGLDisplay *disp)
 
    _eglLog(_EGL_DEBUG, "DRI2: dlopen(%s)", path);
 
-   if (asprintf(&get_extensions_name, "%s_%s",
-                __DRI_DRIVER_GET_EXTENSIONS, dri2_dpy->driver_name) != -1) {
+   get_extensions_name = loader_get_extensions_name(dri2_dpy->driver_name);
+   if (get_extensions_name) {
       get_extensions = dlsym(dri2_dpy->driver, get_extensions_name);
       if (get_extensions) {
          extensions = get_extensions();
@@ -657,6 +658,12 @@ dri2_setup_screen(_EGLDisplay *disp)
       disp->Extensions.KHR_wait_sync = EGL_TRUE;
       if (dri2_dpy->fence->get_fence_from_cl_event)
          disp->Extensions.KHR_cl_event2 = EGL_TRUE;
+      if (dri2_dpy->fence->base.version >= 2) {
+         unsigned capabilities =
+            dri2_dpy->fence->get_capabilities(dri2_dpy->dri_screen);
+         disp->Extensions.ANDROID_native_fence_sync =
+            (capabilities & __DRI_FENCE_CAP_NATIVE_FD) != 0;
+      }
    }
 
    disp->Extensions.KHR_reusable_sync = EGL_TRUE;
@@ -907,6 +914,7 @@ dri2_display_release(_EGLDisplay *disp)
           wl_shm_destroy(dri2_dpy->wl_shm);
       wl_registry_destroy(dri2_dpy->wl_registry);
       wl_event_queue_destroy(dri2_dpy->wl_queue);
+      wl_proxy_wrapper_destroy(dri2_dpy->wl_dpy_wrapper);
       if (dri2_dpy->own_device) {
          wl_display_disconnect(dri2_dpy->wl_dpy);
       }
@@ -1541,9 +1549,9 @@ dri2_bind_tex_image(_EGLDriver *drv,
       assert(!"Unexpected texture target in dri2_bind_tex_image()");
    }
 
-   (*dri2_dpy->tex_buffer->setTexBuffer2)(dri2_ctx->dri_context,
-                                          target, format,
-                                          dri_drawable);
+   dri2_dpy->tex_buffer->setTexBuffer2(dri2_ctx->dri_context,
+                                       target, format,
+                                       dri_drawable);
 
    return EGL_TRUE;
 }
@@ -1574,9 +1582,8 @@ dri2_release_tex_image(_EGLDriver *drv,
 
    if (dri2_dpy->tex_buffer->base.version >= 3 &&
        dri2_dpy->tex_buffer->releaseTexBuffer != NULL) {
-      (*dri2_dpy->tex_buffer->releaseTexBuffer)(dri2_ctx->dri_context,
-                                                target,
-                                                dri_drawable);
+      dri2_dpy->tex_buffer->releaseTexBuffer(dri2_ctx->dri_context,
+                                             target, dri_drawable);
    }
 
    return EGL_TRUE;
@@ -2510,8 +2517,17 @@ dri2_egl_unref_sync(struct dri2_egl_display *dri2_dpy,
                     struct dri2_egl_sync *dri2_sync)
 {
    if (p_atomic_dec_zero(&dri2_sync->refcount)) {
-      if (dri2_sync->base.Type == EGL_SYNC_REUSABLE_KHR)
+      switch (dri2_sync->base.Type) {
+      case EGL_SYNC_REUSABLE_KHR:
          cnd_destroy(&dri2_sync->cond);
+         break;
+      case EGL_SYNC_NATIVE_FENCE_ANDROID:
+         if (dri2_sync->base.SyncFd != EGL_NO_NATIVE_FENCE_FD_ANDROID)
+            close(dri2_sync->base.SyncFd);
+         break;
+      default:
+         break;
+      }
 
       if (dri2_sync->fence)
          dri2_dpy->fence->destroy_fence(dri2_dpy->dri_screen, dri2_sync->fence);
@@ -2602,6 +2618,19 @@ dri2_create_sync(_EGLDriver *drv, _EGLDisplay *dpy,
       /* initial status of reusable sync must be "unsignaled" */
       dri2_sync->base.SyncStatus = EGL_UNSIGNALED_KHR;
       break;
+
+   case EGL_SYNC_NATIVE_FENCE_ANDROID:
+      if (dri2_dpy->fence->create_fence_fd) {
+         dri2_sync->fence = dri2_dpy->fence->create_fence_fd(
+                                    dri2_ctx->dri_context,
+                                    dri2_sync->base.SyncFd);
+      }
+      if (!dri2_sync->fence) {
+         _eglError(EGL_BAD_ATTRIBUTE, "eglCreateSyncKHR");
+         free(dri2_sync);
+         return NULL;
+      }
+      break;
    }
 
    p_atomic_set(&dri2_sync->refcount, 1);
@@ -2631,9 +2660,35 @@ dri2_destroy_sync(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync)
          ret = EGL_FALSE;
       }
    }
+
    dri2_egl_unref_sync(dri2_dpy, dri2_sync);
 
    return ret;
+}
+
+static EGLint
+dri2_dup_native_fence_fd(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   struct dri2_egl_sync *dri2_sync = dri2_egl_sync(sync);
+
+   assert(sync->Type == EGL_SYNC_NATIVE_FENCE_ANDROID);
+
+   if (sync->SyncFd == EGL_NO_NATIVE_FENCE_FD_ANDROID) {
+      /* try to retrieve the actual native fence fd.. if rendering is
+       * not flushed this will just return -1, aka NO_NATIVE_FENCE_FD:
+       */
+      sync->SyncFd = dri2_dpy->fence->get_fence_fd(dri2_dpy->dri_screen,
+                                                   dri2_sync->fence);
+   }
+
+   if (sync->SyncFd == EGL_NO_NATIVE_FENCE_FD_ANDROID) {
+      /* if native fence fd still not created, return an error: */
+      _eglError(EGL_BAD_PARAMETER, "eglDupNativeFenceFDANDROID");
+      return EGL_NO_NATIVE_FENCE_FD_ANDROID;
+   }
+
+   return dup(sync->SyncFd);
 }
 
 static EGLint
@@ -2666,6 +2721,7 @@ dri2_client_wait_sync(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
 
    switch (sync->Type) {
    case EGL_SYNC_FENCE_KHR:
+   case EGL_SYNC_NATIVE_FENCE_ANDROID:
    case EGL_SYNC_CL_EVENT_KHR:
       if (dri2_dpy->fence->client_wait_sync(dri2_ctx ? dri2_ctx->dri_context : NULL,
                                          dri2_sync->fence, wait_flags,
@@ -2921,6 +2977,7 @@ _eglBuiltInDriverDRI2(const char *args)
    dri2_drv->base.API.DestroySyncKHR = dri2_destroy_sync;
    dri2_drv->base.API.GLInteropQueryDeviceInfo = dri2_interop_query_device_info;
    dri2_drv->base.API.GLInteropExportObject = dri2_interop_export_object;
+   dri2_drv->base.API.DupNativeFenceFDANDROID = dri2_dup_native_fence_fd;
 
    dri2_drv->base.Name = "DRI2";
    dri2_drv->base.Unload = dri2_unload;

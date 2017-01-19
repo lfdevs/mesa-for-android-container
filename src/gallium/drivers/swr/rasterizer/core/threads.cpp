@@ -313,11 +313,16 @@ bool CheckDependency(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t lastReti
     return pDC->dependent && IDComparesLess(lastRetiredDraw, pDC->drawId - 1);
 }
 
+bool CheckDependencyFE(SWR_CONTEXT *pContext, DRAW_CONTEXT *pDC, uint32_t lastRetiredDraw)
+{
+    return pDC->dependentFE && IDComparesLess(lastRetiredDraw, pDC->drawId - 1);
+}
+
 //////////////////////////////////////////////////////////////////////////
 /// @brief Update client stats.
 INLINE void UpdateClientStats(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEXT* pDC)
 {
-    if ((pContext->pfnUpdateStats == nullptr) || (GetApiState(pDC).enableStats == false))
+    if ((pContext->pfnUpdateStats == nullptr) || (GetApiState(pDC).enableStatsBE == false))
     {
         return;
     }
@@ -566,7 +571,7 @@ bool WorkOnFifoBE(
 /// @brief Called when FE work is complete for this DC.
 INLINE void CompleteDrawFE(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEXT* pDC)
 {
-    if (pContext->pfnUpdateStatsFE && GetApiState(pDC).enableStats)
+    if (pContext->pfnUpdateStatsFE && GetApiState(pDC).enableStatsFE)
     {
         SWR_STATS_FE& stats = pDC->dynState.statsFE;
 
@@ -576,6 +581,7 @@ INLINE void CompleteDrawFE(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEX
             stats.SoPrimStorageNeeded[0], stats.SoPrimStorageNeeded[1], stats.SoPrimStorageNeeded[2], stats.SoPrimStorageNeeded[3],
             stats.SoNumPrimsWritten[0], stats.SoNumPrimsWritten[1], stats.SoNumPrimsWritten[2], stats.SoNumPrimsWritten[3]
         ));
+		AR_EVENT(FrontendDrawEndEvent(pDC->drawId));
 
         pContext->pfnUpdateStatsFE(GetPrivateState(pDC), &stats);
     }
@@ -595,6 +601,7 @@ INLINE void CompleteDrawFE(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEX
     // Ensure all streaming writes are globally visible before marking this FE done
     _mm_mfence();
     pDC->doneFE = true;
+
     InterlockedDecrement((volatile LONG*)&pContext->drawsOutstandingFE);
 }
 
@@ -606,7 +613,7 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawFE)
     {
         uint32_t dcSlot = curDrawFE % KNOB_MAX_DRAWS_IN_FLIGHT;
         DRAW_CONTEXT *pDC = &pContext->dcRing[dcSlot];
-        if (pDC->isCompute || pDC->doneFE || pDC->FeLock)
+        if (pDC->isCompute || pDC->doneFE)
         {
             CompleteDrawContextInl(pContext, workerId, pDC);
             curDrawFE++;
@@ -617,6 +624,7 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawFE)
         }
     }
 
+    uint32_t lastRetiredFE = curDrawFE - 1;
     uint32_t curDraw = curDrawFE;
     while (IDComparesLess(curDraw, drawEnqueued))
     {
@@ -625,6 +633,11 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawFE)
 
         if (!pDC->isCompute && !pDC->FeLock)
         {
+            if (CheckDependencyFE(pContext, pDC, lastRetiredFE))
+            {
+                return;
+            }
+
             uint32_t initial = InterlockedCompareExchange((volatile uint32_t*)&pDC->FeLock, 1, 0);
             if (initial == 0)
             {

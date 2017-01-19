@@ -772,7 +772,7 @@ dest(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
          if (err == -1)
             return 0;
          if (brw_inst_dst_da16_subreg_nr(devinfo, inst))
-            format(file, ".%"PRIu64, brw_inst_dst_da16_subreg_nr(devinfo, inst) /
+            format(file, ".%u", 16 /
                    reg_type_size[brw_inst_dst_reg_type(devinfo, inst)]);
          string(file, "<1>");
          err |= control(file, "writemask", writemask,
@@ -942,7 +942,7 @@ src_da16(FILE *file,
       format(file, ".%d", 16 / reg_type_size[_reg_type]);
    string(file, "<");
    err |= control(file, "vert stride", vert_stride, _vert_stride, NULL);
-   string(file, ",4,1>");
+   string(file, ">");
    err |= src_swizzle(file, BRW_SWIZZLE4(swz_x, swz_y, swz_z, swz_w));
    err |= control(file, "src da16 reg type", reg_encoding, _reg_type, NULL);
    return err;
@@ -1190,7 +1190,11 @@ qtr_ctrl(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
    int qtr_ctl = brw_inst_qtr_control(devinfo, inst);
    int exec_size = 1 << brw_inst_exec_size(devinfo, inst);
 
-   if (exec_size == 8) {
+   if (exec_size < 8) {
+      const unsigned nib_ctl = devinfo->gen < 7 ? 0 :
+                               brw_inst_nib_control(devinfo, inst);
+      format(file, " %dN", qtr_ctl * 2 + nib_ctl + 1);
+   } else if (exec_size == 8) {
       switch (qtr_ctl) {
       case 0:
          string(file, " 1Q");
@@ -1410,6 +1414,7 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
             }
             break;
          case GEN6_SFID_DATAPORT_SAMPLER_CACHE:
+         case GEN6_SFID_DATAPORT_CONSTANT_CACHE:
             /* aka BRW_SFID_DATAPORT_READ on Gen4-5 */
             if (devinfo->gen >= 6) {
                format(file, " (%"PRIu64", %"PRIu64", %"PRIu64", %"PRIu64")",

@@ -162,7 +162,7 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
    // Bind kernel arguments.
    auto &m = kern.program().build(q->device()).binary;
    auto margs = find(name_equals(kern.name()), m.syms).args;
-   auto msec = find(type_equals(module::section::text), m.secs);
+   auto msec = find(type_equals(module::section::text_executable), m.secs);
    auto explicit_arg = kern._args.begin();
 
    for (auto &marg : margs) {

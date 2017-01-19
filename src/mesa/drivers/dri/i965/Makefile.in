@@ -184,19 +184,18 @@ am__objects_3 = brw_binding_tables.lo brw_blorp.lo brw_cc.lo \
 	brw_draw.lo brw_draw_upload.lo brw_ff_gs.lo brw_ff_gs_emit.lo \
 	brw_fs_channel_expressions.lo brw_fs_vector_splitting.lo \
 	brw_formatquery.lo brw_gs.lo brw_gs_state.lo \
-	brw_gs_surface_state.lo brw_link.lo \
-	brw_lower_texture_gradients.lo brw_meta_util.lo \
+	brw_gs_surface_state.lo brw_link.lo brw_meta_util.lo \
 	brw_misc_state.lo brw_nir_uniforms.lo brw_object_purgeable.lo \
-	brw_performance_monitor.lo brw_pipe_control.lo brw_program.lo \
+	brw_pipe_control.lo brw_program.lo brw_program_cache.lo \
 	brw_primitive_restart.lo brw_queryobj.lo brw_reset.lo \
 	brw_sampler_state.lo brw_sf.lo brw_sf_emit.lo brw_sf_state.lo \
-	brw_state_batch.lo brw_state_cache.lo brw_state_dump.lo \
-	brw_state_upload.lo brw_surface_formats.lo brw_sync.lo \
-	brw_tcs.lo brw_tcs_surface_state.lo brw_tes.lo \
-	brw_tes_surface_state.lo brw_tex_layout.lo brw_urb.lo \
-	brw_vs.lo brw_vs_state.lo brw_vs_surface_state.lo brw_wm.lo \
-	brw_wm_state.lo brw_wm_surface_state.lo gen6_cc.lo \
-	gen6_clip_state.lo gen6_constant_state.lo gen6_depth_state.lo \
+	brw_state_batch.lo brw_state_dump.lo brw_state_upload.lo \
+	brw_surface_formats.lo brw_sync.lo brw_tcs.lo \
+	brw_tcs_surface_state.lo brw_tes.lo brw_tes_surface_state.lo \
+	brw_tex_layout.lo brw_urb.lo brw_vs.lo brw_vs_state.lo \
+	brw_vs_surface_state.lo brw_wm.lo brw_wm_state.lo \
+	brw_wm_surface_state.lo gen6_cc.lo gen6_clip_state.lo \
+	gen6_constant_state.lo gen6_depth_state.lo \
 	gen6_depthstencil.lo gen6_gs_state.lo \
 	gen6_multisample_state.lo gen6_queryobj.lo \
 	gen6_sampler_state.lo gen6_scissor_state.lo gen6_sf_state.lo \
@@ -207,18 +206,18 @@ am__objects_3 = brw_binding_tables.lo brw_blorp.lo brw_cc.lo \
 	gen7_sol_state.lo gen7_te_state.lo gen7_urb.lo \
 	gen7_viewport_state.lo gen7_vs_state.lo gen7_wm_state.lo \
 	gen7_wm_surface_state.lo gen8_blend_state.lo \
-	gen8_depth_state.lo gen8_disable.lo gen8_draw_upload.lo \
-	gen8_ds_state.lo gen8_gs_state.lo gen8_hs_state.lo \
-	gen8_multisample_state.lo gen8_ps_state.lo gen8_sf_state.lo \
-	gen8_sol_state.lo gen8_surface_state.lo gen8_viewport_state.lo \
-	gen8_vs_state.lo gen8_wm_depth_stencil.lo hsw_queryobj.lo \
-	hsw_sol.lo intel_batchbuffer.lo intel_blit.lo \
-	intel_buffer_objects.lo intel_buffers.lo intel_copy_image.lo \
-	intel_extensions.lo intel_fbo.lo intel_mipmap_tree.lo \
-	intel_pixel_bitmap.lo intel_pixel.lo intel_pixel_copy.lo \
-	intel_pixel_draw.lo intel_pixel_read.lo intel_screen.lo \
-	intel_state.lo intel_tex.lo intel_tex_copy.lo \
-	intel_tex_image.lo intel_tex_subimage.lo intel_tex_validate.lo \
+	gen8_depth_state.lo gen8_draw_upload.lo gen8_ds_state.lo \
+	gen8_gs_state.lo gen8_hs_state.lo gen8_multisample_state.lo \
+	gen8_ps_state.lo gen8_sf_state.lo gen8_sol_state.lo \
+	gen8_surface_state.lo gen8_viewport_state.lo gen8_vs_state.lo \
+	gen8_wm_depth_stencil.lo hsw_queryobj.lo hsw_sol.lo \
+	intel_batchbuffer.lo intel_blit.lo intel_buffer_objects.lo \
+	intel_buffers.lo intel_copy_image.lo intel_extensions.lo \
+	intel_fbo.lo intel_mipmap_tree.lo intel_pixel_bitmap.lo \
+	intel_pixel.lo intel_pixel_copy.lo intel_pixel_draw.lo \
+	intel_pixel_read.lo intel_screen.lo intel_state.lo \
+	intel_tex.lo intel_tex_copy.lo intel_tex_image.lo \
+	intel_tex_subimage.lo intel_tex_validate.lo \
 	intel_tiled_memcpy.lo intel_upload.lo
 am_libi965_dri_la_OBJECTS = $(am__objects_3)
 libi965_dri_la_OBJECTS = $(am_libi965_dri_la_OBJECTS)
@@ -630,6 +629,8 @@ AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANDROID_CFLAGS = @ANDROID_CFLAGS@
+ANDROID_LIBS = @ANDROID_LIBS@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -673,10 +674,11 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
-EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
+ETNAVIV_CFLAGS = @ETNAVIV_CFLAGS@
+ETNAVIV_LIBS = @ETNAVIV_LIBS@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -726,9 +728,7 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
-LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
-LIBSHA1_LIBS = @LIBSHA1_LIBS@
+LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
@@ -769,8 +769,6 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -807,8 +805,6 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
-SHA1_CFLAGS = @SHA1_CFLAGS@
-SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
 SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
@@ -817,7 +813,6 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
-TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -833,7 +828,6 @@ VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
 VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
-VG_LIB_DEPS = @VG_LIB_DEPS@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -1055,17 +1049,16 @@ i965_FILES = \
 	brw_gs_state.c \
 	brw_gs_surface_state.c \
 	brw_link.cpp \
-	brw_lower_texture_gradients.cpp \
 	brw_meta_util.c \
 	brw_meta_util.h \
 	brw_misc_state.c \
 	brw_multisample_state.h \
 	brw_nir_uniforms.cpp \
 	brw_object_purgeable.c \
-	brw_performance_monitor.c \
 	brw_pipe_control.c \
 	brw_program.c \
 	brw_program.h \
+	brw_program_cache.c \
 	brw_primitive_restart.c \
 	brw_queryobj.c \
 	brw_reset.c \
@@ -1075,7 +1068,6 @@ i965_FILES = \
 	brw_sf.h \
 	brw_sf_state.c \
 	brw_state_batch.c \
-	brw_state_cache.c \
 	brw_state_dump.c \
 	brw_state.h \
 	brw_state_upload.c \
@@ -1128,7 +1120,6 @@ i965_FILES = \
 	gen7_wm_surface_state.c \
 	gen8_blend_state.c \
 	gen8_depth_state.c \
-	gen8_disable.c \
 	gen8_draw_upload.c \
 	gen8_ds_state.c \
 	gen8_gs_state.c \
@@ -1488,7 +1479,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_gs_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_interpolation_map.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_link.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_texture_gradients.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir.Plo@am__quote@
@@ -1501,11 +1491,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_object_purgeable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_packed_float.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_performance_monitor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_pipe_control.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_predicated_break.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_primitive_restart.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_program.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_program_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_queryobj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_reset.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_sampler_state.Plo@am__quote@
@@ -1515,7 +1505,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_sf_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_state_batch.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_state_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_state_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_state_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_surface_formats.Plo@am__quote@
@@ -1585,7 +1574,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_wm_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_blend_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_depth_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_disable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_draw_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_ds_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_gs_state.Plo@am__quote@

@@ -1098,6 +1098,12 @@ enum opcode {
    VEC4_OPCODE_MOV_BYTES,
    VEC4_OPCODE_PACK_BYTES,
    VEC4_OPCODE_UNPACK_UNIFORM,
+   VEC4_OPCODE_FROM_DOUBLE,
+   VEC4_OPCODE_TO_DOUBLE,
+   VEC4_OPCODE_PICK_LOW_32BIT,
+   VEC4_OPCODE_PICK_HIGH_32BIT,
+   VEC4_OPCODE_SET_LOW_32BIT,
+   VEC4_OPCODE_SET_HIGH_32BIT,
 
    FS_OPCODE_DDX_COARSE,
    FS_OPCODE_DDX_FINE,
@@ -1119,7 +1125,6 @@ enum opcode {
    FS_OPCODE_MOV_DISPATCH_TO_FLAGS,
    FS_OPCODE_DISCARD_JUMP,
    FS_OPCODE_SET_SAMPLE_ID,
-   FS_OPCODE_SET_SIMD4X2_OFFSET,
    FS_OPCODE_PACK_HALF_2x16_SPLIT,
    FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X,
    FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y,
@@ -1405,7 +1410,7 @@ enum fb_write_logical_srcs {
 enum tex_logical_srcs {
    /** Texture coordinates */
    TEX_LOGICAL_SRC_COORDINATE,
-   /** Shadow comparitor */
+   /** Shadow comparator */
    TEX_LOGICAL_SRC_SHADOW_C,
    /** dPdx if the operation takes explicit derivatives, otherwise LOD value */
    TEX_LOGICAL_SRC_LOD,
@@ -1420,7 +1425,7 @@ enum tex_logical_srcs {
    /** Texture sampler index */
    TEX_LOGICAL_SRC_SAMPLER,
    /** Texel offset for gathers */
-   TEX_LOGICAL_SRC_OFFSET_VALUE,
+   TEX_LOGICAL_SRC_TG4_OFFSET,
    /** REQUIRED: Number of coordinate components (as UD immediate) */
    TEX_LOGICAL_SRC_COORD_COMPONENTS,
    /** REQUIRED: Number of derivative components (as UD immediate) */
@@ -1669,6 +1674,12 @@ enum brw_message_target {
 #define BRW_DATAPORT_OWORD_BLOCK_2_OWORDS     2
 #define BRW_DATAPORT_OWORD_BLOCK_4_OWORDS     3
 #define BRW_DATAPORT_OWORD_BLOCK_8_OWORDS     4
+#define BRW_DATAPORT_OWORD_BLOCK_DWORDS(n)              \
+   ((n) == 4 ? BRW_DATAPORT_OWORD_BLOCK_1_OWORDLOW :    \
+    (n) == 8 ? BRW_DATAPORT_OWORD_BLOCK_2_OWORDS :      \
+    (n) == 16 ? BRW_DATAPORT_OWORD_BLOCK_4_OWORDS :     \
+    (n) == 32 ? BRW_DATAPORT_OWORD_BLOCK_8_OWORDS :     \
+    (abort(), ~0))
 
 #define BRW_DATAPORT_OWORD_DUAL_BLOCK_1OWORD     0
 #define BRW_DATAPORT_OWORD_DUAL_BLOCK_4OWORDS    2
@@ -2217,6 +2228,7 @@ enum brw_message_target {
 # define GEN7_CLIP_VERTEX_SUBPIXEL_PRECISION_8          (0 << 19)
 # define GEN7_CLIP_VERTEX_SUBPIXEL_PRECISION_4          (1 << 19)
 # define GEN7_CLIP_EARLY_CULL                           (1 << 18)
+# define GEN8_CLIP_FORCE_USER_CLIP_DISTANCE_BITMASK     (1 << 17)
 # define GEN7_CLIP_CULLMODE_BOTH                        (0 << 16)
 # define GEN7_CLIP_CULLMODE_NONE                        (1 << 16)
 # define GEN7_CLIP_CULLMODE_FRONT                       (2 << 16)
@@ -2372,6 +2384,7 @@ enum brw_message_target {
 #define _3DSTATE_RASTER                         0x7850 /* GEN8+ */
 /* DW1 */
 # define GEN9_RASTER_VIEWPORT_Z_FAR_CLIP_TEST_ENABLE    (1 << 26)
+# define GEN9_RASTER_CONSERVATIVE_RASTERIZATION_ENABLE  (1 << 24)
 # define GEN8_RASTER_FRONT_WINDING_CCW                  (1 << 21)
 # define GEN8_RASTER_CULL_BOTH                          (0 << 16)
 # define GEN8_RASTER_CULL_NONE                          (1 << 16)

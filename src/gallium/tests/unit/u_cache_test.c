@@ -35,7 +35,7 @@
 #include <stdio.h>
 
 #include "util/u_cache.h"
-#include "util/u_hash.h"
+#include "util/crc32.h"
 
 
 typedef uint32_t cache_test_key;

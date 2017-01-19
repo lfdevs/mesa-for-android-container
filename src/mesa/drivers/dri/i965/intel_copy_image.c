@@ -34,98 +34,6 @@
 #include "main/teximage.h"
 #include "drivers/common/meta.h"
 
-static bool
-copy_image_with_blitter(struct brw_context *brw,
-                        struct intel_mipmap_tree *src_mt, int src_level,
-                        int src_x, int src_y, int src_z,
-                        struct intel_mipmap_tree *dst_mt, int dst_level,
-                        int dst_x, int dst_y, int dst_z,
-                        int src_width, int src_height)
-{
-   GLuint bw, bh;
-   uint32_t src_image_x, src_image_y, dst_image_x, dst_image_y;
-
-   /* The blitter doesn't understand multisampling at all. */
-   if (src_mt->num_samples > 0 || dst_mt->num_samples > 0)
-      return false;
-
-   if (src_mt->format == MESA_FORMAT_S_UINT8)
-      return false;
-
-   /* According to the Ivy Bridge PRM, Vol1 Part4, section 1.2.1.2 (Graphics
-    * Data Size Limitations):
-    *
-    *    The BLT engine is capable of transferring very large quantities of
-    *    graphics data. Any graphics data read from and written to the
-    *    destination is permitted to represent a number of pixels that
-    *    occupies up to 65,536 scan lines and up to 32,768 bytes per scan line
-    *    at the destination. The maximum number of pixels that may be
-    *    represented per scan line’s worth of graphics data depends on the
-    *    color depth.
-    *
-    * Furthermore, intelEmitCopyBlit (which is called below) uses a signed
-    * 16-bit integer to represent buffer pitch, so it can only handle buffer
-    * pitches < 32k.
-    *
-    * As a result of these two limitations, we can only use the blitter to do
-    * this copy when the miptree's pitch is less than 32k.
-    */
-   if (src_mt->pitch >= 32768 ||
-       dst_mt->pitch >= 32768) {
-      perf_debug("Falling back due to >=32k pitch\n");
-      return false;
-   }
-
-   intel_miptree_get_image_offset(src_mt, src_level, src_z,
-                                  &src_image_x, &src_image_y);
-
-   if (_mesa_is_format_compressed(src_mt->format)) {
-      _mesa_get_format_block_size(src_mt->format, &bw, &bh);
-
-      assert(src_x % bw == 0);
-      assert(src_y % bh == 0);
-      assert(src_width % bw == 0);
-      assert(src_height % bh == 0);
-
-      src_x /= (int)bw;
-      src_y /= (int)bh;
-      src_width /= (int)bw;
-      src_height /= (int)bh;
-   }
-   src_x += src_image_x;
-   src_y += src_image_y;
-
-   intel_miptree_get_image_offset(dst_mt, dst_level, dst_z,
-                                  &dst_image_x, &dst_image_y);
-
-   if (_mesa_is_format_compressed(dst_mt->format)) {
-      _mesa_get_format_block_size(dst_mt->format, &bw, &bh);
-
-      assert(dst_x % bw == 0);
-      assert(dst_y % bh == 0);
-
-      dst_x /= (int)bw;
-      dst_y /= (int)bh;
-   }
-   dst_x += dst_image_x;
-   dst_y += dst_image_y;
-
-   return intelEmitCopyBlit(brw,
-                            src_mt->cpp,
-                            src_mt->pitch,
-                            src_mt->bo, src_mt->offset,
-                            src_mt->tiling,
-                            src_mt->tr_mode,
-                            dst_mt->pitch,
-                            dst_mt->bo, dst_mt->offset,
-                            dst_mt->tiling,
-                            dst_mt->tr_mode,
-                            src_x, src_y,
-                            dst_x, dst_y,
-                            src_width, src_height,
-                            GL_COPY);
-}
-
 static void
 copy_image_with_memcpy(struct brw_context *brw,
                        struct intel_mipmap_tree *src_mt, int src_level,
@@ -227,11 +135,11 @@ copy_miptrees(struct brw_context *brw,
     */
    intel_miptree_all_slices_resolve_hiz(brw, src_mt);
    intel_miptree_all_slices_resolve_depth(brw, src_mt);
-   intel_miptree_resolve_color(brw, src_mt, 0);
+   intel_miptree_all_slices_resolve_color(brw, src_mt, 0);
 
    intel_miptree_all_slices_resolve_hiz(brw, dst_mt);
    intel_miptree_all_slices_resolve_depth(brw, dst_mt);
-   intel_miptree_resolve_color(brw, dst_mt, 0);
+   intel_miptree_all_slices_resolve_color(brw, dst_mt, 0);
 
    _mesa_get_format_block_size(src_mt->format, &bw, &bh);
 
@@ -246,11 +154,9 @@ copy_miptrees(struct brw_context *brw,
    if (src_height < bh)
       src_height = ALIGN_NPOT(src_height, bh);
 
-   if (copy_image_with_blitter(brw, src_mt, src_level,
-                               src_x, src_y, src_z,
-                               dst_mt, dst_level,
-                               dst_x, dst_y, dst_z,
-                               src_width, src_height))
+   if (intel_miptree_copy(brw, src_mt, src_level, src_z, src_x, src_y,
+                          dst_mt, dst_level, dst_z, dst_x, dst_y,
+                          src_width, src_height))
       return;
 
    /* This is a worst-case scenario software fallback that maps the two
@@ -276,16 +182,6 @@ intel_copy_image_sub_data(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    struct intel_mipmap_tree *src_mt, *dst_mt;
    unsigned src_level, dst_level;
-
-   if (brw->gen < 6 &&
-       _mesa_meta_CopyImageSubData_uncompressed(ctx,
-                                                src_image, src_renderbuffer,
-                                                src_x, src_y, src_z,
-                                                dst_image, dst_renderbuffer,
-                                                dst_x, dst_y, dst_z,
-                                                src_width, src_height)) {
-      return;
-   }
 
    if (src_image) {
       src_mt = intel_texture_image(src_image)->mt;

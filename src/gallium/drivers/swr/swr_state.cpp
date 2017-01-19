@@ -38,6 +38,7 @@
 #include "util/u_inlines.h"
 #include "util/u_helpers.h"
 #include "util/u_framebuffer.h"
+#include "util/u_viewport.h"
 
 #include "swr_state.h"
 #include "swr_context.h"
@@ -370,7 +371,10 @@ swr_delete_vs_state(struct pipe_context *pipe, void *vs)
 {
    struct swr_vertex_shader *swr_vs = (swr_vertex_shader *)vs;
    FREE((void *)swr_vs->pipe.tokens);
-   delete swr_vs;
+   struct swr_screen *screen = swr_screen(pipe->screen);
+
+   /* Defer deletion of vs state */
+   swr_fence_work_delete_vs(screen->flush_fence, swr_vs);
 }
 
 static void *
@@ -406,7 +410,10 @@ swr_delete_fs_state(struct pipe_context *pipe, void *fs)
 {
    struct swr_fragment_shader *swr_fs = (swr_fragment_shader *)fs;
    FREE((void *)swr_fs->pipe.tokens);
-   delete swr_fs;
+   struct swr_screen *screen = swr_screen(pipe->screen);
+
+   /* Defer deleton of fs state */
+   swr_fence_work_delete_fs(screen->flush_fence, swr_fs);
 }
 
 
@@ -446,6 +453,7 @@ swr_create_vertex_elements_state(struct pipe_context *pipe,
    assert(num_elements <= PIPE_MAX_ATTRIBS);
    velems = CALLOC_STRUCT(swr_vertex_element_state);
    if (velems) {
+      velems->fsState.bVertexIDOffsetEnable = true;
       velems->fsState.numAttribs = num_elements;
       for (unsigned i = 0; i < num_elements; i++) {
          // XXX: we should do this keyed on the VS usage info
@@ -484,6 +492,15 @@ swr_create_vertex_elements_state(struct pipe_context *pipe,
          const SWR_FORMAT_INFO &swr_desc = GetFormatInfo(
             mesa_to_swr_format(attribs[i].src_format));
          velems->stream_pitch[attribs[i].vertex_buffer_index] += swr_desc.Bpp;
+
+         if (attribs[i].instance_divisor != 0) {
+            velems->instanced_bufs |= 1U << attribs[i].vertex_buffer_index;
+            uint32_t *min_instance_div =
+               &velems->min_instance_div[attribs[i].vertex_buffer_index];
+            if (!*min_instance_div ||
+                attribs[i].instance_divisor < *min_instance_div)
+               *min_instance_div = attribs[i].instance_divisor;
+         }
       }
    }
 
@@ -607,18 +624,7 @@ swr_set_framebuffer_state(struct pipe_context *pipe,
    assert(fb->height <= KNOB_GUARDBAND_HEIGHT);
 
    if (changed) {
-      unsigned i;
-      for (i = 0; i < fb->nr_cbufs; ++i)
-         pipe_surface_reference(&ctx->framebuffer.cbufs[i], fb->cbufs[i]);
-      for (; i < ctx->framebuffer.nr_cbufs; ++i)
-         pipe_surface_reference(&ctx->framebuffer.cbufs[i], NULL);
-
-      ctx->framebuffer.nr_cbufs = fb->nr_cbufs;
-
-      ctx->framebuffer.width = fb->width;
-      ctx->framebuffer.height = fb->height;
-
-      pipe_surface_reference(&ctx->framebuffer.zsbuf, fb->zsbuf);
+      util_copy_framebuffer_state(&ctx->framebuffer, fb);
 
       ctx->dirty |= SWR_NEW_FRAMEBUFFER;
    }
@@ -672,12 +678,29 @@ swr_update_resource_status(struct pipe_context *pipe,
          swr_resource_read(ib->buffer);
    }
 
+   /* transform feedback buffers */
+   for (uint32_t i = 0; i < ctx->num_so_targets; i++) {
+      struct pipe_stream_output_target *target = ctx->so_targets[i];
+      if (target && target->buffer)
+         swr_resource_write(target->buffer);
+   }
+
    /* texture sampler views */
-   for (uint32_t i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++) {
-      struct pipe_sampler_view *view =
-         ctx->sampler_views[PIPE_SHADER_FRAGMENT][i];
-      if (view)
-         swr_resource_read(view->texture);
+   for (uint32_t j : {PIPE_SHADER_VERTEX, PIPE_SHADER_FRAGMENT}) {
+      for (uint32_t i = 0; i < ctx->num_sampler_views[j]; i++) {
+         struct pipe_sampler_view *view = ctx->sampler_views[j][i];
+         if (view)
+            swr_resource_read(view->texture);
+      }
+   }
+
+   /* constant buffers */
+   for (uint32_t j : {PIPE_SHADER_VERTEX, PIPE_SHADER_FRAGMENT}) {
+      for (uint32_t i = 0; i < PIPE_MAX_CONSTANT_BUFFERS; i++) {
+         struct pipe_constant_buffer *cb = &ctx->constants[j][i];
+         if (cb->buffer)
+            swr_resource_read(cb->buffer);
+      }
    }
 }
 
@@ -690,25 +713,46 @@ swr_update_texture_state(struct swr_context *ctx,
    for (unsigned i = 0; i < num_sampler_views; i++) {
       struct pipe_sampler_view *view =
          ctx->sampler_views[shader_type][i];
+      struct swr_jit_texture *jit_tex = &textures[i];
 
+      memset(jit_tex, 0, sizeof(*jit_tex));
       if (view) {
          struct pipe_resource *res = view->texture;
          struct swr_resource *swr_res = swr_resource(res);
-         struct swr_jit_texture *jit_tex = &textures[i];
-         memset(jit_tex, 0, sizeof(*jit_tex));
+         SWR_SURFACE_STATE *swr = &swr_res->swr;
+         size_t *mip_offsets = swr_res->mip_offsets;
+         if (swr_res->has_depth && swr_res->has_stencil &&
+            !util_format_has_depth(util_format_description(view->format))) {
+            swr = &swr_res->secondary;
+            mip_offsets = swr_res->secondary_mip_offsets;
+         }
+
          jit_tex->width = res->width0;
          jit_tex->height = res->height0;
-         jit_tex->depth = res->depth0;
-         jit_tex->first_level = view->u.tex.first_level;
-         jit_tex->last_level = view->u.tex.last_level;
-         jit_tex->base_ptr = swr_res->swr.pBaseAddress;
+         jit_tex->base_ptr = swr->pBaseAddress;
+         if (view->target != PIPE_BUFFER) {
+            jit_tex->first_level = view->u.tex.first_level;
+            jit_tex->last_level = view->u.tex.last_level;
+            if (view->target == PIPE_TEXTURE_3D)
+               jit_tex->depth = res->depth0;
+            else
+               jit_tex->depth =
+                  view->u.tex.last_layer - view->u.tex.first_layer + 1;
+            jit_tex->base_ptr += view->u.tex.first_layer *
+               swr->qpitch * swr->pitch;
+         } else {
+            unsigned view_blocksize = util_format_get_blocksize(view->format);
+            jit_tex->base_ptr += view->u.buf.offset;
+            jit_tex->width = view->u.buf.size / view_blocksize;
+            jit_tex->depth = 1;
+         }
 
          for (unsigned level = jit_tex->first_level;
               level <= jit_tex->last_level;
               level++) {
-            jit_tex->row_stride[level] = swr_res->row_stride[level];
-            jit_tex->img_stride[level] = swr_res->img_stride[level];
-            jit_tex->mip_offsets[level] = swr_res->mip_offsets[level];
+            jit_tex->row_stride[level] = swr->pitch;
+            jit_tex->img_stride[level] = swr->qpitch * swr->pitch;
+            jit_tex->mip_offsets[level] = mip_offsets[level];
          }
       }
    }
@@ -778,12 +822,95 @@ swr_update_constants(struct swr_context *ctx, enum pipe_shader_type shaderType)
    }
 }
 
+static bool
+swr_change_rt(struct swr_context *ctx,
+              unsigned attachment,
+              const struct pipe_surface *sf)
+{
+   swr_draw_context *pDC = &ctx->swrDC;
+   struct SWR_SURFACE_STATE *rt = &pDC->renderTargets[attachment];
+
+   /* Do nothing if the render target hasn't changed */
+   if ((!sf || !sf->texture) && rt->pBaseAddress == nullptr)
+      return false;
+
+   /* Deal with disabling RT up front */
+   if (!sf || !sf->texture) {
+      /* If detaching attachment, mark tiles as RESOLVED so core
+       * won't try to load from non-existent target. */
+      swr_store_render_target(&ctx->pipe, attachment, SWR_TILE_RESOLVED);
+      *rt = {0};
+      return true;
+   }
+
+   const struct swr_resource *swr = swr_resource(sf->texture);
+   const SWR_SURFACE_STATE *swr_surface = &swr->swr;
+   SWR_FORMAT fmt = mesa_to_swr_format(sf->format);
+
+   if (attachment == SWR_ATTACHMENT_STENCIL && swr->secondary.pBaseAddress) {
+      swr_surface = &swr->secondary;
+      fmt = swr_surface->format;
+   }
+
+   if (rt->pBaseAddress == swr_surface->pBaseAddress &&
+       rt->format == fmt &&
+       rt->lod == sf->u.tex.level &&
+       rt->arrayIndex == sf->u.tex.first_layer)
+      return false;
+
+   bool need_fence = false;
+
+   /* StoreTile for changed target */
+   if (rt->pBaseAddress) {
+      /* If changing attachment to a new target, mark tiles as
+       * INVALID so they are reloaded from surface. */
+      swr_store_render_target(&ctx->pipe, attachment, SWR_TILE_INVALID);
+      need_fence = true;
+   }
+
+   /* Make new attachment */
+   *rt = *swr_surface;
+   rt->format = fmt;
+   rt->lod = sf->u.tex.level;
+   rt->arrayIndex = sf->u.tex.first_layer;
+
+   return need_fence;
+}
+
+static inline void
+swr_user_vbuf_range(const struct pipe_draw_info *info,
+                    const struct swr_vertex_element_state *velems,
+                    const struct pipe_vertex_buffer *vb,
+                    uint32_t i,
+                    uint32_t *totelems,
+                    uint32_t *base,
+                    uint32_t *size)
+{
+   /* FIXME: The size is too large - we don't access the full extra stride. */
+   unsigned elems;
+   if (velems->instanced_bufs & (1U << i)) {
+      elems = info->instance_count / velems->min_instance_div[i] + 1;
+      *totelems = info->start_instance + elems;
+      *base = info->start_instance * vb->stride;
+      *size = elems * vb->stride;
+   } else if (vb->stride) {
+      elems = info->max_index - info->min_index + 1;
+      *totelems = info->max_index + 1;
+      *base = info->min_index * vb->stride;
+      *size = elems * vb->stride;
+   } else {
+      *totelems = 1;
+      *base = 0;
+      *size = velems->stream_pitch[i];
+   }
+}
+
 void
 swr_update_derived(struct pipe_context *pipe,
                    const struct pipe_draw_info *p_draw_info)
 {
    struct swr_context *ctx = swr_context(pipe);
-   struct swr_screen *screen = swr_screen(ctx->pipe.screen);
+   struct swr_screen *screen = swr_screen(pipe->screen);
 
    /* Update screen->pipe to current pipe context. */
    if (screen->pipe != pipe)
@@ -796,64 +923,30 @@ swr_update_derived(struct pipe_context *pipe,
    /* Render Targets */
    if (ctx->dirty & SWR_NEW_FRAMEBUFFER) {
       struct pipe_framebuffer_state *fb = &ctx->framebuffer;
-      SWR_SURFACE_STATE *new_attachment[SWR_NUM_ATTACHMENTS] = {0};
-      UINT i;
+      const struct util_format_description *desc = NULL;
+      bool need_fence = false;
 
       /* colorbuffer targets */
-      if (fb->nr_cbufs)
-         for (i = 0; i < fb->nr_cbufs; ++i)
-            if (fb->cbufs[i]) {
-               struct swr_resource *colorBuffer =
-                  swr_resource(fb->cbufs[i]->texture);
-               new_attachment[SWR_ATTACHMENT_COLOR0 + i] = &colorBuffer->swr;
-            }
+      if (fb->nr_cbufs) {
+         for (unsigned i = 0; i < fb->nr_cbufs; ++i)
+            need_fence |= swr_change_rt(
+                  ctx, SWR_ATTACHMENT_COLOR0 + i, fb->cbufs[i]);
+      }
+      for (unsigned i = fb->nr_cbufs; i < SWR_NUM_RENDERTARGETS; ++i)
+         need_fence |= swr_change_rt(ctx, SWR_ATTACHMENT_COLOR0 + i, NULL);
 
       /* depth/stencil target */
-      if (fb->zsbuf) {
-         struct swr_resource *depthStencilBuffer =
-            swr_resource(fb->zsbuf->texture);
-         if (depthStencilBuffer->has_depth) {
-            new_attachment[SWR_ATTACHMENT_DEPTH] = &depthStencilBuffer->swr;
+      if (fb->zsbuf)
+         desc = util_format_description(fb->zsbuf->format);
+      if (fb->zsbuf && util_format_has_depth(desc))
+         need_fence |= swr_change_rt(ctx, SWR_ATTACHMENT_DEPTH, fb->zsbuf);
+      else
+         need_fence |= swr_change_rt(ctx, SWR_ATTACHMENT_DEPTH, NULL);
 
-            if (depthStencilBuffer->has_stencil)
-               new_attachment[SWR_ATTACHMENT_STENCIL] =
-                  &depthStencilBuffer->secondary;
-
-         } else if (depthStencilBuffer->has_stencil)
-            new_attachment[SWR_ATTACHMENT_STENCIL] = &depthStencilBuffer->swr;
-      }
-
-      /* Make the attachment updates */
-      swr_draw_context *pDC = &ctx->swrDC;
-      SWR_SURFACE_STATE *renderTargets = pDC->renderTargets;
-      unsigned need_fence = FALSE;
-      for (i = 0; i < SWR_NUM_ATTACHMENTS; i++) {
-         void *new_base = nullptr;
-         if (new_attachment[i])
-            new_base = new_attachment[i]->pBaseAddress;
-
-         /* StoreTile for changed target */
-         if (renderTargets[i].pBaseAddress != new_base) {
-            if (renderTargets[i].pBaseAddress) {
-               /* If changing attachment to a new target, mark tiles as
-                * INVALID so they are reloaded from surface.
-                * If detaching attachment, mark tiles as RESOLVED so core
-                * won't try to load from non-existent target. */
-               enum SWR_TILE_STATE post_state = (new_attachment[i]
-                  ? SWR_TILE_INVALID : SWR_TILE_RESOLVED);
-               swr_store_render_target(pipe, i, post_state);
-
-               need_fence |= TRUE;
-            }
-
-            /* Make new attachment */
-            if (new_attachment[i])
-               renderTargets[i] = *new_attachment[i];
-            else
-               if (renderTargets[i].pBaseAddress)
-                  renderTargets[i] = {0};
-         }
-      }
+      if (fb->zsbuf && util_format_has_stencil(desc))
+         need_fence |= swr_change_rt(ctx, SWR_ATTACHMENT_STENCIL, fb->zsbuf);
+      else
+         need_fence |= swr_change_rt(ctx, SWR_ATTACHMENT_STENCIL, NULL);
 
       /* This fence ensures any attachment changes are resolved before the
        * next draw */
@@ -920,6 +1013,7 @@ swr_update_derived(struct pipe_context *pipe,
          rastState->depthFormat = swr_resource(zb->texture)->swr.format;
 
       rastState->depthClipEnable = rasterizer->depth_clip;
+      rastState->clipHalfZ = rasterizer->clip_halfz;
 
       rastState->clipDistanceMask =
          ctx->vs->info.base.num_written_clipdistance ?
@@ -948,16 +1042,11 @@ swr_update_derived(struct pipe_context *pipe,
       SWR_VIEWPORT_MATRICES *vpm = &ctx->derived.vpm;
 
       vp->x = state->translate[0] - state->scale[0];
-      vp->width = state->translate[0] + state->scale[0];
+      vp->width = 2 * state->scale[0];
       vp->y = state->translate[1] - fabs(state->scale[1]);
-      vp->height = state->translate[1] + fabs(state->scale[1]);
-      if (rasterizer->clip_halfz == 0) {
-         vp->minZ = state->translate[2] - state->scale[2];
-         vp->maxZ = state->translate[2] + state->scale[2];
-      } else {
-         vp->minZ = state->translate[2];
-         vp->maxZ = state->translate[2] + state->scale[2];
-      }
+      vp->height = 2 * fabs(state->scale[1]);
+      util_viewport_zmin_zmax(state, rasterizer->clip_halfz,
+                              &vp->minZ, &vp->maxZ);
 
       vpm->m00[0] = state->scale[0];
       vpm->m11[0] = state->scale[1];
@@ -968,10 +1057,16 @@ swr_update_derived(struct pipe_context *pipe,
 
       /* Now that the matrix is calculated, clip the view coords to screen
        * size.  OpenGL allows for -ve x,y in the viewport. */
-      vp->x = std::max(vp->x, 0.0f);
-      vp->y = std::max(vp->y, 0.0f);
-      vp->width = std::min(vp->width, (float)fb->width);
-      vp->height = std::min(vp->height, (float)fb->height);
+      if (vp->x < 0.0f) {
+         vp->width += vp->x;
+         vp->x = 0.0f;
+      }
+      if (vp->y < 0.0f) {
+         vp->height += vp->y;
+         vp->y = 0.0f;
+      }
+      vp->width = std::min(vp->width, (float)fb->width - vp->x);
+      vp->height = std::min(vp->height, (float)fb->height - vp->y);
 
       SwrSetViewports(ctx->swrContext, 1, vp, vpm);
    }
@@ -979,17 +1074,37 @@ swr_update_derived(struct pipe_context *pipe,
    /* Set vertex & index buffers */
    /* (using draw info if called by swr_draw_vbo) */
    if (ctx->dirty & SWR_NEW_VERTEX) {
-      uint32_t size, pitch, max_vertex, partial_inbounds;
-      const uint8_t *p_data;
+      uint32_t scratch_total;
+      uint8_t *scratch = NULL;
 
       /* If being called by swr_draw_vbo, copy draw details */
       struct pipe_draw_info info = {0};
       if (p_draw_info)
          info = *p_draw_info;
 
+      /* We must get all the scratch space in one go */
+      scratch_total = 0;
+      for (UINT i = 0; i < ctx->num_vertex_buffers; i++) {
+         struct pipe_vertex_buffer *vb = &ctx->vertex_buffer[i];
+
+         if (!vb->user_buffer)
+            continue;
+
+         uint32_t elems, base, size;
+         swr_user_vbuf_range(&info, ctx->velems, vb, i, &elems, &base, &size);
+         scratch_total += AlignUp(size, 4);
+      }
+
+      if (scratch_total) {
+         scratch = (uint8_t *)swr_copy_to_scratch_space(
+               ctx, &ctx->scratch->vertex_buffer, NULL, scratch_total);
+      }
+
       /* vertex buffers */
       SWR_VERTEX_BUFFER_STATE swrVertexBuffers[PIPE_MAX_ATTRIBS];
       for (UINT i = 0; i < ctx->num_vertex_buffers; i++) {
+         uint32_t size, pitch, elems, partial_inbounds;
+         const uint8_t *p_data;
          struct pipe_vertex_buffer *vb = &ctx->vertex_buffer[i];
 
          pitch = vb->stride;
@@ -998,7 +1113,7 @@ swr_update_derived(struct pipe_context *pipe,
              * size is based on buffer->width0 rather than info.max_index
              * to prevent having to validate VBO on each draw */
             size = vb->buffer->width0;
-            max_vertex = size / pitch;
+            elems = size / pitch;
             partial_inbounds = size % pitch;
 
             p_data = swr_resource_data(vb->buffer) + vb->buffer_offset;
@@ -1008,24 +1123,17 @@ swr_update_derived(struct pipe_context *pipe,
              * revalidate on each draw */
             post_update_dirty_flags |= SWR_NEW_VERTEX;
 
-            if (pitch) {
-               size = (info.max_index - info.min_index + 1) * pitch;
-            } else {
-               /* pitch = 0, means constant value
-                * set size to 1 vertex */
-               size = ctx->velems->stream_pitch[i];
-            }
-
-            max_vertex = info.max_index + 1;
+            uint32_t base;
+            swr_user_vbuf_range(&info, ctx->velems, vb, i, &elems, &base, &size);
             partial_inbounds = 0;
 
             /* Copy only needed vertices to scratch space */
             size = AlignUp(size, 4);
-            const void *ptr = (const uint8_t *) vb->user_buffer
-               + info.min_index * pitch;
-            ptr = swr_copy_to_scratch_space(
-               ctx, &ctx->scratch->vertex_buffer, ptr, size);
-            p_data = (const uint8_t *)ptr - info.min_index * pitch;
+            const void *ptr = (const uint8_t *) vb->user_buffer + base;
+            memcpy(scratch, ptr, size);
+            ptr = scratch;
+            scratch += size;
+            p_data = (const uint8_t *)ptr - base;
          }
 
          swrVertexBuffers[i] = {0};
@@ -1033,7 +1141,7 @@ swr_update_derived(struct pipe_context *pipe,
          swrVertexBuffers[i].pitch = pitch;
          swrVertexBuffers[i].pData = p_data;
          swrVertexBuffers[i].size = size;
-         swrVertexBuffers[i].maxVertex = max_vertex;
+         swrVertexBuffers[i].maxVertex = elems;
          swrVertexBuffers[i].partialInboundsSize = partial_inbounds;
       }
 
@@ -1043,6 +1151,8 @@ swr_update_derived(struct pipe_context *pipe,
       /* index buffer, if required (info passed in by swr_draw_vbo) */
       SWR_FORMAT index_type = R32_UINT; /* Default for non-indexed draws */
       if (info.indexed) {
+         const uint8_t *p_data;
+         uint32_t size, pitch;
          struct pipe_index_buffer *ib = &ctx->index_buffer;
 
          pitch = ib->index_size ? ib->index_size : sizeof(uint32_t);
@@ -1205,6 +1315,7 @@ swr_update_derived(struct pipe_context *pipe,
       struct pipe_depth_state *depth = &(ctx->depth_stencil->depth);
       struct pipe_stencil_state *stencil = ctx->depth_stencil->stencil;
       SWR_DEPTH_STENCIL_STATE depthStencilState = {{0}};
+      SWR_DEPTH_BOUNDS_STATE depthBoundsState = {0};
 
       /* XXX, incomplete.  Need to flesh out stencil & alpha test state
       struct pipe_stencil_state *front_stencil =
@@ -1251,6 +1362,11 @@ swr_update_derived(struct pipe_context *pipe,
       depthStencilState.depthTestFunc = swr_convert_depth_func(depth->func);
       depthStencilState.depthWriteEnable = depth->writemask;
       SwrSetDepthStencilState(ctx->swrContext, &depthStencilState);
+
+      depthBoundsState.depthBoundsTestEnable = depth->bounds_test;
+      depthBoundsState.depthBoundsTestMinValue = depth->bounds_min;
+      depthBoundsState.depthBoundsTestMaxValue = depth->bounds_max;
+      SwrSetDepthBoundsState(ctx->swrContext, &depthBoundsState);
    }
 
    /* Blend State */
@@ -1299,8 +1415,18 @@ swr_update_derived(struct pipe_context *pipe,
                    &ctx->blend->compileState[target],
                    sizeof(compileState.blendState));
 
+            const SWR_FORMAT_INFO& info = GetFormatInfo(compileState.format);
+            if (compileState.blendState.logicOpEnable &&
+                ((info.type[0] == SWR_TYPE_FLOAT) || info.isSRGB)) {
+               compileState.blendState.logicOpEnable = false;
+            }
+
+            if (info.type[0] == SWR_TYPE_SINT || info.type[0] == SWR_TYPE_UINT)
+               compileState.blendState.blendEnable = false;
+
             if (compileState.blendState.blendEnable == false &&
-                compileState.blendState.logicOpEnable == false) {
+                compileState.blendState.logicOpEnable == false &&
+                ctx->depth_stencil->alpha.enabled == 0) {
                SwrSetBlendFunc(ctx->swrContext, target, NULL);
                continue;
             }
@@ -1308,7 +1434,12 @@ swr_update_derived(struct pipe_context *pipe,
             compileState.desc.alphaTestEnable =
                ctx->depth_stencil->alpha.enabled;
             compileState.desc.independentAlphaBlendEnable =
-               ctx->blend->pipe.independent_blend_enable;
+               (compileState.blendState.sourceBlendFactor !=
+                compileState.blendState.sourceAlphaBlendFactor) ||
+               (compileState.blendState.destBlendFactor !=
+                compileState.blendState.destAlphaBlendFactor) ||
+               (compileState.blendState.colorBlendFunc !=
+                compileState.blendState.alphaBlendFunc);
             compileState.desc.alphaToCoverageEnable =
                ctx->blend->pipe.alpha_to_coverage;
             compileState.desc.sampleMaskEnable = 0; // XXX
@@ -1355,10 +1486,11 @@ swr_update_derived(struct pipe_context *pipe,
             continue;
          buffer.enable = true;
          buffer.pBuffer =
-            (uint32_t *)swr_resource_data(ctx->so_targets[i]->buffer);
+            (uint32_t *)(swr_resource_data(ctx->so_targets[i]->buffer) +
+                         ctx->so_targets[i]->buffer_offset);
          buffer.bufferSize = ctx->so_targets[i]->buffer_size >> 2;
          buffer.pitch = stream_output->stride[i];
-         buffer.streamOffset = ctx->so_targets[i]->buffer_offset >> 2;
+         buffer.streamOffset = 0;
 
          SwrSetSoBuffers(ctx->swrContext, &buffer, i);
       }
@@ -1383,10 +1515,8 @@ swr_update_derived(struct pipe_context *pipe,
       (ctx->rasterizer->sprite_coord_enable ? 1 : 0);
    for (unsigned i = 0; i < backendState.numAttributes; i++)
       backendState.numComponents[i] = 4;
-   backendState.constantInterpolationMask =
-      ctx->rasterizer->flatshade ?
-      ctx->fs->flatConstantMask :
-      ctx->fs->constantMask;
+   backendState.constantInterpolationMask = ctx->fs->constantMask |
+      (ctx->rasterizer->flatshade ? ctx->fs->flatConstantMask : 0);
    backendState.pointSpriteTexCoordMask = ctx->fs->pointSpriteMask;
 
    SwrSetBackendState(ctx->swrContext, &backendState);
@@ -1439,7 +1569,7 @@ swr_set_so_targets(struct pipe_context *pipe,
    struct swr_context *swr = swr_context(pipe);
    uint32_t i;
 
-   assert(num_targets < MAX_SO_STREAMS);
+   assert(num_targets <= MAX_SO_STREAMS);
 
    for (i = 0; i < num_targets; i++) {
       pipe_so_target_reference(
@@ -1454,7 +1584,7 @@ swr_set_so_targets(struct pipe_context *pipe,
 
    swr->num_so_targets = num_targets;
 
-   swr->dirty = SWR_NEW_SO;
+   swr->dirty |= SWR_NEW_SO;
 }
 
 

@@ -272,6 +272,7 @@ static void init_prog(struct program *p)
 	/* fragment shader */
 	p->fs = util_make_fragment_tex_shader(p->pipe, TGSI_TEXTURE_2D,
 	                                      TGSI_INTERPOLATE_LINEAR,
+	                                      TGSI_RETURN_TYPE_FLOAT,
 	                                      TGSI_RETURN_TYPE_FLOAT);
 }
 

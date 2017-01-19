@@ -33,9 +33,9 @@
  */
 void
 intel_resolve_map_set(struct exec_list *resolve_map,
-		      uint32_t level,
-		      uint32_t layer,
-		      enum blorp_hiz_op need)
+                      uint32_t level,
+                      uint32_t layer,
+                      unsigned need)
 {
    foreach_list_typed(struct intel_resolve_map, map, link, resolve_map) {
       if (map->level == level && map->layer == layer) {
@@ -57,13 +57,16 @@ intel_resolve_map_set(struct exec_list *resolve_map,
  * \brief Get an element from the map.
  * \return null if element is not contained in map.
  */
-struct intel_resolve_map *
-intel_resolve_map_get(struct exec_list *resolve_map,
-		      uint32_t level,
-		      uint32_t layer)
+const struct intel_resolve_map *
+intel_resolve_map_find_any(const struct exec_list *resolve_map,
+                           uint32_t start_level, uint32_t num_levels,
+                           uint32_t start_layer, uint32_t num_layers)
 {
    foreach_list_typed(struct intel_resolve_map, map, link, resolve_map) {
-      if (map->level == level && map->layer == layer)
+      if (map->level >= start_level &&
+          map->level < (start_level + num_levels) &&
+          map->layer >= start_layer &&
+          map->layer < (start_layer + num_layers))
          return map;
    }
 

@@ -148,16 +148,16 @@ aa_prolog(struct tgsi_transform_context *ctx)
    tmp0 = ts->tmp;
 
    /* SUB t0.xy, texIn, (0.5, 0,5) */
-   tgsi_transform_op2_inst(ctx, TGSI_OPCODE_SUB,
+   tgsi_transform_op2_inst(ctx, TGSI_OPCODE_ADD,
                            TGSI_FILE_TEMPORARY, tmp0, TGSI_WRITEMASK_XY,
                            TGSI_FILE_INPUT, texIn,
-                           TGSI_FILE_IMMEDIATE, imm);
+                           TGSI_FILE_IMMEDIATE, imm, true);
 
    /* DP2 t0.x, t0.xy, t0.xy;  # t0.x = x^2 + y^2 */
    tgsi_transform_op2_inst(ctx, TGSI_OPCODE_DP2,
                            TGSI_FILE_TEMPORARY, tmp0, TGSI_WRITEMASK_X,
                            TGSI_FILE_TEMPORARY, tmp0,
-                           TGSI_FILE_TEMPORARY, tmp0);
+                           TGSI_FILE_TEMPORARY, tmp0, false);
 
    /* SQRT t0.x, t0.x */
    tgsi_transform_op1_inst(ctx, TGSI_OPCODE_SQRT,
@@ -167,22 +167,22 @@ aa_prolog(struct tgsi_transform_context *ctx)
    /* compute coverage factor = (0.5-d)/(0.5-k) */
 
    /* SUB t0.w, 0.5, texIn.z;  # t0.w = 0.5-k */
-   tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_SUB,
+   tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_ADD,
                                TGSI_FILE_TEMPORARY, tmp0, TGSI_WRITEMASK_W,
                                TGSI_FILE_IMMEDIATE, imm, TGSI_SWIZZLE_X,
-                               TGSI_FILE_INPUT, texIn, TGSI_SWIZZLE_Z);
+                               TGSI_FILE_INPUT, texIn, TGSI_SWIZZLE_Z, true);
 
    /* SUB t0.y, 0.5, t0.x;  # t0.y = 0.5-d */
-   tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_SUB,
+   tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_ADD,
                                TGSI_FILE_TEMPORARY, tmp0, TGSI_WRITEMASK_Y,
                                TGSI_FILE_IMMEDIATE, imm, TGSI_SWIZZLE_X,
-                               TGSI_FILE_TEMPORARY, tmp0, TGSI_SWIZZLE_X);
+                               TGSI_FILE_TEMPORARY, tmp0, TGSI_SWIZZLE_X, true);
 
    /* DIV t0.w, t0.y, t0.w;  # coverage = (0.5-d)/(0.5-k) */
    tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_DIV,
                                TGSI_FILE_TEMPORARY, tmp0, TGSI_WRITEMASK_W,
                                TGSI_FILE_TEMPORARY, tmp0, TGSI_SWIZZLE_Y,
-                               TGSI_FILE_TEMPORARY, tmp0, TGSI_SWIZZLE_W);
+                               TGSI_FILE_TEMPORARY, tmp0, TGSI_SWIZZLE_W, false);
 
    /* If the coverage value is negative, it means the fragment is outside
     * the point's circular boundary.  Kill it.
@@ -198,7 +198,7 @@ aa_prolog(struct tgsi_transform_context *ctx)
    tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_MIN,
                                TGSI_FILE_TEMPORARY, tmp0, TGSI_WRITEMASK_W,
                                TGSI_FILE_TEMPORARY, tmp0, TGSI_SWIZZLE_W,
-                               TGSI_FILE_IMMEDIATE, imm, TGSI_SWIZZLE_W);
+                               TGSI_FILE_IMMEDIATE, imm, TGSI_SWIZZLE_W, false);
 }
 
 /**
@@ -249,7 +249,7 @@ aa_epilog(struct tgsi_transform_context *ctx)
                            TGSI_FILE_OUTPUT, ts->color_out,
                            TGSI_WRITEMASK_W,
                            TGSI_FILE_TEMPORARY, ts->color_tmp,
-                           TGSI_FILE_TEMPORARY, ts->tmp);
+                           TGSI_FILE_TEMPORARY, ts->tmp, false);
 }
 
 /**

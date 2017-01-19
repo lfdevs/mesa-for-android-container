@@ -120,6 +120,7 @@ svga_texture_view_surface(struct svga_context *svga,
    struct svga_winsys_surface *handle;
    uint32_t i, j;
    unsigned z_offset = 0;
+   boolean validated;
 
    SVGA_DBG(DEBUG_PERF,
             "svga: Create surface view: layer %d zslice %d mips %d..%d\n",
@@ -156,7 +157,8 @@ svga_texture_view_surface(struct svga_context *svga,
    }
 
    SVGA_DBG(DEBUG_DMA, "surface_create for texture view\n");
-   handle = svga_screen_surface_create(ss, bind_flags, PIPE_USAGE_DEFAULT, key);
+   handle = svga_screen_surface_create(ss, bind_flags, PIPE_USAGE_DEFAULT,
+                                       &validated, key);
    if (!handle) {
       key->cachable = 0;
       return NULL;
@@ -434,6 +436,23 @@ svga_validate_surface_view(struct svga_context *svga, struct svga_surface *s)
    if (s && s->view_id == SVGA3D_INVALID_ID) {
       SVGA3dResourceType resType;
       SVGA3dRenderTargetViewDesc desc;
+      struct svga_texture *stex = svga_texture(s->base.texture);
+
+      if (stex->validated == FALSE) {
+         assert(stex->handle);
+
+         /* We are about to render into a surface that has not been validated.
+          * First invalidate the surface so that the device does not
+          * need to update the host-side copy with the invalid
+          * content when the associated mob is first bound to the surface.
+          */
+         ret = SVGA3D_InvalidateGBSurface(svga->swc, stex->handle);
+         if (ret != PIPE_OK) {
+            s = NULL;
+            goto done;
+         }
+         stex->validated = TRUE;
+      }
 
       desc.tex.mipSlice = s->real_level;
       desc.tex.firstArraySlice = s->real_layer + s->real_zslice;
@@ -461,7 +480,8 @@ svga_validate_surface_view(struct svga_context *svga, struct svga_surface *s)
           * svga_validate_pipe_sampler_view().
           */
          if (view_format == SVGA3D_B8G8R8A8_UNORM &&
-             stex->key.format == SVGA3D_B8G8R8X8_TYPELESS) {
+             (stex->key.format == SVGA3D_B8G8R8X8_UNORM ||
+              stex->key.format == SVGA3D_B8G8R8X8_TYPELESS)) {
             view_format = SVGA3D_B8G8R8X8_UNORM;
          }
 
@@ -480,6 +500,7 @@ svga_validate_surface_view(struct svga_context *svga, struct svga_surface *s)
       }
    }
    
+done:
    SVGA_STATS_TIME_POP(svga_sws(svga));
 
    return s ? &s->base : NULL;

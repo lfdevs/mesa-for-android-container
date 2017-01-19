@@ -406,8 +406,13 @@ TargetNVC0::isAccessSupported(DataFile file, DataType ty) const
 {
    if (ty == TYPE_NONE)
       return false;
-   if (file == FILE_MEMORY_CONST && getChipset() >= 0xe0) // wrong encoding ?
-      return typeSizeof(ty) <= 8;
+   if (file == FILE_MEMORY_CONST) {
+      if (getChipset() >= NVISA_GM107_CHIPSET)
+         return typeSizeof(ty) <= 4;
+      else
+      if (getChipset() >= NVISA_GK104_CHIPSET) // wrong encoding ?
+         return typeSizeof(ty) <= 8;
+   }
    if (ty == TYPE_B96)
       return false;
    return true;

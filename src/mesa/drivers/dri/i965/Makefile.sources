@@ -128,17 +128,16 @@ i965_FILES = \
 	brw_gs_state.c \
 	brw_gs_surface_state.c \
 	brw_link.cpp \
-	brw_lower_texture_gradients.cpp \
 	brw_meta_util.c \
 	brw_meta_util.h \
 	brw_misc_state.c \
 	brw_multisample_state.h \
 	brw_nir_uniforms.cpp \
 	brw_object_purgeable.c \
-	brw_performance_monitor.c \
 	brw_pipe_control.c \
 	brw_program.c \
 	brw_program.h \
+	brw_program_cache.c \
 	brw_primitive_restart.c \
 	brw_queryobj.c \
 	brw_reset.c \
@@ -148,7 +147,6 @@ i965_FILES = \
 	brw_sf.h \
 	brw_sf_state.c \
 	brw_state_batch.c \
-	brw_state_cache.c \
 	brw_state_dump.c \
 	brw_state.h \
 	brw_state_upload.c \
@@ -201,7 +199,6 @@ i965_FILES = \
 	gen7_wm_surface_state.c \
 	gen8_blend_state.c \
 	gen8_depth_state.c \
-	gen8_disable.c \
 	gen8_draw_upload.c \
 	gen8_ds_state.c \
 	gen8_gs_state.c \

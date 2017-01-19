@@ -1186,8 +1186,8 @@ static int classify_identifier(struct _mesa_glsl_parse_state *, const char *);
 			  "illegal use of reserved word `%s'", yytext);	\
 	 return ERROR_TOK;						\
       } else {								\
-	 void *mem_ctx = yyextra;					\
-	 yylval->identifier = ralloc_strdup(mem_ctx, yytext);		\
+	 void *mem_ctx = yyextra->linalloc;					\
+	 yylval->identifier = linear_strdup(mem_ctx, yytext);		\
 	 return classify_identifier(yyextra, yytext);			\
       }									\
    } while (0)
@@ -1753,8 +1753,8 @@ case 18:
 YY_RULE_SETUP
 #line 247 "../../../src/compiler/glsl/glsl_lexer.ll"
 {
-				   void *mem_ctx = yyextra;
-				   yylval->identifier = ralloc_strdup(mem_ctx, yytext);
+				   void *mem_ctx = yyextra->linalloc;
+				   yylval->identifier = linear_strdup(mem_ctx, yytext);
 				   return IDENTIFIER;
 				}
 	YY_BREAK
@@ -2479,8 +2479,8 @@ YY_RULE_SETUP
                       || yyextra->ARB_tessellation_shader_enable) {
 		      return LAYOUT_TOK;
 		   } else {
-		      void *mem_ctx = yyextra;
-		      yylval->identifier = ralloc_strdup(mem_ctx, yytext);
+		      void *mem_ctx = yyextra->linalloc;
+		      yylval->identifier = linear_strdup(mem_ctx, yytext);
 		      return classify_identifier(yyextra, yytext);
 		   }
 		}
@@ -3040,13 +3040,13 @@ YY_RULE_SETUP
 #line 595 "../../../src/compiler/glsl/glsl_lexer.ll"
 {
 			    struct _mesa_glsl_parse_state *state = yyextra;
-			    void *ctx = state;	
+			    void *ctx = state->linalloc;
 			    if (state->es_shader && strlen(yytext) > 1024) {
 			       _mesa_glsl_error(yylloc, state,
 			                        "Identifier `%s' exceeds 1024 characters",
 			                        yytext);
 			    } else {
-			      yylval->identifier = ralloc_strdup(ctx, yytext);
+			      yylval->identifier = linear_strdup(ctx, yytext);
 			    }
 			    return classify_identifier(state, yytext);
 			}

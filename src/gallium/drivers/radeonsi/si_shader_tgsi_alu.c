@@ -399,7 +399,7 @@ static void emit_frac(const struct lp_build_tgsi_action *action,
 
 	LLVMValueRef floor = lp_build_intrinsic(builder, intr, emit_data->dst_type,
 						&emit_data->args[0], 1,
-						LLVMReadNoneAttribute);
+						LP_FUNC_ATTR_READNONE);
 	emit_data->output[emit_data->chan] = LLVMBuildFSub(builder,
 			emit_data->args[0], floor, "");
 }
@@ -449,7 +449,7 @@ build_tgsi_intrinsic_nomem(const struct lp_build_tgsi_action *action,
 	emit_data->output[emit_data->chan] =
 		lp_build_intrinsic(base->gallivm->builder, action->intr_name,
 				   emit_data->dst_type, emit_data->args,
-				   emit_data->arg_count, LLVMReadNoneAttribute);
+				   emit_data->arg_count, LP_FUNC_ATTR_READNONE);
 }
 
 static void emit_bfi(const struct lp_build_tgsi_action *action,
@@ -507,7 +507,7 @@ static void emit_bfe(const struct lp_build_tgsi_action *action,
 
 	bfe_sm5 = lp_build_intrinsic(builder, action->intr_name,
 				     emit_data->dst_type, emit_data->args,
-				     emit_data->arg_count, LLVMReadNoneAttribute);
+				     emit_data->arg_count, LP_FUNC_ATTR_READNONE);
 
 	/* Correct for GLSL semantics. */
 	cond = LLVMBuildICmp(builder, LLVMIntUGE, emit_data->args[2],
@@ -539,7 +539,7 @@ static void emit_lsb(const struct lp_build_tgsi_action *action,
 	LLVMValueRef lsb =
 		lp_build_intrinsic(gallivm->builder, "llvm.cttz.i32",
 				emit_data->dst_type, args, ARRAY_SIZE(args),
-				LLVMReadNoneAttribute);
+				LP_FUNC_ATTR_READNONE);
 
 	/* TODO: We need an intrinsic to skip this conditional. */
 	/* Check for zero: */
@@ -566,7 +566,7 @@ static void emit_umsb(const struct lp_build_tgsi_action *action,
 	LLVMValueRef msb =
 		lp_build_intrinsic(builder, "llvm.ctlz.i32",
 				emit_data->dst_type, args, ARRAY_SIZE(args),
-				LLVMReadNoneAttribute);
+				LP_FUNC_ATTR_READNONE);
 
 	/* The HW returns the last bit index from MSB, but TGSI wants
 	 * the index from LSB. Invert it by doing "31 - msb". */
@@ -593,7 +593,7 @@ static void emit_imsb(const struct lp_build_tgsi_action *action,
 	LLVMValueRef msb =
 		lp_build_intrinsic(builder, "llvm.AMDGPU.flbit.i32",
 				emit_data->dst_type, &arg, 1,
-				LLVMReadNoneAttribute);
+				LP_FUNC_ATTR_READNONE);
 
 	/* The HW returns the last bit index from MSB, but TGSI wants
 	 * the index from LSB. Invert it by doing "31 - msb". */
@@ -767,8 +767,6 @@ void si_shader_context_init_alu(struct lp_build_tgsi_context *bld_base)
 {
 	lp_set_default_actions(bld_base);
 
-	bld_base->op_actions[TGSI_OPCODE_ABS].emit = build_tgsi_intrinsic_nomem;
-	bld_base->op_actions[TGSI_OPCODE_ABS].intr_name = "llvm.fabs.f32";
 	bld_base->op_actions[TGSI_OPCODE_AND].emit = emit_and;
 	bld_base->op_actions[TGSI_OPCODE_ARL].emit = emit_arl;
 	bld_base->op_actions[TGSI_OPCODE_BFI].emit = emit_bfi;
@@ -907,145 +905,4 @@ void si_shader_context_init_alu(struct lp_build_tgsi_context *bld_base)
 	bld_base->op_actions[TGSI_OPCODE_I64MOD].emit = emit_mod;
 	bld_base->op_actions[TGSI_OPCODE_U64DIV].emit = emit_udiv;
 	bld_base->op_actions[TGSI_OPCODE_I64DIV].emit = emit_idiv;
-}
-
-static LLVMValueRef build_cube_intrinsic(struct gallivm_state *gallivm,
-					 LLVMValueRef in[3])
-{
-	if (HAVE_LLVM >= 0x0309) {
-		LLVMTypeRef f32 = LLVMTypeOf(in[0]);
-		LLVMValueRef out[4];
-
-		out[0] = lp_build_intrinsic(gallivm->builder, "llvm.amdgcn.cubetc",
-					    f32, in, 3, LLVMReadNoneAttribute);
-		out[1] = lp_build_intrinsic(gallivm->builder, "llvm.amdgcn.cubesc",
-					    f32, in, 3, LLVMReadNoneAttribute);
-		out[2] = lp_build_intrinsic(gallivm->builder, "llvm.amdgcn.cubema",
-					    f32, in, 3, LLVMReadNoneAttribute);
-		out[3] = lp_build_intrinsic(gallivm->builder, "llvm.amdgcn.cubeid",
-					    f32, in, 3, LLVMReadNoneAttribute);
-
-		return lp_build_gather_values(gallivm, out, 4);
-	} else {
-		LLVMValueRef c[4] = {
-			in[0],
-			in[1],
-			in[2],
-			LLVMGetUndef(LLVMTypeOf(in[0]))
-		};
-		LLVMValueRef vec = lp_build_gather_values(gallivm, c, 4);
-
-		return lp_build_intrinsic(gallivm->builder, "llvm.AMDGPU.cube",
-					  LLVMTypeOf(vec), &vec, 1,
-					  LLVMReadNoneAttribute);
-	}
-}
-
-static void si_llvm_cube_to_2d_coords(struct lp_build_tgsi_context *bld_base,
-				      LLVMValueRef *in, LLVMValueRef *out)
-{
-	struct gallivm_state *gallivm = bld_base->base.gallivm;
-	LLVMBuilderRef builder = gallivm->builder;
-	LLVMTypeRef type = bld_base->base.elem_type;
-	LLVMValueRef coords[4];
-	LLVMValueRef mad_args[3];
-	LLVMValueRef v;
-	unsigned i;
-
-	v = build_cube_intrinsic(gallivm, in);
-
-	for (i = 0; i < 4; ++i)
-		coords[i] = LLVMBuildExtractElement(builder, v,
-						    lp_build_const_int32(gallivm, i), "");
-
-	coords[2] = lp_build_intrinsic(builder, "llvm.fabs.f32",
-			type, &coords[2], 1, LLVMReadNoneAttribute);
-	coords[2] = lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_RCP, coords[2]);
-
-	mad_args[1] = coords[2];
-	mad_args[2] = LLVMConstReal(type, 1.5);
-
-	mad_args[0] = coords[0];
-	coords[0] = lp_build_emit_llvm_ternary(bld_base, TGSI_OPCODE_MAD,
-			mad_args[0], mad_args[1], mad_args[2]);
-
-	mad_args[0] = coords[1];
-	coords[1] = lp_build_emit_llvm_ternary(bld_base, TGSI_OPCODE_MAD,
-			mad_args[0], mad_args[1], mad_args[2]);
-
-	/* apply xyz = yxw swizzle to cooords */
-	out[0] = coords[1];
-	out[1] = coords[0];
-	out[2] = coords[3];
-}
-
-void si_prepare_cube_coords(struct lp_build_tgsi_context *bld_base,
-			    struct lp_build_emit_data *emit_data,
-			    LLVMValueRef *coords_arg,
-			    LLVMValueRef *derivs_arg)
-{
-
-	unsigned target = emit_data->inst->Texture.Texture;
-	unsigned opcode = emit_data->inst->Instruction.Opcode;
-	struct gallivm_state *gallivm = bld_base->base.gallivm;
-	LLVMBuilderRef builder = gallivm->builder;
-	LLVMValueRef coords[4];
-	unsigned i;
-
-	si_llvm_cube_to_2d_coords(bld_base, coords_arg, coords);
-
-	if (opcode == TGSI_OPCODE_TXD && derivs_arg) {
-		LLVMValueRef derivs[4];
-		int axis;
-
-		/* Convert cube derivatives to 2D derivatives. */
-		for (axis = 0; axis < 2; axis++) {
-			LLVMValueRef shifted_cube_coords[4], shifted_coords[4];
-
-			/* Shift the cube coordinates by the derivatives to get
-			 * the cube coordinates of the "neighboring pixel".
-			 */
-			for (i = 0; i < 3; i++)
-				shifted_cube_coords[i] =
-					LLVMBuildFAdd(builder, coords_arg[i],
-						      derivs_arg[axis*3+i], "");
-			shifted_cube_coords[3] = LLVMGetUndef(bld_base->base.elem_type);
-
-			/* Project the shifted cube coordinates onto the face. */
-			si_llvm_cube_to_2d_coords(bld_base, shifted_cube_coords,
-						      shifted_coords);
-
-			/* Subtract both sets of 2D coordinates to get 2D derivatives.
-			 * This won't work if the shifted coordinates ended up
-			 * in a different face.
-			 */
-			for (i = 0; i < 2; i++)
-				derivs[axis * 2 + i] =
-					LLVMBuildFSub(builder, shifted_coords[i],
-						      coords[i], "");
-		}
-
-		memcpy(derivs_arg, derivs, sizeof(derivs));
-	}
-
-	if (target == TGSI_TEXTURE_CUBE_ARRAY ||
-	    target == TGSI_TEXTURE_SHADOWCUBE_ARRAY) {
-		/* for cube arrays coord.z = coord.w(array_index) * 8 + face */
-		/* coords_arg.w component - array_index for cube arrays */
-		coords[2] = lp_build_emit_llvm_ternary(bld_base, TGSI_OPCODE_MAD,
-						       coords_arg[3], lp_build_const_float(gallivm, 8.0), coords[2]);
-	}
-
-	/* Preserve compare/lod/bias. Put it in coords.w. */
-	if (opcode == TGSI_OPCODE_TEX2 ||
-	    opcode == TGSI_OPCODE_TXB2 ||
-	    opcode == TGSI_OPCODE_TXL2) {
-		coords[3] = coords_arg[4];
-	} else if (opcode == TGSI_OPCODE_TXB ||
-		   opcode == TGSI_OPCODE_TXL ||
-		   target == TGSI_TEXTURE_SHADOWCUBE) {
-		coords[3] = coords_arg[3];
-	}
-
-	memcpy(coords_arg, coords, sizeof(coords));
 }

@@ -55,7 +55,9 @@ fs_visitor::nir_setup_outputs()
       return;
 
    nir_foreach_variable(var, &nir->outputs) {
-      const unsigned vec4s = type_size_vec4(var->type);
+      const unsigned vec4s =
+         var->data.compact ? DIV_ROUND_UP(glsl_get_length(var->type), 4)
+                           : type_size_vec4(var->type);
       fs_reg reg = bld.vgrf(BRW_REGISTER_TYPE_F, 4 * vec4s);
       for (unsigned i = 0; i < vec4s; i++) {
          if (outputs[var->data.driver_location + i].file == BAD_FILE)
@@ -1876,7 +1878,7 @@ fs_visitor::emit_gs_vertex(const nir_src &vertex_count_nir_src,
     * be recorded by transform feedback, we can simply discard all geometry
     * bound to these streams when transform feedback is disabled.
     */
-   if (stream_id > 0 && !nir->info.has_transform_feedback_varyings)
+   if (stream_id > 0 && !nir->info->has_transform_feedback_varyings)
       return;
 
    /* If we're outputting 32 control data bits or less, then we can wait
@@ -2031,12 +2033,12 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
 
          /* Use first_icp_handle as the base offset.  There is one register
           * of URB handles per vertex, so inform the register allocator that
-          * we might read up to nir->info.gs.vertices_in registers.
+          * we might read up to nir->info->gs.vertices_in registers.
           */
          bld.emit(SHADER_OPCODE_MOV_INDIRECT, icp_handle,
                   fs_reg(brw_vec8_grf(first_icp_handle, 0)),
                   fs_reg(icp_offset_bytes),
-                  brw_imm_ud(nir->info.gs.vertices_in * REG_SIZE));
+                  brw_imm_ud(nir->info->gs.vertices_in * REG_SIZE));
       }
    } else {
       assert(gs_prog_data->invocations > 1);
@@ -2062,12 +2064,12 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
 
          /* Use first_icp_handle as the base offset.  There is one DWord
           * of URB handles per vertex, so inform the register allocator that
-          * we might read up to ceil(nir->info.gs.vertices_in / 8) registers.
+          * we might read up to ceil(nir->info->gs.vertices_in / 8) registers.
           */
          bld.emit(SHADER_OPCODE_MOV_INDIRECT, icp_handle,
                   fs_reg(brw_vec8_grf(first_icp_handle, 0)),
                   fs_reg(icp_offset_bytes),
-                  brw_imm_ud(DIV_ROUND_UP(nir->info.gs.vertices_in, 8) *
+                  brw_imm_ud(DIV_ROUND_UP(nir->info->gs.vertices_in, 8) *
                              REG_SIZE));
       }
    }
@@ -2518,78 +2520,7 @@ fs_visitor::nir_emit_tcs_intrinsic(const fs_builder &bld,
          bld.MOV(patch_handle,
                  retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UD));
 
-         if (imm_offset == 0) {
-            /* This is a read of gl_TessLevelInner[], which lives in the
-             * Patch URB header.  The layout depends on the domain.
-             */
-            dst.type = BRW_REGISTER_TYPE_F;
-            switch (tcs_key->tes_primitive_mode) {
-            case GL_QUADS: {
-               /* DWords 3-2 (reversed) */
-               fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_F, 4);
-
-               inst = bld.emit(SHADER_OPCODE_URB_READ_SIMD8, tmp, patch_handle);
-               inst->offset = 0;
-               inst->mlen = 1;
-               inst->size_written = 4 * REG_SIZE;
-
-               /* dst.xy = tmp.wz */
-               bld.MOV(dst,                 offset(tmp, bld, 3));
-               bld.MOV(offset(dst, bld, 1), offset(tmp, bld, 2));
-               break;
-            }
-            case GL_TRIANGLES:
-               /* DWord 4; hardcode offset = 1 and size_written = REG_SIZE */
-               inst = bld.emit(SHADER_OPCODE_URB_READ_SIMD8, dst, patch_handle);
-               inst->offset = 1;
-               inst->mlen = 1;
-               inst->size_written = REG_SIZE;
-               break;
-            case GL_ISOLINES:
-               /* All channels are undefined. */
-               break;
-            default:
-               unreachable("Bogus tessellation domain");
-            }
-         } else if (imm_offset == 1) {
-            /* This is a read of gl_TessLevelOuter[], which lives in the
-             * Patch URB header.  The layout depends on the domain.
-             */
-            dst.type = BRW_REGISTER_TYPE_F;
-
-            fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_F, 4);
-            inst = bld.emit(SHADER_OPCODE_URB_READ_SIMD8, tmp, patch_handle);
-            inst->offset = 1;
-            inst->mlen = 1;
-            inst->size_written = 4 * REG_SIZE;
-
-            /* Reswizzle: WZYX */
-            fs_reg srcs[4] = {
-               offset(tmp, bld, 3),
-               offset(tmp, bld, 2),
-               offset(tmp, bld, 1),
-               offset(tmp, bld, 0),
-            };
-
-            unsigned num_components;
-            switch (tcs_key->tes_primitive_mode) {
-            case GL_QUADS:
-               num_components = 4;
-               break;
-            case GL_TRIANGLES:
-               num_components = 3;
-               break;
-            case GL_ISOLINES:
-               /* Isolines are not reversed; swizzle .zw -> .xy */
-               srcs[0] = offset(tmp, bld, 2);
-               srcs[1] = offset(tmp, bld, 3);
-               num_components = 2;
-               break;
-            default:
-               unreachable("Bogus tessellation domain");
-            }
-            bld.LOAD_PAYLOAD(dst, srcs, num_components, 0);
-         } else {
+         {
             if (first_component != 0) {
                unsigned read_components =
                   instr->num_components + first_component;
@@ -2654,55 +2585,6 @@ fs_visitor::nir_emit_tcs_intrinsic(const fs_builder &bld,
 
       if (indirect_offset.file != BAD_FILE) {
          srcs[header_regs++] = indirect_offset;
-      } else if (!is_passthrough_shader) {
-         if (imm_offset == 0) {
-            value.type = BRW_REGISTER_TYPE_F;
-
-            mask &= (1 << tesslevel_inner_components(tcs_key->tes_primitive_mode)) - 1;
-
-            /* This is a write to gl_TessLevelInner[], which lives in the
-             * Patch URB header.  The layout depends on the domain.
-             */
-            switch (tcs_key->tes_primitive_mode) {
-            case GL_QUADS:
-               /* gl_TessLevelInner[].xy lives at DWords 3-2 (reversed).
-                * We use an XXYX swizzle to reverse put .xy in the .wz
-                * channels, and use a .zw writemask.
-                */
-               mask = writemask_for_backwards_vector(mask);
-               swiz = BRW_SWIZZLE4(0, 0, 1, 0);
-               break;
-            case GL_TRIANGLES:
-               /* gl_TessLevelInner[].x lives at DWord 4, so we set the
-                * writemask to X and bump the URB offset by 1.
-                */
-               imm_offset = 1;
-               break;
-            case GL_ISOLINES:
-               /* Skip; gl_TessLevelInner[] doesn't exist for isolines. */
-               return;
-            default:
-               unreachable("Bogus tessellation domain");
-            }
-         } else if (imm_offset == 1) {
-            /* This is a write to gl_TessLevelOuter[] which lives in the
-             * Patch URB Header at DWords 4-7.  However, it's reversed, so
-             * instead of .xyzw we have .wzyx.
-             */
-            value.type = BRW_REGISTER_TYPE_F;
-
-            mask &= (1 << tesslevel_outer_components(tcs_key->tes_primitive_mode)) - 1;
-
-            if (tcs_key->tes_primitive_mode == GL_ISOLINES) {
-               /* Isolines .xy should be stored in .zw, in order. */
-               swiz = BRW_SWIZZLE4(0, 0, 0, 1);
-               mask <<= 2;
-            } else {
-               /* Other domains are reversed; store .wzyx instead of .xyzw */
-               swiz = BRW_SWIZZLE_WZYX;
-               mask = writemask_for_backwards_vector(mask);
-            }
-         }
       }
 
       if (mask == 0)
@@ -2846,48 +2728,6 @@ fs_visitor::nir_emit_tes_intrinsic(const fs_builder &bld,
       /* gl_TessCoord is part of the payload in g1-3 */
       for (unsigned i = 0; i < 3; i++) {
          bld.MOV(offset(dest, bld, i), fs_reg(brw_vec8_grf(1 + i, 0)));
-      }
-      break;
-
-   case nir_intrinsic_load_tess_level_outer:
-      /* When the TES reads gl_TessLevelOuter, we ensure that the patch header
-       * appears as a push-model input.  So, we can simply use the ATTR file
-       * rather than issuing URB read messages.  The data is stored in the
-       * high DWords in reverse order - DWord 7 contains .x, DWord 6 contains
-       * .y, and so on.
-       */
-      switch (tes_prog_data->domain) {
-      case BRW_TESS_DOMAIN_QUAD:
-         for (unsigned i = 0; i < 4; i++)
-            bld.MOV(offset(dest, bld, i), component(fs_reg(ATTR, 0), 7 - i));
-         break;
-      case BRW_TESS_DOMAIN_TRI:
-         for (unsigned i = 0; i < 3; i++)
-            bld.MOV(offset(dest, bld, i), component(fs_reg(ATTR, 0), 7 - i));
-         break;
-      case BRW_TESS_DOMAIN_ISOLINE:
-         for (unsigned i = 0; i < 2; i++)
-            bld.MOV(offset(dest, bld, i), component(fs_reg(ATTR, 0), 6 + i));
-         break;
-      }
-      break;
-
-   case nir_intrinsic_load_tess_level_inner:
-      /* When the TES reads gl_TessLevelInner, we ensure that the patch header
-       * appears as a push-model input.  So, we can simply use the ATTR file
-       * rather than issuing URB read messages.
-       */
-      switch (tes_prog_data->domain) {
-      case BRW_TESS_DOMAIN_QUAD:
-         bld.MOV(dest, component(fs_reg(ATTR, 0), 3));
-         bld.MOV(offset(dest, bld, 1), component(fs_reg(ATTR, 0), 2));
-         break;
-      case BRW_TESS_DOMAIN_TRI:
-         bld.MOV(dest, component(fs_reg(ATTR, 0), 4));
-         break;
-      case BRW_TESS_DOMAIN_ISOLINE:
-         /* ignore - value is undefined */
-         break;
       }
       break;
 
@@ -3256,6 +3096,11 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
       bld.MOV(offset(dest, bld, 1), offset(sample_pos, bld, 1));
       break;
    }
+
+   case nir_intrinsic_load_layer_id:
+      dest.type = BRW_REGISTER_TYPE_UD;
+      bld.MOV(dest, fetch_render_target_array_index(bld));
+      break;
 
    case nir_intrinsic_load_helper_invocation:
    case nir_intrinsic_load_sample_mask_in:
@@ -4031,7 +3876,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
           */
          brw_mark_surface_used(prog_data,
                                stage_prog_data->binding_table.ubo_start +
-                               nir->info.num_ubos - 1);
+                               nir->info->num_ubos - 1);
       }
 
       nir_const_value *const_offset = nir_src_as_const_value(instr->src[1]);
@@ -4052,20 +3897,23 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
           * and we have to split it if necessary.
           */
          const unsigned type_size = type_sz(dest.type);
-         const fs_reg packed_consts = bld.vgrf(BRW_REGISTER_TYPE_F);
+         const unsigned block_sz = 64; /* Fetch one cacheline at a time. */
+         const fs_builder ubld = bld.exec_all().group(block_sz / 4, 0);
+         const fs_reg packed_consts = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+
          for (unsigned c = 0; c < instr->num_components;) {
             const unsigned base = const_offset->u32[0] + c * type_size;
-
-            /* Number of usable components in the next 16B-aligned load */
+            /* Number of usable components in the next block-aligned load. */
             const unsigned count = MIN2(instr->num_components - c,
-                                        (16 - base % 16) / type_size);
+                                        (block_sz - base % block_sz) / type_size);
 
-            bld.exec_all()
-               .emit(FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD,
-                     packed_consts, surf_index, brw_imm_ud(base & ~15));
+            ubld.emit(FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD,
+                      packed_consts, surf_index,
+                      brw_imm_ud(base & ~(block_sz - 1)));
 
             const fs_reg consts =
-               retype(byte_offset(packed_consts, base & 15), dest.type);
+               retype(byte_offset(packed_consts, base & (block_sz - 1)),
+                      dest.type);
 
             for (unsigned d = 0; d < count; d++)
                bld.MOV(offset(dest, bld, c + d), component(consts, d));
@@ -4098,7 +3946,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
           */
          brw_mark_surface_used(prog_data,
                                stage_prog_data->binding_table.ssbo_start +
-                               nir->info.num_ssbos - 1);
+                               nir->info->num_ssbos - 1);
       }
 
       fs_reg offset_reg;
@@ -4138,7 +3986,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
 
          brw_mark_surface_used(prog_data,
                                stage_prog_data->binding_table.ssbo_start +
-                               nir->info.num_ssbos - 1);
+                               nir->info->num_ssbos - 1);
       }
 
       /* Value */
@@ -4350,7 +4198,7 @@ fs_visitor::nir_emit_ssbo_atomic(const fs_builder &bld,
        */
       brw_mark_surface_used(prog_data,
                             stage_prog_data->binding_table.ssbo_start +
-                            nir->info.num_ssbos - 1);
+                            nir->info->num_ssbos - 1);
    }
 
    fs_reg offset = get_nir_src(instr->src[1]);
@@ -4424,6 +4272,7 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
    if (instr->sampler_dim == GLSL_SAMPLER_DIM_BUF)
       srcs[TEX_LOGICAL_SRC_LOD] = brw_imm_d(0);
 
+   uint32_t header_bits = 0;
    for (unsigned i = 0; i < instr->num_srcs; i++) {
       fs_reg src = get_nir_src(instr->src[i].src);
       switch (instr->src[i].src_type) {
@@ -4431,7 +4280,7 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
          srcs[TEX_LOGICAL_SRC_LOD] =
             retype(get_nir_src_imm(instr->src[i].src), BRW_REGISTER_TYPE_F);
          break;
-      case nir_tex_src_comparitor:
+      case nir_tex_src_comparator:
          srcs[TEX_LOGICAL_SRC_SHADOW_C] = retype(src, BRW_REGISTER_TYPE_F);
          break;
       case nir_tex_src_coord:
@@ -4477,12 +4326,14 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
       case nir_tex_src_offset: {
          nir_const_value *const_offset =
             nir_src_as_const_value(instr->src[i].src);
-         if (const_offset) {
-            unsigned header_bits = brw_texture_offset(const_offset->i32, 3);
-            if (header_bits != 0)
-               srcs[TEX_LOGICAL_SRC_OFFSET_VALUE] = brw_imm_ud(header_bits);
+         unsigned offset_bits = 0;
+         if (const_offset &&
+             brw_texture_offset(const_offset->i32,
+                                nir_tex_instr_src_size(instr, i),
+                                &offset_bits)) {
+            header_bits |= offset_bits;
          } else {
-            srcs[TEX_LOGICAL_SRC_OFFSET_VALUE] =
+            srcs[TEX_LOGICAL_SRC_TG4_OFFSET] =
                retype(src, BRW_REGISTER_TYPE_D);
          }
          break;
@@ -4600,8 +4451,7 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
       opcode = SHADER_OPCODE_LOD_LOGICAL;
       break;
    case nir_texop_tg4:
-      if (srcs[TEX_LOGICAL_SRC_OFFSET_VALUE].file != BAD_FILE &&
-          srcs[TEX_LOGICAL_SRC_OFFSET_VALUE].file != IMM)
+      if (srcs[TEX_LOGICAL_SRC_TG4_OFFSET].file != BAD_FILE)
          opcode = SHADER_OPCODE_TG4_OFFSET_LOGICAL;
       else
          opcode = SHADER_OPCODE_TG4_LOGICAL;
@@ -4632,8 +4482,21 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
       unreachable("unknown texture opcode");
    }
 
+   if (instr->op == nir_texop_tg4) {
+      if (instr->component == 1 &&
+          key_tex->gather_channel_quirk_mask & (1 << texture)) {
+         /* gather4 sampler is broken for green channel on RG32F --
+          * we must ask for blue instead.
+          */
+         header_bits |= 2 << 16;
+      } else {
+         header_bits |= instr->component << 16;
+      }
+   }
+
    fs_reg dst = bld.vgrf(brw_type_for_nir_type(instr->dest_type), 4);
    fs_inst *inst = bld.emit(opcode, dst, srcs, ARRAY_SIZE(srcs));
+   inst->offset = header_bits;
 
    const unsigned dest_size = nir_tex_instr_dest_size(instr);
    if (devinfo->gen >= 9 &&
@@ -4651,23 +4514,8 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
    if (srcs[TEX_LOGICAL_SRC_SHADOW_C].file != BAD_FILE)
       inst->shadow_compare = true;
 
-   if (srcs[TEX_LOGICAL_SRC_OFFSET_VALUE].file == IMM)
-      inst->offset = srcs[TEX_LOGICAL_SRC_OFFSET_VALUE].ud;
-
-   if (instr->op == nir_texop_tg4) {
-      if (instr->component == 1 &&
-          key_tex->gather_channel_quirk_mask & (1 << texture)) {
-         /* gather4 sampler is broken for green channel on RG32F --
-          * we must ask for blue instead.
-          */
-         inst->offset |= 2 << 16;
-      } else {
-         inst->offset |= instr->component << 16;
-      }
-
-      if (devinfo->gen == 6)
-         emit_gen6_gather_wa(key_tex->gen6_gather_wa[texture], dst);
-   }
+   if (instr->op == nir_texop_tg4 && devinfo->gen == 6)
+      emit_gen6_gather_wa(key_tex->gen6_gather_wa[texture], dst);
 
    fs_reg nir_dest[4];
    for (unsigned i = 0; i < dest_size; i++)
@@ -4803,7 +4651,7 @@ setup_imm_df(const fs_builder &bld, double v)
     * instruction allows to set the 64-bit immediate value.
     */
    if (devinfo->is_haswell) {
-      const fs_builder ubld = bld.exec_all();
+      const fs_builder ubld = bld.exec_all().group(1, 0);
       fs_reg dst = ubld.vgrf(BRW_REGISTER_TYPE_DF, 1);
       ubld.DIM(dst, brw_imm_df(v));
       return component(dst, 0);

@@ -420,7 +420,7 @@ static void
 softpipe_delete_compute_state(struct pipe_context *pipe,
                               void *cs)
 {
-   struct softpipe_context *softpipe = softpipe_context(pipe);
+   MAYBE_UNUSED struct softpipe_context *softpipe = softpipe_context(pipe);
    struct sp_compute_shader *state = (struct sp_compute_shader *)cs;
 
    assert(softpipe->cs != state);

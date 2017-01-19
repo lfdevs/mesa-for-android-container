@@ -540,7 +540,7 @@ intel_renderbuffer_update_wrapper(struct brw_context *brw,
    switch (mt->msaa_layout) {
       case INTEL_MSAA_LAYOUT_UMS:
       case INTEL_MSAA_LAYOUT_CMS:
-         layer_multiplier = mt->num_samples;
+         layer_multiplier = MAX2(mt->num_samples, 1);
          break;
 
       default:

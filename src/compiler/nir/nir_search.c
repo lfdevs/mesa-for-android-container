@@ -98,6 +98,16 @@ match_value(const nir_search_value *value, nir_alu_instr *instr, unsigned src,
 {
    uint8_t new_swizzle[4];
 
+   /* Searching only works on SSA values because, if it's not SSA, we can't
+    * know if the value changed between one instance of that value in the
+    * expression and another.  Also, the replace operation will place reads of
+    * that value right before the last instruction in the expression we're
+    * replacing so those reads will happen after the original reads and may
+    * not be valid if they're register reads.
+    */
+   if (!instr->src[src].src.is_ssa)
+      return false;
+
    /* If the source is an explicitly sized source, then we need to reset
     * both the number of components and the swizzle.
     */
@@ -116,9 +126,6 @@ match_value(const nir_search_value *value, nir_alu_instr *instr, unsigned src,
 
    switch (value->type) {
    case nir_search_value_expression:
-      if (!instr->src[src].src.is_ssa)
-         return false;
-
       if (instr->src[src].src.ssa->parent_instr->type != nir_instr_type_alu)
          return false;
 
@@ -131,8 +138,7 @@ match_value(const nir_search_value *value, nir_alu_instr *instr, unsigned src,
       assert(var->variable < NIR_SEARCH_MAX_VARIABLES);
 
       if (state->variables_seen & (1 << var->variable)) {
-         if (!nir_srcs_equal(state->variables[var->variable].src,
-                             instr->src[src].src))
+         if (state->variables[var->variable].src.ssa != instr->src[src].src.ssa)
             return false;
 
          assert(!instr->src[src].abs && !instr->src[src].negate);
@@ -257,6 +263,9 @@ match_expression(const nir_search_expression *expr, nir_alu_instr *instr,
                  unsigned num_components, const uint8_t *swizzle,
                  struct match_state *state)
 {
+   if (expr->cond && !expr->cond(instr))
+      return false;
+
    if (instr->op != expr->opcode)
       return false;
 
@@ -340,7 +349,7 @@ static bitsize_tree *
 build_bitsize_tree(void *mem_ctx, struct match_state *state,
                    const nir_search_value *value)
 {
-   bitsize_tree *tree = ralloc(mem_ctx, bitsize_tree);
+   bitsize_tree *tree = rzalloc(mem_ctx, bitsize_tree);
 
    switch (value->type) {
    case nir_search_value_expression: {

@@ -300,6 +300,10 @@ static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
       ws->family = FAMILY_VI;
       ws->rev_id = VI_POLARIS11_M_A0;
       break;
+   case CHIP_POLARIS12:
+      ws->family = FAMILY_VI;
+      ws->rev_id = VI_POLARIS12_V_A0;
+      break;
    default:
       fprintf(stderr, "amdgpu: Unknown family.\n");
       goto fail;
@@ -423,8 +427,10 @@ static uint64_t amdgpu_query_value(struct radeon_winsys *rws,
    case RADEON_TIMESTAMP:
       amdgpu_query_info(ws->dev, AMDGPU_INFO_TIMESTAMP, 8, &retval);
       return retval;
-   case RADEON_NUM_CS_FLUSHES:
-      return ws->num_cs_flushes;
+   case RADEON_NUM_GFX_IBS:
+      return ws->num_gfx_IBs;
+   case RADEON_NUM_SDMA_IBS:
+      return ws->num_sdma_IBs;
    case RADEON_NUM_BYTES_MOVED:
       amdgpu_query_info(ws->dev, AMDGPU_INFO_NUM_BYTES_MOVED, 8, &retval);
       return retval;
@@ -471,8 +477,6 @@ static int compare_dev(void *key1, void *key2)
 {
    return key1 != key2;
 }
-
-DEBUG_GET_ONCE_BOOL_OPTION(thread, "RADEON_THREAD", true)
 
 static bool amdgpu_winsys_unref(struct radeon_winsys *rws)
 {
@@ -578,8 +582,11 @@ amdgpu_winsys_create(int fd, radeon_screen_create_t screen_create)
    pipe_mutex_init(ws->global_bo_list_lock);
    pipe_mutex_init(ws->bo_fence_lock);
 
-   if (sysconf(_SC_NPROCESSORS_ONLN) > 1 && debug_get_option_thread())
-      util_queue_init(&ws->cs_queue, "amdgpu_cs", 8, 1);
+   if (!util_queue_init(&ws->cs_queue, "amdgpu_cs", 8, 1)) {
+      amdgpu_winsys_destroy(&ws->base);
+      pipe_mutex_unlock(dev_tab_mutex);
+      return NULL;
+   }
 
    /* Create the screen at the end. The winsys must be initialized
     * completely.

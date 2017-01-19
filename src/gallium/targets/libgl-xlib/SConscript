@@ -48,6 +48,10 @@ if env['llvm']:
     env.Append(CPPDEFINES = ['GALLIUM_LLVMPIPE'])
     env.Prepend(LIBS = [llvmpipe])
 
+    if env['swr']:
+        env.Append(CPPDEFINES = 'HAVE_SWR')
+        env.Prepend(LIBS = [swr])
+
 if env['platform'] != 'darwin':
     # Disallow undefined symbols, except with Address Sanitizer, since libasan
     # is not linked on shared libs, as it should be LD_PRELOAD'ed instead

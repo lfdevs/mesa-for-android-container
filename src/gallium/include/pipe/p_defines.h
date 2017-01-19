@@ -350,6 +350,7 @@ enum pipe_flush_flags
 {
    PIPE_FLUSH_END_OF_FRAME = (1 << 0),
    PIPE_FLUSH_DEFERRED = (1 << 1),
+   PIPE_FLUSH_FENCE_FD = (1 << 2),
 };
 
 /**
@@ -397,6 +398,12 @@ enum pipe_flush_flags
 #define PIPE_BARRIER_STREAMOUT_BUFFER  (1 << 10)
 #define PIPE_BARRIER_GLOBAL_BUFFER     (1 << 11)
 #define PIPE_BARRIER_ALL               ((1 << 12) - 1)
+
+/**
+ * Flags for pipe_context::texture_barrier.
+ */
+#define PIPE_TEXTURE_BARRIER_SAMPLER      (1 << 0)
+#define PIPE_TEXTURE_BARRIER_FRAMEBUFFER  (1 << 1)
 
 /**
  * Resource binding flags -- state tracker must specify in advance all
@@ -739,6 +746,11 @@ enum pipe_cap
    PIPE_CAP_VIEWPORT_SUBPIXEL_BITS,
    PIPE_CAP_MIXED_COLOR_DEPTH_BITS,
    PIPE_CAP_TGSI_ARRAY_COMPONENTS,
+   PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS,
+   PIPE_CAP_TGSI_CAN_READ_OUTPUTS,
+   PIPE_CAP_NATIVE_FENCE_FD,
+   PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY,
+   PIPE_CAP_TGSI_FS_FBFETCH,
 };
 
 #define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 (1 << 0)
@@ -808,6 +820,7 @@ enum pipe_shader_cap
    PIPE_SHADER_CAP_MAX_SHADER_BUFFERS,
    PIPE_SHADER_CAP_SUPPORTED_IRS,
    PIPE_SHADER_CAP_MAX_SHADER_IMAGES,
+   PIPE_SHADER_CAP_LOWER_IF_THRESHOLD,
 };
 
 /**

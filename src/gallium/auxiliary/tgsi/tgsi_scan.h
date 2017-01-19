@@ -54,6 +54,8 @@ struct tgsi_shader_info
    ubyte input_cylindrical_wrap[PIPE_MAX_SHADER_INPUTS];
    ubyte output_semantic_name[PIPE_MAX_SHADER_OUTPUTS]; /**< TGSI_SEMANTIC_x */
    ubyte output_semantic_index[PIPE_MAX_SHADER_OUTPUTS];
+   ubyte output_usagemask[PIPE_MAX_SHADER_OUTPUTS];
+   ubyte output_streams[PIPE_MAX_SHADER_OUTPUTS];
 
    ubyte num_system_values;
    ubyte system_value_semantic_name[PIPE_MAX_SHADER_INPUTS];
@@ -64,9 +66,11 @@ struct tgsi_shader_info
    uint file_count[TGSI_FILE_COUNT];  /**< number of declared registers */
    int file_max[TGSI_FILE_COUNT];  /**< highest index of declared registers */
    int const_file_max[PIPE_MAX_CONSTANT_BUFFERS];
+   unsigned const_buffers_declared; /**< bitmask of declared const buffers */
    unsigned samplers_declared; /**< bitmask of declared samplers */
    ubyte sampler_targets[PIPE_MAX_SHADER_SAMPLER_VIEWS];  /**< TGSI_TEXTURE_x values */
    ubyte sampler_type[PIPE_MAX_SHADER_SAMPLER_VIEWS]; /**< TGSI_RETURN_TYPE_x */
+   ubyte num_stream_output_components[4];
 
    ubyte input_array_first[PIPE_MAX_SHADER_INPUTS];
    ubyte input_array_last[PIPE_MAX_SHADER_INPUTS];
@@ -109,8 +113,10 @@ struct tgsi_shader_info
    boolean uses_primid;
    boolean uses_frontface;
    boolean uses_invocationid;
+   boolean writes_position;
    boolean writes_psize;
    boolean writes_clipvertex;
+   boolean writes_primid;
    boolean writes_viewport_index;
    boolean writes_layer;
    boolean writes_memory; /**< contains stores or atomics to buffers or images */
@@ -121,6 +127,8 @@ struct tgsi_shader_info
    unsigned culldist_writemask;
    unsigned num_written_culldistance;
    unsigned num_written_clipdistance;
+
+   unsigned images_declared; /**< bitmask of declared images */
    /**
     * Bitmask indicating which images are written to (STORE / ATOM*).
     * Indirect image accesses are not reflected in this mask.
@@ -130,6 +138,10 @@ struct tgsi_shader_info
     * Bitmask indicating which declared image is a buffer.
     */
    unsigned images_buffers;
+   unsigned shader_buffers_declared; /**< bitmask of declared shader buffers */
+   unsigned shader_buffers_load; /**< bitmask of shader buffers using loads */
+   unsigned shader_buffers_store; /**< bitmask of shader buffers using stores */
+   unsigned shader_buffers_atomic; /**< bitmask of shader buffers using atomics */
    /**
     * Bitmask indicating which register files are accessed with
     * indirect addressing.  The bits are (1 << TGSI_FILE_x), etc.
@@ -141,6 +153,8 @@ struct tgsi_shader_info
     */
    unsigned indirect_files_read;
    unsigned indirect_files_written;
+   unsigned dim_indirect_files; /**< shader resource indexing */
+   unsigned const_buffers_indirect; /**< const buffers using indirect addressing */
 
    unsigned properties[TGSI_PROPERTY_COUNT]; /* index with TGSI_PROPERTY_ */
 

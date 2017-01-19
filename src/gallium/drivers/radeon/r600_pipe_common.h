@@ -79,6 +79,7 @@
 #define DBG_NO_ASM		(1 << 14)
 #define DBG_PREOPT_IR		(1 << 15)
 #define DBG_CHECK_IR		(1 << 16)
+#define DBG_NO_OPT_VARIANT	(1 << 17)
 /* gaps */
 #define DBG_TEST_DMA		(1 << 20)
 /* Bits 21-31 are reserved for the r600g driver. */
@@ -232,20 +233,8 @@ struct r600_cmask_info {
 	uint64_t offset;
 	uint64_t size;
 	unsigned alignment;
-	unsigned pitch;
-	unsigned height;
-	unsigned xalign;
-	unsigned yalign;
 	unsigned slice_tile_max;
 	unsigned base_address_reg;
-};
-
-struct r600_htile_info {
-	unsigned pitch;
-	unsigned height;
-	unsigned xalign;
-	unsigned yalign;
-	unsigned alignment;
 };
 
 struct r600_texture {
@@ -273,7 +262,6 @@ struct r600_texture {
 	unsigned			last_msaa_resolve_target_micro_mode;
 
 	/* Depth buffer compression and fast clear. */
-	struct r600_htile_info		htile;
 	struct r600_resource		*htile_buffer;
 	bool				tc_compatible_htile;
 	bool				depth_cleared; /* if it was cleared at least once */
@@ -319,7 +307,6 @@ struct r600_texture {
 
 struct r600_surface {
 	struct pipe_surface		base;
-	const struct radeon_surf_level	*level_info;
 
 	bool color_initialized;
 	bool depth_initialized;
@@ -365,6 +352,16 @@ struct r600_surface {
 	unsigned db_preload_control;	/* EG and later */
 };
 
+union r600_grbm_counters {
+	struct {
+		unsigned spi_busy;
+		unsigned spi_idle;
+		unsigned gui_busy;
+		unsigned gui_idle;
+	} named;
+	unsigned array[0];
+};
+
 struct r600_common_screen {
 	struct pipe_screen		b;
 	struct radeon_winsys		*ws;
@@ -393,12 +390,12 @@ struct r600_common_screen {
 	 * are loading shaders on demand. This is a monotonic counter.
 	 */
 	unsigned			num_shaders_created;
+	unsigned			num_shader_cache_hits;
 
 	/* GPU load thread. */
 	pipe_mutex			gpu_load_mutex;
 	pipe_thread			gpu_load_thread;
-	unsigned			gpu_load_counter_busy;
-	unsigned			gpu_load_counter_idle;
+	union r600_grbm_counters	grbm_counters;
 	volatile unsigned		gpu_load_stop_thread; /* bool */
 
 	char				renderer_string[100];
@@ -582,9 +579,13 @@ struct r600_common_context {
 	unsigned			num_compute_calls;
 	unsigned			num_spill_compute_calls;
 	unsigned			num_dma_calls;
+	unsigned			num_cp_dma_calls;
 	unsigned			num_vs_flushes;
 	unsigned			num_ps_flushes;
 	unsigned			num_cs_flushes;
+	unsigned			num_fb_cache_flushes;
+	unsigned			num_L2_invalidates;
+	unsigned			num_L2_writebacks;
 	uint64_t			num_alloc_tex_transfer_bytes;
 	unsigned			last_tex_ps_draw_ratio; /* for query */
 
@@ -636,6 +637,9 @@ struct r600_common_context {
 			 struct pipe_resource *src,
 			 unsigned src_level,
 			 const struct pipe_box *src_box);
+
+	void (*dma_clear_buffer)(struct pipe_context *ctx, struct pipe_resource *dst,
+				 uint64_t offset, uint64_t size, unsigned value);
 
 	void (*clear_buffer)(struct pipe_context *ctx, struct pipe_resource *dst,
 			     uint64_t offset, uint64_t size, unsigned value,
@@ -705,8 +709,11 @@ r600_invalidate_resource(struct pipe_context *ctx,
 			 struct pipe_resource *resource);
 
 /* r600_common_pipe.c */
-void r600_gfx_write_fence(struct r600_common_context *ctx, struct r600_resource *buf,
-			  uint64_t va, uint32_t old_value, uint32_t new_value);
+void r600_gfx_write_event_eop(struct r600_common_context *ctx,
+			      unsigned event, unsigned event_flags,
+			      unsigned data_sel,
+			      struct r600_resource *buf, uint64_t va,
+			      uint32_t old_fence, uint32_t new_fence);
 unsigned r600_gfx_write_fence_dwords(struct r600_common_screen *screen);
 void r600_gfx_wait_fence(struct r600_common_context *ctx,
 			 uint64_t va, uint32_t ref, uint32_t mask);
@@ -728,14 +735,12 @@ bool r600_can_dump_shader(struct r600_common_screen *rscreen,
 bool r600_extra_shader_checks(struct r600_common_screen *rscreen,
 			      unsigned processor);
 void r600_screen_clear_buffer(struct r600_common_screen *rscreen, struct pipe_resource *dst,
-			      uint64_t offset, uint64_t size, unsigned value,
-			      enum r600_coherency coher);
+			      uint64_t offset, uint64_t size, unsigned value);
 struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
 						  const struct pipe_resource *templ);
 const char *r600_get_llvm_processor_name(enum radeon_family family);
 void r600_need_dma_space(struct r600_common_context *ctx, unsigned num_dw,
 			 struct r600_resource *dst, struct r600_resource *src);
-void r600_dma_emit_wait_idle(struct r600_common_context *rctx);
 void radeon_save_cs(struct radeon_winsys *ws, struct radeon_winsys_cs *cs,
 		    struct radeon_saved_cs *saved);
 void radeon_clear_saved_cs(struct radeon_saved_cs *saved);
@@ -743,8 +748,10 @@ bool r600_check_device_reset(struct r600_common_context *rctx);
 
 /* r600_gpu_load.c */
 void r600_gpu_load_kill_thread(struct r600_common_screen *rscreen);
-uint64_t r600_gpu_load_begin(struct r600_common_screen *rscreen);
-unsigned r600_gpu_load_end(struct r600_common_screen *rscreen, uint64_t begin);
+uint64_t r600_begin_counter_spi(struct r600_common_screen *rscreen);
+unsigned r600_end_counter_spi(struct r600_common_screen *rscreen, uint64_t begin);
+uint64_t r600_begin_counter_gui(struct r600_common_screen *rscreen);
+unsigned r600_end_counter_gui(struct r600_common_screen *rscreen, uint64_t begin);
 
 /* r600_perfcounters.c */
 void r600_perfcounters_destroy(struct r600_common_screen *rscreen);

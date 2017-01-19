@@ -39,6 +39,7 @@
 #include "svga_draw.h"
 #include "svga_shader.h"
 #include "svga_state.h"
+#include "svga_surface.h"
 #include "svga_swtnl.h"
 #include "svga_debug.h"
 #include "svga_resource_buffer.h"

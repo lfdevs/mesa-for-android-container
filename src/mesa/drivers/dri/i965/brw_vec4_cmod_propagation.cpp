@@ -76,7 +76,9 @@ opt_cmod_propagation_local(bblock_t *block)
                  scan_inst->dst.writemask != WRITEMASK_XYZW) ||
                 (scan_inst->dst.writemask == WRITEMASK_XYZW &&
                  inst->src[0].swizzle != BRW_SWIZZLE_XYZW) ||
-                (inst->dst.writemask & ~scan_inst->dst.writemask) != 0) {
+                (inst->dst.writemask & ~scan_inst->dst.writemask) != 0 ||
+                scan_inst->exec_size != inst->exec_size ||
+                scan_inst->group != inst->group) {
                break;
             }
 

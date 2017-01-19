@@ -67,7 +67,7 @@ try_copy_prop(struct vc4_compile *c, struct qinst *inst, struct qinst **movs)
         bool debug = false;
         bool progress = false;
 
-	for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+	for (int i = 0; i < qir_get_nsrc(inst); i++) {
                 if (inst->src[i].file != QFILE_TEMP)
                         continue;
 
@@ -113,7 +113,7 @@ try_copy_prop(struct vc4_compile *c, struct qinst *inst, struct qinst **movs)
                          * this instruction doesn't already use it.
                          */
                         bool already_has_unpack = false;
-                        for (int j = 0; j < qir_get_op_nsrc(inst->op); j++) {
+                        for (int j = 0; j < qir_get_nsrc(inst); j++) {
                                 if (inst->src[j].pack)
                                         already_has_unpack = true;
                         }

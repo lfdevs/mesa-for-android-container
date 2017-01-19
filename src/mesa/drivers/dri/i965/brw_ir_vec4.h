@@ -60,13 +60,61 @@ retype(src_reg reg, enum brw_reg_type type)
    return reg;
 }
 
-static inline src_reg
-offset(src_reg reg, unsigned delta)
+namespace detail {
+
+static inline void
+add_byte_offset(backend_reg *reg, unsigned bytes)
 {
-   assert(delta == 0 ||
-          (reg.file != ARF && reg.file != FIXED_GRF && reg.file != IMM));
-   reg.offset += delta * (reg.file == UNIFORM ? 16 : REG_SIZE);
+   switch (reg->file) {
+      case BAD_FILE:
+         break;
+      case VGRF:
+      case ATTR:
+      case UNIFORM:
+         reg->offset += bytes;
+         assert(reg->offset % 16 == 0);
+         break;
+      case MRF: {
+         const unsigned suboffset = reg->offset + bytes;
+         reg->nr += suboffset / REG_SIZE;
+         reg->offset = suboffset % REG_SIZE;
+         assert(reg->offset % 16 == 0);
+         break;
+      }
+      case ARF:
+      case FIXED_GRF: {
+         const unsigned suboffset = reg->subnr + bytes;
+         reg->nr += suboffset / REG_SIZE;
+         reg->subnr = suboffset % REG_SIZE;
+         assert(reg->subnr % 16 == 0);
+         break;
+      }
+      default:
+         assert(bytes == 0);
+   }
+}
+
+} /* namepace detail */
+
+static inline src_reg
+byte_offset(src_reg reg, unsigned bytes)
+{
+   detail::add_byte_offset(&reg, bytes);
    return reg;
+}
+
+static inline src_reg
+offset(src_reg reg, unsigned width, unsigned delta)
+{
+   const unsigned stride = (reg.file == UNIFORM ? 0 : 4);
+   const unsigned num_components = MAX2(width / 4 * stride, 4);
+   return byte_offset(reg, num_components * type_sz(reg.type) * delta);
+}
+
+static inline src_reg
+horiz_offset(src_reg reg, unsigned delta)
+{
+   return byte_offset(reg, delta * type_sz(reg.type));
 }
 
 /**
@@ -130,12 +178,24 @@ retype(dst_reg reg, enum brw_reg_type type)
 }
 
 static inline dst_reg
-offset(dst_reg reg, unsigned delta)
+byte_offset(dst_reg reg, unsigned bytes)
 {
-   assert(delta == 0 ||
-          (reg.file != ARF && reg.file != FIXED_GRF && reg.file != IMM));
-   reg.offset += delta * (reg.file == UNIFORM ? 16 : REG_SIZE);
+   detail::add_byte_offset(&reg, bytes);
    return reg;
+}
+
+static inline dst_reg
+offset(dst_reg reg, unsigned width, unsigned delta)
+{
+   const unsigned stride = (reg.file == UNIFORM ? 0 : 4);
+   const unsigned num_components = MAX2(width / 4 * stride, 4);
+   return byte_offset(reg, num_components * type_sz(reg.type) * delta);
+}
+
+static inline dst_reg
+horiz_offset(dst_reg reg, unsigned delta)
+{
+   return byte_offset(reg, delta * type_sz(reg.type));
 }
 
 static inline dst_reg
@@ -231,6 +291,12 @@ public:
    bool can_do_writemask(const struct gen_device_info *devinfo);
    bool can_change_types() const;
    bool has_source_and_destination_hazard() const;
+
+   bool is_align1_partial_write()
+   {
+      return opcode == VEC4_OPCODE_SET_LOW_32BIT ||
+             opcode == VEC4_OPCODE_SET_HIGH_32BIT;
+   }
 
    bool reads_flag()
    {

@@ -55,6 +55,6 @@ softpipe_flush_resource(struct pipe_context *pipe,
                         boolean cpu_access,
                         boolean do_not_block);
 
-void softpipe_texture_barrier(struct pipe_context *pipe);
+void softpipe_texture_barrier(struct pipe_context *pipe, unsigned flags);
 void softpipe_memory_barrier(struct pipe_context *pipe, unsigned flags);
 #endif

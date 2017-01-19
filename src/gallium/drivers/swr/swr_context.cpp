@@ -21,6 +21,14 @@
  * IN THE SOFTWARE.
  ***************************************************************************/
 
+#include "swr_context.h"
+#include "swr_memory.h"
+#include "swr_screen.h"
+#include "swr_resource.h"
+#include "swr_scratch.h"
+#include "swr_query.h"
+#include "swr_fence.h"
+
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_format.h"
@@ -30,14 +38,6 @@ extern "C" {
 #include "util/u_transfer.h"
 #include "util/u_surface.h"
 }
-
-#include "swr_context.h"
-#include "swr_memory.h"
-#include "swr_screen.h"
-#include "swr_resource.h"
-#include "swr_scratch.h"
-#include "swr_query.h"
-#include "swr_fence.h"
 
 #include "api.h"
 #include "backend.h"
@@ -62,10 +62,6 @@ swr_create_surface(struct pipe_context *pipe,
          ps->u.tex.level = surf_tmpl->u.tex.level;
          ps->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
          ps->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
-         if (ps->u.tex.first_layer != ps->u.tex.last_layer) {
-            debug_printf("creating surface with multiple layers, rendering "
-                         "to first layer only\n");
-         }
       } else {
          /* setting width as number of elements should get us correct
           * renderbuffer width */
@@ -139,26 +135,41 @@ swr_transfer_map(struct pipe_context *pipe,
    if (!pt)
       return NULL;
    pipe_resource_reference(&pt->resource, resource);
+   pt->usage = (pipe_transfer_usage)usage;
    pt->level = level;
    pt->box = *box;
-   pt->stride = spr->row_stride[level];
-   pt->layer_stride = spr->img_stride[level];
+   pt->stride = spr->swr.pitch;
+   pt->layer_stride = spr->swr.qpitch * spr->swr.pitch;
 
-   /* if we're mapping the depth/stencil, copy in stencil */
-   if (spr->base.format == PIPE_FORMAT_Z24_UNORM_S8_UINT
-       && spr->has_stencil) {
-      for (unsigned i = 0; i < spr->alignedWidth * spr->alignedHeight; i++) {
-         spr->swr.pBaseAddress[4 * i + 3] = spr->secondary.pBaseAddress[i];
-      }
-   } else if (spr->base.format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT
-              && spr->has_stencil) {
-      for (unsigned i = 0; i < spr->alignedWidth * spr->alignedHeight; i++) {
-         spr->swr.pBaseAddress[8 * i + 4] = spr->secondary.pBaseAddress[i];
+   /* if we're mapping the depth/stencil, copy in stencil for the section
+    * being read in
+    */
+   if (usage & PIPE_TRANSFER_READ && spr->has_depth && spr->has_stencil) {
+      size_t zbase, sbase;
+      for (int z = box->z; z < box->z + box->depth; z++) {
+         zbase = (z * spr->swr.qpitch + box->y) * spr->swr.pitch +
+            spr->mip_offsets[level];
+         sbase = (z * spr->secondary.qpitch + box->y) * spr->secondary.pitch +
+            spr->secondary_mip_offsets[level];
+         for (int y = box->y; y < box->y + box->height; y++) {
+            if (spr->base.format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
+               for (int x = box->x; x < box->x + box->width; x++)
+                  spr->swr.pBaseAddress[zbase + 4 * x + 3] =
+                     spr->secondary.pBaseAddress[sbase + x];
+            } else if (spr->base.format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
+               for (int x = box->x; x < box->x + box->width; x++)
+                  spr->swr.pBaseAddress[zbase + 8 * x + 4] =
+                     spr->secondary.pBaseAddress[sbase + x];
+            }
+            zbase += spr->swr.pitch;
+            sbase += spr->secondary.pitch;
+         }
       }
    }
 
-   unsigned offset = box->z * pt->layer_stride + box->y * pt->stride
-      + box->x * util_format_get_blocksize(format);
+   unsigned offset = box->z * pt->layer_stride +
+      util_format_get_nblocksy(format, box->y) * pt->stride +
+      util_format_get_stride(format, box->x);
 
    *transfer = pt;
 
@@ -166,22 +177,59 @@ swr_transfer_map(struct pipe_context *pipe,
 }
 
 static void
+swr_transfer_flush_region(struct pipe_context *pipe,
+                          struct pipe_transfer *transfer,
+                          const struct pipe_box *flush_box)
+{
+   assert(transfer->resource);
+   assert(transfer->usage & PIPE_TRANSFER_WRITE);
+
+   struct swr_resource *spr = swr_resource(transfer->resource);
+   if (!spr->has_depth || !spr->has_stencil)
+      return;
+
+   size_t zbase, sbase;
+   struct pipe_box box = *flush_box;
+   box.x += transfer->box.x;
+   box.y += transfer->box.y;
+   box.z += transfer->box.z;
+   for (int z = box.z; z < box.z + box.depth; z++) {
+      zbase = (z * spr->swr.qpitch + box.y) * spr->swr.pitch +
+         spr->mip_offsets[transfer->level];
+      sbase = (z * spr->secondary.qpitch + box.y) * spr->secondary.pitch +
+         spr->secondary_mip_offsets[transfer->level];
+      for (int y = box.y; y < box.y + box.height; y++) {
+         if (spr->base.format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
+            for (int x = box.x; x < box.x + box.width; x++)
+               spr->secondary.pBaseAddress[sbase + x] =
+                  spr->swr.pBaseAddress[zbase + 4 * x + 3];
+         } else if (spr->base.format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
+            for (int x = box.x; x < box.x + box.width; x++)
+               spr->secondary.pBaseAddress[sbase + x] =
+                  spr->swr.pBaseAddress[zbase + 8 * x + 4];
+         }
+         zbase += spr->swr.pitch;
+         sbase += spr->secondary.pitch;
+      }
+   }
+}
+
+static void
 swr_transfer_unmap(struct pipe_context *pipe, struct pipe_transfer *transfer)
 {
    assert(transfer->resource);
 
-   struct swr_resource *res = swr_resource(transfer->resource);
-   /* if we're mapping the depth/stencil, copy out stencil */
-   if (res->base.format == PIPE_FORMAT_Z24_UNORM_S8_UINT
-       && res->has_stencil) {
-      for (unsigned i = 0; i < res->alignedWidth * res->alignedHeight; i++) {
-         res->secondary.pBaseAddress[i] = res->swr.pBaseAddress[4 * i + 3];
-      }
-   } else if (res->base.format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT
-              && res->has_stencil) {
-      for (unsigned i = 0; i < res->alignedWidth * res->alignedHeight; i++) {
-         res->secondary.pBaseAddress[i] = res->swr.pBaseAddress[8 * i + 4];
-      }
+   struct swr_resource *spr = swr_resource(transfer->resource);
+   /* if we're mapping the depth/stencil, copy in stencil for the section
+    * being written out
+    */
+   if (transfer->usage & PIPE_TRANSFER_WRITE &&
+       !(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT) &&
+       spr->has_depth && spr->has_stencil) {
+      struct pipe_box box;
+      u_box_3d(0, 0, 0, transfer->box.width, transfer->box.height,
+               transfer->box.depth, &box);
+      swr_transfer_flush_region(pipe, transfer, &box);
    }
 
    pipe_resource_reference(&transfer->resource, NULL);
@@ -253,7 +301,10 @@ swr_blit(struct pipe_context *pipe, const struct pipe_blit_info *blit_info)
       return;
    }
 
-   /* XXX turn off occlusion and streamout queries */
+   if (ctx->active_queries) {
+      SwrEnableStatsFE(ctx->swrContext, FALSE);
+      SwrEnableStatsBE(ctx->swrContext, FALSE);
+   }
 
    util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vertex_buffer);
    util_blitter_save_vertex_elements(ctx->blitter, (void *)ctx->velems);
@@ -287,6 +338,11 @@ swr_blit(struct pipe_context *pipe, const struct pipe_blit_info *blit_info)
                                       ctx->render_cond_mode);
 
    util_blitter_blit(ctx->blitter, &info);
+
+   if (ctx->active_queries) {
+      SwrEnableStatsFE(ctx->swrContext, TRUE);
+      SwrEnableStatsBE(ctx->swrContext, TRUE);
+   }
 }
 
 
@@ -298,9 +354,6 @@ swr_destroy(struct pipe_context *pipe)
 
    if (ctx->blitter)
       util_blitter_destroy(ctx->blitter);
-
-   /* Idle core before deleting context */
-   SwrWaitForIdle(ctx->swrContext);
 
    for (unsigned i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
       pipe_surface_reference(&ctx->framebuffer.cbufs[i], NULL);
@@ -315,6 +368,10 @@ swr_destroy(struct pipe_context *pipe)
    for (unsigned i = 0; i < ARRAY_SIZE(ctx->sampler_views[0]); i++) {
       pipe_sampler_view_reference(&ctx->sampler_views[PIPE_SHADER_VERTEX][i], NULL);
    }
+
+   /* Idle core after destroying buffer resources, but before deleting
+    * context.  Destroying resources has potentially called StoreTiles.*/
+   SwrWaitForIdle(ctx->swrContext);
 
    if (ctx->swrContext)
       SwrDestroyContext(ctx->swrContext);
@@ -400,7 +457,6 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
 
    SWR_CREATECONTEXT_INFO createInfo;
    memset(&createInfo, 0, sizeof(createInfo));
-   createInfo.driver = GL;
    createInfo.privateStateSize = sizeof(swr_draw_context);
    createInfo.pfnLoadTile = swr_LoadHotTile;
    createInfo.pfnStoreTile = swr_StoreHotTile;
@@ -424,8 +480,8 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
    ctx->pipe.surface_destroy = swr_surface_destroy;
    ctx->pipe.transfer_map = swr_transfer_map;
    ctx->pipe.transfer_unmap = swr_transfer_unmap;
+   ctx->pipe.transfer_flush_region = swr_transfer_flush_region;
 
-   ctx->pipe.transfer_flush_region = u_default_transfer_flush_region;
    ctx->pipe.buffer_subdata = u_default_buffer_subdata;
    ctx->pipe.texture_subdata = u_default_texture_subdata;
 

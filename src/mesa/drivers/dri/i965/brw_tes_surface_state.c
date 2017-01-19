@@ -41,8 +41,7 @@ brw_upload_tes_pull_constants(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->tes.base;
 
    /* BRW_NEW_TESS_PROGRAMS */
-   struct brw_tess_eval_program *dp =
-      (struct brw_tess_eval_program *) brw->tess_eval_program;
+   struct brw_program *dp = (struct brw_program *) brw->tess_eval_program;
 
    if (!dp)
       return;
@@ -52,7 +51,7 @@ brw_upload_tes_pull_constants(struct brw_context *brw)
 
    _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_TESS_EVAL);
    /* _NEW_PROGRAM_CONSTANTS */
-   brw_upload_pull_constants(brw, BRW_NEW_TES_CONSTBUF, &dp->program.Base,
+   brw_upload_pull_constants(brw, BRW_NEW_TES_CONSTBUF, &dp->program,
                              stage_state, prog_data);
 }
 
@@ -76,13 +75,13 @@ brw_upload_tes_ubo_surfaces(struct brw_context *brw)
    struct gl_shader_program *prog =
       ctx->_Shader->CurrentProgram[MESA_SHADER_TESS_EVAL];
 
-   if (!prog)
+   if (!prog || !prog->_LinkedShaders[MESA_SHADER_TESS_EVAL])
       return;
 
    /* BRW_NEW_TES_PROG_DATA */
    struct brw_stage_prog_data *prog_data = brw->tes.base.prog_data;
 
-   brw_upload_ubo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_TESS_EVAL],
+   brw_upload_ubo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_TESS_EVAL]->Program,
 			   &brw->tes.base, prog_data);
 }
 
@@ -100,15 +99,13 @@ const struct brw_tracked_state brw_tes_ubo_surfaces = {
 static void
 brw_upload_tes_abo_surfaces(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->ctx;
    /* _NEW_PROGRAM */
-   struct gl_shader_program *prog =
-      ctx->_Shader->CurrentProgram[MESA_SHADER_TESS_EVAL];
+   const struct gl_program *tep = brw->tess_eval_program;
 
-   if (prog) {
+   if (tep) {
       /* BRW_NEW_TES_PROG_DATA */
-      brw_upload_abo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_TESS_EVAL],
-                              &brw->tes.base, brw->tes.base.prog_data);
+      brw_upload_abo_surfaces(brw, tep, &brw->tes.base,
+                              brw->tes.base.prog_data);
    }
 }
 
@@ -126,15 +123,13 @@ const struct brw_tracked_state brw_tes_abo_surfaces = {
 static void
 brw_upload_tes_image_surfaces(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_TESS_PROGRAMS */
-   struct gl_shader_program *prog =
-      ctx->_Shader->CurrentProgram[MESA_SHADER_TESS_EVAL];
+   const struct gl_program *tep = brw->tess_eval_program;
 
-   if (prog) {
+   if (tep) {
       /* BRW_NEW_TES_PROG_DATA, BRW_NEW_IMAGE_UNITS */
-      brw_upload_image_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_TESS_EVAL],
-                                &brw->tes.base, brw->tes.base.prog_data);
+      brw_upload_image_surfaces(brw, tep, &brw->tes.base,
+                                brw->tes.base.prog_data);
    }
 }
 

@@ -385,10 +385,25 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
         switch (sig) {
         case QPU_SIG_SW_BREAKPOINT:
         case QPU_SIG_NONE:
-        case QPU_SIG_THREAD_SWITCH:
-        case QPU_SIG_LAST_THREAD_SWITCH:
         case QPU_SIG_SMALL_IMM:
         case QPU_SIG_LOAD_IMM:
+                break;
+
+        case QPU_SIG_THREAD_SWITCH:
+        case QPU_SIG_LAST_THREAD_SWITCH:
+                /* All accumulator contents and flags are undefined after the
+                 * switch.
+                 */
+                for (int i = 0; i < ARRAY_SIZE(state->last_r); i++)
+                        add_write_dep(state, &state->last_r[i], n);
+                add_write_dep(state, &state->last_sf, n);
+
+                /* Scoreboard-locking operations have to stay after the last
+                 * thread switch.
+                 */
+                add_write_dep(state, &state->last_tlb, n);
+
+                add_write_dep(state, &state->last_tmu_write, n);
                 break;
 
         case QPU_SIG_LOAD_TMU0:
@@ -453,6 +468,7 @@ struct choose_scoreboard {
         int last_sfu_write_tick;
         int last_uniforms_reset_tick;
         uint32_t last_waddr_a, last_waddr_b;
+        bool tlb_locked;
 };
 
 static bool
@@ -461,6 +477,11 @@ reads_too_soon_after_write(struct choose_scoreboard *scoreboard, uint64_t inst)
         uint32_t raddr_a = QPU_GET_FIELD(inst, QPU_RADDR_A);
         uint32_t raddr_b = QPU_GET_FIELD(inst, QPU_RADDR_B);
         uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
+
+        /* Full immediate loads don't read any registers. */
+        if (sig == QPU_SIG_LOAD_IMM)
+                return false;
+
         uint32_t src_muxes[] = {
                 QPU_GET_FIELD(inst, QPU_ADD_A),
                 QPU_GET_FIELD(inst, QPU_ADD_B),
@@ -554,15 +575,28 @@ choose_instruction_to_schedule(struct choose_scoreboard *scoreboard,
         struct schedule_node *chosen = NULL;
         int chosen_prio = 0;
 
+        /* Don't pair up anything with a thread switch signal -- emit_thrsw()
+         * will handle pairing it along with filling the delay slots.
+         */
+        if (prev_inst) {
+                uint32_t prev_sig = QPU_GET_FIELD(prev_inst->inst->inst,
+                                                  QPU_SIG);
+                if (prev_sig == QPU_SIG_THREAD_SWITCH ||
+                    prev_sig == QPU_SIG_LAST_THREAD_SWITCH) {
+                        return NULL;
+                }
+        }
+
         list_for_each_entry(struct schedule_node, n, schedule_list, link) {
                 uint64_t inst = n->inst->inst;
+                uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
 
                 /* Don't choose the branch instruction until it's the last one
                  * left.  XXX: We could potentially choose it before it's the
                  * last one, if the remaining instructions fit in the delay
                  * slots.
                  */
-                if (QPU_GET_FIELD(inst, QPU_SIG) == QPU_SIG_BRANCH &&
+                if (sig == QPU_SIG_BRANCH &&
                     !list_is_singular(schedule_list)) {
                         continue;
                 }
@@ -586,7 +620,23 @@ choose_instruction_to_schedule(struct choose_scoreboard *scoreboard,
                  * that they're compatible.
                  */
                 if (prev_inst) {
+                        /* Don't pair up a thread switch signal -- we'll
+                         * handle pairing it when we pick it on its own.
+                         */
+                        if (sig == QPU_SIG_THREAD_SWITCH ||
+                            sig == QPU_SIG_LAST_THREAD_SWITCH) {
+                                continue;
+                        }
+
                         if (prev_inst->uniform != -1 && n->uniform != -1)
+                                continue;
+
+                        /* Don't merge in something that will lock the TLB.
+                         * Hopwefully what we have in inst will release some
+                         * other instructions, allowing us to delay the
+                         * TLB-locking instruction until later.
+                         */
+                        if (!scoreboard->tlb_locked && qpu_inst_is_tlb(inst))
                                 continue;
 
                         inst = qpu_merge_inst(prev_inst->inst->inst, inst);
@@ -647,6 +697,9 @@ update_scoreboard_for_chosen(struct choose_scoreboard *scoreboard,
             waddr_mul == QPU_W_UNIFORMS_ADDRESS) {
                 scoreboard->last_uniforms_reset_tick = scoreboard->tick;
         }
+
+        if (qpu_inst_is_tlb(inst))
+                scoreboard->tlb_locked = true;
 }
 
 static void
@@ -678,6 +731,26 @@ static uint32_t waddr_latency(uint32_t waddr, uint64_t after)
 
         /* Apply some huge latency between texture fetch requests and getting
          * their results back.
+         *
+         * FIXME: This is actually pretty bogus.  If we do:
+         *
+         * mov tmu0_s, a
+         * <a bit of math>
+         * mov tmu0_s, b
+         * load_tmu0
+         * <more math>
+         * load_tmu0
+         *
+         * we count that as worse than
+         *
+         * mov tmu0_s, a
+         * mov tmu0_s, b
+         * <lots of math>
+         * load_tmu0
+         * <more math>
+         * load_tmu0
+         *
+         * because we associate the first load_tmu0 with the *second* tmu0_s.
          */
         if (waddr == QPU_W_TMU0_S) {
                 if (QPU_GET_FIELD(after, QPU_SIG) == QPU_SIG_LOAD_TMU0)
@@ -765,6 +838,51 @@ mark_instruction_scheduled(struct list_head *schedule_list,
                         list_add(&child->link, schedule_list);
 
                 node->children[i].node = NULL;
+        }
+}
+
+/**
+ * Emits a THRSW/LTHRSW signal in the stream, trying to move it up to pair
+ * with another instruction.
+ */
+static void
+emit_thrsw(struct vc4_compile *c,
+           struct choose_scoreboard *scoreboard,
+           uint64_t inst)
+{
+        uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
+
+        /* There should be nothing in a thrsw inst being scheduled other than
+         * the signal bits.
+         */
+        assert(QPU_GET_FIELD(inst, QPU_OP_ADD) == QPU_A_NOP);
+        assert(QPU_GET_FIELD(inst, QPU_OP_MUL) == QPU_M_NOP);
+
+        /* Try to find an earlier scheduled instruction that we can merge the
+         * thrsw into.
+         */
+        int thrsw_ip = c->qpu_inst_count;
+        for (int i = 1; i <= MIN2(c->qpu_inst_count, 3); i++) {
+                uint64_t prev_instr = c->qpu_insts[c->qpu_inst_count - i];
+                uint32_t prev_sig = QPU_GET_FIELD(prev_instr, QPU_SIG);
+
+                if (prev_sig == QPU_SIG_NONE)
+                        thrsw_ip = c->qpu_inst_count - i;
+        }
+
+        if (thrsw_ip != c->qpu_inst_count) {
+                /* Merge the thrsw into the existing instruction. */
+                c->qpu_insts[thrsw_ip] =
+                        QPU_UPDATE_FIELD(c->qpu_insts[thrsw_ip], sig, QPU_SIG);
+        } else {
+                qpu_serialize_one_inst(c, inst);
+                update_scoreboard_for_chosen(scoreboard, inst);
+        }
+
+        /* Fill the delay slots. */
+        while (c->qpu_inst_count < thrsw_ip + 3) {
+                update_scoreboard_for_chosen(scoreboard, qpu_NOP());
+                qpu_serialize_one_inst(c, qpu_NOP());
         }
 }
 
@@ -860,10 +978,6 @@ schedule_instructions(struct vc4_compile *c,
                         fprintf(stderr, "\n");
                 }
 
-                qpu_serialize_one_inst(c, inst);
-
-                update_scoreboard_for_chosen(scoreboard, inst);
-
                 /* Now that we've scheduled a new instruction, some of its
                  * children can be promoted to the list of instructions ready to
                  * be scheduled.  Update the children's unblocked time for this
@@ -871,6 +985,14 @@ schedule_instructions(struct vc4_compile *c,
                  */
                 mark_instruction_scheduled(schedule_list, time, chosen, false);
                 mark_instruction_scheduled(schedule_list, time, merge, false);
+
+                if (QPU_GET_FIELD(inst, QPU_SIG) == QPU_SIG_THREAD_SWITCH ||
+                    QPU_GET_FIELD(inst, QPU_SIG) == QPU_SIG_LAST_THREAD_SWITCH) {
+                        emit_thrsw(c, scoreboard, inst);
+                } else {
+                        qpu_serialize_one_inst(c, inst);
+                        update_scoreboard_for_chosen(scoreboard, inst);
+                }
 
                 scoreboard->tick++;
                 time++;

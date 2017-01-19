@@ -29,6 +29,22 @@
 
 #define FILE_DEBUG_FLAG DEBUG_TEXTURE
 
+/* Make sure one doesn't end up shrinking base level zero unnecessarily.
+ * Determining the base level dimension by shifting higher level dimension
+ * ends up in off-by-one value in case base level has NPOT size (for example,
+ * 293 != 146 << 1).
+ * Choose the original base level dimension when shifted dimensions agree.
+ * Otherwise assume real resize is intended and use the new shifted value.
+ */
+static unsigned 
+get_base_dim(unsigned old_base_dim, unsigned new_level_dim, unsigned level)
+{
+   const unsigned old_level_dim = old_base_dim >> level;
+   const unsigned new_base_dim = new_level_dim << level;
+
+   return old_level_dim == new_level_dim ? old_base_dim : new_base_dim;
+}
+
 /* Work back from the specified level of the image to the baselevel and create a
  * miptree of that size.
  */
@@ -40,6 +56,8 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
 {
    GLuint lastLevel;
    int width, height, depth;
+   const struct intel_mipmap_tree *old_mt = intelObj->mt;
+   const unsigned level = intelImage->base.Base.Level;
 
    intel_get_image_dims(&intelImage->base.Base, &width, &height, &depth);
 
@@ -51,20 +69,23 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
    case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
    case GL_TEXTURE_RECTANGLE:
    case GL_TEXTURE_EXTERNAL_OES:
-      assert(intelImage->base.Base.Level == 0);
+      assert(level == 0);
       break;
    case GL_TEXTURE_3D:
-      depth <<= intelImage->base.Base.Level;
+      depth = old_mt ? get_base_dim(old_mt->logical_depth0, depth, level) :
+                       depth << level;
       /* Fall through */
    case GL_TEXTURE_2D:
    case GL_TEXTURE_2D_ARRAY:
    case GL_TEXTURE_CUBE_MAP:
    case GL_TEXTURE_CUBE_MAP_ARRAY:
-      height <<= intelImage->base.Base.Level;
+      height = old_mt ? get_base_dim(old_mt->logical_height0, height, level) :
+                        height << level;
       /* Fall through */
    case GL_TEXTURE_1D:
    case GL_TEXTURE_1D_ARRAY:
-      width <<= intelImage->base.Base.Level;
+      width = old_mt ? get_base_dim(old_mt->logical_width0, width, level) :
+                       width << level;
       break;
    default:
       unreachable("Unexpected target");
@@ -502,7 +523,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
    /* Since we are going to write raw data to the miptree, we need to resolve
     * any pending fast color clears before we start.
     */
-   intel_miptree_resolve_color(brw, image->mt, 0);
+   intel_miptree_all_slices_resolve_color(brw, image->mt, 0);
 
    bo = image->mt->bo;
 

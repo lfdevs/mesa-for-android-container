@@ -272,7 +272,7 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	swrast_setup/ss_context.c swrast_setup/ss_context.h \
 	swrast_setup/ss_triangle.c swrast_setup/ss_triangle.h \
 	drivers/common/driverfuncs.c drivers/common/driverfuncs.h \
-	drivers/common/meta_blit.c drivers/common/meta_copy_image.c \
+	drivers/common/meta_blit.c \
 	drivers/common/meta_generate_mipmap.c \
 	drivers/common/meta_tex_subimage.c drivers/common/meta.c \
 	drivers/common/meta.h x86/common_x86.c x86/x86_xform.c \
@@ -376,7 +376,7 @@ am__objects_7 = swrast/s_aaline.lo swrast/s_aatriangle.lo \
 	swrast/s_texture.lo swrast/s_triangle.lo swrast/s_zoom.lo
 am__objects_8 = swrast_setup/ss_context.lo swrast_setup/ss_triangle.lo
 am__objects_9 = drivers/common/driverfuncs.lo \
-	drivers/common/meta_blit.lo drivers/common/meta_copy_image.lo \
+	drivers/common/meta_blit.lo \
 	drivers/common/meta_generate_mipmap.lo \
 	drivers/common/meta_tex_subimage.lo drivers/common/meta.lo
 am__objects_10 = x86/common_x86.lo x86/x86_xform.lo x86/3dnow.lo \
@@ -824,6 +824,8 @@ AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANDROID_CFLAGS = @ANDROID_CFLAGS@
+ANDROID_LIBS = @ANDROID_LIBS@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -867,10 +869,11 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
-EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
+ETNAVIV_CFLAGS = @ETNAVIV_CFLAGS@
+ETNAVIV_LIBS = @ETNAVIV_LIBS@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -920,9 +923,7 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
-LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
-LIBSHA1_LIBS = @LIBSHA1_LIBS@
+LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
@@ -963,8 +964,6 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -1001,8 +1000,6 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
-SHA1_CFLAGS = @SHA1_CFLAGS@
-SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
 SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
@@ -1011,7 +1008,6 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
-TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -1027,7 +1023,6 @@ VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
 VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
-VG_LIB_DEPS = @VG_LIB_DEPS@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -1742,7 +1737,6 @@ COMMON_DRIVER_FILES = \
 	drivers/common/driverfuncs.c	\
 	drivers/common/driverfuncs.h	\
 	drivers/common/meta_blit.c	\
-	drivers/common/meta_copy_image.c	\
 	drivers/common/meta_generate_mipmap.c	\
 	drivers/common/meta_tex_subimage.c	\
 	drivers/common/meta.c \
@@ -2241,8 +2235,6 @@ drivers/common/driverfuncs.lo: drivers/common/$(am__dirstamp) \
 	drivers/common/$(DEPDIR)/$(am__dirstamp)
 drivers/common/meta_blit.lo: drivers/common/$(am__dirstamp) \
 	drivers/common/$(DEPDIR)/$(am__dirstamp)
-drivers/common/meta_copy_image.lo: drivers/common/$(am__dirstamp) \
-	drivers/common/$(DEPDIR)/$(am__dirstamp)
 drivers/common/meta_generate_mipmap.lo:  \
 	drivers/common/$(am__dirstamp) \
 	drivers/common/$(DEPDIR)/$(am__dirstamp)
@@ -2563,7 +2555,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/common/$(DEPDIR)/driverfuncs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/common/$(DEPDIR)/meta.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/common/$(DEPDIR)/meta_blit.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@drivers/common/$(DEPDIR)/meta_copy_image.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/common/$(DEPDIR)/meta_generate_mipmap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/common/$(DEPDIR)/meta_tex_subimage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/accum.Plo@am__quote@

@@ -111,19 +111,15 @@ VULKAN_LIB_DEPS += \
 nodist_EXTRA_libvulkan_radeon_la_SOURCES = dummy.cpp
 libvulkan_radeon_la_SOURCES = $(VULKAN_GEM_FILES)
 
-radv_entrypoints.h : radv_entrypoints_gen.py $(vulkan_include_HEADERS)
-	$(AM_V_GEN) cat $(vulkan_include_HEADERS) |\
+vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
+
+radv_entrypoints.h : radv_entrypoints_gen.py $(vulkan_api_xml)
+	$(AM_V_GEN) cat $(vulkan_api_xml) |\
 	$(PYTHON2) $(srcdir)/radv_entrypoints_gen.py header > $@
 
-radv_entrypoints.c : radv_entrypoints_gen.py $(vulkan_include_HEADERS)
-	$(AM_V_GEN) cat $(vulkan_include_HEADERS) |\
+radv_entrypoints.c : radv_entrypoints_gen.py $(vulkan_api_xml)
+	$(AM_V_GEN) cat $(vulkan_api_xml) |\
 	$(PYTHON2) $(srcdir)/radv_entrypoints_gen.py code > $@
-
-.PHONY: radv_timestamp.h
-
-radv_timestamp.h:
-	@echo "Updating radv_timestamp.h"
-	$(AM_V_GEN) echo "#define RADV_TIMESTAMP \"$(TIMESTAMP_CMD)\"" > $@
 
 vk_format_table.c: vk_format_table.py \
 		   vk_format_parse.py \

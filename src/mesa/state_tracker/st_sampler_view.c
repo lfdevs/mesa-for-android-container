@@ -317,7 +317,7 @@ get_texture_format_swizzle(const struct st_context *st,
  *
  * \param stObj  the st texture object,
  */
-static boolean
+MAYBE_UNUSED static boolean
 check_sampler_swizzle(const struct st_context *st,
                       const struct st_texture_object *stObj,
 		      const struct pipe_sampler_view *sv, unsigned glsl_version)
@@ -473,7 +473,7 @@ st_get_texture_sampler_view_from_stobj(struct st_context *st,
       assert(gl_target_to_pipe(stObj->base.Target) == view->target);
       if (stObj->base.Target == GL_TEXTURE_BUFFER) {
          unsigned base = stObj->base.BufferOffset;
-         unsigned size = MIN2(stObj->pt->width0 - base,
+         MAYBE_UNUSED unsigned size = MIN2(stObj->pt->width0 - base,
                               (unsigned) stObj->base.BufferSize);
          assert(view->u.buf.offset == base);
          assert(view->u.buf.size == size);

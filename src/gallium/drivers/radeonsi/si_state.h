@@ -35,7 +35,7 @@
 
 #define SI_MAX_ATTRIBS			16
 #define SI_NUM_VERTEX_BUFFERS		SI_MAX_ATTRIBS
-#define SI_NUM_SAMPLERS			32 /* OpenGL textures units per shader */
+#define SI_NUM_SAMPLERS			24 /* OpenGL textures units per shader */
 #define SI_NUM_CONST_BUFFERS		16
 #define SI_NUM_IMAGES			16
 #define SI_NUM_SHADER_BUFFERS		16
@@ -99,6 +99,14 @@ struct si_stencil_ref {
 struct si_vertex_element
 {
 	unsigned			count;
+	unsigned			first_vb_use_mask;
+
+	/* Two bits per attribute indicating the size of each vector component
+	 * in bytes if the size 3-workaround must be applied.
+	 */
+	uint32_t			fix_size3;
+	uint64_t			fix_fetch;
+
 	uint32_t			rsrc_word3[SI_MAX_ATTRIBS];
 	uint32_t			format_size[SI_MAX_ATTRIBS];
 	struct pipe_vertex_element	elements[SI_MAX_ATTRIBS];
@@ -160,11 +168,7 @@ enum {
 	SI_ES_RING_ESGS,
 	SI_GS_RING_ESGS,
 
-	SI_GS_RING_GSVS0,
-	SI_GS_RING_GSVS1,
-	SI_GS_RING_GSVS2,
-	SI_GS_RING_GSVS3,
-	SI_VS_RING_GSVS,
+	SI_RING_GSVS,
 
 	SI_VS_STREAMOUT_BUF0,
 	SI_VS_STREAMOUT_BUF1,
@@ -210,6 +214,8 @@ enum {
 struct si_descriptors {
 	/* The list of descriptors in malloc'd memory. */
 	uint32_t *list;
+	/* The list in mapped GPU memory. */
+	uint32_t *gpu_list;
 	/* The size of one descriptor. */
 	unsigned element_dw_size;
 	/* The maximum number of descriptors. */
@@ -232,13 +238,11 @@ struct si_descriptors {
 	/* The shader userdata offset within a shader where the 64-bit pointer to the descriptor
 	 * array will be stored. */
 	unsigned shader_userdata_offset;
-	/* Whether the pointer should be re-emitted. */
-	bool pointer_dirty;
 };
 
 struct si_sampler_views {
 	struct pipe_sampler_view	*views[SI_NUM_SAMPLERS];
-	void				*sampler_states[SI_NUM_SAMPLERS];
+	struct si_sampler_state		*sampler_states[SI_NUM_SAMPLERS];
 
 	/* The i-th bit is set if that element is enabled (non-NULL resource). */
 	unsigned			enabled_mask;

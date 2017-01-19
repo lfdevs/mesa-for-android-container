@@ -1,4 +1,4 @@
 #git=git://anongit.freedesktop.org/mesa/mesa
 version=3
 opts="uversionmangle=s/-rc/~rc/,dversionmangle=s/\+repack//,pgpsigurlmangle=s/$/.sig/,pasv" \
-https://mesa.freedesktop.org/archive/([\d\.]*)/ mesa-(.*)\.tar\.gz
+https://mesa.freedesktop.org/archive/mesa-(.*)\.tar\.gz

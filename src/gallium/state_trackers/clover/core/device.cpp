@@ -98,6 +98,11 @@ device::max_images_write() const {
    return PIPE_MAX_SHADER_IMAGES;
 }
 
+size_t
+device::max_image_buffer_size() const {
+   return pipe->get_param(pipe, PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE);
+}
+
 cl_uint
 device::max_image_levels_2d() const {
    return pipe->get_param(pipe, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
@@ -106,6 +111,11 @@ device::max_image_levels_2d() const {
 cl_uint
 device::max_image_levels_3d() const {
    return pipe->get_param(pipe, PIPE_CAP_MAX_TEXTURE_3D_LEVELS);
+}
+
+size_t
+device::max_image_array_number() const {
+   return pipe->get_param(pipe, PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS);
 }
 
 cl_uint

@@ -198,7 +198,7 @@ brw_ff_gs_populate_key(struct brw_context *brw,
          const struct gl_shader_program *shaderprog =
             ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
          const struct gl_transform_feedback_info *linked_xfb_info =
-            &shaderprog->LinkedTransformFeedback;
+            shaderprog->xfb_program->sh.LinkedTransformFeedback;
          int i;
 
          /* Make sure that the VUE slots won't overflow the unsigned chars in

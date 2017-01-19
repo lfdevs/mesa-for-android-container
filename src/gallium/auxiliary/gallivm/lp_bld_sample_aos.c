@@ -579,10 +579,12 @@ lp_build_sample_fetch_image_nearest(struct lp_build_sample_context *bld,
    LLVMValueRef rgba8;
    struct lp_build_context u8n;
    LLVMTypeRef u8n_vec_type;
+   struct lp_type fetch_type;
 
    lp_build_context_init(&u8n, bld->gallivm, lp_type_unorm(8, bld->vector_width));
    u8n_vec_type = lp_build_vec_type(bld->gallivm, u8n.type);
 
+   fetch_type = lp_type_uint(bld->texel_type.width);
    if (util_format_is_rgba8_variant(bld->format_desc)) {
       /*
        * Given the format is a rgba8, just read the pixels as is,
@@ -591,7 +593,7 @@ lp_build_sample_fetch_image_nearest(struct lp_build_sample_context *bld,
       rgba8 = lp_build_gather(bld->gallivm,
                               bld->texel_type.length,
                               bld->format_desc->block.bits,
-                              bld->texel_type.width,
+                              fetch_type,
                               TRUE,
                               data_ptr, offset, TRUE);
 
@@ -925,14 +927,16 @@ lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
             LLVMValueRef rgba8;
 
             if (util_format_is_rgba8_variant(bld->format_desc)) {
+               struct lp_type fetch_type;
                /*
                 * Given the format is a rgba8, just read the pixels as is,
                 * without any swizzling. Swizzling will be done later.
                 */
+               fetch_type = lp_type_uint(bld->texel_type.width);
                rgba8 = lp_build_gather(bld->gallivm,
                                        bld->texel_type.length,
                                        bld->format_desc->block.bits,
-                                       bld->texel_type.width,
+                                       fetch_type,
                                        TRUE,
                                        data_ptr, offset[k][j][i], TRUE);
 

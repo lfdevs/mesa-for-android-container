@@ -30,6 +30,7 @@
 #include "radeon/radeon_elf_util.h"
 #include "ddebug/dd_util.h"
 #include "util/u_memory.h"
+#include "ac_debug.h"
 
 DEBUG_GET_ONCE_OPTION(replace_shaders, "RADEON_REPLACE_SHADERS", NULL)
 
@@ -45,7 +46,7 @@ static void si_dump_shader(struct si_screen *sscreen,
 		fwrite(current->shader_log, current->shader_log_size, 1, f);
 	else
 		si_shader_dump(sscreen, state->current, NULL,
-			       state->cso->info.processor, f);
+			       state->cso->info.processor, f, false);
 }
 
 /**
@@ -149,317 +150,6 @@ file_error:
 #define COLOR_YELLOW	"\033[1;33m"
 #define COLOR_CYAN	"\033[1;36m"
 
-#define INDENT_PKT 8
-
-static void print_spaces(FILE *f, unsigned num)
-{
-	fprintf(f, "%*s", num, "");
-}
-
-static void print_value(FILE *file, uint32_t value, int bits)
-{
-	/* Guess if it's int or float */
-	if (value <= (1 << 15)) {
-		if (value <= 9)
-			fprintf(file, "%u\n", value);
-		else
-			fprintf(file, "%u (0x%0*x)\n", value, bits / 4, value);
-	} else {
-		float f = uif(value);
-
-		if (fabs(f) < 100000 && f*10 == floor(f*10))
-			fprintf(file, "%.1ff (0x%0*x)\n", f, bits / 4, value);
-		else
-			/* Don't print more leading zeros than there are bits. */
-			fprintf(file, "0x%0*x\n", bits / 4, value);
-	}
-}
-
-static void print_named_value(FILE *file, const char *name, uint32_t value,
-			      int bits)
-{
-	print_spaces(file, INDENT_PKT);
-	fprintf(file, COLOR_YELLOW "%s" COLOR_RESET " <- ", name);
-	print_value(file, value, bits);
-}
-
-static void si_dump_reg(FILE *file, unsigned offset, uint32_t value,
-			uint32_t field_mask)
-{
-	int r, f;
-
-	for (r = 0; r < ARRAY_SIZE(sid_reg_table); r++) {
-		const struct si_reg *reg = &sid_reg_table[r];
-		const char *reg_name = sid_strings + reg->name_offset;
-
-		if (reg->offset == offset) {
-			bool first_field = true;
-
-			print_spaces(file, INDENT_PKT);
-			fprintf(file, COLOR_YELLOW "%s" COLOR_RESET " <- ",
-				reg_name);
-
-			if (!reg->num_fields) {
-				print_value(file, value, 32);
-				return;
-			}
-
-			for (f = 0; f < reg->num_fields; f++) {
-				const struct si_field *field = sid_fields_table + reg->fields_offset + f;
-				const int *values_offsets = sid_strings_offsets + field->values_offset;
-				uint32_t val = (value & field->mask) >>
-					       (ffs(field->mask) - 1);
-
-				if (!(field->mask & field_mask))
-					continue;
-
-				/* Indent the field. */
-				if (!first_field)
-					print_spaces(file,
-						     INDENT_PKT + strlen(reg_name) + 4);
-
-				/* Print the field. */
-				fprintf(file, "%s = ", sid_strings + field->name_offset);
-
-				if (val < field->num_values && values_offsets[val] >= 0)
-					fprintf(file, "%s\n", sid_strings + values_offsets[val]);
-				else
-					print_value(file, val,
-						    util_bitcount(field->mask));
-
-				first_field = false;
-			}
-			return;
-		}
-	}
-
-	fprintf(file, COLOR_YELLOW "0x%05x" COLOR_RESET " = 0x%08x", offset, value);
-}
-
-static void si_parse_set_reg_packet(FILE *f, uint32_t *ib, unsigned count,
-				    unsigned reg_offset)
-{
-	unsigned reg = (ib[1] << 2) + reg_offset;
-	int i;
-
-	for (i = 0; i < count; i++)
-		si_dump_reg(f, reg + i*4, ib[2+i], ~0);
-}
-
-static uint32_t *si_parse_packet3(FILE *f, uint32_t *ib, int *num_dw,
-				  int trace_id, enum chip_class chip_class)
-{
-	unsigned count = PKT_COUNT_G(ib[0]);
-	unsigned op = PKT3_IT_OPCODE_G(ib[0]);
-	const char *predicate = PKT3_PREDICATE(ib[0]) ? "(predicate)" : "";
-	int i;
-
-	/* Print the name first. */
-	for (i = 0; i < ARRAY_SIZE(packet3_table); i++)
-		if (packet3_table[i].op == op)
-			break;
-
-	if (i < ARRAY_SIZE(packet3_table)) {
-		const char *name = sid_strings + packet3_table[i].name_offset;
-
-		if (op == PKT3_SET_CONTEXT_REG ||
-		    op == PKT3_SET_CONFIG_REG ||
-		    op == PKT3_SET_UCONFIG_REG ||
-		    op == PKT3_SET_SH_REG)
-			fprintf(f, COLOR_CYAN "%s%s" COLOR_CYAN ":\n",
-				name, predicate);
-		else
-			fprintf(f, COLOR_GREEN "%s%s" COLOR_RESET ":\n",
-				name, predicate);
-	} else
-		fprintf(f, COLOR_RED "PKT3_UNKNOWN 0x%x%s" COLOR_RESET ":\n",
-			op, predicate);
-
-	/* Print the contents. */
-	switch (op) {
-	case PKT3_SET_CONTEXT_REG:
-		si_parse_set_reg_packet(f, ib, count, SI_CONTEXT_REG_OFFSET);
-		break;
-	case PKT3_SET_CONFIG_REG:
-		si_parse_set_reg_packet(f, ib, count, SI_CONFIG_REG_OFFSET);
-		break;
-	case PKT3_SET_UCONFIG_REG:
-		si_parse_set_reg_packet(f, ib, count, CIK_UCONFIG_REG_OFFSET);
-		break;
-	case PKT3_SET_SH_REG:
-		si_parse_set_reg_packet(f, ib, count, SI_SH_REG_OFFSET);
-		break;
-	case PKT3_ACQUIRE_MEM:
-		si_dump_reg(f, R_0301F0_CP_COHER_CNTL, ib[1], ~0);
-		si_dump_reg(f, R_0301F4_CP_COHER_SIZE, ib[2], ~0);
-		si_dump_reg(f, R_030230_CP_COHER_SIZE_HI, ib[3], ~0);
-		si_dump_reg(f, R_0301F8_CP_COHER_BASE, ib[4], ~0);
-		si_dump_reg(f, R_0301E4_CP_COHER_BASE_HI, ib[5], ~0);
-		print_named_value(f, "POLL_INTERVAL", ib[6], 16);
-		break;
-	case PKT3_SURFACE_SYNC:
-		if (chip_class >= CIK) {
-			si_dump_reg(f, R_0301F0_CP_COHER_CNTL, ib[1], ~0);
-			si_dump_reg(f, R_0301F4_CP_COHER_SIZE, ib[2], ~0);
-			si_dump_reg(f, R_0301F8_CP_COHER_BASE, ib[3], ~0);
-		} else {
-			si_dump_reg(f, R_0085F0_CP_COHER_CNTL, ib[1], ~0);
-			si_dump_reg(f, R_0085F4_CP_COHER_SIZE, ib[2], ~0);
-			si_dump_reg(f, R_0085F8_CP_COHER_BASE, ib[3], ~0);
-		}
-		print_named_value(f, "POLL_INTERVAL", ib[4], 16);
-		break;
-	case PKT3_EVENT_WRITE:
-		si_dump_reg(f, R_028A90_VGT_EVENT_INITIATOR, ib[1],
-			    S_028A90_EVENT_TYPE(~0));
-		print_named_value(f, "EVENT_INDEX", (ib[1] >> 8) & 0xf, 4);
-		print_named_value(f, "INV_L2", (ib[1] >> 20) & 0x1, 1);
-		if (count > 0) {
-			print_named_value(f, "ADDRESS_LO", ib[2], 32);
-			print_named_value(f, "ADDRESS_HI", ib[3], 16);
-		}
-		break;
-	case PKT3_DRAW_INDEX_AUTO:
-		si_dump_reg(f, R_030930_VGT_NUM_INDICES, ib[1], ~0);
-		si_dump_reg(f, R_0287F0_VGT_DRAW_INITIATOR, ib[2], ~0);
-		break;
-	case PKT3_DRAW_INDEX_2:
-		si_dump_reg(f, R_028A78_VGT_DMA_MAX_SIZE, ib[1], ~0);
-		si_dump_reg(f, R_0287E8_VGT_DMA_BASE, ib[2], ~0);
-		si_dump_reg(f, R_0287E4_VGT_DMA_BASE_HI, ib[3], ~0);
-		si_dump_reg(f, R_030930_VGT_NUM_INDICES, ib[4], ~0);
-		si_dump_reg(f, R_0287F0_VGT_DRAW_INITIATOR, ib[5], ~0);
-		break;
-	case PKT3_INDEX_TYPE:
-		si_dump_reg(f, R_028A7C_VGT_DMA_INDEX_TYPE, ib[1], ~0);
-		break;
-	case PKT3_NUM_INSTANCES:
-		si_dump_reg(f, R_030934_VGT_NUM_INSTANCES, ib[1], ~0);
-		break;
-	case PKT3_WRITE_DATA:
-		si_dump_reg(f, R_370_CONTROL, ib[1], ~0);
-		si_dump_reg(f, R_371_DST_ADDR_LO, ib[2], ~0);
-		si_dump_reg(f, R_372_DST_ADDR_HI, ib[3], ~0);
-		for (i = 2; i < count; i++) {
-			print_spaces(f, INDENT_PKT);
-			fprintf(f, "0x%08x\n", ib[2+i]);
-		}
-		break;
-	case PKT3_CP_DMA:
-		si_dump_reg(f, R_410_CP_DMA_WORD0, ib[1], ~0);
-		si_dump_reg(f, R_411_CP_DMA_WORD1, ib[2], ~0);
-		si_dump_reg(f, R_412_CP_DMA_WORD2, ib[3], ~0);
-		si_dump_reg(f, R_413_CP_DMA_WORD3, ib[4], ~0);
-		si_dump_reg(f, R_414_COMMAND, ib[5], ~0);
-		break;
-	case PKT3_DMA_DATA:
-		si_dump_reg(f, R_500_DMA_DATA_WORD0, ib[1], ~0);
-		si_dump_reg(f, R_501_SRC_ADDR_LO, ib[2], ~0);
-		si_dump_reg(f, R_502_SRC_ADDR_HI, ib[3], ~0);
-		si_dump_reg(f, R_503_DST_ADDR_LO, ib[4], ~0);
-		si_dump_reg(f, R_504_DST_ADDR_HI, ib[5], ~0);
-		si_dump_reg(f, R_414_COMMAND, ib[6], ~0);
-		break;
-	case PKT3_INDIRECT_BUFFER_SI:
-	case PKT3_INDIRECT_BUFFER_CONST:
-	case PKT3_INDIRECT_BUFFER_CIK:
-		si_dump_reg(f, R_3F0_IB_BASE_LO, ib[1], ~0);
-		si_dump_reg(f, R_3F1_IB_BASE_HI, ib[2], ~0);
-		si_dump_reg(f, R_3F2_CONTROL, ib[3], ~0);
-		break;
-	case PKT3_NOP:
-		if (ib[0] == 0xffff1000) {
-			count = -1; /* One dword NOP. */
-			break;
-		} else if (count == 0 && SI_IS_TRACE_POINT(ib[1])) {
-			unsigned packet_id = SI_GET_TRACE_POINT_ID(ib[1]);
-
-			print_spaces(f, INDENT_PKT);
-			fprintf(f, COLOR_RED "Trace point ID: %u\n", packet_id);
-
-			if (trace_id == -1)
-				break; /* tracing was disabled */
-
-			print_spaces(f, INDENT_PKT);
-			if (packet_id < trace_id)
-				fprintf(f, COLOR_RED
-					"This trace point was reached by the CP."
-					COLOR_RESET "\n");
-			else if (packet_id == trace_id)
-				fprintf(f, COLOR_RED
-					"!!!!! This is the last trace point that "
-					"was reached by the CP !!!!!"
-					COLOR_RESET "\n");
-			else if (packet_id+1 == trace_id)
-				fprintf(f, COLOR_RED
-					"!!!!! This is the first trace point that "
-					"was NOT been reached by the CP !!!!!"
-					COLOR_RESET "\n");
-			else
-				fprintf(f, COLOR_RED
-					"!!!!! This trace point was NOT reached "
-					"by the CP !!!!!"
-					COLOR_RESET "\n");
-			break;
-		}
-		/* fall through, print all dwords */
-	default:
-		for (i = 0; i < count+1; i++) {
-			print_spaces(f, INDENT_PKT);
-			fprintf(f, "0x%08x\n", ib[1+i]);
-		}
-	}
-
-	ib += count + 2;
-	*num_dw -= count + 2;
-	return ib;
-}
-
-/**
- * Parse and print an IB into a file.
- *
- * \param f		file
- * \param ib		IB
- * \param num_dw	size of the IB
- * \param chip_class	chip class
- * \param trace_id	the last trace ID that is known to have been reached
- *			and executed by the CP, typically read from a buffer
- */
-static void si_parse_ib(FILE *f, uint32_t *ib, int num_dw, int trace_id,
-			const char *name, enum chip_class chip_class)
-{
-	fprintf(f, "------------------ %s begin ------------------\n", name);
-
-	while (num_dw > 0) {
-		unsigned type = PKT_TYPE_G(ib[0]);
-
-		switch (type) {
-		case 3:
-			ib = si_parse_packet3(f, ib, &num_dw, trace_id,
-					      chip_class);
-			break;
-		case 2:
-			/* type-2 nop */
-			if (ib[0] == 0x80000000) {
-				fprintf(f, COLOR_GREEN "NOP (type 2)" COLOR_RESET "\n");
-				ib++;
-				break;
-			}
-			/* fall through */
-		default:
-			fprintf(f, "Unknown packet type %i\n", type);
-			return;
-		}
-	}
-
-	fprintf(f, "------------------- %s end -------------------\n", name);
-	if (num_dw < 0) {
-		printf("Packet ends after the end of IB.\n");
-		exit(0);
-	}
-	fprintf(f, "\n");
-}
-
 static void si_dump_mmapped_reg(struct si_context *sctx, FILE *f,
 				unsigned offset)
 {
@@ -467,7 +157,7 @@ static void si_dump_mmapped_reg(struct si_context *sctx, FILE *f,
 	uint32_t value;
 
 	if (ws->read_registers(ws, offset, 1, &value))
-		si_dump_reg(f, offset, value, ~0);
+		ac_dump_reg(f, offset, value, ~0);
 }
 
 static void si_dump_debug_registers(struct si_context *sctx, FILE *f)
@@ -530,16 +220,19 @@ static void si_dump_last_ib(struct si_context *sctx, FILE *f)
 	}
 
 	if (sctx->init_config)
-		si_parse_ib(f, sctx->init_config->pm4, sctx->init_config->ndw,
-			    -1, "IB2: Init config", sctx->b.chip_class);
+		ac_parse_ib(f, sctx->init_config->pm4, sctx->init_config->ndw,
+			    -1, "IB2: Init config", sctx->b.chip_class,
+			    NULL, NULL);
 
 	if (sctx->init_config_gs_rings)
-		si_parse_ib(f, sctx->init_config_gs_rings->pm4,
+		ac_parse_ib(f, sctx->init_config_gs_rings->pm4,
 			    sctx->init_config_gs_rings->ndw,
-			    -1, "IB2: Init GS rings", sctx->b.chip_class);
+			    -1, "IB2: Init GS rings", sctx->b.chip_class,
+			    NULL, NULL);
 
-	si_parse_ib(f, sctx->last_gfx.ib, sctx->last_gfx.num_dw,
-		    last_trace_id, "IB", sctx->b.chip_class);
+	ac_parse_ib(f, sctx->last_gfx.ib, sctx->last_gfx.num_dw,
+		    last_trace_id, "IB", sctx->b.chip_class,
+		     NULL, NULL);
 }
 
 static const char *priority_to_string(enum radeon_bo_priority priority)
@@ -628,7 +321,7 @@ static void si_dump_bo_list(struct si_context *sctx,
 		}
 
 		/* Print the buffer. */
-		fprintf(f, "  %10"PRIu64"    0x%013"PRIx64"       0x%013"PRIx64"       ",
+		fprintf(f, "  %10"PRIu64"    0x%013"PRIX64"       0x%013"PRIX64"       ",
 			size / page_size, va / page_size, (va + size) / page_size);
 
 		/* Print the usage. */
@@ -669,6 +362,112 @@ static void si_dump_framebuffer(struct si_context *sctx, FILE *f)
 	}
 }
 
+static void si_dump_descriptor_list(struct si_descriptors *desc,
+				    const char *shader_name,
+				    const char *elem_name,
+				    unsigned num_elements,
+				    FILE *f)
+{
+	unsigned i, j;
+	uint32_t *cpu_list = desc->list;
+	uint32_t *gpu_list = desc->gpu_list;
+	const char *list_note = "GPU list";
+
+	if (!gpu_list) {
+		gpu_list = cpu_list;
+		list_note = "CPU list";
+	}
+
+	for (i = 0; i < num_elements; i++) {
+		fprintf(f, COLOR_GREEN "%s%s slot %u (%s):" COLOR_RESET "\n",
+			shader_name, elem_name, i, list_note);
+
+		switch (desc->element_dw_size) {
+		case 4:
+			for (j = 0; j < 4; j++)
+				ac_dump_reg(f, R_008F00_SQ_BUF_RSRC_WORD0 + j*4,
+					    gpu_list[j], 0xffffffff);
+			break;
+		case 8:
+			for (j = 0; j < 8; j++)
+				ac_dump_reg(f, R_008F10_SQ_IMG_RSRC_WORD0 + j*4,
+					    gpu_list[j], 0xffffffff);
+
+			fprintf(f, COLOR_CYAN "    Buffer:" COLOR_RESET "\n");
+			for (j = 0; j < 4; j++)
+				ac_dump_reg(f, R_008F00_SQ_BUF_RSRC_WORD0 + j*4,
+					    gpu_list[4+j], 0xffffffff);
+			break;
+		case 16:
+			for (j = 0; j < 8; j++)
+				ac_dump_reg(f, R_008F10_SQ_IMG_RSRC_WORD0 + j*4,
+					    gpu_list[j], 0xffffffff);
+
+			fprintf(f, COLOR_CYAN "    Buffer:" COLOR_RESET "\n");
+			for (j = 0; j < 4; j++)
+				ac_dump_reg(f, R_008F00_SQ_BUF_RSRC_WORD0 + j*4,
+					    gpu_list[4+j], 0xffffffff);
+
+			fprintf(f, COLOR_CYAN "    FMASK:" COLOR_RESET "\n");
+			for (j = 0; j < 8; j++)
+				ac_dump_reg(f, R_008F10_SQ_IMG_RSRC_WORD0 + j*4,
+					    gpu_list[8+j], 0xffffffff);
+
+			fprintf(f, COLOR_CYAN "    Sampler state:" COLOR_RESET "\n");
+			for (j = 0; j < 4; j++)
+				ac_dump_reg(f, R_008F30_SQ_IMG_SAMP_WORD0 + j*4,
+					    gpu_list[12+j], 0xffffffff);
+			break;
+		}
+
+		if (memcmp(gpu_list, cpu_list, desc->element_dw_size * 4) != 0) {
+			fprintf(f, COLOR_RED "!!!!! This slot was corrupted in GPU memory !!!!!"
+				COLOR_RESET "\n");
+		}
+
+		fprintf(f, "\n");
+		gpu_list += desc->element_dw_size;
+		cpu_list += desc->element_dw_size;
+	}
+}
+
+static void si_dump_descriptors(struct si_context *sctx,
+				struct si_shader_ctx_state *state,
+				FILE *f)
+{
+	if (!state->cso || !state->current)
+		return;
+
+	unsigned type = state->cso->type;
+	const struct tgsi_shader_info *info = &state->cso->info;
+	struct si_descriptors *descs =
+		&sctx->descriptors[SI_DESCS_FIRST_SHADER +
+				   type * SI_NUM_SHADER_DESCS];
+	static const char *shader_name[] = {"VS", "PS", "GS", "TCS", "TES", "CS"};
+
+	static const char *elem_name[] = {
+		" - Constant buffer",
+		" - Shader buffer",
+		" - Sampler",
+		" - Image",
+	};
+	unsigned num_elements[] = {
+		util_last_bit(info->const_buffers_declared),
+		util_last_bit(info->shader_buffers_declared),
+		util_last_bit(info->samplers_declared),
+		util_last_bit(info->images_declared),
+	};
+
+	if (type == PIPE_SHADER_VERTEX) {
+		si_dump_descriptor_list(&sctx->vertex_buffers, shader_name[type],
+					" - Vertex buffer", info->num_inputs, f);
+	}
+
+	for (unsigned i = 0; i < SI_NUM_SHADER_DESCS; ++i, ++descs)
+		si_dump_descriptor_list(descs, shader_name[type], elem_name[i],
+					num_elements[i], f);
+}
+
 static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 				unsigned flags)
 {
@@ -686,6 +485,14 @@ static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 		si_dump_shader(sctx->screen, &sctx->tes_shader, f);
 		si_dump_shader(sctx->screen, &sctx->gs_shader, f);
 		si_dump_shader(sctx->screen, &sctx->ps_shader, f);
+
+		si_dump_descriptor_list(&sctx->descriptors[SI_DESCS_RW_BUFFERS],
+					"", "RW buffers", SI_NUM_RW_BUFFERS, f);
+		si_dump_descriptors(sctx, &sctx->vs_shader, f);
+		si_dump_descriptors(sctx, &sctx->tcs_shader, f);
+		si_dump_descriptors(sctx, &sctx->tes_shader, f);
+		si_dump_descriptors(sctx, &sctx->gs_shader, f);
+		si_dump_descriptors(sctx, &sctx->ps_shader, f);
 	}
 
 	if (flags & PIPE_DUMP_LAST_COMMAND_BUFFER) {

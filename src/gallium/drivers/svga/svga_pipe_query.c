@@ -1239,7 +1239,11 @@ svga_render_condition(struct pipe_context *pipe, struct pipe_query *q,
          ret = SVGA3D_vgpu10_SetPredication(svga->swc, queryId,
                                             (uint32) condition);
       }
+      svga->pred.query_id = queryId;
+      svga->pred.cond = condition;
    }
+
+   svga->render_condition = (sq != NULL);
 }
 
 

@@ -442,7 +442,6 @@ public:
       this->instructions_to_schedule = 0;
       this->post_reg_alloc = (mode == SCHEDULE_POST);
       this->mode = mode;
-      this->time = 0;
       if (!post_reg_alloc) {
          this->reg_pressure_in = rzalloc_array(mem_ctx, int, block_count);
 
@@ -514,7 +513,6 @@ public:
    int instructions_to_schedule;
    int grf_count;
    int hw_reg_count;
-   int time;
    int reg_pressure;
    int block_idx;
    exec_list instructions;
@@ -1574,7 +1572,7 @@ void
 instruction_scheduler::schedule_instructions(bblock_t *block)
 {
    const struct gen_device_info *devinfo = bs->devinfo;
-   time = 0;
+   int time = 0;
    if (!post_reg_alloc)
       reg_pressure = reg_pressure_in[block->num];
    block_idx = block->num;
@@ -1696,9 +1694,6 @@ instruction_scheduler::run(cfg_t *cfg)
       setup_liveness(cfg);
 
    foreach_block(block, cfg) {
-      if (block->end_ip - block->start_ip <= 1)
-         continue;
-
       if (reads_remaining) {
          memset(reads_remaining, 0,
                 grf_count * sizeof(*reads_remaining));

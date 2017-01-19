@@ -41,17 +41,13 @@ struct swr_resource {
    bool has_depth;
    bool has_stencil;
 
-   UINT alignedWidth;
-   UINT alignedHeight;
-
    SWR_SURFACE_STATE swr;
    SWR_SURFACE_STATE secondary; /* for faking depth/stencil merged formats */
 
    struct sw_displaytarget *display_target;
 
-   unsigned row_stride[PIPE_MAX_TEXTURE_LEVELS];
-   unsigned img_stride[PIPE_MAX_TEXTURE_LEVELS];
-   unsigned mip_offsets[PIPE_MAX_TEXTURE_LEVELS];
+   size_t mip_offsets[PIPE_MAX_TEXTURE_LEVELS];
+   size_t secondary_mip_offsets[PIPE_MAX_TEXTURE_LEVELS];
 
    enum swr_resource_status status;
 };

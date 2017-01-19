@@ -77,6 +77,9 @@
 
 #include <llvm/Support/TargetSelect.h>
 
+#if HAVE_LLVM >= 0x0305
+#include <llvm/IR/CallSite.h>
+#endif
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CBindingWrapping.h>
@@ -539,6 +542,20 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    llvm::SmallVector<std::string, 16> MAttrs;
 
 #if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
+#if HAVE_LLVM >= 0x0400
+   /* llvm-3.7+ implements sys::getHostCPUFeatures for x86,
+    * which allows us to enable/disable code generation based
+    * on the results of cpuid.
+    */
+   llvm::StringMap<bool> features;
+   llvm::sys::getHostCPUFeatures(features);
+
+   for (StringMapIterator<bool> f = features.begin();
+        f != features.end();
+        ++f) {
+      MAttrs.push_back(((*f).second ? "+" : "-") + (*f).first().str());
+   }
+#else
    /*
     * We need to unset attributes because sometimes LLVM mistakenly assumes
     * certain features are present given the processor name.
@@ -591,6 +608,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    MAttrs.push_back("-avx512bw");
    MAttrs.push_back("-avx512dq");
    MAttrs.push_back("-avx512vl");
+#endif
 #endif
 #endif
 
@@ -707,4 +725,42 @@ lp_add_attr_dereferenceable(LLVMValueRef val, uint64_t bytes)
    B.addDereferenceableAttr(bytes);
    A->addAttr(llvm::AttributeSet::get(A->getContext(), A->getArgNo() + 1,  B));
 #endif
+}
+
+extern "C" LLVMValueRef
+lp_get_called_value(LLVMValueRef call)
+{
+#if HAVE_LLVM >= 0x0309
+	return LLVMGetCalledValue(call);
+#elif HAVE_LLVM >= 0x0305
+	return llvm::wrap(llvm::CallSite(llvm::unwrap<llvm::Instruction>(call)).getCalledValue());
+#else
+	return NULL; /* radeonsi doesn't support so old LLVM. */
+#endif
+}
+
+extern "C" bool
+lp_is_function(LLVMValueRef v)
+{
+#if HAVE_LLVM >= 0x0309
+	return LLVMGetValueKind(v) == LLVMFunctionValueKind;
+#else
+	return llvm::isa<llvm::Function>(llvm::unwrap(v));
+#endif
+}
+
+extern "C" LLVMBuilderRef
+lp_create_builder(LLVMContextRef ctx, bool unsafe_fpmath)
+{
+   LLVMBuilderRef builder = LLVMCreateBuilderInContext(ctx);
+
+#if HAVE_LLVM >= 0x0308
+   if (unsafe_fpmath) {
+      llvm::FastMathFlags flags;
+      flags.setUnsafeAlgebra();
+      llvm::unwrap(builder)->setFastMathFlags(flags);
+   }
+#endif
+
+   return builder;
 }

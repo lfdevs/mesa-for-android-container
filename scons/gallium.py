@@ -323,10 +323,6 @@ def generate(env):
                 'GLX_DIRECT_RENDERING',
                 'GLX_INDIRECT_RENDERING',
             ]
-        if env['platform'] in ('linux', 'freebsd'):
-            cppdefines += ['HAVE_ALIAS']
-        else:
-            cppdefines += ['GLX_ALIAS_UNSUPPORTED']
 
         if env['platform'] in ('linux', 'darwin'):
             cppdefines += ['HAVE_XLOCALE_H']
@@ -651,7 +647,7 @@ def generate(env):
     env.PkgCheckModules('X11', ['x11', 'xext', 'xdamage', 'xfixes', 'glproto >= 1.4.13'])
     env.PkgCheckModules('XCB', ['x11-xcb', 'xcb-glx >= 1.8.1', 'xcb-dri2 >= 1.8'])
     env.PkgCheckModules('XF86VIDMODE', ['xxf86vm'])
-    env.PkgCheckModules('DRM', ['libdrm >= 2.4.38'])
+    env.PkgCheckModules('DRM', ['libdrm >= 2.4.66'])
 
     if env['x11']:
         env.Append(CPPPATH = env['X11_CPPPATH'])

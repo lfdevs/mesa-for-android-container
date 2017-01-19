@@ -54,7 +54,7 @@ static const enum adreno_state_block sb[] = {
  * prsc or dwords: buffer containing constant values
  * sizedwords:     size of const value buffer
  */
-void
+static void
 fd3_emit_const(struct fd_ringbuffer *ring, enum shader_t type,
 		uint32_t regid, uint32_t offset, uint32_t sizedwords,
 		const uint32_t *dwords, struct pipe_resource *prsc)
@@ -96,16 +96,16 @@ static void
 fd3_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 		uint32_t regid, uint32_t num, struct pipe_resource **prscs, uint32_t *offsets)
 {
+	uint32_t anum = align(num, 4);
 	uint32_t i;
 
 	debug_assert((regid % 4) == 0);
-	debug_assert((num % 4) == 0);
 
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + num);
+	OUT_PKT3(ring, CP_LOAD_STATE, 2 + anum);
 	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(regid/2) |
 			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
 			CP_LOAD_STATE_0_STATE_BLOCK(sb[type]) |
-			CP_LOAD_STATE_0_NUM_UNIT(num/2));
+			CP_LOAD_STATE_0_NUM_UNIT(anum/2));
 	OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
 			CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
 
@@ -120,6 +120,9 @@ fd3_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 			OUT_RING(ring, 0xbad00000 | (i << 16));
 		}
 	}
+
+	for (; i < anum; i++)
+		OUT_RING(ring, 0xffffffff);
 }
 
 #define VERT_TEX_OFF    0
@@ -299,13 +302,13 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring,
 		}
 
 		struct fd_resource *rsc = fd_resource(psurf[i]->texture);
-		enum pipe_format format = fd3_gmem_restore_format(psurf[i]->format);
+		enum pipe_format format = fd_gmem_restore_format(psurf[i]->format);
 		/* The restore blit_zs shader expects stencil in sampler 0, and depth
 		 * in sampler 1
 		 */
 		if (rsc->stencil && i == 0) {
 			rsc = rsc->stencil;
-			format = fd3_gmem_restore_format(rsc->base.b.format);
+			format = fd_gmem_restore_format(rsc->base.b.format);
 		}
 
 		/* note: PIPE_BUFFER disallowed for surfaces */

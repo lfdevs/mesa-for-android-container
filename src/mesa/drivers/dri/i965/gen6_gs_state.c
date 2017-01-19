@@ -37,16 +37,15 @@ gen6_upload_gs_push_constants(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->gs.base;
 
    /* BRW_NEW_GEOMETRY_PROGRAM */
-   const struct brw_geometry_program *gp =
-      (struct brw_geometry_program *) brw->geometry_program;
+   const struct brw_program *gp = brw_program_const(brw->geometry_program);
 
    if (gp) {
       /* BRW_NEW_GS_PROG_DATA */
       struct brw_stage_prog_data *prog_data = brw->gs.base.prog_data;
 
       _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_GEOMETRY);
-      gen6_upload_push_constants(brw, &gp->program.Base, prog_data,
-                                 stage_state, AUB_TRACE_VS_CONSTANTS);
+      gen6_upload_push_constants(brw, &gp->program, prog_data, stage_state,
+                                 AUB_TRACE_VS_CONSTANTS);
    }
 
    if (brw->gen >= 7)
@@ -101,8 +100,6 @@ upload_gs_state(struct brw_context *brw)
    const struct brw_stage_prog_data *prog_data = stage_state->prog_data;
    const struct brw_vue_prog_data *vue_prog_data =
       brw_vue_prog_data(stage_state->prog_data);
-   const struct brw_gs_prog_data *gs_prog_data =
-      brw_gs_prog_data(stage_state->prog_data);
 
    if (!active || stage_state->push_const_size == 0) {
       /* Disable the push constant buffers. */
@@ -165,7 +162,7 @@ upload_gs_state(struct brw_context *brw)
                 GEN6_GS_SO_STATISTICS_ENABLE |
                 GEN6_GS_RENDERING_ENABLE);
 
-      if (gs_prog_data->gen6_xfb_enabled) {
+      if (brw->geometry_program->info.has_transform_feedback_varyings) {
          /* GEN6_GS_REORDER is equivalent to GEN7_GS_REORDER_TRAILING
           * in gen7. SNB and IVB specs are the same regarding the reordering of
           * TRISTRIP/TRISTRIP_REV vertices and triangle orientation, so we do

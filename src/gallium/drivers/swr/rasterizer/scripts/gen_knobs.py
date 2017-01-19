@@ -23,13 +23,14 @@
 from __future__ import print_function
 import os
 import sys
+import argparse
 import knob_defs
 from mako.template import Template
 from mako.exceptions import RichTraceback
 
 def write_template_to_string(template_filename, **kwargs):
     try:
-        template = Template(filename=template_filename)
+        template = Template(filename=os.path.abspath(template_filename))
         # Split + Join fixes line-endings for whatever platform you are using
         return '\n'.join(template.render(**kwargs).splitlines())
     except:
@@ -40,37 +41,39 @@ def write_template_to_string(template_filename, **kwargs):
         print("%s: %s" % (str(traceback.error.__class__.__name__), traceback.error))
 
 def write_template_to_file(template_filename, output_filename, **kwargs):
+    output_dirname = os.path.dirname(output_filename)
+    if not os.path.exists(output_dirname):
+        os.makedirs(output_dirname)
     with open(output_filename, "w") as outfile:
         print(write_template_to_string(template_filename, **kwargs), file=outfile)
 
 def main(args=sys.argv[1:]):
-    if len(args) != 1:
-        print('Usage:', sys.argv[0], '<output_directory>', file=sys.stderr)
-        return 1
 
-    output_dir = args[0]
-    if not os.path.isdir(output_dir):
-        if os.path.exists(output_dir):
-            print('ERROR: Invalid output directory:', output_dir, file=sys.stderr)
-            return 1
+    # parse args
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", "-i", help="Path to knobs.template", required=True)
+    parser.add_argument("--output", "-o", help="Path to output file", required=True)
+    parser.add_argument("--gen_h", "-gen_h", help="Generate gen_knobs.h", action="store_true", default=False)
+    parser.add_argument("--gen_cpp", "-gen_cpp", help="Generate gen_knobs.cpp", action="store_true", required=False)
 
-        try:
-            os.makedirs(output_dir)
-        except:
-            print('ERROR: Could not create output directory:', output_dir, file=sys.stderr)
-            return 1
+    args = parser.parse_args()
 
-    # Output path exists, now just run the template
-    template_file = os.sep.join([sys.path[0], 'templates', 'knobs.template'])
-    output_file = os.sep.join([output_dir, 'gen_knobs.cpp'])
-    output_header = os.sep.join([output_dir, 'gen_knobs.h'])
+    if args.input:
+        if args.gen_h:
+            write_template_to_file(args.input,
+                                   args.output,
+                                   filename='gen_knobs',
+                                   knobs=knob_defs.KNOBS,
+                                   includes=['core/knobs_init.h', 'common/os.h', 'sstream', 'iomanip'],
+                                   gen_header=True)
 
-    for f in [output_header, output_file]:
-        write_template_to_file(template_file, f,
-                filename='gen_knobs',
-                knobs=knob_defs.KNOBS,
-                includes=['core/knobs_init.h', 'common/os.h', 'sstream', 'iomanip'],
-                gen_header=True if f == output_header else False)
+        if args.gen_cpp:
+            write_template_to_file(args.input,
+                                   args.output,
+                                   filename='gen_knobs',
+                                   knobs=knob_defs.KNOBS,
+                                   includes=['core/knobs_init.h', 'common/os.h', 'sstream', 'iomanip'],
+                                   gen_header=False)
 
     return 0
 

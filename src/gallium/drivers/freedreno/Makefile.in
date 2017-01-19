@@ -90,10 +90,13 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_LIBDRM_TRUE@am__append_1 = \
+@HAVE_LIBDRM_TRUE@	$(LIBDRM_LIBS)
+
+@HAVE_DRISW_TRUE@am__append_2 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@HAVE_DRISW_KMS_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@am__append_3 = \
 @HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
 @HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
 
@@ -138,15 +141,19 @@ am__objects_4 = a4xx/fd4_blend.lo a4xx/fd4_context.lo a4xx/fd4_draw.lo \
 	a4xx/fd4_emit.lo a4xx/fd4_format.lo a4xx/fd4_gmem.lo \
 	a4xx/fd4_program.lo a4xx/fd4_query.lo a4xx/fd4_rasterizer.lo \
 	a4xx/fd4_screen.lo a4xx/fd4_texture.lo a4xx/fd4_zsa.lo
-am__objects_5 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler_nir.lo \
+am__objects_5 = a5xx/fd5_blend.lo a5xx/fd5_context.lo a5xx/fd5_draw.lo \
+	a5xx/fd5_emit.lo a5xx/fd5_format.lo a5xx/fd5_gmem.lo \
+	a5xx/fd5_program.lo a5xx/fd5_query.lo a5xx/fd5_rasterizer.lo \
+	a5xx/fd5_screen.lo a5xx/fd5_texture.lo a5xx/fd5_zsa.lo
+am__objects_6 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler_nir.lo \
 	ir3/ir3_compiler.lo ir3/ir3_cp.lo ir3/ir3_depth.lo \
 	ir3/ir3_group.lo ir3/ir3_legalize.lo ir3/ir3_nir.lo \
 	ir3/ir3_nir_lower_if_else.lo ir3/ir3_print.lo ir3/ir3_ra.lo \
 	ir3/ir3_sched.lo ir3/ir3_shader.lo
-am__objects_6 = ir3/ir3_nir_trig.lo
+am__objects_7 = ir3/ir3_nir_trig.lo
 am_libfreedreno_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
-	$(am__objects_6)
+	$(am__objects_6) $(am__objects_7)
 libfreedreno_la_OBJECTS = $(am_libfreedreno_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -156,15 +163,17 @@ PROGRAMS = $(noinst_PROGRAMS)
 am_ir3_compiler_OBJECTS = ir3/ir3_cmdline.$(OBJEXT)
 ir3_compiler_OBJECTS = $(am_ir3_compiler_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
+@HAVE_LIBDRM_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
+am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_2)
 ir3_compiler_DEPENDENCIES = libfreedreno.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/compiler/glsl/libstandalone.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/mesa/libmesagallium.la \
-	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_3) $(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -253,6 +262,8 @@ AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANDROID_CFLAGS = @ANDROID_CFLAGS@
+ANDROID_LIBS = @ANDROID_LIBS@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -296,10 +307,11 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
-EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
+ETNAVIV_CFLAGS = @ETNAVIV_CFLAGS@
+ETNAVIV_LIBS = @ETNAVIV_LIBS@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -349,9 +361,7 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
-LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
-LIBSHA1_LIBS = @LIBSHA1_LIBS@
+LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
@@ -392,8 +402,6 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -430,8 +438,6 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
-SHA1_CFLAGS = @SHA1_CFLAGS@
-SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
 SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
@@ -440,7 +446,6 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
-TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -456,7 +461,6 @@ VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
 VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
-VG_LIB_DEPS = @VG_LIB_DEPS@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -670,6 +674,33 @@ a4xx_SOURCES := \
 	a4xx/fd4_zsa.c \
 	a4xx/fd4_zsa.h
 
+a5xx_SOURCES := \
+	a5xx/a5xx.xml.h \
+	a5xx/fd5_blend.c \
+	a5xx/fd5_blend.h \
+	a5xx/fd5_context.c \
+	a5xx/fd5_context.h \
+	a5xx/fd5_draw.c \
+	a5xx/fd5_draw.h \
+	a5xx/fd5_emit.c \
+	a5xx/fd5_emit.h \
+	a5xx/fd5_format.c \
+	a5xx/fd5_format.h \
+	a5xx/fd5_gmem.c \
+	a5xx/fd5_gmem.h \
+	a5xx/fd5_program.c \
+	a5xx/fd5_program.h \
+	a5xx/fd5_query.c \
+	a5xx/fd5_query.h \
+	a5xx/fd5_rasterizer.c \
+	a5xx/fd5_rasterizer.h \
+	a5xx/fd5_screen.c \
+	a5xx/fd5_screen.h \
+	a5xx/fd5_texture.c \
+	a5xx/fd5_texture.h \
+	a5xx/fd5_zsa.c \
+	a5xx/fd5_zsa.h
+
 ir3_SOURCES := \
 	ir3/disasm-a3xx.c \
 	ir3/instr-a3xx.h \
@@ -741,12 +772,8 @@ GALLIUM_TARGET_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_COMMON_LIB_DEPS = \
-	-lm \
-	$(CLOCK_LIB) \
-	$(PTHREAD_LIBS) \
-	$(DLOPEN_LIBS)
-
+GALLIUM_COMMON_LIB_DEPS = -lm $(LIBSENSORS_LIBS) $(CLOCK_LIB) \
+	$(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
@@ -758,7 +785,7 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_1) $(am__append_2)
+	$(am__append_2) $(am__append_3)
 AM_CFLAGS = \
 	-Wno-packed-bitfield-compat \
 	-I$(top_srcdir)/src/gallium/drivers/freedreno/ir3 \
@@ -773,6 +800,7 @@ libfreedreno_la_SOURCES = \
 	$(a2xx_SOURCES) \
 	$(a3xx_SOURCES) \
 	$(a4xx_SOURCES) \
+	$(a5xx_SOURCES) \
 	$(ir3_SOURCES) \
 	$(ir3_GENERATED_FILES)
 
@@ -916,6 +944,30 @@ a4xx/fd4_screen.lo: a4xx/$(am__dirstamp) \
 a4xx/fd4_texture.lo: a4xx/$(am__dirstamp) \
 	a4xx/$(DEPDIR)/$(am__dirstamp)
 a4xx/fd4_zsa.lo: a4xx/$(am__dirstamp) a4xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/$(am__dirstamp):
+	@$(MKDIR_P) a5xx
+	@: > a5xx/$(am__dirstamp)
+a5xx/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) a5xx/$(DEPDIR)
+	@: > a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_blend.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_context.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_draw.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_emit.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_format.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_gmem.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_program.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_query.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_rasterizer.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_screen.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_texture.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_zsa.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
 ir3/$(am__dirstamp):
 	@$(MKDIR_P) ir3
 	@: > ir3/$(am__dirstamp)
@@ -966,6 +1018,8 @@ mostlyclean-compile:
 	-rm -f a3xx/*.lo
 	-rm -f a4xx/*.$(OBJEXT)
 	-rm -f a4xx/*.lo
+	-rm -f a5xx/*.$(OBJEXT)
+	-rm -f a5xx/*.lo
 	-rm -f ir3/*.$(OBJEXT)
 	-rm -f ir3/*.lo
 
@@ -1027,6 +1081,18 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@a4xx/$(DEPDIR)/fd4_screen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a4xx/$(DEPDIR)/fd4_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a4xx/$(DEPDIR)/fd4_zsa.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_blend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_context.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_draw.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_emit.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_format.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_gmem.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_program.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_query.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_rasterizer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_screen.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_texture.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_zsa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/disasm-a3xx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_cmdline.Po@am__quote@
@@ -1100,6 +1166,7 @@ clean-libtool:
 	-rm -rf a2xx/.libs a2xx/_libs
 	-rm -rf a3xx/.libs a3xx/_libs
 	-rm -rf a4xx/.libs a4xx/_libs
+	-rm -rf a5xx/.libs a5xx/_libs
 	-rm -rf ir3/.libs ir3/_libs
 
 ID: $(am__tagged_files)
@@ -1223,6 +1290,8 @@ distclean-generic:
 	-rm -f a3xx/$(am__dirstamp)
 	-rm -f a4xx/$(DEPDIR)/$(am__dirstamp)
 	-rm -f a4xx/$(am__dirstamp)
+	-rm -f a5xx/$(DEPDIR)/$(am__dirstamp)
+	-rm -f a5xx/$(am__dirstamp)
 	-rm -f ir3/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ir3/$(am__dirstamp)
 
@@ -1236,7 +1305,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR) a4xx/$(DEPDIR) ir3/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR) a4xx/$(DEPDIR) a5xx/$(DEPDIR) ir3/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -1282,7 +1351,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR) a4xx/$(DEPDIR) ir3/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR) a4xx/$(DEPDIR) a5xx/$(DEPDIR) ir3/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

@@ -94,13 +94,13 @@ static void si_emit_cb_render_state(struct si_context *sctx, struct r600_atom *a
 {
 	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
 	struct si_state_blend *blend = sctx->queued.named.blend;
-	uint32_t cb_target_mask, i;
+	/* CB_COLORn_INFO.FORMAT=INVALID should disable unbound colorbuffers,
+	 * but you never know. */
+	uint32_t cb_target_mask = sctx->framebuffer.colorbuf_enabled_4bit;
+	unsigned i;
 
-	/* CB_COLORn_INFO.FORMAT=INVALID disables empty colorbuffer slots. */
 	if (blend)
-		cb_target_mask = blend->cb_target_mask;
-	else
-		cb_target_mask = 0xffffffff;
+		cb_target_mask &= blend->cb_target_mask;
 
 	/* Avoid a hang that happens when dual source blending is enabled
 	 * but there is not enough color outputs. This is undefined behavior,
@@ -119,7 +119,7 @@ static void si_emit_cb_render_state(struct si_context *sctx, struct r600_atom *a
 	if (sctx->b.family == CHIP_STONEY) {
 		unsigned spi_shader_col_format =
 			sctx->ps_shader.cso ?
-			sctx->ps_shader.current->key.ps.epilog.spi_shader_col_format : 0;
+			sctx->ps_shader.current->key.part.ps.epilog.spi_shader_col_format : 0;
 		unsigned sx_ps_downconvert = 0;
 		unsigned sx_blend_opt_epsilon = 0;
 		unsigned sx_blend_opt_control = 0;
@@ -659,12 +659,36 @@ static void si_emit_clip_state(struct si_context *sctx, struct r600_atom *atom)
 static void si_emit_clip_regs(struct si_context *sctx, struct r600_atom *atom)
 {
 	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
+	struct si_shader *vs = si_get_vs_state(sctx);
 	struct tgsi_shader_info *info = si_get_vs_info(sctx);
+	struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
 	unsigned window_space =
 	   info->properties[TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION];
 	unsigned clipdist_mask =
 		info->writes_clipvertex ? SIX_BITS : info->clipdist_writemask;
-	unsigned total_mask = clipdist_mask | (info->culldist_writemask << info->num_written_clipdistance);
+	unsigned ucp_mask = clipdist_mask ? 0 : rs->clip_plane_enable & SIX_BITS;
+	unsigned culldist_mask = info->culldist_writemask << info->num_written_clipdistance;
+	unsigned total_mask;
+	bool misc_vec_ena;
+
+	if (vs->key.opt.hw_vs.clip_disable) {
+		assert(!info->culldist_writemask);
+		clipdist_mask = 0;
+		culldist_mask = 0;
+	}
+	total_mask = clipdist_mask | culldist_mask;
+
+	/* Clip distances on points have no effect, so need to be implemented
+	 * as cull distances. This applies for the clipvertex case as well.
+	 *
+	 * Setting this for primitives other than points should have no adverse
+	 * effects.
+	 */
+	clipdist_mask &= rs->clip_plane_enable;
+	culldist_mask |= clipdist_mask;
+
+	misc_vec_ena = info->writes_psize || info->writes_edgeflag ||
+		       info->writes_layer || info->writes_viewport_index;
 
 	radeon_set_context_reg(cs, R_02881C_PA_CL_VS_OUT_CNTL,
 		S_02881C_USE_VTX_POINT_SIZE(info->writes_psize) |
@@ -673,17 +697,12 @@ static void si_emit_clip_regs(struct si_context *sctx, struct r600_atom *atom)
 	        S_02881C_USE_VTX_VIEWPORT_INDX(info->writes_viewport_index) |
 		S_02881C_VS_OUT_CCDIST0_VEC_ENA((total_mask & 0x0F) != 0) |
 		S_02881C_VS_OUT_CCDIST1_VEC_ENA((total_mask & 0xF0) != 0) |
-		S_02881C_VS_OUT_MISC_VEC_ENA(info->writes_psize ||
-					    info->writes_edgeflag ||
-					    info->writes_layer ||
-					     info->writes_viewport_index) |
-		S_02881C_VS_OUT_MISC_SIDE_BUS_ENA(1) |
-		(sctx->queued.named.rasterizer->clip_plane_enable &
-		 clipdist_mask) | (info->culldist_writemask << 8));
+		S_02881C_VS_OUT_MISC_VEC_ENA(misc_vec_ena) |
+		S_02881C_VS_OUT_MISC_SIDE_BUS_ENA(misc_vec_ena) |
+		clipdist_mask | (culldist_mask << 8));
 	radeon_set_context_reg(cs, R_028810_PA_CL_CLIP_CNTL,
-		sctx->queued.named.rasterizer->pa_cl_clip_cntl |
-		(clipdist_mask ? 0 :
-		 sctx->queued.named.rasterizer->clip_plane_enable & SIX_BITS) |
+		rs->pa_cl_clip_cntl |
+		ucp_mask |
 		S_028810_CLIP_DISABLE(window_space));
 
 	/* reuse needs to be set off if we write oViewport */
@@ -882,11 +901,12 @@ static void si_bind_rs_state(struct pipe_context *ctx, void *state)
 	if (!state)
 		return;
 
-	if (sctx->framebuffer.nr_samples > 1 &&
-	    (!old_rs || old_rs->multisample_enable != rs->multisample_enable)) {
+	if (!old_rs || old_rs->multisample_enable != rs->multisample_enable) {
 		si_mark_atom_dirty(sctx, &sctx->db_render_state);
 
-		if (sctx->b.family >= CHIP_POLARIS10)
+		/* Update the small primitive filter workaround if necessary. */
+		if (sctx->b.family >= CHIP_POLARIS10 &&
+		    sctx->framebuffer.nr_samples > 1)
 			si_mark_atom_dirty(sctx, &sctx->msaa_sample_locs.atom);
 	}
 
@@ -1168,7 +1188,7 @@ static void si_emit_db_render_state(struct si_context *sctx, struct r600_atom *s
 	}
 
 	/* Disable the gl_SampleMask fragment shader output if MSAA is disabled. */
-	if (sctx->framebuffer.nr_samples <= 1 || (rs && !rs->multisample_enable))
+	if (!rs || !rs->multisample_enable)
 		db_shader_control &= C_02880C_MASK_EXPORT_ENABLE;
 
 	if (sctx->b.family == CHIP_STONEY &&
@@ -1677,17 +1697,12 @@ static uint32_t si_translate_buffer_dataformat(struct pipe_screen *screen,
 					       const struct util_format_description *desc,
 					       int first_non_void)
 {
-	unsigned type;
 	int i;
 
 	if (desc->format == PIPE_FORMAT_R11G11B10_FLOAT)
 		return V_008F0C_BUF_DATA_FORMAT_10_11_11;
 
 	assert(first_non_void >= 0);
-	type = desc->channel[first_non_void].type;
-
-	if (type == UTIL_FORMAT_TYPE_FIXED)
-		return V_008F0C_BUF_DATA_FORMAT_INVALID;
 
 	if (desc->nr_channels == 4 &&
 	    desc->channel[0].size == 10 &&
@@ -1726,14 +1741,6 @@ static uint32_t si_translate_buffer_dataformat(struct pipe_screen *screen,
 		}
 		break;
 	case 32:
-		/* From the Southern Islands ISA documentation about MTBUF:
-		 * 'Memory reads of data in memory that is 32 or 64 bits do not
-		 * undergo any format conversion.'
-		 */
-		if (type != UTIL_FORMAT_TYPE_FLOAT &&
-		    !desc->channel[first_non_void].pure_integer)
-			return V_008F0C_BUF_DATA_FORMAT_INVALID;
-
 		switch (desc->nr_channels) {
 		case 1:
 			return V_008F0C_BUF_DATA_FORMAT_32;
@@ -1761,18 +1768,21 @@ static uint32_t si_translate_buffer_numformat(struct pipe_screen *screen,
 
 	switch (desc->channel[first_non_void].type) {
 	case UTIL_FORMAT_TYPE_SIGNED:
-		if (desc->channel[first_non_void].normalized)
-			return V_008F0C_BUF_NUM_FORMAT_SNORM;
-		else if (desc->channel[first_non_void].pure_integer)
+	case UTIL_FORMAT_TYPE_FIXED:
+		if (desc->channel[first_non_void].size >= 32 ||
+		    desc->channel[first_non_void].pure_integer)
 			return V_008F0C_BUF_NUM_FORMAT_SINT;
+		else if (desc->channel[first_non_void].normalized)
+			return V_008F0C_BUF_NUM_FORMAT_SNORM;
 		else
 			return V_008F0C_BUF_NUM_FORMAT_SSCALED;
 		break;
 	case UTIL_FORMAT_TYPE_UNSIGNED:
-		if (desc->channel[first_non_void].normalized)
-			return V_008F0C_BUF_NUM_FORMAT_UNORM;
-		else if (desc->channel[first_non_void].pure_integer)
+		if (desc->channel[first_non_void].size >= 32 ||
+		    desc->channel[first_non_void].pure_integer)
 			return V_008F0C_BUF_NUM_FORMAT_UINT;
+		else if (desc->channel[first_non_void].normalized)
+			return V_008F0C_BUF_NUM_FORMAT_UNORM;
 		else
 			return V_008F0C_BUF_NUM_FORMAT_USCALED;
 		break;
@@ -1782,16 +1792,43 @@ static uint32_t si_translate_buffer_numformat(struct pipe_screen *screen,
 	}
 }
 
-static bool si_is_vertex_format_supported(struct pipe_screen *screen, enum pipe_format format)
+static unsigned si_is_vertex_format_supported(struct pipe_screen *screen,
+					      enum pipe_format format,
+					      unsigned usage)
 {
 	const struct util_format_description *desc;
 	int first_non_void;
 	unsigned data_format;
 
+	assert((usage & ~(PIPE_BIND_SHADER_IMAGE |
+			  PIPE_BIND_SAMPLER_VIEW |
+			  PIPE_BIND_VERTEX_BUFFER)) == 0);
+
 	desc = util_format_description(format);
+
+	/* There are no native 8_8_8 or 16_16_16 data formats, and we currently
+	 * select 8_8_8_8 and 16_16_16_16 instead. This works reasonably well
+	 * for read-only access (with caveats surrounding bounds checks), but
+	 * obviously fails for write access which we have to implement for
+	 * shader images. Luckily, OpenGL doesn't expect this to be supported
+	 * anyway, and so the only impact is on PBO uploads / downloads, which
+	 * shouldn't be expected to be fast for GL_RGB anyway.
+	 */
+	if (desc->block.bits == 3 * 8 ||
+	    desc->block.bits == 3 * 16) {
+		if (usage & (PIPE_BIND_SHADER_IMAGE | PIPE_BIND_SAMPLER_VIEW)) {
+		    usage &= ~(PIPE_BIND_SHADER_IMAGE | PIPE_BIND_SAMPLER_VIEW);
+			if (!usage)
+				return 0;
+		}
+	}
+
 	first_non_void = util_format_get_first_non_void_channel(format);
 	data_format = si_translate_buffer_dataformat(screen, desc, first_non_void);
-	return data_format != V_008F0C_BUF_DATA_FORMAT_INVALID;
+	if (data_format == V_008F0C_BUF_DATA_FORMAT_INVALID)
+		return 0;
+
+	return usage;
 }
 
 static bool si_is_colorbuffer_format_supported(enum pipe_format format)
@@ -1846,9 +1883,9 @@ static boolean si_is_format_supported(struct pipe_screen *screen,
 	if (usage & (PIPE_BIND_SAMPLER_VIEW |
 		     PIPE_BIND_SHADER_IMAGE)) {
 		if (target == PIPE_BUFFER) {
-			if (si_is_vertex_format_supported(screen, format))
-				retval |= usage & (PIPE_BIND_SAMPLER_VIEW |
-						   PIPE_BIND_SHADER_IMAGE);
+			retval |= si_is_vertex_format_supported(
+				screen, format, usage & (PIPE_BIND_SAMPLER_VIEW |
+						         PIPE_BIND_SHADER_IMAGE));
 		} else {
 			if (si_is_sampler_format_supported(screen, format))
 				retval |= usage & (PIPE_BIND_SAMPLER_VIEW |
@@ -1877,9 +1914,9 @@ static boolean si_is_format_supported(struct pipe_screen *screen,
 		retval |= PIPE_BIND_DEPTH_STENCIL;
 	}
 
-	if ((usage & PIPE_BIND_VERTEX_BUFFER) &&
-	    si_is_vertex_format_supported(screen, format)) {
-		retval |= PIPE_BIND_VERTEX_BUFFER;
+	if (usage & PIPE_BIND_VERTEX_BUFFER) {
+		retval |= si_is_vertex_format_supported(screen, format,
+							PIPE_BIND_VERTEX_BUFFER);
 	}
 
 	if ((usage & PIPE_BIND_LINEAR) &&
@@ -2123,7 +2160,7 @@ static void si_initialize_color_surface(struct si_context *sctx,
 	if (sctx->b.chip_class >= VI) {
 		unsigned max_uncompressed_block_size = 2;
 
-		if (rtex->surface.nsamples > 1) {
+		if (rtex->resource.b.b.nr_samples > 1) {
 			if (rtex->surface.bpe == 1)
 				max_uncompressed_block_size = 0;
 			else if (rtex->surface.bpe == 2)
@@ -2337,6 +2374,7 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 	si_dec_framebuffer_counters(&sctx->framebuffer.state);
 	util_copy_framebuffer_state(&sctx->framebuffer.state, state);
 
+	sctx->framebuffer.colorbuf_enabled_4bit = 0;
 	sctx->framebuffer.spi_shader_col_format = 0;
 	sctx->framebuffer.spi_shader_col_format_alpha = 0;
 	sctx->framebuffer.spi_shader_col_format_blend = 0;
@@ -2359,6 +2397,7 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 			si_initialize_color_surface(sctx, surf);
 		}
 
+		sctx->framebuffer.colorbuf_enabled_4bit |= 0xf << (i * 4);
 		sctx->framebuffer.spi_shader_col_format |=
 			surf->spi_shader_col_format << (i * 4);
 		sctx->framebuffer.spi_shader_col_format_alpha |=
@@ -2371,11 +2410,11 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 		if (surf->color_is_int8)
 			sctx->framebuffer.color_is_int8 |= 1 << i;
 
-		if (rtex->fmask.size && rtex->cmask.size) {
+		if (rtex->fmask.size) {
 			sctx->framebuffer.compressed_cb_mask |= 1 << i;
 		}
 
-		if (surf->level_info->mode == RADEON_SURF_MODE_LINEAR_ALIGNED)
+		if (rtex->surface.is_linear)
 			sctx->framebuffer.any_dst_linear = true;
 
 		r600_context_add_resource_size(ctx, surf->base.texture);
@@ -2453,6 +2492,7 @@ static void si_emit_framebuffer_state(struct si_context *sctx, struct r600_atom 
 
 	/* Colorbuffers. */
 	for (i = 0; i < nr_cbufs; i++) {
+		const struct radeon_surf_level *level_info;
 		unsigned pitch_tile_max, slice_tile_max, tile_mode_index;
 		unsigned cb_color_base, cb_color_fmask, cb_color_attrib;
 		unsigned cb_color_pitch, cb_color_slice, cb_color_fmask_slice;
@@ -2468,9 +2508,10 @@ static void si_emit_framebuffer_state(struct si_context *sctx, struct r600_atom 
 		}
 
 		tex = (struct r600_texture *)cb->base.texture;
+		level_info =  &tex->surface.level[cb->base.u.tex.level];
 		radeon_add_to_buffer_list(&sctx->b, &sctx->b.gfx,
 				      &tex->resource, RADEON_USAGE_READWRITE,
-				      tex->surface.nsamples > 1 ?
+				      tex->resource.b.b.nr_samples > 1 ?
 					      RADEON_PRIO_COLOR_BUFFER_MSAA :
 					      RADEON_PRIO_COLOR_BUFFER);
 
@@ -2487,12 +2528,12 @@ static void si_emit_framebuffer_state(struct si_context *sctx, struct r600_atom 
 						  RADEON_PRIO_DCC);
 
 		/* Compute mutable surface parameters. */
-		pitch_tile_max = cb->level_info->nblk_x / 8 - 1;
-		slice_tile_max = cb->level_info->nblk_x *
-				 cb->level_info->nblk_y / 64 - 1;
+		pitch_tile_max = level_info->nblk_x / 8 - 1;
+		slice_tile_max = level_info->nblk_x *
+				 level_info->nblk_y / 64 - 1;
 		tile_mode_index = si_tile_mode_index(tex, cb->base.u.tex.level, false);
 
-		cb_color_base = (tex->resource.gpu_address + cb->level_info->offset) >> 8;
+		cb_color_base = (tex->resource.gpu_address + level_info->offset) >> 8;
 		cb_color_pitch = S_028C64_TILE_MAX(pitch_tile_max);
 		cb_color_slice = S_028C68_TILE_MAX(slice_tile_max);
 		cb_color_attrib = cb->cb_color_attrib |
@@ -2515,7 +2556,7 @@ static void si_emit_framebuffer_state(struct si_context *sctx, struct r600_atom 
 
 		cb_color_info = cb->cb_color_info | tex->cb_color_info;
 
-		if (tex->dcc_offset && cb->level_info->dcc_enabled) {
+		if (tex->dcc_offset && cb->base.u.tex.level < tex->surface.num_dcc_levels) {
 			bool is_msaa_resolve_dst = state->cbufs[0] &&
 						   state->cbufs[0]->texture->nr_samples > 1 &&
 						   state->cbufs[1] == &cb->base &&
@@ -2617,7 +2658,10 @@ static void si_emit_msaa_sample_locs(struct si_context *sctx,
 	/* On Polaris, the small primitive filter uses the sample locations
 	 * even when MSAA is off, so we need to make sure they're set to 0.
 	 */
-	if ((nr_samples > 1 || sctx->b.family >= CHIP_POLARIS10) &&
+	if (sctx->b.family >= CHIP_POLARIS10)
+		nr_samples = MAX2(nr_samples, 1);
+
+	if (nr_samples >= 1 &&
 	    (nr_samples != sctx->msaa_sample_locs.nr_samples)) {
 		sctx->msaa_sample_locs.nr_samples = nr_samples;
 		cayman_emit_msaa_sample_locs(cs, nr_samples);
@@ -3202,6 +3246,9 @@ static void *si_create_sampler_state(struct pipe_context *ctx,
 		}
 	}
 
+#ifdef DEBUG
+	rstate->magic = SI_SAMPLER_STATE_MAGIC;
+#endif
 	rstate->val[0] = (S_008F30_CLAMP_X(si_tex_wrap(state->wrap_s)) |
 			  S_008F30_CLAMP_Y(si_tex_wrap(state->wrap_t)) |
 			  S_008F30_CLAMP_Z(si_tex_wrap(state->wrap_r)) |
@@ -3258,6 +3305,12 @@ static void si_emit_sample_mask(struct si_context *sctx, struct r600_atom *atom)
 
 static void si_delete_sampler_state(struct pipe_context *ctx, void *state)
 {
+#ifdef DEBUG
+	struct si_sampler_state *s = state;
+
+	assert(s->magic == SI_SAMPLER_STATE_MAGIC);
+	s->magic = 0;
+#endif
 	free(state);
 }
 
@@ -3270,6 +3323,7 @@ static void *si_create_vertex_elements(struct pipe_context *ctx,
 				       const struct pipe_vertex_element *elements)
 {
 	struct si_vertex_element *v = CALLOC_STRUCT(si_vertex_element);
+	bool used[SI_NUM_VERTEX_BUFFERS] = {};
 	int i;
 
 	assert(count <= SI_MAX_ATTRIBS);
@@ -3279,13 +3333,26 @@ static void *si_create_vertex_elements(struct pipe_context *ctx,
 	v->count = count;
 	for (i = 0; i < count; ++i) {
 		const struct util_format_description *desc;
+		const struct util_format_channel_description *channel;
 		unsigned data_format, num_format;
 		int first_non_void;
+		unsigned vbo_index = elements[i].vertex_buffer_index;
+
+		if (vbo_index >= SI_NUM_VERTEX_BUFFERS) {
+			FREE(v);
+			return NULL;
+		}
+
+		if (!used[vbo_index]) {
+			v->first_vb_use_mask |= 1 << i;
+			used[vbo_index] = true;
+		}
 
 		desc = util_format_description(elements[i].src_format);
 		first_non_void = util_format_get_first_non_void_channel(elements[i].src_format);
 		data_format = si_translate_buffer_dataformat(ctx->screen, desc, first_non_void);
 		num_format = si_translate_buffer_numformat(ctx->screen, desc, first_non_void);
+		channel = &desc->channel[first_non_void];
 
 		v->rsrc_word3[i] = S_008F0C_DST_SEL_X(si_map_swizzle(desc->swizzle[0])) |
 				   S_008F0C_DST_SEL_Y(si_map_swizzle(desc->swizzle[1])) |
@@ -3294,6 +3361,54 @@ static void *si_create_vertex_elements(struct pipe_context *ctx,
 				   S_008F0C_NUM_FORMAT(num_format) |
 				   S_008F0C_DATA_FORMAT(data_format);
 		v->format_size[i] = desc->block.bits / 8;
+
+		/* The hardware always treats the 2-bit alpha channel as
+		 * unsigned, so a shader workaround is needed.
+		 */
+		if (data_format == V_008F0C_BUF_DATA_FORMAT_2_10_10_10) {
+			if (num_format == V_008F0C_BUF_NUM_FORMAT_SNORM) {
+				v->fix_fetch |= (uint64_t)SI_FIX_FETCH_A2_SNORM << (4 * i);
+			} else if (num_format == V_008F0C_BUF_NUM_FORMAT_SSCALED) {
+				v->fix_fetch |= (uint64_t)SI_FIX_FETCH_A2_SSCALED << (4 * i);
+			} else if (num_format == V_008F0C_BUF_NUM_FORMAT_SINT) {
+				/* This isn't actually used in OpenGL. */
+				v->fix_fetch |= (uint64_t)SI_FIX_FETCH_A2_SINT << (4 * i);
+			}
+		} else if (channel->type == UTIL_FORMAT_TYPE_FIXED) {
+			if (desc->swizzle[3] == PIPE_SWIZZLE_1)
+				v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBX_32_FIXED << (4 * i);
+			else
+				v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBA_32_FIXED << (4 * i);
+		} else if (channel->size == 32 && !channel->pure_integer) {
+			if (channel->type == UTIL_FORMAT_TYPE_SIGNED) {
+				if (channel->normalized) {
+					if (desc->swizzle[3] == PIPE_SWIZZLE_1)
+						v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBX_32_SNORM << (4 * i);
+					else
+						v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBA_32_SNORM << (4 * i);
+				} else {
+					v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBA_32_SSCALED << (4 * i);
+				}
+			} else if (channel->type == UTIL_FORMAT_TYPE_UNSIGNED) {
+				if (channel->normalized) {
+					if (desc->swizzle[3] == PIPE_SWIZZLE_1)
+						v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBX_32_UNORM << (4 * i);
+					else
+						v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBA_32_UNORM << (4 * i);
+				} else {
+					v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBA_32_USCALED << (4 * i);
+				}
+			}
+		}
+
+		/* We work around the fact that 8_8_8 and 16_16_16 data formats
+		 * do not exist by using the corresponding 4-component formats.
+		 * This requires a fixup of the descriptor for bounds checks.
+		 */
+		if (desc->block.bits == 3 * 8 ||
+		    desc->block.bits == 3 * 16) {
+			v->fix_size3 |= (desc->block.bits / 24) << (2 * i);
+		}
 	}
 	memcpy(v->elements, elements, sizeof(struct pipe_vertex_element) * count);
 
@@ -3395,14 +3510,13 @@ static void si_set_tess_state(struct pipe_context *ctx,
 	pipe_resource_reference(&cb.buffer, NULL);
 }
 
-static void si_texture_barrier(struct pipe_context *ctx)
+static void si_texture_barrier(struct pipe_context *ctx, unsigned flags)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 
 	sctx->b.flags |= SI_CONTEXT_INV_VMEM_L1 |
 			 SI_CONTEXT_INV_GLOBAL_L2 |
-			 SI_CONTEXT_FLUSH_AND_INV_CB |
-			 SI_CONTEXT_CS_PARTIAL_FLUSH;
+			 SI_CONTEXT_FLUSH_AND_INV_CB;
 }
 
 /* This only ensures coherency for shader image/buffer stores. */
@@ -3859,6 +3973,7 @@ static void si_init_config(struct si_context *sctx)
 		raster_config_1 = 0x0000002a;
 		break;
 	case CHIP_POLARIS11:
+	case CHIP_POLARIS12:
 		raster_config = 0x16000012;
 		raster_config_1 = 0x00000000;
 		break;

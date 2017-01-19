@@ -161,7 +161,7 @@ NineTexture9_ctor( struct NineTexture9 *This,
          * apps access sublevels of texture even if they locked only first
          * level) */
         level_offsets = alloca(sizeof(unsigned) * (info->last_level + 1));
-        user_buffer = align_malloc(
+        user_buffer = align_calloc(
             nine_format_get_size_and_offsets(pf, level_offsets,
                                              Width, Height,
                                              info->last_level), 32);
@@ -330,9 +330,13 @@ NineTexture9_AddDirtyRect( struct NineTexture9 *This,
         u_box_origin_2d(This->base.base.info.width0,
                         This->base.base.info.height0, &This->dirty_rect);
     } else {
-        struct pipe_box box;
-        rect_to_pipe_box_clamp(&box, pDirtyRect);
-        u_box_union_2d(&This->dirty_rect, &This->dirty_rect, &box);
+        if (This->dirty_rect.width == 0) {
+            rect_to_pipe_box_clamp(&This->dirty_rect, pDirtyRect);
+        } else {
+            struct pipe_box box;
+            rect_to_pipe_box_clamp(&box, pDirtyRect);
+            u_box_union_2d(&This->dirty_rect, &This->dirty_rect, &box);
+        }
         (void) u_box_clip_2d(&This->dirty_rect, &This->dirty_rect,
                              This->base.base.info.width0,
                              This->base.base.info.height0);

@@ -49,9 +49,8 @@ CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
 
    /* If the index buffer overflows we'll need to run
     * through the normal paths */
-   if (start >= draw->pt.user.eltMax ||
-       end > draw->pt.user.eltMax ||
-       end < istart || end < icount)
+   if (end >= draw->pt.user.eltMax ||
+       end < istart)
       return FALSE;
 
    /* use the ib directly */
@@ -157,7 +156,7 @@ CONCAT(vsplit_segment_cache_, ELT_TYPE)(struct vsplit_frontend *vsplit,
       if (close)
          ADD_CACHE(vsplit, ib, 0, iclose, 0);
    }
-   else if (ibias > 0) {
+   else {
       if (spoken)
          ADD_CACHE(vsplit, ib, 0, ispoken, ibias);
 
@@ -166,19 +165,6 @@ CONCAT(vsplit_segment_cache_, ELT_TYPE)(struct vsplit_frontend *vsplit,
 
       if (close)
          ADD_CACHE(vsplit, ib, 0, iclose, ibias);
-   }
-   else {
-      if (spoken) {
-         ADD_CACHE(vsplit, ib, 0, ispoken, ibias);
-      }
-
-      for (i = spoken; i < icount; i++) {
-         ADD_CACHE(vsplit, ib, istart, i, ibias);
-      }
-
-      if (close) {
-         ADD_CACHE(vsplit, ib, 0, iclose, ibias);
-      }
    }
 
    vsplit_flush_cache(vsplit, flags);

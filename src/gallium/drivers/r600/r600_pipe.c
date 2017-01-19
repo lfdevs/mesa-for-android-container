@@ -374,6 +374,10 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_VOTE:
 	case PIPE_CAP_MAX_WINDOW_RECTANGLES:
 	case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
+	case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
+	case PIPE_CAP_NATIVE_FENCE_FD:
+	case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
+	case PIPE_CAP_TGSI_FS_FBFETCH:
 		return 0;
 
 	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
@@ -385,6 +389,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
 		return rscreen->b.has_streamout ? 4 : 0;
 	case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+	case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
 		return rscreen->b.has_streamout ? 1 : 0;
 	case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
 	case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
@@ -560,6 +565,7 @@ static int r600_get_shader_param(struct pipe_screen* pscreen, unsigned shader, e
 	case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
 	case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+	case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
 		return 0;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
 		/* due to a bug in the shader compiler, some loops hang

@@ -58,6 +58,7 @@ struct gbm_dri_device {
    const __DRIswrastExtension *swrast;
    const __DRI2flushExtension *flush;
    const __DRIdri2LoaderExtension *loader;
+   const __DRI2interopExtension *interop;
 
    const __DRIconfig   **driver_configs;
    const __DRIextension **loader_extensions;

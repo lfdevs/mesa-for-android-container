@@ -207,7 +207,10 @@ struct tgsi_declaration_semantic
 {
    unsigned Name           : 8;  /**< one of TGSI_SEMANTIC_x */
    unsigned Index          : 16; /**< UINT */
-   unsigned Padding        : 8;
+   unsigned StreamX        : 2; /**< vertex stream (for GS output) */
+   unsigned StreamY        : 2;
+   unsigned StreamZ        : 2;
+   unsigned StreamW        : 2;
 };
 
 struct tgsi_declaration_image {
@@ -342,7 +345,7 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_SLT                 14
 #define TGSI_OPCODE_SGE                 15
 #define TGSI_OPCODE_MAD                 16
-#define TGSI_OPCODE_SUB                 17
+/* gap */
 #define TGSI_OPCODE_LRP                 18
 #define TGSI_OPCODE_FMA                 19
 #define TGSI_OPCODE_SQRT                20
@@ -358,7 +361,7 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_POW                 30
 #define TGSI_OPCODE_XPD                 31
 #define TGSI_OPCODE_U2I64               32
-#define TGSI_OPCODE_ABS                 33
+/* gap */
 #define TGSI_OPCODE_I2I64               34
 #define TGSI_OPCODE_DPH                 35
 #define TGSI_OPCODE_COS                 36
@@ -394,7 +397,7 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_CMP                 66
 #define TGSI_OPCODE_SCS                 67
 #define TGSI_OPCODE_TXB                 68
-                                /* gap */
+#define TGSI_OPCODE_FBFETCH             69
 #define TGSI_OPCODE_DIV                 70
 #define TGSI_OPCODE_DP2                 71
 #define TGSI_OPCODE_TXL                 72
@@ -598,7 +601,10 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_U64DIV              245
 #define TGSI_OPCODE_I64MOD              246
 #define TGSI_OPCODE_U64MOD              247
-#define TGSI_OPCODE_LAST                248
+
+#define TGSI_OPCODE_DDIV                248
+
+#define TGSI_OPCODE_LAST                249
 
 /**
  * Opcode is the operation code to execute. A given operation defines the

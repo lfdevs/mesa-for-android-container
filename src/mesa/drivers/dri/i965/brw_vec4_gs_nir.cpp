@@ -64,23 +64,40 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
        * be constant.  We should handle indirects someday.
        */
       nir_const_value *vertex = nir_src_as_const_value(instr->src[0]);
-      nir_const_value *offset = nir_src_as_const_value(instr->src[1]);
+      nir_const_value *offset_reg = nir_src_as_const_value(instr->src[1]);
 
-      /* Make up a type...we have no way of knowing... */
-      const glsl_type *const type = glsl_type::ivec(instr->num_components);
+      if (nir_dest_bit_size(instr->dest) == 64) {
+         src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u32[0] +
+                       instr->const_index[0] + offset_reg->u32[0],
+                       glsl_type::dvec4_type);
 
-      src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u32[0] +
-                          instr->const_index[0] + offset->u32[0],
-                    type);
-      src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
+         dst_reg tmp = dst_reg(this, glsl_type::dvec4_type);
+         shuffle_64bit_data(tmp, src, false);
 
-      /* gl_PointSize is passed in the .w component of the VUE header */
-      if (instr->const_index[0] == VARYING_SLOT_PSIZ)
-         src.swizzle = BRW_SWIZZLE_WWWW;
+         src = src_reg(tmp);
+         src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr) / 2);
 
-      dest = get_nir_dest(instr->dest, src.type);
-      dest.writemask = brw_writemask_for_size(instr->num_components);
-      emit(MOV(dest, src));
+         /* Write to dst reg taking into account original writemask */
+         dest = get_nir_dest(instr->dest, BRW_REGISTER_TYPE_DF);
+         dest.writemask = brw_writemask_for_size(instr->num_components);
+         emit(MOV(dest, src));
+      } else {
+         /* Make up a type...we have no way of knowing... */
+         const glsl_type *const type = glsl_type::ivec(instr->num_components);
+
+         src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u32[0] +
+                       instr->const_index[0] + offset_reg->u32[0],
+                       type);
+         src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
+
+         /* gl_PointSize is passed in the .w component of the VUE header */
+         if (instr->const_index[0] == VARYING_SLOT_PSIZ)
+            src.swizzle = BRW_SWIZZLE_WWWW;
+
+         dest = get_nir_dest(instr->dest, src.type);
+         dest.writemask = brw_writemask_for_size(instr->num_components);
+         emit(MOV(dest, src));
+      }
       break;
    }
 

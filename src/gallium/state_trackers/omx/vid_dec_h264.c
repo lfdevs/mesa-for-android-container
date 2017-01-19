@@ -46,7 +46,7 @@ struct dpb_list {
    struct list_head list;
    struct pipe_video_buffer *buffer;
    OMX_TICKS timestamp;
-   unsigned poc;
+   int poc;
 };
 
 static const uint8_t Default_4x4_Intra[16] = {
@@ -737,8 +737,8 @@ static void slice_header(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp,
    if (sps->pic_order_cnt_type == 0) {
       unsigned log2_max_pic_order_cnt_lsb = sps->log2_max_pic_order_cnt_lsb_minus4 + 4;
       unsigned max_pic_order_cnt_lsb = 1 << log2_max_pic_order_cnt_lsb;
-      unsigned pic_order_cnt_lsb = vl_rbsp_u(rbsp, log2_max_pic_order_cnt_lsb);
-      unsigned pic_order_cnt_msb;
+      int pic_order_cnt_lsb = vl_rbsp_u(rbsp, log2_max_pic_order_cnt_lsb);
+      int pic_order_cnt_msb;
 
       if (pic_order_cnt_lsb != priv->codec_data.h264.pic_order_cnt_lsb)
          vid_dec_h264_EndFrame(priv);

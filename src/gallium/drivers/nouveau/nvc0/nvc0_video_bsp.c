@@ -143,7 +143,6 @@ nvc0_decoder_bsp_end(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
    uint32_t caps;
    struct nouveau_bo *bsp_bo = dec->bsp_bo[comm_seq % NOUVEAU_VP3_VIDEO_QDEPTH];
    struct nouveau_bo *inter_bo = dec->inter_bo[comm_seq & 1];
-   unsigned fence_extra = 0;
    struct nouveau_pushbuf_refn bo_refs[] = {
       { bsp_bo, NOUVEAU_BO_RD | NOUVEAU_BO_VRAM },
       { inter_bo, NOUVEAU_BO_WR | NOUVEAU_BO_VRAM },
@@ -157,15 +156,11 @@ nvc0_decoder_bsp_end(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
    if (!dec->bitplane_bo)
       num_refs--;
 
-#if NOUVEAU_VP3_DEBUG_FENCE
-   fence_extra = 4;
-#endif
-
    caps = nouveau_vp3_bsp_end(dec, desc);
 
    nouveau_vp3_vp_caps(dec, desc, target, comm_seq, vp_caps, is_ref, refs);
 
-   nouveau_pushbuf_space(push, 6 + (codec == PIPE_VIDEO_FORMAT_MPEG4_AVC ? 9 : 7) + fence_extra + 2, num_refs, 0);
+   nouveau_pushbuf_space(push, 32, num_refs, 0);
    nouveau_pushbuf_refn(push, bo_refs, num_refs);
 
    bsp_addr = bsp_bo->offset >> 8;

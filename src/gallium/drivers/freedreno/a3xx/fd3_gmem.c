@@ -332,7 +332,7 @@ emit_gmem2mem_surf(struct fd_batch *batch,
 			A3XX_RB_COPY_CONTROL_GMEM_BASE(base) |
 			COND(format == PIPE_FORMAT_Z32_FLOAT ||
 				 format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT,
-				 A3XX_RB_COPY_CONTROL_UNK12));
+				 A3XX_RB_COPY_CONTROL_DEPTH32_RESOLVE));
 
 	OUT_RELOCW(ring, rsc->bo, offset, 0, -1);    /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch * rsc->cpp));

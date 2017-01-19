@@ -51,6 +51,7 @@ struct swr_jit_sampler_key {
 struct swr_jit_fs_key : swr_jit_sampler_key {
    unsigned nr_cbufs;
    unsigned light_twoside;
+   unsigned sprite_coord_enable;
    ubyte vs_output_semantic_name[PIPE_MAX_SHADER_OUTPUTS];
    ubyte vs_output_semantic_idx[PIPE_MAX_SHADER_OUTPUTS];
 };

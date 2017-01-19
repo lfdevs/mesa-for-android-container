@@ -700,6 +700,7 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 {
 	struct pipe_resource *prsc = &rsc->base.b;
 	enum util_format_layout layout = util_format_description(format)->layout;
+	uint32_t pitchalign = fd_screen(prsc->screen)->gmem_alignw;
 	uint32_t level, size = 0;
 	uint32_t width = prsc->width0;
 	uint32_t height = prsc->height0;
@@ -715,9 +716,9 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 
 		if (layout == UTIL_FORMAT_LAYOUT_ASTC)
 			slice->pitch = width =
-				util_align_npot(width, 32 * util_format_get_blockwidth(format));
+				util_align_npot(width, pitchalign * util_format_get_blockwidth(format));
 		else
-			slice->pitch = width = align(width, 32);
+			slice->pitch = width = align(width, pitchalign);
 		slice->offset = size;
 		blocks = util_format_get_nblocks(format, width, height);
 		/* 1d array and 2d array textures must all have the same layer size
@@ -818,7 +819,7 @@ fd_resource_create(struct pipe_screen *pscreen,
 	assert(rsc->cpp);
 
 	alignment = slice_alignment(pscreen, tmpl);
-	if (is_a4xx(fd_screen(pscreen))) {
+	if (is_a4xx(fd_screen(pscreen)) || is_a5xx(fd_screen(pscreen))) {
 		switch (tmpl->target) {
 		case PIPE_TEXTURE_3D:
 			rsc->layer_first = false;
@@ -882,6 +883,7 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 	struct fd_resource *rsc = CALLOC_STRUCT(fd_resource);
 	struct fd_resource_slice *slice = &rsc->slices[0];
 	struct pipe_resource *prsc = &rsc->base.b;
+	uint32_t pitchalign = fd_screen(pscreen)->gmem_alignw;
 
 	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
@@ -909,8 +911,10 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 	rsc->cpp = util_format_get_blocksize(tmpl->format);
 	slice->pitch = handle->stride / rsc->cpp;
 	slice->offset = handle->offset;
+	slice->size0 = handle->stride * prsc->height0;
 
-	if ((slice->pitch < align(prsc->width0, 32)) || (slice->pitch % 32))
+	if ((slice->pitch < align(prsc->width0, pitchalign)) ||
+			(slice->pitch & (pitchalign - 1)))
 		goto fail;
 
 	assert(rsc->cpp);
@@ -1124,7 +1128,7 @@ fd_resource_context_init(struct pipe_context *pctx)
 	pctx->transfer_flush_region = u_transfer_flush_region_vtbl;
 	pctx->transfer_unmap = u_transfer_unmap_vtbl;
 	pctx->buffer_subdata = u_default_buffer_subdata;
-        pctx->texture_subdata = u_default_texture_subdata;
+	pctx->texture_subdata = u_default_texture_subdata;
 	pctx->create_surface = fd_create_surface;
 	pctx->surface_destroy = fd_surface_destroy;
 	pctx->resource_copy_region = fd_resource_copy_region;

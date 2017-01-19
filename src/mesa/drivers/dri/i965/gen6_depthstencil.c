@@ -83,7 +83,7 @@ gen6_upload_depth_stencil_state(struct brw_context *brw)
    if (ctx->Depth.Test && depth_irb) {
       ds->ds2.depth_test_enable = ctx->Depth.Test;
       ds->ds2.depth_test_func = intel_translate_compare_func(ctx->Depth.Func);
-      ds->ds2.depth_write_enable = ctx->Depth.Mask;
+      ds->ds2.depth_write_enable = brw_depth_writes_enabled(brw);
    }
 
    /* Point the GPU at the new indirect state. */

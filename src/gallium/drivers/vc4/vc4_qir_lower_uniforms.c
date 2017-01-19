@@ -77,7 +77,7 @@ is_lowerable_uniform(struct qinst *inst, int i)
         if (inst->src[i].file != QFILE_UNIF)
                 return false;
         if (qir_is_tex(inst))
-                return i != 1;
+                return i != qir_get_tex_uniform_src(inst);
         return true;
 }
 
@@ -89,7 +89,7 @@ qir_get_instruction_uniform_count(struct qinst *inst)
 {
         uint32_t count = 0;
 
-        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+        for (int i = 0; i < qir_get_nsrc(inst); i++) {
                 if (inst->src[i].file != QFILE_UNIF)
                         continue;
 
@@ -119,7 +119,7 @@ qir_lower_uniforms(struct vc4_compile *c)
          * ht.
          */
         qir_for_each_inst_inorder(inst, c) {
-                uint32_t nsrc = qir_get_op_nsrc(inst->op);
+                uint32_t nsrc = qir_get_nsrc(inst);
 
                 if (qir_get_instruction_uniform_count(inst) <= 1)
                         continue;
@@ -155,7 +155,7 @@ qir_lower_uniforms(struct vc4_compile *c)
                         struct qinst *mov = NULL;
 
                         qir_for_each_inst(inst, block) {
-                                uint32_t nsrc = qir_get_op_nsrc(inst->op);
+                                uint32_t nsrc = qir_get_nsrc(inst);
 
                                 uint32_t count = qir_get_instruction_uniform_count(inst);
 

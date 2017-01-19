@@ -63,25 +63,6 @@ __anv_finishme(const char *file, int line, const char *format, ...)
    fprintf(stderr, "%s:%d: FINISHME: %s\n", file, line, buffer);
 }
 
-void anv_noreturn anv_printflike(1, 2)
-anv_abortf(const char *format, ...)
-{
-   va_list va;
-
-   va_start(va, format);
-   anv_abortfv(format, va);
-   va_end(va);
-}
-
-void anv_noreturn
-anv_abortfv(const char *format, va_list va)
-{
-   fprintf(stderr, "vk: error: ");
-   vfprintf(stderr, format, va);
-   fprintf(stderr, "\n");
-   abort();
-}
-
 VkResult
 __vk_errorf(VkResult error, const char *file, int line, const char *format, ...)
 {

@@ -134,10 +134,13 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_LIBDRM_TRUE@am__append_1 = \
+@HAVE_LIBDRM_TRUE@	$(LIBDRM_LIBS)
+
+@HAVE_DRISW_TRUE@am__append_2 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@HAVE_DRISW_KMS_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@am__append_3 = \
 @HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
 @HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
 
@@ -206,7 +209,8 @@ am__objects_2 = libswrAVX_la-swr_clear.lo libswrAVX_la-swr_context.lo \
 	libswrAVX_la-swr_draw.lo libswrAVX_la-swr_screen.lo \
 	libswrAVX_la-swr_state.lo libswrAVX_la-swr_tex_sample.lo \
 	libswrAVX_la-swr_scratch.lo libswrAVX_la-swr_shader.lo \
-	libswrAVX_la-swr_fence.lo libswrAVX_la-swr_query.lo
+	libswrAVX_la-swr_fence.lo libswrAVX_la-swr_fence_work.lo \
+	libswrAVX_la-swr_query.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_3 = rasterizer/archrast/libswrAVX_la-archrast.lo
 am__objects_4 = rasterizer/common/libswrAVX_la-formats.lo \
@@ -262,7 +266,7 @@ am__objects_10 = libswrAVX2_la-swr_clear.lo \
 	libswrAVX2_la-swr_screen.lo libswrAVX2_la-swr_state.lo \
 	libswrAVX2_la-swr_tex_sample.lo libswrAVX2_la-swr_scratch.lo \
 	libswrAVX2_la-swr_shader.lo libswrAVX2_la-swr_fence.lo \
-	libswrAVX2_la-swr_query.lo
+	libswrAVX2_la-swr_fence_work.lo libswrAVX2_la-swr_query.lo
 am__objects_11 = rasterizer/archrast/libswrAVX2_la-archrast.lo
 am__objects_12 = rasterizer/common/libswrAVX2_la-formats.lo \
 	rasterizer/common/libswrAVX2_la-rdtsc_buckets.lo \
@@ -403,6 +407,8 @@ AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+ANDROID_CFLAGS = @ANDROID_CFLAGS@
+ANDROID_LIBS = @ANDROID_LIBS@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -446,10 +452,11 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
-EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
+ETNAVIV_CFLAGS = @ETNAVIV_CFLAGS@
+ETNAVIV_LIBS = @ETNAVIV_LIBS@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -499,9 +506,7 @@ LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSENSORS_LDFLAGS = @LIBSENSORS_LDFLAGS@
-LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
-LIBSHA1_LIBS = @LIBSHA1_LIBS@
+LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
@@ -542,8 +547,6 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
-OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
-OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -580,8 +583,6 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
-SHA1_CFLAGS = @SHA1_CFLAGS@
-SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
 SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
 SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
@@ -590,7 +591,6 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
-TIMESTAMP_CMD = @TIMESTAMP_CMD@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -606,7 +606,6 @@ VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
 VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
-VG_LIB_DEPS = @VG_LIB_DEPS@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -721,6 +720,8 @@ CXX_SOURCES := \
 	swr_memory.h \
 	swr_fence.h \
 	swr_fence.cpp \
+	swr_fence_work.h \
+	swr_fence_work.cpp \
 	swr_query.h \
 	swr_query.cpp
 
@@ -864,12 +865,8 @@ GALLIUM_TARGET_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_COMMON_LIB_DEPS = \
-	-lm \
-	$(CLOCK_LIB) \
-	$(PTHREAD_LIBS) \
-	$(DLOPEN_LIBS)
-
+GALLIUM_COMMON_LIB_DEPS = -lm $(LIBSENSORS_LIBS) $(CLOCK_LIB) \
+	$(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
@@ -881,7 +878,7 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_1) $(am__append_2)
+	$(am__append_2) $(am__append_3)
 AM_CXXFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(SWR_CXX11_CXXFLAGS)
 noinst_LTLIBRARIES = libmesaswr.la
 libmesaswr_la_SOURCES = $(LOADER_SOURCES)
@@ -989,6 +986,7 @@ libswrAVX2_la_LDFLAGS = \
 	$(COMMON_LDFLAGS)
 
 EXTRA_DIST = \
+	SConscript \
 	rasterizer/archrast/events.proto \
 	rasterizer/jitter/scripts/gen_llvm_ir_macros.py \
 	rasterizer/jitter/scripts/gen_llvm_types.py \
@@ -1392,6 +1390,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX2_la-swr_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX2_la-swr_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX2_la-swr_fence.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX2_la-swr_fence_work.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX2_la-swr_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX2_la-swr_scratch.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX2_la-swr_screen.Plo@am__quote@
@@ -1402,6 +1401,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_fence.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_fence_work.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_scratch.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libswrAVX_la-swr_screen.Plo@am__quote@
@@ -1572,6 +1572,13 @@ libswrAVX_la-swr_fence.lo: swr_fence.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='swr_fence.cpp' object='libswrAVX_la-swr_fence.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o libswrAVX_la-swr_fence.lo `test -f 'swr_fence.cpp' || echo '$(srcdir)/'`swr_fence.cpp
+
+libswrAVX_la-swr_fence_work.lo: swr_fence_work.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT libswrAVX_la-swr_fence_work.lo -MD -MP -MF $(DEPDIR)/libswrAVX_la-swr_fence_work.Tpo -c -o libswrAVX_la-swr_fence_work.lo `test -f 'swr_fence_work.cpp' || echo '$(srcdir)/'`swr_fence_work.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libswrAVX_la-swr_fence_work.Tpo $(DEPDIR)/libswrAVX_la-swr_fence_work.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='swr_fence_work.cpp' object='libswrAVX_la-swr_fence_work.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -c -o libswrAVX_la-swr_fence_work.lo `test -f 'swr_fence_work.cpp' || echo '$(srcdir)/'`swr_fence_work.cpp
 
 libswrAVX_la-swr_query.lo: swr_query.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX_la_CXXFLAGS) $(CXXFLAGS) -MT libswrAVX_la-swr_query.lo -MD -MP -MF $(DEPDIR)/libswrAVX_la-swr_query.Tpo -c -o libswrAVX_la-swr_query.lo `test -f 'swr_query.cpp' || echo '$(srcdir)/'`swr_query.cpp
@@ -1908,6 +1915,13 @@ libswrAVX2_la-swr_fence.lo: swr_fence.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='swr_fence.cpp' object='libswrAVX2_la-swr_fence.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o libswrAVX2_la-swr_fence.lo `test -f 'swr_fence.cpp' || echo '$(srcdir)/'`swr_fence.cpp
+
+libswrAVX2_la-swr_fence_work.lo: swr_fence_work.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT libswrAVX2_la-swr_fence_work.lo -MD -MP -MF $(DEPDIR)/libswrAVX2_la-swr_fence_work.Tpo -c -o libswrAVX2_la-swr_fence_work.lo `test -f 'swr_fence_work.cpp' || echo '$(srcdir)/'`swr_fence_work.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libswrAVX2_la-swr_fence_work.Tpo $(DEPDIR)/libswrAVX2_la-swr_fence_work.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='swr_fence_work.cpp' object='libswrAVX2_la-swr_fence_work.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -c -o libswrAVX2_la-swr_fence_work.lo `test -f 'swr_fence_work.cpp' || echo '$(srcdir)/'`swr_fence_work.cpp
 
 libswrAVX2_la-swr_query.lo: swr_query.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) -MT libswrAVX2_la-swr_query.lo -MD -MP -MF $(DEPDIR)/libswrAVX2_la-swr_query.Tpo -c -o libswrAVX2_la-swr_query.lo `test -f 'swr_query.cpp' || echo '$(srcdir)/'`swr_query.cpp
@@ -2428,11 +2442,21 @@ swr_context_llvm.h: rasterizer/jitter/scripts/gen_llvm_types.py swr_context.h
 		--input $(srcdir)/swr_context.h \
 		--output swr_context_llvm.h
 
-rasterizer/scripts/gen_knobs.cpp rasterizer/scripts/gen_knobs.h: rasterizer/scripts/gen_knobs.py rasterizer/scripts/knob_defs.py rasterizer/scripts/templates/knobs.template
+rasterizer/scripts/gen_knobs.cpp: rasterizer/scripts/gen_knobs.py rasterizer/scripts/knob_defs.py rasterizer/scripts/templates/knobs.template
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
 		$(srcdir)/rasterizer/scripts/gen_knobs.py \
-		rasterizer/scripts
+		--input $(srcdir)/rasterizer/scripts/templates/knobs.template \
+		--output rasterizer/scripts/gen_knobs.cpp \
+		--gen_cpp
+
+rasterizer/scripts/gen_knobs.h: rasterizer/scripts/gen_knobs.py rasterizer/scripts/knob_defs.py rasterizer/scripts/templates/knobs.template
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/scripts/gen_knobs.py \
+		--input $(srcdir)/rasterizer/scripts/templates/knobs.template \
+		--output rasterizer/scripts/gen_knobs.h \
+		--gen_h
 
 rasterizer/jitter/state_llvm.h: rasterizer/jitter/scripts/gen_llvm_types.py rasterizer/core/state.h
 	$(MKDIR_GEN)

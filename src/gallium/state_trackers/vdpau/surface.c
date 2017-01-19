@@ -460,10 +460,10 @@ VdpStatus vlVdpVideoSurfaceDMABuf(VdpVideoSurface surface,
    }
 
    surf = p_surf->video_buffer->get_surfaces(p_surf->video_buffer)[plane];
-   pipe_mutex_unlock(p_surf->device->mutex);
-
-   if (!surf)
+   if (!surf) {
+      pipe_mutex_unlock(p_surf->device->mutex);
       return VDP_STATUS_RESOURCES;
+   }
 
    memset(&whandle, 0, sizeof(struct winsys_handle));
    whandle.type = DRM_API_HANDLE_TYPE_FD;
@@ -472,8 +472,12 @@ VdpStatus vlVdpVideoSurfaceDMABuf(VdpVideoSurface surface,
    pscreen = surf->texture->screen;
    if (!pscreen->resource_get_handle(pscreen, p_surf->device->context,
                                      surf->texture, &whandle,
-				     PIPE_HANDLE_USAGE_READ_WRITE))
+                                     PIPE_HANDLE_USAGE_READ_WRITE)) {
+      pipe_mutex_unlock(p_surf->device->mutex);
       return VDP_STATUS_NO_IMPLEMENTATION;
+   }
+
+   pipe_mutex_unlock(p_surf->device->mutex);
 
    result->handle = whandle.handle;
    result->width = surf->width;

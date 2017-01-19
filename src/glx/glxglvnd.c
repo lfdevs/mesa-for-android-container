@@ -1,10 +1,10 @@
 #include <string.h>
+#include <stdlib.h>
 #include <X11/Xlib.h>
 
 #include "glvnd/libglxabi.h"
 
 #include "glxglvnd.h"
-
 
 static Bool __glXGLVNDIsScreenSupported(Display *dpy, int screen)
 {
@@ -17,26 +17,24 @@ static void *__glXGLVNDGetProcAddress(const GLubyte *procName)
     return glXGetProcAddressARB(procName);
 }
 
+static int
+compare(const void *l, const void *r)
+{
+    const char *s = *(const char **)r;
+    return strcmp(l, s);
+}
+
 static unsigned FindGLXFunction(const GLubyte *name)
 {
-    int first = 0;
-    int last = DI_FUNCTION_COUNT - 1;
+    const char **match;
 
-    while (first <= last) {
-        int middle = (first + last) / 2;
-        int comp = strcmp(__glXDispatchTableStrings[middle],
-                          (const char *) name);
+    match = bsearch(name, __glXDispatchTableStrings, DI_FUNCTION_COUNT,
+                    sizeof(const char *), compare);
 
-        if (comp < 0)
-            first = middle + 1;
-        else if (comp > 0)
-            last = middle - 1;
-        else
-            return middle;
-    }
+    if (match == NULL)
+        return DI_FUNCTION_COUNT;
 
-    /* Just point to the dummy entry at the end of the respective table */
-    return DI_FUNCTION_COUNT;
+    return match - __glXDispatchTableStrings;
 }
 
 static void *__glXGLVNDGetDispatchAddress(const GLubyte *procName)

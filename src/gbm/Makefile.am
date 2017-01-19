@@ -4,8 +4,6 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = main/gbm.pc
 
 AM_CFLAGS = \
-	-D_OS_UNIX=1 \
-	-DMODULEDIR='"$(libdir)/gbm"' \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gbm/main \

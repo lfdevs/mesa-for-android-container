@@ -92,4 +92,10 @@ gen_get_l3_config_urb_size(const struct gen_device_info *devinfo,
 
 void gen_dump_l3_config(const struct gen_l3_config *cfg, FILE *fp);
 
+void gen_get_urb_config(const struct gen_device_info *devinfo,
+                        unsigned push_constant_bytes, unsigned urb_size_bytes,
+                        bool tess_present, bool gs_present,
+                        const unsigned entry_size[4],
+                        unsigned entries[4], unsigned start[4]);
+
 #endif /* GEN_L3_CONFIG_H */

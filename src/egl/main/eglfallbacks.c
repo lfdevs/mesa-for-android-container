@@ -92,6 +92,7 @@ _eglInitDriverFallbacks(_EGLDriver *drv)
    drv->API.WaitSyncKHR = NULL;
    drv->API.SignalSyncKHR = NULL;
    drv->API.GetSyncAttrib = _eglGetSyncAttrib;
+   drv->API.DupNativeFenceFDANDROID = NULL;
 
    drv->API.CreateDRMImageMESA = NULL;
    drv->API.ExportDRMImageMESA = NULL;

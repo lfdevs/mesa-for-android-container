@@ -82,7 +82,11 @@ copy_region_vgpu10(struct svga_context *svga, struct pipe_resource *src_tex,
       assert(ret == PIPE_OK);
    }
 
+   /* Mark the texture subresource as defined. */
    svga_define_texture_level(dtex, dst_face, dst_level);
+
+   /* Mark the texture subresource as rendered-to. */
+   svga_set_texture_rendered_to(dtex, dst_face, dst_level);
 }
 
 
@@ -165,10 +169,10 @@ svga_resource_copy_region(struct pipe_context *pipe,
       /* vgpu10 */
       if (util_format_is_compressed(src_tex->format) ==
           util_format_is_compressed(dst_tex->format) &&
-          !util_format_is_depth_and_stencil(src_tex->format) &&
           stex->handle != dtex->handle &&
           svga_resource_type(src_tex->target) ==
-          svga_resource_type(dst_tex->target)) {
+          svga_resource_type(dst_tex->target) &&
+          stex->b.b.nr_samples == dtex->b.b.nr_samples) {
          copy_region_vgpu10(svga,
                             src_tex,
                             src_box->x, src_box->y, src_z,
@@ -246,7 +250,7 @@ can_blit_via_copy_region_vgpu10(struct svga_context *svga,
    stex = svga_texture(blit_info->src.resource);
    dtex = svga_texture(blit_info->dst.resource);
 
-   // can't copy within one resource
+   /* can't copy within one resource */
    if (stex->handle == dtex->handle)
       return false;
 
@@ -260,11 +264,19 @@ can_blit_via_copy_region_vgpu10(struct svga_context *svga,
        blit_info->src.box.height != blit_info->dst.box.height)
       return false;
 
-   /* depth/stencil copies not supported at this time */
-   if (blit_info->mask != PIPE_MASK_RGBA)
+   /* check that sample counts are the same */
+   if (stex->b.b.nr_samples != dtex->b.b.nr_samples)
       return false;
 
-   if (blit_info->alpha_blend || blit_info->render_condition_enable ||
+   /* For depth+stencil formats, copy with mask != PIPE_MASK_ZS is not
+    * supported
+    */
+   if (util_format_is_depth_and_stencil(blit_info->src.format) &&
+      blit_info->mask != (PIPE_MASK_ZS))
+     return false;
+
+   if (blit_info->alpha_blend ||
+       (svga->render_condition && blit_info->render_condition_enable) ||
        blit_info->scissor_enable)
       return false;
 
@@ -274,12 +286,43 @@ can_blit_via_copy_region_vgpu10(struct svga_context *svga,
 }
 
 
+/**
+ * A helper function to determine if the specified view format
+ * is compatible with the surface format.
+ * It is compatible if the view format is the same as the surface format,
+ * or the associated svga format for the surface is a typeless format, or
+ * the view format is an adjusted format for BGRX/BGRA resource.
+ */
+static bool
+is_view_format_compatible(enum pipe_format surf_fmt,
+                          SVGA3dSurfaceFormat surf_svga_fmt,
+                          enum pipe_format view_fmt)
+{
+   if (surf_fmt == view_fmt || svga_format_is_typeless(surf_svga_fmt))
+      return true;
+
+   if ((surf_fmt == PIPE_FORMAT_B8G8R8X8_UNORM &&
+        view_fmt == PIPE_FORMAT_B8G8R8A8_UNORM) ||
+       (surf_fmt == PIPE_FORMAT_B8G8R8A8_UNORM &&
+        view_fmt == PIPE_FORMAT_B8G8R8X8_UNORM))
+      return true;
+
+   return false;
+}
+
+
 static void
 svga_blit(struct pipe_context *pipe,
           const struct pipe_blit_info *blit_info)
 {
    struct svga_context *svga = svga_context(pipe);
    struct pipe_blit_info blit = *blit_info;
+   struct pipe_resource *src = blit.src.resource;
+   struct pipe_resource *dst = blit.dst.resource;
+   struct pipe_resource *newSrc = NULL;
+   struct pipe_resource *newDst = NULL;
+   bool can_create_src_view;
+   bool can_create_dst_view;
 
    if (!svga_have_vgpu10(svga) &&
        blit.src.resource->nr_samples > 1 &&
@@ -321,8 +364,21 @@ svga_blit(struct pipe_context *pipe,
       return; /* done */
    }
 
+   /* Check if we can create shader resource view and
+    * render target view for the quad blitter to work
+    */
+   can_create_src_view =
+      is_view_format_compatible(src->format, svga_texture(src)->key.format,
+                                blit.src.format);
+
+   can_create_dst_view =
+      is_view_format_compatible(dst->format, svga_texture(dst)->key.format,
+                                blit.dst.format);
+
    if ((blit.mask & PIPE_MASK_S) ||
-       !util_blitter_is_blit_supported(svga->blitter, blit_info)) {
+       ((!can_create_dst_view || !can_create_src_view)
+        && !svga_have_vgpu10(svga)) ||
+       !util_blitter_is_blit_supported(svga->blitter, &blit)) {
       debug_printf("svga: blit unsupported %s -> %s\n",
                    util_format_short_name(blit.src.resource->format),
                    util_format_short_name(blit.dst.resource->format));
@@ -355,7 +411,98 @@ svga_blit(struct pipe_context *pipe,
                      svga->curr.sampler_views[PIPE_SHADER_FRAGMENT]);
    /*util_blitter_save_render_condition(svga->blitter, svga->render_cond_query,
                                       svga->render_cond_cond, svga->render_cond_mode);*/
+
+   if (!can_create_src_view) {
+      struct pipe_resource template;
+      unsigned src_face, src_z;
+
+      /**
+       * If the source blit format is not compatible with the source resource
+       * format, we will not be able to create a shader resource view.
+       * In order to avoid falling back to software blit, we'll create
+       * a new resource in the blit format, and use DXCopyResource to
+       * copy from the original format to the new format. The new
+       * resource will be used for the blit in util_blitter_blit().
+       */
+      template = *src;
+      template.format = blit.src.format;
+      newSrc = svga_texture_create(svga->pipe.screen, &template);
+      if (newSrc == NULL) {
+         debug_printf("svga_blit: fails to create temporary src\n");
+         return;
+      }
+
+      /* Copy from original resource to the temporary resource */
+      adjust_z_layer(blit.src.resource->target, blit.src.box.z,
+                     &src_face, &src_z);
+
+      copy_region_vgpu10(svga,
+                         blit.src.resource,
+                         blit.src.box.x, blit.src.box.y, src_z,
+                         blit.src.level, src_face,
+                         newSrc,
+                         blit.src.box.x, blit.src.box.y, src_z,
+                         blit.src.level, src_face,
+                         blit.src.box.width, blit.src.box.height,
+                         blit.src.box.depth);
+
+      blit.src.resource = newSrc;
+   }
+   
+   if (!can_create_dst_view) {
+      struct pipe_resource template;
+
+      /**
+       * If the destination blit format is not compatible with the destination
+       * resource format, we will not be able to create a render target view.
+       * In order to avoid falling back to software blit, we'll create
+       * a new resource in the blit format, and use DXPredCopyRegion
+       * after the blit to copy from the blit format back to the resource
+       * format.
+       */
+      template = *dst;
+      template.format = blit.dst.format;
+      newDst = svga_texture_create(svga->pipe.screen, &template);
+      if (newDst == NULL) {
+         debug_printf("svga_blit: fails to create temporary dst\n");
+         return;
+      }
+
+      blit.dst.resource = newDst;
+   }
+
    util_blitter_blit(svga->blitter, &blit);
+
+   if (blit.dst.resource != dst) {
+      unsigned dst_face, dst_z;
+
+      adjust_z_layer(blit.dst.resource->target, blit.dst.box.z,
+                     &dst_face, &dst_z);
+
+      /**
+       * A temporary resource was created for the blit, we need to
+       * copy from the temporary resource back to the original destination.
+       */
+      copy_region_vgpu10(svga,
+                         blit.dst.resource,
+                         blit.dst.box.x, blit.dst.box.y, dst_z,
+                         blit.dst.level, dst_face,
+                         dst,
+                         blit.dst.box.x, blit.dst.box.y, dst_z,
+                         blit.dst.level, dst_face,
+                         blit.dst.box.width, blit.dst.box.height,
+                         blit.dst.box.depth);
+
+      /* unreference the temporary resource */
+      pipe_resource_reference(&newDst, NULL);
+      blit.dst.resource = dst;
+   }
+
+   if (blit.src.resource != src) {
+      /* unreference the temporary resource */
+      pipe_resource_reference(&newSrc, NULL);
+      blit.src.resource = src;
+   }
 }
 
 

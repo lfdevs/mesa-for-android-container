@@ -68,11 +68,6 @@ static void compile_clip_prog( struct brw_context *brw,
    c.key = *key;
    c.vue_map = brw->vue_map_geom_out;
 
-   c.has_flat_shading =
-      brw_any_flat_varyings(&key->interpolation_mode);
-   c.has_noperspective_shading =
-      brw_any_noperspective_varyings(&key->interpolation_mode);
-
    /* nr_regs is the number of registers filled by reading data from the VUE.
     * This program accesses the entire VUE, so nr_regs needs to be the size of
     * the VUE (measured in pairs, since two slots are stored in each
@@ -144,7 +139,7 @@ brw_upload_clip_prog(struct brw_context *brw)
                         _NEW_POLYGON |
                         _NEW_TRANSFORM,
                         BRW_NEW_BLORP |
-                        BRW_NEW_INTERPOLATION_MAP |
+                        BRW_NEW_FS_PROG_DATA |
                         BRW_NEW_REDUCED_PRIMITIVE |
                         BRW_NEW_VUE_MAP_GEOM_OUT))
       return;
@@ -154,8 +149,15 @@ brw_upload_clip_prog(struct brw_context *brw)
    /* Populate the key:
     */
 
-   /* BRW_NEW_INTERPOLATION_MAP */
-   key.interpolation_mode = brw->interpolation_mode;
+   /* BRW_NEW_FS_PROG_DATA */
+   const struct brw_wm_prog_data *wm_prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
+   if (wm_prog_data) {
+      key.contains_flat_varying = wm_prog_data->contains_flat_varying;
+      key.contains_noperspective_varying =
+         wm_prog_data->contains_noperspective_varying;
+      key.interp_mode = wm_prog_data->interp_mode;
+   }
 
    /* BRW_NEW_REDUCED_PRIMITIVE */
    key.primitive = brw->reduced_primitive;

@@ -120,29 +120,39 @@ __emit_genx_sf_state(struct anv_cmd_buffer *cmd_buffer)
                            cmd_buffer->state.pipeline->gen8.sf);
 }
 
-#include "genxml/gen9_pack.h"
-static void
-__emit_gen9_sf_state(struct anv_cmd_buffer *cmd_buffer)
+void
+gen9_emit_sf_state(struct anv_cmd_buffer *cmd_buffer);
+
+#if GEN_GEN == 9
+
+void
+gen9_emit_sf_state(struct anv_cmd_buffer *cmd_buffer)
 {
-      uint32_t sf_dw[GENX(3DSTATE_SF_length)];
-      struct GEN9_3DSTATE_SF sf = {
-         GEN9_3DSTATE_SF_header,
-         .LineWidth = cmd_buffer->state.dynamic.line_width,
-      };
-      GEN9_3DSTATE_SF_pack(NULL, sf_dw, &sf);
-      /* FIXME: gen9.fs */
-      anv_batch_emit_merge(&cmd_buffer->batch, sf_dw,
-                           cmd_buffer->state.pipeline->gen8.sf);
+   __emit_genx_sf_state(cmd_buffer);
 }
+
+#endif
+
+#if GEN_GEN == 8
 
 static void
 __emit_sf_state(struct anv_cmd_buffer *cmd_buffer)
 {
    if (cmd_buffer->device->info.is_cherryview)
-      __emit_gen9_sf_state(cmd_buffer);
+      gen9_emit_sf_state(cmd_buffer);
    else
       __emit_genx_sf_state(cmd_buffer);
 }
+
+#else
+
+static void
+__emit_sf_state(struct anv_cmd_buffer *cmd_buffer)
+{
+   __emit_genx_sf_state(cmd_buffer);
+}
+
+#endif
 
 void
 genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
@@ -310,207 +320,6 @@ void genX(CmdBindIndexBuffer)(
    }
 
    cmd_buffer->state.dirty |= ANV_CMD_DIRTY_INDEX_BUFFER;
-}
-
-
-/**
- * Emit the HZ_OP packet in the sequence specified by the BDW PRM section
- * entitled: "Optimized Depth Buffer Clear and/or Stencil Buffer Clear."
- *
- * \todo Enable Stencil Buffer-only clears
- */
-void
-genX(cmd_buffer_emit_hz_op)(struct anv_cmd_buffer *cmd_buffer,
-                          enum blorp_hiz_op op)
-{
-   struct anv_cmd_state *cmd_state = &cmd_buffer->state;
-   const struct anv_image_view *iview =
-      anv_cmd_buffer_get_depth_stencil_view(cmd_buffer);
-
-   if (iview == NULL || !anv_image_has_hiz(iview->image))
-      return;
-
-   /* FINISHME: Implement multi-subpass HiZ */
-   if (cmd_buffer->state.pass->subpass_count > 1)
-      return;
-
-   const uint32_t ds = cmd_state->subpass->depth_stencil_attachment;
-
-   /* Section 7.4. of the Vulkan 1.0.27 spec states:
-    *
-    *   "The render area must be contained within the framebuffer dimensions."
-    *
-    * Therefore, the only way the extent of the render area can match that of
-    * the image view is if the render area offset equals (0, 0).
-    */
-   const bool full_surface_op =
-             cmd_state->render_area.extent.width == iview->extent.width &&
-             cmd_state->render_area.extent.height == iview->extent.height;
-   if (full_surface_op)
-      assert(cmd_state->render_area.offset.x == 0 &&
-             cmd_state->render_area.offset.y == 0);
-
-   /* This variable corresponds to the Pixel Dim column in the table below */
-   struct isl_extent2d px_dim;
-
-   /* Validate that we can perform the HZ operation and that it's necessary. */
-   switch (op) {
-   case BLORP_HIZ_OP_DEPTH_CLEAR:
-      if (cmd_buffer->state.pass->attachments[ds].load_op !=
-          VK_ATTACHMENT_LOAD_OP_CLEAR)
-         return;
-
-      /* Apply alignment restrictions. Despite the BDW PRM mentioning this is
-       * only needed for a depth buffer surface type of D16_UNORM, testing
-       * showed it to be necessary for other depth formats as well
-       * (e.g., D32_FLOAT).
-       */
-#if GEN_GEN == 8
-      /* Pre-SKL, HiZ has an 8x4 sample block. As the number of samples
-       * increases, the number of pixels representable by this block
-       * decreases by a factor of the sample dimensions. Sample dimensions
-       * scale following the MSAA interleaved pattern.
-       *
-       * Sample|Sample|Pixel
-       * Count |Dim   |Dim
-       * ===================
-       *    1  | 1x1  | 8x4
-       *    2  | 2x1  | 4x4
-       *    4  | 2x2  | 4x2
-       *    8  | 4x2  | 2x2
-       *   16  | 4x4  | 2x1
-       *
-       * Table: Pixel Dimensions in a HiZ Sample Block Pre-SKL
-       */
-      /* This variable corresponds to the Sample Dim column in the table
-       * above.
-       */
-      const struct isl_extent2d sa_dim =
-         isl_get_interleaved_msaa_px_size_sa(iview->image->samples);
-      px_dim.w = 8 / sa_dim.w;
-      px_dim.h = 4 / sa_dim.h;
-#elif GEN_GEN >= 9
-      /* SKL+, the sample block becomes a "pixel block" so the expected
-       * pixel dimension is a constant 8x4 px for all sample counts.
-       */
-      px_dim = (struct isl_extent2d) { .w = 8, .h = 4};
-#endif
-
-      if (!full_surface_op) {
-         /* Fast depth clears clear an entire sample block at a time. As a
-          * result, the rectangle must be aligned to the pixel dimensions of
-          * a sample block for a successful operation.
-          *
-          * Fast clears can still work if the offset is aligned and the render
-          * area offset + extent touches the edge of a depth buffer whose extent
-          * is unaligned. This is because each physical HiZ miplevel is padded
-          * by the px_dim. In this case, the size of the clear rectangle will be
-          * padded later on in this function.
-          */
-         if (cmd_state->render_area.offset.x % px_dim.w ||
-             cmd_state->render_area.offset.y % px_dim.h)
-            return;
-         if (cmd_state->render_area.offset.x +
-             cmd_state->render_area.extent.width != iview->extent.width &&
-             cmd_state->render_area.extent.width % px_dim.w)
-            return;
-         if (cmd_state->render_area.offset.y +
-             cmd_state->render_area.extent.height != iview->extent.height &&
-             cmd_state->render_area.extent.height % px_dim.h)
-            return;
-      }
-      break;
-   case BLORP_HIZ_OP_DEPTH_RESOLVE:
-      if (cmd_buffer->state.pass->attachments[ds].store_op !=
-          VK_ATTACHMENT_STORE_OP_STORE)
-         return;
-      break;
-   case BLORP_HIZ_OP_HIZ_RESOLVE:
-      /* If the render area covers the entire surface *and* load_op is either
-       * CLEAR or DONT_CARE then the previous contents of the depth buffer
-       * will be entirely discarded.  In this case, we can skip the HiZ
-       * resolve.
-       *
-       * If the render area is not the full surface, we need to do
-       * the resolve because otherwise data outside the render area may get
-       * garbled by the resolve at the end of the render pass.
-       */
-      if (full_surface_op &&
-          cmd_buffer->state.pass->attachments[ds].load_op !=
-          VK_ATTACHMENT_LOAD_OP_LOAD)
-         return;
-      break;
-   case BLORP_HIZ_OP_NONE:
-      unreachable("Invalid HiZ OP");
-      break;
-   }
-
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_WM_HZ_OP), hzp) {
-      switch (op) {
-      case BLORP_HIZ_OP_DEPTH_CLEAR:
-         hzp.StencilBufferClearEnable = VK_IMAGE_ASPECT_STENCIL_BIT &
-                            cmd_state->attachments[ds].pending_clear_aspects;
-         hzp.DepthBufferClearEnable = VK_IMAGE_ASPECT_DEPTH_BIT &
-                            cmd_state->attachments[ds].pending_clear_aspects;
-         hzp.FullSurfaceDepthandStencilClear = full_surface_op;
-         hzp.StencilClearValue =
-            cmd_state->attachments[ds].clear_value.depthStencil.stencil & 0xff;
-
-         /* Mark aspects as cleared */
-         cmd_state->attachments[ds].pending_clear_aspects = 0;
-         break;
-      case BLORP_HIZ_OP_DEPTH_RESOLVE:
-         hzp.DepthBufferResolveEnable = true;
-         break;
-      case BLORP_HIZ_OP_HIZ_RESOLVE:
-         hzp.HierarchicalDepthBufferResolveEnable = true;
-         break;
-      case BLORP_HIZ_OP_NONE:
-         unreachable("Invalid HiZ OP");
-         break;
-      }
-
-      if (op != BLORP_HIZ_OP_DEPTH_CLEAR) {
-         /* The Optimized HiZ resolve rectangle must be the size of the full RT
-          * and aligned to 8x4. The non-optimized Depth resolve rectangle must
-          * be the size of the full RT. The same alignment is assumed to be
-          * required.
-          */
-         hzp.ClearRectangleXMin = 0;
-         hzp.ClearRectangleYMin = 0;
-         hzp.ClearRectangleXMax = align_u32(iview->extent.width, 8);
-         hzp.ClearRectangleYMax = align_u32(iview->extent.height, 4);
-      } else {
-         /* This clear rectangle is aligned */
-         hzp.ClearRectangleXMin = cmd_state->render_area.offset.x;
-         hzp.ClearRectangleYMin = cmd_state->render_area.offset.y;
-         hzp.ClearRectangleXMax = cmd_state->render_area.offset.x +
-            align_u32(cmd_state->render_area.extent.width, px_dim.width);
-         hzp.ClearRectangleYMax = cmd_state->render_area.offset.y +
-            align_u32(cmd_state->render_area.extent.height, px_dim.height);
-      }
-
-
-      /* Due to a hardware issue, this bit MBZ */
-      hzp.ScissorRectangleEnable = false;
-      hzp.NumberofMultisamples = ffs(iview->image->samples) - 1;
-      hzp.SampleMask = 0xFFFF;
-   }
-
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
-      pc.PostSyncOperation = WriteImmediateData;
-      pc.Address =
-         (struct anv_address){ &cmd_buffer->device->workaround_bo, 0 };
-   }
-
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_WM_HZ_OP), hzp);
-
-   if (!full_surface_op && op == BLORP_HIZ_OP_DEPTH_CLEAR) {
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
-         pc.DepthStallEnable = true;
-         pc.DepthCacheFlushEnable = true;
-      }
-   }
 }
 
 /* Set of stage bits for which are pipelined, i.e. they get queued by the

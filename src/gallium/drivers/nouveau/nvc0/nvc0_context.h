@@ -120,6 +120,9 @@
 /* block/grid size, at 3 32-bits integers each, gridid and work_dim */
 #define NVC0_CB_AUX_GRID_INFO(i)    0x100 + (i) * 4 /* CP */
 #define NVC0_CB_AUX_GRID_SIZE       (8 * 4)
+/* FB texture handle */
+#define NVC0_CB_AUX_FB_TEX_INFO     0x100 /* FP */
+#define NVC0_CB_AUX_FB_TEX_SIZE     (4)
 /* 8 user clip planes, at 4 32-bits floats each */
 #define NVC0_CB_AUX_UCP_INFO        0x120
 #define NVC0_CB_AUX_UCP_SIZE        (PIPE_MAX_CLIP_PLANES * 4 * 4)
@@ -206,6 +209,7 @@ struct nvc0_context {
    unsigned num_samplers[6];
    uint32_t samplers_dirty[6];
    bool seamless_cube_map;
+   struct pipe_sampler_view *fbtexture;
 
    uint32_t tex_handles[6][PIPE_MAX_SAMPLERS]; /* for nve4 */
 

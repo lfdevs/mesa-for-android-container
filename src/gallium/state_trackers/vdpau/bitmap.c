@@ -198,8 +198,6 @@ vlVdpBitmapSurfacePutBitsNative(VdpBitmapSurface surface,
 
    pipe_mutex_lock(vlsurface->device->mutex);
 
-   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
-
    dst_box = RectToPipeBox(destination_rect, vlsurface->sampler_view->texture);
    pipe->texture_subdata(pipe, vlsurface->sampler_view->texture, 0,
                          PIPE_TRANSFER_WRITE, &dst_box, *source_data,

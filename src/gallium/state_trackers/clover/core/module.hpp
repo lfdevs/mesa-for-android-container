@@ -33,7 +33,9 @@ namespace clover {
 
       struct section {
          enum type {
-            text,
+            text_intermediate,
+            text_library,
+            text_executable,
             data_constant,
             data_global,
             data_local,
@@ -43,7 +45,7 @@ namespace clover {
          section(resource_id id, enum type type, size_t size,
                  const std::vector<char> &data) :
                  id(id), type(type), size(size), data(data) { }
-         section() : id(0), type(text), size(0), data() { }
+         section() : id(0), type(text_intermediate), size(0), data() { }
 
          resource_id id;
          type type;

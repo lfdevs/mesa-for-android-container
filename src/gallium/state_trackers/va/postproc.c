@@ -80,6 +80,7 @@ vlVaPostProcCompositor(vlVaDriver *drv, vlVaContext *context,
    vl_compositor_set_layer_dst_area(&drv->cstate, 0, &dst_rect);
    vl_compositor_render(&drv->cstate, &drv->compositor, surfaces[0], NULL, false);
 
+   drv->pipe->flush(drv->pipe, NULL, 0);
    return VA_STATUS_SUCCESS;
 }
 

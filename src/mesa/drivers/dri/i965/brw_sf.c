@@ -79,7 +79,6 @@ static void compile_sf_prog( struct brw_context *brw,
 
    c.prog_data.urb_read_length = c.nr_attr_regs;
    c.prog_data.urb_entry_size = c.nr_setup_regs * 2;
-   c.has_flat_shading = brw_any_flat_varyings(&key->interpolation_mode);
 
    /* Which primitive?  Or all three?
     */
@@ -148,7 +147,7 @@ brw_upload_sf_prog(struct brw_context *brw)
                         _NEW_PROGRAM |
                         _NEW_TRANSFORM,
                         BRW_NEW_BLORP |
-                        BRW_NEW_INTERPOLATION_MAP |
+                        BRW_NEW_FS_PROG_DATA |
                         BRW_NEW_REDUCED_PRIMITIVE |
                         BRW_NEW_VUE_MAP_GEOM_OUT))
       return;
@@ -192,7 +191,7 @@ brw_upload_sf_prog(struct brw_context *brw)
    if (key.do_point_sprite) {
       key.point_sprite_coord_replace = ctx->Point.CoordReplace & 0xff;
    }
-   if (brw->fragment_program->Base.nir->info.inputs_read &
+   if (brw->fragment_program->info.inputs_read &
        BITFIELD64_BIT(VARYING_SLOT_PNTC)) {
       key.do_point_coord = 1;
    }
@@ -204,8 +203,13 @@ brw_upload_sf_prog(struct brw_context *brw)
    if ((ctx->Point.SpriteOrigin == GL_LOWER_LEFT) != render_to_fbo)
       key.sprite_origin_lower_left = true;
 
-   /* BRW_NEW_INTERPOLATION_MAP */
-   key.interpolation_mode = brw->interpolation_mode;
+   /* BRW_NEW_FS_PROG_DATA */
+   const struct brw_wm_prog_data *wm_prog_data =
+      brw_wm_prog_data(brw->wm.base.prog_data);
+   if (wm_prog_data) {
+      key.contains_flat_varying = wm_prog_data->contains_flat_varying;
+      key.interp_mode = wm_prog_data->interp_mode;
+   }
 
    /* _NEW_LIGHT | _NEW_PROGRAM */
    key.do_twoside_color = ((ctx->Light.Enabled && ctx->Light.Model.TwoSide) ||

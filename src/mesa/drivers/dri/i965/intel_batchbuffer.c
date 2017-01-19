@@ -36,48 +36,55 @@
 #include <i915_drm.h>
 
 static void
-intel_batchbuffer_reset(struct brw_context *brw);
+intel_batchbuffer_reset(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
+                        bool has_llc);
 
 void
-intel_batchbuffer_init(struct brw_context *brw)
+intel_batchbuffer_init(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
+                       bool has_llc)
 {
-   intel_batchbuffer_reset(brw);
+   intel_batchbuffer_reset(batch, bufmgr, has_llc);
 
-   if (!brw->has_llc) {
-      brw->batch.cpu_map = malloc(BATCH_SZ);
-      brw->batch.map = brw->batch.cpu_map;
-      brw->batch.map_next = brw->batch.cpu_map;
+   if (!has_llc) {
+      batch->cpu_map = malloc(BATCH_SZ);
+      batch->map = batch->cpu_map;
+      batch->map_next = batch->cpu_map;
    }
 }
 
 static void
-intel_batchbuffer_reset(struct brw_context *brw)
+intel_batchbuffer_reset(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
+                        bool has_llc)
 {
-   if (brw->batch.last_bo != NULL) {
-      drm_intel_bo_unreference(brw->batch.last_bo);
-      brw->batch.last_bo = NULL;
+   if (batch->last_bo != NULL) {
+      drm_intel_bo_unreference(batch->last_bo);
+      batch->last_bo = NULL;
    }
-   brw->batch.last_bo = brw->batch.bo;
+   batch->last_bo = batch->bo;
 
-   brw_render_cache_set_clear(brw);
-
-   brw->batch.bo = drm_intel_bo_alloc(brw->bufmgr, "batchbuffer",
-					BATCH_SZ, 4096);
-   if (brw->has_llc) {
-      drm_intel_bo_map(brw->batch.bo, true);
-      brw->batch.map = brw->batch.bo->virtual;
+   batch->bo = drm_intel_bo_alloc(bufmgr, "batchbuffer", BATCH_SZ, 4096);
+   if (has_llc) {
+      drm_intel_bo_map(batch->bo, true);
+      batch->map = batch->bo->virtual;
    }
-   brw->batch.map_next = brw->batch.map;
+   batch->map_next = batch->map;
 
-   brw->batch.reserved_space = BATCH_RESERVED;
-   brw->batch.state_batch_offset = brw->batch.bo->size;
-   brw->batch.needs_sol_reset = false;
-   brw->batch.state_base_address_emitted = false;
+   batch->reserved_space = BATCH_RESERVED;
+   batch->state_batch_offset = batch->bo->size;
+   batch->needs_sol_reset = false;
+   batch->state_base_address_emitted = false;
 
    /* We don't know what ring the new batch will be sent to until we see the
     * first BEGIN_BATCH or BEGIN_BATCH_BLT.  Mark it as unknown.
     */
-   brw->batch.ring = UNKNOWN_RING;
+   batch->ring = UNKNOWN_RING;
+}
+
+static void
+intel_batchbuffer_reset_and_clear_render_cache(struct brw_context *brw)
+{
+   intel_batchbuffer_reset(&brw->batch, brw->bufmgr, brw->has_llc);
+   brw_render_cache_set_clear(brw);
 }
 
 void
@@ -99,11 +106,11 @@ intel_batchbuffer_reset_to_saved(struct brw_context *brw)
 }
 
 void
-intel_batchbuffer_free(struct brw_context *brw)
+intel_batchbuffer_free(struct intel_batchbuffer *batch)
 {
-   free(brw->batch.cpu_map);
-   drm_intel_bo_unreference(brw->batch.last_bo);
-   drm_intel_bo_unreference(brw->batch.bo);
+   free(batch->cpu_map);
+   drm_intel_bo_unreference(batch->last_bo);
+   drm_intel_bo_unreference(batch->bo);
 }
 
 void
@@ -119,7 +126,7 @@ intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz,
 #ifdef DEBUG
    assert(sz < BATCH_SZ - BATCH_RESERVED);
 #endif
-   if (intel_batchbuffer_space(brw) < sz)
+   if (intel_batchbuffer_space(&brw->batch) < sz)
       intel_batchbuffer_flush(brw);
 
    enum brw_gpu_ring prev_ring = brw->batch.ring;
@@ -175,8 +182,7 @@ do_batch_dump(struct brw_context *brw)
 void
 intel_batchbuffer_emit_render_ring_prelude(struct brw_context *brw)
 {
-   /* We may need to enable and snapshot OA counters. */
-   brw_perf_monitor_new_batch(brw);
+   /* Un-used currently */
 }
 
 /**
@@ -187,7 +193,7 @@ brw_new_batch(struct brw_context *brw)
 {
    /* Create a new batchbuffer and reset the associated state: */
    drm_intel_gem_bo_clear_relocs(brw->batch.bo, 0);
-   intel_batchbuffer_reset(brw);
+   intel_batchbuffer_reset_and_clear_render_cache(brw);
 
    /* If the kernel supports hardware contexts, then most hardware state is
     * preserved between batches; we only need to re-emit state that is required
@@ -211,9 +217,6 @@ brw_new_batch(struct brw_context *brw)
     */
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       brw_collect_and_report_shader_time(brw);
-
-   if (INTEL_DEBUG & DEBUG_PERFMON)
-      brw_dump_perf_monitors(brw);
 }
 
 /**
@@ -240,9 +243,6 @@ brw_finish_batch(struct brw_context *brw)
        */
       if (brw->gen >= 7)
          gen7_restore_default_l3_config(brw);
-
-      /* We may also need to snapshot and disable OA counters. */
-      brw_perf_monitor_finish_batch(brw);
 
       if (brw->is_haswell) {
          /* From the Haswell PRM, Volume 2b, Command Reference: Instructions,
@@ -408,10 +408,10 @@ _intel_batchbuffer_flush(struct brw_context *brw,
    brw_finish_batch(brw);
 
    /* Mark the end of the buffer. */
-   intel_batchbuffer_emit_dword(brw, MI_BATCH_BUFFER_END);
+   intel_batchbuffer_emit_dword(&brw->batch, MI_BATCH_BUFFER_END);
    if (USED_BATCH(brw->batch) & 1) {
       /* Round batchbuffer usage to 2 DWORDs. */
-      intel_batchbuffer_emit_dword(brw, MI_NOOP);
+      intel_batchbuffer_emit_dword(&brw->batch, MI_NOOP);
    }
 
    intel_upload_finish(brw);
@@ -439,14 +439,14 @@ _intel_batchbuffer_flush(struct brw_context *brw,
 /*  This is the only way buffers get added to the validate list.
  */
 uint32_t
-intel_batchbuffer_reloc(struct brw_context *brw,
+intel_batchbuffer_reloc(struct intel_batchbuffer *batch,
                         drm_intel_bo *buffer, uint32_t offset,
                         uint32_t read_domains, uint32_t write_domain,
                         uint32_t delta)
 {
    int ret;
 
-   ret = drm_intel_bo_emit_reloc(brw->batch.bo, offset,
+   ret = drm_intel_bo_emit_reloc(batch->bo, offset,
 				 buffer, delta,
 				 read_domains, write_domain);
    assert(ret == 0);
@@ -460,12 +460,12 @@ intel_batchbuffer_reloc(struct brw_context *brw,
 }
 
 uint64_t
-intel_batchbuffer_reloc64(struct brw_context *brw,
+intel_batchbuffer_reloc64(struct intel_batchbuffer *batch,
                           drm_intel_bo *buffer, uint32_t offset,
                           uint32_t read_domains, uint32_t write_domain,
                           uint32_t delta)
 {
-   int ret = drm_intel_bo_emit_reloc(brw->batch.bo, offset,
+   int ret = drm_intel_bo_emit_reloc(batch->bo, offset,
                                      buffer, delta,
                                      read_domains, write_domain);
    assert(ret == 0);

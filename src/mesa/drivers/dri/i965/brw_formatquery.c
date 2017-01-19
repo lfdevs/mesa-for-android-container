@@ -23,6 +23,7 @@
 
 #include "brw_context.h"
 #include "brw_state.h"
+#include "main/context.h"
 #include "main/formatquery.h"
 #include "main/glformats.h"
 
@@ -50,9 +51,24 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
       return 3;
 
    case 7:
-      samples[0] = 8;
-      samples[1] = 4;
-      return 2;
+      if (internalFormat == GL_RGBA32F && _mesa_is_gles(ctx)) {
+         /* For GLES, we are allowed to return a smaller number of samples for
+          * GL_RGBA32F. See OpenGLES 3.2 spec, section 20.3.1 Internal Format
+          * Query Parameters, under SAMPLES:
+          *
+          * "A value less than or equal to the value of MAX_SAMPLES, if
+          *  internalformat is RGBA16F, R32F, RG32F, or RGBA32F."
+          *
+          * In brw_render_target_supported, we prevent formats with a size
+          * greater than 8 bytes from using 8x MSAA on gen7.
+          */
+         samples[0] = 4;
+         return 1;
+      } else {
+         samples[0] = 8;
+         samples[1] = 4;
+         return 2;
+      }
 
    case 6:
       samples[0] = 4;

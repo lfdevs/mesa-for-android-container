@@ -34,7 +34,6 @@ extern "C" {
 int type_size_scalar(const struct glsl_type *type);
 int type_size_vec4(const struct glsl_type *type);
 int type_size_dvec4(const struct glsl_type *type);
-int type_size_vs_input(const struct glsl_type *type);
 
 static inline int
 type_size_scalar_bytes(const struct glsl_type *type)
@@ -108,12 +107,13 @@ void brw_nir_lower_fs_inputs(nir_shader *nir,
                              const struct gen_device_info *devinfo,
                              const struct brw_wm_prog_key *key);
 void brw_nir_lower_vue_outputs(nir_shader *nir, bool is_scalar);
-void brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue);
+void brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue,
+                               GLenum tes_primitive_mode);
 void brw_nir_lower_fs_outputs(nir_shader *nir);
 void brw_nir_lower_cs_shared(nir_shader *nir);
 
 nir_shader *brw_postprocess_nir(nir_shader *nir,
-                                const struct gen_device_info *devinfo,
+                                const struct brw_compiler *compiler,
                                 bool is_scalar);
 
 bool brw_nir_apply_attribute_workarounds(nir_shader *nir,
@@ -125,7 +125,7 @@ bool brw_nir_apply_trig_workarounds(nir_shader *nir);
 void brw_nir_apply_tcs_quads_workaround(nir_shader *nir);
 
 nir_shader *brw_nir_apply_sampler_key(nir_shader *nir,
-                                      const struct gen_device_info *devinfo,
+                                      const struct brw_compiler *compiler,
                                       const struct brw_sampler_prog_key_data *key,
                                       bool is_scalar);
 
@@ -134,7 +134,6 @@ enum brw_reg_type brw_type_for_nir_type(nir_alu_type type);
 enum glsl_base_type brw_glsl_base_type_for_nir_type(nir_alu_type type);
 
 void brw_nir_setup_glsl_uniforms(nir_shader *shader,
-                                 struct gl_shader_program *shader_prog,
                                  const struct gl_program *prog,
                                  struct brw_stage_prog_data *stage_prog_data,
                                  bool is_scalar);

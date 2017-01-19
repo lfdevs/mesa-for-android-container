@@ -114,7 +114,7 @@ d3dadapter9_la_LIBADD += \
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 
-if HAVE_MESA_LLVM
+if HAVE_GALLIUM_LLVM
 nodist_EXTRA_d3dadapter9_la_SOURCES = dummy.cpp
 d3dadapter9_la_LDFLAGS += $(LLVM_LDFLAGS)
 d3dadapter9_la_LIBADD += $(LLVM_LIBS)

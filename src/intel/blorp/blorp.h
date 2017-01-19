@@ -155,10 +155,42 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
                           uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1,
                           bool clear_depth, float depth_value,
                           uint8_t stencil_mask, uint8_t stencil_value);
+bool
+blorp_can_hiz_clear_depth(uint8_t gen, enum isl_format format,
+                          uint32_t num_samples,
+                          uint32_t x0, uint32_t y0,
+                          uint32_t x1, uint32_t y1);
+
+void
+blorp_gen8_hiz_clear_attachments(struct blorp_batch *batch,
+                                 uint32_t num_samples,
+                                 uint32_t x0, uint32_t y0,
+                                 uint32_t x1, uint32_t y1,
+                                 bool clear_depth, bool clear_stencil,
+                                 uint8_t stencil_value);
+void
+blorp_clear_attachments(struct blorp_batch *batch,
+                        uint32_t binding_table_offset,
+                        enum isl_format depth_format,
+                        uint32_t num_samples,
+                        uint32_t start_layer, uint32_t num_layers,
+                        uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1,
+                        bool clear_color, union isl_color_value color_value,
+                        bool clear_depth, float depth_value,
+                        uint8_t stencil_mask, uint8_t stencil_value);
+
+enum blorp_fast_clear_op {
+   BLORP_FAST_CLEAR_OP_NONE = 0,
+   BLORP_FAST_CLEAR_OP_CLEAR,
+   BLORP_FAST_CLEAR_OP_RESOLVE_PARTIAL,
+   BLORP_FAST_CLEAR_OP_RESOLVE_FULL,
+};
 
 void
 blorp_ccs_resolve(struct blorp_batch *batch,
-                  struct blorp_surf *surf, enum isl_format format);
+                  struct blorp_surf *surf, uint32_t level, uint32_t layer,
+                  enum isl_format format,
+                  enum blorp_fast_clear_op resolve_op);
 
 /**
  * For an overview of the HiZ operations, see the following sections of the

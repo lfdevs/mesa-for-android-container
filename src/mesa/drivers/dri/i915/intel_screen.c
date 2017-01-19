@@ -1044,7 +1044,8 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
 {
    static const mesa_format formats[] = {
       MESA_FORMAT_B5G6R5_UNORM,
-      MESA_FORMAT_B8G8R8A8_UNORM
+      MESA_FORMAT_B8G8R8A8_UNORM,
+      MESA_FORMAT_B8G8R8X8_UNORM
    };
 
    /* GLX_SWAP_COPY_OML is not supported due to page flipping. */

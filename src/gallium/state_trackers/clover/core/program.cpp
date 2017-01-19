@@ -108,6 +108,18 @@ program::build::status() const {
       return CL_BUILD_NONE;
 }
 
+cl_program_binary_type
+program::build::binary_type() const {
+   if (any_of(type_equals(module::section::text_intermediate), binary.secs))
+      return CL_PROGRAM_BINARY_TYPE_COMPILED_OBJECT;
+   else if (any_of(type_equals(module::section::text_library), binary.secs))
+      return CL_PROGRAM_BINARY_TYPE_LIBRARY;
+   else if (any_of(type_equals(module::section::text_executable), binary.secs))
+      return CL_PROGRAM_BINARY_TYPE_EXECUTABLE;
+   else
+      return CL_PROGRAM_BINARY_TYPE_NONE;
+}
+
 const struct program::build &
 program::build(const device &dev) const {
    static const struct build null;

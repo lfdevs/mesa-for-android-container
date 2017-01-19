@@ -361,6 +361,16 @@ The integer capabilities:
   equal interpolation qualifiers.
   Components may overlap, notably when the gaps in an array of dvec3 are
   filled in.
+* ``PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS``: Whether interleaved stream
+  output mode is able to interleave across buffers. This is required for
+  ARB_transform_feedback3.
+* ``PIPE_CAP_TGSI_CAN_READ_OUTPUTS``: Whether every TGSI shader stage can read
+  from the output file.
+* ``PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY``: Tell the GLSL compiler to use
+  the minimum amount of optimizations just to be able to do all the linking
+  and lowering.
+* ``PIPE_CAP_TGSI_FS_FBFETCH``: Whether a fragment shader can use the FBFETCH
+  opcode to retrieve the current value in the framebuffer.
 
 
 .. _pipe_capf:
@@ -460,6 +470,10 @@ to be 0.
 * ``PIPE_SHADER_CAP_SUPPORTED_IRS``: Supported representations of the
   program.  It should be a mask of ``pipe_shader_ir`` bits.
 * ``PIPE_SHADER_CAP_MAX_SHADER_IMAGES``: Maximum number of image units.
+* ``PIPE_SHADER_CAP_LOWER_IF_THRESHOLD``: IF and ELSE branches with a lower
+  cost than this value should be lowered by the state tracker for better
+  performance. This is a tunable for the GLSL compiler and the behavior is
+  specific to the compiler.
 
 
 .. _pipe_compute_cap:
@@ -728,3 +742,13 @@ query group at the specified **index** is returned in **info**.
 The function returns non-zero on success.
 The driver-specific query group is described with the
 pipe_driver_query_group_info structure.
+
+
+Thread safety
+-------------
+
+Screen methods are required to be thread safe. While gallium rendering
+contexts are not required to be thread safe, it is required to be safe to use
+different contexts created with the same screen in different threads without
+locks. It is also required to be safe using screen methods in a thread, while
+using one of its contexts in another (without locks).

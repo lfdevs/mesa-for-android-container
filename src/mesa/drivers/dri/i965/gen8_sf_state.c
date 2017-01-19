@@ -95,7 +95,7 @@ upload_sbe(struct brw_context *brw)
       /* prepare the active component dwords */
       int input_index = 0;
       for (int attr = 0; attr < VARYING_SLOT_MAX; attr++) {
-         if (!(brw->fragment_program->Base.nir->info.inputs_read &
+         if (!(brw->fragment_program->info.inputs_read &
                BITFIELD64_BIT(attr))) {
             continue;
          }
@@ -319,6 +319,12 @@ upload_raster(struct brw_context *brw)
       }
    }
 
+   /* BRW_NEW_CONSERVATIVE_RASTERIZATION */
+   if (ctx->IntelConservativeRasterization) {
+      if (brw->gen >= 9)
+         dw1 |= GEN9_RASTER_CONSERVATIVE_RASTERIZATION_ENABLE;
+   }
+
    BEGIN_BATCH(5);
    OUT_BATCH(_3DSTATE_RASTER << 16 | (5 - 2));
    OUT_BATCH(dw1);
@@ -338,7 +344,8 @@ const struct brw_tracked_state gen8_raster_state = {
                _NEW_SCISSOR |
                _NEW_TRANSFORM,
       .brw   = BRW_NEW_BLORP |
-               BRW_NEW_CONTEXT,
+               BRW_NEW_CONTEXT |
+               BRW_NEW_CONSERVATIVE_RASTERIZATION,
    },
    .emit = upload_raster,
 };

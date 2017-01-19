@@ -1681,7 +1681,7 @@ trace_context_render_condition(struct pipe_context *_context,
 
 
 static void
-trace_context_texture_barrier(struct pipe_context *_context)
+trace_context_texture_barrier(struct pipe_context *_context, unsigned flags)
 {
    struct trace_context *tr_context = trace_context(_context);
    struct pipe_context *context = tr_context->pipe;
@@ -1689,10 +1689,11 @@ trace_context_texture_barrier(struct pipe_context *_context)
    trace_dump_call_begin("pipe_context", "texture_barrier");
 
    trace_dump_arg(ptr, context);
+   trace_dump_arg(uint, flags);
 
    trace_dump_call_end();
 
-   context->texture_barrier(context);
+   context->texture_barrier(context, flags);
 }
 
 

@@ -35,6 +35,13 @@ namespace SwrJit
     using namespace llvm;
 
     //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VGATHERPD(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_gather_d_pd_256);
+        return CALL(func, std::initializer_list<Value*>{src, pBase, indices, mask, scale});
+    }
+
+    //////////////////////////////////////////////////////////////////////////
     Value *Builder::VGATHERPS(Value* src, Value* pBase, Value* indices, Value* mask, Value* scale)
     {
         Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_gather_d_ps_256);
@@ -155,6 +162,13 @@ namespace SwrJit
     {
         Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_permps);
         return CALL(func, std::initializer_list<Value*>{idx, a});
+    }
+
+    //////////////////////////////////////////////////////////////////////////
+    Value *Builder::VCVTPD2PS(Value* a)
+    {
+        Function *func = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_cvt_pd2_ps_256);
+        return CALL(func, std::initializer_list<Value*>{a});
     }
 
     //////////////////////////////////////////////////////////////////////////

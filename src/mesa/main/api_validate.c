@@ -99,10 +99,8 @@ check_blend_func_error(struct gl_context *ctx)
        *     the blend equation or "blend_support_all_equations", the error
        *     INVALID_OPERATION is generated [...]"
        */
-      const struct gl_shader_program *sh_prog =
-         ctx->_Shader->_CurrentFragmentProgram;
-      const GLbitfield blend_support = !sh_prog ? 0 :
-         sh_prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->info.BlendSupport;
+      const struct gl_program *prog = ctx->_Shader->_CurrentFragmentProgram;
+      const GLbitfield blend_support = !prog ? 0 : prog->sh.fs.BlendSupport;
 
       if ((blend_support & ctx->Color._AdvancedBlendMode) == 0) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
@@ -197,8 +195,8 @@ _mesa_valid_to_render(struct gl_context *ctx, const char *where)
       gl_shader_stage i;
 
       for (i = 0; i < MESA_SHADER_STAGES; i++) {
-	 if (shProg[i] == NULL || shProg[i]->_Used
-	     || shProg[i]->_LinkedShaders[i] == NULL)
+	 if (shProg[i] == NULL || shProg[i]->_LinkedShaders[i] == NULL ||
+             shProg[i]->_LinkedShaders[i]->Program->_Used)
 	    continue;
 
 	 /* This is the first time this shader is being used.
@@ -210,12 +208,12 @@ _mesa_valid_to_render(struct gl_context *ctx, const char *where)
 	  * program isn't also bound to the fragment shader target we don't
 	  * want to log its fragment data.
 	  */
-	 _mesa_append_uniforms_to_file(shProg[i]->_LinkedShaders[i]);
+	 _mesa_append_uniforms_to_file(shProg[i]->_LinkedShaders[i]->Program);
       }
 
       for (i = 0; i < MESA_SHADER_STAGES; i++) {
-	 if (shProg[i] != NULL)
-	    shProg[i]->_Used = GL_TRUE;
+	 if (shProg[i] != NULL && shProg[i]->_LinkedShaders[i] != NULL)
+	    shProg[i]->_LinkedShaders[i]->Program->_Used = GL_TRUE;
       }
    }
 #endif
@@ -551,6 +549,48 @@ _mesa_valid_prim_mode(struct gl_context *ctx, GLenum mode, const char *name)
                          name,
                          _mesa_lookup_prim_by_nr(mode),
                          _mesa_lookup_prim_by_nr(ctx->TransformFeedback.Mode));
+         return GL_FALSE;
+      }
+   }
+
+   /* From GL_INTEL_conservative_rasterization spec:
+    *
+    * The conservative rasterization option applies only to polygons with
+    * PolygonMode state set to FILL. Draw requests for polygons with different
+    * PolygonMode setting or for other primitive types (points/lines) generate
+    * INVALID_OPERATION error.
+    */
+   if (ctx->IntelConservativeRasterization) {
+      GLboolean pass = GL_TRUE;
+
+      switch (mode) {
+      case GL_POINTS:
+      case GL_LINES:
+      case GL_LINE_LOOP:
+      case GL_LINE_STRIP:
+      case GL_LINES_ADJACENCY:
+      case GL_LINE_STRIP_ADJACENCY:
+         pass = GL_FALSE;
+         break;
+      case GL_TRIANGLES:
+      case GL_TRIANGLE_STRIP:
+      case GL_TRIANGLE_FAN:
+      case GL_QUADS:
+      case GL_QUAD_STRIP:
+      case GL_POLYGON:
+      case GL_TRIANGLES_ADJACENCY:
+      case GL_TRIANGLE_STRIP_ADJACENCY:
+         if (ctx->Polygon.FrontMode != GL_FILL ||
+             ctx->Polygon.BackMode != GL_FILL)
+            pass = GL_FALSE;
+         break;
+      default:
+         pass = GL_FALSE;
+      }
+      if (!pass) {
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+                     "mode=%s invalid with GL_INTEL_conservative_rasterization",
+                     _mesa_lookup_prim_by_nr(mode));
          return GL_FALSE;
       }
    }

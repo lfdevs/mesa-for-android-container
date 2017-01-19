@@ -92,7 +92,7 @@ GL_PREFIX(fn, fn_alt):					\
 	JMP(GL_OFFSET(off))
 #endif
 
-#ifdef HAVE_ALIAS
+#ifdef HAVE_FUNC_ATTRIBUTE_ALIAS
 #  define GL_STUB_ALIAS(fn,off,fn_alt,alias,alias_alt)	\
 	.globl	GL_PREFIX(fn, fn_alt) ;			\
 	.set	GL_PREFIX(fn, fn_alt), GL_PREFIX(alias, alias_alt)

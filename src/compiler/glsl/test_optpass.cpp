@@ -99,7 +99,7 @@ do_optimization(struct exec_list *ir, const char *optimization,
       return do_if_simplification(ir);
    } else if (sscanf(optimization, "lower_if_to_cond_assign ( %d ) ",
                      &int_0) == 1) {
-      return lower_if_to_cond_assign(ir, int_0);
+      return lower_if_to_cond_assign(MESA_SHADER_VERTEX, ir, int_0);
    } else if (strcmp(optimization, "do_mat_op_to_vec") == 0) {
       return do_mat_op_to_vec(ir);
    } else if (strcmp(optimization, "do_noop_swizzle") == 0) {
@@ -200,7 +200,6 @@ int test_optpass(int argc, char **argv)
    struct gl_context *ctx = &local_ctx;
    initialize_context_to_defaults(ctx, API_OPENGL_COMPAT);
 
-   ctx->Driver.NewShader = _mesa_new_linked_shader;
    ir_variable::temporaries_allocate_names = true;
 
    struct gl_shader *shader = rzalloc(NULL, struct gl_shader);

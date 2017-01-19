@@ -333,8 +333,8 @@ anv_pipeline_cache_load(struct anv_pipeline_cache *cache,
                         const void *data, size_t size)
 {
    struct anv_device *device = cache->device;
+   struct anv_physical_device *pdevice = &device->instance->physicalDevice;
    struct cache_header header;
-   uint8_t uuid[VK_UUID_SIZE];
 
    if (cache->cache == NULL)
       return;
@@ -350,8 +350,7 @@ anv_pipeline_cache_load(struct anv_pipeline_cache *cache,
       return;
    if (header.device_id != device->chipset_id)
       return;
-   anv_device_get_cache_uuid(uuid);
-   if (memcmp(header.uuid, uuid, VK_UUID_SIZE) != 0)
+   if (memcmp(header.uuid, pdevice->uuid, VK_UUID_SIZE) != 0)
       return;
 
    const void *end = data + size;
@@ -470,6 +469,7 @@ VkResult anv_GetPipelineCacheData(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_pipeline_cache, cache, _cache);
+   struct anv_physical_device *pdevice = &device->instance->physicalDevice;
    struct cache_header *header;
 
    if (pData == NULL) {
@@ -497,7 +497,7 @@ VkResult anv_GetPipelineCacheData(
    header->header_version = VK_PIPELINE_CACHE_HEADER_VERSION_ONE;
    header->vendor_id = 0x8086;
    header->device_id = device->chipset_id;
-   anv_device_get_cache_uuid(header->uuid);
+   memcpy(header->uuid, pdevice->uuid, VK_UUID_SIZE);
    p += align_u32(header->header_size, 8);
 
    uint32_t *count = p;

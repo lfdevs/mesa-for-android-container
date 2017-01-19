@@ -21,6 +21,8 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <stdint.h>
+#include <assert.h>
+#include <string.h>
 
 #include "util/u_format.h"
 #include "util/u_memory.h"
@@ -315,12 +317,16 @@ int virgl_encode_clear(struct virgl_context *ctx,
                       double depth, unsigned stencil)
 {
    int i;
+   uint64_t qword;
+
+   STATIC_ASSERT(sizeof(qword) == sizeof(depth));
+   memcpy(&qword, &depth, sizeof(qword));
 
    virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_CLEAR, 0, VIRGL_OBJ_CLEAR_SIZE));
    virgl_encoder_write_dword(ctx->cbuf, buffers);
    for (i = 0; i < 4; i++)
       virgl_encoder_write_dword(ctx->cbuf, color->ui[i]);
-   virgl_encoder_write_qword(ctx->cbuf, *(uint64_t *)&depth);
+   virgl_encoder_write_qword(ctx->cbuf, qword);
    virgl_encoder_write_dword(ctx->cbuf, stencil);
    return 0;
 }

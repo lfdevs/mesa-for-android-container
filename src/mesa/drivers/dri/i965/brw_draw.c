@@ -285,7 +285,7 @@ brw_emit_prim(struct brw_context *brw,
 
 static void
 brw_merge_inputs(struct brw_context *brw,
-                 const struct gl_client_array *arrays[])
+                 const struct gl_vertex_array *arrays[])
 {
    const struct gl_context *ctx = &brw->ctx;
    GLuint i;
@@ -302,7 +302,7 @@ brw_merge_inputs(struct brw_context *brw,
    }
 
    if (brw->gen < 8 && !brw->is_haswell) {
-      uint64_t mask = ctx->VertexProgram._Current->Base.nir->info.inputs_read;
+      uint64_t mask = ctx->VertexProgram._Current->info.inputs_read;
       /* Prior to Haswell, the hardware can't natively support GL_FIXED or
        * 2_10_10_10_REV vertex formats.  Set appropriate workaround flags.
        */
@@ -372,7 +372,7 @@ brw_postdraw_set_buffers_need_resolve(struct brw_context *brw)
       front_irb->need_downsample = true;
    if (back_irb)
       back_irb->need_downsample = true;
-   if (depth_irb && ctx->Depth.Mask) {
+   if (depth_irb && brw_depth_writes_enabled(brw)) {
       intel_renderbuffer_att_set_needs_depth_resolve(depth_att);
       brw_render_cache_set_add_bo(brw, depth_irb->mt->bo);
    }
@@ -386,13 +386,12 @@ brw_postdraw_set_buffers_need_resolve(struct brw_context *brw)
       struct intel_renderbuffer *irb =
          intel_renderbuffer(fb->_ColorDrawBuffers[i]);
 
-      if (irb) {
-         brw_render_cache_set_add_bo(brw, irb->mt->bo);
-
-         if (intel_miptree_is_lossless_compressed(brw, irb->mt)) {
-            irb->mt->fast_clear_state = INTEL_FAST_CLEAR_STATE_UNRESOLVED;
-         }
-      }
+      if (!irb)
+         continue;
+     
+      brw_render_cache_set_add_bo(brw, irb->mt->bo);
+      intel_miptree_used_for_rendering(
+         brw, irb->mt, irb->mt_level, irb->mt_layer, irb->layer_count);
    }
 }
 
@@ -412,6 +411,20 @@ brw_predraw_set_aux_buffers(struct brw_context *brw)
       if (!irb) {
          continue;
       }
+
+      /* For layered rendering non-compressed fast cleared buffers need to be
+       * resolved. Surface state can carry only one fast color clear value
+       * while each layer may have its own fast clear color value. For
+       * compressed buffers color value is available in the color buffer.
+       */
+      if (irb->layer_count > 1 &&
+          !(irb->mt->aux_disable & INTEL_AUX_DISABLE_CCS) &&
+          !intel_miptree_is_lossless_compressed(brw, irb->mt)) {
+         assert(brw->gen >= 8);
+
+         intel_miptree_resolve_color(brw, irb->mt, irb->mt_level,
+                                     irb->mt_layer, irb->layer_count, 0);
+      }
    }
 }
 
@@ -420,7 +433,7 @@ brw_predraw_set_aux_buffers(struct brw_context *brw)
  */
 static void
 brw_try_draw_prims(struct gl_context *ctx,
-                   const struct gl_client_array *arrays[],
+                   const struct gl_vertex_array *arrays[],
                    const struct _mesa_prim *prims,
                    GLuint nr_prims,
                    const struct _mesa_index_buffer *ib,
@@ -452,15 +465,15 @@ brw_try_draw_prims(struct gl_context *ctx,
     * index.
     */
    brw->wm.base.sampler_count =
-      util_last_bit(ctx->FragmentProgram._Current->Base.SamplersUsed);
+      util_last_bit(ctx->FragmentProgram._Current->SamplersUsed);
    brw->gs.base.sampler_count = ctx->GeometryProgram._Current ?
-      util_last_bit(ctx->GeometryProgram._Current->Base.SamplersUsed) : 0;
+      util_last_bit(ctx->GeometryProgram._Current->SamplersUsed) : 0;
    brw->tes.base.sampler_count = ctx->TessEvalProgram._Current ?
-      util_last_bit(ctx->TessEvalProgram._Current->Base.SamplersUsed) : 0;
+      util_last_bit(ctx->TessEvalProgram._Current->SamplersUsed) : 0;
    brw->tcs.base.sampler_count = ctx->TessCtrlProgram._Current ?
-      util_last_bit(ctx->TessCtrlProgram._Current->Base.SamplersUsed) : 0;
+      util_last_bit(ctx->TessCtrlProgram._Current->SamplersUsed) : 0;
    brw->vs.base.sampler_count =
-      util_last_bit(ctx->VertexProgram._Current->Base.SamplersUsed);
+      util_last_bit(ctx->VertexProgram._Current->SamplersUsed);
 
    intel_prepare_render(brw);
    brw_predraw_set_aux_buffers(brw);
@@ -612,7 +625,7 @@ retry:
    if (brw->always_flush_batch)
       intel_batchbuffer_flush(brw);
 
-   brw_state_cache_check_size(brw);
+   brw_program_cache_check_size(brw);
    brw_postdraw_set_buffers_need_resolve(brw);
 
    return;
@@ -631,7 +644,7 @@ brw_draw_prims(struct gl_context *ctx,
                struct gl_buffer_object *indirect)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gl_client_array **arrays = ctx->Array._DrawArrays;
+   const struct gl_vertex_array **arrays = ctx->Array._DrawArrays;
    struct brw_transform_feedback_object *xfb_obj =
       (struct brw_transform_feedback_object *) gl_xfb_obj;
 

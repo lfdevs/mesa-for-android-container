@@ -70,6 +70,7 @@ set_uniform_initializer::SetUp()
 {
    this->mem_ctx = ralloc_context(NULL);
    this->prog = rzalloc(NULL, struct gl_shader_program);
+   this->prog->data = rzalloc(this->prog, struct gl_shader_program_data);
 
    /* Set default values used by the test cases.
     */
@@ -110,43 +111,43 @@ establish_uniform_storage(struct gl_shader_program *prog, unsigned num_storage,
    const unsigned red_zone_components = total_components - data_components;
 
    prog->UniformHash = new string_to_uint_map;
-   prog->UniformStorage = rzalloc_array(prog, struct gl_uniform_storage,
-					num_storage);
-   prog->NumUniformStorage = num_storage;
+   prog->data->UniformStorage = rzalloc_array(prog, struct gl_uniform_storage,
+                                              num_storage);
+   prog->data->NumUniformStorage = num_storage;
 
-   prog->UniformStorage[index_to_set].name = (char *) name;
-   prog->UniformStorage[index_to_set].type = type;
-   prog->UniformStorage[index_to_set].array_elements = array_size;
+   prog->data->UniformStorage[index_to_set].name = (char *) name;
+   prog->data->UniformStorage[index_to_set].type = type;
+   prog->data->UniformStorage[index_to_set].array_elements = array_size;
    for (int sh = 0; sh < MESA_SHADER_STAGES; sh++) {
-      prog->UniformStorage[index_to_set].opaque[sh].index = ~0;
-      prog->UniformStorage[index_to_set].opaque[sh].active = false;
+      prog->data->UniformStorage[index_to_set].opaque[sh].index = ~0;
+      prog->data->UniformStorage[index_to_set].opaque[sh].active = false;
    }
-   prog->UniformStorage[index_to_set].num_driver_storage = 0;
-   prog->UniformStorage[index_to_set].driver_storage = NULL;
-   prog->UniformStorage[index_to_set].storage =
+   prog->data->UniformStorage[index_to_set].num_driver_storage = 0;
+   prog->data->UniformStorage[index_to_set].driver_storage = NULL;
+   prog->data->UniformStorage[index_to_set].storage =
       rzalloc_array(prog, union gl_constant_value, total_components);
 
-   fill_storage_array_with_sentinels(prog->UniformStorage[index_to_set].storage,
+   fill_storage_array_with_sentinels(prog->data->UniformStorage[index_to_set].storage,
 				     data_components,
 				     red_zone_components);
 
    prog->UniformHash->put(index_to_set,
-                          prog->UniformStorage[index_to_set].name);
+                          prog->data->UniformStorage[index_to_set].name);
 
    for (unsigned i = 0; i < num_storage; i++) {
       if (i == index_to_set)
 	 continue;
 
-      prog->UniformStorage[i].name = (char *) "invalid slot";
-      prog->UniformStorage[i].type = glsl_type::void_type;
-      prog->UniformStorage[i].array_elements = 0;
+      prog->data->UniformStorage[i].name = (char *) "invalid slot";
+      prog->data->UniformStorage[i].type = glsl_type::void_type;
+      prog->data->UniformStorage[i].array_elements = 0;
       for (int sh = 0; sh < MESA_SHADER_STAGES; sh++) {
-         prog->UniformStorage[i].opaque[sh].index = ~0;
-         prog->UniformStorage[i].opaque[sh].active = false;
+         prog->data->UniformStorage[i].opaque[sh].index = ~0;
+         prog->data->UniformStorage[i].opaque[sh].active = false;
       }
-      prog->UniformStorage[i].num_driver_storage = 0;
-      prog->UniformStorage[i].driver_storage = NULL;
-      prog->UniformStorage[i].storage = NULL;
+      prog->data->UniformStorage[i].num_driver_storage = 0;
+      prog->data->UniformStorage[i].driver_storage = NULL;
+      prog->data->UniformStorage[i].storage = NULL;
    }
 
    return red_zone_components;
@@ -169,7 +170,7 @@ non_array_test(void *mem_ctx, struct gl_shader_program *prog,
 
    linker::set_uniform_initializer(mem_ctx, prog, name, type, val, 0xF00F);
 
-   verify_data(prog->UniformStorage[actual_index].storage, 0, val,
+   verify_data(prog->data->UniformStorage[actual_index].storage, 0, val,
 	       red_zone_components, 0xF00F);
 }
 
@@ -325,7 +326,7 @@ array_test(void *mem_ctx, struct gl_shader_program *prog,
    linker::set_uniform_initializer(mem_ctx, prog, name, element_type, val,
                                    0xF00F);
 
-   verify_data(prog->UniformStorage[actual_index].storage, array_size,
+   verify_data(prog->data->UniformStorage[actual_index].storage, array_size,
 	       val, red_zone_components, 0xF00F);
 }
 

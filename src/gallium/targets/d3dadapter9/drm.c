@@ -56,6 +56,9 @@ DRI_CONF_BEGIN
         DRI_CONF_NINE_OVERRIDEVENDOR(-1)
         DRI_CONF_NINE_THROTTLE(-2)
         DRI_CONF_NINE_THREADSUBMIT("false")
+        DRI_CONF_NINE_ALLOWDISCARDDELAYEDRELEASE("true")
+        DRI_CONF_NINE_TEARFREEDISCARD("false")
+        DRI_CONF_NINE_CSMT(-1)
     DRI_CONF_SECTION_END
 DRI_CONF_END;
 
@@ -283,6 +286,26 @@ drm_create_adapter( int fd,
     if (driCheckOption(&userInitOptions, "override_vendorid", DRI_INT)) {
         override_vendorid = driQueryOptioni(&userInitOptions, "override_vendorid");
     }
+
+    if (driCheckOption(&userInitOptions, "discard_delayed_release", DRI_BOOL))
+        ctx->base.discard_delayed_release = driQueryOptionb(&userInitOptions, "discard_delayed_release");
+    else
+        ctx->base.discard_delayed_release = TRUE;
+
+    if (driCheckOption(&userInitOptions, "tearfree_discard", DRI_BOOL))
+        ctx->base.tearfree_discard = driQueryOptionb(&userInitOptions, "tearfree_discard");
+    else
+        ctx->base.tearfree_discard = FALSE;
+
+    if (ctx->base.tearfree_discard && !ctx->base.discard_delayed_release) {
+        ERR("tearfree_discard requires discard_delayed_release\n");
+        ctx->base.tearfree_discard = FALSE;
+    }
+
+    if (driCheckOption(&userInitOptions, "csmt_force", DRI_INT))
+        ctx->base.csmt_force = driQueryOptioni(&userInitOptions, "csmt_force");
+    else
+        ctx->base.csmt_force = -1;
 
     driDestroyOptionCache(&userInitOptions);
     driDestroyOptionInfo(&defaultInitOptions);

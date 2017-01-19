@@ -73,7 +73,7 @@ nouveau_vpe_fini(struct nouveau_decoder *dec) {
    if (!dec->cmds)
       return;
 
-   nouveau_pushbuf_space(push, 8, 2, 0);
+   nouveau_pushbuf_space(push, 16, 2, 0);
    nouveau_bufctx_reset(dec->bufctx, NV31_VIDEO_BIND_CMD);
 
 #define BCTX_ARGS dec->bufctx, NV31_VIDEO_BIND_CMD, NOUVEAU_BO_RD

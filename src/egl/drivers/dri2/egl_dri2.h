@@ -199,7 +199,7 @@ struct dri2_egl_display
 
 #ifdef HAVE_X11_PLATFORM
    xcb_connection_t         *conn;
-   int                      screen;
+   xcb_screen_t             *screen;
    int                      swap_available;
 #ifdef HAVE_DRI3
    struct loader_dri3_extensions loader_dri3_ext;
@@ -208,6 +208,7 @@ struct dri2_egl_display
 
 #ifdef HAVE_WAYLAND_PLATFORM
    struct wl_display        *wl_dpy;
+   struct wl_display        *wl_dpy_wrapper;
    struct wl_registry       *wl_registry;
    struct wl_drm            *wl_server_drm;
    struct wl_drm            *wl_drm;
@@ -217,6 +218,10 @@ struct dri2_egl_display
    int                       formats;
    uint32_t                  capabilities;
    char                     *device_name;
+#endif
+
+#ifdef HAVE_ANDROID_PLATFORM
+   const gralloc_module_t *gralloc;
 #endif
 
    int                       is_render_node;
@@ -290,7 +295,8 @@ struct dri2_egl_surface
 #ifdef HAVE_ANDROID_PLATFORM
    struct ANativeWindow *window;
    struct ANativeWindowBuffer *buffer;
-   __DRIimage *dri_image;
+   __DRIimage *dri_image_back;
+   __DRIimage *dri_image_front;
 
    /* EGL-owned buffers */
    __DRIbuffer           *local_buffers[__DRI_BUFFER_COUNT];

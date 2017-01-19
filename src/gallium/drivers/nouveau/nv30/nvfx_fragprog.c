@@ -533,9 +533,6 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
    sat  = finst->Instruction.Saturate;
 
    switch (finst->Instruction.Opcode) {
-   case TGSI_OPCODE_ABS:
-      nvfx_fp_emit(fpc, arith(sat, MOV, dst, mask, abs(src[0]), none, none));
-      break;
    case TGSI_OPCODE_ADD:
       nvfx_fp_emit(fpc, arith(sat, ADD, dst, mask, src[0], src[1], none));
       break;
@@ -753,9 +750,6 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
       }
       break;
    }
-   case TGSI_OPCODE_SUB:
-      nvfx_fp_emit(fpc, arith(sat, ADD, dst, mask, src[0], neg(src[1]), none));
-      break;
    case TGSI_OPCODE_TEX:
       nvfx_fp_emit(fpc, tex(sat, TEX, unit, dst, mask, src[0], none, none));
       break;

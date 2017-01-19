@@ -39,13 +39,54 @@ namespace ArchRast
     class EventHandler
     {
     public:
-        virtual void handle(Start& event) {}
-        virtual void handle(End& event) {}
-        virtual void handle(DrawInstancedEvent& event) {}
-        virtual void handle(DrawIndexedInstancedEvent& event) {}
-        virtual void handle(DispatchEvent& event) {}
-        virtual void handle(FrameEndEvent& event) {}
-        virtual void handle(FrontendStatsEvent& event) {}
-        virtual void handle(BackendStatsEvent& event) {}
+        EventHandler() {}
+        virtual ~EventHandler() {}
+
+        virtual void Handle(Start event) {}
+        virtual void Handle(End event) {}
+        virtual void Handle(ThreadStartApiEvent event) {}
+        virtual void Handle(ThreadStartWorkerEvent event) {}
+        virtual void Handle(DrawInstancedEvent event) {}
+        virtual void Handle(DrawIndexedInstancedEvent event) {}
+        virtual void Handle(DispatchEvent event) {}
+        virtual void Handle(FrameEndEvent event) {}
+        virtual void Handle(FrontendStatsEvent event) {}
+        virtual void Handle(BackendStatsEvent event) {}
+        virtual void Handle(EarlyDepthStencilInfoSingleSample event) {}
+        virtual void Handle(EarlyDepthStencilInfoSampleRate event) {}
+        virtual void Handle(EarlyDepthStencilInfoNullPS event) {}
+        virtual void Handle(LateDepthStencilInfoSingleSample event) {}
+        virtual void Handle(LateDepthStencilInfoSampleRate event) {}
+        virtual void Handle(LateDepthStencilInfoNullPS event) {}
+        virtual void Handle(EarlyDepthInfoPixelRate event) {}
+        virtual void Handle(LateDepthInfoPixelRate event) {}
+        virtual void Handle(BackendDrawEndEvent event) {}
+        virtual void Handle(FrontendDrawEndEvent event) {}
+        virtual void Handle(EarlyZSingleSample event) {}
+        virtual void Handle(LateZSingleSample event) {}
+        virtual void Handle(EarlyStencilSingleSample event) {}
+        virtual void Handle(LateStencilSingleSample event) {}
+        virtual void Handle(EarlyZSampleRate event) {}
+        virtual void Handle(LateZSampleRate event) {}
+        virtual void Handle(EarlyStencilSampleRate event) {}
+        virtual void Handle(LateStencilSampleRate event) {}
+        virtual void Handle(EarlyZNullPS event) {}
+        virtual void Handle(EarlyStencilNullPS event) {}
+        virtual void Handle(EarlyZPixelRate event) {}
+        virtual void Handle(LateZPixelRate event) {}
+        virtual void Handle(EarlyOmZ event) {}
+        virtual void Handle(EarlyOmStencil event) {}
+        virtual void Handle(LateOmZ event) {}
+        virtual void Handle(LateOmStencil event) {}
+        virtual void Handle(GSPrimInfo event) {}
+        virtual void Handle(GSInputPrims event) {}
+        virtual void Handle(GSPrimsGen event) {}
+        virtual void Handle(GSVertsInput event) {}
+        virtual void Handle(ClipVertexCount event) {}
+        virtual void Handle(FlushVertClip event) {}
+        virtual void Handle(VertsClipped event) {}
+        virtual void Handle(TessPrimCount event) {}
+        virtual void Handle(TessPrimFlush event) {}
+        virtual void Handle(TessPrims event) {}
     };
 }

@@ -5,3 +5,5 @@
 0:14(20): warning: `undefinedIndex' used uninitialized
 0:14(51): warning: `undefinedIndex' used uninitialized
 0:14(82): warning: `undefinedIndex' used uninitialized
+
+error: unresolved reference to function `foo'

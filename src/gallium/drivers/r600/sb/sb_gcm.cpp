@@ -199,10 +199,9 @@ void gcm::td_release_val(value *v) {
 		sblog << "\n";
 	);
 
-	use_info *u = v->uses;
-	while (u) {
+	for (uselist::iterator I = v->uses.begin(), E = v->uses.end(); I != E; ++I) {
+		use_info *u = *I;
 		if (u->op->parent != &pending) {
-			u = u->next;
 			continue;
 		}
 
@@ -212,6 +211,7 @@ void gcm::td_release_val(value *v) {
 			sblog << "\n";
 		);
 
+		assert(uses[u->op] > 0);
 		if (--uses[u->op] == 0) {
 			GCM_DUMP(
 				sblog << "td        released : ";
@@ -222,7 +222,6 @@ void gcm::td_release_val(value *v) {
 			pending.remove_node(u->op);
 			ready.push_back(u->op);
 		}
-		u = u->next;
 	}
 
 }

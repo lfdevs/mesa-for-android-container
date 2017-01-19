@@ -26,17 +26,12 @@
  */
 
 #include "brw_nir.h"
+#include "compiler/nir/nir_builder.h"
 
 /*
  * Implements a small peephole optimization that looks for a multiply that
  * is only ever used in an add and replaces both with an fma.
  */
-
-struct peephole_ffma_state {
-   void *mem_ctx;
-   nir_function_impl *impl;
-   bool progress;
-};
 
 static inline bool
 are_all_uses_fadd(nir_ssa_def *def)
@@ -167,7 +162,7 @@ any_alu_src_is_a_constant(nir_alu_src srcs[])
 }
 
 static bool
-brw_nir_opt_peephole_ffma_block(nir_block *block, void *mem_ctx)
+brw_nir_opt_peephole_ffma_block(nir_builder *b, nir_block *block)
 {
    bool progress = false;
 
@@ -229,29 +224,17 @@ brw_nir_opt_peephole_ffma_block(nir_block *block, void *mem_ctx)
          continue;
       }
 
+      b->cursor = nir_before_instr(&add->instr);
+
       if (abs) {
-         for (unsigned i = 0; i < 2; i++) {
-            nir_alu_instr *abs = nir_alu_instr_create(mem_ctx, nir_op_fabs);
-            abs->src[0].src = nir_src_for_ssa(mul_src[i]);
-            nir_ssa_dest_init(&abs->instr, &abs->dest.dest,
-                              mul_src[i]->num_components, bit_size, NULL);
-            abs->dest.write_mask = (1 << mul_src[i]->num_components) - 1;
-            nir_instr_insert_before(&add->instr, &abs->instr);
-            mul_src[i] = &abs->dest.dest.ssa;
-         }
+         for (unsigned i = 0; i < 2; i++)
+            mul_src[i] = nir_fabs(b, mul_src[i]);
       }
 
-      if (negate) {
-         nir_alu_instr *neg = nir_alu_instr_create(mem_ctx, nir_op_fneg);
-         neg->src[0].src = nir_src_for_ssa(mul_src[0]);
-         nir_ssa_dest_init(&neg->instr, &neg->dest.dest,
-                           mul_src[0]->num_components, bit_size, NULL);
-         neg->dest.write_mask = (1 << mul_src[0]->num_components) - 1;
-         nir_instr_insert_before(&add->instr, &neg->instr);
-         mul_src[0] = &neg->dest.dest.ssa;
-      }
+      if (negate)
+         mul_src[0] = nir_fneg(b, mul_src[0]);
 
-      nir_alu_instr *ffma = nir_alu_instr_create(mem_ctx, nir_op_ffma);
+      nir_alu_instr *ffma = nir_alu_instr_create(b->shader, nir_op_ffma);
       ffma->dest.saturate = add->dest.saturate;
       ffma->dest.write_mask = add->dest.write_mask;
 
@@ -271,7 +254,7 @@ brw_nir_opt_peephole_ffma_block(nir_block *block, void *mem_ctx)
       nir_ssa_def_rewrite_uses(&add->dest.dest.ssa,
                                nir_src_for_ssa(&ffma->dest.dest.ssa));
 
-      nir_instr_insert_before(&add->instr, &ffma->instr);
+      nir_builder_instr_insert(b, &ffma->instr);
       assert(list_empty(&add->dest.dest.ssa.uses));
       nir_instr_remove(&add->instr);
 
@@ -285,10 +268,12 @@ static bool
 brw_nir_opt_peephole_ffma_impl(nir_function_impl *impl)
 {
    bool progress = false;
-   void *mem_ctx = ralloc_parent(impl);
+
+   nir_builder builder;
+   nir_builder_init(&builder, impl);
 
    nir_foreach_block(block, impl) {
-      progress |= brw_nir_opt_peephole_ffma_block(block, mem_ctx);
+      progress |= brw_nir_opt_peephole_ffma_block(&builder, block);
    }
 
    if (progress)

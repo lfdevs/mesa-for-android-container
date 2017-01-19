@@ -250,8 +250,6 @@ C_SOURCES := \
 	util/u_half.h \
 	util/u_handle_table.c \
 	util/u_handle_table.h \
-	util/u_hash.c \
-	util/u_hash.h \
 	util/u_hash_table.c \
 	util/u_hash_table.h \
 	util/u_helpers.c \
@@ -437,3 +435,7 @@ GALLIVM_SOURCES := \
 	draw/draw_llvm_sample.c \
 	draw/draw_pt_fetch_shade_pipeline_llvm.c \
 	draw/draw_vs_llvm.c
+
+RENDERONLY_SOURCES := \
+	renderonly/renderonly.c \
+	renderonly/renderonly.h
