@@ -210,43 +210,27 @@ match_value(const nir_search_value *value, nir_alu_instr *instr, unsigned src,
          return true;
 
       case nir_type_int:
-         for (unsigned i = 0; i < num_components; ++i) {
-            int64_t val;
-            switch (load->def.bit_size) {
-            case 32:
-               val = load->value.i32[new_swizzle[i]];
-               break;
-            case 64:
-               val = load->value.i64[new_swizzle[i]];
-               break;
-            default:
-               unreachable("unknown bit size");
-            }
-
-            if (val != const_val->data.i)
-               return false;
-         }
-         return true;
-
       case nir_type_uint:
       case nir_type_bool32:
-         for (unsigned i = 0; i < num_components; ++i) {
-            uint64_t val;
-            switch (load->def.bit_size) {
-            case 32:
-               val = load->value.u32[new_swizzle[i]];
-               break;
-            case 64:
-               val = load->value.u64[new_swizzle[i]];
-               break;
-            default:
-               unreachable("unknown bit size");
+         switch (load->def.bit_size) {
+         case 32:
+            for (unsigned i = 0; i < num_components; ++i) {
+               if (load->value.u32[new_swizzle[i]] !=
+                   (uint32_t)const_val->data.u)
+                  return false;
             }
+            return true;
 
-            if (val != const_val->data.u)
-               return false;
+         case 64:
+            for (unsigned i = 0; i < num_components; ++i) {
+               if (load->value.u64[new_swizzle[i]] != const_val->data.u)
+                  return false;
+            }
+            return true;
+
+         default:
+            unreachable("unknown bit size");
          }
-         return true;
 
       default:
          unreachable("Invalid alu source type");

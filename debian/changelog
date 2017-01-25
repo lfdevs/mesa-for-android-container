@@ -1,3 +1,13 @@
+mesa (17.0.0~rc2-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * Add configure.ac-Require-LLVM-for-r300-only-on-x86-and-x.patch:
+    Should fix FTBFS on some arches.
+  * rules: Explicitly enable/disable gbm. Should fix FTBFS on hurd.
+  * Revert to debhelper compat 9 (Workaround for #851130).
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Wed, 25 Jan 2017 16:45:53 +0100
+
 mesa (17.0.0~rc1-1) experimental; urgency=medium
 
   * New upstream release candidate.

@@ -366,6 +366,7 @@ fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 			struct fd_resource *rsc = fd_resource(vb->buffer);
 			enum pipe_format pfmt = elem->src_format;
 			enum a5xx_vtx_fmt fmt = fd5_pipe2vtx(pfmt);
+			bool isint = util_format_is_pure_integer(pfmt);
 			uint32_t off = vb->buffer_offset + elem->src_offset;
 			uint32_t size = fd_bo_size(rsc->bo) - off;
 			debug_assert(fmt != ~0);
@@ -379,7 +380,8 @@ fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 			OUT_RING(ring, A5XX_VFD_DECODE_INSTR_IDX(j) |
 					A5XX_VFD_DECODE_INSTR_FORMAT(fmt) |
 					COND(elem->instance_divisor, A5XX_VFD_DECODE_INSTR_INSTANCED) |
-					0xc0000000);  // XXX
+					A5XX_VFD_DECODE_INSTR_UNK30 |
+					COND(!isint, A5XX_VFD_DECODE_INSTR_FLOAT));
 			OUT_RING(ring, MAX2(1, elem->instance_divisor)); /* VFD_DECODE[j].STEP_RATE */
 
 			OUT_PKT4(ring, REG_A5XX_VFD_DEST_CNTL(j), 1);

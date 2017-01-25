@@ -717,8 +717,10 @@ static void si_update_poly_offset_state(struct si_context *sctx)
 {
 	struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
 
-	if (!rs || !rs->uses_poly_offset || !sctx->framebuffer.state.zsbuf)
+	if (!rs || !rs->uses_poly_offset || !sctx->framebuffer.state.zsbuf) {
+		si_pm4_bind_state(sctx, poly_offset, NULL);
 		return;
+	}
 
 	/* Use the user format, not db_render_format, so that the polygon
 	 * offset behaves as expected by applications.
@@ -1363,11 +1365,17 @@ static uint32_t si_translate_texformat(struct pipe_screen *screen,
 		case PIPE_FORMAT_Z16_UNORM:
 			return V_008F14_IMG_DATA_FORMAT_16;
 		case PIPE_FORMAT_X24S8_UINT:
+		case PIPE_FORMAT_S8X24_UINT:
+			/*
+			 * Implemented as an 8_8_8_8 data format to fix texture
+			 * gathers in stencil sampling. This affects at least
+			 * GL45-CTS.texture_cube_map_array.sampling on VI.
+			 */
+			return V_008F14_IMG_DATA_FORMAT_8_8_8_8;
 		case PIPE_FORMAT_Z24X8_UNORM:
 		case PIPE_FORMAT_Z24_UNORM_S8_UINT:
 			return V_008F14_IMG_DATA_FORMAT_8_24;
 		case PIPE_FORMAT_X8Z24_UNORM:
-		case PIPE_FORMAT_S8X24_UINT:
 		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
 			return V_008F14_IMG_DATA_FORMAT_24_8;
 		case PIPE_FORMAT_S8_UINT:
@@ -2794,13 +2802,21 @@ si_make_texture_descriptor(struct si_screen *screen,
 	if (desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
 		const unsigned char swizzle_xxxx[4] = {0, 0, 0, 0};
 		const unsigned char swizzle_yyyy[4] = {1, 1, 1, 1};
+		const unsigned char swizzle_wwww[4] = {3, 3, 3, 3};
 
 		switch (pipe_format) {
 		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
-		case PIPE_FORMAT_X24S8_UINT:
 		case PIPE_FORMAT_X32_S8X24_UINT:
 		case PIPE_FORMAT_X8Z24_UNORM:
 			util_format_compose_swizzles(swizzle_yyyy, state_swizzle, swizzle);
+			break;
+		case PIPE_FORMAT_X24S8_UINT:
+			/*
+			 * X24S8 is implemented as an 8_8_8_8 data format, to
+			 * fix texture gathers. This affects at least
+			 * GL45-CTS.texture_cube_map_array.sampling on VI.
+			 */
+			util_format_compose_swizzles(swizzle_wwww, state_swizzle, swizzle);
 			break;
 		default:
 			util_format_compose_swizzles(swizzle_xxxx, state_swizzle, swizzle);

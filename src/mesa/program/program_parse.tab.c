@@ -68,7 +68,7 @@
 
 
 /* Copy the first part of user declarations.  */
-#line 1 "../../../src/mesa/program/program_parse.y" /* yacc.c:339  */
+#line 1 "./program/program_parse.y" /* yacc.c:339  */
 
 /*
  * Copyright © 2009 Intel Corporation
@@ -335,7 +335,7 @@ extern int _mesa_program_debug;
 
 union YYSTYPE
 {
-#line 126 "../../../src/mesa/program/program_parse.y" /* yacc.c:355  */
+#line 126 "./program/program_parse.y" /* yacc.c:355  */
 
    struct asm_instruction *inst;
    struct asm_symbol *sym;
@@ -390,7 +390,7 @@ int _mesa_program_parse (struct asm_parser_state *state);
 #endif /* !YY__MESA_PROGRAM_PROGRAM_PROGRAM_PARSE_TAB_H_INCLUDED  */
 
 /* Copy the second part of user declarations.  */
-#line 269 "../../../src/mesa/program/program_parse.y" /* yacc.c:358  */
+#line 269 "./program/program_parse.y" /* yacc.c:358  */
 
 extern int
 _mesa_program_lexer_lex(YYSTYPE *yylval_param, YYLTYPE *yylloc_param,
@@ -1960,7 +1960,7 @@ yyreduce:
   switch (yyn)
     {
         case 3:
-#line 288 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 288 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->prog->Target != GL_VERTEX_PROGRAM_ARB) {
 	      yyerror(& (yylsp[0]), state, "invalid fragment program header");
@@ -1972,7 +1972,7 @@ yyreduce:
     break;
 
   case 4:
-#line 296 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 296 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->prog->Target != GL_FRAGMENT_PROGRAM_ARB) {
 	      yyerror(& (yylsp[0]), state, "invalid vertex program header");
@@ -1986,7 +1986,7 @@ yyreduce:
     break;
 
   case 7:
-#line 312 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 312 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   int valid = 0;
 
@@ -2012,7 +2012,7 @@ yyreduce:
     break;
 
   case 10:
-#line 340 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 340 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((yyvsp[-1].inst) != NULL) {
 	      if (state->inst_tail == NULL) {
@@ -2031,7 +2031,7 @@ yyreduce:
     break;
 
   case 12:
-#line 358 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 358 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = (yyvsp[0].inst);
            state->prog->arb.NumAluInstructions++;
@@ -2040,7 +2040,7 @@ yyreduce:
     break;
 
   case 13:
-#line 363 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 363 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = (yyvsp[0].inst);
            state->prog->arb.NumTexInstructions++;
@@ -2049,7 +2049,7 @@ yyreduce:
     break;
 
   case 24:
-#line 384 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 384 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_ctor(OPCODE_ARL, & (yyvsp[-2].dst_reg), & (yyvsp[0].src_reg), NULL, NULL);
 	}
@@ -2057,7 +2057,7 @@ yyreduce:
     break;
 
   case 25:
-#line 390 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 390 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_copy_ctor(& (yyvsp[-3].temp_inst), & (yyvsp[-2].dst_reg), & (yyvsp[0].src_reg), NULL, NULL);
 	}
@@ -2065,7 +2065,7 @@ yyreduce:
     break;
 
   case 26:
-#line 396 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 396 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_copy_ctor(& (yyvsp[-3].temp_inst), & (yyvsp[-2].dst_reg), & (yyvsp[0].src_reg), NULL, NULL);
 	}
@@ -2073,7 +2073,7 @@ yyreduce:
     break;
 
   case 27:
-#line 402 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 402 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_copy_ctor(& (yyvsp[-5].temp_inst), & (yyvsp[-4].dst_reg), & (yyvsp[-2].src_reg), & (yyvsp[0].src_reg), NULL);
 	}
@@ -2081,7 +2081,7 @@ yyreduce:
     break;
 
   case 28:
-#line 409 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 409 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_copy_ctor(& (yyvsp[-5].temp_inst), & (yyvsp[-4].dst_reg), & (yyvsp[-2].src_reg), & (yyvsp[0].src_reg), NULL);
 	}
@@ -2089,7 +2089,7 @@ yyreduce:
     break;
 
   case 29:
-#line 416 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 416 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_copy_ctor(& (yyvsp[-7].temp_inst), & (yyvsp[-6].dst_reg), & (yyvsp[-4].src_reg), & (yyvsp[-2].src_reg), & (yyvsp[0].src_reg));
 	}
@@ -2097,7 +2097,7 @@ yyreduce:
     break;
 
   case 30:
-#line 422 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 422 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_copy_ctor(& (yyvsp[-7].temp_inst), & (yyvsp[-6].dst_reg), & (yyvsp[-4].src_reg), NULL, NULL);
 	   if ((yyval.inst) != NULL) {
@@ -2143,7 +2143,7 @@ yyreduce:
     break;
 
   case 31:
-#line 466 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 466 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_ctor(OPCODE_KIL, NULL, & (yyvsp[0].src_reg), NULL, NULL);
 	   state->fragment.UsesKill = 1;
@@ -2152,7 +2152,7 @@ yyreduce:
     break;
 
   case 32:
-#line 473 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 473 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.inst) = asm_instruction_copy_ctor(& (yyvsp[-11].temp_inst), & (yyvsp[-10].dst_reg), & (yyvsp[-8].src_reg), & (yyvsp[-6].src_reg), & (yyvsp[-4].src_reg));
 	   if ((yyval.inst) != NULL) {
@@ -2198,7 +2198,7 @@ yyreduce:
     break;
 
   case 33:
-#line 517 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 517 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = (yyvsp[0].integer);
 	}
@@ -2206,79 +2206,79 @@ yyreduce:
     break;
 
   case 34:
-#line 522 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 522 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = TEXTURE_1D_INDEX; }
 #line 2212 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 35:
-#line 523 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 523 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = TEXTURE_2D_INDEX; }
 #line 2218 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 36:
-#line 524 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 524 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = TEXTURE_3D_INDEX; }
 #line 2224 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 37:
-#line 525 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 525 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = TEXTURE_CUBE_INDEX; }
 #line 2230 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 38:
-#line 526 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 526 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = TEXTURE_RECT_INDEX; }
 #line 2236 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 39:
-#line 527 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 527 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = -TEXTURE_1D_INDEX; }
 #line 2242 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 40:
-#line 528 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 528 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = -TEXTURE_2D_INDEX; }
 #line 2248 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 41:
-#line 529 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 529 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = -TEXTURE_RECT_INDEX; }
 #line 2254 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 42:
-#line 530 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 530 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = TEXTURE_1D_ARRAY_INDEX; }
 #line 2260 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 43:
-#line 531 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 531 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = TEXTURE_2D_ARRAY_INDEX; }
 #line 2266 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 44:
-#line 532 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 532 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = -TEXTURE_1D_ARRAY_INDEX; }
 #line 2272 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 45:
-#line 533 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 533 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = -TEXTURE_2D_ARRAY_INDEX; }
 #line 2278 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 46:
-#line 537 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 537 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   /* FIXME: Is this correct?  Should the extenedSwizzle be applied
 	    * FIXME: to the existing swizzle?
@@ -2292,7 +2292,7 @@ yyreduce:
     break;
 
   case 47:
-#line 549 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 549 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.src_reg) = (yyvsp[0].src_reg);
 
@@ -2304,7 +2304,7 @@ yyreduce:
     break;
 
   case 48:
-#line 559 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 559 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.src_reg) = (yyvsp[-1].src_reg);
 
@@ -2315,7 +2315,7 @@ yyreduce:
     break;
 
   case 49:
-#line 568 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 568 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.src_reg) = (yyvsp[-1].src_reg);
 
@@ -2330,7 +2330,7 @@ yyreduce:
     break;
 
   case 50:
-#line 581 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 581 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.dst_reg) = (yyvsp[-1].dst_reg);
 	   (yyval.dst_reg).WriteMask = (yyvsp[0].swiz_mask).mask;
@@ -2354,7 +2354,7 @@ yyreduce:
     break;
 
   case 51:
-#line 603 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 603 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   set_dst_reg(& (yyval.dst_reg), PROGRAM_ADDRESS, 0);
 	   (yyval.dst_reg).WriteMask = (yyvsp[0].swiz_mask).mask;
@@ -2363,7 +2363,7 @@ yyreduce:
     break;
 
   case 52:
-#line 610 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 610 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   const unsigned xyzw_valid =
 	      ((yyvsp[-6].ext_swizzle).xyzw_valid << 0)
@@ -2398,7 +2398,7 @@ yyreduce:
     break;
 
   case 53:
-#line 643 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 643 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.ext_swizzle) = (yyvsp[0].ext_swizzle);
 	   (yyval.ext_swizzle).negate = ((yyvsp[-1].negate)) ? 1 : 0;
@@ -2407,7 +2407,7 @@ yyreduce:
     break;
 
   case 54:
-#line 650 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 650 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (((yyvsp[0].integer) != 0) && ((yyvsp[0].integer) != 1)) {
 	      yyerror(& (yylsp[0]), state, "invalid extended swizzle selector");
@@ -2427,7 +2427,7 @@ yyreduce:
     break;
 
   case 55:
-#line 666 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 666 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   char s;
 
@@ -2488,7 +2488,7 @@ yyreduce:
     break;
 
   case 56:
-#line 725 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 725 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s = (struct asm_symbol *)
               _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
@@ -2535,7 +2535,7 @@ yyreduce:
     break;
 
   case 57:
-#line 768 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 768 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   set_src_reg(& (yyval.src_reg), PROGRAM_INPUT, (yyvsp[0].attrib));
            state->prog->info.inputs_read |= BITFIELD64_BIT((yyval.src_reg).Base.Index);
@@ -2548,7 +2548,7 @@ yyreduce:
     break;
 
   case 58:
-#line 777 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 777 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (! (yyvsp[-1].src_reg).Base.RelAddr
 	       && ((unsigned) (yyvsp[-1].src_reg).Base.Index >= (yyvsp[-3].sym)->param_binding_length)) {
@@ -2574,7 +2574,7 @@ yyreduce:
     break;
 
   case 59:
-#line 799 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 799 "./program/program_parse.y" /* yacc.c:1646  */
     {
            gl_register_file file = ((yyvsp[0].temp_sym).name != NULL) 
 	      ? (yyvsp[0].temp_sym).param_binding_type
@@ -2586,7 +2586,7 @@ yyreduce:
     break;
 
   case 60:
-#line 809 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 809 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   set_dst_reg(& (yyval.dst_reg), PROGRAM_OUTPUT, (yyvsp[0].result));
 	}
@@ -2594,7 +2594,7 @@ yyreduce:
     break;
 
   case 61:
-#line 813 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 813 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s = (struct asm_symbol *)
               _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
@@ -2625,7 +2625,7 @@ yyreduce:
     break;
 
   case 62:
-#line 842 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 842 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s = (struct asm_symbol *)
               _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
@@ -2646,7 +2646,7 @@ yyreduce:
     break;
 
   case 65:
-#line 863 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 863 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   init_src_reg(& (yyval.src_reg));
 	   (yyval.src_reg).Base.Index = (yyvsp[0].integer);
@@ -2655,7 +2655,7 @@ yyreduce:
     break;
 
   case 66:
-#line 870 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 870 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   /* FINISHME: Add support for multiple address registers.
 	    */
@@ -2669,25 +2669,25 @@ yyreduce:
     break;
 
   case 67:
-#line 881 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 881 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 0; }
 #line 2675 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 68:
-#line 882 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 882 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = (yyvsp[0].integer); }
 #line 2681 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 69:
-#line 883 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 883 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = -(yyvsp[0].integer); }
 #line 2687 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 70:
-#line 887 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 887 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (((yyvsp[0].integer) < 0) || ((yyvsp[0].integer) > (state->limits->MaxAddressOffset - 1))) {
               char s[100];
@@ -2703,7 +2703,7 @@ yyreduce:
     break;
 
   case 71:
-#line 901 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 901 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (((yyvsp[0].integer) < 0) || ((yyvsp[0].integer) > state->limits->MaxAddressOffset)) {
               char s[100];
@@ -2719,7 +2719,7 @@ yyreduce:
     break;
 
   case 72:
-#line 915 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 915 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s = (struct asm_symbol *)
               _mesa_symbol_table_find_symbol(state->st, (yyvsp[0].string));
@@ -2741,7 +2741,7 @@ yyreduce:
     break;
 
   case 73:
-#line 935 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 935 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((yyvsp[0].swiz_mask).mask != WRITEMASK_X) {
 	      yyerror(& (yylsp[0]), state, "invalid address component selector");
@@ -2754,7 +2754,7 @@ yyreduce:
     break;
 
   case 74:
-#line 946 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 946 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((yyvsp[0].swiz_mask).mask != WRITEMASK_X) {
 	      yyerror(& (yylsp[0]), state,
@@ -2768,19 +2768,19 @@ yyreduce:
     break;
 
   case 79:
-#line 962 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 962 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.swiz_mask).swizzle = SWIZZLE_NOOP; (yyval.swiz_mask).mask = WRITEMASK_XYZW; }
 #line 2774 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 84:
-#line 966 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 966 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.swiz_mask).swizzle = SWIZZLE_NOOP; (yyval.swiz_mask).mask = WRITEMASK_XYZW; }
 #line 2780 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 91:
-#line 978 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 978 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s =
 	      declare_variable(state, (yyvsp[-2].string), at_attrib, & (yylsp[-2]));
@@ -2801,7 +2801,7 @@ yyreduce:
     break;
 
   case 92:
-#line 997 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 997 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = (yyvsp[0].attrib);
 	}
@@ -2809,7 +2809,7 @@ yyreduce:
     break;
 
   case 93:
-#line 1001 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1001 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = (yyvsp[0].attrib);
 	}
@@ -2817,7 +2817,7 @@ yyreduce:
     break;
 
   case 94:
-#line 1007 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1007 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VERT_ATTRIB_POS;
 	}
@@ -2825,7 +2825,7 @@ yyreduce:
     break;
 
   case 95:
-#line 1011 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1011 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VERT_ATTRIB_WEIGHT;
 	}
@@ -2833,7 +2833,7 @@ yyreduce:
     break;
 
   case 96:
-#line 1015 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1015 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VERT_ATTRIB_NORMAL;
 	}
@@ -2841,7 +2841,7 @@ yyreduce:
     break;
 
   case 97:
-#line 1019 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1019 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VERT_ATTRIB_COLOR0 + (yyvsp[0].integer);
 	}
@@ -2849,7 +2849,7 @@ yyreduce:
     break;
 
   case 98:
-#line 1023 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1023 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VERT_ATTRIB_FOG;
 	}
@@ -2857,7 +2857,7 @@ yyreduce:
     break;
 
   case 99:
-#line 1027 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1027 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VERT_ATTRIB_TEX0 + (yyvsp[0].integer);
 	}
@@ -2865,7 +2865,7 @@ yyreduce:
     break;
 
   case 100:
-#line 1031 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1031 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   yyerror(& (yylsp[-3]), state, "GL_ARB_matrix_palette not supported");
 	   YYERROR;
@@ -2874,7 +2874,7 @@ yyreduce:
     break;
 
   case 101:
-#line 1036 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1036 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VERT_ATTRIB_GENERIC0 + (yyvsp[-1].integer);
 	}
@@ -2882,7 +2882,7 @@ yyreduce:
     break;
 
   case 102:
-#line 1042 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1042 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->limits->MaxAttribs) {
 	      yyerror(& (yylsp[0]), state, "invalid vertex attribute reference");
@@ -2895,7 +2895,7 @@ yyreduce:
     break;
 
   case 106:
-#line 1056 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1056 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VARYING_SLOT_POS;
 	}
@@ -2903,7 +2903,7 @@ yyreduce:
     break;
 
   case 107:
-#line 1060 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1060 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VARYING_SLOT_COL0 + (yyvsp[0].integer);
 	}
@@ -2911,7 +2911,7 @@ yyreduce:
     break;
 
   case 108:
-#line 1064 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1064 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VARYING_SLOT_FOGC;
 	}
@@ -2919,7 +2919,7 @@ yyreduce:
     break;
 
   case 109:
-#line 1068 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1068 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.attrib) = VARYING_SLOT_TEX0 + (yyvsp[0].integer);
 	}
@@ -2927,7 +2927,7 @@ yyreduce:
     break;
 
   case 112:
-#line 1076 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1076 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s =
 	      declare_variable(state, (yyvsp[-1].string), at_param, & (yylsp[-1]));
@@ -2947,7 +2947,7 @@ yyreduce:
     break;
 
   case 113:
-#line 1094 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1094 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (((yyvsp[-2].integer) != 0) && ((unsigned) (yyvsp[-2].integer) != (yyvsp[0].temp_sym).param_binding_length)) {
 	      free((yyvsp[-4].string));
@@ -2974,7 +2974,7 @@ yyreduce:
     break;
 
   case 114:
-#line 1119 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1119 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = 0;
 	}
@@ -2982,7 +2982,7 @@ yyreduce:
     break;
 
   case 115:
-#line 1123 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1123 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (((yyvsp[0].integer) < 1) || ((unsigned) (yyvsp[0].integer) > state->limits->MaxParameters)) {
               char msg[100];
@@ -2999,7 +2999,7 @@ yyreduce:
     break;
 
   case 116:
-#line 1138 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1138 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.temp_sym) = (yyvsp[0].temp_sym);
 	}
@@ -3007,7 +3007,7 @@ yyreduce:
     break;
 
   case 117:
-#line 1144 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1144 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.temp_sym) = (yyvsp[-1].temp_sym);
 	}
@@ -3015,7 +3015,7 @@ yyreduce:
     break;
 
   case 119:
-#line 1151 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1151 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyvsp[-2].temp_sym).param_binding_length += (yyvsp[0].temp_sym).param_binding_length;
 	   (yyval.temp_sym) = (yyvsp[-2].temp_sym);
@@ -3024,7 +3024,7 @@ yyreduce:
     break;
 
   case 120:
-#line 1158 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1158 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3034,7 +3034,7 @@ yyreduce:
     break;
 
   case 121:
-#line 1164 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1164 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3044,7 +3044,7 @@ yyreduce:
     break;
 
   case 122:
-#line 1170 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1170 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3054,7 +3054,7 @@ yyreduce:
     break;
 
   case 123:
-#line 1178 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1178 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3064,7 +3064,7 @@ yyreduce:
     break;
 
   case 124:
-#line 1184 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1184 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3074,7 +3074,7 @@ yyreduce:
     break;
 
   case 125:
-#line 1190 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1190 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3084,7 +3084,7 @@ yyreduce:
     break;
 
   case 126:
-#line 1198 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1198 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3094,7 +3094,7 @@ yyreduce:
     break;
 
   case 127:
-#line 1204 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1204 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3104,7 +3104,7 @@ yyreduce:
     break;
 
   case 128:
-#line 1210 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1210 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset(& (yyval.temp_sym), 0, sizeof((yyval.temp_sym)));
 	   (yyval.temp_sym).param_binding_begin = ~0;
@@ -3114,85 +3114,85 @@ yyreduce:
     break;
 
   case 129:
-#line 1217 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1217 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3120 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 130:
-#line 1218 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1218 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3126 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 131:
-#line 1221 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1221 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3132 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 132:
-#line 1222 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1222 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3138 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 133:
-#line 1223 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1223 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3144 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 134:
-#line 1224 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1224 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3150 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 135:
-#line 1225 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1225 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3156 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 136:
-#line 1226 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1226 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3162 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 137:
-#line 1227 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1227 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3168 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 138:
-#line 1228 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1228 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3174 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 139:
-#line 1229 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1229 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3180 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 140:
-#line 1230 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1230 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3186 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 141:
-#line 1231 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1231 "./program/program_parse.y" /* yacc.c:1646  */
     { memcpy((yyval.state), (yyvsp[0].state), sizeof((yyval.state))); }
 #line 3192 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 142:
-#line 1235 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1235 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = STATE_MATERIAL;
@@ -3203,7 +3203,7 @@ yyreduce:
     break;
 
   case 143:
-#line 1244 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1244 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = (yyvsp[0].integer);
 	}
@@ -3211,7 +3211,7 @@ yyreduce:
     break;
 
   case 144:
-#line 1248 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1248 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_EMISSION;
 	}
@@ -3219,7 +3219,7 @@ yyreduce:
     break;
 
   case 145:
-#line 1252 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1252 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_SHININESS;
 	}
@@ -3227,7 +3227,7 @@ yyreduce:
     break;
 
   case 146:
-#line 1258 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1258 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = STATE_LIGHT;
@@ -3238,7 +3238,7 @@ yyreduce:
     break;
 
   case 147:
-#line 1267 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1267 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = (yyvsp[0].integer);
 	}
@@ -3246,7 +3246,7 @@ yyreduce:
     break;
 
   case 148:
-#line 1271 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1271 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_POSITION;
 	}
@@ -3254,7 +3254,7 @@ yyreduce:
     break;
 
   case 149:
-#line 1275 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1275 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (!state->ctx->Extensions.EXT_point_parameters) {
 	      yyerror(& (yylsp[0]), state, "GL_ARB_point_parameters not supported");
@@ -3267,7 +3267,7 @@ yyreduce:
     break;
 
   case 150:
-#line 1284 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1284 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = (yyvsp[0].integer);
 	}
@@ -3275,7 +3275,7 @@ yyreduce:
     break;
 
   case 151:
-#line 1288 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1288 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_HALF_VECTOR;
 	}
@@ -3283,7 +3283,7 @@ yyreduce:
     break;
 
   case 152:
-#line 1294 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1294 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_SPOT_DIRECTION;
 	}
@@ -3291,7 +3291,7 @@ yyreduce:
     break;
 
   case 153:
-#line 1300 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1300 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = (yyvsp[0].state)[0];
 	   (yyval.state)[1] = (yyvsp[0].state)[1];
@@ -3300,7 +3300,7 @@ yyreduce:
     break;
 
   case 154:
-#line 1307 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1307 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = STATE_LIGHTMODEL_AMBIENT;
@@ -3309,7 +3309,7 @@ yyreduce:
     break;
 
   case 155:
-#line 1312 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1312 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = STATE_LIGHTMODEL_SCENECOLOR;
@@ -3319,7 +3319,7 @@ yyreduce:
     break;
 
   case 156:
-#line 1320 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1320 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = STATE_LIGHTPROD;
@@ -3331,7 +3331,7 @@ yyreduce:
     break;
 
   case 158:
-#line 1332 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1332 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = (yyvsp[0].integer);
@@ -3341,7 +3341,7 @@ yyreduce:
     break;
 
   case 159:
-#line 1340 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1340 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_TEXENV_COLOR;
 	}
@@ -3349,7 +3349,7 @@ yyreduce:
     break;
 
   case 160:
-#line 1346 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1346 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_AMBIENT;
 	}
@@ -3357,7 +3357,7 @@ yyreduce:
     break;
 
   case 161:
-#line 1350 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1350 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_DIFFUSE;
 	}
@@ -3365,7 +3365,7 @@ yyreduce:
     break;
 
   case 162:
-#line 1354 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1354 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_SPECULAR;
 	}
@@ -3373,7 +3373,7 @@ yyreduce:
     break;
 
   case 163:
-#line 1360 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1360 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->MaxLights) {
 	      yyerror(& (yylsp[0]), state, "invalid light selector");
@@ -3386,7 +3386,7 @@ yyreduce:
     break;
 
   case 164:
-#line 1371 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1371 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = STATE_TEXGEN;
@@ -3397,7 +3397,7 @@ yyreduce:
     break;
 
   case 165:
-#line 1380 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1380 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_TEXGEN_EYE_S;
 	}
@@ -3405,7 +3405,7 @@ yyreduce:
     break;
 
   case 166:
-#line 1384 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1384 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_TEXGEN_OBJECT_S;
 	}
@@ -3413,7 +3413,7 @@ yyreduce:
     break;
 
   case 167:
-#line 1389 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1389 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_TEXGEN_EYE_S - STATE_TEXGEN_EYE_S;
 	}
@@ -3421,7 +3421,7 @@ yyreduce:
     break;
 
   case 168:
-#line 1393 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1393 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_TEXGEN_EYE_T - STATE_TEXGEN_EYE_S;
 	}
@@ -3429,7 +3429,7 @@ yyreduce:
     break;
 
   case 169:
-#line 1397 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1397 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_TEXGEN_EYE_R - STATE_TEXGEN_EYE_S;
 	}
@@ -3437,7 +3437,7 @@ yyreduce:
     break;
 
   case 170:
-#line 1401 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1401 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_TEXGEN_EYE_Q - STATE_TEXGEN_EYE_S;
 	}
@@ -3445,7 +3445,7 @@ yyreduce:
     break;
 
   case 171:
-#line 1407 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1407 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = (yyvsp[0].integer);
@@ -3454,7 +3454,7 @@ yyreduce:
     break;
 
   case 172:
-#line 1414 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1414 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_FOG_COLOR;
 	}
@@ -3462,7 +3462,7 @@ yyreduce:
     break;
 
   case 173:
-#line 1418 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1418 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_FOG_PARAMS;
 	}
@@ -3470,7 +3470,7 @@ yyreduce:
     break;
 
   case 174:
-#line 1424 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1424 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = STATE_CLIPPLANE;
@@ -3480,7 +3480,7 @@ yyreduce:
     break;
 
   case 175:
-#line 1432 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1432 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->MaxClipPlanes) {
 	      yyerror(& (yylsp[0]), state, "invalid clip plane selector");
@@ -3493,7 +3493,7 @@ yyreduce:
     break;
 
   case 176:
-#line 1443 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1443 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = (yyvsp[0].integer);
@@ -3502,7 +3502,7 @@ yyreduce:
     break;
 
   case 177:
-#line 1450 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1450 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_POINT_SIZE;
 	}
@@ -3510,7 +3510,7 @@ yyreduce:
     break;
 
   case 178:
-#line 1454 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1454 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_POINT_ATTENUATION;
 	}
@@ -3518,7 +3518,7 @@ yyreduce:
     break;
 
   case 179:
-#line 1460 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1460 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = (yyvsp[-4].state)[0];
 	   (yyval.state)[1] = (yyvsp[-4].state)[1];
@@ -3530,7 +3530,7 @@ yyreduce:
     break;
 
   case 180:
-#line 1470 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1470 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = (yyvsp[-1].state)[0];
 	   (yyval.state)[1] = (yyvsp[-1].state)[1];
@@ -3542,7 +3542,7 @@ yyreduce:
     break;
 
   case 181:
-#line 1480 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1480 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[2] = 0;
 	   (yyval.state)[3] = 3;
@@ -3551,7 +3551,7 @@ yyreduce:
     break;
 
   case 182:
-#line 1485 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1485 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   /* It seems logical that the matrix row range specifier would have
 	    * to specify a range or more than one row (i.e., $5 > $3).
@@ -3571,7 +3571,7 @@ yyreduce:
     break;
 
   case 183:
-#line 1503 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1503 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = (yyvsp[-1].state)[0];
 	   (yyval.state)[1] = (yyvsp[-1].state)[1];
@@ -3581,7 +3581,7 @@ yyreduce:
     break;
 
   case 184:
-#line 1511 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1511 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = 0;
 	}
@@ -3589,7 +3589,7 @@ yyreduce:
     break;
 
   case 185:
-#line 1515 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1515 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = (yyvsp[0].integer);
 	}
@@ -3597,7 +3597,7 @@ yyreduce:
     break;
 
   case 186:
-#line 1521 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1521 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_MATRIX_INVERSE;
 	}
@@ -3605,7 +3605,7 @@ yyreduce:
     break;
 
   case 187:
-#line 1525 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1525 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_MATRIX_TRANSPOSE;
 	}
@@ -3613,7 +3613,7 @@ yyreduce:
     break;
 
   case 188:
-#line 1529 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1529 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = STATE_MATRIX_INVTRANS;
 	}
@@ -3621,7 +3621,7 @@ yyreduce:
     break;
 
   case 189:
-#line 1535 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1535 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((yyvsp[0].integer) > 3) {
 	      yyerror(& (yylsp[0]), state, "invalid matrix row reference");
@@ -3634,7 +3634,7 @@ yyreduce:
     break;
 
   case 190:
-#line 1546 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1546 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = STATE_MODELVIEW_MATRIX;
 	   (yyval.state)[1] = (yyvsp[0].integer);
@@ -3643,7 +3643,7 @@ yyreduce:
     break;
 
   case 191:
-#line 1551 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1551 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = STATE_PROJECTION_MATRIX;
 	   (yyval.state)[1] = 0;
@@ -3652,7 +3652,7 @@ yyreduce:
     break;
 
   case 192:
-#line 1556 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1556 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = STATE_MVP_MATRIX;
 	   (yyval.state)[1] = 0;
@@ -3661,7 +3661,7 @@ yyreduce:
     break;
 
   case 193:
-#line 1561 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1561 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = STATE_TEXTURE_MATRIX;
 	   (yyval.state)[1] = (yyvsp[0].integer);
@@ -3670,7 +3670,7 @@ yyreduce:
     break;
 
   case 194:
-#line 1566 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1566 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   yyerror(& (yylsp[-3]), state, "GL_ARB_matrix_palette not supported");
 	   YYERROR;
@@ -3679,7 +3679,7 @@ yyreduce:
     break;
 
   case 195:
-#line 1571 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1571 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = STATE_PROGRAM_MATRIX;
 	   (yyval.state)[1] = (yyvsp[-1].integer);
@@ -3688,7 +3688,7 @@ yyreduce:
     break;
 
   case 196:
-#line 1578 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1578 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = 0;
 	}
@@ -3696,7 +3696,7 @@ yyreduce:
     break;
 
   case 197:
-#line 1582 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1582 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = (yyvsp[-1].integer);
 	}
@@ -3704,7 +3704,7 @@ yyreduce:
     break;
 
   case 198:
-#line 1587 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1587 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   /* Since GL_ARB_vertex_blend isn't supported, only modelview matrix
 	    * zero is valid.
@@ -3720,7 +3720,7 @@ yyreduce:
     break;
 
   case 199:
-#line 1600 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1600 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   /* Since GL_ARB_matrix_palette isn't supported, just let any value
 	    * through here.  The error will be generated later.
@@ -3731,7 +3731,7 @@ yyreduce:
     break;
 
   case 200:
-#line 1608 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1608 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->MaxProgramMatrices) {
 	      yyerror(& (yylsp[0]), state, "invalid program matrix selector");
@@ -3744,7 +3744,7 @@ yyreduce:
     break;
 
   case 201:
-#line 1619 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1619 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = STATE_DEPTH_RANGE;
@@ -3753,7 +3753,7 @@ yyreduce:
     break;
 
   case 206:
-#line 1631 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1631 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = state->state_param_enum;
@@ -3765,7 +3765,7 @@ yyreduce:
     break;
 
   case 207:
-#line 1641 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1641 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = (yyvsp[0].integer);
 	   (yyval.state)[1] = (yyvsp[0].integer);
@@ -3774,7 +3774,7 @@ yyreduce:
     break;
 
   case 208:
-#line 1646 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1646 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = (yyvsp[-2].integer);
 	   (yyval.state)[1] = (yyvsp[0].integer);
@@ -3783,7 +3783,7 @@ yyreduce:
     break;
 
   case 209:
-#line 1653 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1653 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = state->state_param_enum;
@@ -3795,7 +3795,7 @@ yyreduce:
     break;
 
   case 210:
-#line 1663 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1663 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = state->state_param_enum;
@@ -3807,7 +3807,7 @@ yyreduce:
     break;
 
   case 211:
-#line 1672 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1672 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = (yyvsp[0].integer);
 	   (yyval.state)[1] = (yyvsp[0].integer);
@@ -3816,7 +3816,7 @@ yyreduce:
     break;
 
   case 212:
-#line 1677 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1677 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.state)[0] = (yyvsp[-2].integer);
 	   (yyval.state)[1] = (yyvsp[0].integer);
@@ -3825,7 +3825,7 @@ yyreduce:
     break;
 
   case 213:
-#line 1684 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1684 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   memset((yyval.state), 0, sizeof((yyval.state)));
 	   (yyval.state)[0] = state->state_param_enum;
@@ -3837,7 +3837,7 @@ yyreduce:
     break;
 
   case 214:
-#line 1694 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1694 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->limits->MaxEnvParams) {
 	      yyerror(& (yylsp[0]), state, "invalid environment parameter reference");
@@ -3849,7 +3849,7 @@ yyreduce:
     break;
 
   case 215:
-#line 1704 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1704 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->limits->MaxLocalParams) {
 	      yyerror(& (yylsp[0]), state, "invalid local parameter reference");
@@ -3861,7 +3861,7 @@ yyreduce:
     break;
 
   case 220:
-#line 1719 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1719 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.vector).count = 4;
 	   (yyval.vector).data[0].f = (yyvsp[0].real);
@@ -3873,7 +3873,7 @@ yyreduce:
     break;
 
   case 221:
-#line 1729 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1729 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.vector).count = 1;
 	   (yyval.vector).data[0].f = (yyvsp[0].real);
@@ -3885,7 +3885,7 @@ yyreduce:
     break;
 
   case 222:
-#line 1737 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1737 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.vector).count = 1;
 	   (yyval.vector).data[0].f = (float) (yyvsp[0].integer);
@@ -3897,7 +3897,7 @@ yyreduce:
     break;
 
   case 223:
-#line 1747 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1747 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.vector).count = 4;
 	   (yyval.vector).data[0].f = (yyvsp[-1].real);
@@ -3909,7 +3909,7 @@ yyreduce:
     break;
 
   case 224:
-#line 1755 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1755 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.vector).count = 4;
 	   (yyval.vector).data[0].f = (yyvsp[-3].real);
@@ -3921,7 +3921,7 @@ yyreduce:
     break;
 
   case 225:
-#line 1764 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1764 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.vector).count = 4;
 	   (yyval.vector).data[0].f = (yyvsp[-5].real);
@@ -3933,7 +3933,7 @@ yyreduce:
     break;
 
   case 226:
-#line 1773 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1773 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.vector).count = 4;
 	   (yyval.vector).data[0].f = (yyvsp[-7].real);
@@ -3945,7 +3945,7 @@ yyreduce:
     break;
 
   case 227:
-#line 1783 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1783 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.real) = ((yyvsp[-1].negate)) ? -(yyvsp[0].real) : (yyvsp[0].real);
 	}
@@ -3953,7 +3953,7 @@ yyreduce:
     break;
 
   case 228:
-#line 1787 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1787 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.real) = (float)(((yyvsp[-1].negate)) ? -(yyvsp[0].integer) : (yyvsp[0].integer));
 	}
@@ -3961,37 +3961,37 @@ yyreduce:
     break;
 
   case 229:
-#line 1792 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1792 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.negate) = FALSE; }
 #line 3967 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 230:
-#line 1793 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1793 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.negate) = TRUE;  }
 #line 3973 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 231:
-#line 1794 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1794 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.negate) = FALSE; }
 #line 3979 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 232:
-#line 1797 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1797 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = (yyvsp[0].integer); }
 #line 3985 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 234:
-#line 1800 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1800 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = (yyvsp[0].integer); }
 #line 3991 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 236:
-#line 1804 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1804 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (!declare_variable(state, (yyvsp[0].string), (yyvsp[-3].integer), & (yylsp[0]))) {
 	      free((yyvsp[0].string));
@@ -4002,7 +4002,7 @@ yyreduce:
     break;
 
   case 237:
-#line 1811 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1811 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (!declare_variable(state, (yyvsp[0].string), (yyvsp[-1].integer), & (yylsp[0]))) {
 	      free((yyvsp[0].string));
@@ -4013,7 +4013,7 @@ yyreduce:
     break;
 
   case 238:
-#line 1820 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1820 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *const s =
 	      declare_variable(state, (yyvsp[-2].string), at_output, & (yylsp[-2]));
@@ -4029,7 +4029,7 @@ yyreduce:
     break;
 
   case 239:
-#line 1834 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1834 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.result) = VARYING_SLOT_POS;
@@ -4042,7 +4042,7 @@ yyreduce:
     break;
 
   case 240:
-#line 1843 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1843 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.result) = VARYING_SLOT_FOGC;
@@ -4055,7 +4055,7 @@ yyreduce:
     break;
 
   case 241:
-#line 1852 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1852 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.result) = (yyvsp[0].result);
 	}
@@ -4063,7 +4063,7 @@ yyreduce:
     break;
 
   case 242:
-#line 1856 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1856 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.result) = VARYING_SLOT_PSIZ;
@@ -4076,7 +4076,7 @@ yyreduce:
     break;
 
   case 243:
-#line 1865 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1865 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.result) = VARYING_SLOT_TEX0 + (yyvsp[0].integer);
@@ -4089,7 +4089,7 @@ yyreduce:
     break;
 
   case 244:
-#line 1874 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1874 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_fragment) {
 	      (yyval.result) = FRAG_RESULT_DEPTH;
@@ -4102,7 +4102,7 @@ yyreduce:
     break;
 
   case 245:
-#line 1885 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1885 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.result) = (yyvsp[-1].integer) + (yyvsp[0].integer);
 	}
@@ -4110,7 +4110,7 @@ yyreduce:
     break;
 
   case 246:
-#line 1891 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1891 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.integer) = VARYING_SLOT_COL0;
@@ -4125,7 +4125,7 @@ yyreduce:
     break;
 
   case 247:
-#line 1902 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1902 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      yyerror(& (yylsp[-2]), state, "invalid program result name");
@@ -4157,7 +4157,7 @@ yyreduce:
     break;
 
   case 248:
-#line 1930 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1930 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.integer) = VARYING_SLOT_COL0;
@@ -4170,7 +4170,7 @@ yyreduce:
     break;
 
   case 249:
-#line 1939 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1939 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.integer) = VARYING_SLOT_BFC0;
@@ -4183,7 +4183,7 @@ yyreduce:
     break;
 
   case 250:
-#line 1950 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1950 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   (yyval.integer) = 0; 
 	}
@@ -4191,7 +4191,7 @@ yyreduce:
     break;
 
   case 251:
-#line 1954 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1954 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.integer) = 0;
@@ -4204,7 +4204,7 @@ yyreduce:
     break;
 
   case 252:
-#line 1963 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1963 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if (state->mode == ARB_vertex) {
 	      (yyval.integer) = 1;
@@ -4217,79 +4217,79 @@ yyreduce:
     break;
 
   case 253:
-#line 1973 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1973 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 0; }
 #line 4223 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 254:
-#line 1974 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1974 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 0; }
 #line 4229 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 255:
-#line 1975 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1975 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 1; }
 #line 4235 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 256:
-#line 1978 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1978 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 0; }
 #line 4241 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 257:
-#line 1979 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1979 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 0; }
 #line 4247 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 258:
-#line 1980 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1980 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 1; }
 #line 4253 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 259:
-#line 1983 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1983 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 0; }
 #line 4259 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 260:
-#line 1984 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1984 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = (yyvsp[-1].integer); }
 #line 4265 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 261:
-#line 1987 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1987 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 0; }
 #line 4271 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 262:
-#line 1988 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1988 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = (yyvsp[-1].integer); }
 #line 4277 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 263:
-#line 1991 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1991 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = 0; }
 #line 4283 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 264:
-#line 1992 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1992 "./program/program_parse.y" /* yacc.c:1646  */
     { (yyval.integer) = (yyvsp[-1].integer); }
 #line 4289 "program/program_parse.tab.c" /* yacc.c:1646  */
     break;
 
   case 265:
-#line 1996 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 1996 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->MaxTextureCoordUnits) {
 	      yyerror(& (yylsp[0]), state, "invalid texture coordinate unit selector");
@@ -4302,7 +4302,7 @@ yyreduce:
     break;
 
   case 266:
-#line 2007 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 2007 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->MaxTextureImageUnits) {
 	      yyerror(& (yylsp[0]), state, "invalid texture image unit selector");
@@ -4315,7 +4315,7 @@ yyreduce:
     break;
 
   case 267:
-#line 2018 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 2018 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   if ((unsigned) (yyvsp[0].integer) >= state->MaxTextureUnits) {
 	      yyerror(& (yylsp[0]), state, "invalid texture unit selector");
@@ -4328,7 +4328,7 @@ yyreduce:
     break;
 
   case 268:
-#line 2029 "../../../src/mesa/program/program_parse.y" /* yacc.c:1646  */
+#line 2029 "./program/program_parse.y" /* yacc.c:1646  */
     {
 	   struct asm_symbol *exist = (struct asm_symbol *)
               _mesa_symbol_table_find_symbol(state->st, (yyvsp[-2].string));
@@ -4591,7 +4591,7 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 2058 "../../../src/mesa/program/program_parse.y" /* yacc.c:1906  */
+#line 2058 "./program/program_parse.y" /* yacc.c:1906  */
 
 
 void

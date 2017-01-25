@@ -989,8 +989,7 @@ VkResult radv_QueueSubmit(
 			if (queue->device->trace_bo)
 				*queue->device->trace_id_ptr = 0;
 
-			ret = queue->device->ws->cs_submit(ctx, queue->queue_idx, cs_array,
-							pSubmits[i].commandBufferCount,
+			ret = queue->device->ws->cs_submit(ctx, queue->queue_idx, cs_array + j, advance,
 							(struct radeon_winsys_sem **)pSubmits[i].pWaitSemaphores,
 							b ? pSubmits[i].waitSemaphoreCount : 0,
 							(struct radeon_winsys_sem **)pSubmits[i].pSignalSemaphores,

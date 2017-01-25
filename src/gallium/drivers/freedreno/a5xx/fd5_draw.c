@@ -60,12 +60,6 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
 			info->restart_index : 0xffffffff);
 
-	/* points + psize -> spritelist: */
-	if (ctx->rasterizer->point_size_per_vertex &&
-			fd5_emit_get_vp(emit)->writes_psize &&
-			(info->mode == PIPE_PRIM_POINTS))
-		primtype = DI_PT_POINTLIST_PSIZE;
-
 	fd5_emit_render_cntl(ctx, false);
 	fd5_draw_emit(ctx->batch, ring, primtype,
 			emit->key.binning_pass ? IGNORE_VISIBILITY : USE_VISIBILITY,
@@ -214,35 +208,44 @@ fd5_clear(struct fd_context *ctx, unsigned buffers,
 			if (!(buffers & (PIPE_CLEAR_COLOR0 << i)))
 				continue;
 
+			enum pipe_format pfmt = pfb->cbufs[i]->format;
+
 			// XXX I think RB_CLEAR_COLOR_DWn wants to take into account SWAP??
-			float f[4];
-			switch (fd5_pipe2swap(pfb->cbufs[i]->format)) {
+			union pipe_color_union swapped;
+			switch (fd5_pipe2swap(pfmt)) {
 			case WZYX:
-				f[0] = color->f[0];
-				f[1] = color->f[1];
-				f[2] = color->f[2];
-				f[3] = color->f[3];
+				swapped.ui[0] = color->ui[0];
+				swapped.ui[1] = color->ui[1];
+				swapped.ui[2] = color->ui[2];
+				swapped.ui[3] = color->ui[3];
 				break;
 			case WXYZ:
-				f[2] = color->f[0];
-				f[1] = color->f[1];
-				f[0] = color->f[2];
-				f[3] = color->f[3];
+				swapped.ui[2] = color->ui[0];
+				swapped.ui[1] = color->ui[1];
+				swapped.ui[0] = color->ui[2];
+				swapped.ui[3] = color->ui[3];
 				break;
 			case ZYXW:
-				f[3] = color->f[0];
-				f[0] = color->f[1];
-				f[1] = color->f[2];
-				f[2] = color->f[3];
+				swapped.ui[3] = color->ui[0];
+				swapped.ui[0] = color->ui[1];
+				swapped.ui[1] = color->ui[2];
+				swapped.ui[2] = color->ui[3];
 				break;
 			case XYZW:
-				f[3] = color->f[0];
-				f[2] = color->f[1];
-				f[1] = color->f[2];
-				f[0] = color->f[3];
+				swapped.ui[3] = color->ui[0];
+				swapped.ui[2] = color->ui[1];
+				swapped.ui[1] = color->ui[2];
+				swapped.ui[0] = color->ui[3];
 				break;
 			}
-			util_pack_color(f, pfb->cbufs[i]->format, &uc);
+
+			if (util_format_is_pure_uint(pfmt)) {
+				util_format_write_4ui(pfmt, swapped.ui, 0, &uc, 0, 0, 0, 1, 1);
+			} else if (util_format_is_pure_sint(pfmt)) {
+				util_format_write_4i(pfmt, swapped.i, 0, &uc, 0, 0, 0, 1, 1);
+			} else {
+				util_pack_color(swapped.f, pfmt, &uc);
+			}
 
 			OUT_PKT4(ring, REG_A5XX_RB_BLIT_CNTL, 1);
 			OUT_RING(ring, A5XX_RB_BLIT_CNTL_BUF(BLIT_MRT0 + i));

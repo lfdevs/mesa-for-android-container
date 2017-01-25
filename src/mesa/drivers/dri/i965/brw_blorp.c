@@ -908,6 +908,17 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
       blorp_batch_finish(&batch);
    }
 
+   /*
+    * Ivybrigde PRM Vol 2, Part 1, "11.7 MCS Buffer for Render Target(s)":
+    *
+    *  Any transition from any value in {Clear, Render, Resolve} to a
+    *  different value in {Clear, Render, Resolve} requires end of pipe
+    *  synchronization.
+    */
+   brw_emit_pipe_control_flush(brw,
+                               PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                               PIPE_CONTROL_CS_STALL);
+
    return true;
 }
 
@@ -975,6 +986,17 @@ brw_blorp_resolve_color(struct brw_context *brw, struct intel_mipmap_tree *mt,
                      brw_blorp_to_isl_format(brw, format, true),
                      resolve_op);
    blorp_batch_finish(&batch);
+
+   /*
+    * Ivybrigde PRM Vol 2, Part 1, "11.7 MCS Buffer for Render Target(s)":
+    *
+    *  Any transition from any value in {Clear, Render, Resolve} to a
+    *  different value in {Clear, Render, Resolve} requires end of pipe
+    *  synchronization.
+    */
+   brw_emit_pipe_control_flush(brw,
+                               PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                               PIPE_CONTROL_CS_STALL);
 }
 
 static void

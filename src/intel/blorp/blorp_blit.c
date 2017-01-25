@@ -26,6 +26,9 @@
 #include "blorp_priv.h"
 #include "brw_meta_util.h"
 
+/* header-only include needed for _mesa_unorm_to_float and friends. */
+#include "mesa/main/format_utils.h"
+
 #define FILE_DEBUG_FLAG DEBUG_BLORP
 
 static const bool split_blorp_blit_debug = false;
@@ -2204,6 +2207,75 @@ get_ccs_compatible_uint_format(const struct isl_format_layout *fmtl)
    }
 }
 
+/* Takes an isl_color_value and returns a color value that is the original
+ * color value only bit-casted to a UINT format.  This value, together with
+ * the format from get_ccs_compatible_uint_format, will yield the same bit
+ * value as the original color and format.
+ */
+static union isl_color_value
+bitcast_color_value_to_uint(union isl_color_value color,
+                            const struct isl_format_layout *fmtl)
+{
+   /* All CCS formats have the same number of bits in each channel */
+   const struct isl_channel_layout *chan = &fmtl->channels.r;
+
+   union isl_color_value bits;
+   switch (chan->type) {
+   case ISL_UINT:
+   case ISL_SINT:
+      /* Hardware will ignore the high bits so there's no need to cast */
+      bits = color;
+      break;
+
+   case ISL_UNORM:
+      for (unsigned i = 0; i < 4; i++)
+         bits.u32[i] = _mesa_float_to_unorm(color.f32[i], chan->bits);
+      break;
+
+   case ISL_SNORM:
+      for (unsigned i = 0; i < 4; i++)
+         bits.i32[i] = _mesa_float_to_snorm(color.f32[i], chan->bits);
+      break;
+
+   case ISL_SFLOAT:
+      switch (chan->bits) {
+      case 16:
+         for (unsigned i = 0; i < 4; i++)
+            bits.u32[i] = _mesa_float_to_half(color.f32[i]);
+         break;
+
+      case 32:
+         bits = color;
+         break;
+
+      default:
+         unreachable("Invalid float format size");
+      }
+      break;
+
+   default:
+      unreachable("Invalid channel type");
+   }
+
+   switch (fmtl->format) {
+   case ISL_FORMAT_B8G8R8A8_UNORM:
+   case ISL_FORMAT_B8G8R8A8_UNORM_SRGB:
+   case ISL_FORMAT_B8G8R8X8_UNORM:
+   case ISL_FORMAT_B8G8R8X8_UNORM_SRGB: {
+      /* If it's a BGRA format, we need to swap blue and red */
+      uint32_t tmp = bits.u32[0];
+      bits.u32[0] = bits.u32[2];
+      bits.u32[2] = tmp;
+      break;
+   }
+
+   default:
+      break; /* Nothing to do */
+   }
+
+   return bits;
+}
+
 static void
 surf_convert_to_uncompressed(const struct isl_device *isl_dev,
                              struct brw_blorp_surface_info *info,
@@ -2318,6 +2390,16 @@ blorp_copy(struct blorp_batch *batch,
    } else {
       params.dst.view.format = get_copy_format_for_bpb(isl_dev, dst_fmtl->bpb);
       params.src.view.format = get_copy_format_for_bpb(isl_dev, src_fmtl->bpb);
+   }
+
+   if (params.src.aux_usage == ISL_AUX_USAGE_CCS_E) {
+      params.src.clear_color =
+         bitcast_color_value_to_uint(params.src.clear_color, src_fmtl);
+   }
+
+   if (params.dst.aux_usage == ISL_AUX_USAGE_CCS_E) {
+      params.dst.clear_color =
+         bitcast_color_value_to_uint(params.dst.clear_color, dst_fmtl);
    }
 
    wm_prog_key.src_bpc =

@@ -75,8 +75,11 @@ choose_isl_surf_usage(VkImageUsageFlags vk_usage,
       isl_usage |= ISL_SURF_USAGE_TEXTURE_BIT;
    }
 
-   if (vk_usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
-      /* blorp implements transfers by rendering into the destination image. */
+   if (vk_usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT &&
+       aspect == VK_IMAGE_ASPECT_COLOR_BIT) {
+      /* blorp implements transfers by rendering into the destination image.
+       * Only request this with color images, as we deal with depth/stencil
+       * formats differently. */
       isl_usage |= ISL_SURF_USAGE_RENDER_TARGET_BIT;
    }
 

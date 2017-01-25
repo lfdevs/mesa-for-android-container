@@ -217,6 +217,15 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
         out_numThreadsPerProcGroup++;
     }
 
+    /* Prune empty numa nodes */
+    for (auto it = out_nodes.begin(); it != out_nodes.end(); ) {
+       if ((*it).cores.size() == 0)
+          it = out_nodes.erase(it);
+       else
+          ++it;
+    }
+
+    /* Prune empty core nodes */
     for (uint32_t node = 0; node < out_nodes.size(); node++) {
         auto& numaNode = out_nodes[node];
         auto it = numaNode.cores.begin();

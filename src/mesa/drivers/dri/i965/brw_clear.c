@@ -36,6 +36,7 @@
 
 #include "brw_context.h"
 #include "brw_blorp.h"
+#include "brw_defines.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BLIT
 
@@ -174,14 +175,46 @@ brw_fast_clear_depth(struct gl_context *ctx)
       mt->depth_clear_value = depth_clear_value;
    }
 
-   /* From the Sandy Bridge PRM, volume 2 part 1, page 313:
-    *
-    *     "If other rendering operations have preceded this clear, a
-    *      PIPE_CONTROL with write cache flush enabled and Z-inhibit disabled
-    *      must be issued before the rectangle primitive used for the depth
-    *      buffer clear operation.
-    */
-   brw_emit_mi_flush(brw);
+   if (brw->gen == 6) {
+      /* From the Sandy Bridge PRM, volume 2 part 1, page 313:
+       *
+       *   "If other rendering operations have preceded this clear, a
+       *    PIPE_CONTROL with write cache flush enabled and Z-inhibit disabled
+       *    must be issued before the rectangle primitive used for the depth
+       *    buffer clear operation.
+       */
+       brw_emit_pipe_control_flush(brw,
+                                   PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                   PIPE_CONTROL_CS_STALL);
+   } else if (brw->gen >= 7) {
+      /*
+       * From the Ivybridge PRM, volume 2, "Depth Buffer Clear":
+       *
+       *   If other rendering operations have preceded this clear, a
+       *   PIPE_CONTROL with depth cache flush enabled, Depth Stall bit
+       *   enabled must be issued before the rectangle primitive used for the
+       *   depth buffer clear operation.
+       *
+       * Same applies for Gen8 and Gen9.
+       *
+       * In addition, from the Ivybridge PRM, volume 2, 1.10.4.1 PIPE_CONTROL,
+       * Depth Cache Flush Enable:
+       *
+       *   This bit must not be set when Depth Stall Enable bit is set in
+       *   this packet.
+       *
+       * This is confirmed to hold for real, HSW gets immediate gpu hangs.
+       *
+       * Therefore issue two pipe control flushes, one for cache flush and
+       * another for depth stall.
+       */
+       brw_emit_pipe_control_flush(brw,
+                                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                   PIPE_CONTROL_CS_STALL);
+
+       brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_STALL);
+   }
 
    if (fb->MaxNumLayers > 0) {
       for (unsigned layer = 0; layer < depth_irb->layer_count; layer++) {
@@ -201,7 +234,12 @@ brw_fast_clear_depth(struct gl_context *ctx)
        *      by a PIPE_CONTROL command with DEPTH_STALL bit set and Then
        *      followed by Depth FLUSH'
       */
-      brw_emit_mi_flush(brw);
+      brw_emit_pipe_control_flush(brw,
+                                  PIPE_CONTROL_DEPTH_STALL);
+
+      brw_emit_pipe_control_flush(brw,
+                                  PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                  PIPE_CONTROL_CS_STALL);
    }
 
    /* Now, the HiZ buffer contains data that needs to be resolved to the depth

@@ -29,7 +29,7 @@
 #include "swr_query.h"
 #include "swr_screen.h"
 #include "swr_state.h"
-
+#include "common/os.h"
 
 static struct swr_query *
 swr_query(struct pipe_query *p)
@@ -45,7 +45,8 @@ swr_create_query(struct pipe_context *pipe, unsigned type, unsigned index)
    assert(type < PIPE_QUERY_TYPES);
    assert(index < MAX_SO_STREAMS);
 
-   pq = CALLOC_STRUCT(swr_query);
+   pq = (struct swr_query *) AlignedMalloc(sizeof(struct swr_query), 64);
+   memset(pq, 0, sizeof(*pq));
 
    if (pq) {
       pq->type = type;
@@ -67,7 +68,7 @@ swr_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
       swr_fence_reference(pipe->screen, &pq->fence, NULL);
    }
 
-   FREE(pq);
+   AlignedFree(pq);
 }
 
 

@@ -850,11 +850,12 @@ void si_emit_cache_flush(struct si_context *sctx)
 	if (rctx->flags & SI_CONTEXT_INV_GLOBAL_L2 ||
 	    (rctx->chip_class <= CIK &&
 	     (rctx->flags & SI_CONTEXT_WRITEBACK_GLOBAL_L2))) {
-		/* Invalidate L1 & L2. (L1 is always invalidated)
+		/* Invalidate L1 & L2. (L1 is always invalidated on SI)
 		 * WB must be set on VI+ when TC_ACTION is set.
 		 */
 		si_emit_surface_sync(rctx, cp_coher_cntl |
 				     S_0085F0_TC_ACTION_ENA(1) |
+				     S_0085F0_TCL1_ACTION_ENA(1) |
 				     S_0301F0_TC_WB_ACTION_ENA(rctx->chip_class >= VI));
 		cp_coher_cntl = 0;
 		sctx->b.num_L2_invalidates++;

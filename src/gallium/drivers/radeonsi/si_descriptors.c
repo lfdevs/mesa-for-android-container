@@ -320,14 +320,21 @@ static void si_sampler_view_add_buffer(struct si_context *sctx,
 	if (resource->target == PIPE_BUFFER)
 		return;
 
-	/* Now add separate DCC if it's present. */
+	/* Now add separate DCC or HTILE. */
 	rtex = (struct r600_texture*)resource;
-	if (!rtex->dcc_separate_buffer)
-		return;
+	if (rtex->dcc_separate_buffer) {
+		radeon_add_to_buffer_list_check_mem(&sctx->b, &sctx->b.gfx,
+						    rtex->dcc_separate_buffer, usage,
+						    RADEON_PRIO_DCC, check_mem);
+	}
 
-	radeon_add_to_buffer_list_check_mem(&sctx->b, &sctx->b.gfx,
-					    rtex->dcc_separate_buffer, usage,
-					    RADEON_PRIO_DCC, check_mem);
+	if (rtex->htile_buffer &&
+	    rtex->tc_compatible_htile &&
+	    !is_stencil_sampler) {
+		radeon_add_to_buffer_list_check_mem(&sctx->b, &sctx->b.gfx,
+						    rtex->htile_buffer, usage,
+						    RADEON_PRIO_HTILE, check_mem);
+	}
 }
 
 static void si_sampler_views_begin_new_cs(struct si_context *sctx,

@@ -34,7 +34,7 @@ struct swr_query_result {
    uint64_t timestamp_end;
 };
 
-struct swr_query {
+OSALIGNLINE(struct) swr_query {
    unsigned type; /* PIPE_QUERY_* */
    unsigned index;
 

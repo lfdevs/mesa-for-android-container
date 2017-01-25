@@ -76,11 +76,11 @@ fd5_rasterizer_state_create(struct pipe_context *pctx,
 //	if (cso->fill_front != PIPE_POLYGON_MODE_FILL ||
 //		cso->fill_back != PIPE_POLYGON_MODE_FILL)
 //		so->pc_prim_vtx_cntl2 |= A5XX_PC_PRIM_VTX_CNTL2_POLYMODE_ENABLE;
-//
-//	if (cso->cull_face & PIPE_FACE_FRONT)
-//		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_CULL_FRONT;
-//	if (cso->cull_face & PIPE_FACE_BACK)
-//		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_CULL_BACK;
+
+	if (cso->cull_face & PIPE_FACE_FRONT)
+		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_CULL_FRONT;
+	if (cso->cull_face & PIPE_FACE_BACK)
+		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_CULL_BACK;
 	if (!cso->front_ccw)
 		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_FRONT_CW;
 //	if (!cso->flatshade_first)

@@ -109,7 +109,8 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		}
 
 		OUT_PKT4(ring, REG_A5XX_SP_FS_MRT_REG(i), 1);
-		OUT_RING(ring, A5XX_SP_FS_MRT_REG_COLOR_FORMAT(format));
+		OUT_RING(ring, A5XX_SP_FS_MRT_REG_COLOR_FORMAT(format) |
+				COND(srgb, A5XX_SP_FS_MRT_REG_COLOR_SRGB));
 
 		/* when we support UBWC, these would be the system memory
 		 * addr/pitch/etc:

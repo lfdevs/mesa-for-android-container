@@ -1199,7 +1199,8 @@ var_decoration_cb(struct vtn_builder *b, struct vtn_value *val, int member,
          is_vertex_input = false;
          location += vtn_var->patch ? VARYING_SLOT_PATCH0 : VARYING_SLOT_VAR0;
       } else {
-         unreachable("Location must be on input or output variable");
+         vtn_warn("Location must be on input or output variable");
+         return;
       }
 
       if (vtn_var->var) {

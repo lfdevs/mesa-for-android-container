@@ -1,0 +1,52 @@
+From: Andreas Boll <andreas.boll.dev@gmail.com>
+Date: Tue, 24 Jan 2017 16:44:12 +0100
+Subject: [PATCH] configure.ac: Require LLVM for r300 only on x86 and x86_64
+
+b3119a3 introduced a strict LLVM requirement for r300 on all
+architectures and thus configure fails on architectures where LLVM is
+not available or buggy.
+
+r300 doesn't strictly require LLVM, but for performance reasons we
+highly recommend LLVM usage. So require it at least on x86 and x86_64
+architectures as we have done before b3119a3.
+
+Fixes: b3119a3 ("configure.ac: Check gallium LLVM version in gallium_require_llvm")
+Cc: 17.0 <mesa-stable@lists.freedesktop.org>
+Signed-off-by: Andreas Boll <andreas.boll.dev@gmail.com>
+---
+ configure.ac | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index de8af87..7410a50 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2213,6 +2213,19 @@ gallium_require_llvm() {
+ }
+ 
+ dnl
++dnl r300 doesn't strictly require LLVM, but for performance reasons we
++dnl highly recommend LLVM usage. So require it at least on x86 and x86_64
++dnl architectures.
++dnl
++r300_require_llvm() {
++    case "$host" in *gnux32) return;; esac
++    case "$host_cpu" in
++    i*86|x86_64|amd64) gallium_require_llvm $1
++        ;;
++    esac
++}
++
++dnl
+ dnl DRM is needed by X, Wayland, and offscreen rendering.
+ dnl Surfaceless is an alternative for the last one.
+ dnl
+@@ -2298,7 +2311,7 @@ if test -n "$with_gallium_drivers"; then
+             HAVE_GALLIUM_R300=yes
+             PKG_CHECK_MODULES([RADEON], [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
+             require_libdrm "r300"
+-            gallium_require_llvm "r300"
++            r300_require_llvm "r300"
+             ;;
+         xr600)
+             HAVE_GALLIUM_R600=yes

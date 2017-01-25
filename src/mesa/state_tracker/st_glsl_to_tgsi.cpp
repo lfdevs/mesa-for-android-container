@@ -955,7 +955,7 @@ glsl_to_tgsi_visitor::get_opcode(unsigned op,
       case3fid(MUL, UMUL, DMUL);
       case3fid(MAD, UMAD, DMAD);
       case3fid(FMA, UMAD, DFMA);
-      case3(DIV, IDIV, UDIV);
+      case4d(DIV, IDIV, UDIV, DDIV);
       case4d(MAX, IMAX, UMAX, DMAX);
       case4d(MIN, IMIN, UMIN, DMIN);
       case2iu(MOD, UMOD);
@@ -1710,10 +1710,7 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
       emit_asm(ir, TGSI_OPCODE_MUL, result_dst, op[0], op[1]);
       break;
    case ir_binop_div:
-      if (result_dst.type == GLSL_TYPE_FLOAT || result_dst.type == GLSL_TYPE_DOUBLE)
-         assert(!"not reached: should be handled by ir_div_to_mul_rcp");
-      else
-         emit_asm(ir, TGSI_OPCODE_DIV, result_dst, op[0], op[1]);
+      emit_asm(ir, TGSI_OPCODE_DIV, result_dst, op[0], op[1]);
       break;
    case ir_binop_mod:
       if (result_dst.type == GLSL_TYPE_FLOAT)
@@ -6918,7 +6915,7 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
       lower_instructions(ir,
                          MOD_TO_FLOOR |
-                         DIV_TO_MUL_RCP |
+                         FDIV_TO_MUL_RCP |
                          EXP_TO_EXP2 |
                          LOG_TO_LOG2 |
                          LDEXP_TO_ARITH |

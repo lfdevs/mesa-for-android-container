@@ -296,7 +296,7 @@ extern int _mesa_glsl_debug;
 
 union YYSTYPE
 {
-#line 98 "../../../src/compiler/glsl/glsl_parser.yy" /* yacc.c:1909  */
+#line 98 "./glsl/glsl_parser.yy" /* yacc.c:1909  */
 
    int n;
    float real;

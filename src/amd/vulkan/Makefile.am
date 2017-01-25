@@ -32,9 +32,6 @@ lib_LTLIBRARIES = libvulkan_radeon.la
 # The gallium includes are for the util/u_math.h include from main/macros.h
 
 AM_CPPFLAGS = \
-	$(AMDGPU_CFLAGS) \
-	$(VALGRIND_CFLAGS) \
-	$(DEFINES) \
 	-I$(top_srcdir)/include \
 	-I$(top_builddir)/src \
 	-I$(top_srcdir)/src \
@@ -48,7 +45,10 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/mesa \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/include
+	-I$(top_srcdir)/src/gallium/include \
+	$(AMDGPU_CFLAGS) \
+	$(VALGRIND_CFLAGS) \
+	$(DEFINES)
 
 AM_CFLAGS = \
 	$(VISIBILITY_CFLAGS) \
