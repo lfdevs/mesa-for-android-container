@@ -55,8 +55,6 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_device *device = cmd_buffer->device;
 
-/* XXX: Do we need this on more than just BDW? */
-#if (GEN_GEN >= 8)
    /* Emit a render target cache flush.
     *
     * This isn't documented anywhere in the PRM.  However, it seems to be
@@ -65,9 +63,10 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
     * clear depth, reset state base address, and then go render stuff.
     */
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      pc.DCFlushEnable = true;
       pc.RenderTargetCacheFlushEnable = true;
+      pc.CommandStreamerStallEnable = true;
    }
-#endif
 
    anv_batch_emit(&cmd_buffer->batch, GENX(STATE_BASE_ADDRESS), sba) {
       sba.GeneralStateBaseAddress = (struct anv_address) { NULL, 0 };
@@ -148,6 +147,8 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
     */
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
       pc.TextureCacheInvalidationEnable = true;
+      pc.ConstantCacheInvalidationEnable = true;
+      pc.StateCacheInvalidationEnable = true;
    }
 }
 
@@ -1177,9 +1178,9 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
 
       case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
          assert(stage == MESA_SHADER_FRAGMENT);
-         if (desc->image_view->aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT) {
-            /* For stencil input attachments, we treat it like any old texture
-             * that a user may have bound.
+         if (desc->image_view->aspect_mask != VK_IMAGE_ASPECT_COLOR_BIT) {
+            /* For depth and stencil input attachments, we treat it like any
+             * old texture that a user may have bound.
              */
             surface_state = desc->image_view->sampler_surface_state;
             assert(surface_state.alloc_size);
@@ -1187,9 +1188,9 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
                                   desc->image_view->image->aux_usage,
                                   surface_state);
          } else {
-            /* For depth and color input attachments, we create the surface
-             * state at vkBeginRenderPass time so that we can include aux
-             * and clear color information.
+            /* For color input attachments, we create the surface state at
+             * vkBeginRenderPass time so that we can include aux and clear
+             * color information.
              */
             assert(binding->input_attachment_index < subpass->input_count);
             const unsigned subpass_att = binding->input_attachment_index;

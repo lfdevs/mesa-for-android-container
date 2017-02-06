@@ -201,7 +201,10 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
 
    size = setup_miptree(rsc, paddingX, paddingY, msaa_xscale, msaa_yscale);
 
-   struct etna_bo *bo = etna_bo_new(screen->dev, size, DRM_ETNA_GEM_CACHE_WC);
+   uint32_t flags = DRM_ETNA_GEM_CACHE_WC;
+   if (templat->bind & PIPE_BIND_VERTEX_BUFFER)
+      flags |= DRM_ETNA_GEM_FORCE_MMU;
+   struct etna_bo *bo = etna_bo_new(screen->dev, size, flags);
    if (unlikely(bo == NULL)) {
       BUG("Problem allocating video memory for resource");
       return NULL;

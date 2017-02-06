@@ -1,3 +1,25 @@
+mesa (17.0.0~rc3-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * Drop libgles1.
+
+  [ Andreas Boll ]
+  * New upstream release candidate.
+  * Drop transitional package libegl1-mesa-drivers.
+  * Remove Breaks/Replaces from pre-jessie.
+  * Explicitly disable LLVM on some arches. Should fix FTBFS on x32.
+  * Drop configure.ac-Require-LLVM-for-r300-only-on-x86-and-x.patch,
+    upstream.
+  * Cherry-pick 045f38a (vulkan: Don't install vk_platform.h or
+    vulkan.h).
+  * Update list of unwanted vulkan headers.
+  * Drop unused git-cleanup.sh script. Replaced with usage of --extend-
+    diff-ignore some time ago.
+  * Enable building etnaviv and imx on armhf (Closes: #852614).
+    - Bump libdrm-dev build-dep to 2.4.74-2~.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Mon, 06 Feb 2017 19:05:30 +0100
+
 mesa (17.0.0~rc2-1) experimental; urgency=medium
 
   * New upstream release candidate.
@@ -23,6 +45,18 @@ mesa (17.0.0~rc1-1) experimental; urgency=medium
   * Update extend-diff-ignore.
 
  -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 19 Jan 2017 18:39:06 +0100
+
+mesa (13.0.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Drop vl-zscan-fix-Fix-trivial-sign-compare-warnings.diff and r600-
+    sb-Fix-loop-optimization-related-hangs-on-eg.diff, upstream.
+  * Drop workaround-binutils-mips-844357.diff, binutils regression has
+    been fixed (Closes: #852030).
+  * Revert to debhelper compat 9 (Workaround for #851130).
+  * Update extend-diff-ignore.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Wed, 01 Feb 2017 15:36:10 +0100
 
 mesa (13.0.3-1) unstable; urgency=medium
 

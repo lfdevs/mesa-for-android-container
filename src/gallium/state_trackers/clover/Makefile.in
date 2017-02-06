@@ -639,12 +639,11 @@ TGSI_SOURCES := \
 	tgsi/compiler.cpp \
 	tgsi/invocation.hpp
 
-AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src \
-	-I$(top_srcdir)/src/gallium/include \
+AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_builddir)/src \
+	-I$(top_srcdir)/src -I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/winsys -I$(top_builddir)/src \
-	-I$(srcdir) $(am__append_1)
+	-I$(top_srcdir)/src/gallium/winsys -I$(srcdir) $(am__append_1)
 # Only install the headers if we are building a stand-alone implementation
 @HAVE_CLOVER_ICD_FALSE@cldir = $(includedir)/CL
 @HAVE_CLOVER_ICD_FALSE@cl_HEADERS = \

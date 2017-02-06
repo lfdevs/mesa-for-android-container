@@ -235,13 +235,9 @@ emit_miptree_blit(struct brw_context *brw,
     *    represented per scan line’s worth of graphics data depends on the
     *    color depth.
     *
-    * Furthermore, intelEmitCopyBlit (which is called below) uses a signed
-    * 16-bit integer to represent buffer pitch, so it can only handle buffer
-    * pitches < 32k. However, the pitch is measured in bytes for linear buffers
-    * and dwords for tiled buffers.
-    *
-    * As a result of these two limitations, we can only use the blitter to do
-    * this copy when the miptree's pitch is less than 32k linear or 128k tiled.
+    * The blitter's pitch is a signed 16-bit integer, but measured in bytes
+    * for linear surfaces and DWords for tiled surfaces.  So the maximum
+    * pitch is 32k linear and 128k tiled.
     */
    if (blt_pitch(src_mt) >= 32768 || blt_pitch(dst_mt) >= 32768) {
       perf_debug("Falling back due to >= 32k/128k pitch\n");
@@ -480,11 +476,11 @@ static bool
 can_fast_copy_blit(struct brw_context *brw,
 		   drm_intel_bo *src_buffer,
                    int16_t src_x, int16_t src_y,
-                   uintptr_t src_offset, uint32_t src_pitch,
+                   uintptr_t src_offset, int32_t src_pitch,
                    uint32_t src_tiling, uint32_t src_tr_mode,
 		   drm_intel_bo *dst_buffer,
                    int16_t dst_x, int16_t dst_y,
-                   uintptr_t dst_offset, uint32_t dst_pitch,
+                   uintptr_t dst_offset, int32_t dst_pitch,
                    uint32_t dst_tiling, uint32_t dst_tr_mode,
                    int16_t w, int16_t h, uint32_t cpp,
                    GLenum logic_op)
@@ -520,10 +516,8 @@ can_fast_copy_blit(struct brw_context *brw,
    if (!_mesa_is_pow_two(cpp) || cpp > 16)
       return false;
 
-   /* For Fast Copy Blits the pitch cannot be a negative number. So, bit 15
-    * of the destination pitch must be zero.
-    */
-   if ((src_pitch >> 15 & 1) != 0 || (dst_pitch >> 15 & 1) != 0)
+   /* For Fast Copy Blits the pitch cannot be a negative number. */
+   if (src_pitch < 0 || dst_pitch < 0)
       return false;
 
    /* For Linear surfaces, the pitch has to be an OWord (16byte) multiple. */
@@ -577,12 +571,12 @@ xy_blit_cmd(uint32_t src_tiling, uint32_t src_tr_mode,
 bool
 intelEmitCopyBlit(struct brw_context *brw,
 		  GLuint cpp,
-		  GLshort src_pitch,
+		  int32_t src_pitch,
 		  drm_intel_bo *src_buffer,
 		  GLuint src_offset,
 		  uint32_t src_tiling,
 		  uint32_t src_tr_mode,
-		  GLshort dst_pitch,
+		  int32_t dst_pitch,
 		  drm_intel_bo *dst_buffer,
 		  GLuint dst_offset,
 		  uint32_t dst_tiling,

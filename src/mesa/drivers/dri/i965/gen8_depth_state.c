@@ -477,6 +477,18 @@ gen8_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
       break;
    case BLORP_HIZ_OP_DEPTH_CLEAR:
       dw1 |= GEN8_WM_HZ_DEPTH_CLEAR;
+
+      /* The "Clear Rectangle X Max" (and Y Max) fields are exclusive,
+       * rather than inclusive, and limited to 16383.  This means that
+       * for a 16384x16384 render target, we would miss the last row
+       * or column of pixels along the edge.
+       *
+       * To work around this, we have to set the "Full Surface Depth
+       * and Stencil Clear" bit.  We can do this in all cases because
+       * we always clear the full rectangle anyway.  We'll need to
+       * change this if we ever add scissored clear support.
+       */
+      dw1 |= GEN8_WM_HZ_FULL_SURFACE_DEPTH_CLEAR;
       break;
    case BLORP_HIZ_OP_NONE:
       unreachable("Should not get here.");

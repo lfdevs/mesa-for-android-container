@@ -3368,7 +3368,7 @@ static void *si_create_vertex_elements(struct pipe_context *ctx,
 		first_non_void = util_format_get_first_non_void_channel(elements[i].src_format);
 		data_format = si_translate_buffer_dataformat(ctx->screen, desc, first_non_void);
 		num_format = si_translate_buffer_numformat(ctx->screen, desc, first_non_void);
-		channel = &desc->channel[first_non_void];
+		channel = first_non_void >= 0 ? &desc->channel[first_non_void] : NULL;
 
 		v->rsrc_word3[i] = S_008F0C_DST_SEL_X(si_map_swizzle(desc->swizzle[0])) |
 				   S_008F0C_DST_SEL_Y(si_map_swizzle(desc->swizzle[1])) |
@@ -3390,12 +3390,12 @@ static void *si_create_vertex_elements(struct pipe_context *ctx,
 				/* This isn't actually used in OpenGL. */
 				v->fix_fetch |= (uint64_t)SI_FIX_FETCH_A2_SINT << (4 * i);
 			}
-		} else if (channel->type == UTIL_FORMAT_TYPE_FIXED) {
+		} else if (channel && channel->type == UTIL_FORMAT_TYPE_FIXED) {
 			if (desc->swizzle[3] == PIPE_SWIZZLE_1)
 				v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBX_32_FIXED << (4 * i);
 			else
 				v->fix_fetch |= (uint64_t)SI_FIX_FETCH_RGBA_32_FIXED << (4 * i);
-		} else if (channel->size == 32 && !channel->pure_integer) {
+		} else if (channel && channel->size == 32 && !channel->pure_integer) {
 			if (channel->type == UTIL_FORMAT_TYPE_SIGNED) {
 				if (channel->normalized) {
 					if (desc->swizzle[3] == PIPE_SWIZZLE_1)

@@ -100,11 +100,8 @@ try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load)
 
    if (image_dim == GLSL_SAMPLER_DIM_SUBPASS_MS) {
       tex->op = nir_texop_txf_ms;
-
-      nir_ssa_def *sample_id =
-         nir_load_system_value(&b, nir_intrinsic_load_sample_id, 0);
       tex->src[2].src_type = nir_tex_src_ms_index;
-      tex->src[2].src = nir_src_for_ssa(sample_id);
+      tex->src[2].src = load->src[1];
    }
 
    nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);

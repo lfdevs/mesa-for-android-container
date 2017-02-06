@@ -28,8 +28,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_builddir)/src/mesa/drivers/dri/common \
+	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	$(GALLIUM_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)

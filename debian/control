@@ -9,7 +9,7 @@ Build-Depends:
  dh-autoreconf,
  quilt (>= 0.40),
  pkg-config,
- libdrm-dev (>= 2.4.74) [!hurd-any],
+ libdrm-dev (>= 2.4.74-2~) [!hurd-any],
  libx11-dev,
  x11proto-gl-dev (>= 1.4.14),
  libxxf86vm-dev,
@@ -163,15 +163,6 @@ Description: free implementation of the EGL API -- development files
  This package provides the development environment for compiling programs
  against the EGL library.
 
-Package: libegl1-mesa-drivers
-Section: libs
-Architecture: linux-any kfreebsd-any
-Depends:
- ${misc:Depends},
-Multi-Arch: same
-Description: transitional dummy package
- This is a transitional dummy package, it can be safely removed.
-
 Package: libwayland-egl1-mesa
 Section: libs
 Architecture: linux-any
@@ -181,51 +172,11 @@ Depends:
  libegl1-mesa (= ${binary:Version})
 Provides: libwayland-egl1
 Conflicts: libwayland-egl1
-Replaces: libwayland-egl1, libegl1-mesa-drivers  (<< 10.1.0-2)
-Breaks: libegl1-mesa-drivers (<< 10.1.0-2)
+Replaces: libwayland-egl1
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: implementation of the Wayland EGL platform -- runtime
  This package contains the mesa implementation of the Wayland EGL platform
-
-Package: libgles1-mesa
-Section: libs
-Architecture: any
-Depends:
- libglapi-mesa (= ${binary:Version}),
- ${shlibs:Depends},
- ${misc:Depends},
-Provides: libgles1
-Conflicts: libgles1
-Replaces: libgles1
-Pre-Depends: ${misc:Pre-Depends}
-Multi-Arch: same
-Description: free implementation of the OpenGL|ES 1.x API -- runtime
- OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on
- embedded systems - including consoles, phones, appliances and vehicles.
- It contains a subset of OpenGL plus a number of extensions for the
- special needs of embedded systems.
- .
- OpenGL|ES 1.x provides an API for fixed-function hardware.
-
-Package: libgles1-mesa-dev
-Section: libdevel
-Architecture: any
-Depends:
- libgles1-mesa (= ${binary:Version}),
- libegl1-mesa-dev,
- ${misc:Depends},
-Multi-Arch: same
-Description: free implementation of the OpenGL|ES 1.x API -- development files
- OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on
- embedded systems - including consoles, phones, appliances and vehicles.
- It contains a subset of OpenGL plus a number of extensions for the
- special needs of embedded systems.
- .
- OpenGL|ES 1.x provides an API for fixed-function hardware.
- .
- This package provides a development environment for building programs using
- the OpenGL|ES 1.x APIs.
 
 Package: libgles2-mesa
 Section: libs
@@ -293,7 +244,6 @@ Conflicts: libgl1
 Replaces: libgl1
 Provides: libgl1
 Breaks:
- glx-diversions (<< 0.4),
  libopengl-perl (<< 0.6704+dfsg-2),
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
@@ -320,8 +270,6 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends}
 Recommends: libtxc-dxtn-s2tc | libtxc-dxtn-s2tc0 | libtxc-dxtn0
-Breaks:
- xserver-xorg-core (<< 2:1.14.3-5),
 Multi-Arch: same
 Description: free implementation of the OpenGL API -- DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
@@ -482,10 +430,6 @@ Depends:
  ocl-icd-libopencl1 | libopencl1,
  ${shlibs:Depends},
  ${misc:Depends},
-Replaces:
- libgl1-mesa-dri (<< 10.3.0-1),
-Breaks:
- libgl1-mesa-dri (<< 10.3.0-1),
 Provides: opencl-icd
 Multi-Arch: same
 Description: free implementation of the OpenCL API -- ICD runtime

@@ -218,9 +218,10 @@ static const struct surface_format_info format_info[] = {
    SF(50, 50,  x,  x,  x,  x,  x,  x,  x,    x,   P8A8_UNORM_PALETTE1)
    SF( x,  x,  x,  x,  x,  x,  x,  x,  x,    x,   A1B5G5R5_UNORM)
    /* According to the PRM, A4B4G4R4_UNORM isn't supported until Sky Lake
-    * but empirical testing indicates that it works just fine on Broadwell.
+    * but empirical testing indicates that at least sampling works just fine
+    * on Broadwell.
     */
-   SF(80, 80,  x,  x, 80,  x,  x,  x,  x,    x,   A4B4G4R4_UNORM)
+   SF(80, 80,  x,  x, 90,  x,  x,  x,  x,    x,   A4B4G4R4_UNORM)
    SF(90,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8A8_UINT)
    SF(90,  x,  x,  x,  x,  x,  x,  x,  x,    x,   L8A8_SINT)
    SF( Y,  Y,  x, 45,  Y,  Y,  Y,  x,  x,    x,   R8_UNORM)

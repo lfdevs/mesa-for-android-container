@@ -1268,6 +1268,12 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
                      const uint32_t *w, unsigned count)
 {
    switch (opcode) {
+   case SpvOpUndef: {
+      struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_undef);
+      val->type = vtn_value(b, w[1], vtn_value_type_type)->type;
+      break;
+   }
+
    case SpvOpVariable: {
       struct vtn_variable *var = rzalloc(b, struct vtn_variable);
       var->type = vtn_value(b, w[1], vtn_value_type_type)->type;

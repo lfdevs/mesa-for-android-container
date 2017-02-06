@@ -349,6 +349,29 @@ blorp_clear(struct blorp_batch *batch,
    if (format == ISL_FORMAT_R9G9B9E5_SHAREDEXP) {
       clear_color.u32[0] = float3_to_rgb9e5(clear_color.f32);
       format = ISL_FORMAT_R32_UINT;
+   } else if (format == ISL_FORMAT_A4B4G4R4_UNORM) {
+      /* Broadwell and earlier cannot render to this format so we need to work
+       * around it by swapping the colors around and using B4G4R4A4 instead.
+       */
+
+      /* First, we apply the swizzle. */
+      union isl_color_value old;
+      assert((unsigned)(swizzle.r - ISL_CHANNEL_SELECT_RED) < 4);
+      assert((unsigned)(swizzle.g - ISL_CHANNEL_SELECT_RED) < 4);
+      assert((unsigned)(swizzle.b - ISL_CHANNEL_SELECT_RED) < 4);
+      assert((unsigned)(swizzle.a - ISL_CHANNEL_SELECT_RED) < 4);
+      old.u32[swizzle.r - ISL_CHANNEL_SELECT_RED] = clear_color.u32[0];
+      old.u32[swizzle.g - ISL_CHANNEL_SELECT_RED] = clear_color.u32[1];
+      old.u32[swizzle.b - ISL_CHANNEL_SELECT_RED] = clear_color.u32[2];
+      old.u32[swizzle.a - ISL_CHANNEL_SELECT_RED] = clear_color.u32[3];
+      swizzle = ISL_SWIZZLE_IDENTITY;
+
+      /* Now we re-order for the new format */
+      clear_color.u32[0] = old.u32[1];
+      clear_color.u32[1] = old.u32[2];
+      clear_color.u32[2] = old.u32[3];
+      clear_color.u32[3] = old.u32[0];
+      format = ISL_FORMAT_B4G4R4A4_UNORM;
    }
 
    memcpy(&params.wm_inputs.clear_color, clear_color.f32, sizeof(float) * 4);

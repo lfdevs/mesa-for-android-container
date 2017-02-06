@@ -24,8 +24,8 @@ libwindowsglx_la_CFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/glx \
 	-I$(top_srcdir)/src/mapi \
-	-I$(top_srcdir)/src/mapi/glapi \
 	-I$(top_builddir)/src/mapi/glapi \
+	-I$(top_srcdir)/src/mapi/glapi \
 	$(VISIBILITY_CFLAGS) \
 	$(SHARED_GLAPI_CFLAGS) \
 	$(DEFINES) \

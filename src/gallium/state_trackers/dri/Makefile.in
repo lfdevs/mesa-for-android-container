@@ -603,10 +603,9 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(am__append_2) $(am__append_3)
 AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_builddir)/src/mesa/drivers/dri/common \
-	$(GALLIUM_CFLAGS) $(LIBDRM_CFLAGS) $(VISIBILITY_CFLAGS) \
-	$(am__append_4)
+	-I$(top_srcdir)/src/mesa/drivers/dri/common $(GALLIUM_CFLAGS) \
+	$(LIBDRM_CFLAGS) $(VISIBILITY_CFLAGS) $(am__append_4)
 noinst_LTLIBRARIES = libdri.la
 libdri_la_SOURCES = $(common_SOURCES) $(am__append_5) $(am__append_6)
 EXTRA_DIST = SConscript

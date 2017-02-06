@@ -910,6 +910,9 @@ brw_process_driconf_options(struct brw_context *brw)
    ctx->Const.ForceGLSLExtensionsWarn =
       driQueryOptionb(options, "force_glsl_extensions_warn");
 
+   ctx->Const.ForceGLSLVersion =
+      driQueryOptioni(options, "force_glsl_version");
+
    ctx->Const.DisableGLSLLineContinuations =
       driQueryOptionb(options, "disable_glsl_line_continuations");
 

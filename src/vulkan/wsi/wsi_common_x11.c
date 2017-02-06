@@ -370,7 +370,8 @@ x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
        */
       caps->currentExtent = (VkExtent2D) { -1, -1 };
       caps->minImageExtent = (VkExtent2D) { 1, 1 };
-      caps->maxImageExtent = (VkExtent2D) { INT16_MAX, INT16_MAX };
+      /* This is the maximum supported size on Intel */
+      caps->maxImageExtent = (VkExtent2D) { 1 << 14, 1 << 14 };
    }
    free(err);
    free(geom);

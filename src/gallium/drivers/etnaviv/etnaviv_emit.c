@@ -491,6 +491,23 @@ etna_emit_state(struct etna_context *ctx)
       /*00C14*/ EMIT_STATE(SE_DEPTH_BIAS, rasterizer->SE_DEPTH_BIAS);
       /*00C18*/ EMIT_STATE(SE_CONFIG, rasterizer->SE_CONFIG);
    }
+   if (unlikely(dirty & (ETNA_DIRTY_SCISSOR | ETNA_DIRTY_FRAMEBUFFER |
+                         ETNA_DIRTY_RASTERIZER | ETNA_DIRTY_VIEWPORT))) {
+      struct etna_rasterizer_state *rasterizer = etna_rasterizer_state(ctx->rasterizer);
+
+      uint32_t clip_right =
+         MIN2(ctx->framebuffer.SE_CLIP_RIGHT, ctx->viewport.SE_CLIP_RIGHT);
+      uint32_t clip_bottom =
+         MIN2(ctx->framebuffer.SE_CLIP_BOTTOM, ctx->viewport.SE_CLIP_BOTTOM);
+
+      if (rasterizer->scissor) {
+         clip_right = MIN2(ctx->scissor.SE_CLIP_RIGHT, clip_right);
+         clip_bottom = MIN2(ctx->scissor.SE_CLIP_BOTTOM, clip_bottom);
+      }
+
+      /*00C20*/ EMIT_STATE_FIXP(SE_CLIP_RIGHT, clip_right);
+      /*00C24*/ EMIT_STATE_FIXP(SE_CLIP_BOTTOM, clip_bottom);
+   }
    if (unlikely(dirty & (ETNA_DIRTY_SHADER))) {
       /*00E00*/ EMIT_STATE(RA_CONTROL, ctx->shader_state.RA_CONTROL);
    }

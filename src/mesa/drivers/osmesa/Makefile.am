@@ -28,8 +28,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/mapi \
 	-I$(top_builddir)/src/mapi \
+	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa/ \
 	$(DEFINES)
 AM_CFLAGS = $(PTHREAD_CFLAGS) \

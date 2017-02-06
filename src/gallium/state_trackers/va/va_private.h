@@ -261,6 +261,7 @@ typedef struct {
    int target_id;
    bool first_single_submitted;
    int gop_coeff;
+   bool needs_begin_frame;
 } vlVaContext;
 
 typedef struct {

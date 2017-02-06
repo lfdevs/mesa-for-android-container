@@ -170,7 +170,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/VERSION $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(vulkan_include_HEADERS) \
+DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
 	$(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
@@ -202,8 +202,7 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(icdconfdir)" \
-	"$(DESTDIR)$(vulkan_includedir)"
+am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(icdconfdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 libvulkan_common_la_LIBADD =
 am__libvulkan_common_la_SOURCES_DIST = radv_entrypoints.c \
@@ -336,7 +335,7 @@ am__can_run_installinfo = \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
 DATA = $(icdconf_DATA) $(noinst_DATA)
-HEADERS = $(vulkan_include_HEADERS)
+HEADERS = $(noinst_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -709,8 +708,7 @@ VULKAN_GENERATED_FILES := \
 	radv_entrypoints.c \
 	radv_entrypoints.h
 
-vulkan_includedir = $(includedir)/vulkan
-vulkan_include_HEADERS = \
+noinst_HEADERS = \
 	$(top_srcdir)/include/vulkan/vk_platform.h \
 	$(top_srcdir)/include/vulkan/vulkan.h
 
@@ -992,27 +990,6 @@ uninstall-icdconfDATA:
 	@list='$(icdconf_DATA)'; test -n "$(icdconfdir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(icdconfdir)'; $(am__uninstall_files_from_dir)
-install-vulkan_includeHEADERS: $(vulkan_include_HEADERS)
-	@$(NORMAL_INSTALL)
-	@list='$(vulkan_include_HEADERS)'; test -n "$(vulkan_includedir)" || list=; \
-	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(vulkan_includedir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(vulkan_includedir)" || exit 1; \
-	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; \
-	done | $(am__base_list) | \
-	while read files; do \
-	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(vulkan_includedir)'"; \
-	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(vulkan_includedir)" || exit $$?; \
-	done
-
-uninstall-vulkan_includeHEADERS:
-	@$(NORMAL_UNINSTALL)
-	@list='$(vulkan_include_HEADERS)'; test -n "$(vulkan_includedir)" || list=; \
-	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
-	dir='$(DESTDIR)$(vulkan_includedir)'; $(am__uninstall_files_from_dir)
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -1103,7 +1080,7 @@ check: $(BUILT_SOURCES)
 @HAVE_COMPAT_SYMLINKS_FALSE@all-local:
 all-am: Makefile $(LTLIBRARIES) $(DATA) $(HEADERS) all-local
 installdirs:
-	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(icdconfdir)" "$(DESTDIR)$(vulkan_includedir)"; do \
+	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(icdconfdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: $(BUILT_SOURCES)
@@ -1166,7 +1143,7 @@ info: info-am
 
 info-am:
 
-install-data-am: install-icdconfDATA install-vulkan_includeHEADERS
+install-data-am: install-icdconfDATA
 
 install-dvi: install-dvi-am
 
@@ -1212,8 +1189,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-icdconfDATA uninstall-libLTLIBRARIES \
-	uninstall-vulkan_includeHEADERS
+uninstall-am: uninstall-icdconfDATA uninstall-libLTLIBRARIES
 
 .MAKE: all check install install-am install-strip
 
@@ -1227,12 +1203,11 @@ uninstall-am: uninstall-icdconfDATA uninstall-libLTLIBRARIES \
 	install-html-am install-icdconfDATA install-info \
 	install-info-am install-libLTLIBRARIES install-man install-pdf \
 	install-pdf-am install-ps install-ps-am install-strip \
-	install-vulkan_includeHEADERS installcheck installcheck-am \
-	installdirs maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-icdconfDATA uninstall-libLTLIBRARIES \
-	uninstall-vulkan_includeHEADERS
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am uninstall-icdconfDATA \
+	uninstall-libLTLIBRARIES
 
 .PRECIOUS: Makefile
 

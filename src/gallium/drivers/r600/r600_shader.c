@@ -2924,7 +2924,7 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	struct pipe_stream_output_info so = pipeshader->selector->so;
 	struct tgsi_full_immediate *immediate;
 	struct r600_shader_ctx ctx;
-	struct r600_bytecode_output output[32];
+	struct r600_bytecode_output output[ARRAY_SIZE(shader->output)];
 	unsigned output_done, noutput;
 	unsigned opcode;
 	int i, j, k, r = 0;

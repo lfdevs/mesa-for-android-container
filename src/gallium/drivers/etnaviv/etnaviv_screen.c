@@ -469,8 +469,11 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
       return FALSE;
 
    if (usage & PIPE_BIND_RENDER_TARGET) {
-      /* if render target, must be RS-supported format */
-      if (translate_rs_format(format) != ETNA_NO_MATCH) {
+      /* If render target, must be RS-supported format that is not rb swapped.
+       * Exposing rb swapped (or other swizzled) formats for rendering would
+       * involve swizzing in the pixel shader.
+       */
+      if (translate_rs_format(format) != ETNA_NO_MATCH && !translate_rs_format_rb_swap(format)) {
          /* Validate MSAA; number of samples must be allowed, and render target
           * must have MSAA'able format. */
          if (sample_count > 1) {
@@ -617,6 +620,8 @@ etna_get_specs(struct etna_screen *screen)
       screen->model >= 0x1000 || screen->model == 0x880;
    screen->specs.npot_tex_any_wrap =
       VIV_FEATURE(screen, chipMinorFeatures1, NON_POWER_OF_TWO);
+   screen->specs.has_new_sin_cos =
+      VIV_FEATURE(screen, chipMinorFeatures3, HAS_FAST_TRANSCENDENTALS);
 
    if (instruction_count > 256) { /* unified instruction memory? */
       screen->specs.vs_offset = 0xC000;

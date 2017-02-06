@@ -21,9 +21,7 @@
 
 include Makefile.sources
 
-vulkan_includedir = $(includedir)/vulkan
-
-vulkan_include_HEADERS = \
+noinst_HEADERS = \
 	$(top_srcdir)/include/vulkan/vk_platform.h \
 	$(top_srcdir)/include/vulkan/vulkan.h
 

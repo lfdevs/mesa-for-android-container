@@ -232,9 +232,12 @@ VkResult anv_AllocateCommandBuffers(
          break;
    }
 
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
       anv_FreeCommandBuffers(_device, pAllocateInfo->commandPool,
                              i, pCommandBuffers);
+      for (i = 0; i < pAllocateInfo->commandBufferCount; i++)
+         pCommandBuffers[i] = VK_NULL_HANDLE;
+   }
 
    return result;
 }

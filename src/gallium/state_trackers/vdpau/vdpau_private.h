@@ -415,6 +415,7 @@ typedef struct
    struct pipe_fence_handle *fence;
    struct vl_compositor_state cstate;
    struct u_rect dirty_area;
+   bool send_to_X;
 } vlVdpOutputSurface;
 
 typedef struct

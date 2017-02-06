@@ -1,2 +1,1 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
-configure.ac-Require-LLVM-for-r300-only-on-x86-and-x.patch

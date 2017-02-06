@@ -30,21 +30,22 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/ \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
+	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/mesa/drivers/dri/intel/server \
 	-I$(top_srcdir)/src/gtest/include \
-	-I$(top_srcdir)/src/compiler/nir \
-	-I$(top_srcdir)/src/intel \
 	-I$(top_builddir)/src/compiler/glsl \
 	-I$(top_builddir)/src/compiler/nir \
+	-I$(top_srcdir)/src/compiler/nir \
 	-I$(top_builddir)/src/intel \
-	-I$(top_builddir)/src/mesa/drivers/dri/common \
+	-I$(top_srcdir)/src/intel \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS) \
 	$(INTEL_CFLAGS)
 
 AM_CXXFLAGS = $(AM_CFLAGS)
 
+MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 brw_nir_trig_workarounds.c: brw_nir_trig_workarounds.py $(top_srcdir)/src/compiler/nir/nir_algebraic.py
 	$(MKDIR_GEN)
 	$(AM_V_GEN) PYTHONPATH=$(top_srcdir)/src/compiler/nir $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_nir_trig_workarounds.py > $@ || ($(RM) $@; false)

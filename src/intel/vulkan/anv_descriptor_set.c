@@ -329,18 +329,18 @@ VkResult anv_CreateDescriptorPool(
       }
    }
 
-   const size_t size =
-      sizeof(*pool) +
+   const size_t pool_size =
       pCreateInfo->maxSets * sizeof(struct anv_descriptor_set) +
       descriptor_count * sizeof(struct anv_descriptor) +
       buffer_count * sizeof(struct anv_buffer_view);
+   const size_t total_size = sizeof(*pool) + pool_size;
 
-   pool = vk_alloc2(&device->alloc, pAllocator, size, 8,
+   pool = vk_alloc2(&device->alloc, pAllocator, total_size, 8,
                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!pool)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   pool->size = size;
+   pool->size = pool_size;
    pool->next = 0;
    pool->free_list = EMPTY;
 

@@ -111,8 +111,8 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 @HAVE_DRICOMMON_TRUE@am__append_1 = \
-@HAVE_DRICOMMON_TRUE@	-I$(top_srcdir)/src/mesa/drivers/dri/common/ \
 @HAVE_DRICOMMON_TRUE@	-I$(top_builddir)/src/mesa/drivers/dri/common/ \
+@HAVE_DRICOMMON_TRUE@	-I$(top_srcdir)/src/mesa/drivers/dri/common/ \
 @HAVE_DRICOMMON_TRUE@	-I$(top_srcdir)/src/mesa/ \
 @HAVE_DRICOMMON_TRUE@	-I$(top_srcdir)/src/mapi/ \
 @HAVE_DRICOMMON_TRUE@	-DUSE_DRICONF

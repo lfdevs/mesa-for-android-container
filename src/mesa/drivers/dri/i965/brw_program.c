@@ -177,6 +177,49 @@ static struct gl_program *brwNewProgram(struct gl_context *ctx, GLenum target,
 static void brwDeleteProgram( struct gl_context *ctx,
 			      struct gl_program *prog )
 {
+   struct brw_context *brw = brw_context(ctx);
+
+   /* Beware!  prog's refcount has reached zero, and it's about to be freed.
+    *
+    * In brw_upload_pipeline_state(), we compare brw->foo_program to
+    * ctx->FooProgram._Current, and flag BRW_NEW_FOO_PROGRAM if the
+    * pointer has changed.
+    *
+    * We cannot leave brw->foo_program as a dangling pointer to the dead
+    * program.  malloc() may allocate the same memory for a new gl_program,
+    * causing us to see matching pointers...but totally different programs.
+    *
+    * We cannot set brw->foo_program to NULL, either.  If we've deleted the
+    * active program, Mesa may set ctx->FooProgram._Current to NULL.  That
+    * would cause us to see matching pointers (NULL == NULL), and fail to
+    * detect that a program has changed since our last draw.
+    *
+    * So, set it to a bogus gl_program pointer that will never match,
+    * causing us to properly reevaluate the state on our next draw.
+    *
+    * Getting this wrong causes heisenbugs which are very hard to catch,
+    * as you need a very specific allocation pattern to hit the problem.
+    */
+   static const struct gl_program deleted_program;
+
+   if (brw->vertex_program == prog)
+      brw->vertex_program = &deleted_program;
+
+   if (brw->tess_ctrl_program == prog)
+      brw->tess_ctrl_program = &deleted_program;
+
+   if (brw->tess_eval_program == prog)
+      brw->tess_eval_program = &deleted_program;
+
+   if (brw->geometry_program == prog)
+      brw->geometry_program = &deleted_program;
+
+   if (brw->fragment_program == prog)
+      brw->fragment_program = &deleted_program;
+
+   if (brw->compute_program == prog)
+      brw->compute_program = &deleted_program;
+
    _mesa_delete_program( ctx, prog );
 }
 

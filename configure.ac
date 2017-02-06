@@ -1436,6 +1436,22 @@ if test "x$enable_gallium_osmesa" = xyes; then
     fi
 fi
 
+require_dri_shared_libs_and_glapi() {
+    if test "x$enable_static" = xyes; then
+        AC_MSG_ERROR([$1 cannot be build as static library])
+    fi
+
+    if test "x$enable_dri" != xyes; then
+        # There is only a single backend which won't be build/used otherwise.
+        # XXX: Revisit this as the egl/haiku is a thing.
+        AC_MSG_ERROR([$1 requires --enable-dri])
+    fi
+
+    if test "x$enable_shared_glapi" != xyes; then
+        AC_MSG_ERROR([$1 requires --enable-shared-glapi])
+    fi
+}
+
 if test "x$enable_dri" = xyes; then
     require_dri_shared_libs_and_glapi "DRI"
 
@@ -1722,7 +1738,7 @@ fi
 AC_ARG_WITH([vulkan-drivers],
     [AS_HELP_STRING([--with-vulkan-drivers@<:@=DIRS...@:>@],
         [comma delimited Vulkan drivers list, e.g.
-        "intel"
+        "intel,radeon"
         @<:@default=no@:>@])],
     [with_vulkan_drivers="$withval"],
     [with_vulkan_drivers="no"])
@@ -1814,22 +1830,6 @@ fi
 AC_SUBST([OSMESA_LIB_DEPS])
 AC_SUBST([OSMESA_PC_REQ])
 AC_SUBST([OSMESA_PC_LIB_PRIV])
-
-require_dri_shared_libs_and_glapi() {
-    if test "x$enable_static" = xyes; then
-        AC_MSG_ERROR([$1 cannot be build as static library])
-    fi
-
-    if test "x$enable_dri" != xyes; then
-        # There is only a single backend which won't be build/used otherwise.
-        # XXX: Revisit this as the egl/haiku is a thing.
-        AC_MSG_ERROR([$1 requires --enable-dri])
-    fi
-
-    if test "x$enable_shared_glapi" != xyes; then
-        AC_MSG_ERROR([$1 requires --enable-shared-glapi])
-    fi
-}
 
 dnl
 dnl gbm configuration
@@ -2213,6 +2213,19 @@ gallium_require_llvm() {
 }
 
 dnl
+dnl r300 doesn't strictly require LLVM, but for performance reasons we
+dnl highly recommend LLVM usage. So require it at least on x86 and x86_64
+dnl architectures.
+dnl
+r300_require_llvm() {
+    case "$host" in *gnux32) return;; esac
+    case "$host_cpu" in
+    i*86|x86_64|amd64) gallium_require_llvm $1
+        ;;
+    esac
+}
+
+dnl
 dnl DRM is needed by X, Wayland, and offscreen rendering.
 dnl Surfaceless is an alternative for the last one.
 dnl
@@ -2298,7 +2311,7 @@ if test -n "$with_gallium_drivers"; then
             HAVE_GALLIUM_R300=yes
             PKG_CHECK_MODULES([RADEON], [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
             require_libdrm "r300"
-            gallium_require_llvm "r300"
+            r300_require_llvm "r300"
             ;;
         xr600)
             HAVE_GALLIUM_R600=yes

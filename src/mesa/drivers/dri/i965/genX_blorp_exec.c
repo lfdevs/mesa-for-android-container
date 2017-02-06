@@ -261,4 +261,8 @@ retry:
 
    if (params->dst.enabled)
       brw_render_cache_set_add_bo(brw, params->dst.addr.buffer);
+   if (params->depth.enabled)
+      brw_render_cache_set_add_bo(brw, params->depth.addr.buffer);
+   if (params->stencil.enabled)
+      brw_render_cache_set_add_bo(brw, params->stencil.addr.buffer);
 }

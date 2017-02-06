@@ -23,9 +23,11 @@ include Makefile.sources
 
 vulkan_includedir = $(includedir)/vulkan
 
-vulkan_include_HEADERS = \
+noinst_HEADERS = \
 	$(top_srcdir)/include/vulkan/vk_platform.h \
-	$(top_srcdir)/include/vulkan/vulkan.h \
+	$(top_srcdir)/include/vulkan/vulkan.h
+
+vulkan_include_HEADERS = \
 	$(top_srcdir)/include/vulkan/vulkan_intel.h
 
 lib_LTLIBRARIES = libvulkan_intel.la
@@ -189,7 +191,7 @@ libvulkan_test_la_LIBADD = $(VULKAN_LIB_DEPS)
 
 include $(top_srcdir)/install-lib-links.mk
 
-noinst_HEADERS = \
+noinst_HEADERS += \
 	tests/state_pool_test_helper.h
 
 LDADD = \

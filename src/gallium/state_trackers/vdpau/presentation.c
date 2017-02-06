@@ -231,7 +231,7 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
    vscreen = pq->device->vscreen;
 
    pipe_mutex_lock(pq->device->mutex);
-   if (vscreen->set_back_texture_from_output)
+   if (vscreen->set_back_texture_from_output && surf->send_to_X)
       vscreen->set_back_texture_from_output(vscreen, surf->surface->texture, clip_width, clip_height);
    tex = vscreen->texture_from_drawable(vscreen, (void *)pq->drawable);
    if (!tex) {
@@ -239,7 +239,7 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
       return VDP_STATUS_INVALID_HANDLE;
    }
 
-   if (!vscreen->set_back_texture_from_output) {
+   if (!vscreen->set_back_texture_from_output || !surf->send_to_X) {
       dirty_area = vscreen->get_dirty_area(vscreen);
 
       memset(&surf_templ, 0, sizeof(surf_templ));
@@ -289,7 +289,7 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
       framenum++;
    }
 
-   if (!vscreen->set_back_texture_from_output) {
+   if (!vscreen->set_back_texture_from_output || !surf->send_to_X) {
       pipe_resource_reference(&tex, NULL);
       pipe_surface_reference(&surf_draw, NULL);
    }

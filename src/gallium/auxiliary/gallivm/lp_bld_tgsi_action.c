@@ -2624,7 +2624,6 @@ lp_set_default_actions_cpu(
    bld_base->op_actions[TGSI_OPCODE_DSLT].emit = dslt_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_DSNE].emit = dsne_emit_cpu;
 
-   bld_base->op_actions[TGSI_OPCODE_DDIV].emit = div_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_DRSQ].emit = drecip_sqrt_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_DSQRT].emit = dsqrt_emit_cpu;
 
