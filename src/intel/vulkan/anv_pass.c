@@ -172,6 +172,7 @@ VkResult anv_CreateRenderPass(
             pass->attachments[a].usage |=
                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
             pass->attachments[a].subpass_usage[i] |= ANV_SUBPASS_USAGE_DRAW;
+            pass->attachments[a].last_subpass_idx = i;
          }
       } else {
          subpass->depth_stencil_attachment = VK_ATTACHMENT_UNUSED;

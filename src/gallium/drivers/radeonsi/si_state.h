@@ -35,7 +35,7 @@
 
 #define SI_MAX_ATTRIBS			16
 #define SI_NUM_VERTEX_BUFFERS		SI_MAX_ATTRIBS
-#define SI_NUM_SAMPLERS			24 /* OpenGL textures units per shader */
+#define SI_NUM_SAMPLERS			32 /* OpenGL textures units per shader */
 #define SI_NUM_CONST_BUFFERS		16
 #define SI_NUM_IMAGES			16
 #define SI_NUM_SHADER_BUFFERS		16

@@ -81,6 +81,8 @@
 static struct dri3_drawable *
 loader_drawable_to_dri3_drawable(struct loader_dri3_drawable *draw) {
    size_t offset = offsetof(struct dri3_drawable, loader_drawable);
+   if (!draw)
+      return NULL;
    return (struct dri3_drawable *)(((void*) draw) - offset);
 }
 
@@ -117,6 +119,10 @@ static bool
 glx_dri3_in_current_context(struct loader_dri3_drawable *draw)
 {
    struct dri3_drawable *priv = loader_drawable_to_dri3_drawable(draw);
+
+   if (!priv)
+      return false;
+
    struct dri3_context *pcp = (struct dri3_context *) __glXGetCurrentContext();
    struct dri3_screen *psc = (struct dri3_screen *) priv->base.psc;
 
@@ -558,6 +564,8 @@ dri3_destroy_screen(struct glx_screen *base)
 static int
 dri3_set_swap_interval(__GLXDRIdrawable *pdraw, int interval)
 {
+   assert(pdraw != NULL);
+
    struct dri3_drawable *priv =  (struct dri3_drawable *) pdraw;
    GLint vblank_mode = DRI_CONF_VBLANK_DEF_INTERVAL_1;
    struct dri3_screen *psc = (struct dri3_screen *) priv->base.psc;
@@ -591,6 +599,8 @@ dri3_set_swap_interval(__GLXDRIdrawable *pdraw, int interval)
 static int
 dri3_get_swap_interval(__GLXDRIdrawable *pdraw)
 {
+   assert(pdraw != NULL);
+
    struct dri3_drawable *priv =  (struct dri3_drawable *) pdraw;
 
   return priv->swap_interval;

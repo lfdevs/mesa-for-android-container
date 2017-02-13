@@ -286,12 +286,11 @@ upload_sf_state(struct brw_context *brw)
 
    dw1 = GEN6_SF_SWIZZLE_ENABLE | num_outputs << GEN6_SF_NUM_OUTPUTS_SHIFT;
    dw2 = GEN6_SF_STATISTICS_ENABLE;
+   dw3 = GEN6_SF_SCISSOR_ENABLE;
+   dw4 = 0;
 
    if (brw->sf.viewport_transform_enable)
        dw2 |= GEN6_SF_VIEWPORT_TRANSFORM_ENABLE;
-
-   dw3 = 0;
-   dw4 = 0;
 
    /* _NEW_POLYGON */
    if (ctx->Polygon._FrontBit == render_to_fbo)
@@ -339,13 +338,6 @@ upload_sf_state(struct brw_context *brw)
    default:
        unreachable("not reached");
    }
-
-   /* _NEW_SCISSOR | _NEW_POLYGON,
-    * BRW_NEW_GS_PROG_DATA | BRW_NEW_TES_PROG_DATA | BRW_NEW_PRIMITIVE
-    */
-   if (ctx->Scissor.EnableFlags ||
-       brw_is_drawing_points(brw) || brw_is_drawing_lines(brw))
-      dw3 |= GEN6_SF_SCISSOR_ENABLE;
 
    /* _NEW_POLYGON */
    if (ctx->Polygon.CullFlag) {
@@ -449,8 +441,7 @@ const struct brw_tracked_state gen6_sf_state = {
                _NEW_MULTISAMPLE |
                _NEW_POINT |
                _NEW_POLYGON |
-               _NEW_PROGRAM |
-               _NEW_SCISSOR,
+               _NEW_PROGRAM,
       .brw   = BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
                BRW_NEW_FRAGMENT_PROGRAM |

@@ -91,7 +91,7 @@ else
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el))
 	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += --enable-gallium-llvm
-	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-3.9
+	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-4.0
 	GALLIUM_DRIVERS += swrast
   else
 	DRI_DRIVERS += swrast

@@ -2279,41 +2279,40 @@ NVC0LoweringPass::handleLDST(Instruction *i)
          int8_t fileIndex = i->getSrc(0)->reg.fileIndex - 1;
          Value *ind = i->getIndirect(0, 1);
 
+         if (!ind && fileIndex == -1)
+            return;
+
          if (ind) {
             // Clamp the UBO index when an indirect access is used to avoid
             // loading information from the wrong place in the driver cb.
+            // TODO - synchronize the max with the driver.
             ind = bld.mkOp2v(OP_MIN, TYPE_U32, ind,
                              bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(),
                                         ind, bld.loadImm(NULL, fileIndex)),
-                             bld.loadImm(NULL, 12));
+                             bld.loadImm(NULL, 13));
+            fileIndex = 0;
          }
 
-         if (i->src(0).isIndirect(1)) {
-            Value *offset = bld.loadImm(NULL, i->getSrc(0)->reg.data.offset + typeSizeof(i->sType));
-            Value *ptr = loadUboInfo64(ind, fileIndex * 16);
-            Value *length = loadUboLength32(ind, fileIndex * 16);
-            Value *pred = new_LValue(func, FILE_PREDICATE);
-            if (i->src(0).isIndirect(0)) {
-               bld.mkOp2(OP_ADD, TYPE_U64, ptr, ptr, i->getIndirect(0, 0));
-               bld.mkOp2(OP_ADD, TYPE_U32, offset, offset, i->getIndirect(0, 0));
-            }
-            i->getSrc(0)->reg.file = FILE_MEMORY_GLOBAL;
-            i->setIndirect(0, 1, NULL);
-            i->setIndirect(0, 0, ptr);
-            bld.mkCmp(OP_SET, CC_GT, TYPE_U32, pred, TYPE_U32, offset, length);
-            i->setPredicate(CC_NOT_P, pred);
-            if (i->defExists(0)) {
-               bld.mkMov(i->getDef(0), bld.mkImm(0));
-            }
-         } else if (fileIndex >= 0) {
-            Value *ptr = loadUboInfo64(ind, fileIndex * 16);
-            if (i->src(0).isIndirect(0)) {
-               bld.mkOp2(OP_ADD, TYPE_U64, ptr, ptr, i->getIndirect(0, 0));
-            }
-            i->getSrc(0)->reg.file = FILE_MEMORY_GLOBAL;
-            i->setIndirect(0, 1, NULL);
-            i->setIndirect(0, 0, ptr);
+         Value *offset = bld.loadImm(NULL, i->getSrc(0)->reg.data.offset + typeSizeof(i->sType));
+         Value *ptr = loadUboInfo64(ind, fileIndex * 16);
+         Value *length = loadUboLength32(ind, fileIndex * 16);
+         Value *pred = new_LValue(func, FILE_PREDICATE);
+         if (i->src(0).isIndirect(0)) {
+            bld.mkOp2(OP_ADD, TYPE_U64, ptr, ptr, i->getIndirect(0, 0));
+            bld.mkOp2(OP_ADD, TYPE_U32, offset, offset, i->getIndirect(0, 0));
          }
+         i->getSrc(0)->reg.file = FILE_MEMORY_GLOBAL;
+         i->setIndirect(0, 1, NULL);
+         i->setIndirect(0, 0, ptr);
+         bld.mkCmp(OP_SET, CC_GT, TYPE_U32, pred, TYPE_U32, offset, length);
+         i->setPredicate(CC_NOT_P, pred);
+         Value *zero, *dst = i->getDef(0);
+         i->setDef(0, bld.getSSA());
+
+         bld.setPosition(i, true);
+         bld.mkMov((zero = bld.getSSA()), bld.mkImm(0))
+            ->setPredicate(CC_P, pred);
+         bld.mkOp2(OP_UNION, TYPE_U32, dst, i->getDef(0), zero);
       } else if (i->src(0).isIndirect(1)) {
          Value *ptr;
          if (i->src(0).isIndirect(0))

@@ -33,12 +33,18 @@ static void
 gen7_upload_sf_clip_viewport(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    GLfloat y_scale, y_bias;
-   const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
    struct gen7_sf_clip_viewport *vp;
 
    /* BRW_NEW_VIEWPORT_COUNT */
    const unsigned viewport_count = brw->clip.viewport_count;
+
+   /* _NEW_BUFFERS */
+   struct gl_framebuffer *fb = ctx->DrawBuffer;
+   const bool render_to_fbo = _mesa_is_user_fbo(fb);
+   const uint32_t fb_width = _mesa_geometric_width(ctx->DrawBuffer);
+   const uint32_t fb_height = _mesa_geometric_height(ctx->DrawBuffer);
 
    vp = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
                         sizeof(*vp) * viewport_count, 64,
@@ -52,33 +58,12 @@ gen7_upload_sf_clip_viewport(struct brw_context *brw)
       y_bias = 0.0;
    } else {
       y_scale = -1.0;
-      y_bias = (float)_mesa_geometric_height(ctx->DrawBuffer);
+      y_bias = (float)fb_height;
    }
 
    for (unsigned i = 0; i < viewport_count; i++) {
       float scale[3], translate[3];
       _mesa_get_viewport_xform(ctx, i, scale, translate);
-
-      /* According to the "Vertex X,Y Clamping and Quantization" section of
-       * the Strips and Fans documentation, objects must not have a
-       * screen-space extents of over 8192 pixels, or they may be
-       * mis-rasterized.  The maximum screen space coordinates of a small
-       * object may larger, but we have no way to enforce the object size
-       * other than through clipping.
-       *
-       * If you're surprised that we set clip to -gbx to +gbx and it seems
-       * like we'll end up with 16384 wide, note that for a 8192-wide render
-       * target, we'll end up with a normal (-1, 1) clip volume that just
-       * covers the drawable.
-       */
-      const float maximum_guardband_extent = 8192;
-      const float gbx = maximum_guardband_extent / ctx->ViewportArray[i].Width;
-      const float gby = maximum_guardband_extent / ctx->ViewportArray[i].Height;
-
-      vp[i].guardband.xmin = -gbx;
-      vp[i].guardband.xmax = gbx;
-      vp[i].guardband.ymin = -gby;
-      vp[i].guardband.ymax = gby;
 
       /* _NEW_VIEWPORT */
       vp[i].viewport.m00 = scale[0];
@@ -87,6 +72,14 @@ gen7_upload_sf_clip_viewport(struct brw_context *brw)
       vp[i].viewport.m30 = translate[0];
       vp[i].viewport.m31 = translate[1] * y_scale + y_bias;
       vp[i].viewport.m32 = translate[2];
+
+      brw_calculate_guardband_size(devinfo, fb_width, fb_height,
+                                   vp[i].viewport.m00, vp[i].viewport.m11,
+                                   vp[i].viewport.m30, vp[i].viewport.m31,
+                                   &vp[i].guardband.xmin,
+                                   &vp[i].guardband.xmax,
+                                   &vp[i].guardband.ymin,
+                                   &vp[i].guardband.ymax);
    }
 
    BEGIN_BATCH(2);

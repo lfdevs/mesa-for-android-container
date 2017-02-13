@@ -262,45 +262,6 @@ public:
         return _simd_movemask_ps(vClipCullMask);
     }
 
-    // clip a single primitive
-    int ClipScalar(PA_STATE& pa, uint32_t primIndex, float* pOutPos, float* pOutAttribs)
-    {
-        OSALIGNSIMD(float) inVerts[3 * 4];
-        OSALIGNSIMD(float) inAttribs[3 * KNOB_NUM_ATTRIBUTES * 4];
-
-        // transpose primitive position
-        __m128 verts[3];
-        pa.AssembleSingle(VERTEX_POSITION_SLOT, primIndex, verts);
-        _mm_store_ps(&inVerts[0], verts[0]);
-        _mm_store_ps(&inVerts[4], verts[1]);
-        _mm_store_ps(&inVerts[8], verts[2]);
-
-        // transpose attribs
-        uint32_t numScalarAttribs = this->state.linkageCount * 4;
-
-        int idx = 0;
-        DWORD slot = 0;
-        uint32_t mapIdx = 0;
-        uint32_t tmpLinkage = uint32_t(this->state.linkageMask);
-        while (_BitScanForward(&slot, tmpLinkage))
-        {
-            tmpLinkage &= ~(1 << slot);
-            // Compute absolute attrib slot in vertex array
-            uint32_t inputSlot = VERTEX_ATTRIB_START_SLOT + this->state.linkageMap[mapIdx++];
-            __m128 attrib[3];    // triangle attribs (always 4 wide)
-            pa.AssembleSingle(inputSlot, primIndex, attrib);
-            _mm_store_ps(&inAttribs[idx], attrib[0]);
-            _mm_store_ps(&inAttribs[idx + numScalarAttribs], attrib[1]);
-            _mm_store_ps(&inAttribs[idx + numScalarAttribs * 2], attrib[2]);
-            idx += 4;
-        }
-
-        int numVerts;
-        Clip(inVerts, inAttribs, numScalarAttribs, pOutPos, &numVerts, pOutAttribs);
-
-        return numVerts;
-    }
-
     // clip SIMD primitives
     void ClipSimd(const simdscalar& vPrimMask, const simdscalar& vClipMask, PA_STATE& pa, const simdscalari& vPrimId, const simdscalari& vViewportIdx)
     {

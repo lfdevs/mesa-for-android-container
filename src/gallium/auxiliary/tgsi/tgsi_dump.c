@@ -685,17 +685,19 @@ iter_instruction(
       }
    }
 
-   switch (inst->Instruction.Opcode) {
-   case TGSI_OPCODE_IF:
-   case TGSI_OPCODE_UIF:
-   case TGSI_OPCODE_ELSE:
-   case TGSI_OPCODE_BGNLOOP:
-   case TGSI_OPCODE_ENDLOOP:
-   case TGSI_OPCODE_CAL:
-   case TGSI_OPCODE_BGNSUB:
-      TXT( " :" );
-      UID( inst->Label.Label );
-      break;
+   if (inst->Instruction.Label) {
+      switch (inst->Instruction.Opcode) {
+      case TGSI_OPCODE_IF:
+      case TGSI_OPCODE_UIF:
+      case TGSI_OPCODE_ELSE:
+      case TGSI_OPCODE_BGNLOOP:
+      case TGSI_OPCODE_ENDLOOP:
+      case TGSI_OPCODE_CAL:
+      case TGSI_OPCODE_BGNSUB:
+         TXT( " :" );
+         UID( inst->Label.Label );
+         break;
+      }
    }
 
    /* update indentation */

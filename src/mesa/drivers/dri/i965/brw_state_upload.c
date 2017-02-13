@@ -103,8 +103,7 @@ static const struct brw_tracked_state *gen4_atoms[] =
 
 static const struct brw_tracked_state *gen6_atoms[] =
 {
-   &gen6_clip_vp,
-   &gen6_sf_vp,
+   &gen6_sf_and_clip_viewports,
 
    /* Command packets: */
 

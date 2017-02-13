@@ -14,8 +14,8 @@
 #define NVC0_TIC_MAX_ENTRIES 2048
 #define NVC0_TSC_MAX_ENTRIES 2048
 
-/* doesn't count reserved slots (for auxiliary constants, immediates, etc.) */
-#define NVC0_MAX_PIPE_CONSTBUFS         14
+/* doesn't count driver-reserved slot */
+#define NVC0_MAX_PIPE_CONSTBUFS         15
 
 #define NVC0_MAX_SURFACE_SLOTS 16
 
@@ -50,7 +50,6 @@ struct nvc0_graph_state {
    uint8_t num_textures[6];
    uint8_t num_samplers[6];
    uint8_t tls_required; /* bitmask of shader types using l[] */
-   uint8_t c14_bound; /* whether immediate array constbuf is bound */
    uint8_t clip_enable;
    uint32_t clip_mode;
    uint32_t uniform_buffer_bound[6];

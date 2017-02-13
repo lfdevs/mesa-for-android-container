@@ -110,7 +110,7 @@ extern const struct brw_tracked_state gen7_cs_push_constants;
 extern const struct brw_tracked_state gen6_binding_table_pointers;
 extern const struct brw_tracked_state gen6_blend_state;
 extern const struct brw_tracked_state gen6_clip_state;
-extern const struct brw_tracked_state gen6_clip_vp;
+extern const struct brw_tracked_state gen6_sf_and_clip_viewports;
 extern const struct brw_tracked_state gen6_color_calc_state;
 extern const struct brw_tracked_state gen6_depth_stencil_state;
 extern const struct brw_tracked_state gen6_gs_state;
@@ -454,6 +454,11 @@ use_state_point_size(const struct brw_context *brw)
           (brw->vue_map_geom_out.slots_valid & VARYING_BIT_PSIZ) == 0;
 }
 
+void brw_calculate_guardband_size(const struct gen_device_info *devinfo,
+                                  uint32_t fb_width, uint32_t fb_height,
+                                  float m00, float m11, float m30, float m31,
+                                  float *xmin, float *xmax,
+                                  float *ymin, float *ymax);
 
 #ifdef __cplusplus
 }

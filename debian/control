@@ -41,11 +41,11 @@ Build-Depends:
  python-mako,
  flex,
  bison,
- llvm-3.9-dev (>= 1:3.9.1) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
+ llvm-4.0-dev (>= 1:4.0~) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
  libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
  libwayland-dev (>= 1.11.0) [linux-any],
- libclang-3.9-dev (>= 1:3.9.1) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
- libclc-dev (>= 0.2.0+git20160907) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
+ libclang-4.0-dev (>= 1:4.0~) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
+ libclc-dev (>= 0.2.0+git20170213) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
 Vcs-Git: https://anonscm.debian.org/git/pkg-xorg/lib/mesa.git
 Vcs-Browser: https://anonscm.debian.org/cgit/pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.org/
@@ -425,8 +425,8 @@ Section: libs
 Architecture: amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
- libclc-r600 (>= 0.2.0+git20160907),
- libclc-amdgcn (>= 0.2.0+git20160907),
+ libclc-r600 (>= 0.2.0+git20170213),
+ libclc-amdgcn (>= 0.2.0+git20170213),
  ocl-icd-libopencl1 | libopencl1,
  ${shlibs:Depends},
  ${misc:Depends},

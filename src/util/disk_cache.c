@@ -366,7 +366,8 @@ make_cache_file_directory(struct disk_cache *cache, cache_key key)
  */
 static char *
 choose_random_file_matching(const char *dir_path,
-                            bool (*predicate)(struct dirent *))
+                            bool (*predicate)(struct dirent *,
+                                              const char *dir_path))
 {
    DIR *dir;
    struct dirent *entry;
@@ -383,7 +384,7 @@ choose_random_file_matching(const char *dir_path,
       entry = readdir(dir);
       if (entry == NULL)
          break;
-      if (! predicate(entry))
+      if (!predicate(entry, dir_path))
          continue;
 
       count++;
@@ -403,7 +404,7 @@ choose_random_file_matching(const char *dir_path,
       entry = readdir(dir);
       if (entry == NULL)
          break;
-      if (! predicate(entry))
+      if (!predicate(entry, dir_path))
          continue;
       if (count == victim)
          break;
@@ -428,14 +429,20 @@ choose_random_file_matching(const char *dir_path,
  * ".tmp"
  */
 static bool
-is_regular_non_tmp_file(struct dirent *entry)
+is_regular_non_tmp_file(struct dirent *entry, const char *path)
 {
-   size_t len;
-
-   if (entry->d_type != DT_REG)
+   char *filename;
+   if (asprintf(&filename, "%s/%s", path, entry->d_name) == -1)
       return false;
 
-   len = strlen (entry->d_name);
+   struct stat sb;
+   int res = stat(filename, &sb);
+   free(filename);
+
+   if (res == -1 || !S_ISREG(sb.st_mode))
+      return false;
+
+   size_t len = strlen (entry->d_name);
    if (len >= 4 && strcmp(&entry->d_name[len-4], ".tmp") == 0)
       return false;
 
@@ -469,9 +476,17 @@ unlink_random_file_from_directory(const char *path)
  * special name of "..")
  */
 static bool
-is_two_character_sub_directory(struct dirent *entry)
+is_two_character_sub_directory(struct dirent *entry, const char *path)
 {
-   if (entry->d_type != DT_DIR)
+   char *subdir;
+   if (asprintf(&subdir, "%s/%s", path, entry->d_name) == -1)
+      return false;
+
+   struct stat sb;
+   int res = stat(subdir, &sb);
+   free(subdir);
+
+   if (res == -1 || !S_ISDIR(sb.st_mode))
       return false;
 
    if (strlen(entry->d_name) != 2)

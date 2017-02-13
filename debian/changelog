@@ -1,3 +1,10 @@
+mesa (17.0.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * control, rules: Bump clang/llvm to 4.0, and libclc to match.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 13 Feb 2017 15:46:47 +0200
+
 mesa (17.0.0~rc3-1) experimental; urgency=medium
 
   [ Timo Aaltonen ]

@@ -253,14 +253,17 @@ static void *amdgpu_bo_map(struct pb_buffer *buf,
              * (neither one is changing it).
              *
              * Only check whether the buffer is being used for write. */
-            if (cs && amdgpu_bo_is_referenced_by_cs_with_usage(cs, bo,
-                                                               RADEON_USAGE_WRITE)) {
-               cs->flush_cs(cs->flush_data, 0, NULL);
-            } else {
-               /* Try to avoid busy-waiting in amdgpu_bo_wait. */
-               if (p_atomic_read(&bo->num_active_ioctls))
-                  amdgpu_cs_sync_flush(rcs);
+            if (cs) {
+               if (amdgpu_bo_is_referenced_by_cs_with_usage(cs, bo,
+                                                            RADEON_USAGE_WRITE)) {
+                  cs->flush_cs(cs->flush_data, 0, NULL);
+               } else {
+                  /* Try to avoid busy-waiting in amdgpu_bo_wait. */
+                  if (p_atomic_read(&bo->num_active_ioctls))
+                     amdgpu_cs_sync_flush(rcs);
+               }
             }
+
             amdgpu_bo_wait((struct pb_buffer*)bo, PIPE_TIMEOUT_INFINITE,
                            RADEON_USAGE_WRITE);
          } else {

@@ -173,7 +173,7 @@ upload_sf_state(struct brw_context *brw)
        unreachable("not reached");
    }
 
-   dw2 = 0;
+   dw2 = GEN6_SF_SCISSOR_ENABLE;
 
    if (ctx->Polygon.CullFlag) {
       switch (ctx->Polygon.CullFaceMode) {
@@ -192,13 +192,6 @@ upload_sf_state(struct brw_context *brw)
    } else {
       dw2 |= GEN6_SF_CULL_NONE;
    }
-
-   /* _NEW_SCISSOR | _NEW_POLYGON,
-    * BRW_NEW_GS_PROG_DATA | BRW_NEW_PRIMITIVE | BRW_NEW_TES_PROG_DATA
-    */
-   if (ctx->Scissor.EnableFlags ||
-       brw_is_drawing_points(brw) || brw_is_drawing_lines(brw))
-      dw2 |= GEN6_SF_SCISSOR_ENABLE;
 
    /* _NEW_LINE */
    {
@@ -260,8 +253,7 @@ const struct brw_tracked_state gen7_sf_state = {
                _NEW_MULTISAMPLE |
                _NEW_POINT |
                _NEW_POLYGON |
-               _NEW_PROGRAM |
-               _NEW_SCISSOR,
+               _NEW_PROGRAM,
       .brw   = BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
                BRW_NEW_GS_PROG_DATA |

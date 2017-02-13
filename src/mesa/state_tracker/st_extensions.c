@@ -348,7 +348,7 @@ void st_init_limits(struct pipe_screen *screen,
    c->MaxGeometryTotalOutputComponents =
       screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS);
    c->MaxTessPatchComponents =
-      MAX2(screen->get_param(screen, PIPE_CAP_MAX_SHADER_PATCH_VARYINGS),
+      MIN2(screen->get_param(screen, PIPE_CAP_MAX_SHADER_PATCH_VARYINGS),
            MAX_VARYING) * 4;
 
    c->MinProgramTexelOffset =

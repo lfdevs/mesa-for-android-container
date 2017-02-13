@@ -969,17 +969,14 @@ strip_unwanted_llvm_flags() {
 llvm_set_environment_variables() {
     if test "x$LLVM_CONFIG" != xno; then
         LLVM_VERSION=`$LLVM_CONFIG --version | egrep -o '^[[0-9.]]+'`
-        LLVM_LDFLAGS=`$LLVM_CONFIG --ldflags`
         LLVM_BINDIR=`$LLVM_CONFIG --bindir`
         LLVM_CPPFLAGS=`strip_unwanted_llvm_flags "$LLVM_CONFIG --cppflags"`
-        LLVM_CFLAGS=$LLVM_CPPFLAGS   # CPPFLAGS seem to be sufficient
-        LLVM_CXXFLAGS=`strip_unwanted_llvm_flags "$LLVM_CONFIG --cxxflags"`
         LLVM_INCLUDEDIR=`$LLVM_CONFIG --includedir`
         LLVM_LIBDIR=`$LLVM_CONFIG --libdir`
 
-        # We need to respect LLVM_CFLAGS when compiling LLVM headers.
+        # We need to respect LLVM_CPPFLAGS when compiling LLVM headers.
         save_CFLAGS="$CFLAGS"
-        CFLAGS="$CFLAGS $LLVM_CFLAGS"
+        CFLAGS="$CFLAGS $LLVM_CPPFLAGS"
 
         AC_COMPUTE_INT([LLVM_VERSION_MAJOR], [LLVM_VERSION_MAJOR],
             [#include "${LLVM_INCLUDEDIR}/llvm/Config/llvm-config.h"])
@@ -1001,19 +998,21 @@ llvm_set_environment_variables() {
             LLVM_VERSION_INT="${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}"
         fi
 
-        DEFINES="${DEFINES} -DHAVE_LLVM=0x0$LLVM_VERSION_INT -DMESA_LLVM_VERSION_PATCH=$LLVM_VERSION_PATCH"
-        MESA_LLVM=1
+        FOUND_LLVM=yes
     else
-        MESA_LLVM=0
+        FOUND_LLVM=no
         LLVM_VERSION_INT=0
     fi
 }
 
-llvm_check_version_for() {
-    if test "x$MESA_LLVM" = x0; then
-        AC_MSG_ERROR([LLVM $1 or newer is required for $2])
-        return
+require_llvm() {
+    if test "x$enable_gallium_llvm" != "xyes"; then
+        AC_MSG_ERROR([--enable-gallium-llvm is required when building $1])
     fi
+}
+
+llvm_require_version() {
+    require_llvm $2
 
     llvm_target_version_major=`echo $1 | cut -d. -f1 | egrep -o '^[[0-9]]+'`
     llvm_target_version_minor=`echo $1 | cut -d. -f2 | egrep -o '^[[0-9]]+'`
@@ -1054,7 +1053,7 @@ radeon_llvm_check() {
         amdgpu_llvm_target_name='amdgpu'
     fi
 
-    llvm_check_version_for $*
+    llvm_require_version $*
 
     llvm_add_target $amdgpu_llvm_target_name $2
 
@@ -1731,6 +1730,34 @@ if test -n "$with_dri_drivers"; then
 fi
 
 
+dnl
+dnl Gallium LLVM
+dnl
+dnl With follow-up commits we'll rework --enable-gallium-llvm to --enable-llvm
+dnl Since that is too invasive to stable, do the more conservative thing for now
+dnl and consider it as a global LLVM toggle.
+dnl
+AC_ARG_ENABLE([gallium-llvm],
+    [AS_HELP_STRING([--enable-gallium-llvm],
+        [build gallium LLVM support @<:@default=enabled on x86/x86_64@:>@])],
+    [enable_gallium_llvm="$enableval"],
+    [enable_gallium_llvm=auto])
+
+if test "x$enable_gallium_llvm" = xauto; then
+    if test "x$FOUND_LLVM" = xyes; then
+        case "$host_cpu" in
+        i*86|x86_64|amd64) enable_gallium_llvm=yes;;
+        *) enable_gallium_llvm=no;;
+        esac
+    else
+        enable_gallium_llvm=no
+    fi
+fi
+
+if test "x$enable_gallium_llvm" = xyes -a "x$FOUND_LLVM" = xno; then
+    AC_MSG_ERROR([--enable-gallium-llvm selected but llvm-config is not found])
+fi
+
 #
 # Vulkan driver configuration
 #
@@ -2012,7 +2039,7 @@ if test "x$enable_opencl" = xyes; then
        AC_MSG_ERROR([Clover requires libelf])
     fi
 
-    llvm_check_version_for $LLVM_REQUIRED_OPENCL "opencl"
+    llvm_require_version $LLVM_REQUIRED_OPENCL "opencl"
 
     llvm_add_default_components "opencl"
     llvm_add_component "all-targets" "opencl"
@@ -2137,24 +2164,6 @@ if ! echo "$egl_platforms" | grep -q 'x11'; then
     GL_PC_CFLAGS="$GL_PC_CFLAGS -DMESA_EGL_NO_X11_HEADERS"
 fi
 
-dnl
-dnl Gallium LLVM
-dnl
-AC_ARG_ENABLE([gallium-llvm],
-    [AS_HELP_STRING([--enable-gallium-llvm],
-        [build gallium LLVM support @<:@default=enabled on x86/x86_64@:>@])],
-    [enable_gallium_llvm="$enableval"],
-    [enable_gallium_llvm=auto])
-
-if test -z "$with_gallium_drivers"; then
-    enable_gallium_llvm=no
-fi
-if test "x$enable_gallium_llvm" = xauto; then
-    case "$host_cpu" in
-    i*86|x86_64|amd64) enable_gallium_llvm=yes;;
-    esac
-fi
-
 dnl Directory for XVMC libs
 AC_ARG_WITH([xvmc-libdir],
     [AS_HELP_STRING([--with-xvmc-libdir=DIR],
@@ -2202,17 +2211,6 @@ AC_ARG_WITH([d3d-libdir],
 AC_SUBST([D3D_DRIVER_INSTALL_DIR])
 
 dnl
-dnl Gallium helper functions
-dnl
-gallium_require_llvm() {
-    if test "x$enable_gallium_llvm" = "xyes"; then
-        llvm_check_version_for $LLVM_REQUIRED_GALLIUM "gallium"
-    else
-        AC_MSG_ERROR([--enable-gallium-llvm is required when building $1])
-    fi
-}
-
-dnl
 dnl r300 doesn't strictly require LLVM, but for performance reasons we
 dnl highly recommend LLVM usage. So require it at least on x86 and x86_64
 dnl architectures.
@@ -2220,7 +2218,7 @@ dnl
 r300_require_llvm() {
     case "$host" in *gnux32) return;; esac
     case "$host_cpu" in
-    i*86|x86_64|amd64) gallium_require_llvm $1
+    i*86|x86_64|amd64) require_llvm $1
         ;;
     esac
 }
@@ -2352,13 +2350,12 @@ if test -n "$with_gallium_drivers"; then
             ;;
         xswrast)
             HAVE_GALLIUM_SOFTPIPE=yes
-            if test "x$MESA_LLVM" = x1 && test "x$enable_gallium_llvm" == "xyes";  then
+            if test "x$enable_gallium_llvm" = xyes; then
                 HAVE_GALLIUM_LLVMPIPE=yes
             fi
             ;;
         xswr)
-            llvm_check_version_for $LLVM_REQUIRED_SWR "swr"
-            gallium_require_llvm "swr"
+            llvm_require_version $LLVM_REQUIRED_SWR "swr"
 
             swr_require_cxx_feature_flags "C++11" "__cplusplus >= 201103L" \
                 ",-std=c++11" \
@@ -2399,8 +2396,8 @@ if test -n "$with_gallium_drivers"; then
     done
 fi
 
-if test "x$enable_gallium_llvm" == "xyes"; then
-    llvm_check_version_for $LLVM_REQUIRED_GALLIUM "gallium"
+if test "x$enable_gallium_llvm" == "xyes" -a "$with_gallium_drivers"; then
+    llvm_require_version $LLVM_REQUIRED_GALLIUM "gallium"
     llvm_add_default_components "gallium"
 fi
 
@@ -2410,14 +2407,22 @@ if test "x$HAVE_GALLIUM_ETNAVIV" != xyes -a "x$HAVE_GALLIUM_IMX" == xyes  ; then
     AC_ERROR([Building with imx requires etnaviv])
 fi
 
-dnl Set LLVM_LIBS - This is done after the driver configuration so
-dnl that drivers can add additional components to LLVM_COMPONENTS.
-dnl Previously, gallium drivers were updating LLVM_LIBS directly
-dnl by calling llvm-config --libs ${DRIVER_LLVM_COMPONENTS}, but
-dnl this was causing the same libraries to be appear multiple times
-dnl in LLVM_LIBS.
+dnl
+dnl Set defines and buildtime variables only when using LLVM.
+dnl
+if test "x$enable_gallium_llvm" = xyes; then
+    DEFINES="${DEFINES} -DHAVE_LLVM=0x0$LLVM_VERSION_INT -DMESA_LLVM_VERSION_PATCH=$LLVM_VERSION_PATCH"
 
-if test "x$MESA_LLVM" != x0; then
+    LLVM_LDFLAGS=`$LLVM_CONFIG --ldflags`
+    LLVM_CFLAGS=$LLVM_CPPFLAGS   # CPPFLAGS seem to be sufficient
+    LLVM_CXXFLAGS=`strip_unwanted_llvm_flags "$LLVM_CONFIG --cxxflags"`
+
+    dnl Set LLVM_LIBS - This is done after the driver configuration so
+    dnl that drivers can add additional components to LLVM_COMPONENTS.
+    dnl Previously, gallium drivers were updating LLVM_LIBS directly
+    dnl by calling llvm-config --libs ${DRIVER_LLVM_COMPONENTS}, but
+    dnl this was causing the same libraries to be appear multiple times
+    dnl in LLVM_LIBS.
 
     if ! $LLVM_CONFIG --libs ${LLVM_COMPONENTS} >/dev/null; then
        AC_MSG_ERROR([Calling ${LLVM_CONFIG} failed])
@@ -2519,8 +2524,7 @@ AM_CONDITIONAL(NEED_RADEON_DRM_WINSYS, test "x$HAVE_GALLIUM_R300" = xyes -o \
 AM_CONDITIONAL(NEED_WINSYS_XLIB, test "x$enable_glx" = xgallium-xlib)
 AM_CONDITIONAL(NEED_RADEON_LLVM, test x$NEED_RADEON_LLVM = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_COMPUTE, test x$enable_opencl = xyes)
-AM_CONDITIONAL(HAVE_GALLIUM_LLVM, test "x$MESA_LLVM" = x1 -a \
-                                       "x$enable_gallium_llvm" = xyes)
+AM_CONDITIONAL(HAVE_GALLIUM_LLVM, test "x$enable_gallium_llvm" = xyes)
 AM_CONDITIONAL(USE_VC4_SIMULATOR, test x$USE_VC4_SIMULATOR = xyes)
 if test "x$USE_VC4_SIMULATOR" = xyes -a "x$HAVE_GALLIUM_ILO" = xyes; then
     AC_MSG_ERROR([VC4 simulator on x86 replaces i965 driver build, so ilo must be disabled.])
@@ -2805,7 +2809,7 @@ else
 fi
 
 echo ""
-if test "x$MESA_LLVM" = x1; then
+if test "x$enable_gallium_llvm" = xyes; then
     echo "        llvm:            yes"
     echo "        llvm-config:     $LLVM_CONFIG"
     echo "        llvm-version:    $LLVM_VERSION"
@@ -2852,7 +2856,7 @@ echo "        CFLAGS:          $cflags"
 echo "        CXXFLAGS:        $cxxflags"
 echo "        Macros:          $defines"
 echo ""
-if test "x$MESA_LLVM" = x1; then
+if test "x$enable_gallium_llvm" = xyes; then
     echo "        LLVM_CFLAGS:     $LLVM_CFLAGS"
     echo "        LLVM_CXXFLAGS:   $LLVM_CXXFLAGS"
     echo "        LLVM_CPPFLAGS:   $LLVM_CPPFLAGS"

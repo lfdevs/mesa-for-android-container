@@ -1448,9 +1448,15 @@ ccs_resolve_attachment(struct anv_cmd_buffer *cmd_buffer,
          resolve_op = BLORP_FAST_CLEAR_OP_RESOLVE_FULL;
       } else if (att_state->fast_clear) {
          /* We don't know what to do with clear colors outside the render
-          * pass.  We need a partial resolve.
+          * pass.  We need a partial resolve. Only transparent black is
+          * built into the surface state object and thus no resolve is
+          * required for this case.
           */
-         resolve_op = BLORP_FAST_CLEAR_OP_RESOLVE_PARTIAL;
+         if (att_state->clear_value.color.uint32[0] ||
+             att_state->clear_value.color.uint32[1] ||
+             att_state->clear_value.color.uint32[2] ||
+             att_state->clear_value.color.uint32[3])
+            resolve_op = BLORP_FAST_CLEAR_OP_RESOLVE_PARTIAL;
       } else {
          /* The image "natively" supports all the compression we care about
           * and we don't need to resolve at all.  If this is the case, we also
