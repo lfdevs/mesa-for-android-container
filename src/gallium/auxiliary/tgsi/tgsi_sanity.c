@@ -559,6 +559,7 @@ tgsi_sanity_check(
    const struct tgsi_token *tokens )
 {
    struct sanity_check_ctx ctx;
+   boolean retval;
 
    ctx.iter.prolog = prolog;
    ctx.iter.iterate_instruction = iter_instruction;
@@ -580,11 +581,12 @@ tgsi_sanity_check(
    ctx.implied_array_size = 0;
    ctx.print = debug_get_option_print_sanity();
 
-   if (!tgsi_iterate_shader( tokens, &ctx.iter ))
-      return FALSE;
-
+   retval = tgsi_iterate_shader( tokens, &ctx.iter );
    regs_hash_destroy(ctx.regs_decl);
    regs_hash_destroy(ctx.regs_used);
    regs_hash_destroy(ctx.regs_ind_used);
+   if (retval == FALSE)
+      return FALSE;
+
    return ctx.errors == 0;
 }

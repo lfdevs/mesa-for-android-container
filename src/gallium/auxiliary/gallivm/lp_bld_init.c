@@ -621,7 +621,10 @@ gallivm_compile_module(struct gallivm_state *gallivm)
       util_snprintf(filename, sizeof(filename), "ir_%s.bc", gallivm->module_name);
       LLVMWriteBitcodeToFile(gallivm->module, filename);
       debug_printf("%s written\n", filename);
-      debug_printf("Invoke as \"llc -o - %s\"\n", filename);
+      debug_printf("Invoke as \"llc %s%s -o - %s\"\n",
+                   (HAVE_LLVM >= 0x0305) ? "[-mcpu=<-mcpu option] " : "",
+                   "[-mattr=<-mattr option(s)>]",
+                   filename);
    }
 
    if (use_mcjit) {

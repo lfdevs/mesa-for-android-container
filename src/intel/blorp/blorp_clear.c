@@ -328,6 +328,26 @@ blorp_fast_clear(struct blorp_batch *batch,
    batch->blorp->exec(batch, &params);
 }
 
+static union isl_color_value
+swizzle_color_value(union isl_color_value src, struct isl_swizzle swizzle)
+{
+   union isl_color_value dst = { .u32 = { 0, } };
+
+   /* We assign colors in ABGR order so that the first one will be taken in
+    * RGBA precedence order.  According to the PRM docs for shader channel
+    * select, this matches Haswell hardware behavior.
+    */
+   if ((unsigned)(swizzle.a - ISL_CHANNEL_SELECT_RED) < 4)
+      dst.u32[swizzle.a - ISL_CHANNEL_SELECT_RED] = src.u32[3];
+   if ((unsigned)(swizzle.b - ISL_CHANNEL_SELECT_RED) < 4)
+      dst.u32[swizzle.b - ISL_CHANNEL_SELECT_RED] = src.u32[2];
+   if ((unsigned)(swizzle.g - ISL_CHANNEL_SELECT_RED) < 4)
+      dst.u32[swizzle.g - ISL_CHANNEL_SELECT_RED] = src.u32[1];
+   if ((unsigned)(swizzle.r - ISL_CHANNEL_SELECT_RED) < 4)
+      dst.u32[swizzle.r - ISL_CHANNEL_SELECT_RED] = src.u32[0];
+
+   return dst;
+}
 
 void
 blorp_clear(struct blorp_batch *batch,
@@ -346,6 +366,14 @@ blorp_clear(struct blorp_batch *batch,
    params.x1 = x1;
    params.y1 = y1;
 
+   /* Manually apply the clear destination swizzle.  This way swizzled clears
+    * will work for swizzles which we can't normally use for rendering and it
+    * also ensures that they work on pre-Haswell hardware which can't swizlle
+    * at all.
+    */
+   clear_color = swizzle_color_value(clear_color, swizzle);
+   swizzle = ISL_SWIZZLE_IDENTITY;
+
    if (format == ISL_FORMAT_R9G9B9E5_SHAREDEXP) {
       clear_color.u32[0] = float3_to_rgb9e5(clear_color.f32);
       format = ISL_FORMAT_R32_UINT;
@@ -353,24 +381,8 @@ blorp_clear(struct blorp_batch *batch,
       /* Broadwell and earlier cannot render to this format so we need to work
        * around it by swapping the colors around and using B4G4R4A4 instead.
        */
-
-      /* First, we apply the swizzle. */
-      union isl_color_value old;
-      assert((unsigned)(swizzle.r - ISL_CHANNEL_SELECT_RED) < 4);
-      assert((unsigned)(swizzle.g - ISL_CHANNEL_SELECT_RED) < 4);
-      assert((unsigned)(swizzle.b - ISL_CHANNEL_SELECT_RED) < 4);
-      assert((unsigned)(swizzle.a - ISL_CHANNEL_SELECT_RED) < 4);
-      old.u32[swizzle.r - ISL_CHANNEL_SELECT_RED] = clear_color.u32[0];
-      old.u32[swizzle.g - ISL_CHANNEL_SELECT_RED] = clear_color.u32[1];
-      old.u32[swizzle.b - ISL_CHANNEL_SELECT_RED] = clear_color.u32[2];
-      old.u32[swizzle.a - ISL_CHANNEL_SELECT_RED] = clear_color.u32[3];
-      swizzle = ISL_SWIZZLE_IDENTITY;
-
-      /* Now we re-order for the new format */
-      clear_color.u32[0] = old.u32[1];
-      clear_color.u32[1] = old.u32[2];
-      clear_color.u32[2] = old.u32[3];
-      clear_color.u32[3] = old.u32[0];
+      const struct isl_swizzle ARGB = ISL_SWIZZLE(ALPHA, RED, GREEN, BLUE);
+      clear_color = swizzle_color_value(clear_color, ARGB);
       format = ISL_FORMAT_B4G4R4A4_UNORM;
    }
 

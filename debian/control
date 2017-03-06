@@ -20,7 +20,7 @@ Build-Depends:
  libxext-dev,
  libva-dev (>= 1.6.0) [linux-any kfreebsd-any],
  libvdpau-dev (>= 1.1.1) [linux-any kfreebsd-any],
- libvulkan-dev [amd64 i386 arm64 armhf ppc64el x32],
+ libvulkan-dev [amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el x32],
  autoconf,
  automake,
  libtool,
@@ -41,14 +41,14 @@ Build-Depends:
  python-mako,
  flex,
  bison,
- llvm-4.0-dev (>= 1:4.0~) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
- libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf ppc64el],
+ llvm-4.0-dev (>= 1:4.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el],
+ libelf-dev [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el],
  libwayland-dev (>= 1.11.0) [linux-any],
- libclang-4.0-dev (>= 1:4.0~) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
- libclc-dev (>= 0.2.0+git20170213) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf],
+ libclang-4.0-dev (>= 1:4.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el],
+ libclc-dev (>= 0.2.0+git20170213) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el],
 Vcs-Git: https://anonscm.debian.org/git/pkg-xorg/lib/mesa.git
 Vcs-Browser: https://anonscm.debian.org/cgit/pkg-xorg/lib/mesa.git
-Homepage: http://mesa3d.org/
+Homepage: https://mesa3d.org/
 
 Package: libxatracker2
 Section: libs
@@ -410,19 +410,20 @@ Description: Mesa VDPAU video acceleration drivers
 
 Package: mesa-vulkan-drivers
 Section: libs
-Architecture: amd64 i386 arm64 armhf ppc64el x32
+Architecture: amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el x32
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libvulkan1,
  ${shlibs:Depends},
  ${misc:Depends}
+Multi-Arch: same
 Description: Mesa Vulkan graphics drivers
  Vulkan is a low-overhead 3D graphics and compute API. This package
  includes Vulkan drivers provided by the Mesa project.
 
 Package: mesa-opencl-icd
 Section: libs
-Architecture: amd64 i386 kfreebsd-amd64 kfreebsd-i386 arm64 armhf
+Architecture: amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libclc-r600 (>= 0.2.0+git20170213),

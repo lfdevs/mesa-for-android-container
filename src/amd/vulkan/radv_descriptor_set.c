@@ -275,12 +275,13 @@ radv_descriptor_set_create(struct radv_device *device,
 		uint32_t layout_size = align_u32(layout->size, 32);
 		set->size = layout->size;
 		if (!cmd_buffer) {
-			if (pool->current_offset + layout_size <= pool->size) {
+			if (pool->current_offset + layout_size <= pool->size &&
+			    pool->allocated_sets < pool->max_sets) {
 				set->bo = pool->bo;
 				set->mapped_ptr = (uint32_t*)(pool->mapped_ptr + pool->current_offset);
 				set->va = device->ws->buffer_get_va(set->bo) + pool->current_offset;
 				pool->current_offset += layout_size;
-
+				++pool->allocated_sets;
 			} else {
 				int entry = pool->free_list, prev_entry = -1;
 				uint32_t offset;
@@ -417,6 +418,7 @@ VkResult radv_CreateDescriptorPool(
 	pool->full_list = 0;
 	pool->free_nodes[max_sets - 1].next = -1;
 	pool->max_sets = max_sets;
+	pool->allocated_sets = 0;
 
 	for (int i = 0; i  + 1 < max_sets; ++i)
 		pool->free_nodes[i].next = i + 1;
@@ -494,6 +496,7 @@ VkResult radv_ResetDescriptorPool(
 		radv_descriptor_set_destroy(device, pool, set, false);
 	}
 
+	pool->allocated_sets = 0;
 	pool->current_offset = 0;
 	pool->free_list = -1;
 	pool->full_list = 0;

@@ -906,13 +906,59 @@ static void si_get_draw_start_count(struct si_context *sctx,
 				    unsigned *start, unsigned *count)
 {
 	if (info->indirect) {
-		struct r600_resource *indirect =
-			(struct r600_resource*)info->indirect;
-		int *data = r600_buffer_map_sync_with_rings(&sctx->b,
-					indirect, PIPE_TRANSFER_READ);
-                data += info->indirect_offset/sizeof(int);
-		*start = data[2];
-		*count = data[0];
+		unsigned indirect_count;
+		struct pipe_transfer *transfer;
+		unsigned begin, end;
+		unsigned map_size;
+		unsigned *data;
+
+		if (info->indirect_params) {
+			data = pipe_buffer_map_range(&sctx->b.b,
+					info->indirect_params,
+					info->indirect_params_offset,
+					sizeof(unsigned),
+					PIPE_TRANSFER_READ, &transfer);
+
+			indirect_count = *data;
+
+			pipe_buffer_unmap(&sctx->b.b, transfer);
+		} else {
+			indirect_count = info->indirect_count;
+		}
+
+		if (!indirect_count) {
+			*start = *count = 0;
+			return;
+		}
+
+		map_size = (indirect_count - 1) * info->indirect_stride + 3 * sizeof(unsigned);
+		data = pipe_buffer_map_range(&sctx->b.b, info->indirect,
+					     info->indirect_offset, map_size,
+					     PIPE_TRANSFER_READ, &transfer);
+
+		begin = UINT_MAX;
+		end = 0;
+
+		for (unsigned i = 0; i < indirect_count; ++i) {
+			unsigned count = data[0];
+			unsigned start = data[2];
+
+			if (count > 0) {
+				begin = MIN2(begin, start);
+				end = MAX2(end, start + count);
+			}
+
+			data += info->indirect_stride / sizeof(unsigned);
+		}
+
+		pipe_buffer_unmap(&sctx->b.b, transfer);
+
+		if (begin < end) {
+			*start = begin;
+			*count = end - begin;
+		} else {
+			*start = *count = 0;
+		}
 	} else {
 		*start = info->start;
 		*count = info->count;
@@ -1060,7 +1106,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 			void *ptr;
 
 			si_get_draw_start_count(sctx, info, &start, &count);
-			start_offset = start * ib.index_size;
+			start_offset = start * 2;
 
 			u_upload_alloc(sctx->b.uploader, start_offset, count * 2, 256,
 				       &out_offset, &out_buffer, &ptr);
@@ -1069,8 +1115,8 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 				return;
 			}
 
-			util_shorten_ubyte_elts_to_userptr(&sctx->b.b, &ib, 0,
-							   ib.offset + start_offset,
+			util_shorten_ubyte_elts_to_userptr(&sctx->b.b, &ib, 0, 0,
+							   ib.offset + start,
 							   count, ptr);
 
 			pipe_resource_reference(&ib.buffer, NULL);

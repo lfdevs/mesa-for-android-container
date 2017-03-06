@@ -2494,7 +2494,7 @@ CodeEmitterGM107::emitATOMS()
 
    emitField(0x34, 4, subOp);
    emitGPR  (0x14, insn->src(1));
-   emitADDR (0x08, 0x12, 22, 0, insn->src(0));
+   emitADDR (0x08, 0x1e, 22, 2, insn->src(0));
    emitGPR  (0x00, insn->def(0));
 }
 

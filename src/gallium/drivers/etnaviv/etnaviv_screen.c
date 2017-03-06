@@ -576,16 +576,6 @@ etna_get_specs(struct etna_screen *screen)
       DBG("could not get ETNA_GPU_PIXEL_PIPES");
       goto fail;
    }
-   if (val < 1 && val > ETNA_MAX_PIXELPIPES) {
-      if (val == 0) {
-         fprintf(stderr, "Warning: zero pixel pipes (update kernel?)\n");
-         val = 1;
-      } else {
-         fprintf(stderr, "Error: bad pixel pipes value %u\n",
-                 (unsigned int)val);
-         goto fail;
-      }
-   }
    screen->specs.pixel_pipes = val;
 
    if (etna_gpu_get_param(screen->gpu, ETNA_GPU_NUM_CONSTANTS, &val)) {

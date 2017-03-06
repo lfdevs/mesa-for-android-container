@@ -1740,7 +1740,7 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 				       &out_offset, &out_buffer, &ptr);
 
 			util_shorten_ubyte_elts_to_userptr(
-						&rctx->b.b, &ib, 0, ib.offset + start, count, ptr);
+						&rctx->b.b, &ib, 0, 0, ib.offset + start, count, ptr);
 
 			pipe_resource_reference(&ib.buffer, NULL);
 			ib.user_buffer = NULL;

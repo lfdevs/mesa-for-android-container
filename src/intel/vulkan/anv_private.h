@@ -429,6 +429,19 @@ anv_clflush_range(void *start, size_t size)
    }
 }
 
+static inline void
+anv_invalidate_range(void *start, size_t size)
+{
+   void *p = (void *) (((uintptr_t) start) & ~CACHELINE_MASK);
+   void *end = start + size;
+
+   while (p < end) {
+      __builtin_ia32_clflush(p);
+      p += CACHELINE_SIZE;
+   }
+   __builtin_ia32_mfence();
+}
+
 static void inline
 anv_state_clflush(struct anv_state state)
 {

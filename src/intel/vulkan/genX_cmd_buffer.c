@@ -2450,6 +2450,36 @@ emit_query_availability(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
+void genX(CmdResetQueryPool)(
+    VkCommandBuffer                             commandBuffer,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    firstQuery,
+    uint32_t                                    queryCount)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+   ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
+
+   for (uint32_t i = 0; i < queryCount; i++) {
+      switch (pool->type) {
+      case VK_QUERY_TYPE_OCCLUSION:
+      case VK_QUERY_TYPE_TIMESTAMP: {
+         anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), sdm) {
+            sdm.Address = (struct anv_address) {
+               .bo = &pool->bo,
+               .offset = (firstQuery + i) * sizeof(struct anv_query_pool_slot) +
+                         offsetof(struct anv_query_pool_slot, available),
+            };
+            sdm.DataDWord0 = 0;
+            sdm.DataDWord1 = 0;
+         }
+         break;
+      }
+      default:
+         assert(!"Invalid query type");
+      }
+   }
+}
+
 void genX(CmdBeginQuery)(
     VkCommandBuffer                             commandBuffer,
     VkQueryPool                                 queryPool,

@@ -629,7 +629,7 @@ droid_create_image_from_prime_fd_yuv(_EGLDisplay *disp, _EGLContext *ctx,
     * so they can be interpreted as offsets. */
    offsets[0] = (size_t)ycbcr.y;
    /* We assume here that all the planes are located in one DMA-buf. */
-   is_ycrcb = (size_t)ycbcr.cb < (size_t)ycbcr.cr;
+   is_ycrcb = (size_t)ycbcr.cr < (size_t)ycbcr.cb;
    if (is_ycrcb) {
       offsets[1] = (size_t)ycbcr.cr;
       offsets[2] = (size_t)ycbcr.cb;

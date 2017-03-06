@@ -1009,13 +1009,16 @@ static inline void si_shader_selector_key(struct pipe_context *ctx,
 		 * to the range supported by the type if a channel has less
 		 * than 16 bits and the export format is 16_ABGR.
 		 */
-		if (sctx->b.chip_class <= CIK && sctx->b.family != CHIP_HAWAII)
+		if (sctx->b.chip_class <= CIK && sctx->b.family != CHIP_HAWAII) {
 			key->part.ps.epilog.color_is_int8 = sctx->framebuffer.color_is_int8;
+			key->part.ps.epilog.color_is_int10 = sctx->framebuffer.color_is_int10;
+		}
 
 		/* Disable unwritten outputs (if WRITE_ALL_CBUFS isn't enabled). */
 		if (!key->part.ps.epilog.last_cbuf) {
 			key->part.ps.epilog.spi_shader_col_format &= sel->colors_written_4bit;
 			key->part.ps.epilog.color_is_int8 &= sel->info.colors_written;
+			key->part.ps.epilog.color_is_int10 &= sel->info.colors_written;
 		}
 
 		if (rs) {
@@ -2210,7 +2213,9 @@ static bool si_update_spi_tmpring_size(struct si_context *sctx)
 
 static void si_init_tess_factor_ring(struct si_context *sctx)
 {
-	bool double_offchip_buffers = sctx->b.chip_class >= CIK;
+	bool double_offchip_buffers = sctx->b.chip_class >= CIK &&
+				      sctx->b.family != CHIP_CARRIZO &&
+				      sctx->b.family != CHIP_STONEY;
 	unsigned max_offchip_buffers_per_se = double_offchip_buffers ? 128 : 64;
 	unsigned max_offchip_buffers = max_offchip_buffers_per_se *
 				       sctx->screen->b.info.max_se;

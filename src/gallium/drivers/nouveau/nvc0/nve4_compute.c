@@ -816,6 +816,7 @@ nve4_compute_dump_launch_desc(const struct nve4_cp_launch_desc *desc)
    debug_printf("barrier count: %u\n", desc->bar_alloc);
    debug_printf("$r count: %u\n", desc->gpr_alloc);
    debug_printf("cache split: %s\n", nve4_cache_split_name(desc->cache_split));
+   debug_printf("linked tsc: %d\n", desc->linked_tsc);
 
    for (i = 0; i < 8; ++i) {
       uint64_t address;

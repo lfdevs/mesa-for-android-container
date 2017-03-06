@@ -148,12 +148,21 @@ dri2_wl_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
    if (!_eglInitSurface(&dri2_surf->base, disp, EGL_WINDOW_BIT, conf, attrib_list))
       goto cleanup_surf;
 
-   if (conf->RedSize == 5)
-      dri2_surf->format = WL_DRM_FORMAT_RGB565;
-   else if (conf->AlphaSize == 0)
-      dri2_surf->format = WL_DRM_FORMAT_XRGB8888;
-   else
-      dri2_surf->format = WL_DRM_FORMAT_ARGB8888;
+   if (dri2_dpy->dri2) {
+      if (conf->RedSize == 5)
+         dri2_surf->format = WL_DRM_FORMAT_RGB565;
+      else if (conf->AlphaSize == 0)
+         dri2_surf->format = WL_DRM_FORMAT_XRGB8888;
+      else
+         dri2_surf->format = WL_DRM_FORMAT_ARGB8888;
+   } else {
+      if (conf->RedSize == 5)
+         dri2_surf->format = WL_SHM_FORMAT_RGB565;
+      else if (conf->AlphaSize == 0)
+         dri2_surf->format = WL_SHM_FORMAT_XRGB8888;
+      else
+         dri2_surf->format = WL_SHM_FORMAT_ARGB8888;
+   }
 
    if (!window) {
       _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_create_surface");

@@ -1827,6 +1827,7 @@ void radv_CmdExecuteCommands(
 	/* if we execute secondary we need to re-emit out pipelines */
 	if (commandBufferCount) {
 		primary->state.emitted_pipeline = NULL;
+		primary->state.emitted_compute_pipeline = NULL;
 		primary->state.dirty |= RADV_CMD_DIRTY_PIPELINE;
 		primary->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_ALL;
 	}

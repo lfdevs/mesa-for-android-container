@@ -1448,11 +1448,12 @@ VkResult anv_InvalidateMappedMemoryRanges(
 }
 
 void anv_GetBufferMemoryRequirements(
-    VkDevice                                    device,
+    VkDevice                                    _device,
     VkBuffer                                    _buffer,
     VkMemoryRequirements*                       pMemoryRequirements)
 {
    ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
+   ANV_FROM_HANDLE(anv_device, device, _device);
 
    /* The Vulkan spec (git aaed022) says:
     *
@@ -1461,20 +1462,21 @@ void anv_GetBufferMemoryRequirements(
     *    only if the memory type `i` in the VkPhysicalDeviceMemoryProperties
     *    structure for the physical device is supported.
     *
-    * We support exactly one memory type.
+    * We support exactly one memory type on LLC, two on non-LLC.
     */
-   pMemoryRequirements->memoryTypeBits = 1;
+   pMemoryRequirements->memoryTypeBits = device->info.has_llc ? 1 : 3;
 
    pMemoryRequirements->size = buffer->size;
    pMemoryRequirements->alignment = 16;
 }
 
 void anv_GetImageMemoryRequirements(
-    VkDevice                                    device,
+    VkDevice                                    _device,
     VkImage                                     _image,
     VkMemoryRequirements*                       pMemoryRequirements)
 {
    ANV_FROM_HANDLE(anv_image, image, _image);
+   ANV_FROM_HANDLE(anv_device, device, _device);
 
    /* The Vulkan spec (git aaed022) says:
     *
@@ -1483,9 +1485,9 @@ void anv_GetImageMemoryRequirements(
     *    only if the memory type `i` in the VkPhysicalDeviceMemoryProperties
     *    structure for the physical device is supported.
     *
-    * We support exactly one memory type.
+    * We support exactly one memory type on LLC, two on non-LLC.
     */
-   pMemoryRequirements->memoryTypeBits = 1;
+   pMemoryRequirements->memoryTypeBits = device->info.has_llc ? 1 : 3;
 
    pMemoryRequirements->size = image->size;
    pMemoryRequirements->alignment = image->alignment;

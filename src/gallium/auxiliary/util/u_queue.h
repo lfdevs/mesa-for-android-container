@@ -34,6 +34,7 @@
 #define U_QUEUE_H
 
 #include "os/os_thread.h"
+#include "util/list.h"
 
 /* Job completion fence.
  * Put this into your job structure.
@@ -66,6 +67,9 @@ struct util_queue {
    int max_jobs;
    int write_idx, read_idx; /* ring buffer pointers */
    struct util_queue_job *jobs;
+
+   /* for cleanup at exit(), protected by exit_mutex */
+   struct list_head head;
 };
 
 bool util_queue_init(struct util_queue *queue,

@@ -1,3 +1,20 @@
+mesa (17.0.1-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+
+  [ Andreas Boll ]
+  * Declare Multi-Arch: same for mesa-vulkan-drivers (Closes: #853897).
+  * Cherry-pick 7d1195c (clover: Work around build failure with
+    AltiVec.) from upstream master branch.
+  * Enable OpenCL on ppc64el (Closes: #810913).
+  * Require LLVM on more architectures (armel mips mips64el mipsel
+    powerpc ppc64):
+    - Enables radeonsi, llvmpipe and radv drivers.
+    - Enables OpenCL support.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Mon, 06 Mar 2017 15:15:00 +0100
+
 mesa (17.0.0-1) experimental; urgency=medium
 
   * New upstream release.
@@ -52,6 +69,14 @@ mesa (17.0.0~rc1-1) experimental; urgency=medium
   * Update extend-diff-ignore.
 
  -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 19 Jan 2017 18:39:06 +0100
+
+mesa (13.0.5-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Switch mesa3d.org URLs to https.
+  * Update extend-diff-ignore.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 21 Feb 2017 13:13:50 +0100
 
 mesa (13.0.4-1) unstable; urgency=medium
 

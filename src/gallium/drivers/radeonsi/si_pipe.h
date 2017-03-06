@@ -173,7 +173,8 @@ struct si_framebuffer {
 	unsigned			spi_shader_col_format_alpha;
 	unsigned			spi_shader_col_format_blend;
 	unsigned			spi_shader_col_format_blend_alpha;
-	unsigned			color_is_int8; /* bitmask */
+	unsigned			color_is_int8;
+	unsigned			color_is_int10;
 	unsigned			dirty_cbufs;
 	bool				dirty_zsbuf;
 	bool				any_dst_linear;

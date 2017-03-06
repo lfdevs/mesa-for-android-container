@@ -543,6 +543,7 @@ struct radv_descriptor_pool {
 	int free_list;
 	int full_list;
 	uint32_t max_sets;
+	uint32_t allocated_sets;
 	struct radv_descriptor_pool_free_node free_nodes[];
 };
 

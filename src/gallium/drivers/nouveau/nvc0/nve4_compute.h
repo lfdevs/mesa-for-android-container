@@ -8,7 +8,10 @@ struct nve4_cp_launch_desc
 {
    u32 unk0[8];
    u32 entry;
-   u32 unk9[3];
+   u32 unk9[2];
+   u32 unk11_0      : 30;
+   u32 linked_tsc   : 1;
+   u32 unk11_31     : 1;
    u32 griddim_x    : 31;
    u32 unk12        : 1;
    u16 griddim_y;
@@ -48,7 +51,7 @@ nve4_cp_launch_desc_init_default(struct nve4_cp_launch_desc *desc)
    memset(desc, 0, sizeof(*desc));
 
    desc->unk0[7]  = 0xbc000000;
-   desc->unk9[2]  = 0x44014000;
+   desc->unk11_0  = 0x04014000;
    desc->unk47_20 = 0x300;
 }
 

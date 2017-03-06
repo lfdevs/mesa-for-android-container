@@ -3234,7 +3234,7 @@ static void visit_tex(struct nir_to_llvm_context *ctx, nir_tex_instr *instr)
 	}
 
 	if (instr->op == nir_texop_txs && instr->sampler_dim == GLSL_SAMPLER_DIM_BUF) {
-		result = get_buffer_size(ctx, res_ptr, false);
+		result = get_buffer_size(ctx, res_ptr, true);
 		goto write_result;
 	}
 

@@ -101,6 +101,7 @@
 #include "util/u_cpu_detect.h"
 
 #include "lp_bld_misc.h"
+#include "lp_bld_debug.h"
 
 namespace {
 
@@ -614,7 +615,8 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 
 #if defined(PIPE_ARCH_PPC)
    MAttrs.push_back(util_cpu_caps.has_altivec ? "+altivec" : "-altivec");
-#if HAVE_LLVM >= 0x0304
+#if (HAVE_LLVM >= 0x0304)
+#if (HAVE_LLVM <= 0x0307) || (HAVE_LLVM == 0x0308 && MESA_LLVM_VERSION_PATCH == 0)
    /*
     * Make sure VSX instructions are disabled
     * See LLVM bug https://llvm.org/bugs/show_bug.cgi?id=25503#c7
@@ -622,10 +624,31 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    if (util_cpu_caps.has_altivec) {
       MAttrs.push_back("-vsx");
    }
+#else
+   /*
+    * However, bug 25503 is fixed, by the same fix that fixed
+    * bug 26775, in versions of LLVM later than 3.8 (starting with 3.8.1):
+    * Make sure VSX instructions are ENABLED
+    * See LLVM bug https://llvm.org/bugs/show_bug.cgi?id=26775
+    */
+   if (util_cpu_caps.has_altivec) {
+      MAttrs.push_back("+vsx");
+   }
+#endif
 #endif
 #endif
 
    builder.setMAttrs(MAttrs);
+
+   if (gallivm_debug & (GALLIVM_DEBUG_IR | GALLIVM_DEBUG_ASM | GALLIVM_DEBUG_DUMP_BC)) {
+      int n = MAttrs.size();
+      if (n > 0) {
+         debug_printf("llc -mattr option(s): ");
+         for (int i = 0; i < n; i++)
+            debug_printf("%s%s", MAttrs[i].c_str(), (i < n - 1) ? "," : "");
+         debug_printf("\n");
+      }
+   }
 
 #if HAVE_LLVM >= 0x0305
    StringRef MCPU = llvm::sys::getHostCPUName();
@@ -641,7 +664,23 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     * when not using MCJIT so no instructions are generated which the old JIT
     * can't handle. Not entirely sure if we really need to do anything yet.
     */
+#if defined(PIPE_ARCH_LITTLE_ENDIAN)  && defined(PIPE_ARCH_PPC_64)
+   /*
+    * Versions of LLVM prior to 4.0 lacked a table entry for "POWER8NVL",
+    * resulting in (big-endian) "generic" being returned on
+    * little-endian Power8NVL systems.  The result was that code that
+    * attempted to load the least significant 32 bits of a 64-bit quantity
+    * from memory loaded the wrong half.  This resulted in failures in some
+    * Piglit tests, e.g.
+    * .../arb_gpu_shader_fp64/execution/conversion/frag-conversion-explicit-double-uint
+    */
+   if (MCPU == "generic")
+      MCPU = "pwr8";
+#endif
    builder.setMCPU(MCPU);
+   if (gallivm_debug & (GALLIVM_DEBUG_IR | GALLIVM_DEBUG_ASM | GALLIVM_DEBUG_DUMP_BC)) {
+      debug_printf("llc -mcpu option: %s\n", MCPU.str().c_str());
+   }
 #endif
 
    ShaderMemoryManager *MM = NULL;

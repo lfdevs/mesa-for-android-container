@@ -315,6 +315,7 @@ struct r600_surface {
 	bool alphatest_bypass;
 	bool export_16bpc;
 	bool color_is_int8;
+	bool color_is_int10;
 
 	/* Color registers. */
 	unsigned cb_color_info;

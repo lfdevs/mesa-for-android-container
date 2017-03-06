@@ -419,6 +419,25 @@ dri3_query_buffer_age(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
    return loader_dri3_query_buffer_age(&dri3_surf->loader_drawable);
 }
 
+static EGLBoolean
+dri3_query_surface(_EGLDriver *drv, _EGLDisplay *dpy,
+                   _EGLSurface *surf, EGLint attribute,
+                   EGLint *value)
+{
+   struct dri3_egl_surface *dri3_surf = dri3_egl_surface(surf);
+
+   switch (attribute) {
+   case EGL_WIDTH:
+   case EGL_HEIGHT:
+      loader_dri3_update_drawable_geometry(&dri3_surf->loader_drawable);
+      break;
+   default:
+      break;
+   }
+
+   return _eglQuerySurface(drv, dpy, surf, attribute, value);
+}
+
 static __DRIdrawable *
 dri3_get_dri_drawable(_EGLSurface *surf)
 {
@@ -441,6 +460,7 @@ struct dri2_egl_display_vtbl dri3_x11_display_vtbl = {
    .post_sub_buffer = dri2_fallback_post_sub_buffer,
    .copy_buffers = dri3_copy_buffers,
    .query_buffer_age = dri3_query_buffer_age,
+   .query_surface = dri3_query_surface,
    .create_wayland_buffer_from_image = dri2_fallback_create_wayland_buffer_from_image,
    .get_sync_values = dri3_get_sync_values,
    .get_dri_drawable = dri3_get_dri_drawable,

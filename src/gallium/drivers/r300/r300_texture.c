@@ -47,6 +47,11 @@
  */
 static enum pipe_format r300_unbyteswap_array_format(enum pipe_format format)
 {
+    /* FIXME: Disabled on little endian because of a reported regression:
+     * https://bugs.freedesktop.org/show_bug.cgi?id=98869 */
+    if (PIPE_ENDIAN_NATIVE != PIPE_ENDIAN_BIG)
+        return format;
+
     /* Only BGRA 8888 array formats are supported for simplicity of
      * the implementation. */
     switch (format) {

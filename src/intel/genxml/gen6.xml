@@ -1803,7 +1803,7 @@
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="32"/>
     <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="DWord Length" start="0" end="5" type="uint" default="2"/>
-    <field name="Address" start="66" end="95" type="uint"/>
+    <field name="Address" start="66" end="95" type="address"/>
     <field name="Core Mode Enable" start="64" end="64" type="uint"/>
     <field name="Data DWord 0" start="96" end="127" type="uint"/>
     <field name="Data DWord 1" start="128" end="159" type="uint"/>

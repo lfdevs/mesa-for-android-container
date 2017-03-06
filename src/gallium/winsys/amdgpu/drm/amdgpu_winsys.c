@@ -322,8 +322,10 @@ static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
    /* Set hardware information. */
    ws->info.gart_size = gtt.heap_size;
    ws->info.vram_size = vram.heap_size;
-   /* The kernel can split large buffers, so we can do large allocations. */
-   ws->info.max_alloc_size = MAX2(ws->info.vram_size, ws->info.gart_size) * 0.9;
+   /* The kernel can split large buffers in VRAM but not in GTT, so large
+    * allocations can fail or cause buffer movement failures in the kernel.
+    */
+   ws->info.max_alloc_size = MIN2(ws->info.vram_size * 0.9, ws->info.gart_size * 0.7);
    /* convert the shader clock from KHz to MHz */
    ws->info.max_shader_clock = ws->amdinfo.max_engine_clk / 1000;
    ws->info.max_se = ws->amdinfo.num_shader_engines;

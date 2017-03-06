@@ -41,7 +41,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
                        &out_offset, out_buffer, &ptr);
 
         util_shorten_ubyte_elts_to_userptr(
-                &r300->context, ib, index_offset,
+                &r300->context, ib, PIPE_TRANSFER_UNSYNCHRONIZED, index_offset,
                 *start, count, ptr);
 
         *index_size = 2;
@@ -55,6 +55,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
                            &out_offset, out_buffer, &ptr);
 
             util_rebuild_ushort_elts_to_userptr(&r300->context, ib,
+                                                PIPE_TRANSFER_UNSYNCHRONIZED,
                                                 index_offset, *start,
                                                 count, ptr);
 
@@ -69,6 +70,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
                            &out_offset, out_buffer, &ptr);
 
             util_rebuild_uint_elts_to_userptr(&r300->context, ib,
+                                              PIPE_TRANSFER_UNSYNCHRONIZED,
                                               index_offset, *start,
                                               count, ptr);
 

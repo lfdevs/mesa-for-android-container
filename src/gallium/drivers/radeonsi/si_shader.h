@@ -366,6 +366,7 @@ struct si_ps_prolog_bits {
 struct si_ps_epilog_bits {
 	unsigned	spi_shader_col_format;
 	unsigned	color_is_int8:8;
+	unsigned	color_is_int10:8;
 	unsigned	last_cbuf:3;
 	unsigned	alpha_func:3;
 	unsigned	alpha_to_one:1;

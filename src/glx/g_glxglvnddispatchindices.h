@@ -46,14 +46,14 @@ typedef enum __GLXdispatchIndex {
     DI_GetMscRateOML,
     // GetProcAddress implemented by libglvnd
     // GetProcAddressARB implemented by libglvnd
+    DI_GetScreenDriver,
     // GetSelectedEvent implemented by libglvnd
     DI_GetSelectedEventSGIX,
+    DI_GetSwapIntervalMESA,
+    DI_GetSyncValuesOML,
     DI_GetVideoSyncSGI,
     // GetVisualFromFBConfig implemented by libglvnd
     DI_GetVisualFromFBConfigSGIX,
-    DI_GetScreenDriver,
-    DI_GetSwapIntervalMESA,
-    DI_GetSyncValuesOML,
     // ImportContextEXT implemented by libglvnd
     // IsDirect implemented by libglvnd
     DI_JoinSwapGroupSGIX,
@@ -81,9 +81,9 @@ typedef enum __GLXdispatchIndex {
     DI_SwapIntervalMESA,
     DI_SwapIntervalSGI,
     // UseXFont implemented by libglvnd
-    // WaitGL implemented by libglvnd
     DI_WaitForMscOML,
     DI_WaitForSbcOML,
+    // WaitGL implemented by libglvnd
     DI_WaitVideoSyncSGI,
     // WaitX implemented by libglvnd
     DI_LAST_INDEX

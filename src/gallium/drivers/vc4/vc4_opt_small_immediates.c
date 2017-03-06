@@ -52,6 +52,17 @@ qir_opt_small_immediates(struct vc4_compile *c)
                 if (uses_small_imm)
                         continue;
 
+                /* Don't propagate small immediates into the top-end bounds
+                 * checking for indirect UBO loads.  The kernel doesn't parse
+                 * small immediates and rejects the shader in this case.  UBO
+                 * loads are much more expensive than the uniform load, and
+                 * indirect UBO regions are usually much larger than a small
+                 * immediate, so it's not worth updating the kernel to allow
+                 * optimizing it.
+                 */
+                if (inst->op == QOP_MIN_NOIMM)
+                        continue;
+
                 for (int i = 0; i < qir_get_nsrc(inst); i++) {
                         struct qreg src = qir_follow_movs(c, inst->src[i]);
 

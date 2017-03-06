@@ -285,6 +285,8 @@ vc4_generate_code_block(struct vc4_compile *c,
                         [QOP_MOV] = { QPU_A_OR },
                         [QOP_FMOV] = { QPU_A_FMAX },
                         [QOP_MMOV] = { QPU_M_V8MIN },
+
+                        [QOP_MIN_NOIMM] = { QPU_A_MIN },
                 };
 
                 uint64_t unpack = 0;

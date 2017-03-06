@@ -1121,7 +1121,7 @@ VkResult radv_AllocateMemory(
 	if (pAllocateInfo->memoryTypeIndex == RADV_MEM_TYPE_GTT_WRITE_COMBINE)
 		flags |= RADEON_FLAG_GTT_WC;
 
-	mem->bo = device->ws->buffer_create(device->ws, alloc_size, 32768,
+	mem->bo = device->ws->buffer_create(device->ws, alloc_size, 65536,
 					       domain, flags);
 
 	if (!mem->bo) {

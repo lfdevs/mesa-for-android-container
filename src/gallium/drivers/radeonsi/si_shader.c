@@ -1985,7 +1985,7 @@ static void si_llvm_init_export_args(struct lp_build_tgsi_context *bld_base,
 	LLVMValueRef val[4];
 	unsigned spi_shader_col_format = V_028714_SPI_SHADER_32_ABGR;
 	unsigned chan;
-	bool is_int8;
+	bool is_int8, is_int10;
 
 	/* Default is 0xf. Adjusted below depending on the format. */
 	args[0] = lp_build_const_int32(base->gallivm, 0xf); /* writemask */
@@ -2007,6 +2007,7 @@ static void si_llvm_init_export_args(struct lp_build_tgsi_context *bld_base,
 		assert(cbuf >= 0 && cbuf < 8);
 		spi_shader_col_format = (col_formats >> (cbuf * 4)) & 0xf;
 		is_int8 = (key->part.ps.epilog.color_is_int8 >> cbuf) & 0x1;
+		is_int10 = (key->part.ps.epilog.color_is_int10 >> cbuf) & 0x1;
 	}
 
 	args[4] = uint->zero; /* COMPR flag */
@@ -2106,13 +2107,17 @@ static void si_llvm_init_export_args(struct lp_build_tgsi_context *bld_base,
 		break;
 
 	case V_028714_SPI_SHADER_UINT16_ABGR: {
-		LLVMValueRef max = lp_build_const_int32(gallivm, is_int8 ?
-							255 : 65535);
+		LLVMValueRef max_rgb = lp_build_const_int32(gallivm,
+			is_int8 ? 255 : is_int10 ? 1023 : 65535);
+		LLVMValueRef max_alpha =
+			!is_int10 ? max_rgb : lp_build_const_int32(gallivm, 3);
+
 		/* Clamp. */
 		for (chan = 0; chan < 4; chan++) {
 			val[chan] = bitcast(bld_base, TGSI_TYPE_UNSIGNED, values[chan]);
 			val[chan] = lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_UMIN,
-							      val[chan], max);
+					val[chan],
+					chan == 3 ? max_alpha : max_rgb);
 		}
 
 		args[4] = uint->one; /* COMPR flag */
@@ -2124,19 +2129,24 @@ static void si_llvm_init_export_args(struct lp_build_tgsi_context *bld_base,
 	}
 
 	case V_028714_SPI_SHADER_SINT16_ABGR: {
-		LLVMValueRef max = lp_build_const_int32(gallivm, is_int8 ?
-							127 : 32767);
-		LLVMValueRef min = lp_build_const_int32(gallivm, is_int8 ?
-							-128 : -32768);
+		LLVMValueRef max_rgb = lp_build_const_int32(gallivm,
+			is_int8 ? 127 : is_int10 ? 511 : 32767);
+		LLVMValueRef min_rgb = lp_build_const_int32(gallivm,
+			is_int8 ? -128 : is_int10 ? -512 : -32768);
+		LLVMValueRef max_alpha =
+			!is_int10 ? max_rgb : lp_build_const_int32(gallivm, 1);
+		LLVMValueRef min_alpha =
+			!is_int10 ? min_rgb : lp_build_const_int32(gallivm, -2);
+
 		/* Clamp. */
 		for (chan = 0; chan < 4; chan++) {
 			val[chan] = bitcast(bld_base, TGSI_TYPE_UNSIGNED, values[chan]);
 			val[chan] = lp_build_emit_llvm_binary(bld_base,
-							      TGSI_OPCODE_IMIN,
-							      val[chan], max);
+					TGSI_OPCODE_IMIN,
+					val[chan], chan == 3 ? max_alpha : max_rgb);
 			val[chan] = lp_build_emit_llvm_binary(bld_base,
-							      TGSI_OPCODE_IMAX,
-							      val[chan], min);
+					TGSI_OPCODE_IMAX,
+					val[chan], chan == 3 ? min_alpha : min_rgb);
 		}
 
 		args[4] = uint->one; /* COMPR flag */
@@ -6678,6 +6688,7 @@ static void si_dump_shader_key(unsigned shader, struct si_shader_key *key,
 		fprintf(f, "  part.ps.prolog.bc_optimize_for_linear = %u\n", key->part.ps.prolog.bc_optimize_for_linear);
 		fprintf(f, "  part.ps.epilog.spi_shader_col_format = 0x%x\n", key->part.ps.epilog.spi_shader_col_format);
 		fprintf(f, "  part.ps.epilog.color_is_int8 = 0x%X\n", key->part.ps.epilog.color_is_int8);
+		fprintf(f, "  part.ps.epilog.color_is_int10 = 0x%X\n", key->part.ps.epilog.color_is_int10);
 		fprintf(f, "  part.ps.epilog.last_cbuf = %u\n", key->part.ps.epilog.last_cbuf);
 		fprintf(f, "  part.ps.epilog.alpha_func = %u\n", key->part.ps.epilog.alpha_func);
 		fprintf(f, "  part.ps.epilog.alpha_to_one = %u\n", key->part.ps.epilog.alpha_to_one);

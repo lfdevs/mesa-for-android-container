@@ -5920,7 +5920,7 @@ struct GEN7_MI_STORE_DATA_IMM {
    uint32_t                             MICommandOpcode;
    bool                                 UseGlobalGTT;
    uint32_t                             DWordLength;
-   uint32_t                             Address;
+   __gen_address_type                   Address;
    uint32_t                             CoreModeEnable;
    uint32_t                             DataDWord0;
    uint32_t                             DataDWord1;
@@ -5940,9 +5940,9 @@ GEN7_MI_STORE_DATA_IMM_pack(__gen_user_data *data, void * restrict dst,
 
    dw[1] = 0;
 
-   dw[2] =
-      __gen_uint(values->Address, 2, 31) |
+   const uint32_t v2 =
       __gen_uint(values->CoreModeEnable, 0, 0);
+   dw[2] = __gen_combine_address(data, &dw[2], values->Address, v2);
 
    dw[3] =
       __gen_uint(values->DataDWord0, 0, 31);

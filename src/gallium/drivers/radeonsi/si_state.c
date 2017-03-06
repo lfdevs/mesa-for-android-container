@@ -2121,11 +2121,15 @@ static void si_initialize_color_surface(struct si_context *sctx,
 		blend_bypass = 1;
 	}
 
-	if ((ntype == V_028C70_NUMBER_UINT || ntype == V_028C70_NUMBER_SINT) &&
-	    (format == V_028C70_COLOR_8 ||
-	     format == V_028C70_COLOR_8_8 ||
-	     format == V_028C70_COLOR_8_8_8_8))
-		surf->color_is_int8 = true;
+	if (ntype == V_028C70_NUMBER_UINT || ntype == V_028C70_NUMBER_SINT) {
+		if (format == V_028C70_COLOR_8 ||
+		    format == V_028C70_COLOR_8_8 ||
+		    format == V_028C70_COLOR_8_8_8_8)
+			surf->color_is_int8 = true;
+		else if (format == V_028C70_COLOR_10_10_10_2 ||
+			 format == V_028C70_COLOR_2_10_10_10)
+			surf->color_is_int10 = true;
+	}
 
 	color_info = S_028C70_FORMAT(format) |
 		S_028C70_COMP_SWAP(swap) |
@@ -2388,6 +2392,7 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 	sctx->framebuffer.spi_shader_col_format_blend = 0;
 	sctx->framebuffer.spi_shader_col_format_blend_alpha = 0;
 	sctx->framebuffer.color_is_int8 = 0;
+	sctx->framebuffer.color_is_int10 = 0;
 
 	sctx->framebuffer.compressed_cb_mask = 0;
 	sctx->framebuffer.nr_samples = util_framebuffer_get_num_samples(state);
@@ -2417,6 +2422,8 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 
 		if (surf->color_is_int8)
 			sctx->framebuffer.color_is_int8 |= 1 << i;
+		if (surf->color_is_int10)
+			sctx->framebuffer.color_is_int10 |= 1 << i;
 
 		if (rtex->fmask.size) {
 			sctx->framebuffer.compressed_cb_mask |= 1 << i;

@@ -66,6 +66,10 @@ blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
                           unsigned state_size, unsigned state_alignment,
                           uint32_t *bt_offset, uint32_t *surface_offsets,
                           void **surface_maps);
+
+static void
+blorp_flush_range(struct blorp_batch *batch, void *start, size_t size);
+
 static void
 blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
                     struct blorp_address address, uint32_t delta);
@@ -182,6 +186,7 @@ blorp_emit_vertex_data(struct blorp_batch *batch,
    void *data = blorp_alloc_vertex_buffer(batch, sizeof(vertices), addr);
    memcpy(data, vertices, sizeof(vertices));
    *size = sizeof(vertices);
+   blorp_flush_range(batch, data, *size);
 }
 
 static void
@@ -199,7 +204,8 @@ blorp_emit_input_varying_data(struct blorp_batch *batch,
    *size = 16 + num_varyings * vec4_size_in_bytes;
 
    const uint32_t *const inputs_src = (const uint32_t *)&params->wm_inputs;
-   uint32_t *inputs = blorp_alloc_vertex_buffer(batch, *size, addr);
+   void *data = blorp_alloc_vertex_buffer(batch, *size, addr);
+   uint32_t *inputs = data;
 
    /* Copy in the VS inputs */
    assert(sizeof(params->vs_inputs) == 16);
@@ -223,6 +229,8 @@ blorp_emit_input_varying_data(struct blorp_batch *batch,
          inputs += 4;
       }
    }
+
+   blorp_flush_range(batch, data, *size);
 }
 
 static void
@@ -906,6 +914,7 @@ blorp_emit_blend_state(struct blorp_batch *batch,
                                            GENX(BLEND_STATE_length) * 4,
                                            64, &offset);
    GENX(BLEND_STATE_pack)(NULL, state, &blend);
+   blorp_flush_range(batch, state, GENX(BLEND_STATE_length) * 4);
 
 #if GEN_GEN >= 7
    blorp_emit(batch, GENX(3DSTATE_BLEND_STATE_POINTERS), sp) {
@@ -940,6 +949,7 @@ blorp_emit_color_calc_state(struct blorp_batch *batch,
                                            GENX(COLOR_CALC_STATE_length) * 4,
                                            64, &offset);
    GENX(COLOR_CALC_STATE_pack)(NULL, state, &cc);
+   blorp_flush_range(batch, state, GENX(COLOR_CALC_STATE_length) * 4);
 
 #if GEN_GEN >= 7
    blorp_emit(batch, GENX(3DSTATE_CC_STATE_POINTERS), sp) {
@@ -1016,6 +1026,7 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
                                            GENX(DEPTH_STENCIL_STATE_length) * 4,
                                            64, &offset);
    GENX(DEPTH_STENCIL_STATE_pack)(NULL, state, &ds);
+   blorp_flush_range(batch, state, GENX(DEPTH_STENCIL_STATE_length) * 4);
 #endif
 
 #if GEN_GEN == 7
@@ -1068,6 +1079,8 @@ blorp_emit_surface_state(struct blorp_batch *batch,
       blorp_surface_reloc(batch, state_offset + isl_dev->ss.aux_addr_offset,
                           surface->aux_addr, *aux_addr);
    }
+
+   blorp_flush_range(batch, state, GENX(RENDER_SURFACE_STATE_length) * 4);
 }
 
 static void
@@ -1098,6 +1111,8 @@ blorp_emit_null_surface_state(struct blorp_batch *batch,
    };
 
    GENX(RENDER_SURFACE_STATE_pack)(NULL, state, &ss);
+
+   blorp_flush_range(batch, state, GENX(RENDER_SURFACE_STATE_length) * 4);
 }
 
 static void
@@ -1181,6 +1196,7 @@ blorp_emit_sampler_state(struct blorp_batch *batch,
                                            GENX(SAMPLER_STATE_length) * 4,
                                            32, &offset);
    GENX(SAMPLER_STATE_pack)(NULL, state, &sampler);
+   blorp_flush_range(batch, state, GENX(SAMPLER_STATE_length) * 4);
 
 #if GEN_GEN >= 7
    blorp_emit(batch, GENX(3DSTATE_SAMPLER_STATE_POINTERS_PS), ssp) {
@@ -1333,6 +1349,7 @@ blorp_emit_viewport_state(struct blorp_batch *batch,
          .MinimumDepth = 0.0,
          .MaximumDepth = 1.0,
       });
+   blorp_flush_range(batch, state, GENX(CC_VIEWPORT_length) * 4);
 
 #if GEN_GEN >= 7
    blorp_emit(batch, GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), vsp) {

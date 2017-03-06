@@ -29,6 +29,68 @@
 #include "u_string.h"
 #include "os/os_time.h"
 
+static void util_queue_killall_and_wait(struct util_queue *queue);
+
+/****************************************************************************
+ * Wait for all queues to assert idle when exit() is called.
+ *
+ * Otherwise, C++ static variable destructors can be called while threads
+ * are using the static variables.
+ */
+
+static once_flag atexit_once_flag = ONCE_FLAG_INIT;
+static struct list_head queue_list;
+pipe_static_mutex(exit_mutex);
+
+static void
+atexit_handler(void)
+{
+   struct util_queue *iter;
+
+   pipe_mutex_lock(exit_mutex);
+   /* Wait for all queues to assert idle. */
+   LIST_FOR_EACH_ENTRY(iter, &queue_list, head) {
+      util_queue_killall_and_wait(iter);
+   }
+   pipe_mutex_unlock(exit_mutex);
+}
+
+static void
+global_init(void)
+{
+   LIST_INITHEAD(&queue_list);
+   atexit(atexit_handler);
+}
+
+static void
+add_to_atexit_list(struct util_queue *queue)
+{
+   call_once(&atexit_once_flag, global_init);
+
+   pipe_mutex_lock(exit_mutex);
+   LIST_ADD(&queue->head, &queue_list);
+   pipe_mutex_unlock(exit_mutex);
+}
+
+static void
+remove_from_atexit_list(struct util_queue *queue)
+{
+   struct util_queue *iter, *tmp;
+
+   pipe_mutex_lock(exit_mutex);
+   LIST_FOR_EACH_ENTRY_SAFE(iter, tmp, &queue_list, head) {
+      if (iter == queue) {
+         LIST_DEL(&iter->head);
+         break;
+      }
+   }
+   pipe_mutex_unlock(exit_mutex);
+}
+
+/****************************************************************************
+ * util_queue implementation
+ */
+
 static void
 util_queue_fence_signal(struct util_queue_fence *fence)
 {
@@ -104,6 +166,7 @@ static PIPE_THREAD_ROUTINE(util_queue_thread_func, input)
       queue->jobs[queue->read_idx].job = NULL;
       queue->read_idx = (queue->read_idx + 1) % queue->max_jobs;
    }
+   queue->num_queued = 0; /* reset this when exiting the thread */
    pipe_mutex_unlock(queue->lock);
    return 0;
 }
@@ -152,11 +215,13 @@ util_queue_init(struct util_queue *queue,
             goto fail;
          } else {
             /* at least one thread created, so use it */
-            queue->num_threads = i+1;
+            queue->num_threads = i;
             break;
          }
       }
    }
+
+   add_to_atexit_list(queue);
    return true;
 
 fail:
@@ -173,8 +238,8 @@ fail:
    return false;
 }
 
-void
-util_queue_destroy(struct util_queue *queue)
+static void
+util_queue_killall_and_wait(struct util_queue *queue)
 {
    unsigned i;
 
@@ -186,6 +251,14 @@ util_queue_destroy(struct util_queue *queue)
 
    for (i = 0; i < queue->num_threads; i++)
       pipe_thread_wait(queue->threads[i]);
+   queue->num_threads = 0;
+}
+
+void
+util_queue_destroy(struct util_queue *queue)
+{
+   util_queue_killall_and_wait(queue);
+   remove_from_atexit_list(queue);
 
    pipe_condvar_destroy(queue->has_space_cond);
    pipe_condvar_destroy(queue->has_queued_cond);
