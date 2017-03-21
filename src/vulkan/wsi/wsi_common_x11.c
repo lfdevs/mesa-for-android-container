@@ -49,6 +49,7 @@
 struct wsi_x11_connection {
    bool has_dri3;
    bool has_present;
+   bool is_proprietary_x11;
 };
 
 struct wsi_x11 {
@@ -63,8 +64,8 @@ static struct wsi_x11_connection *
 wsi_x11_connection_create(const VkAllocationCallbacks *alloc,
                           xcb_connection_t *conn)
 {
-   xcb_query_extension_cookie_t dri3_cookie, pres_cookie;
-   xcb_query_extension_reply_t *dri3_reply, *pres_reply;
+   xcb_query_extension_cookie_t dri3_cookie, pres_cookie, amd_cookie, nv_cookie;
+   xcb_query_extension_reply_t *dri3_reply, *pres_reply, *amd_reply, *nv_reply;
 
    struct wsi_x11_connection *wsi_conn =
       vk_alloc(alloc, sizeof(*wsi_conn), 8,
@@ -75,20 +76,43 @@ wsi_x11_connection_create(const VkAllocationCallbacks *alloc,
    dri3_cookie = xcb_query_extension(conn, 4, "DRI3");
    pres_cookie = xcb_query_extension(conn, 7, "PRESENT");
 
+   /* We try to be nice to users and emit a warning if they try to use a
+    * Vulkan application on a system without DRI3 enabled.  However, this ends
+    * up spewing the warning when a user has, for example, both Intel
+    * integrated graphics and a discrete card with proprietary drivers and are
+    * running on the discrete card with the proprietary DDX.  In this case, we
+    * really don't want to print the warning because it just confuses users.
+    * As a heuristic to detect this case, we check for a couple of proprietary
+    * X11 extensions.
+    */
+   amd_cookie = xcb_query_extension(conn, 11, "ATIFGLRXDRI");
+   nv_cookie = xcb_query_extension(conn, 10, "NV-CONTROL");
+
    dri3_reply = xcb_query_extension_reply(conn, dri3_cookie, NULL);
    pres_reply = xcb_query_extension_reply(conn, pres_cookie, NULL);
-   if (dri3_reply == NULL || pres_reply == NULL) {
+   amd_reply = xcb_query_extension_reply(conn, amd_cookie, NULL);
+   nv_reply = xcb_query_extension_reply(conn, nv_cookie, NULL);
+   if (!dri3_reply || !pres_reply) {
       free(dri3_reply);
       free(pres_reply);
+      free(amd_reply);
+      free(nv_reply);
       vk_free(alloc, wsi_conn);
       return NULL;
    }
 
    wsi_conn->has_dri3 = dri3_reply->present != 0;
    wsi_conn->has_present = pres_reply->present != 0;
+   wsi_conn->is_proprietary_x11 = false;
+   if (amd_reply && amd_reply->present)
+      wsi_conn->is_proprietary_x11 = true;
+   if (nv_reply && nv_reply->present)
+      wsi_conn->is_proprietary_x11 = true;
 
    free(dri3_reply);
    free(pres_reply);
+   free(amd_reply);
+   free(nv_reply);
 
    return wsi_conn;
 }
@@ -98,6 +122,18 @@ wsi_x11_connection_destroy(const VkAllocationCallbacks *alloc,
                            struct wsi_x11_connection *conn)
 {
    vk_free(alloc, conn);
+}
+
+static bool
+wsi_x11_check_for_dri3(struct wsi_x11_connection *wsi_conn)
+{
+  if (wsi_conn->has_dri3)
+    return true;
+  if (!wsi_conn->is_proprietary_x11) {
+    fprintf(stderr, "vulkan: No DRI3 support detected - required for presentation\n"
+                    "Note: you can probably enable DRI3 in your Xorg config\n");
+  }
+  return false;
 }
 
 static struct wsi_x11_connection *
@@ -264,11 +300,8 @@ VkBool32 wsi_get_physical_device_xcb_presentation_support(
    if (!wsi_conn)
       return false;
 
-   if (!wsi_conn->has_dri3) {
-      fprintf(stderr, "vulkan: No DRI3 support detected - required for presentation\n");
-      fprintf(stderr, "Note: Buggy applications may crash, if they do please report to vendor\n");
+   if (!wsi_x11_check_for_dri3(wsi_conn))
       return false;
-   }
 
    unsigned visual_depth;
    if (!connection_get_visualtype(connection, visual_id, &visual_depth))
@@ -313,9 +346,7 @@ x11_surface_get_support(VkIcdSurfaceBase *icd_surface,
    if (!wsi_conn)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   if (!wsi_conn->has_dri3) {
-      fprintf(stderr, "vulkan: No DRI3 support detected - required for presentation\n");
-      fprintf(stderr, "Note: Buggy applications may crash, if they do please report to vendor\n");
+   if (!wsi_x11_check_for_dri3(wsi_conn)) {
       *pSupported = false;
       return VK_SUCCESS;
    }

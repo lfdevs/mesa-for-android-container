@@ -1552,7 +1552,7 @@ void radv_CmdBindDescriptorSets(
 		radv_bind_descriptor_set(cmd_buffer, set, idx);
 
 		for(unsigned j = 0; j < set->layout->dynamic_offset_count; ++j, ++dyn_idx) {
-			unsigned idx = j + layout->set[i].dynamic_offset_start;
+			unsigned idx = j + layout->set[i + firstSet].dynamic_offset_start;
 			uint32_t *dst = cmd_buffer->dynamic_buffers + idx * 4;
 			assert(dyn_idx < dynamicOffsetCount);
 
@@ -1817,6 +1817,9 @@ void radv_CmdExecuteCommands(
 	const VkCommandBuffer*                      pCmdBuffers)
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, primary, commandBuffer);
+
+	/* Emit pending flushes on primary prior to executing secondary */
+	si_emit_cache_flush(primary);
 
 	for (uint32_t i = 0; i < commandBufferCount; i++) {
 		RADV_FROM_HANDLE(radv_cmd_buffer, secondary, pCmdBuffers[i]);

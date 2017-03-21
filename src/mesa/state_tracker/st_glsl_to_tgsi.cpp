@@ -3432,10 +3432,17 @@ glsl_to_tgsi_visitor::visit_ssbo_intrinsic(ir_call *ir)
       inst->resource = buffer;
       if (access)
          inst->buffer_access = access->value.u[0];
+
+      if (inst == this->instructions.get_head_raw())
+         break;
       inst = (glsl_to_tgsi_instruction *)inst->get_prev();
-      if (inst->op == TGSI_OPCODE_UADD)
+
+      if (inst->op == TGSI_OPCODE_UADD) {
+         if (inst == this->instructions.get_head_raw())
+            break;
          inst = (glsl_to_tgsi_instruction *)inst->get_prev();
-   } while (inst && inst->op == op && inst->resource.file == PROGRAM_UNDEFINED);
+      }
+   } while (inst->op == op && inst->resource.file == PROGRAM_UNDEFINED);
 }
 
 void

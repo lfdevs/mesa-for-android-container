@@ -29,6 +29,9 @@
   *   Keith Whitwell <keithw@vmware.com>
   */
 
+#ifndef BRW_DEFINES_H
+#define BRW_DEFINES_H
+
 #define INTEL_MASK(high, low) (((1u<<((high)-(low)+1))-1)<<(low))
 /* Using the GNU statement expression extension */
 #define SET_FIELD(value, field)                                         \
@@ -46,9 +49,6 @@
  * of the lower bits are committed to the register.
  */
 #define REG_MASK(value) ((value) << 16)
-
-#ifndef BRW_DEFINES_H
-#define BRW_DEFINES_H
 
 /* 3D state:
  */

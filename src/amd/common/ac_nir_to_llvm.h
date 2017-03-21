@@ -27,6 +27,7 @@
 #include "llvm-c/Core.h"
 #include "llvm-c/TargetMachine.h"
 #include "amd_family.h"
+#include "../vulkan/radv_descriptor_set.h"
 
 struct ac_shader_binary;
 struct ac_shader_config;
@@ -76,7 +77,8 @@ enum ac_ud_index {
 	AC_UD_MAX_UD = AC_UD_VS_MAX_UD,
 };
 
-#define AC_UD_MAX_SETS 4
+// Match MAX_SETS from radv_descriptor_set.h
+#define AC_UD_MAX_SETS MAX_SETS
 
 struct ac_userdata_locations {
 	struct ac_userdata_info descriptor_sets[AC_UD_MAX_SETS];

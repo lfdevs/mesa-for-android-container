@@ -2007,7 +2007,7 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
           * we might read up to nir->info->gs.vertices_in registers.
           */
          bld.emit(SHADER_OPCODE_MOV_INDIRECT, icp_handle,
-                  fs_reg(brw_vec8_grf(first_icp_handle, 0)),
+                  retype(brw_vec8_grf(first_icp_handle, 0), icp_handle.type),
                   fs_reg(icp_offset_bytes),
                   brw_imm_ud(nir->info->gs.vertices_in * REG_SIZE));
       }
@@ -2038,7 +2038,7 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
           * we might read up to ceil(nir->info->gs.vertices_in / 8) registers.
           */
          bld.emit(SHADER_OPCODE_MOV_INDIRECT, icp_handle,
-                  fs_reg(brw_vec8_grf(first_icp_handle, 0)),
+                  retype(brw_vec8_grf(first_icp_handle, 0), icp_handle.type),
                   fs_reg(icp_offset_bytes),
                   brw_imm_ud(DIV_ROUND_UP(nir->info->gs.vertices_in, 8) *
                              REG_SIZE));
@@ -2378,7 +2378,7 @@ fs_visitor::nir_emit_tcs_intrinsic(const fs_builder &bld,
 
          /* Start at g1.  We might read up to 4 registers. */
          bld.emit(SHADER_OPCODE_MOV_INDIRECT, icp_handle,
-                  fs_reg(brw_vec8_grf(1, 0)), vertex_offset_bytes,
+                  retype(brw_vec8_grf(1, 0), icp_handle.type), vertex_offset_bytes,
                   brw_imm_ud(4 * REG_SIZE));
       }
 
@@ -3792,31 +3792,30 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
          unsigned read_size = instr->const_index[1] -
             (instr->num_components - 1) * type_sz(dest.type);
 
-         fs_reg indirect_chv_high_32bit;
-         bool is_chv_bxt_64bit =
-            (devinfo->is_cherryview || devinfo->is_broxton) &&
-            type_sz(dest.type) == 8;
-         if (is_chv_bxt_64bit) {
-            indirect_chv_high_32bit = vgrf(glsl_type::uint_type);
-            /* Calculate indirect address to read high 32 bits */
-            bld.ADD(indirect_chv_high_32bit, indirect, brw_imm_ud(4));
-         }
+         bool supports_64bit_indirects =
+            !devinfo->is_cherryview && !devinfo->is_broxton;
 
-         for (unsigned j = 0; j < instr->num_components; j++) {
-            if (!is_chv_bxt_64bit) {
+         if (type_sz(dest.type) != 8 || supports_64bit_indirects) {
+            for (unsigned j = 0; j < instr->num_components; j++) {
                bld.emit(SHADER_OPCODE_MOV_INDIRECT,
                         offset(dest, bld, j), offset(src, bld, j),
                         indirect, brw_imm_ud(read_size));
-            } else {
-               bld.emit(SHADER_OPCODE_MOV_INDIRECT,
-                        subscript(offset(dest, bld, j), BRW_REGISTER_TYPE_UD, 0),
-                        offset(src, bld, j),
-                        indirect, brw_imm_ud(read_size));
-
-               bld.emit(SHADER_OPCODE_MOV_INDIRECT,
-                        subscript(offset(dest, bld, j), BRW_REGISTER_TYPE_UD, 1),
-                        offset(src, bld, j),
-                        indirect_chv_high_32bit, brw_imm_ud(read_size));
+            }
+         } else {
+            const unsigned num_mov_indirects =
+               type_sz(dest.type) / type_sz(BRW_REGISTER_TYPE_UD);
+            /* We read a little bit less per MOV INDIRECT, as they are now
+             * 32-bits ones instead of 64-bit. Fix read_size then.
+             */
+            const unsigned read_size_32bit = read_size -
+                (num_mov_indirects - 1) * type_sz(BRW_REGISTER_TYPE_UD);
+            for (unsigned j = 0; j < instr->num_components; j++) {
+               for (unsigned i = 0; i < num_mov_indirects; i++) {
+                  bld.emit(SHADER_OPCODE_MOV_INDIRECT,
+                           subscript(offset(dest, bld, j), BRW_REGISTER_TYPE_UD, i),
+                           subscript(offset(src, bld, j), BRW_REGISTER_TYPE_UD, i),
+                           indirect, brw_imm_ud(read_size_32bit));
+               }
             }
          }
       }

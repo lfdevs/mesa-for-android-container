@@ -264,7 +264,7 @@ static LLVMValueRef get_shared_memory_ptr(struct nir_to_llvm_context *ctx,
 	LLVMValueRef ptr;
 	int addr_space;
 
-	offset = LLVMConstInt(ctx->i32, idx, false);
+	offset = LLVMConstInt(ctx->i32, idx * 16, false);
 
 	ptr = ctx->shared_memory;
 	ptr = LLVMBuildGEP(ctx->builder, ptr, &offset, 1, "");
@@ -1721,15 +1721,17 @@ static LLVMValueRef visit_vulkan_resource_index(struct nir_to_llvm_context *ctx,
 	unsigned desc_set = nir_intrinsic_desc_set(instr);
 	unsigned binding = nir_intrinsic_binding(instr);
 	LLVMValueRef desc_ptr = ctx->descriptor_sets[desc_set];
-	struct radv_descriptor_set_layout *layout = ctx->options->layout->set[desc_set].layout;
+	struct radv_pipeline_layout *pipeline_layout = ctx->options->layout;
+	struct radv_descriptor_set_layout *layout = pipeline_layout->set[desc_set].layout;
 	unsigned base_offset = layout->binding[binding].offset;
 	LLVMValueRef offset, stride;
 
 	if (layout->binding[binding].type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
 	    layout->binding[binding].type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
+		unsigned idx = pipeline_layout->set[desc_set].dynamic_offset_start +
+			layout->binding[binding].dynamic_offset_offset;
 		desc_ptr = ctx->push_constants;
-		base_offset = ctx->options->layout->push_constant_size;
-		base_offset +=  16 * layout->binding[binding].dynamic_offset_offset;
+		base_offset = pipeline_layout->push_constant_size + 16 * idx;
 		stride = LLVMConstInt(ctx->i32, 16, false);
 	} else
 		stride = LLVMConstInt(ctx->i32, layout->binding[binding].size, false);
@@ -4459,6 +4461,13 @@ LLVMModuleRef ac_translate_nir_to_llvm(LLVMTargetMachineRef tm,
 	memset(shader_info, 0, sizeof(*shader_info));
 
 	LLVMSetTarget(ctx.module, "amdgcn--");
+
+	LLVMTargetDataRef data_layout = LLVMCreateTargetDataLayout(tm);
+	char *data_layout_str = LLVMCopyStringRepOfTargetData(data_layout);
+	LLVMSetDataLayout(ctx.module, data_layout_str);
+	LLVMDisposeTargetData(data_layout);
+	LLVMDisposeMessage(data_layout_str);
+
 	setup_types(&ctx);
 
 	ctx.builder = LLVMCreateBuilderInContext(ctx.context);

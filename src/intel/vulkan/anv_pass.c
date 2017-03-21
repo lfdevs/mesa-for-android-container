@@ -116,13 +116,15 @@ VkResult anv_CreateRenderPass(
          for (uint32_t j = 0; j < desc->inputAttachmentCount; j++) {
             uint32_t a = desc->pInputAttachments[j].attachment;
             subpass->input_attachments[j] = a;
-            pass->attachments[a].usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-            pass->attachments[a].subpass_usage[i] |= ANV_SUBPASS_USAGE_INPUT;
-            pass->attachments[a].last_subpass_idx = i;
+            if (a != VK_ATTACHMENT_UNUSED) {
+               pass->attachments[a].usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+               pass->attachments[a].subpass_usage[i] |= ANV_SUBPASS_USAGE_INPUT;
+               pass->attachments[a].last_subpass_idx = i;
 
-            if (desc->pDepthStencilAttachment &&
-                a == desc->pDepthStencilAttachment->attachment)
-               subpass->has_ds_self_dep = true;
+               if (desc->pDepthStencilAttachment &&
+                   a == desc->pDepthStencilAttachment->attachment)
+                  subpass->has_ds_self_dep = true;
+            }
          }
       }
 
@@ -133,9 +135,11 @@ VkResult anv_CreateRenderPass(
          for (uint32_t j = 0; j < desc->colorAttachmentCount; j++) {
             uint32_t a = desc->pColorAttachments[j].attachment;
             subpass->color_attachments[j] = a;
-            pass->attachments[a].usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-            pass->attachments[a].subpass_usage[i] |= ANV_SUBPASS_USAGE_DRAW;
-            pass->attachments[a].last_subpass_idx = i;
+            if (a != VK_ATTACHMENT_UNUSED) {
+               pass->attachments[a].usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+               pass->attachments[a].subpass_usage[i] |= ANV_SUBPASS_USAGE_DRAW;
+               pass->attachments[a].last_subpass_idx = i;
+            }
          }
       }
 

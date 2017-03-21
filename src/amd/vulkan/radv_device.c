@@ -2024,7 +2024,7 @@ radv_init_sampler(struct radv_device *device,
 			     S_008F38_XY_MAG_FILTER(radv_tex_filter(pCreateInfo->magFilter, max_aniso)) |
 			     S_008F38_XY_MIN_FILTER(radv_tex_filter(pCreateInfo->minFilter, max_aniso)) |
 			     S_008F38_MIP_FILTER(radv_tex_mipfilter(pCreateInfo->mipmapMode)) |
-			     S_008F38_MIP_POINT_PRECLAMP(1) |
+			     S_008F38_MIP_POINT_PRECLAMP(0) |
 			     S_008F38_DISABLE_LSB_CEIL(1) |
 			     S_008F38_FILTER_PREC_FIX(1) |
 			     S_008F38_ANISO_OVERRIDE(is_vi));

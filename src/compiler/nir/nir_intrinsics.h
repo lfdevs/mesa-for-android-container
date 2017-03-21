@@ -401,7 +401,9 @@ LOAD(input, 1, 2, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINS
 /* src[] = { vertex, offset }. const_index[] = { base, component } */
 LOAD(per_vertex_input, 2, 2, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
 /* src[] = { barycoord, offset }. const_index[] = { base, component } */
-LOAD(interpolated_input, 2, 2, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
+INTRINSIC(load_interpolated_input, 2, ARR(2, 1), true, 0, 0,
+          2, BASE, COMPONENT, xx,
+          NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
 
 /* src[] = { buffer_index, offset }. No const_index */
 LOAD(ssbo, 2, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)

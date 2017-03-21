@@ -180,6 +180,11 @@ make_surface(const struct anv_device *dev,
    /* Add a HiZ surface to a depth buffer that will be used for rendering.
     */
    if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
+      /* We don't advertise that depth buffers could be used as storage
+       * images.
+       */
+       assert(!(image->usage & VK_IMAGE_USAGE_STORAGE_BIT));
+
       /* Allow the user to control HiZ enabling. Disable by default on gen7
        * because resolves are not currently implemented pre-BDW.
        */
@@ -578,7 +583,7 @@ anv_CreateImageView(VkDevice _device,
                           .view = &view,
                           .clear_color.f32 = { red_clear_color,},
                           .aux_surf = &image->aux_surface.isl,
-                          .aux_usage = surf_usage,
+                          .aux_usage = image->aux_usage,
                           .mocs = device->default_mocs);
 
       if (!device->info.has_llc)
@@ -602,7 +607,7 @@ anv_CreateImageView(VkDevice _device,
                              .surf = &surface->isl,
                              .view = &view,
                              .aux_surf = &image->aux_surface.isl,
-                             .aux_usage = surf_usage,
+                             .aux_usage = image->aux_usage,
                              .mocs = device->default_mocs);
       } else {
          anv_fill_buffer_surface_state(device, iview->storage_surface_state,

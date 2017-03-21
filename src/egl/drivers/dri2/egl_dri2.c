@@ -1094,6 +1094,20 @@ dri2_create_context(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
    if (!_eglInitContext(&dri2_ctx->base, disp, conf, attrib_list))
       goto cleanup;
 
+   /* The EGL_EXT_create_context_robustness spec says:
+    *
+    *    "Add to the eglCreateContext context creation errors: [...]
+    *
+    *     * If the reset notification behavior of <share_context> and the
+    *       newly created context are different then an EGL_BAD_MATCH error is
+    *       generated."
+    */
+   if (share_list && share_list->ResetNotificationStrategy !=
+                     dri2_ctx->base.ResetNotificationStrategy) {
+      _eglError(EGL_BAD_MATCH, "eglCreateContext");
+      goto cleanup;
+   }
+
    switch (dri2_ctx->base.ClientAPI) {
    case EGL_OPENGL_ES_API:
       switch (dri2_ctx->base.ClientMajorVersion) {

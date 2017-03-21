@@ -655,6 +655,9 @@ radv_image_alloc_htile(struct radv_device *device,
 	if (device->debug_flags & RADV_DEBUG_NO_HIZ)
 		return;
 
+	if (image->array_size > 1 || image->levels > 1)
+		return;
+
 	image->htile.size = radv_image_get_htile_size(device, image);
 
 	if (!image->htile.size)

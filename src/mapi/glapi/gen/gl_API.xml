@@ -5858,7 +5858,7 @@
         <param name="location" type="GLint"/>
         <param name="count" type="GLsizei" counter="true"/>
         <param name="transpose" type="GLboolean"/>
-        <param name="value" type="const GLfloat *" count="count" count_scale="6"/>
+        <param name="value" type="const GLfloat *" count="count" count_scale="8"/>
         <glx ignore="true"/>
     </function>
     <function name="UniformMatrix4x2fv" es2="3.0">

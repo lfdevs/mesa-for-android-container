@@ -428,7 +428,7 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
       brw_ADD(p, addr, indirect_byte_offset, brw_imm_uw(imm_byte_offset));
       struct brw_reg ind_src = brw_VxH_indirect(0, 0);
 
-      brw_inst *mov = brw_MOV(p, dst, retype(ind_src, dst.type));
+      brw_inst *mov = brw_MOV(p, dst, retype(ind_src, reg.type));
 
       if (devinfo->gen == 6 && dst.file == BRW_MESSAGE_REGISTER_FILE &&
           !inst->get_next()->is_tail_sentinel() &&

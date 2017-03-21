@@ -147,7 +147,9 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 256;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-      return 16; /* 256 for binding as RT, but that's not possible in GL */
+      if (class_3d < NVE4_3D_CLASS)
+         return 256; /* IMAGE bindings require alignment to 256 */
+      return 16;
    case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
       return 16;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:

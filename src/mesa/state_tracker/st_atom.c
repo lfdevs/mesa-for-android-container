@@ -188,7 +188,15 @@ void st_validate_state( struct st_context *st, enum st_pipeline pipeline )
       }
 
       st->compute_shader_may_be_dirty = false;
-      pipeline_mask = ST_PIPELINE_COMPUTE_STATE_MASK;
+
+      /*
+       * We add the ST_NEW_FB_STATE bit here as well, because glBindFramebuffer
+       * acts as a barrier that breaks feedback loops between the framebuffer
+       * and textures bound to the framebuffer, even when those textures are
+       * accessed by compute shaders; so we must inform the driver of new
+       * framebuffer state.
+       */
+      pipeline_mask = ST_PIPELINE_COMPUTE_STATE_MASK | ST_NEW_FB_STATE;
       break;
    }
 
