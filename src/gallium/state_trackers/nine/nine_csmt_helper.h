@@ -233,8 +233,8 @@ name##_rx( struct NineDevice9 *device, struct csmt_instruction *instr ) \
     name##_priv( \
         device ARGS_FOR_CALL( __VA_ARGS__ ) \
     ); \
-    ARGS_FOR_UNBIND( __VA_ARGS__ ) \
     p_atomic_dec(args->counter); \
+    ARGS_FOR_UNBIND( __VA_ARGS__ ) \
     return 0; \
 } \
 \

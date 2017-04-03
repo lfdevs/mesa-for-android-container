@@ -1146,7 +1146,7 @@ again:
 		   memcmp(&current->key, key, sizeof(*key)) == 0 &&
 		   (!current->is_optimized ||
 		    util_queue_fence_is_signalled(&current->optimized_ready))))
-		return 0;
+		return current->compilation_failed ? -1 : 0;
 
 	/* This must be done before the mutex is locked, because async GS
 	 * compilation calls this function too, and therefore must enter

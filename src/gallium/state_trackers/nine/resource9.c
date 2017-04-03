@@ -79,7 +79,7 @@ NineResource9_ctor( struct NineResource9 *This,
         if (This->info.target != PIPE_BUFFER) {
             This->size = util_resource_size(&This->info);
 
-            This->base.device->available_texture_mem -= This->size;
+            p_atomic_add(&This->base.device->available_texture_mem, -This->size);
             if (This->base.device->available_texture_mem <=
                     This->base.device->available_texture_limit) {
                 return D3DERR_OUTOFVIDEOMEMORY;
@@ -111,7 +111,7 @@ NineResource9_dtor( struct NineResource9 *This )
 
     /* NOTE: size is 0, unless something has actually been allocated */
     if (This->base.device)
-        This->base.device->available_texture_mem += This->size;
+        p_atomic_add(&This->base.device->available_texture_mem, This->size);
 
     NineUnknown_dtor(&This->base);
 }

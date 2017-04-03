@@ -236,6 +236,13 @@ def if_execute_flag(statements):
     check_sexp(statements)
     return [['if', ['var_ref', 'execute_flag'], statements, []]]
 
+def if_return_flag(then_statements, else_statements):
+    """Wrap statements in an if test with return_flag as the condition.
+    """
+    check_sexp(then_statements)
+    check_sexp(else_statements)
+    return [['if', ['var_ref', 'return_flag'], then_statements, else_statements]]
+
 def if_not_return_flag(statements):
     """Wrap statements in an if test so that they will only execute if
     return_flag is False.
@@ -452,7 +459,10 @@ def test_lower_pulled_out_jump():
                 loop(simple_if('b', simple_if('c', [], continue_()),
                                lowered_return_simple()) +
                      break_()) +
-                if_not_return_flag(assign_x('d', const_float(1))))
+
+                if_return_flag(assign_x('return_flag', const_bool(1)) +
+                               assign_x('execute_flag', const_bool(0)),
+                               assign_x('d', const_float(1))))
             ))
     create_test_case(doc_string, input_sexp, expected_sexp, 'lower_pulled_out_jump',
                      lower_main_return=True, pull_out_jumps=True)
@@ -583,11 +593,14 @@ def test_lower_return_void_at_end_of_loop():
             assign_x('b', const_float(2))
             ))
     expected_sexp = make_test_case('main', 'void', (
+            declare_execute_flag() +
             declare_return_flag() +
             loop(assign_x('a', const_float(1)) +
                  lowered_return_simple() +
                  break_()) +
-            if_not_return_flag(assign_x('b', const_float(2)))
+            if_return_flag(assign_x('return_flag', const_bool(1)) +
+                           assign_x('execute_flag', const_bool(0)),
+                           assign_x('b', const_float(2)))
             ))
     create_test_case(doc_string, input_sexp, input_sexp, 'return_void_at_end_of_loop_lower_nothing')
     create_test_case(doc_string, input_sexp, expected_sexp, 'return_void_at_end_of_loop_lower_return',

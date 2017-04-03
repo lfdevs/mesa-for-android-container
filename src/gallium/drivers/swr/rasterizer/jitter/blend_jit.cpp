@@ -542,7 +542,7 @@ struct BlendJit : public Builder
         IRB()->SetInsertPoint(entry);
 
         // arguments
-        auto argitr = blendFunc->getArgumentList().begin();
+        auto argitr = blendFunc->arg_begin();
         Value* pBlendState = &*argitr++;
         pBlendState->setName("pBlendState");
         Value* pSrc = &*argitr++;

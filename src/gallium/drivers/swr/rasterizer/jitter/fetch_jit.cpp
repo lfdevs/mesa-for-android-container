@@ -99,7 +99,7 @@ Function* FetchJit::Create(const FETCH_COMPILE_STATE& fetchState)
 
     IRB()->SetInsertPoint(entry);
 
-    auto    argitr = fetch->getArgumentList().begin();
+    auto    argitr = fetch->arg_begin();
 
     // Fetch shader arguments
     mpFetchInfo = &*argitr; ++argitr;

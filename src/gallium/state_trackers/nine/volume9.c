@@ -142,9 +142,15 @@ NineVolume9_dtor( struct NineVolume9 *This )
 {
     DBG("This=%p\n", This);
 
-    if (This->transfer)
-        NineVolume9_UnlockBox(This);
+    if (This->transfer) {
+        struct pipe_context *pipe = nine_context_get_pipe_multithread(This->base.device);
+        pipe->transfer_unmap(pipe, This->transfer);
+        This->transfer = NULL;
+    }
 
+    /* Note: Following condition cannot happen currently, since we
+     * refcount the volume in the functions increasing
+     * pending_uploads_counter. */
     if (p_atomic_read(&This->pending_uploads_counter))
         nine_csmt_process(This->base.device);
 

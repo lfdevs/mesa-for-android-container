@@ -1176,6 +1176,12 @@ interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog,
             for (unsigned k = 0; k <= i; k++) {
                delete[] InterfaceBlockStageIndex[k];
             }
+
+            /* Reset the block count. This will help avoid various segfaults
+             * from api calls that assume the array exists due to the count
+             * being non-zero.
+             */
+            *num_blks = 0;
             return false;
          }
 

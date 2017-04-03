@@ -125,6 +125,7 @@ namespace clover {
    private:
       pipe_context *pctx;
       pipe_transfer *pxfer;
+      pipe_resource *pres;
       void *p;
    };
 }

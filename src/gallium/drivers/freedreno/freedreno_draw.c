@@ -264,6 +264,8 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
 	util_blitter_restore_constant_buffer_state(blitter);
 	util_blitter_restore_vertex_states(blitter);
 	util_blitter_restore_fragment_states(blitter);
+	util_blitter_restore_textures(blitter);
+	util_blitter_restore_fb_state(blitter);
 	util_blitter_restore_render_cond(blitter);
 	util_blitter_unset_running_flag(blitter);
 

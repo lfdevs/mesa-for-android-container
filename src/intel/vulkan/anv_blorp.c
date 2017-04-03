@@ -227,7 +227,8 @@ void anv_CmdCopyImage(
          layer_count = pRegions[r].extent.depth;
       } else {
          dst_base_layer = pRegions[r].dstSubresource.baseArrayLayer;
-         layer_count = pRegions[r].dstSubresource.layerCount;
+         layer_count =
+            anv_get_layerCount(dst_image, &pRegions[r].dstSubresource);
       }
 
       unsigned src_base_layer;
@@ -235,7 +236,8 @@ void anv_CmdCopyImage(
          src_base_layer = pRegions[r].srcOffset.z;
       } else {
          src_base_layer = pRegions[r].srcSubresource.baseArrayLayer;
-         assert(pRegions[r].srcSubresource.layerCount == layer_count);
+         assert(layer_count ==
+                anv_get_layerCount(src_image, &pRegions[r].srcSubresource));
       }
 
       assert(pRegions[r].srcSubresource.aspectMask ==
@@ -307,7 +309,8 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
          anv_sanitize_image_extent(anv_image->type, pRegions[r].imageExtent);
       if (anv_image->type != VK_IMAGE_TYPE_3D) {
          image.offset.z = pRegions[r].imageSubresource.baseArrayLayer;
-         extent.depth = pRegions[r].imageSubresource.layerCount;
+         extent.depth =
+            anv_get_layerCount(anv_image, &pRegions[r].imageSubresource);
       }
 
       const enum isl_format buffer_format =
@@ -461,7 +464,7 @@ void anv_CmdBlitImage(
          dst_end = pRegions[r].dstOffsets[1].z;
       } else {
          dst_start = dst_res->baseArrayLayer;
-         dst_end = dst_start + dst_res->layerCount;
+         dst_end = dst_start + anv_get_layerCount(dst_image, dst_res);
       }
 
       unsigned src_start, src_end;
@@ -471,7 +474,7 @@ void anv_CmdBlitImage(
          src_end = pRegions[r].srcOffsets[1].z;
       } else {
          src_start = src_res->baseArrayLayer;
-         src_end = src_start + src_res->layerCount;
+         src_end = src_start + anv_get_layerCount(src_image, src_res);
       }
 
       bool flip_z = flip_coords(&src_start, &src_end, &dst_start, &dst_end);
@@ -818,7 +821,7 @@ void anv_CmdClearColorImage(
                         VK_IMAGE_ASPECT_COLOR_BIT, image->tiling);
 
       unsigned base_layer = pRanges[r].baseArrayLayer;
-      unsigned layer_count = pRanges[r].layerCount;
+      unsigned layer_count = anv_get_layerCount(image, &pRanges[r]);
 
       for (unsigned i = 0; i < anv_get_levelCount(image, &pRanges[r]); i++) {
          const unsigned level = pRanges[r].baseMipLevel + i;
@@ -878,7 +881,7 @@ void anv_CmdClearDepthStencilImage(
       bool clear_stencil = pRanges[r].aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT;
 
       unsigned base_layer = pRanges[r].baseArrayLayer;
-      unsigned layer_count = pRanges[r].layerCount;
+      unsigned layer_count = anv_get_layerCount(image, &pRanges[r]);
 
       for (unsigned i = 0; i < anv_get_levelCount(image, &pRanges[r]); i++) {
          const unsigned level = pRanges[r].baseMipLevel + i;
@@ -1379,10 +1382,11 @@ void anv_CmdResolveImage(
    for (uint32_t r = 0; r < regionCount; r++) {
       assert(pRegions[r].srcSubresource.aspectMask ==
              pRegions[r].dstSubresource.aspectMask);
-      assert(pRegions[r].srcSubresource.layerCount ==
-             pRegions[r].dstSubresource.layerCount);
+      assert(anv_get_layerCount(src_image, &pRegions[r].srcSubresource) ==
+             anv_get_layerCount(dst_image, &pRegions[r].dstSubresource));
 
-      const uint32_t layer_count = pRegions[r].dstSubresource.layerCount;
+      const uint32_t layer_count =
+         anv_get_layerCount(dst_image, &pRegions[r].dstSubresource);
 
       for (uint32_t layer = 0; layer < layer_count; layer++) {
          resolve_image(&batch,

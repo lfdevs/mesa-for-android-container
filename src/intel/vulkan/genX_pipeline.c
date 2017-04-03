@@ -763,7 +763,7 @@ emit_cb_state(struct anv_pipeline *pipeline,
       /* We can have at most 8 attachments */
       assert(i < 8);
 
-      if (binding->index >= info->attachmentCount)
+      if (info == NULL || binding->index >= info->attachmentCount)
          continue;
 
       assert(binding->binding == 0);
@@ -1261,7 +1261,7 @@ emit_3dstate_ps(struct anv_pipeline *pipeline,
     * source blend factors.
     */
    bool dual_src_blend = false;
-   if (wm_prog_data->dual_src_blend) {
+   if (wm_prog_data->dual_src_blend && blend) {
       for (uint32_t i = 0; i < blend->attachmentCount; i++) {
          const VkPipelineColorBlendAttachmentState *bstate =
             &blend->pAttachments[i];

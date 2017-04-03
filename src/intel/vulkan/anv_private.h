@@ -1627,13 +1627,12 @@ anv_gen8_hiz_op_resolve(struct anv_cmd_buffer *cmd_buffer,
                         const struct anv_image *image,
                         enum blorp_hiz_op op);
 
-static inline uint32_t
-anv_get_layerCount(const struct anv_image *image,
-                   const VkImageSubresourceRange *range)
-{
-   return range->layerCount == VK_REMAINING_ARRAY_LAYERS ?
-          image->array_size - range->baseArrayLayer : range->layerCount;
-}
+/* This is defined as a macro so that it works for both
+ * VkImageSubresourceRange and VkImageSubresourceLayers
+ */
+#define anv_get_layerCount(_image, _range) \
+   ((_range)->layerCount == VK_REMAINING_ARRAY_LAYERS ? \
+    (_image)->array_size - (_range)->baseArrayLayer : (_range)->layerCount)
 
 static inline uint32_t
 anv_get_levelCount(const struct anv_image *image,

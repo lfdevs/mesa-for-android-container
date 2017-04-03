@@ -111,7 +111,7 @@ rmrf_local(const char *path)
    if (path == NULL || *path == '\0' || *path != '.')
       return -1;
 
-   return nftw(path, remove_entry, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
+   return nftw(path, remove_entry, 64, FTW_DEPTH | FTW_PHYS);
 }
 
 #define CACHE_TEST_TMP "./cache-test-tmp"

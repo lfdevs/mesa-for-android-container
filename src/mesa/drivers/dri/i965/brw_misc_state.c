@@ -877,8 +877,9 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
 
          brw->ctx.NewDriverState |= BRW_NEW_CC_STATE;
       }
+   }
 
-   } else if (brw->gen >= 6) {
+   if (brw->gen >= 6) {
       /* From "BXML » GT » MI » vol1a GPU Overview » [Instruction]
        * PIPELINE_SELECT [DevBWR+]":
        *

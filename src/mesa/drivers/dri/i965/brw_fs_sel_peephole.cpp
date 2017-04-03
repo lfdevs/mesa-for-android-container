@@ -165,6 +165,8 @@ fs_visitor::opt_peephole_sel()
              then_mov[i]->exec_size != else_mov[i]->exec_size ||
              then_mov[i]->group != else_mov[i]->group ||
              then_mov[i]->force_writemask_all != else_mov[i]->force_writemask_all ||
+             then_mov[i]->dst.type != then_mov[i]->src[0].type ||
+             else_mov[i]->dst.type != else_mov[i]->src[0].type ||
              then_mov[i]->is_partial_write() ||
              else_mov[i]->is_partial_write() ||
              then_mov[i]->conditional_mod != BRW_CONDITIONAL_NONE ||

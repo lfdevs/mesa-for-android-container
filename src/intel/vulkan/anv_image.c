@@ -346,13 +346,14 @@ VkResult anv_BindImageMemory(
    ANV_FROM_HANDLE(anv_device_memory, mem, _memory);
    ANV_FROM_HANDLE(anv_image, image, _image);
 
-   if (mem) {
-      image->bo = &mem->bo;
-      image->offset = memoryOffset;
-   } else {
+   if (mem == NULL) {
       image->bo = NULL;
       image->offset = 0;
+      return VK_SUCCESS;
    }
+
+   image->bo = &mem->bo;
+   image->offset = memoryOffset;
 
    if (image->aux_surface.isl.size > 0) {
 

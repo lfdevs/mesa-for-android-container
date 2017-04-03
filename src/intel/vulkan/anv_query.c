@@ -129,35 +129,59 @@ VkResult anv_GetQueryPoolResults(
    void *data_end = pData + dataSize;
    struct anv_query_pool_slot *slot = pool->bo.map;
 
-   if (!device->info.has_llc)
-      anv_invalidate_range(slot, MIN2(queryCount * sizeof(*slot), pool->bo.size));
+   if (!device->info.has_llc) {
+      uint64_t offset = firstQuery * sizeof(*slot);
+      uint64_t size = queryCount * sizeof(*slot);
+      anv_invalidate_range(pool->bo.map + offset,
+                           MIN2(size, pool->bo.size - offset));
+   }
 
+   VkResult status = VK_SUCCESS;
    for (uint32_t i = 0; i < queryCount; i++) {
-      switch (pool->type) {
-      case VK_QUERY_TYPE_OCCLUSION: {
-         result = slot[firstQuery + i].end - slot[firstQuery + i].begin;
-         break;
-      }
-      case VK_QUERY_TYPE_PIPELINE_STATISTICS:
-         unreachable("pipeline stats not supported");
-      case VK_QUERY_TYPE_TIMESTAMP: {
-         result = slot[firstQuery + i].begin;
-         break;
-      }
-      default:
-         unreachable("invalid pool type");
+      bool available = slot[firstQuery + i].available;
+
+      /* From the Vulkan 1.0.42 spec:
+       *
+       *    "If VK_QUERY_RESULT_WAIT_BIT and VK_QUERY_RESULT_PARTIAL_BIT are
+       *    both not set then no result values are written to pData for
+       *    queries that are in the unavailable state at the time of the call,
+       *    and vkGetQueryPoolResults returns VK_NOT_READY. However,
+       *    availability state is still written to pData for those queries if
+       *    VK_QUERY_RESULT_WITH_AVAILABILITY_BIT is set."
+       */
+      bool write_results = available || (flags & VK_QUERY_RESULT_PARTIAL_BIT);
+
+      if (write_results) {
+         switch (pool->type) {
+         case VK_QUERY_TYPE_OCCLUSION: {
+            result = slot[firstQuery + i].end - slot[firstQuery + i].begin;
+            break;
+         }
+         case VK_QUERY_TYPE_PIPELINE_STATISTICS:
+            unreachable("pipeline stats not supported");
+         case VK_QUERY_TYPE_TIMESTAMP: {
+            result = slot[firstQuery + i].begin;
+            break;
+         }
+         default:
+            unreachable("invalid pool type");
+         }
+      } else {
+         status = VK_NOT_READY;
       }
 
       if (flags & VK_QUERY_RESULT_64_BIT) {
          uint64_t *dst = pData;
-         dst[0] = result;
+         if (write_results)
+            dst[0] = result;
          if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
             dst[1] = slot[firstQuery + i].available;
       } else {
          uint32_t *dst = pData;
          if (result > UINT32_MAX)
             result = UINT32_MAX;
-         dst[0] = result;
+         if (write_results)
+            dst[0] = result;
          if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
             dst[1] = slot[firstQuery + i].available;
       }
@@ -167,5 +191,5 @@ VkResult anv_GetQueryPoolResults(
          break;
    }
 
-   return VK_SUCCESS;
+   return status;
 }

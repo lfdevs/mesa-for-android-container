@@ -281,7 +281,7 @@ struct StreamOutJit : public Builder
         IRB()->SetInsertPoint(entry);
 
         // arguments
-        auto argitr = soFunc->getArgumentList().begin();
+        auto argitr = soFunc->arg_begin();
         Value* pSoCtx = &*argitr++;
         pSoCtx->setName("pSoCtx");
 

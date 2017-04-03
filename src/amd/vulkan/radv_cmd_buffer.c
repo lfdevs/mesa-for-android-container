@@ -1974,7 +1974,7 @@ void radv_CmdDraw(
 
 static void radv_emit_primitive_reset_index(struct radv_cmd_buffer *cmd_buffer)
 {
-	uint32_t primitive_reset_index = cmd_buffer->state.last_primitive_reset_index ? 0xffffffffu : 0xffffu;
+	uint32_t primitive_reset_index = cmd_buffer->state.index_type ? 0xffffffffu : 0xffffu;
 
 	if (cmd_buffer->state.pipeline->graphics.prim_restart_enable &&
 	    primitive_reset_index != cmd_buffer->state.last_primitive_reset_index) {
@@ -2411,7 +2411,13 @@ static void radv_handle_depth_image_transition(struct radv_cmd_buffer *cmd_buffe
 		range.baseMipLevel = 0;
 		range.levelCount = 1;
 
+		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB |
+		                                RADV_CMD_FLAG_FLUSH_AND_INV_DB_META;
+
 		radv_decompress_depth_image_inplace(cmd_buffer, image, &range);
+
+		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB |
+		                                RADV_CMD_FLAG_FLUSH_AND_INV_DB_META;
 	}
 }
 

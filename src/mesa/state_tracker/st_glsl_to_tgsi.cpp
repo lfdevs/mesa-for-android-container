@@ -3986,6 +3986,7 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
     */
    result_src = get_temp(ir->type);
    result_dst = st_dst_reg(result_src);
+   result_dst.writemask = (1 << ir->type->vector_elements) - 1;
 
    switch (ir->op) {
    case ir_tex:

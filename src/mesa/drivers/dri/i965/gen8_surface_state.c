@@ -46,10 +46,9 @@ static uint32_t *
 gen8_allocate_surface_state(struct brw_context *brw,
                             uint32_t *out_offset, int index)
 {
-   int dwords = brw->gen >= 9 ? 16 : 13;
    uint32_t *surf = __brw_state_batch(brw, AUB_TRACE_SURFACE_STATE,
-                                      dwords * 4, 64, index, out_offset);
-   memset(surf, 0, dwords * 4);
+                                      64, 64, index, out_offset);
+   memset(surf, 0, 64);
    return surf;
 }
 
