@@ -1804,7 +1804,7 @@ dri2_interop_export_object(__DRIcontext *_ctx,
          return MESA_GLINTEROP_INVALID_MIP_LEVEL;
       }
 
-      if (!st_finalize_texture(ctx, st->pipe, obj)) {
+      if (!st_finalize_texture(ctx, st->pipe, obj, 0)) {
          mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_OUT_OF_RESOURCES;
       }

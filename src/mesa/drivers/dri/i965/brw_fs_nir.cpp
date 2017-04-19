@@ -4377,15 +4377,6 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
    srcs[TEX_LOGICAL_SRC_COORD_COMPONENTS] = brw_imm_d(instr->coord_components);
    srcs[TEX_LOGICAL_SRC_GRAD_COMPONENTS] = brw_imm_d(lod_components);
 
-   if (instr->op == nir_texop_query_levels ||
-       (instr->op == nir_texop_tex && stage != MESA_SHADER_FRAGMENT)) {
-      /* textureQueryLevels() and texture() are implemented in terms of TXS
-       * and TXL respectively, so we need to pass a valid LOD argument.
-       */
-      assert(srcs[TEX_LOGICAL_SRC_LOD].file == BAD_FILE);
-      srcs[TEX_LOGICAL_SRC_LOD] = brw_imm_ud(0u);
-   }
-
    enum opcode opcode;
    switch (instr->op) {
    case nir_texop_tex:
@@ -4450,6 +4441,15 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
    }
    default:
       unreachable("unknown texture opcode");
+   }
+
+   /* TXS and TXL require a LOD but not everything we implement using those
+    * two opcodes provides one.  Provide a default LOD of 0.
+    */
+   if ((opcode == SHADER_OPCODE_TXS_LOGICAL ||
+        opcode == SHADER_OPCODE_TXL_LOGICAL) &&
+       srcs[TEX_LOGICAL_SRC_LOD].file == BAD_FILE) {
+      srcs[TEX_LOGICAL_SRC_LOD] = brw_imm_ud(0u);
    }
 
    if (instr->op == nir_texop_tg4) {

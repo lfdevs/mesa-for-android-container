@@ -106,7 +106,8 @@ hgl_winsys_convert_cs(enum pipe_format format)
 static struct sw_displaytarget*
 hgl_winsys_displaytarget_create(struct sw_winsys* winsys,
 	unsigned textureUsage, enum pipe_format format, unsigned width,
-	unsigned height, unsigned alignment, unsigned* stride)
+	unsigned height, unsigned alignment, const void *front_private,
+	unsigned* stride)
 {
 	struct haiku_displaytarget* haikuDisplayTarget
 		= CALLOC_STRUCT(haiku_displaytarget);

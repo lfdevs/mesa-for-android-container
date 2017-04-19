@@ -2580,7 +2580,8 @@ void radv_CmdPipelineBarrier(
 			flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB;
 			break;
 		case VK_ACCESS_TRANSFER_WRITE_BIT:
-			flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB;
+			flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB |
+			              RADV_CMD_FLAG_INV_GLOBAL_L2;
 			break;
 		default:
 			break;

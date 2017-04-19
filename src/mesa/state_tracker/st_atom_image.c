@@ -64,7 +64,7 @@ st_bind_images(struct st_context *st, struct gl_program *prog,
       struct pipe_image_view *img = &images[i];
 
       if (!_mesa_is_image_unit_valid(st->ctx, u) ||
-          !st_finalize_texture(st->ctx, st->pipe, u->TexObj) ||
+          !st_finalize_texture(st->ctx, st->pipe, u->TexObj, 0) ||
           !stObj->pt) {
          memset(img, 0, sizeof(*img));
          continue;

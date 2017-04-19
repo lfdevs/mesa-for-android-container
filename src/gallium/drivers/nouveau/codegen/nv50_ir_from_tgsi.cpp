@@ -2906,8 +2906,8 @@ Converter::handleINTERP(Value *dst[4])
       // and then convert to s32.
       Value *offs[2];
       for (c = 0; c < 2; c++) {
-         offs[c] = fetchSrc(1, c);
-         mkOp2(OP_MIN, TYPE_F32, offs[c], offs[c], loadImm(NULL, 0.4375f));
+         offs[c] = getScratch();
+         mkOp2(OP_MIN, TYPE_F32, offs[c], fetchSrc(1, c), loadImm(NULL, 0.4375f));
          mkOp2(OP_MAX, TYPE_F32, offs[c], offs[c], loadImm(NULL, -0.5f));
          mkOp2(OP_MUL, TYPE_F32, offs[c], offs[c], loadImm(NULL, 4096.0f));
          mkCvt(OP_CVT, TYPE_S32, offs[c], TYPE_F32, offs[c]);
@@ -3651,16 +3651,17 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
    case TGSI_OPCODE_UBFE:
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi) {
          src0 = fetchSrc(0, c);
+         val0 = getScratch();
          if (tgsi.getSrc(1).getFile() == TGSI_FILE_IMMEDIATE &&
              tgsi.getSrc(2).getFile() == TGSI_FILE_IMMEDIATE) {
-            src1 = loadImm(NULL, tgsi.getSrc(2).getValueU32(c, info) << 8 |
-                           tgsi.getSrc(1).getValueU32(c, info));
+            loadImm(val0, (tgsi.getSrc(2).getValueU32(c, info) << 8) |
+                    tgsi.getSrc(1).getValueU32(c, info));
          } else {
             src1 = fetchSrc(1, c);
             src2 = fetchSrc(2, c);
-            mkOp3(OP_INSBF, TYPE_U32, src1, src2, mkImm(0x808), src1);
+            mkOp3(OP_INSBF, TYPE_U32, val0, src2, mkImm(0x808), src1);
          }
-         mkOp2(OP_EXTBF, dstTy, dst0[c], src0, src1);
+         mkOp2(OP_EXTBF, dstTy, dst0[c], src0, val0);
       }
       break;
    case TGSI_OPCODE_BFI:
@@ -3669,16 +3670,18 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
          src1 = fetchSrc(1, c);
          src2 = fetchSrc(2, c);
          src3 = fetchSrc(3, c);
-         mkOp3(OP_INSBF, TYPE_U32, src2, src3, mkImm(0x808), src2);
-         mkOp3(OP_INSBF, TYPE_U32, dst0[c], src1, src2, src0);
+         val0 = getScratch();
+         mkOp3(OP_INSBF, TYPE_U32, val0, src3, mkImm(0x808), src2);
+         mkOp3(OP_INSBF, TYPE_U32, dst0[c], src1, val0, src0);
       }
       break;
    case TGSI_OPCODE_LSB:
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi) {
          src0 = fetchSrc(0, c);
-         geni = mkOp2(OP_EXTBF, TYPE_U32, src0, src0, mkImm(0x2000));
+         val0 = getScratch();
+         geni = mkOp2(OP_EXTBF, TYPE_U32, val0, src0, mkImm(0x2000));
          geni->subOp = NV50_IR_SUBOP_EXTBF_REV;
-         geni = mkOp1(OP_BFIND, TYPE_U32, dst0[c], src0);
+         geni = mkOp1(OP_BFIND, TYPE_U32, dst0[c], val0);
          geni->subOp = NV50_IR_SUBOP_BFIND_SAMT;
       }
       break;

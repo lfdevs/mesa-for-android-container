@@ -987,6 +987,14 @@ gbm_dri_bo_unmap(struct gbm_bo *_bo, void *map_data)
       return;
 
    dri->image->unmapImage(dri->context, bo->image, map_data);
+
+   /*
+    * Not all DRI drivers use direct maps. They may queue up DMA operations
+    * on the mapping context. Since there is no explicit gbm flush
+    * mechanism, we need to flush here.
+    */
+   if (dri->flush->base.version >= 4)
+      dri->flush->flush_with_flags(dri->context, NULL, __DRI2_FLUSH_CONTEXT, 0);
 }
 
 

@@ -282,7 +282,7 @@ drm_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
          ret = 1;
       }
       else {
-         log_(_LOADER_WARNING, "MESA-LOADER: device is not located on the PCI bus\n");
+         log_(_LOADER_DEBUG, "MESA-LOADER: device is not located on the PCI bus\n");
          ret = 0;
       }
       drmFreeDevice(&device);

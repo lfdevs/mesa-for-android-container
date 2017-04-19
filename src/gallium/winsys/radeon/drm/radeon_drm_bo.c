@@ -186,8 +186,13 @@ static enum radeon_bo_domain radeon_bo_get_initial_domain(
     args.handle = bo->handle;
     args.op = RADEON_GEM_OP_GET_INITIAL_DOMAIN;
 
-    drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_OP,
-                        &args, sizeof(args));
+    if (drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_OP,
+                            &args, sizeof(args))) {
+        fprintf(stderr, "radeon: failed to get initial domain: %p 0x%08X\n",
+                bo, bo->handle);
+        /* Default domain as returned by get_valid_domain. */
+        return RADEON_DOMAIN_VRAM_GTT;
+    }
 
     /* GEM domains and winsys domains are defined the same. */
     return get_valid_domain(args.value);
@@ -258,7 +263,7 @@ static uint64_t radeon_bomgr_find_va(struct radeon_drm_winsys *rws,
 static void radeon_bomgr_free_va(struct radeon_drm_winsys *rws,
                                  uint64_t va, uint64_t size)
 {
-    struct radeon_bo_va_hole *hole;
+    struct radeon_bo_va_hole *hole = NULL;
 
     size = align(size, rws->info.gart_page_size);
 
